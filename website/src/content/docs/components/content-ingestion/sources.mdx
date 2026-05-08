@@ -1,0 +1,326 @@
+---
+title: "Content Sources"
+description: "The seven ingestion sources that feed the Exchange catalog, from RAMP sitemap extensions to CatalogService API push."
+---
+
+## Source Priority
+
+Each source implements the `Discoverer` interface. The pipeline queries sources in priority order and merges results, with higher-priority sources overriding lower-priority data for the same URL path.
+
+```go
+type Discoverer interface {
+    Name() IngestionSource
+    Priority() int
+    Discover(ctx context.Context, tenant *TenantConfig) ([]RawEntry, error)
+    SupportsIncremental() bool
+}
+```
+
+All sources produce `RawEntry` structs:
+
+```go
+type RawEntry struct {
+    URL           string
+    Path          string
+    Title         string
+    WordCount     int
+    Tokens        int
+    ContentID     string
+    PricingModel  PricingModel
+    Rate          float64
+    Currency      string
+    Permissions   []comp.Function
+    Prohibitions  []comp.Function
+    LastModified  time.Time
+    ChangeFreq    string
+    Priority      float64
+    Authors       []string
+    PubDate       string
+    SourceType    int32
+    Source        IngestionSource
+}
+```
+
+## Source 1: RAMP Sitemap Extension (Priority 1)
+
+The highest-fidelity source. Providers add RAMP-specific metadata directly in their sitemap using XML namespace extensions. This follows established practice: Google uses `image:`, `video:`, and `news:` sitemap extensions.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:ramp="https://ramp.dev/sitemap/1.0">
+  <url>
+    <loc>https://example.com/premium/ai-infrastructure.html</loc>
+    <lastmod>2026-03-14</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+
+    <ramp:content>
+      <ramp:tokens>3300</ramp:tokens>
+      <ramp:content-id>article-2026-03-14-ai-infra</ramp:content-id>
+      <ramp:wordcount>2500</ramp:wordcount>
+      <ramp:pricing-model>per_article</ramp:pricing-model>
+      <ramp:rate currency="USD">0.05</ramp:rate>
+      <ramp:permits>ai-input ai-index search</ramp:permits>
+      <ramp:prohibits>ai-train</ramp:prohibits>
+      <ramp:content-type>text</ramp:content-type>
+      <ramp:author>Sarah Chen</ramp:author>
+      <ramp:source-type>human</ramp:source-type>
+    </ramp:content>
+  </url>
+</urlset>
+```
+
+### RAMP Sitemap Namespace Definition
+
+| Element | Type | Required | Description |
+|---|---|---|---|
+| `ramp:content` | Container | No | Wraps all RAMP extensions for a URL |
+| `ramp:tokens` | int | No | Estimated token count (most accurate when provider-provided) |
+| `ramp:content-id` | string | No | Stable content identifier (survives URL changes) |
+| `ramp:wordcount` | int | No | Word count of main body text |
+| `ramp:pricing-model` | enum | No | Pricing model hint (Exchange may override with private pricing) |
+| `ramp:rate` | decimal | No | Suggested price (fallback if no private pricing configured). Attribute: `currency` (ISO 4217) |
+| `ramp:permits` | string | No | Space-separated permitted CoMP functions |
+| `ramp:prohibits` | string | No | Space-separated prohibited CoMP functions |
+| `ramp:content-type` | enum | No | Content type (text, video, image, audio) |
+| `ramp:author` | string | No | Author name(s), comma-separated for multiple |
+| `ramp:source-type` | enum | No | human, ai, or hybrid |
+
+### Go Parser
+
+```go
+type RAMPSitemapSource struct {
+    httpClient *http.Client
+    logger     *slog.Logger
+}
+
+func (s *RAMPSitemapSource) Name() IngestionSource {
+    return IngestionSourceRAMPSitemap
+}
+
+func (s *RAMPSitemapSource) Priority() int { return 1 }
+
+func (s *RAMPSitemapSource) SupportsIncremental() bool { return true }
+
+// Namespace-aware XML structs
+type sitemapURL struct {
+    Loc        string             `xml:"loc"`
+    LastMod    string             `xml:"lastmod"`
+    ChangeFreq string             `xml:"changefreq"`
+    Priority   float64            `xml:"priority"`
+    Content    *rampSitemapContent `xml:"https://ramp.dev/sitemap/1.0 content"`
+}
+
+type rampSitemapContent struct {
+    Tokens       int     `xml:"https://ramp.dev/sitemap/1.0 tokens"`
+    ContentID    string  `xml:"https://ramp.dev/sitemap/1.0 content-id"`
+    WordCount    int     `xml:"https://ramp.dev/sitemap/1.0 wordcount"`
+    PricingModel string  `xml:"https://ramp.dev/sitemap/1.0 pricing-model"`
+    Rate         rateElement `xml:"https://ramp.dev/sitemap/1.0 rate"`
+    Permits      string  `xml:"https://ramp.dev/sitemap/1.0 permits"`
+    Prohibits    string  `xml:"https://ramp.dev/sitemap/1.0 prohibits"`
+    ContentType  string  `xml:"https://ramp.dev/sitemap/1.0 content-type"`
+    Author       string  `xml:"https://ramp.dev/sitemap/1.0 author"`
+    SourceType   string  `xml:"https://ramp.dev/sitemap/1.0 source-type"`
+}
+
+type rateElement struct {
+    Currency string  `xml:"currency,attr"`
+    Value    float64 `xml:",chardata"`
+}
+```
+
+## Source 2: RSL rsl.txt (Priority 2)
+
+Parses RSL 1.0 XML to extract permits, prohibits, and payment hints per content path. RSL is the provider's authoritative declaration of content availability and licensing terms. Pricing in RSL (`<payment>`, `<amount>`) is optional -- omitting it means "contact the Exchange for pricing."
+
+**Standard attribution for RSL fields:**
+- RSL usage types (ai-all, ai-input, ai-index, search) map to CoMP Function/SubFunction enums
+- RSL payment types (crawl, purchase, subscription) map to RAMP PricingModel enum
+- RSL content paths map to CoMP Package.scope + Retrieval
+
+### RSL Payment Type to RAMP PricingModel
+
+| RSL Payment Type | RAMP PricingModel | Notes |
+|---|---|---|
+| `crawl` | `PRICING_MODEL_PER_FETCH` | Per-fetch pricing |
+| `purchase` | `PRICING_MODEL_PER_ACCESS` | One-time access fee |
+| `subscription` | `PRICING_MODEL_SUBSCRIPTION` | Recurring access |
+| `free` | `PRICING_MODEL_FREE` | No charge |
+| `attribution` | `PRICING_MODEL_ATTRIBUTION` | Free with required citation |
+| `contribution` | `PRICING_MODEL_CONTRIBUTION` | Good-faith payment |
+| `training` | `PRICING_MODEL_TRAINING` | Per training instance |
+| `use` / `inference` | `PRICING_MODEL_PER_TOKEN` | Per-token consumption |
+| *(omitted)* | `PRICING_MODEL_UNSPECIFIED` | No `<payment>` in RSL = "contact Exchange for pricing" |
+
+### RSL Usage Type to CoMP Function
+
+| RSL Usage Type | CoMP Function | Notes |
+|---|---|---|
+| `all` | `FUNCTION_ALL` | All uses permitted/prohibited |
+| `ai-all` | `FUNCTION_AI_ALL` | All AI uses |
+| `ai-train` | `FUNCTION_AI_TRAIN` | Model training |
+| `ai-input` | `FUNCTION_AI_INPUT` | RAG, grounding, agent context |
+| `ai-index` | `FUNCTION_AI_INDEX` | Indexing for AI search |
+| `search` | `FUNCTION_SEARCH` | Traditional search engine indexing |
+
+### RSL Content Paths to CoMP Objects
+
+| RSL Element | CoMP Object | Notes |
+|---|---|---|
+| `<content url="/premium/*">` | `Package.scope` | Content addressing via path patterns |
+| `<content url="...">` | `Retrieval.endpoint` | Populated at ExecuteTransaction with signed URL |
+
+## Source 3: Standard Sitemap XML (Priority 3)
+
+Parses standard sitemap.xml for URL discovery. Provides URL inventory and freshness signals but no pricing or token information. Combined with RSL or tenant defaults for complete catalog entries.
+
+The implementation tries the sitemap index first, then direct sitemap, then falls back to checking robots.txt for sitemap location.
+
+```go
+type SitemapSource struct {
+    httpClient *http.Client
+    logger     *slog.Logger
+}
+
+func (s *SitemapSource) Name() IngestionSource { return IngestionSourceSitemap }
+func (s *SitemapSource) Priority() int          { return 3 }
+func (s *SitemapSource) SupportsIncremental() bool { return true }
+```
+
+## Source 4: HTML Crawl + Readability (Priority 4)
+
+For URLs without token estimates from higher-priority sources, the pipeline crawls the page and extracts main content using a readability algorithm (equivalent to Mozilla's Readability.js). This is the most expensive source -- it makes HTTP requests to every content URL.
+
+**Crawl constraints:**
+
+- Respect `robots.txt` (cached per domain, refreshed daily)
+- Rate limit: max 1 request/second per domain (configurable)
+- Timeout: 10s per page
+- Max body size: 5 MB
+- User-Agent: `RAMP-Exchange/1.0 (content-indexer)`
+- Crawl only during ingestion window, never on the hot path
+
+```go
+type HTMLCrawlSource struct {
+    httpClient  *http.Client
+    rateLimiter *rate.Limiter
+    robotsCache map[string]*robotstxt.RobotsData
+    logger      *slog.Logger
+}
+
+func (s *HTMLCrawlSource) Name() IngestionSource { return IngestionSourceHTMLCrawl }
+func (s *HTMLCrawlSource) Priority() int          { return 4 }
+func (s *HTMLCrawlSource) SupportsIncremental() bool { return true }
+```
+
+The `EnrichEntry` method crawls a single URL, extracts text via readability, counts words, and estimates tokens. It is called by the Enricher for entries missing word count or token estimates.
+
+## Source 5: CMS API Integration (Priority 5)
+
+Pluggable adapters for common CMS platforms. Each adapter implements the `Discoverer` interface and queries the CMS REST API for content metadata.
+
+| CMS | API Endpoint | Content Field | Notes |
+|---|---|---|---|
+| WordPress | `/wp-json/wp/v2/posts` | `content.rendered` | Most common. Pagination via `X-WP-TotalPages` header |
+| Ghost | `/ghost/api/content/posts` | `html` | Requires content API key |
+| Contentful | `/spaces/{id}/entries` | `fields.body` | Structured content, may need rich text parsing |
+| Strapi | `/api/articles` | `attributes.content` | REST or GraphQL |
+| Drupal JSON:API | `/jsonapi/node/article` | `attributes.body.processed` | JSON:API spec compliant |
+
+## Source 6: Manual Configuration (Priority 6)
+
+Provider or Exchange operator configures resource rules via the Exchange admin API (`POST /admin/content-rules`, `PUT /admin/tenants/{id}/pricing`). Provides tenant-level defaults and path-level overrides.
+
+```go
+type ManualSource struct {
+    configStore ConfigStore
+    logger      *slog.Logger
+}
+
+func (s *ManualSource) Name() IngestionSource { return IngestionSourceManual }
+func (s *ManualSource) Priority() int          { return 6 }
+func (s *ManualSource) SupportsIncremental() bool { return false }
+```
+
+## Source 7: CatalogService API Push
+
+Optional gRPC service for providers, CMS plugins, and third-party content intelligence providers to push content metadata directly to the Exchange, bypassing crawl/poll cycles.
+
+CatalogService is NOT how Exchange operators push their own inventory. Exchange operators own the Exchange and have direct DB access. CatalogService is for external parties: CMS plugins, third-party intelligence providers, resource syndicators.
+
+### Authentication and Authorization
+
+`PushResources` requests must be signed. Every request carries:
+- `caller_id` -- identifies the registered CatalogService client
+- `caller_signature` -- Ed25519 signature proving the caller is authorized
+- `caller_signature_algorithm` -- signature algorithm (default: "ed25519")
+
+The Exchange verifies `caller_signature` against the registered public key for `caller_id`, and confirms that `caller_id` is authorized to push content for the specified `tenant_id`.
+
+### Third-Party Content Intelligence and Verification Vendors (v1.0)
+
+Companies like GumGum, Peer39, and DoubleVerify already index the web for contextual ad targeting. They can implement `CatalogService.PushResources` to feed enriched content metadata (topic, token estimates, content categorization) and signed `ResourceAttestation` entries to Exchanges.
+
+**Verification vendors as attestation sources**: In v1.0, third-party vendors push `ResourceAttestation` entries alongside catalog metadata. Each attestation is a signed envelope of claims (token count, language, content hash) from a trusted party. The Exchange verifies the attestation signature against the vendor's public key published at `https://{vendor-domain}/.well-known/ramp-verifier.json`.
+
+**Authorization**: A verification vendor must be listed in the provider's `catalog_contributors` (declared in `/.well-known/ramp.json`) to push attestations for that provider's content. The Exchange checks this authorization on every `PushResources` call.
+
+```protobuf
+service CatalogService {
+  rpc PushResources(PushResourcesRequest) returns (PushResourcesResponse);
+  rpc RemoveContent(RemoveContentRequest) returns (RemoveContentResponse);
+  rpc RefreshCatalog(RefreshCatalogRequest) returns (RefreshCatalogResponse);
+}
+
+message PushResourcesRequest {
+  string tenant_id = 1;
+  repeated ResourceEntry entries = 2;
+  string caller_signature = 3;
+  string caller_signature_algorithm = 4;
+  string caller_id = 5;
+}
+
+message ResourceEntry {
+  string domain = 1;
+  string path = 2;
+  optional string content_id = 3;
+  optional string title = 4;
+  optional int32 word_count = 5;
+  optional int32 estimated_quantity = 6;
+  optional string content_hash = 7;
+  optional string hash_method = 8;
+  optional IngestionSource source = 9;
+  optional string provenance_source = 10;
+  optional google.protobuf.Timestamp provenance_timestamp = 11;
+  repeated ResourceAttestation attestations = 12; // v1.0: signed attestation entries
+  google.protobuf.Struct ext = 15;
+}
+```
+
+### Provenance Tracking
+
+Every catalog entry records who provided it and when, via two fields on `ResourceEntry`:
+- `provenance_source` -- e.g., "gumgum.com", "ssp-alpha.com", "wordpress-plugin"
+- `provenance_timestamp` -- when the metadata was collected/generated
+
+This creates an audit trail for "where did this catalog entry come from?" -- essential when multiple parties can push metadata for the same content.
+
+## Source Decision Matrix
+
+```
+Does the provider have a RAMP-extended sitemap.xml?
++-- YES -> Source 1 (RAMP Sitemap) -- best fidelity
+|
++-- NO -> Does the provider have rsl.txt?
+         +-- YES -> Source 2 (RSL) + Source 3 (Standard Sitemap) + Source 4 (HTML Crawl)
+         |
+         +-- NO -> Does the provider have a standard sitemap.xml?
+                  +-- YES -> Source 3 (Standard Sitemap) + Source 4 (HTML Crawl)
+                  |
+                  +-- NO -> Is a CMS API available?
+                           +-- YES -> Source 5 (CMS API)
+                           |
+                           +-- NO -> Source 6 (Manual configuration only)
+```

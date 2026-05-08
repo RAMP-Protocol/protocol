@@ -1,0 +1,308 @@
+---
+title: "RAMP for Exchange Operators"
+description: "How to operate a RAMP Exchange — aggregate resource catalogs, handle transactions, earn a margin"
+---
+
+## The Opportunity
+
+Resource providers need a transaction layer but don't want to build one. Courts don't want to run billing APIs. Publishers don't want to negotiate with every AI company. Hospitals don't want to handle metered access to imaging data. Patent offices don't want to build per-query pricing.
+
+You solve this by running an **Exchange**: aggregate their catalogs, handle discovery, pricing, and transactions, and earn a margin on every access. This is the aggregator pattern — the same model that drives SSPs in ad-tech, clearinghouses in finance, and distributors in publishing.
+
+RAMP was validated across **18 real-world scenarios** spanning 10 industries. The same protocol works for all of them:
+
+| Exchange Type | What You Aggregate | Providers | Example Operators |
+|---|---|---|---|
+| Media exchange | News articles, podcasts, video | Publishers | SSPs, media companies |
+| Academic exchange | Journal articles, preprints | Publishers, repositories | Elsevier, OpenAlex |
+| Legal exchange | Court filings, legislation, patents | Courts, patent offices | PACER aggregator, EUR-Lex |
+| Credit/financial exchange | Credit reports, market data | Data providers | D&B resellers, Bloomberg |
+| Medical data exchange | Clinical data, imaging | Hospitals, research institutions | TCIA, imaging exchanges |
+| Government data exchange | Property records, business filings | County/state agencies | CoreLogic, ATTOM |
+
+The value proposition is the same regardless of domain: providers get revenue from AI agents without building anything, agents get standardized access without bespoke integrations, and you keep a margin on every transaction.
+
+## What You Deploy
+
+You deploy an **Exchange Node** -- a Go service that handles three API calls:
+
+1. **DiscoverResources** -- AI agent asks "what's available at this URL and how much?" Your Exchange looks up the provider's catalog and returns offers with pricing.
+2. **ExecuteTransaction** -- AI agent says "I'll take it." Your Exchange checks the buyer's balance, logs the transaction, and returns a signed URL.
+3. **ReportUsage** -- AI agent reports what it did with the content. Mandatory. You track compliance.
+
+That's the whole protocol. Three RPCs. Your billing adapter plugs in where `Authorize(buyer, amount)` and `Record(transaction)` are called.
+
+## Unit-Agnostic Metering
+
+A media exchange meters in tokens. A legal exchange meters in pages. A medical exchange meters in studies. A geospatial exchange meters in sq_km. Same protocol, different units.
+
+RAMP pricing uses three fields: `unit_cost` (price per unit), `unit` (what's being metered), and `estimated_quantity` (how much the agent will consume). No assumption about what's being metered:
+
+```
+Exchange Type       Metering Unit       Example unit_cost
+──────────────────────────────────────────────────────────────
+Media                  tokens              $0.00003/token
+Legal                  pages               $0.50/page
+Academic               tokens              $0.05/article (flat)
+Medical imaging        studies             $2.00/study
+Credit/financial       records             $5.00/record
+Geospatial             sq_km               $0.10/sq_km
+Streaming (audio)      minutes             $0.02/minute
+Pharma                 interaction_pairs   $0.001/pair
+```
+
+Usage reporting follows the same pattern: `consumed_quantity` + `consumed_unit`. Your Exchange MUST support these fields on all offers and MUST NOT assume tokens as the default unit.
+
+## Extension Profiles
+
+Your Exchange declares which domain profiles it supports in its manifest. This tells Brokers and agents what kind of resources you handle:
+
+```json
+// Media exchange
+{ "supported_profiles": ["ramp-news-v1"] }
+
+// Academic exchange
+{ "supported_profiles": ["ramp-academic-v1"] }
+
+// Legal exchange
+{ "supported_profiles": ["ramp-legal-v1"] }
+
+// Multi-domain exchange
+{ "supported_profiles": ["ramp-news-v1", "ramp-academic-v1"] }
+```
+
+Agents declare which profiles they understand. The Broker routes queries to Exchanges that support the requested profile. An academic research agent requesting `ramp-academic-v1` is routed to your Exchange if you declare that profile.
+
+Profile conformance means your Exchange sets the required `ext` fields defined in the profile spec and validates them against the profile's JSON Schema:
+
+| Profile | Scope | What It Means for Your Exchange |
+|---|---|---|
+| `ramp-news-v1` | News, podcasts, broadcasting | Set IPTC subject codes, correction status, podcast metadata in offer ext fields |
+| `ramp-academic-v1` | Scholarly articles, preprints | Set DOI, OA status, version lifecycle in offer ext fields |
+| `ramp-legal-v1` | Legislation, case law, patents | Set jurisdiction, amendment chains, ELI/ECLI in offer ext fields |
+
+A Exchange MAY implement zero, one, or multiple profiles. You can start with one domain and expand.
+
+## If You're an SSP: How RAMP Maps to Your Infrastructure
+
+If you operate an SSP or ad exchange, RAMP maps directly to your existing concepts:
+
+```
+Ad-Tech Concept          →  RAMP Equivalent
+─────────────────────────────────────────────
+SSP / Exchange           →  Exchange Node
+Publisher                →  Resource Provider
+ads.txt                  →  ramp.json (authorized sellers)
+Bid Request              →  ResourceQuery
+Win Notification         →  TransactionRequest
+eCPM                     →  unit_cost (effective cost per unit)
+Impression               →  Content access (signed URL)
+Viewability Report       →  Usage Report
+```
+
+**You already have:**
+- Provider relationships and contracts
+- Billing infrastructure (invoicing, prepaid, credit)
+- CDN access for provider domains
+- Revenue share agreements
+
+**RAMP adds:**
+- A Exchange service (Go binary, stateless, horizontally scalable)
+- An edge function deployed to provider CDNs (bot blocking + signed URL verification)
+- A resource catalog built from provider `rsl.txt` files and CMS integrations
+
+## Provider Onboarding
+
+For each provider, you:
+
+1. Run domain verification (ACME-based) to prove provider domain ownership and provision signing keys
+2. Ingest their `rsl.txt` to build a resource catalog with pricing
+3. Configure their pricing tier (the `rsl.txt` rate is a ceiling; your private rate can be lower)
+4. Authorize `catalog_contributors` -- third-party verification vendors the provider permits to push attestations for their content
+5. If applicable, deploy the RAMP edge function to their delivery endpoint (CDN, API gateway, PACS server) for signed URL verification
+6. Done. Their content is now available to AI buyers through your Exchange
+
+Providers deploy nothing themselves in the managed model. You manage everything. This is the [Exchange-Managed deployment model](/architecture/deployment-models/). Some providers (large publishers, data vendors) may prefer to manage their own delivery endpoint -- the protocol supports both.
+
+## Buyer Onboarding
+
+AI companies register via your existing account management or a self-signup API:
+
+- **Enterprise**: Out-of-band key exchange during contract signing. You register their Ed25519 public key.
+- **Self-signup**: AI agent registers via API with their public key manifest. Per-request billing only (no subscription).
+
+You don't need bilateral deals with every AI company. Any agent that speaks the RAMP protocol can buy from your Exchange.
+
+## Requester Verification
+
+Every incoming request carries a `Requester` message with an Ed25519 signature. Your Exchange MUST verify this identity before processing any query or transaction.
+
+### Signature Verification
+
+1. Extract the `domain` from the `Requester` message
+2. Fetch the requester's public key from `{domain}/.well-known/ramp-agent.json`
+3. Verify the Ed25519 signature over the tuple `(id, domain, uris, scopes)`
+4. Reject the request if verification fails — no fallback, no degraded mode
+
+Key caching is recommended. Fetch keys with a TTL and re-fetch periodically to handle key rotation without per-request overhead.
+
+### Biscuit Delegation Verification
+
+When a request includes a `Delegation` message (nested inside `Requester`), your Exchange verifies the Biscuit token chain:
+
+1. Deserialize the base64-encoded `token` from the `Delegation` message
+2. Verify the authority block (block 0) is signed by the Ed25519 key published at `{principal_domain}/.well-known/ramp-agent.json`
+3. Verify each attenuation block's signature (each signed by the entity that appended it)
+4. Evaluate all check conditions across all blocks — scope restrictions, spend caps, URI constraints
+5. Check `expires_at` against current time — reject expired tokens with `DENIAL_REASON_DELEGATION_EXPIRED`
+6. Optionally check `revocation_uri` for high-value transactions
+
+This verification is entirely offline — no callback to the principal is required.
+
+### IntermediaryHop Chain Verification
+
+When the `intermediaries` list is non-empty, the request has passed through one or more intermediaries (e.g., agent to broker to your Exchange). For each `IntermediaryHop`:
+
+1. Fetch the intermediary's public key from `{hop.domain}/.well-known/ramp-agent.json`
+2. Verify the Ed25519 signature proves the intermediary handled the request
+3. Check the `forwarded_at` timestamps for temporal consistency
+
+### Scope-Based Catalog Filtering
+
+After verifying identity and delegation, filter your catalog by the requester's declared scopes. Only resources matching the scopes are returned in the `DiscoverResources` response.
+
+For resources that exist but fall outside the requester's scopes:
+
+- **Public Exchange:** Silently omit the resource. Do not reveal its existence.
+- **Enterprise Exchange:** Return `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` in the `OfferGroup.absence_reason` field so the requester gets an actionable diagnostic.
+
+### Subscription Quota Signaling
+
+When the requester holds a subscription (identifiable via `license_id` or subscription scopes), populate `SubscriptionQuotaInfo` entries on offers and transaction responses. This proactive quota signaling lets agents track remaining allowance and avoid committing to transactions they cannot complete. Track `max_accesses` and `quota_period` from the `Delegation` message when present.
+
+### New Denial Reasons to Implement
+
+v1.0 adds three identity-related denial reasons your Exchange MUST return when appropriate:
+
+| Denial Reason | When to Return |
+|---|---|
+| `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for the current `quota_period` |
+| `DENIAL_REASON_DELEGATION_EXPIRED` | Biscuit delegation token `expires_at` is in the past |
+| `DENIAL_REASON_SCOPE_INSUFFICIENT` | Requester's scopes do not cover the requested resource (transaction-time denial) |
+
+For the full identity model specification — Requester fields, Biscuit structure, scope format, and key management — see [Authentication](/protocol/authentication/).
+
+## Attestation Verification
+
+Your Exchange verifies `ResourceAttestation` signatures at catalog push time. When a provider or verification vendor pushes resource metadata via `CatalogService.PushContent`, your Exchange:
+
+1. Fetches the signer's public key from `https://{verifier}/.well-known/ramp-verifier.json`
+2. Verifies the Ed25519 signature over JCS-canonicalized claims
+3. Checks that the `verifier` is either the provider domain (Level 1 self-attestation) or a vendor listed in the provider's `catalog_contributors` (Level 2 third-party attestation)
+4. Rejects attestations from unauthorized contributors
+
+This prevents unauthorized parties from injecting false claims into your resource catalog.
+
+## Dispute Resolution
+
+Your Exchange handles `DisputeTransaction` RPCs from agents. The dispute system operates in three tiers:
+
+| Tier | Scope | Volume | Response Time |
+|---|---|---|---|
+| **Tier 1 -- Automated** | Delivery failures, content hash mismatches, signed URL expiry | ~99% of disputes | &lt; 1 second |
+| **Tier 2 -- Rule-Based** | Ambiguous evidence, delivery says 200 but content is suspect | ~0.9% of disputes | &lt; 24 hours |
+| **Tier 3 -- Investigation** | Aggregate fraud patterns, systematic abuse | ~0.1% of disputes | Case-by-case |
+
+**`report_id` generation**: When an agent calls `ReportUsage`, your Exchange returns a `report_id` in the `UsageReportResponse`. This `report_id` is required on every `DisputeRequest` -- it proves the agent fulfilled its reporting obligation before disputing. Your Exchange rejects disputes without a valid `report_id`.
+
+Delivery logs are the authoritative evidence source. They cannot be fabricated by the agent and provide independent verification of delivery status, response size, and timing.
+
+## Exchange Manifest and Health Checks
+
+As an Exchange operator, you are responsible for two additional capabilities:
+
+**Exchange Manifest** -- Your Exchange serves a machine-readable self-description at `/.well-known/ramp-exchange.json`. This tells Brokers and agents what your Exchange supports (pricing models, delivery methods, accepted verifiers, endpoints) without trial-and-error. The manifest includes:
+
+- **`base_currency`** (ISO 4217 code) -- the currency for all `unit_cost` values. Enables cross-exchange price comparison by the Broker. A legal exchange quoting in EUR and a media exchange quoting in USD can be compared when both declare their currency.
+- **`supported_profiles`** -- domain extension profiles your Exchange conforms to.
+
+The manifest is generated from your configuration at startup and served as a static JSON document. See [Exchange Manifest](/protocol/exchange-manifest/).
+
+**Health Checks** -- Your Exchange exposes three health layers: gRPC health (`grpc.health.v1.Health/Check`), HTTP liveness (`/healthz`), and HTTP readiness (`/readyz`). Brokers use gRPC health probing to make structured routing decisions -- they can distinguish an Exchange with a stale catalog from one with billing down. Kubernetes uses the HTTP endpoints for pod lifecycle management. See [Health Checks](/components/exchange/health-checks/).
+
+## Revenue Model
+
+Revenue depends on your exchange domain and the value of the resources you aggregate:
+
+```
+Media exchange:
+  Provider sets price:  $0.05/article (tokens)
+  AI Agent pays:        $0.05/article
+  You keep:             Your standard rev-share margin
+
+Legal exchange:
+  Provider sets price:  $0.50/page (court filing)
+  AI Agent pays:        $0.50/page
+  You keep:             Your standard rev-share margin
+
+Credit exchange:
+  Provider sets price:  $5.00/record (credit report)
+  AI Agent pays:        $5.00/record
+  You keep:             Your standard rev-share margin
+
+Medical imaging exchange:
+  Provider sets price:  $2.00/study (MRI scan)
+  AI Agent pays:        $2.00/study
+  You keep:             Your standard rev-share margin
+```
+
+Higher-value resources mean higher absolute margins per transaction. A credit exchange processing 2K reports/day at $5.00 average = $10K/day gross = **$3.6M/year**. A media exchange processing 10K articles/day at $0.05 average = $500/day gross = **$182K/year**. Infrastructure costs scale with RPS, not transaction value -- approximately **$40/day** at 10K RPS.
+
+## Multi-Exchange Competition
+
+AI agents can use a **Broker** to query multiple Exchanges and compare prices -- like header bidding but for content. This means:
+
+- Competitive pressure keeps your margins honest
+- Premium content commands premium pricing (quality signals in offers)
+- Subscription deals give your providers an advantage (zero marginal cost for the buyer)
+- `base_currency` in your manifest enables cross-exchange price comparison even across currencies
+
+## Technical Integration
+
+**NFR targets**: 10K RPS, under 100ms p99 latency, under $0.00005/transaction infrastructure cost.
+
+**Billing adapter interface** (your integration point):
+```go
+type BillingAdapter interface {
+    Authorize(ctx, buyerID, amount) → (ok, error)
+    Record(ctx, transaction) → error
+    CheckSubscription(ctx, buyerID, providerGroup) → (sub, error)
+}
+```
+
+Implement these three methods against your existing billing system. The reference implementation uses DynamoDB; production deployments wire it to their real ledger.
+
+## New Pricing Models
+
+RAMP v1.0 adds three pricing models beyond the original text-centric set:
+
+| Model | Unit | Use Case |
+|---|---|---|
+| `PRICING_MODEL_PER_PAGE` | pages | Court filings, legal documents, PDFs |
+| `PRICING_MODEL_PER_MINUTE` | minutes | Video, audio, streaming sessions |
+| `PRICING_MODEL_PER_RECORD` | records | Database records, credit reports, medical studies |
+
+Pricing is now unit-agnostic: `unit_cost` replaces eCPT, `estimated_quantity` replaces `estimated_tokens`, and `Pricing.unit` specifies the metering unit. Your Exchange MUST support these fields on all offers.
+
+## Streaming Delivery
+
+RAMP v1.0 adds `DELIVERY_METHOD_STREAMING` for real-time connections (WebSocket, SSE, HLS, Icecast). Your Exchange generates a signed URL pointing to a streaming endpoint. The agent connects and receives continuous data. Stream mechanics (heartbeat, reconnection, concurrent connection limits) are managed by the provider, not the protocol.
+
+Streaming transactions follow the same RAMP flow, but the signed URL has a longer TTL (streaming sessions last minutes/hours) and usage is reported in time-based units (minutes, hours).
+
+## Next Steps
+
+1. Review the [Exchange design](/components/exchange/overview/) for architecture details
+2. See the [Billing Adapter](/components/exchange/billing-adapter/) for the integration interface
+3. Walk through the [Scenario Walkthrough](/protocol/scenario-walkthrough/) for a complete transaction trace
+4. Review the [Threat Model](/security/threat-model/) -- it was built from 20 years of ad-tech fraud patterns

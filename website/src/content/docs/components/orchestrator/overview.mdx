@@ -1,0 +1,371 @@
+---
+title: "Broker Overview"
+description: "The RAMP Broker is a demand-side router that queries multiple Exchanges, compares offers, enforces budget, and selects the best resource deal for AI agents."
+---
+
+## What the Broker Does
+
+The RAMP Broker is the optional demand-side router in the RAMP protocol. It sits with or near the AI agent, queries multiple Exchanges in parallel, compares offers, enforces budget, and selects the best deal. It is the "DSP" of metered resource access.
+
+**The Broker is optional.** Agents can talk directly to Exchanges using the same `DiscoverResources`/`ExecuteTransaction`/`UsageReport` RPCs. The Broker adds value through:
+
+- **Multi-exchange comparison** -- fan out DiscoverResources to N Exchanges, pick cheapest
+- **Budget enforcement** -- per-request, per-session, per-Exchange cumulative tracking
+- **Resource deduplication** -- same article from two Exchanges, compare price
+- **Attestation-aware selection (v1.0)** -- prefer offers with higher attestation levels (Level 2 > Level 1 > Level 0)
+- **Reporting relay** -- forward UsageReports to the correct Exchange, track `report_id` for dispute chain
+- **Dispute relay (v1.0)** -- forward `DisputeRequest` messages to the correct Exchange
+- **Selection transparency** -- logged rationale for every selection decision
+
+The Exchange does not know or care whether the request came from an Broker or directly from an agent. The protocol is identical.
+
+## Component Architecture
+
+The Broker is composed of five internal components. Each is a Go interface with a concrete implementation. No inter-component communication uses the network; everything is in-process function calls.
+
+```mermaid
+graph TB
+    subgraph "RAMP Broker"
+        MR[Exchange Registry]
+        SD[Supply Discovery<br/>parallel fanout]
+        SE[Selection Engine]
+        BT[Budget Tracker]
+        RR[Reporting Relay]
+    end
+
+    Agent[AI Agent] -->|RAMPRequest| SD
+    SD -->|DiscoverResources| MPA[Exchange A]
+    SD -->|DiscoverResources| MPB[Exchange B]
+    SD -->|DiscoverResources| MPC[Exchange C]
+
+    MR -.->|endpoint list| SD
+    SD -->|[]ResourceResponse| SE
+    BT -.->|budget check| SE
+    SE -->|winning Offer| SD
+    SD -->|ExecuteTransaction| MPA
+    SD -->|RAMPResponse| Agent
+
+    Agent -->|UsageReport| RR
+    RR -->|forward| MPA
+```
+
+### Component Responsibilities
+
+| Component | Responsibility | State |
+|---|---|---|
+| **Exchange Registry** | Knows which Exchanges exist and their health status. Bootstraps from [Exchange Manifest](/protocol/exchange-manifest/) (`/.well-known/ramp-exchange.json`) instead of HEAD probes -- extracting endpoints, capabilities, and accepted verifiers in a single fetch | Long-lived, refreshed periodically |
+| **Supply Discovery** | Fans out DiscoverResources RPCs to N Exchanges concurrently | Per-request, stateless |
+| **Selection Engine** | Deduplicates, ranks, filters, and selects the best offer | Per-request, stateless |
+| **Budget Tracker** | Tracks cumulative spend per session/period and enforces limits | Per-session in-memory, per-period in Redis |
+| **Reporting Relay** | Forwards UsageReports to the winning Exchange, tracks obligations | Per-transaction, short-lived |
+
+## Internal Call Flow
+
+```go
+func (o *Broker) HandleRequest(ctx context.Context, req *rampv1.RAMPRequest) (*rampv1.RAMPResponse, error) {
+    // 1. Resolve which Exchanges to query
+    exchanges := o.registry.Resolve(req.Constraints)
+
+    // 2. Fan out DiscoverResources to all Exchanges (multi-URI: all URIs in one query per MP)
+    responses := o.discovery.FanOut(ctx, exchanges, req)
+
+    // 3. Select best offer(s).
+    //    Single-URI: select one winning offer.
+    //    Multi-URI (batch): select best offer per URI, check total against budget.
+    uris := req.Aisystem.Aisysuse.Uri
+    if len(uris) > 1 {
+        return o.handleBatchRequest(ctx, req, responses)
+    }
+
+    selection, err := o.selector.Select(ctx, responses, req.Constraints, o.budget)
+    if err != nil {
+        return nil, err // no viable offer
+    }
+
+    // 4. Execute transaction with winning Exchange
+    txn, err := o.discovery.Execute(ctx, selection.Exchange, selection.Offer, req)
+    if err != nil {
+        return nil, err
+    }
+
+    // 5. Track budget and reporting obligation
+    o.budget.Record(ctx, req.SessionID(), txn.Cost)
+    o.reporter.Track(txn)
+
+    // 6. Return RAMPResponse to agent
+    return toRAMPResponse(req, txn, selection), nil
+}
+```
+
+## Request Signing and Intermediary Chain
+
+RAMP uses a two-layer signing model: the **Requester signature** proves who originated the request, and the **intermediary chain** proves which intermediaries forwarded it.
+
+### Requester Signature
+
+The `Requester` message carries an Ed25519 signature over `(id, domain, uris, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp-agent.json`.
+
+The Broker passes `Requester` through unchanged -- it never modifies the requester's identity or signature.
+
+### Intermediary Chain (schain-inspired)
+
+When the Broker forwards a request, it appends a signed `IntermediaryHop` to the `ResourceQuery.intermediaries` chain. Each hop records:
+
+- **`domain`** -- the intermediary's canonical domain (for public key lookup)
+- **`id`** -- the intermediary's identifier
+- **`forwarded_at`** -- timestamp of when the intermediary forwarded the request
+- **`signature`** -- Ed25519 signature over the request payload at this hop
+
+This chain is modeled after OpenRTB schain (Supply Chain Object). When the agent queries a Exchange directly, `intermediaries` is empty. When the request passes through an Broker, it contains one hop.
+
+```go
+// Broker appends a signed hop when forwarding.
+func (o *Broker) signHop(query *rampv1.ResourceQuery) {
+    hop := &rampv1.IntermediaryHop{
+        Domain:      o.domain,                     // e.g., "broker.example.com"
+        Id:          o.id,
+        ForwardedAt: timestamppb.Now(),
+        Signature:   o.signPayload(query),          // Ed25519 over the query payload
+        SignatureAlgorithm: "ed25519",
+    }
+    query.Intermediaries = append(query.Intermediaries, hop)
+}
+```
+
+### Exchange Verification
+
+The Exchange verifies both layers:
+
+1. **Requester signature** -- verified against the public key at `{requester.domain}/.well-known/ramp-agent.json`
+2. **Each intermediary hop signature** -- verified against the public key at `{hop.domain}/.well-known/ramp-agent.json`
+
+Both must pass. This replaces the earlier flat `agent_signature` + `broker_signature` model with a chain that generalizes to multiple intermediaries.
+
+The Broker announces its public key at `{domain}/.well-known/ramp-agent.json` (same manifest format as agents). This allows any Exchange to verify the Broker's identity without prior registration.
+
+## Profile-Based Routing
+
+The Broker uses domain profiles to route queries to the right Exchanges.
+
+### How It Works
+
+1. **Agent declares profiles** -- `RAMPRequest.supported_profiles` lists which domain extension profiles the agent understands (e.g., `["ramp-academic-v1"]`)
+2. **Broker filters Exchanges** -- the Exchange Registry checks each Exchange's `ExchangeManifest.supported_profiles` and routes queries only to Exchanges that support at least one of the requested profiles
+3. **Broker forwards profiles** -- the declared profiles are forwarded in `ResourceQuery.supported_profiles`, so the Exchange knows which profile-specific `ext` fields to include in offers
+4. **Exchange responds with profile data** -- the Exchange includes profile-specific metadata (e.g., retraction status, citation counts for academic content) only when the caller declares support
+
+### Example: Academic Research Agent
+
+An agent working on a literature review sends:
+
+```json
+{
+  "supported_profiles": ["ramp-academic-v1"]
+}
+```
+
+The Broker's Exchange Registry contains three Exchanges:
+- **academic-mp.example.com** -- `supported_profiles: ["ramp-academic-v1", "ramp-legal-v1"]`
+- **news-mp.example.com** -- `supported_profiles: ["ramp-news-v1"]`
+- **general-mp.example.com** -- `supported_profiles: []` (no profiles)
+
+The Broker queries only **academic-mp.example.com** (profile match) and **general-mp.example.com** (no profile restriction -- always included). It skips **news-mp.example.com** (no matching profile).
+
+## Scope Forwarding, Token Attenuation, and Quota Aggregation
+
+### Scope Forwarding
+
+The Broker forwards `Requester.scopes` to every Exchange it queries. Scopes control what the requester can access -- the Exchange filters its catalog to resources matching these scopes. The Broker does not modify scopes; it passes them through as-is.
+
+### Biscuit Token Attenuation
+
+When the `Requester.delegation` carries a Biscuit authorization token, the Broker MAY attenuate it before forwarding. Biscuit tokens support append-only attenuation -- the holder can add restrictions (narrower scope, lower spend cap, fewer URIs) without going back to the issuer. This lets the Broker narrow a broad delegation for a specific Exchange:
+
+- Original delegation: `scope: academic:*, max_spend: $500`
+- Attenuated for Exchange A: `scope: academic:read, max_spend: $100, uris: doi:10.*`
+
+The attenuated token is a new signed block appended to the Biscuit chain. The Exchange verifies the full chain back to the original principal.
+
+### SubscriptionQuotaInfo Aggregation
+
+When multiple Exchanges return `SubscriptionQuotaInfo` on their offers or transaction responses, the Broker MAY aggregate this quota information before returning it to the agent. This gives the agent a consolidated view of remaining quota across Exchanges, enabling proactive throttling without the agent needing to track per-Exchange quota independently.
+
+## Three Discovery Modes
+
+Agents can discover content through the Broker in three ways, depending on how much they know about what they need. All three modes feed into the same Selection Engine -- the Broker compares offers identically regardless of how they were discovered.
+
+### 1. Specific URIs
+
+The agent already knows which resources it wants. It sends `Requester.uris` with one or more specific content identifiers (DOIs, URLs, etc.). The Broker forwards these as a `ResourceQuery` to each Exchange and collects offers.
+
+```json
+{
+  "requester": {
+    "uris": ["doi:10.1038/s41586-024-07386-0", "doi:10.1126/science.adq3854"]
+  }
+}
+```
+
+This is the simplest mode -- the agent has exact references and wants the best price across Exchanges.
+
+### 2. Structured Search
+
+The agent knows what kind of content it needs but not the exact URIs. It sends `RAMPRequest.search_filters` with profile-specific key-value pairs. The Broker maps these to Exchange-specific query parameters and discovers matching resources.
+
+```json
+{
+  "search_filters": {
+    "academic.topic": "CRISPR gene therapy",
+    "academic.year_min": 2023,
+    "academic.peer_reviewed": true
+  }
+}
+```
+
+Filter keys are profile-specific: `academic.topic`, `news.category`, `legal.jurisdiction`, `medical.specialty`, etc. The Broker translates these into the native query format of each Exchange it contacts.
+
+### 3. Natural Language
+
+The agent describes what it needs in free text. It sends `RAMPRequest.query` with a natural-language description. The Broker interprets the query and searches across Exchanges on the agent's behalf.
+
+```json
+{
+  "query": "Recent peer-reviewed studies on mRNA vaccine efficacy in immunocompromised patients"
+}
+```
+
+This mode is useful for exploratory research where the agent cannot formulate structured filters. The Broker resolves the intent into Exchange queries.
+
+### Combining Modes
+
+All three modes can be combined in a single request. For example, an agent can send specific URIs it already knows about, plus a search query to discover additional relevant resources:
+
+```json
+{
+  "requester": {
+    "uris": ["doi:10.1038/s41586-024-07386-0"]
+  },
+  "query": "Related studies on CRISPR delivery mechanisms",
+  "search_filters": {
+    "academic.year_min": 2022
+  }
+}
+```
+
+The Broker merges results from all modes, deduplicates across them, and feeds everything into the Selection Engine for comparison and ranking.
+
+## Discovery Extension Point (v2)
+
+The Broker's internal `SupplySource` interface is the extension point for content discovery beyond Exchange queries. In v1, all URIs come from the agent's request. In v2, the Broker can discover URIs on the agent's behalf:
+
+```go
+// SupplySource abstracts where content offers come from.
+// v1: only ExchangeSource (queries a Exchange).
+// v2: SearchSource (Exa, Tavily), RecommendationSource, etc.
+type SupplySource interface {
+    // Query returns offers from this source matching the request.
+    Query(ctx context.Context, req *rampv1.ResourceQuery) (*rampv1.ResourceResponse, error)
+
+    // Domain returns the source identifier (exchange domain or service name).
+    Domain() string
+
+    // Kind returns the source type for selection policy routing.
+    Kind() SupplySourceKind // Exchange, SearchEngine, Archive, etc.
+}
+```
+
+The flow: search/recommendation produces URIs, the Broker looks up a Exchange for each URI's domain (via ramp.json), the Exchange provides pricing/offers, and the standard transaction flow continues. Discovery is upstream of transactions -- it produces URIs, not offers. The `OfferGroup.discovery_method` field tells the agent how each URI was found.
+
+This positions the Broker as the natural integration point for agentic search -- agents that need content don't just request known URLs, they ask "find me articles about X" and the Broker discovers, prices, and delivers.
+
+## Request Lifecycle (End-to-End)
+
+Full request lifecycle from agent to content delivery:
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI Agent
+    participant Orch as Broker
+    participant Reg as Exchange Registry
+    participant MPA as Exchange A
+    participant MPB as Exchange B
+    participant CDN as Provider CDN
+
+    Agent->>Orch: RAMPRequest (aisystem + constraints)
+
+    Orch->>Reg: Resolve(constraints)
+    Reg-->>Orch: [Exchange A, Exchange B]
+
+    par Parallel Discovery (60ms deadline)
+        Orch->>MPA: DiscoverResources(ResourceQuery)
+        MPA-->>Orch: ResourceResponse (3 offers)
+    and
+        Orch->>MPB: DiscoverResources(ResourceQuery)
+        MPB-->>Orch: ResourceResponse (2 offers)
+    end
+
+    Note over Orch: Selection Engine:<br/>5 offers received<br/>4 pass AccessRestrictions<br/>3 pass RequestConstraints<br/>2 after dedup (1 AP article from both)<br/>Rank by unit_cost: MP-A offer wins
+
+    Note over Orch: Budget Tracker:<br/>Session spent $0.12 of $1.00<br/>This offer: $0.05<br/>Approved
+
+    Orch->>MPA: ExecuteTransaction(winning offer_id)
+    MPA-->>Orch: TransactionResponse(signed URL + billing_id)
+
+    Note over Orch: Track reporting obligation<br/>Record spend: $0.05
+
+    Orch-->>Agent: RAMPResponse(signed URL + cost + reporting obligation)
+
+    Agent->>CDN: GET signed URL
+    CDN-->>Agent: 200 OK + content
+
+    Note over Agent: Use content (RAG, grounding)
+
+    Agent->>Orch: UsageReport(transaction_id, consumed_quantity, function)
+    Orch->>MPA: Forward UsageReport
+    MPA-->>Orch: UsageReportResponse(accepted)
+    Orch-->>Agent: UsageReportResponse(accepted)
+```
+
+## Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **Broker is optional** | Agents can query Exchanges directly. The Broker adds multi-exchange intelligence but is not required by the protocol. |
+| **Same protocol, transparent proxy** | The Exchange cannot distinguish Broker-mediated requests from direct agent requests. No special Exchange support needed. |
+| **Signed offer pass-through** | Exchange signatures cover pricing fields. The Broker cannot inflate prices without invalidating the signature. |
+| **Advisory budget enforcement** | The Broker pre-filters transactions by budget, but the Exchange is the authoritative enforcement point. No overspend occurs because the Exchange is the gatekeeper. |
+| **Ed25519 + intermediary chain** | Requester signs (id, domain, uris, scopes); Broker appends a signed `IntermediaryHop`. Exchange verifies both layers. Public keys discoverable via `.well-known/ramp-agent.json`. |
+| **Partial results are normal** | If 3 of 5 Exchanges respond within the deadline, the Broker proceeds with 3 responses. Availability of any individual Exchange does not block the system. |
+
+## Go Module Structure
+
+```
+github.com/postindustria-tech/ramp-protocol/broker/
+    cmd/
+        broker/           # Sidecar binary entrypoint
+            main.go
+    pkg/
+        broker/           # Core broker logic (used by all deployment modes)
+            broker.go     # Broker struct + HandleRequest
+            config.go           # Configuration loading
+        registry/               # Exchange Registry
+            registry.go         # ExchangeRegistry interface + in-memory impl
+            crawler.go          # ramp.json crawler
+            health.go           # Health checker
+        discovery/              # Supply Discovery (parallel fanout)
+            fanout.go           # FanOut implementation
+            clientpool.go       # Connect client pool management
+        selection/              # Selection Engine
+            engine.go           # SelectionEngine interface + default impl
+            pipeline.go         # Filter, dedup, rank stages
+            policy.go           # Pluggable selection policies
+        budget/                 # Budget Tracker
+            tracker.go          # BudgetTracker interface + in-memory impl
+        reporting/              # Reporting Relay
+            relay.go            # ReportingRelay interface + impl
+            obligations.go      # Obligation tracking + deadline checker
+        metrics/                # Prometheus metrics
+            metrics.go          # All metric definitions
+    internal/
+        testutil/               # Test helpers
+```

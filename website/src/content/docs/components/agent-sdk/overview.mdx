@@ -1,0 +1,447 @@
+---
+title: "Agent SDK Overview"
+description: "The RAMP Agent SDK is an embeddable library that gives AI agents one-liner content access -- a single Fetch call handling discovery, negotiation, transaction, delivery, budget enforcement, and usage reporting."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## What the SDK Provides
+
+The RAMP Agent SDK is a library that agent developers embed directly in their application process. It provides one-liner content access -- a single `Fetch(url)` call that handles discovery, negotiation, transaction, delivery, budget enforcement, and usage reporting behind the scenes.
+
+**The SDK IS a single-tenant Broker embedded as a library.** It contains the same components (Exchange Registry, Supply Discovery, Selection Engine, Budget Tracker, Usage Reporter) and the same logic as the standalone [Broker](/components/broker/overview/). The difference is deployment model, not architecture:
+
+| Aspect | Agent SDK | Sidecar Broker | Hosted Broker |
+|---|---|---|---|
+| **Process model** | In-process library | Separate process, localhost | Remote service |
+| **Communication** | Function calls | Connect RPC over localhost | Connect RPC over HTTPS |
+| **Latency overhead** | 0ms (in-process) | ~1ms (localhost) | ~5-20ms (network) |
+| **Multi-tenancy** | N/A (one license per instance) | N/A (one agent per sidecar) | Required |
+| **Configuration** | Struct literal in code | YAML + env vars | API |
+| **Content fetch** | Built-in (SDK fetches signed URL) | Agent fetches signed URL | Agent fetches signed URL |
+| **Usage reporting** | Automatic (background, non-blocking) | Agent submits via RPC | Agent submits via RPC |
+| **Who operates** | Agent developer | Agent operator (ops team) | SaaS provider |
+
+The SDK is the lowest-friction deployment model. An agent developer adds one dependency, passes their license key and budget, and calls `Fetch`. No sidecar process, no YAML, no infrastructure.
+
+## Public API
+
+### Go (Primary)
+
+```go
+package ramp
+
+// NewClient creates a RAMP client with the given configuration.
+// It initializes the Exchange registry, budget tracker, and
+// background reporting goroutine.
+func NewClient(cfg Config) (*Client, error)
+
+// Fetch acquires licensed content for a single URL.
+// Handles discovery, negotiation, transaction, content fetch,
+// and usage reporting. Returns the content and cost.
+func (c *Client) Fetch(ctx context.Context, url string) (*FetchResult, error)
+
+// FetchBatch acquires licensed content for multiple URLs.
+// All URIs are sent in a single ResourceQuery per Exchange.
+// Budget is enforced across the total batch cost.
+func (c *Client) FetchBatch(ctx context.Context, urls []string) ([]*FetchResult, error)
+
+// ReportUsage manually submits a usage report for a completed fetch.
+// Not needed when AutoReport is enabled (the default) -- the SDK
+// reports automatically after each successful Fetch.
+func (c *Client) ReportUsage(ctx context.Context, report UsageReport) error
+
+// Close shuts down the client, flushing any pending usage reports
+// and releasing resources. Blocks until all reports are submitted
+// or the context is cancelled.
+func (c *Client) Close(ctx context.Context) error
+```
+
+**Usage -- single URL:**
+
+```go
+client, err := ramp.NewClient(ramp.Config{
+    LicenseID:  "LIC-BUYER-001",
+    SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
+    Budget:     ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close(ctx)
+
+result, err := client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(result.Content)    // HTML content
+fmt.Println(result.Cost)       // 0.05 USD
+fmt.Println(result.BillingID)  // bill-93a7f2-001
+```
+
+**Usage -- batch:**
+
+```go
+results, err := client.FetchBatch(ctx, []string{
+    "https://techcrunch.com/premium/ai-infrastructure.html",
+    "https://techcrunch.com/premium/gpu-shortage-2026.html",
+    "https://arstechnica.com/premium/quantum-computing.html",
+})
+if err != nil {
+    log.Fatal(err)
+}
+for _, r := range results {
+    if r.Err != nil {
+        fmt.Printf("FAILED %s: %v\n", r.URL, r.Err)
+        continue
+    }
+    fmt.Printf("OK %s -- %s %.4f\n", r.URL, r.Content[:80], r.Cost.Amount)
+}
+```
+
+### TypeScript
+
+<Aside type="note">
+The TypeScript SDK is not yet published to npm. Use the working implementation at [`poc/agent-sdk/client.ts`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/agent-sdk/client.ts).
+</Aside>
+
+```typescript
+// Import from the poc/agent-sdk/ directory (npm package not yet published)
+import { RampClient } from "./poc/agent-sdk/client";
+
+const client = new RampClient({
+    licenseId: "LIC-BUYER-001",
+    signingKey: process.env.RAMP_SIGNING_KEY!,
+    budget: { maxPerRequest: 0.10, currency: "USD" },
+});
+
+// Single URL
+const result = await client.fetch("https://techcrunch.com/premium/article.html");
+console.log(result.content, result.cost);
+
+// Batch
+const results = await client.fetchBatch([url1, url2, url3]);
+for (const r of results) {
+    console.log(r.url, r.content, r.cost);
+}
+
+// Cleanup -- flushes pending reports
+await client.close();
+```
+
+### Python
+
+<Aside type="note">
+The Python SDK is not yet published to PyPI. See [`poc/mcp-tool/server.py`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/mcp-tool/server.py) for the Python reference implementation using FastMCP.
+</Aside>
+
+```python
+# Reference: poc/mcp-tool/server.py (PyPI package not yet published)
+from ramp_sdk import RampClient, Budget
+
+client = RampClient(
+    license_id="LIC-BUYER-001",
+    signing_key=os.environ["RAMP_SIGNING_KEY"],
+    budget=Budget(max_per_request=0.10, currency="USD"),
+)
+
+# Single URL
+result = client.fetch("https://techcrunch.com/premium/article.html")
+print(result.content, result.cost)
+
+# Batch
+results = client.fetch_batch([url1, url2, url3])
+for r in results:
+    print(r.url, r.content, r.cost)
+
+# Cleanup
+client.close()
+```
+
+## v1.0 Capabilities
+
+### Attestation Verification
+
+The SDK verifies content attestations after fetching content. Each `Offer` may carry `ResourceAttestation` entries -- signed claims from providers or third-party verification vendors about the content at the delivery URI. After fetching, the SDK:
+
+- **Level 1 (self-attested)**: computes SHA-256 of the received bytes and compares against the attested `content_hash`. A mismatch triggers an automatic dispute.
+- **Level 2 (third-party)**: trusts the attestation without re-verifying the hash (the agent cannot replicate the vendor's extraction algorithm). The SDK checks `attested_at` freshness against the agent's configured staleness threshold.
+
+Attestation verification is automatic when `Config.VerifyAttestations` is true (default). Results are available on `FetchResult.AttestationResult`.
+
+### Dispute Filing
+
+When attestation verification detects a content integrity violation, the SDK can automatically file a dispute:
+
+1. The SDK files a `UsageReport` (required before any dispute -- the dispute chain requires `report_id`).
+2. The `UsageReportResponse` returns a `report_id`.
+3. The SDK files a `DisputeRequest` referencing `transaction_id` and `report_id`, with the appropriate `DisputeReason` (e.g., `CONTENT_MISMATCH`, `DELIVERY_FAILED`).
+4. The `DisputeResponse` returns a `dispute_id` and resolution status.
+
+When `Config.AutoDispute` is true (default: false), the SDK files disputes automatically on content hash mismatch or delivery failure. When false, `FetchResult.AttestationResult` provides the data needed for the caller to file manually via `client.Dispute()`.
+
+```go
+// Dispute files a content dispute with the Exchange.
+// Requires a prior UsageReport (report_id is mandatory in DisputeRequest).
+func (c *Client) Dispute(ctx context.Context, req DisputeRequest) (*DisputeResult, error)
+```
+
+## Key Types
+
+### FetchResult
+
+```go
+type FetchResult struct {
+    URL            string           // The original URL requested
+    Content        string           // Fetched content (HTML, JSON, or text)
+    ContentType    string           // Content type from CDN (e.g. "text/html")
+    Cost           Cost             // Transaction cost. Zero for subscription-based access
+    BillingID      string           // Exchange-assigned billing reference
+    TransactionID  string           // Exchange-assigned transaction identifier
+    ReportID       string           // Exchange-assigned report ID (from UsageReportResponse)
+    Exchange    string           // Which Exchange fulfilled this request
+    SubscriptionID string           // Subscription ID if fulfilled under a subscription deal
+    Identity       *ResourceIdentity // Content identity for deduplication (when available)
+    Attestations   []ResourceAttestation // Attestations from the Offer (v1.0)
+    AttestationResult *AttestationVerification // Result of post-fetch verification (v1.0)
+    Err            error            // Per-result error (used in FetchBatch)
+}
+
+type Cost struct {
+    Amount   float64
+    Currency string
+    UnitCost float64 // effective cost per token
+}
+```
+
+### Configuration
+
+```go
+type Config struct {
+    // REQUIRED. License ID issued by the Exchange operator.
+    LicenseID string
+
+    // REQUIRED. Ed25519 private key for agent request signatures.
+    SigningKey string
+
+    // Budget constraints.
+    Budget Budget
+
+    // Exchanges the agent has existing subscription relationships with.
+    PreferredExchanges []string
+
+    // Manually configured Exchange endpoints.
+    // If empty, the SDK discovers Exchanges via ramp.json.
+    Exchanges []ExchangeConfig
+
+    // Exchange discovery settings.
+    Discovery DiscoveryConfig
+
+    // Usage reporting settings.
+    Reporting ReportingConfig
+
+    // HTTP client settings.
+    HTTP HTTPConfig
+
+    // AISystem metadata for protocol messages.
+    AISystem *AISystemConfig
+}
+```
+
+**Minimal configuration** (everything else uses sensible defaults):
+
+```go
+client, _ := ramp.NewClient(ramp.Config{
+    LicenseID: "LIC-BUYER-001",
+    SigningKey: os.Getenv("RAMP_SIGNING_KEY"),
+    Budget:    ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
+})
+```
+
+### Budget Configuration
+
+```go
+type Budget struct {
+    // Maximum cost per individual request.
+    MaxPerRequest float64
+
+    // Maximum cumulative spend per session (in-memory, resets on restart).
+    MaxPerSession float64
+
+    // Maximum cumulative spend per period (persisted).
+    MaxPerPeriod float64
+
+    // Period duration for MaxPerPeriod (e.g. 720h = 30 days).
+    Period time.Duration
+
+    // Budget scope identifier for per-period tracking.
+    // E.g. "user:u-12345" for per-user, "team:eng" for per-team.
+    Scope string
+
+    // ISO 4217 currency code. Default: "USD".
+    Currency string
+}
+```
+
+### Discovery Configuration
+
+```go
+type DiscoveryConfig struct {
+    // Whether to auto-discover Exchanges via ramp.json. Default: true.
+    AutoDiscover bool
+
+    // Cache TTL for ramp.json responses. Default: 1 hour.
+    ParseJSONCacheTTL time.Duration
+
+    // Whether to use 403 X-Content-Rules header as fallback. Default: true.
+    FallbackOn403 bool
+}
+```
+
+### HTTP Configuration
+
+```go
+type HTTPConfig struct {
+    // Timeout for Exchange RPC calls. Default: 500ms.
+    RPCTimeout time.Duration
+
+    // Timeout for content fetch (signed URL). Default: 30s.
+    FetchTimeout time.Duration
+
+    // Maximum number of retries for transient failures. Default: 2.
+    MaxRetries int
+
+    // Custom HTTP client. If nil, a default client is created.
+    Client *http.Client
+}
+```
+
+## Internal Architecture
+
+The SDK contains the same components as the Broker, organized as in-process collaborators:
+
+```
+RampClient
+  |
+  +-- ExchangeRegistry
+  |     Discovers and caches Exchange endpoints.
+  |     Sources: manual config, ramp.json auto-discovery, 403 fallback.
+  |     In-memory LRU with TTL-based refresh.
+  |
+  +-- SupplyDiscoverer
+  |     Queries Exchanges via DiscoverResources RPC (Connect HTTP/JSON).
+  |     Handles single-URI and multi-URI (batch) queries.
+  |     Parallel fanout to multiple Exchanges.
+  |
+  +-- SelectionEngine
+  |     Ranks offers: subscription > preferred MP > lowest unit_cost.
+  |     Deduplicates by ResourceIdentity across Exchanges.
+  |     Enforces AccessRestrictions filtering.
+  |
+  +-- BudgetTracker
+  |     Per-request: reject if offer > MaxPerRequest.
+  |     Per-session: in-memory cumulative spend (resets on restart).
+  |     Per-period: persisted to local file (or Redis for shared state).
+  |     Checks budget BEFORE ExecuteTransaction, not after.
+  |
+  +-- TransactionExecutor
+  |     Sends ExecuteTransaction RPC to winning Exchange.
+  |     Stateless offer verification via exchange_signature.
+  |     Idempotency key on every request.
+  |
+  +-- ContentFetcher
+  |     Fetches content from signed URL in TransactionResponse.
+  |     Sends X-Agent-License-Id header for CDN audit trail.
+  |     Handles both DELIVERY_METHOD_DIRECT and DELIVERY_METHOD_INSTRUCTIONS.
+  |
+  +-- UsageReporter
+  |     Auto-submits UsageReport after each successful Fetch.
+  |     Background goroutine with in-memory queue.
+  |     Tracks reporting deadlines per obligation.
+  |     Retries on failure (non-blocking, never delays Fetch).
+  |
+  +-- RequestSigner
+        Signs ResourceQuery and TransactionRequest with agent's Ed25519 private key.
+        Private key never logged, never serialized, never exposed.
+```
+
+### Component Interface Reuse
+
+The SDK reuses the same Go interfaces defined for the standalone Broker:
+
+- `ExchangeRegistry` interface is identical
+- `SelectionEngine` interface is identical (same `SelectionPolicy` abstraction)
+- `BudgetTracker` interface is identical
+- `ReportingRelay` becomes `UsageReporter` (same logic, different name because the SDK owns the full lifecycle)
+
+The concrete implementations differ in persistence strategy (in-memory vs Redis), but the interfaces are shared.
+
+## Relationship to the Broker
+
+```
+                       +-----------------------------------------+
+                       |     Shared Go packages                  |
+                       |                                         |
+                       |  pkg/registry/    ExchangeRegistry   |
+                       |  pkg/selection/   SelectionEngine       |
+                       |  pkg/budget/      BudgetTracker         |
+                       |  pkg/reporting/   ReportingRelay        |
+                       |  pkg/signing/     RequestSigner         |
+                       |  pkg/discovery/   SupplyDiscoverer      |
+                       +----------+--------------+---------------+
+                                  |              |
+                 +----------------+              +----------------+
+                 |                                                |
+                 v                                                v
+    +-------------------------+               +-------------------------+
+    |    Agent SDK            |               |    Broker         |
+    |                         |               |                        |
+    |  ramp.NewClient(cfg)   |               |  cmd/broker/     |
+    |  client.Fetch(url)      |               |  main.go               |
+    |  client.FetchBatch(urls)|               |                        |
+    |                         |               |  Connect RPC server    |
+    |  In-process library     |               |  YAML configuration    |
+    |  No network boundary    |               |  Multi-tenant (SaaS)   |
+    |  Auto content fetch     |               |  Agent fetches content |
+    |  Auto usage reporting   |               |                        |
+    +-------------------------+               +-------------------------+
+```
+
+| Concern | SDK | Broker |
+|---|---|---|
+| Content fetch | SDK does it (returns content) | Agent does it (Broker returns signed URL) |
+| Usage reporting | SDK does it automatically | Agent submits via RPC, Broker forwards |
+| Budget persistence | Local file (single process) | Redis (multi-tenant) |
+| Configuration | Struct literal in code | YAML + env vars + API |
+| Exchange trust | All configured = verified | Graduated trust model |
+| Process lifecycle | Tied to agent process | Independent process |
+
+**Same logic, different packaging.** The selection algorithm, unit_cost comparison, ResourceIdentity deduplication, subscription preference ranking, and budget arithmetic are identical.
+
+## Language Bindings
+
+| Language | Source | Status | Dependencies |
+|---|---|---|---|
+| Go | [`gen/go/`](https://github.com/postindustria-tech/ramp-protocol/tree/main/gen/go/) (types) + [`gen/go/ramp/v1/rampv1connect`](https://github.com/postindustria-tech/ramp-protocol/tree/main/gen/go/ramp/v1/rampv1connect) (Connect client) | Generated, usable via Go modules | `connectrpc.com/connect` + `google.golang.org/protobuf` + stdlib |
+| TypeScript | [`poc/agent-sdk/client.ts`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/agent-sdk/client.ts) | Working PoC (npm package planned) | `@connectrpc/connect` + `@bufbuild/protobuf` |
+| Python | [`poc/mcp-tool/server.py`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/mcp-tool/server.py) | Working PoC (PyPI package planned) | `httpx` + `fastmcp` |
+
+### What Is Language-Specific vs Shared
+
+| Component | Shared (from proto) | Language-specific |
+|---|---|---|
+| Protobuf types | Generated from `.proto` | -- |
+| Exchange RPC client | Generated Connect client | -- |
+| Selection engine | -- | ~200 lines per language |
+| Budget tracker | -- | ~150 lines per language |
+| Usage reporter | -- | ~100 lines per language |
+| Request signer | -- | ~50 lines per language (Ed25519) |
+| Public API | -- | Idiomatic wrappers |
+
+## Version Strategy
+
+- SDK version follows semver: `v1.x.y`
+- Protocol version is independent: `ver: "1.0"` in messages
+- SDK version `v1.x` supports protocol `ver: "1.0"`
+- Breaking API changes increment major version
+- New protocol features (e.g. new DenialReason, DisputeReason) are minor version bumps

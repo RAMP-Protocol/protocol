@@ -1,0 +1,130 @@
+---
+title: "Transaction Log"
+description: "Append-only audit trail enabling three-sided reconciliation between CDN access logs, Exchange transaction records, and agent Usage Reports."
+---
+
+## What the Transaction Log Does
+
+The Transaction Log is the append-only audit trail that enables three-sided reconciliation between CDN access logs (provider-controlled), Exchange transaction records, and agent Usage Reports. It is the financial backbone of the RAMP protocol.
+
+If the log is compromised:
+- Billing disputes are unresolvable
+- Revenue skimming (T5) is undetectable
+- Phantom transactions (T4) cannot be disproven
+- Ghost billing (T9 -- systematic caching without payment) cannot be quantified
+
+The system specifies:
+- What gets logged and the schema for each event type
+- Write-ahead logging to prevent unbillable content access
+- Storage backend selection per deployment tier
+- Retention, lifecycle, and archival strategy
+- Reconciliation query patterns
+- Immutability guarantees
+- Export formats for billing reconciliation
+
+## Write-Ahead Logging for Crash Safety
+
+The `ExecuteTransaction` flow has a critical ordering dependency. If the Exchange crashes after generating a signed URL but before recording the transaction, the signed URL is live on the CDN -- the agent can fetch content -- but no billing record exists. This is an unbillable content access.
+
+WAL ensures the transaction record is durably written before the signed URL is returned to the agent.
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant MP as Exchange
+    participant SSD as Local SSD (WAL)
+    participant BA as Billing Adapter
+    participant Store as Durable Store (PG/CH)
+
+    Agent->>MP: ExecuteTransaction(TransactionRequest)
+    MP->>BA: Authorize(buyer, amount)
+    BA-->>MP: AuthorizeResponse(billing_id)
+    MP->>MP: Generate signed URL
+
+    rect rgb(255, 240, 220)
+        Note over MP,SSD: Phase 1: Synchronous (1-2ms)
+        MP->>SSD: write(SignedURLIssued record)
+        MP->>SSD: fsync()
+        SSD-->>MP: OK
+    end
+
+    MP-->>Agent: TransactionResponse(signed_url, billing_id)
+
+    rect rgb(220, 240, 255)
+        Note over SSD,Store: Phase 2: Asynchronous (batched, ~100ms)
+        SSD->>Store: Batch write (100 records)
+        Store-->>SSD: ACK
+        SSD->>SSD: Truncate flushed segments
+    end
+```
+
+The per-request `fsync` in the synchronous path is to local SSD (~1-2ms), not to the durable store. This is the same pattern as PostgreSQL's own WAL: synchronous local write for durability, asynchronous replication for redundancy.
+
+## Event Sourcing Pattern
+
+Every state transition in the transaction lifecycle produces a log event. There are eight event types, each corresponding to a protocol step. v1.0 adds two dispute-related event types: `DisputeRequested` and `DisputeResolved`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> ResourceQueryReceived: Agent queries catalog
+    ResourceQueryReceived --> OffersPresented: Exchange returns offers
+    OffersPresented --> TransactionRequested: Agent commits to offer
+    TransactionRequested --> BillingAuthorized: Billing adapter approves
+    BillingAuthorized --> SignedURLIssued: WAL commit + URL returned
+    SignedURLIssued --> UsageReportReceived: Agent reports usage
+    UsageReportReceived --> DisputeRequested: Agent files dispute (v1.0)
+    DisputeRequested --> DisputeResolved: Resolution applied (v1.0)
+
+    TransactionRequested --> BillingDenied: Billing adapter rejects
+    BillingDenied --> [*]
+```
+
+All event types share a universal `TransactionEvent` envelope structure -- a wide table / fat event design. The alternative (per-type tables) was rejected because reconciliation queries span event types and JOIN performance degrades at scale.
+
+## Reconciliation with Billing
+
+The Transaction Log enables three-sided reconciliation:
+
+```mermaid
+graph TB
+    subgraph "Side 1: Provider CDN Logs"
+        CDN[CDN Access Logs<br/>Every signed URL fetch<br/>Fields: URL params, timestamp, client IP, status code]
+    end
+
+    subgraph "Side 2: Exchange Transaction Log"
+        TXN[Transaction Log<br/>Every billing_id issued<br/>Fields: transaction_id, billing_id, cost, buyer, provider, signed_url_hash]
+    end
+
+    subgraph "Side 3: Agent Usage Reports"
+        USG[Usage Reports<br/>Every content use<br/>Fields: transaction_id, billing_id, function, consumed_quantity]
+    end
+
+    CDN --- R1[Reconciliation Point 1<br/>CDN access vs signed_url_hash]
+    TXN --- R1
+
+    TXN --- R2[Reconciliation Point 2<br/>billing_id vs usage report]
+    USG --- R2
+
+    CDN --- R3[Reconciliation Point 3<br/>CDN access vs usage report timing]
+    USG --- R3
+```
+
+Core reconciliation queries:
+- **Q1**: All transactions for a provider in a time range (billing)
+- **Q2**: CDN accesses without billing_id (revenue leakage detection)
+- **Q3**: Billing IDs without usage reports (compliance enforcement)
+- **Q4**: Buyer compliance status (real-time lookup, < 1ms)
+- **Q5**: Transaction detail for dispute resolution
+- **Q6**: Buyer spending summary for a period (invoicing)
+
+## Key Design Decisions
+
+**WAL-first.** No signed URL leaves the Exchange without a durable record on local disk. If the WAL write fails, the signed URL is never returned, even though billing was authorized. A "wasted" authorization is far safer than an "unbillable" delivery.
+
+**Append-only, verifiable.** Three layers of defense: storage-level immutability (S3 Object Lock, PostgreSQL triggers), cryptographic hash chains (SHA-256), and Ed25519-signed records. Three-sided reconciliation is the ultimate arbiter.
+
+**Tiered for cost.** The same WAL code and `DurableStore` interface serve both deployment tiers. Growth operators use PostgreSQL for ~$641/month. Scale operators get sub-second reconciliation queries on ClickHouse for ~$4,700/month. Both stay well under the $0.00005/transaction NFR ceiling.
+
+**Fat events, not normalized tables.** All event types share a single `TransactionEvent` struct. Fields that don't apply to a given event type are zero-valued. This avoids JOINs in reconciliation queries and simplifies the WAL format.
+
+**Backpressure over data loss.** If the durable store is down and WAL segments accumulate past 1GB, the Exchange stops issuing signed URLs (503 Service Unavailable) rather than risk unbillable access.

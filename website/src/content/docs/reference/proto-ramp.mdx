@@ -1,0 +1,879 @@
+---
+title: "Proto: RAMP v1"
+description: "RAMP v1.0 protobuf reference -- ExchangeService, CatalogService, and all message types"
+---
+
+Source: [`proto/ramp/v1/ramp.proto`](https://github.com/postindustria-tech/ramp-protocol/blob/main/proto/ramp/v1/ramp.proto)
+
+## Services
+
+### ExchangeService
+
+The core protocol. Both AI agents and Brokers are valid clients.
+
+| RPC | Request | Response | Description |
+|---|---|---|---|
+| `DiscoverResources` | `ResourceQuery` | `ResourceResponse` | Discover available content offers (Steps 2-3) |
+| `ExecuteTransaction` | `TransactionRequest` | `TransactionResponse` | Commit to an offer, receive delivery info (Steps 4-5) |
+| `ReportUsage` | `UsageReport` | `UsageReportResponse` | Submit post-usage report (Step 7) |
+| `DisputeTransaction` | `DisputeRequest` | `DisputeResponse` | Signal a content dispute for a completed transaction |
+| `RequestDomainVerification` | `DomainVerificationRequest` | `DomainVerificationChallenge` | Request ACME-style domain verification challenge |
+| `ConfirmDomainVerification` | `DomainVerificationConfirmation` | `DomainVerificationResult` | Confirm domain verification and register signing key |
+
+### CatalogService
+
+Optional RPC for providers/CMS/third-party intelligence providers to push content metadata.
+
+| RPC | Request | Response | Description |
+|---|---|---|---|
+| `PushResources` | `PushResourcesRequest` | `PushResourcesResponse` | Push or update catalog entries |
+| `RemoveResources` | `RemoveResourcesRequest` | `RemoveResourcesResponse` | Remove catalog entries |
+| `RefreshCatalog` | `RefreshCatalogRequest` | `RefreshCatalogResponse` | Trigger full catalog refresh |
+
+## Messages -- Supply Discovery
+
+### ResourceQuery
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | RAMP protocol version |
+| `id` | string | 2 | Unique query identifier |
+| `requester` | Requester | 3 | Requester identity, scopes, and optional delegation chain |
+| `request_id` | optional string | 4 | Original RAMP request ID (traceability) |
+| `intermediaries` | repeated IntermediaryHop | 5 | Intermediary forwarding chain (Agent -> Broker -> Exchange). Empty for direct queries. |
+| `deadline` | optional Duration | 8 | Max wait time (default 500ms) |
+| `supported_profiles` | repeated string | 11 | Domain extension profiles the caller understands (e.g. "ramp-academic-v1") |
+| `ext` | Struct | 15 | Extension point |
+
+:::note[Breaking change]
+Field 3 changed from `comp.v1.AISystem aisystem` to `Requester requester`. Fields 5--7 (`broker`, `agent_signature`, `agent_signature_algorithm`) and 9--10 (`broker_signature`, `broker_signature_algorithm`) have been removed. Agent signatures are now in `Requester.signature`; intermediary signatures are in `IntermediaryHop.signature`.
+:::
+
+### ResourceResponse
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `id` | string | 2 | Echoed query identifier |
+| `exchange` | string | 3 | Responding Exchange domain |
+| `offers` | repeated Offer | 4 | Flat offer list (single-URI queries) |
+| `offer_groups` | repeated OfferGroup | 5 | Grouped offers (multi-URI batch queries) |
+| `rate_limit` | optional RateLimitInfo | 6 | Rate limit status for this caller |
+| `ext` | Struct | 15 | Extension point |
+
+### OfferGroup
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `uri` | string | 1 | URI this group is for |
+| `offers` | repeated Offer | 2 | Offers for this URI |
+| `discovery_method` | optional DiscoveryMethod | 3 | How the URI was discovered (v2 extension) |
+| `absence_reason` | optional OfferAbsenceReason | 4 | Why no offers are available for this URI |
+
+### RateLimitInfo
+
+Rate limit status modeled after IETF RateLimit header fields.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `limit` | int32 | 1 | Maximum requests allowed in the current window |
+| `remaining` | int32 | 2 | Requests remaining in the current window |
+| `reset_at` | Timestamp | 3 | When the current window resets (UTC) |
+| `window` | optional Duration | 4 | Duration of the rate limit window |
+
+## Messages -- Requester Identity
+
+### Requester
+
+Identifies who is making a request, what scopes they have, and optional delegation chain. Replaces `comp.v1.AISystem` in `ResourceQuery` and `RAMPRequest`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `id` | string | 1 | Unique requester identifier (e.g. "agent-research-bot-001") |
+| `domain` | string | 2 | Requester's domain -- used for public key lookup at `{domain}/.well-known/ramp-agent.json` |
+| `type` | RequesterType | 3 | What kind of entity is making this request |
+| `name` | optional string | 4 | Human-readable name (e.g. "Acme Research Assistant") |
+| `uris` | repeated string | 5 | Resource URIs being requested (same role as CoMP `aisysuse.uri`) |
+| `intended_use` | repeated string | 6 | What the requester intends to do with the resources (CoMP Function values) |
+| `license_id` | optional string | 7 | Commercial license or subscription identifier (same role as CoMP `aisysuse.lid`) |
+| `scopes` | repeated string | 8 | Entitlement scopes declaring what the requester can access. Format: `"{domain}:{permission}"`. Empty = default access policy. |
+| `signature` | string | 9 | Ed25519 signature over (id, domain, uris, scopes) |
+| `signature_algorithm` | string | 10 | Signature algorithm (default: "ed25519") |
+| `delegation` | optional Delegation | 11 | Present when requester acts on behalf of another entity |
+| `ext` | Struct | 15 | Extension point |
+
+### Delegation
+
+Scoped, time-limited, spend-capped credential using [Biscuit authorization tokens](https://biscuitsec.org). Biscuit tokens are Ed25519-signed block chains that can be attenuated (holder adds restrictions) without going back to the issuer. Each block in the chain narrows permissions -- never widens them.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `principal_domain` | string | 1 | Who granted this delegation (domain for public key lookup) |
+| `principal_id` | string | 2 | Principal's identifier (e.g. "user@acme.com", "bloomberg.com") |
+| `scopes` | repeated string | 3 | Scopes granted by this delegation (MUST be a subset of the principal's own scopes) |
+| `expires_at` | Timestamp | 4 | When this delegation expires. Exchange MUST reject expired tokens. |
+| `max_spend` | optional Cost | 5 | Maximum spend allowed under this delegation |
+| `token` | string | 6 | Biscuit authorization token, base64-encoded |
+| `token_format` | string | 7 | Token format (default: "biscuit-v2") |
+| `revocation_uri` | optional string | 8 | URI for real-time revocation checking (MAY be checked for high-value transactions) |
+| `ext` | Struct | 15 | Extension point |
+
+**Biscuit authority block facts** (RAMP-specific):
+
+```
+user({principal_id});
+scope({scope_string});           // one fact per granted scope
+max_spend_cents({amount});       // spending cap in currency minor units
+expires({RFC3339_timestamp});    // expiration time
+```
+
+**Attenuation example**: An agent can further restrict (but never widen) a delegation:
+- Original: `scope: credit:*, max_spend: $1000`
+- Attenuated: `scope: credit:read, max_spend: $200, uris: duns:123*`
+
+### IntermediaryHop
+
+One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop signs the request, proving it passed through legitimately. Modeled after OpenRTB schain (Supply Chain Object).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `domain` | string | 1 | Domain of the intermediary (for public key lookup) |
+| `id` | string | 2 | Intermediary's identifier |
+| `forwarded_at` | Timestamp | 3 | When this intermediary forwarded the request |
+| `signature` | string | 4 | Ed25519 signature over the request payload at this hop |
+| `signature_algorithm` | string | 5 | Signature algorithm |
+
+## Messages -- Offers and Pricing
+
+### Offer
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `offer_id` | string | 1 | Unique offer identifier |
+| `package` | comp.v1.Package | 2 | CoMP content metadata |
+| `pricing` | Pricing | 3 | Pricing terms with unit_cost |
+| `delivery_method` | DeliveryMethod | 4 | How content is delivered |
+| `reporting` | optional ReportingObligation | 5 | Post-usage reporting requirements |
+| `expires_at` | optional Timestamp | 6 | Offer expiry |
+| `identity` | optional ResourceIdentity | 7 | Content identity for dedup |
+| `restrictions` | optional AccessRestrictions | 8 | Access restrictions from RSL |
+| `exchange_signature` | string | 9 | **REQUIRED.** Ed25519 signature |
+| `signature_algorithm` | string | 10 | Signature algorithm (default: "ed25519") |
+| `subscription_id` | optional string | 11 | Subscription/deal identifier |
+| `iab_categories` | repeated string | 13 | IAB Content Taxonomy codes |
+| `attestations` | repeated ResourceAttestation | 14 | Signed content attestations (replaces ContentQuality) |
+| `data_as_of` | optional Timestamp | 16 | When the offered data was current (for DYNAMIC resources) |
+| `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Pre-commit quota snapshot for subscription offers |
+| `ext` | Struct | 15 | Extension point |
+
+:::note[Breaking change in v1.0]
+`Offer.quality` (field 12, `ContentQuality`) has been removed. Use `Offer.attestations` with `ResourceAttestation` claims instead. See [Content Attestation](/protocol/content-attestation/).
+:::
+
+### ResourceAttestation
+
+Signed envelope of claims from a trusted party (provider or verification vendor) about content at a specific URI.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `verifier` | string | 1 | Domain of the attesting party. Keys at `https://{verifier}/.well-known/ramp-verifier.json` |
+| `kid` | string | 2 | Key ID from the verifier's JWKS |
+| `attested_at` | Timestamp | 3 | When this attestation was created |
+| `uri` | string | 4 | Content URI this attestation covers |
+| `claims` | Struct | 5 | Signed claims about the content (max 4KB) |
+| `signature` | string | 6 | Ed25519 over JCS-canonicalized (RFC 8785) representation |
+
+Three verification levels:
+
+| Level | Condition | What's Verifiable |
+|---|---|---|
+| **0 -- None** | `attestations` empty | CDN delivery failure only |
+| **1 -- Self-attested** | `verifier` matches provider domain | Content hash + token count |
+| **2 -- Third-party** | `verifier` is a verification vendor | Token count (with CDN corroboration) |
+
+### Pricing
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `model` | PricingModel | 1 | Provider's pricing model |
+| `rate` | double | 2 | Price in provider's model |
+| `currency` | string | 3 | ISO 4217 currency code |
+| `unit_cost` | optional double | 4 | Normalized cost per unit (universal comparison metric) |
+| `estimated_quantity` | optional int32 | 5 | Estimated consumption in the metering unit |
+| `revshare` | optional double | 6 | Revenue share percentage (0.0--1.0) |
+| `license_duration_months` | optional int32 | 7 | License duration in months |
+| `unit` | optional string | 8 | Metering unit for unit_cost and estimated_quantity (e.g. "tokens", "pages", "seconds", "records") |
+| `ext` | Struct | 15 | Extension point |
+
+### ResourceIdentity
+
+Layered content identification for cross-exchange dedup and integrity verification.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `canonical_url` | optional string | 1 | Provider's canonical URL |
+| `doi` | optional string | 2 | Digital Object Identifier |
+| `iptc_guid` | optional string | 3 | IPTC NewsML-G2 identifier |
+| `isni` | optional string | 4 | International Standard Name Identifier |
+| `content_hash` | optional string | 5 | Content hash (SimHash or SHA-256) |
+| `hash_method` | optional string | 6 | Hash algorithm ("simhash-v1", "sha256") |
+| `c2pa_manifest` | optional string | 7 | C2PA credentials manifest URI |
+| `resource_mutability` | ResourceMutability | 8 | Whether resource content is static, dynamic, or live |
+| `ext` | Struct | 15 | Extension point |
+
+### AccessRestrictions
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `permitted_functions` | repeated Function | 1 | Permitted CoMP usage functions |
+| `prohibited_functions` | repeated Function | 2 | Prohibited CoMP usage functions |
+| `permitted_users` | repeated string | 3 | Permitted user categories |
+| `prohibited_users` | repeated string | 4 | Prohibited user categories |
+| `permitted_geo` | repeated string | 5 | Permitted geographies (ISO 3166-1 alpha-2) |
+| `prohibited_geo` | repeated string | 6 | Prohibited geographies |
+| `max_display_words` | optional int32 | 7 | Maximum words displayed to users (from CoMP License.maxword) |
+| `ext` | Struct | 15 | Extension point |
+
+### SubscriptionQuotaInfo
+
+Quota status for a subscription within the current billing period. Appears on `Offer` (field 17) as a pre-commit snapshot and on `TransactionResponse` (field 17) as the post-transaction remaining quota. The field is `repeated` to support multi-dimensional quotas (e.g. access count + spend cap).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `subscription_id` | string | 1 | Subscription this quota applies to |
+| `quota_limit` | int32 | 2 | Total allowed in the current period |
+| `quota_used` | int32 | 3 | Used so far in the current period |
+| `quota_remaining` | int32 | 4 | Remaining in the current period |
+| `resets_at` | Timestamp | 5 | When the quota counter resets (UTC) |
+| `unit` | string | 6 | What is metered: `"accesses"`, `"tokens"`, `"spend_cents"`, `"burst"` |
+
+## Messages -- Transaction
+
+### TransactionRequest
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `id` | string | 2 | Unique transaction request ID (idempotency key) |
+| `offer_id` | optional string | 3 | Single-offer mode |
+| `requester` | Requester | 4 | Requester identity for authorization and audit |
+| `request_id` | optional string | 5 | Original RAMP request ID |
+| `offer_signature` | optional string | 6 | Single-offer signature |
+| `items` | repeated TransactionItem | 10 | Batch mode: multiple offers |
+| `ext` | Struct | 15 | Extension point |
+
+:::note
+Fields 7-9, 11-12 reserved. Request authentication moved to RFC 9421 HTTP Message Signatures.
+:::
+
+### TransactionResponse
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `id` | string | 2 | Echoed transaction request ID |
+| `transaction_id` | optional string | 3 | Exchange-assigned transaction ID |
+| `billing_id` | optional string | 4 | Billing reference |
+| `package` | optional comp.v1.Package | 5 | CoMP Package with signed URL |
+| `cost` | optional Cost | 6 | Transaction cost |
+| `delivery_method` | DeliveryMethod | 7 | How content is delivered |
+| `reporting_obligation` | optional ReportingObligation | 8 | Reporting requirements |
+| `expires_at` | optional Timestamp | 9 | Signed URL expiry |
+| `agent_identity_hash` | string | 10 | **REQUIRED.** Agent identity bound into URLs |
+| `denial_reason` | optional DenialReason | 11 | Set when denied |
+| `subscription_id` | optional string | 12 | Subscription/deal identifier |
+| `subscription_unit_value` | optional Cost | 16 | Per-unit cost for subscription accounting |
+| `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Post-transaction remaining quota snapshot |
+| `items` | repeated TransactionResultItem | 13 | Batch mode results |
+| `total_cost` | optional Cost | 14 | Batch aggregate cost |
+| `ext` | Struct | 15 | Extension point |
+
+### TransactionItem
+
+A single offer commitment within a batch transaction.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `offer_id` | string | 1 | The offer_id from the selected Offer |
+| `offer_signature` | string | 2 | The exchange_signature from the selected Offer |
+
+:::note
+Field 3 reserved.
+:::
+
+### TransactionResultItem
+
+Result for a single offer in a batch transaction.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `offer_id` | string | 1 | The offer_id this result is for |
+| `transaction_id` | string | 2 | Exchange-assigned transaction identifier |
+| `billing_id` | string | 3 | Billing reference |
+| `package` | comp.v1.Package | 4 | CoMP Package with signed URL populated |
+| `cost` | Cost | 5 | Cost for this item |
+| `subscription_id` | optional string | 6 | Subscription identifier (no per-request charge) |
+| `subscription_unit_value` | optional Cost | 11 | Per-unit cost for subscription accounting (ASC 606) |
+| `denial_reason` | optional DenialReason | 7 | Set if this item was denied |
+| `expires_at` | optional Timestamp | 8 | When the signed URL expires |
+| `delivery_method` | DeliveryMethod | 9 | How content is delivered for this item |
+| `reporting_obligation` | optional ReportingObligation | 10 | Reporting requirements for this item |
+
+### Cost
+
+Actual transaction cost.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `amount` | double | 1 | Cost amount |
+| `currency` | string | 2 | ISO 4217 currency code |
+| `unit_cost` | optional double | 3 | Effective cost per unit |
+
+## Messages -- Reporting
+
+### UsageReport
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `id` | string | 2 | Unique report identifier |
+| `transaction_id` | string | 3 | Transaction ID from delivery |
+| `billing_id` | string | 4 | Billing reference from delivery |
+| `usage` | Usage | 5 | How content was used |
+| `timestamp` | Timestamp | 6 | When content was used |
+| `request_id` | optional string | 7 | Original RAMP request ID |
+| `exchange` | optional string | 8 | Exchange this report is for |
+| `assets` | repeated UsageAsset | 9 | Assets delivered and used |
+| `ext` | Struct | 15 | Extension point |
+
+### ReportingObligation
+
+Requirements attached to a delivery.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `required` | bool | 1 | Whether post-usage reporting is required |
+| `window` | optional Duration | 2 | Duration within which report must be submitted (e.g. 24h) |
+| `endpoint` | optional string | 3 | URL to submit usage report (if different from Exchange) |
+| `required_fields` | repeated string | 4 | Field names that must be present in the report |
+| `ext` | Struct | 15 | Extension point |
+
+### Usage
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `function` | repeated Function | 1 | CoMP functions used |
+| `subfn` | repeated SubFunction | 2 | CoMP sub-functions used |
+| `consumed_quantity` | int32 | 3 | **REQUIRED.** Actual quantity consumed in the metering unit |
+| `displayed_to_user` | optional bool | 4 | Was output shown to a human? |
+| `citation_included` | optional bool | 5 | Was citation included? |
+| `attribution` | repeated AttributionDetail | 6 | Structured citation details |
+| `consumed_unit` | optional string | 8 | Metering unit for consumed_quantity (defaults to "tokens") |
+
+### AttributionDetail
+
+Structured attribution metadata for usage reporting.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `displayed_url` | optional string | 1 | URL displayed to the user as the attribution link |
+| `format` | optional CitationFormat | 2 | How the citation was presented |
+| `visible_to_user` | optional bool | 3 | Whether the attribution was visible to the end user |
+
+### UsageAsset
+
+A single asset included in the usage report.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `uri` | string | 1 | Asset URI |
+| `title` | optional string | 2 | Asset title |
+| `package_id` | optional string | 3 | Package identifier |
+
+### UsageReportResponse
+
+Acknowledgment of a usage report.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `accepted` | bool | 1 | Whether the report was accepted |
+| `rejection_reason` | optional string | 2 | Reason for rejection (if not accepted) |
+| `report_id` | string | 3 | Exchange-assigned report ID (required for dispute chain) |
+| `ext` | Struct | 15 | Extension point |
+
+## Messages -- Dispute Resolution
+
+### DisputeRequest
+
+Agent signals a content delivery problem for a completed transaction.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `id` | string | 2 | Unique dispute request identifier |
+| `transaction_id` | string | 3 | Transaction this dispute is about |
+| `billing_id` | string | 4 | Billing reference |
+| `reason` | DisputeReason | 5 | Why the agent is disputing |
+| `description` | optional string | 6 | Human-readable description |
+| `received_content_hash` | optional string | 7 | Agent's computed hash of received content |
+| `received_hash_method` | optional string | 8 | Hash algorithm the agent used |
+| `report_id` | string | 10 | **REQUIRED.** Must reference a filed UsageReport |
+| `ext` | Struct | 15 | Extension point |
+
+:::note
+Field 9 reserved.
+:::
+
+### DisputeResponse
+
+Exchange acknowledges and processes the dispute.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `accepted` | bool | 1 | Whether the dispute was accepted for processing |
+| `dispute_id` | string | 2 | Exchange-assigned dispute identifier |
+| `rejection_reason` | optional string | 3 | If not accepted, reason for rejection |
+| `estimated_resolution` | optional string | 4 | Estimated time to resolution |
+| `status` | DisputeStatus | 5 | Current lifecycle state |
+| `resolution` | optional ResolutionType | 6 | Populated at terminal states |
+| `ext` | Struct | 15 | Extension point |
+
+## Messages -- Domain Verification
+
+### DomainVerificationRequest
+
+Request an ACME-style domain verification challenge.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `domain` | string | 2 | Provider domain to verify |
+| `caller_id` | optional string | 4 | Registered caller identity |
+
+:::note
+Field 3 reserved. Caller auth moved to HTTP Message Signatures.
+:::
+
+### DomainVerificationChallenge
+
+Exchange returns a challenge token to be placed at the provider's domain.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `token` | string | 1 | Opaque challenge token |
+| `expires_at` | Timestamp | 2 | 10-minute expiry window |
+| `verification_url` | string | 3 | Exact URL the Exchange will fetch |
+
+### DomainVerificationConfirmation
+
+Confirm domain verification and register a signing key.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `domain` | string | 2 | Provider domain |
+| `token` | string | 3 | Token from the challenge |
+| `signing_key` | optional string | 4 | PEM (CloudFront) or hex (HMAC) |
+| `cdn_type` | optional string | 5 | "cloudfront", "akamai", "fastly", "hmac" |
+
+:::note
+Field 6 reserved. Caller auth moved to HTTP Message Signatures.
+:::
+
+### DomainVerificationResult
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `verified` | bool | 1 | Whether verification succeeded |
+| `key_id` | optional string | 2 | Assigned key ID |
+| `failure_reason` | optional string | 3 | If not verified, the reason |
+| `valid_until` | optional Timestamp | 4 | Re-verification deadline |
+
+## Messages -- Discovery
+
+### ProviderManifest
+
+Served at `/.well-known/ramp.json`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `provider` | string | 2 | Canonical domain |
+| `contact` | optional string | 3 | Contact email |
+| `exchanges` | repeated AuthorizedExchange | 4 | Authorized Exchanges |
+| `catalog_contributors` | repeated CatalogContributor | 5 | Authorized third-party catalog pushers |
+| `ext` | Struct | 15 | Extension point |
+
+### CatalogContributor
+
+Authorizes a third party to push catalog metadata on the provider's behalf.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `domain` | string | 1 | Contributor domain (e.g. "doubleverify.com") |
+| `relationship` | string | 2 | Relationship type (e.g. "verifier", "exchange") |
+
+### AuthorizedExchange
+
+A Exchange authorized to sell this provider's content.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `domain` | string | 1 | Canonical domain of the Exchange |
+| `endpoint` | string | 2 | RAMP ExchangeService endpoint URL |
+| `relationship` | ProviderRelationship | 3 | Relationship type (mirrors ads.txt DIRECT/RESELLER) |
+| `ext` | Struct | 15 | Extension point |
+
+### ExchangeManifest
+
+Served at `/.well-known/ramp-exchange.json`. Machine-readable self-description of a RAMP Exchange. See [Exchange Manifest](/protocol/exchange-manifest/) for details.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | RAMP protocol version |
+| `domain` | string | 2 | Canonical domain |
+| `name` | string | 3 | Human-readable name |
+| `operator` | string | 4 | Operating organization |
+| `operator_domain` | optional string | 5 | Operator's corporate domain |
+| `exchange_endpoint` | string | 6 | ExchangeService endpoint URL |
+| `keys_uri` | string | 7 | Ed25519 public keys URL |
+| `health_endpoint` | optional string | 8 | Health check endpoint URL |
+| `catalog_endpoint` | optional string | 9 | CatalogService endpoint URL |
+| `protocol_versions_supported` | repeated string | 10 | Supported RAMP protocol versions |
+| `pricing_models_supported` | repeated string | 11 | Supported pricing models |
+| `delivery_methods_supported` | repeated string | 12 | Supported delivery methods |
+| `hash_methods_supported` | repeated string | 13 | Accepted hash methods |
+| `accepted_verifiers` | repeated string | 14 | Trusted verifier domains |
+| `contact_email` | optional string | 15 | Contact email |
+| `terms_uri` | optional string | 16 | Terms of service URL |
+| `privacy_uri` | optional string | 17 | Privacy policy URL |
+| `supported_profiles` | repeated string | 18 | Domain extension profiles this Exchange conforms to (e.g. "ramp-news-v1") |
+| `base_currency` | optional string | 19 | ISO 4217 base currency for all unit_cost values (e.g. "USD") |
+| `ext` | Struct | 20 | Extension point |
+
+### AccessPolicy
+
+Per-path content access rules. Used by Exchanges to communicate provider access policies.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `default_policy` | ResourceAccessPolicy | 1 | Default policy for paths not matching any rule |
+| `rules` | repeated AccessPolicyRule | 2 | Path-specific overrides |
+
+### AccessPolicyRule
+
+Access policy for a URL path pattern.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `pattern` | string | 1 | Glob pattern (e.g. "/premium/*", "/free/*") |
+| `policy` | ResourceAccessPolicy | 2 | Access policy for matching paths |
+
+## Messages -- Broker Protocol
+
+Messages for the Agent-to-Broker path (Steps 1 and 6). When an agent talks directly to an Exchange, it uses ResourceQuery/TransactionRequest instead.
+
+### RAMPRequest
+
+Agent sends to Broker (Step 1).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | RAMP protocol version |
+| `id` | string | 2 | Unique request identifier |
+| `requester` | Requester | 3 | Requester identity, scopes, and optional delegation. Broker forwards this in `ResourceQuery.requester`. |
+| `constraints` | optional RequestConstraints | 4 | Budget and preference constraints |
+| `supported_profiles` | repeated string | 5 | Domain extension profiles the agent understands (e.g. "ramp-academic-v1") |
+| `query` | optional string | 6 | Search query for Broker-side resource discovery. When present, the Broker interprets the query and discovers resources across Exchanges on the agent's behalf. Can be used alongside `Requester.uris`. |
+| `search_filters` | optional Struct | 7 | Structured search filters (alongside or instead of `query`). Keys are profile-specific: `"academic.topic"`, `"news.category"`, `"legal.jurisdiction"`, etc. The Broker maps these to Exchange-specific query parameters. |
+| `ext` | Struct | 15 | Extension point |
+
+:::note[Breaking change]
+Field 3 changed from `comp.v1.AISystem aisystem` to `Requester requester`.
+:::
+
+### RequestConstraints
+
+Budget and preference constraints for exchange filtering and offer selection.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `exchanges` | repeated string | 1 | Authorized Exchange domains |
+| `max_price` | optional Cost | 2 | Maximum price the agent will pay |
+| `max_unit_cost` | optional double | 3 | Maximum effective cost per unit |
+| `delivery_preference` | repeated DeliveryMethod | 4 | Preferred delivery methods (in order) |
+| `reporting_capable` | optional bool | 5 | Whether agent supports post-usage reporting |
+| `preferred_exchanges` | repeated string | 6 | Exchanges with existing relationships (subscriptions) |
+| `budget_scope` | optional string | 7 | Budget scope identifier (e.g. "user:u-12345") |
+| `period_budget` | optional Cost | 8 | Per-period budget limit |
+| `budget_period` | optional Duration | 9 | Budget period (e.g. 720h = 30 days) |
+| `max_data_age` | optional Duration | 10 | Maximum acceptable age of resource data (for DYNAMIC resources) |
+
+### RAMPResponse
+
+Broker returns to Agent (Step 6).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `ver` | string | 1 | Protocol version |
+| `id` | string | 2 | Unique response identifier |
+| `request_id` | string | 3 | Echoed request ID from Step 1 |
+| `transaction_id` | string | 4 | Exchange-assigned transaction ID |
+| `billing_id` | string | 5 | Billing reference |
+| `exchange` | string | 6 | Which Exchange won the selection |
+| `package` | comp.v1.Package | 7 | CoMP Package with retrieval.endpoint populated |
+| `cost` | Cost | 8 | Transaction cost |
+| `delivery_method` | DeliveryMethod | 9 | How content is delivered |
+| `reporting_obligation` | optional ReportingObligation | 10 | Reporting obligations the agent must fulfill |
+| `expires_at` | optional Timestamp | 11 | When the delivery endpoint expires |
+| `broker_fee` | optional Cost | 12 | Broker's fee for this transaction |
+| `ext` | Struct | 15 | Extension point |
+
+## Messages -- CatalogService
+
+Messages for the optional CatalogService RPC.
+
+### PushResourcesRequest
+
+Push or update content entries in the Exchange catalog.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `tenant_id` | string | 1 | Tenant identifier |
+| `entries` | repeated ResourceEntry | 2 | Content entries to push |
+| `caller_id` | string | 5 | Identity of the caller |
+
+:::note
+Fields 3-4 reserved. Caller auth moved to HTTP Message Signatures.
+:::
+
+### ResourceEntry
+
+A single resource catalog entry.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `domain` | string | 1 | Provider domain |
+| `path` | string | 2 | Content path |
+| `content_id` | optional string | 3 | Content identifier |
+| `title` | optional string | 4 | Content title |
+| `word_count` | optional int32 | 5 | Word count |
+| `estimated_quantity` | optional int32 | 6 | Estimated quantity in the metering unit |
+| `content_hash` | optional string | 7 | Content hash |
+| `hash_method` | optional string | 8 | Hash algorithm |
+| `source` | optional IngestionSource | 9 | How the entry was discovered |
+| `provenance_source` | optional string | 10 | Who provided this metadata (e.g. "gumgum.com") |
+| `provenance_timestamp` | optional Timestamp | 11 | When metadata was collected |
+| `attestations` | repeated ResourceAttestation | 12 | Signed attestations about this content |
+| `ext` | Struct | 15 | Extension point |
+
+### PushResourcesResponse
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `accepted` | int32 | 1 | Number of entries accepted |
+| `rejected` | int32 | 2 | Number of entries rejected |
+
+### RemoveResourcesRequest
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `tenant_id` | string | 1 | Tenant identifier |
+| `paths` | repeated string | 2 | Paths to remove |
+
+### RemoveResourcesResponse
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `removed` | int32 | 1 | Number of entries removed |
+
+### RefreshCatalogRequest
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `tenant_id` | string | 1 | Tenant identifier |
+
+### RefreshCatalogResponse
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `started` | bool | 1 | Whether the refresh was started |
+
+## Enums
+
+### PricingModel
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | PER_ACCESS | One-time access fee |
+| 2 | PER_TOKEN | Rate per LLM token consumed |
+| 3 | PER_FETCH | Rate per fetch request |
+| 4 | SUBSCRIPTION | Recurring access |
+| 5 | FREE | No charge |
+| 6 | ATTRIBUTION | Free with required attribution |
+| 7 | CONTRIBUTION | Good-faith payment |
+| 8 | TRAINING | Per training instance fee |
+| 9 | REVENUE_SHARE | Revenue share model (percentage of agent revenue) |
+| 10 | PER_PAGE | Per document page (legal filings, PDFs) |
+| 11 | PER_MINUTE | Per minute of audio/video |
+| 12 | PER_RECORD | Per structured data record |
+
+### DenialReason
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | INVALID_LICENSE | License ID not recognized |
+| 2 | EXPIRED_LICENSE | License ID expired |
+| 3 | INSUFFICIENT_BALANCE | Buyer's balance too low |
+| 4 | RATE_LIMITED | Too many requests |
+| 5 | CONTENT_UNAVAILABLE | Content no longer available |
+| 6 | FUNCTION_PROHIBITED | Requested function not permitted |
+| 7 | GEO_RESTRICTED | Buyer's geography not permitted |
+| 8 | REPORTING_OVERDUE | Buyer has overdue reports |
+| 9 | OFFER_EXPIRED | Offer TTL exceeded |
+| 10 | SIGNATURE_INVALID | Signature verification failed |
+| 11 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
+| 12 | DELEGATION_EXPIRED | Biscuit delegation token expired |
+| 13 | SCOPE_INSUFFICIENT | Requester's scopes do not cover this resource |
+
+### DisputeReason
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | DELIVERY_FAILED | CDN returned 4xx/5xx |
+| 2 | CONTENT_MISMATCH | Content hash does not match attested hash |
+| 3 | INCOMPLETE_CONTENT | Significantly fewer tokens than promised |
+| 4 | WRONG_CONTENT | Different content than described |
+| 5 | EXPIRED_BEFORE_FETCH | Signed URL expired before agent could fetch |
+
+### DisputeStatus
+
+Full dispute lifecycle from filing to final resolution.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | FILED | Dispute received, processing started |
+| 2 | AUTO_RESOLVED | Tier 1 automated resolution (< 1s) |
+| 3 | EVIDENCE_NEEDED | Additional evidence required from a party |
+| 4 | UNDER_REVIEW | Tier 2 rule-based review in progress |
+| 5 | ESCALATED | Tier 3 pattern investigation triggered |
+| 6 | RESOLVED | Decision made (Tier 2) |
+| 7 | APPEALED | Losing party submitted new evidence |
+| 8 | SETTLED | Investigation complete, settlement applied (Tier 3) |
+| 9 | FINAL | Terminal state -- dispute closed |
+
+### ResolutionType
+
+Outcome of a resolved dispute.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | CREDIT | Account credit applied to next billing cycle |
+| 2 | REDELIVERY | New signed URL issued for same content |
+| 3 | REJECTED | Dispute rejected with reason |
+| 4 | INVESTIGATION | Escalated to pattern analysis (Tier 3) |
+
+### CitationFormat
+
+How the citation is presented to the user.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | LINK | Hyperlink citation |
+| 1 | FOOTNOTE | Footnote citation |
+| 2 | INLINE | Inline text citation |
+
+### OfferAbsenceReason
+
+Why no offers are available for a requested URI.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | NOT_IN_CATALOG | URI is not in this Exchange's catalog |
+| 2 | CONTENT_BLOCKED | Provider opted out of AI access |
+| 3 | FUNCTION_PROHIBITED | Requested function prohibited by provider terms |
+| 4 | GEO_RESTRICTED | Requester's geography is restricted |
+| 5 | USER_CATEGORY_PROHIBITED | Requester's user category not permitted |
+| 6 | TEMPORARILY_UNAVAILABLE | Content temporarily unavailable (e.g. feed refresh) |
+| 7 | NOT_AUTHORIZED | Exchange not authorized by provider |
+| 8 | SCOPE_INSUFFICIENT | Requester's scopes do not cover this resource. Used in enterprise deployments; public Exchanges SHOULD silently omit. |
+| 9 | UNKNOWN_CRITICAL_EXTENSION | Consumer encountered `ext_critical` keys it does not recognize |
+
+### RequesterType
+
+What kind of entity is making the request.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | AGENT | Autonomous AI agent (LLM, RAG system, research bot) |
+| 2 | HUMAN_TOOL | Human using an AI-powered tool (copilot, assistant) |
+| 3 | SERVICE | Enterprise service account (automated pipeline, cron job) |
+| 4 | DELEGATED | Agent acting on behalf of a user (delegated identity) |
+| 5 | RESEARCH | Research pipeline (batch data collection, model training) |
+
+### DiscoveryMethod
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | MARKETPLACE | Direct query or Exchange discovery |
+| 2 | SEARCH | Via search engine (Exa, Tavily, etc.) |
+| 3 | RECOMMENDATION | Via content recommendation service |
+| 4 | SYNDICATION | Via content syndication tracking |
+
+### DeliveryMethod
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | DIRECT | Content returned inline |
+| 2 | INSTRUCTIONS | Delivery instructions (signed URL, token) |
+| 3 | STREAMING | Real-time streaming connection (WebSocket, SSE, gRPC stream) |
+
+### ResourceMutability
+
+Signals whether resource content changes over time. Drives hash verification behavior.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | STATIC | Content is immutable. Hash is stable and verifiable. Mismatch is disputable. |
+| 2 | DYNAMIC | Content changes between offer and fetch. Hash mismatch is expected, not disputable. Use `data_as_of` for freshness. |
+| 3 | LIVE | Content does not exist at offer time (real-time streaming). No content_hash applicable. Metering is time-based. |
+
+### IngestionSource
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | RAMP_SITEMAP | RAMP XML namespace in sitemap |
+| 2 | RSL | RSL rsl.txt |
+| 3 | SITEMAP | Standard sitemap.xml |
+| 4 | HTML_CRAWL | HTML crawl + readability extraction |
+| 5 | CMS_API | CMS REST API (WordPress, etc.) |
+| 6 | MANUAL | Manual configuration |
+| 7 | CATALOG_API | Third-party CatalogService push |
+
+### ProviderRelationship
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | DIRECT | Provider has a direct contract with this Exchange |
+| 2 | RESELLER | Exchange resells content via another authorized party |
+
+### ResourceAccessPolicy
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | LICENSED | Content requires a RAMP transaction |
+| 2 | OPEN | Content is freely accessible |
+| 3 | BLOCKED | Content is not available to AI systems |

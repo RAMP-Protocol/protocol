@@ -1,0 +1,224 @@
+---
+title: "Provider Onboarding"
+description: "ACME-style domain verification, CDN key provisioning, and catalog contributor setup for RAMP providers"
+---
+
+## Overview
+
+Provider onboarding has three steps:
+
+1. **Domain verification** -- prove you control the domain (ACME HTTP-01 pattern)
+2. **CDN signing key provisioning** -- get signing keys into the Exchange
+3. **Catalog contributor authorization** -- declare who can push resource metadata on your behalf
+
+Both steps can be completed in under an hour using `ramp-cli`.
+
+## Two Deployment Models
+
+### Model A: Exchange-Managed (Default)
+
+The provider grants CDN access during onboarding. The Exchange generates keys, configures the CDN, and rotates keys automatically on a 90-day schedule.
+
+**Best for**: Single-exchange providers who want zero operational overhead.
+
+**What you provide**: IAM role (CloudFront), API credentials (Akamai/Fastly).
+
+### Model B: Provider-Managed (Opt-In)
+
+The provider generates keys locally, pushes them to each Exchange via `ramp-cli`, and configures their own CDN.
+
+**Best for**: Multi-exchange providers who need control over key distribution.
+
+## Domain Verification Flow
+
+The flow adapts the ACME HTTP-01 challenge used by Let's Encrypt.
+
+```
+ramp-cli                    Exchange                   Provider CDN
+    |                             |                           |
+    |  1. RequestDomainVerification                           |
+    |     { domain: "example.com" }                           |
+    |------------------------------>                          |
+    |                             |  Generate challenge token |
+    |                             |                           |
+    |  2. DomainVerificationChallenge                         |
+    |     { token: "abc123...",                               |
+    |       expires_at: +10min }                              |
+    |<------------------------------                          |
+    |                             |                           |
+    |  3. Place token at                                      |
+    |     /.well-known/ramp-verify/{token}                   |
+    |---------------------------------------------------->    |
+    |                             |                           |
+    |  4. ConfirmDomainVerification                           |
+    |------------------------------>                          |
+    |                             |  5. Fetch verification_url|
+    |                             |---------------------------->
+    |                             |  6. Verify token + check  |
+    |                             |     ramp.json            |
+    |                             |                           |
+    |  7. DomainVerificationResult                            |
+    |     { verified: true, key_id: "k-2026-03" }            |
+    |<------------------------------                          |
+```
+
+**Double protection**: The Exchange checks both the ACME challenge (domain control) and `ramp.json` authorization (exchange authorization). Both must pass.
+
+## ramp-cli Commands
+
+### Generate a signing key
+
+```bash
+# CloudFront (ECDSA P-256 recommended)
+ramp-cli key generate --cdn cloudfront --algorithm ecdsa-p256
+
+# Akamai (HMAC-SHA256)
+ramp-cli key generate --cdn akamai
+
+# Fastly (HMAC-SHA256)
+ramp-cli key generate --cdn fastly
+```
+
+### Push key to an Exchange
+
+Includes ACME domain verification automatically:
+
+```bash
+ramp-cli key push \
+  --exchange mp.ssp.com \
+  --domain techcrunch.com \
+  --cdn cloudfront \
+  --key-file ./ramp-cloudfront-private.pem
+```
+
+Output:
+```
+Requesting domain verification for techcrunch.com...
+Challenge token: abc123def456
+Placing token at /.well-known/ramp-verify/abc123def456
+  -> Edge function KV write: OK
+Confirming domain verification...
+  -> Domain verified: techcrunch.com
+  -> Key registered: k-2026-03-18-cf
+  -> Valid until: 2026-06-18T00:00:00Z
+Done.
+```
+
+### Rotate a key
+
+```bash
+ramp-cli key rotate \
+  --exchange mp.ssp.com \
+  --cdn cloudfront \
+  --drain-minutes 10
+```
+
+Four-phase zero-downtime rotation: PREPARE (generate new key, push to CDN) -> ACTIVATE (switch signer) -> DRAIN (wait for old URLs to expire) -> CLEANUP (remove old key).
+
+### Check key status
+
+```bash
+ramp-cli key status --exchange mp.ssp.com --domain techcrunch.com
+```
+
+### Emergency revocation
+
+```bash
+ramp-cli key revoke --exchange mp.ssp.com --key-id k-2026-03-18-cf
+```
+
+## Configure ramp.json
+
+Set up `/.well-known/ramp.json` to authorize Exchanges and catalog contributors:
+
+```json
+{
+  "ver": "1.0",
+  "provider": "nytimes.com",
+  "contact": "licensing@nytimes.com",
+  "exchanges": [
+    {
+      "domain": "mp.ssp-alpha.com",
+      "endpoint": "https://mp.ssp-alpha.com/ramp/v1",
+      "relationship": "DIRECT"
+    }
+  ],
+  "catalog_contributors": [
+    {
+      "domain": "doubleverify.com",
+      "relationship": "verifier"
+    },
+    {
+      "domain": "gumgum.com",
+      "relationship": "verifier"
+    }
+  ],
+  "supported_profiles": ["ramp-news-v1"]
+}
+```
+
+The `catalog_contributors` field authorizes third parties to push attestations and catalog metadata for your resources via `CatalogService.PushContent`.
+
+## Publish ramp-verifier.json (Optional)
+
+If you want to self-attest resources (Level 1 verification), publish your Ed25519 signing keys at:
+
+```
+https://{domain}/.well-known/ramp-verifier.json
+```
+
+```json
+{
+  "verifier": "nytimes.com",
+  "name": "The New York Times",
+  "claims_schema": {
+    "content_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of delivered content bytes"
+    },
+    "estimated_quantity": {
+      "type": "integer",
+      "description": "Token count computed by NYT CMS"
+    }
+  },
+  "keys": [
+    {
+      "kid": "nyt-2026-Q1",
+      "algorithm": "ed25519",
+      "public_key": "MCowBQYDK2VwAyEA...",
+      "valid_from": "2026-01-01T00:00:00Z",
+      "valid_until": "2026-12-31T23:59:59Z"
+    }
+  ]
+}
+```
+
+See [Content Attestation](/protocol/content-attestation/) for the full attestation system design.
+
+## CDN Key Types
+
+| CDN | Key Type | Algorithm |
+|---|---|---|
+| CloudFront | Asymmetric | ECDSA P-256 (recommended) or RSA-2048 |
+| Akamai | Symmetric | Auth Token 2.0 (HMAC-SHA256) |
+| Fastly | Symmetric | Custom VCL (HMAC-SHA256) |
+| Generic | Symmetric | HMAC-SHA256 |
+
+CloudFront's asymmetric model provides the strongest security separation: the Exchange holds the private key for signing, CloudFront holds the public key for verification.
+
+## Onboarding Checklist
+
+| Step | Action | Time |
+|---|---|---|
+| 1 | Deploy RAMP edge function on CDN | 15 min |
+| 2 | Configure `ramp.json` with authorized Exchange(s) | 5 min |
+| 3 | Generate and push signing key (or grant CDN access) | 5--10 min |
+| 4 | (Optional) Add `catalog_contributors` to `ramp.json` | 5 min |
+| 5 | (Optional) Publish `ramp-verifier.json` for self-attestation | 10 min |
+| **Total** | | **~30--45 min** |
+
+## Next Steps
+
+- [Content Attestation](/protocol/content-attestation/) -- set up content attestation after onboarding
+- [For Providers](/getting-started/for-providers/) -- provider value proposition overview
+- [Proto: RAMP v1](/reference/proto-ramp/) -- `DomainVerification*` message reference

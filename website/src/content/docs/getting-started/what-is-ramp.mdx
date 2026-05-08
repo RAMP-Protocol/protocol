@@ -1,0 +1,165 @@
+---
+title: "What Is RAMP?"
+description: "An introduction to the Resource Access Metering Protocol — the open transaction layer for fast, metered access to any digital resource by AI agents."
+---
+
+## The Problem
+
+AI agents need resources. Not just web pages — court filings, academic papers, credit reports, medical imaging, satellite data, drug interaction databases, live market feeds. These resources are scattered across thousands of providers, each with their own API, pricing model, authentication scheme, and terms of use.
+
+Today, every integration is bespoke. An agent that needs a D&B credit report speaks a completely different protocol than one that needs a PACER court filing or a DrugBank interaction check. There is no common way to discover what's available, negotiate a price, execute a transaction, verify what was delivered, or dispute a problem.
+
+The result: agents are locked into whichever providers their developers happened to integrate. Providers who want to serve AI agents must build custom APIs for each consumer. Neither side scales.
+
+## What RAMP Does
+
+RAMP — the **Resource Access Metering Protocol** — is an open transaction layer for metered resource access by AI agents. One protocol for discovering, pricing, transacting, delivering, and verifying any digital resource.
+
+```
+Agent → Broker → Exchange → Resource
+         (routes)       (prices)      (delivers)
+```
+
+**For agents:** Query any Exchange. Compare offers across providers. Pay per use. Verify what you got.
+
+**For resource providers:** Expose your catalog through an Exchange. Set your price. Get paid per access. No custom integrations per consumer.
+
+**For Exchange operators:** Aggregate provider catalogs. Handle transactions. Earn a margin. Compete on coverage, quality, and price.
+
+## How It Works
+
+A RAMP transaction follows six steps:
+
+```
+1. Discover    Agent checks /.well-known/ramp.json → finds Exchange endpoint
+2. Query       Agent calls DiscoverResources → gets Offers with pricing + attestations
+3. Transact    Agent calls ExecuteTransaction → gets delivery instructions + billing_id
+4. Deliver     Agent fetches resource via signed URL → time-limited, identity-bound
+5. Report      Agent calls ReportUsage → reports consumption (tokens, pages, minutes, records)
+6. Dispute     If needed: DisputeTransaction → evidence-based dispute with report_id
+```
+
+## What Makes It Universal
+
+RAMP was validated across **18 real-world scenarios** spanning 10 industries:
+
+| Industry | Resource | Metering Unit | Validated |
+|----------|----------|---------------|-----------|
+| News/Media | Articles, podcasts, live broadcasts | tokens, minutes | UC1, UC14, UC16 |
+| Legal | Court filings, EU legislation, patents | pages, documents | UC3, UC4, UC5 |
+| Finance | Stock quotes, credit reports | records, minutes | UC6, UC7 |
+| Academic | Journal articles, preprints | tokens, articles | UC2 |
+| Medical | Clinical trials, brain MRI scans | records, studies | UC8, UC13 |
+| Government | Property records | records | UC9 |
+| Geospatial | Satellite imagery | sq_km | UC12 |
+| Pharma | Drug interaction databases | queries, interaction_pairs | UC10 |
+| Media Intelligence | Continuous news monitoring | alerts, articles | UC18 |
+| Composite | Due diligence packages | mixed | UC17 |
+
+The same protocol handles all of them. The differences are in the `ext` fields, not the protocol.
+
+## Key Design Decisions
+
+### Unit-agnostic metering
+
+Pricing uses `unit_cost` + `unit` + `estimated_quantity`. No assumption about what's being metered. Tokens, pages, seconds, records, sq_km, interaction_pairs — all work.
+
+### Content mutability
+
+Every resource declares whether it's **static** (articles, patents — hash is stable), **dynamic** (credit reports, drug databases — content changes between offer and fetch), or **live** (streaming feeds — no content exists at offer time). This drives hash verification, attestation cadence, and dispute rules.
+
+### Data freshness
+
+Offers carry `data_as_of` — when the data was current. Agents set `max_data_age` — how fresh they need it. The Broker filters. Essential for credit reports (days), stock quotes (seconds), drug databases (weeks).
+
+### Extension profiles
+
+A three-layer governance model prevents fragmentation:
+
+| Layer | What | Example |
+|-------|------|---------|
+| **Core proto** | Fields every implementation supports | `resource_mutability`, `data_as_of` |
+| **Standard extensions** | Cross-domain conventions in `ramp.*` namespace | `ramp.compliance.dua_required` |
+| **Domain profiles** | Industry-specific vocabularies | `news.iptc_guid`, `academic.doi`, `legal.eli` |
+
+Exchanges declare which profiles they support. Agents declare which profiles they understand. The Broker routes accordingly.
+
+Three v1 profiles exist:
+- **ramp-news-v1** — articles, podcasts, broadcasting (IPTC NewsML-G2, Podcasting 2.0)
+- **ramp-academic-v1** — scholarly articles, preprints (CrossRef, OpenAlex, COUNTER 5.1)
+- **ramp-legal-v1** — legislation, case law, patents (ELI, ECLI, Akoma Ntoso)
+
+### Identity and authorization
+
+Every request carries a `Requester` message — a universal actor identity with fields for `id`, `domain`, `type`, `scopes`, and an Ed25519 `signature`. The Requester is not limited to AI systems: any entity that needs metered access — autonomous agents, human-operated copilots, enterprise service accounts, research pipelines — uses the same identity model.
+
+**RequesterType** classifies the caller: `AGENT` (autonomous), `HUMAN_TOOL` (copilot), `SERVICE` (enterprise pipeline), `DELEGATED` (acting on behalf of another), `RESEARCH` (batch data collection).
+
+**Scopes** filter what the Requester can access. Examples: `subscription:bloomberg-2026`, `credit:read`, `academic:*`, `*` (unrestricted). The Exchange returns only resources matching the declared scopes.
+
+**Delegation with Biscuit tokens** enables offline-verifiable, attenuable authorization. A principal (organization, IAM, upstream agent) issues a Biscuit token. Each holder in the chain can narrow permissions — restrict scopes, lower spend caps, shorten expiry — but can never widen them. Zero round trips to the original issuer, regardless of how many delegation levels deep.
+
+**IntermediaryHop** records request provenance when a request passes through intermediaries (e.g., agent to broker to Exchange). Each hop signs the request with its own Ed25519 key, creating a verifiable chain modeled after OpenRTB's supply chain object.
+
+**`ext_critical`** flags extension keys that an Exchange MUST understand to process the request. See [Extension Profiles](/protocol/extension-profiles/) for details.
+
+For the full identity model — key lookup, Biscuit attenuation examples, scope-based catalog filtering, and denial reasons — see [Authentication](/protocol/authentication/).
+
+### Cryptographic attestation
+
+Providers and third-party verifiers sign claims about resources using Ed25519. Three levels: none (just identifiers), self-attested (provider signs), third-party verified (independent verifier signs). Agents choose what to trust.
+
+### Dispute chain
+
+No fire-and-forget disputes. The agent must file a `UsageReport` before disputing, creating an evidence chain. Routine disputes (delivery failure, hash mismatch on static content) auto-resolve in under one second.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       DEMAND SIDE                           │
+│                                                             │
+│   AI Agent ──→ Broker                                 │
+│   (needs resources)   (routes queries, compares offers,     │
+│                        enforces budgets, tracks freshness)  │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ DiscoverResources / ExecuteTransaction
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       SUPPLY SIDE                           │
+│                                                             │
+│   Exchange ──→ Resource Provider ──→ Delivery Endpoint   │
+│   (catalog, pricing,   (owns content,    (CDN, API, PACS,  │
+│    transactions)        sets terms)       DICOMweb, etc.)   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The Broker is optional — agents can query Exchanges directly. But it adds multi-exchange comparison, budget enforcement, freshness filtering, and profile-based routing.
+
+## Scope
+
+RAMP covers **metered access to resources that exist**. The test: "Does the resource exist before the transaction?"
+
+| In Scope | Out of Scope |
+|----------|-------------|
+| Static resources (articles, papers, patents) | Job execution (translation, ML inference) |
+| Dynamic resources (credit reports, drug DBs) | Document generation |
+| Streaming resources (quote feeds, live audio) | Compute services |
+| Database lookups (drug interactions, property records) | |
+
+## What Exists Today
+
+- **Protocol specification** — protobuf IDL with generated Go and TypeScript SDKs
+- **Three extension profiles** — news, academic, legal (spec + JSON Schema each)
+- **18-scenario validation** — cross-industry proof that the protocol works
+- **Working proof of concept** — bot detection, exchange discovery, signed URL delivery
+- **Alignment with IAB standards** — layers on RSL (terms) and CoMP (metadata)
+
+## Next Steps
+
+- [For Resource Providers](/getting-started/for-providers/) — how to expose your resources through RAMP
+- [For AI Agents](/getting-started/for-ai-agents/) — how to access resources through RAMP
+- [For Exchange Operators](/getting-started/for-exchange-operators/) — how to run a RAMP Exchange
+- [How Money Flows](/getting-started/how-money-flows/) — the billing chain, pricing models, and settlement
+- [Standards Layering](/protocol/standards-layering/) — how RSL, CoMP, and RAMP work together
+- [Extension Profiles](/protocol/extension-profiles/) — domain-specific metadata governance

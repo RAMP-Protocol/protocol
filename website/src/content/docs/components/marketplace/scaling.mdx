@@ -1,0 +1,539 @@
+---
+title: "Scaling and Performance"
+description: "NFR targets, caching strategies, concurrency model, horizontal scaling, failure modes, and cost analysis for the Exchange Node."
+---
+
+## NFR Targets
+
+| Metric | Target |
+|---|---|
+| Request rate | 10K RPS |
+| ExecuteTransaction latency (p99) | &lt;100ms |
+| DiscoverResources latency (p99) | &lt;50ms |
+| ReportUsage latency (p99) | &lt;20ms |
+| Per-transaction cost | &lt;$0.00005 |
+
+---
+
+## Concurrency Model
+
+### Goroutine-Per-Request
+
+Each incoming RPC is handled by its own goroutine (standard Go HTTP server behavior). No goroutine pooling needed — Go's scheduler handles this efficiently up to 100K+ concurrent goroutines.
+
+```go
+// Server setup — standard Connect-Go with HTTP/2.
+func NewServer(cfg *Config) *http.Server {
+    mux := http.NewServeMux()
+
+    handler := NewExchangeHandler(cfg)
+    path, h := rampv1connect.NewExchangeServiceHandler(handler)
+    mux.Handle(path, h)
+
+    return &http.Server{
+        Addr:    cfg.ListenAddr,
+        Handler: mux,
+        // HTTP/2 enabled by default in Go's net/http
+    }
+}
+```
+
+### Lock-Free Catalog Reads
+
+The resource catalog is read on every DiscoverResources call. Writes happen only during RSL re-ingestion (every 5 minutes). This is a classic read-heavy workload.
+
+**Pattern**: Copy-on-write with `atomic.Pointer`.
+
+```go
+// Read path (hot — every DiscoverResources):
+func (c *Catalog) FindOffers(ctx context.Context, tenantID string, ais *compv1.AISystem) ([]*rampv1.Offer, error) {
+    // Atomic load — no lock, no contention
+    snapshot := c.current.Load()
+    tenant, ok := snapshot.Tenants[tenantID]
+    if !ok {
+        return nil, ErrTenantNotFound
+    }
+    // Traverse radix trie — immutable data, safe for concurrent reads
+    return tenant.matchOffers(ais)
+}
+
+// Write path (cold — every 5 minutes per tenant):
+func (c *Catalog) ReplaceSnapshot(newSnapshot *CatalogSnapshot) {
+    // Atomic store — single pointer write, no lock
+    // Old snapshot is GC'd after all in-flight reads complete
+    c.current.Store(newSnapshot)
+}
+```
+
+No `sync.RWMutex` needed. The atomic pointer swap is wait-free. In-flight reads on the old snapshot complete normally; they just see slightly stale data (which is fine — the catalog changes every 5 minutes, not every request).
+
+### Connection Pooling to Billing Adapter
+
+The Billing Adapter makes an external call on every ExecuteTransaction. Connection reuse is critical.
+
+```go
+// Billing adapter HTTP client with connection pooling.
+billingClient := &http.Client{
+    Transport: &http.Transport{
+        MaxIdleConns:        200,
+        MaxIdleConnsPerHost: 200,
+        IdleConnTimeout:     90 * time.Second,
+        // Keep-alive enabled by default
+    },
+    Timeout: 30 * time.Millisecond, // Hard timeout per NFR
+}
+```
+
+At 10K RPS, the billing adapter needs to sustain 10K concurrent requests. With connection reuse and a 5ms average response time, ~50 connections can handle 10K RPS. The pool of 200 provides headroom for latency spikes.
+
+### Batched Transaction Log Writes
+
+Individual fsync per transaction is too slow at 10K RPS. The WAL batches writes.
+
+```go
+// WALWriter batches transaction log writes for throughput.
+type WALWriter struct {
+    file    *os.File
+    buf     *bufio.Writer
+    mu      sync.Mutex
+    pending []pendingWrite
+    ticker  *time.Ticker // Flush interval
+}
+
+type pendingWrite struct {
+    data []byte
+    done chan error
+}
+
+// Write appends a record to the WAL. Blocks until the batch is flushed.
+func (w *WALWriter) Write(ctx context.Context, record *TransactionRecord) error {
+    data, err := encodeRecord(record)
+    if err != nil {
+        return err
+    }
+
+    pw := pendingWrite{data: data, done: make(chan error, 1)}
+
+    w.mu.Lock()
+    w.pending = append(w.pending, pw)
+    shouldFlush := len(w.pending) >= w.batchSize
+    w.mu.Unlock()
+
+    if shouldFlush {
+        w.flush()
+    }
+
+    // Wait for flush confirmation
+    select {
+    case err := <-pw.done:
+        return err
+    case <-ctx.Done():
+        return ctx.Err()
+    }
+}
+
+// flush writes all pending records and fsyncs.
+func (w *WALWriter) flush() {
+    w.mu.Lock()
+    batch := w.pending
+    w.pending = w.pending[:0]
+    w.mu.Unlock()
+
+    var writeErr error
+    for _, pw := range batch {
+        if _, err := w.buf.Write(pw.data); err != nil {
+            writeErr = err
+            break
+        }
+    }
+    if writeErr == nil {
+        writeErr = w.buf.Flush()
+    }
+    if writeErr == nil {
+        writeErr = w.file.Sync() // fdatasync — one sync per batch
+    }
+
+    for _, pw := range batch {
+        pw.done <- writeErr
+    }
+}
+```
+
+At 10K RPS with 50ms flush interval, each batch contains ~500 records. One fdatasync per batch = 20 fsyncs/second, well within SSD capability (typically 10K+ IOPS).
+
+### Idempotency Cache
+
+The idempotency cache uses a concurrent LRU with sharded locks to avoid contention:
+
+```go
+// IdempotencyCache stores recent TransactionResponse values keyed by request ID.
+// Sharded by hash of key to reduce lock contention.
+type IdempotencyCache struct {
+    shards    [256]*idempotencyShard
+    ttl       time.Duration
+}
+
+type idempotencyShard struct {
+    mu    sync.RWMutex
+    items map[string]*idempotencyEntry
+}
+
+type idempotencyEntry struct {
+    response  *rampv1.TransactionResponse
+    expiresAt time.Time
+}
+```
+
+---
+
+## Horizontal Scaling
+
+### What's Stateless
+
+The Exchange request handler is stateless. Any instance can handle any request. No session affinity required.
+
+### What's Shared State
+
+| State | Sharing Model | Consistency |
+|---|---|---|
+| Content catalog | Independently built per instance from RSL | Eventual (instances may serve slightly different catalogs during RSL re-ingestion) |
+| Transaction log | Shared durable store (Kafka/S3/DynamoDB) | Append-only, no conflicts |
+| Idempotency cache | Per-instance (not shared) | At-most-once per instance; cross-instance idempotency via transaction log dedup |
+| Reporting obligations | Shared durable store | Eventually consistent |
+| Signing keys | Shared secrets manager (read-only) | Consistent (all instances load same keys) |
+
+### Idempotency Across Instances
+
+The per-instance idempotency LRU cache handles the common case (retry hits same instance). For cross-instance retries (load balancer routes retry to different instance), the transaction log provides dedup.
+
+**Growth Tier**: Accept the risk. Both nodes may process the same request. The transaction log provides deduplication at the durable store layer. The billing adapter's `Record` call is idempotent (keyed by billing_id). The cost of a rare duplicate signed URL is negligible compared to the engineering cost of distributed coordination at this tier.
+
+```
+Node A: processes request → writes txn log → signs URL → responds
+Node B: processes same request → writes txn log (dedup at store) → signs URL → responds
+Result: Two signed URLs issued for one billing event. CDN redeems one. No financial impact.
+```
+
+**Scale Tier**: At 10K+ RPS, use Redis for distributed idempotency:
+
+```go
+// Distributed idempotency check via Redis.
+func (h *ExchangeHandler) checkIdempotency(ctx context.Context, requestID string) (*rampv1.TransactionResponse, error) {
+    // 1. Local LRU (fast path, no network)
+    if cached, ok := h.localCache.Get(requestID); ok {
+        return cached, nil
+    }
+    // 2. Redis SETNX with TTL (distributed lock)
+    acquired, err := h.redis.SetNX(ctx, "idemp:"+requestID, "processing", 10*time.Minute).Result()
+    if err != nil {
+        // Redis down — fall back to Growth tier behavior (accept the risk)
+        slog.Warn("redis idempotency check failed, proceeding without distributed lock",
+            slog.String("request_id", requestID),
+            slog.Any("error", err),
+        )
+        return nil, nil
+    }
+    if !acquired {
+        // Another node is processing — wait briefly, then read result
+        return h.waitForResult(ctx, requestID)
+    }
+    return nil, nil // Proceed with new transaction
+}
+```
+
+**Day-one guidance**: Don't over-engineer. Start with Growth tier behavior. Add Redis idempotency when you observe duplicate transactions in the transaction log exceeding your tolerance threshold.
+
+### Sharding Strategy
+
+For the Scale tier (10K RPS) and beyond, shard by **provider tenant**:
+
+```
+                    ┌──────────────┐
+                    │ Load Balancer│
+                    │ (L7, path    │
+                    │  routing)    │
+                    └──────┬───────┘
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+    ┌─────────▼────┐ ┌─────▼──────┐ ┌──▼───────────┐
+    │ Shard A      │ │ Shard B    │ │ Shard C      │
+    │ Tenants:     │ │ Tenants:   │ │ Tenants:     │
+    │ techcrunch   │ │ reuters    │ │ wsj          │
+    │ verge        │ │ apnews     │ │ nytimes      │
+    │ wired        │ │ bbc        │ │ washpost     │
+    └──────────────┘ └────────────┘ └──────────────┘
+```
+
+**Why shard by tenant?**
+- Each shard's catalog is smaller (fewer tenants = less memory).
+- Signing keys are isolated per shard.
+- A misbehaving tenant (RSL changes, traffic spikes) only affects its shard.
+- Load balancer can route based on the URI domain in the ResourceQuery.
+
+**Why not shard by buyer or content path?**
+- Buyer sharding requires the load balancer to inspect the request body (license ID), which is slower and more complex.
+- Content path sharding fragments a tenant's catalog across shards, complicating RSL ingestion and offer resolution.
+
+**Load balancing**: Layer 7 (HTTP) load balancer. Use consistent hashing on the target domain extracted from the request URI for sticky routing. Fallback to round-robin for requests without a resolvable domain.
+
+### Scaling Tiers
+
+| Tier | Instances | Tenants/Instance | RPS/Instance | Total RPS |
+|---|---|---|---|---|
+| Growth | 4 | 25 | 250 | 1,000 |
+| Scale | 20 | 5 | 500 | 10,000 |
+| Extreme | 100+ | 1-2 | 1,000 | 100,000+ |
+
+---
+
+## Failure Modes
+
+### Billing Adapter Timeout
+
+**Scenario**: Billing Authorize call exceeds the 30ms timeout.
+
+**Policy options** (configurable per deployment):
+
+| Policy | Behavior | Risk | When to Use |
+|---|---|---|---|
+| **Reject** (default) | Return `CodeUnavailable` to agent | Lost revenue | High-value content, strict accounting |
+| **Deferred** | Authorize optimistically, record for later settlement | Potential bad debt | Low-value content, trusted buyers |
+
+For deferred mode, the transaction is logged with `billing_status: "deferred"` and a background reconciliation goroutine retries authorization when the billing system recovers.
+
+### CDN Signing Failure
+
+**Scenario**: SignURL returns an error (corrupt key, unsupported algorithm, etc.).
+
+**Behavior**: Transaction is rejected. The billing hold is released. The transaction log records the failure with `status: "sign_failed"`.
+
+This is a hard failure — no fallback. The Exchange cannot issue an unsigned URL; it would bypass the entire security model. The operator must fix the signing configuration.
+
+### Catalog Stale or Empty
+
+**Scenario**: RSL ingestion fails (provider domain down, RSL malformed, network error).
+
+**Behavior**: The Exchange continues serving from the previous catalog snapshot. DiscoverResources returns offers based on the last successful ingestion. The catalog's `BuiltAt` timestamp is included in metrics for staleness monitoring.
+
+**If no catalog has ever been built** (first startup, RSL never reachable): DiscoverResources returns zero offers. The Exchange is healthy but has no inventory.
+
+**Alert thresholds**:
+- Catalog age > 15 minutes: warning
+- Catalog age > 1 hour: critical
+- Catalog empty for > 5 minutes: critical
+
+### Transaction Log Store Down
+
+**Scenario**: The durable store (Kafka, S3, DynamoDB) backing the transaction log is unreachable.
+
+**Behavior**: The local WAL continues accepting writes. The WAL has a configurable capacity (default: 1 GB, ~5M records). When the durable store recovers, the WAL drainer resumes shipping records.
+
+**If WAL reaches capacity**: The Exchange stops accepting new transactions (ExecuteTransaction returns `CodeUnavailable`). DiscoverResources and ReportUsage continue functioning. This is the "transaction log store down" failure mode from the NFR document — the Exchange must stop issuing signed URLs when it cannot guarantee durable recording.
+
+```go
+// WALDrainer ships WAL records to the durable store.
+type WALDrainer struct {
+    wal         *WALWriter
+    store       TransactionStore
+    retryDelay  time.Duration // Exponential backoff on store failure
+    maxWALBytes int64         // Capacity limit before rejecting transactions
+}
+
+func (d *WALDrainer) Run(ctx context.Context) {
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        default:
+            batch, err := d.wal.ReadBatch(1000)
+            if err != nil {
+                // WAL read error — critical, log and retry
+                continue
+            }
+            if err := d.store.WriteBatch(ctx, batch); err != nil {
+                // Durable store down — back off and retry
+                time.Sleep(d.retryDelay)
+                d.retryDelay = min(d.retryDelay*2, 30*time.Second)
+                continue
+            }
+            d.retryDelay = 100 * time.Millisecond // Reset on success
+            d.wal.Acknowledge(batch) // Mark WAL records as shipped
+        }
+    }
+}
+```
+
+---
+
+## Cost Analysis
+
+### At 10K RPS (Scale Tier)
+
+**Assumptions**: 864M transactions/day. Go binary running on AWS ECS. US-East region. 30-day month.
+
+#### Compute
+
+| Component | Instances | Instance Type | Monthly Cost |
+|---|---|---|---|
+| Exchange Node | 20 | c7g.xlarge (4 vCPU, 8 GB) | 20 x $98 = **$1,960** |
+| Total monthly compute | | | **$1,960** |
+| Per-transaction compute | | | **$0.0000000756** |
+
+Each c7g.xlarge handles ~500 RPS. Go's goroutine model and in-memory catalog mean CPU is primarily spent on serialization and crypto. At 500 RPS with 20ms average latency, each request consumes ~10ms of CPU time = ~0.01 vCPU per request. 500 RPS x 0.01 = 5 vCPU needed per instance — but we have 4, so targeting 500 RPS leaves ~20% headroom when accounting for non-request CPU (RSL ingestion, WAL flushing, etc.).
+
+#### Storage
+
+| Component | Store | Volume/Month | Monthly Cost |
+|---|---|---|---|
+| Transaction log (Kafka) | MSK (3 brokers, kafka.m5.large) | ~800 GB/month | **$600** |
+| Transaction log (S3 archival) | S3 Standard | ~200 GB/month (Parquet compressed) | **$5** |
+| WAL (local EBS) | gp3, 100 GB per instance | 20 x 100 GB | **$160** |
+| Idempotency cache | In-memory | ~1 GB per instance | $0 (included in compute) |
+| Content catalog | In-memory | ~2-20 GB per instance | $0 (included in compute) |
+| Total monthly storage | | | **$765** |
+| Per-transaction storage | | | **$0.0000000295** |
+
+#### Network
+
+| Component | Volume/Month | Monthly Cost |
+|---|---|---|
+| Inter-AZ (Exchange to Kafka) | ~400 GB | **$4** |
+| Internet egress (responses to agents) | ~500 GB | **$45** |
+| Total monthly network | | **$49** |
+| Per-transaction network | | **$0.0000000019** |
+
+#### Total Cost
+
+| Category | Monthly | Per Transaction |
+|---|---|---|
+| Compute | $1,960 | $0.0000000756 |
+| Storage | $765 | $0.0000000295 |
+| Network | $49 | $0.0000000019 |
+| **Total** | **$2,774** | **$0.000000107** |
+
+**Per-transaction cost: ~$0.0000001** — well under the NFR target of $0.00005/txn. That target was conservative; the actual infrastructure cost is **500x below** the ceiling.
+
+At $0.05/article average transaction value, infrastructure cost is **0.0002%** of transaction value. Even including the billing adapter (estimated ~$500/month for DynamoDB at this scale), the total is under $3,300/month — **$0.000127/txn**.
+
+The dominant cost is not compute or storage but **engineering time** to build and maintain the Billing Adapter integration and tenant onboarding tooling.
+
+#### Cost Comparison: Containers vs. Lambda
+
+| Model | Monthly Cost at 10K RPS | Per-Transaction |
+|---|---|---|
+| **Containers (this design)** | ~$2,774 | $0.0000001 |
+| **Lambda** (128MB, 50ms avg) | ~$8,100 | $0.0000003 |
+| **Lambda** (256MB, 50ms avg) | ~$16,200 | $0.0000006 |
+
+Containers are ~3-6x cheaper at this sustained load, confirming the NFR recommendation.
+
+---
+
+## Metrics and Observability
+
+All metrics are exposed via Prometheus (OpenMetrics format) on `/metrics`.
+
+### Request Metrics
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `exchange_rpc_total` | Counter | `method`, `code`, `tenant_id` | Total RPC calls |
+| `exchange_rpc_duration_seconds` | Histogram | `method`, `tenant_id` | RPC latency (p50, p95, p99) |
+| `exchange_offers_returned` | Histogram | `tenant_id` | Offers per DiscoverResources response |
+| `exchange_transaction_total` | Counter | `tenant_id`, `status` | Transactions by outcome |
+
+### Billing Adapter Metrics
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `billing_authorize_duration_seconds` | Histogram | `tenant_id`, `approved` | Billing authorization latency |
+| `billing_authorize_total` | Counter | `tenant_id`, `approved` | Billing authorization outcomes |
+| `billing_timeout_total` | Counter | `tenant_id` | Billing adapter timeouts |
+
+### Catalog Metrics
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `catalog_offers_total` | Gauge | `tenant_id` | Current offer count per tenant |
+| `catalog_last_refresh_timestamp` | Gauge | `tenant_id` | Last successful RSL ingestion time |
+| `catalog_refresh_duration_seconds` | Histogram | `tenant_id` | RSL ingestion duration |
+| `catalog_refresh_errors_total` | Counter | `tenant_id`, `reason` | RSL ingestion failures |
+
+### Transaction Log Metrics
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `txlog_wal_pending_bytes` | Gauge | | Current WAL size (bytes) |
+| `txlog_wal_pending_records` | Gauge | | Records waiting for durable store flush |
+| `txlog_flush_duration_seconds` | Histogram | | WAL batch flush latency |
+| `txlog_store_errors_total` | Counter | `store` | Durable store write failures |
+
+### Reporting Metrics
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `reporting_obligations_total` | Gauge | `tenant_id`, `state` | Obligations by state |
+| `reporting_compliance_rate` | Gauge | `tenant_id` | % of obligations fulfilled on time |
+| `reporting_token_deviation` | Histogram | `tenant_id` | Deviation between reported and estimated tokens |
+| `reporting_token_deviation_cumulative` | Gauge | `tenant_id`, `buyer_license` | Cumulative token deviation per buyer |
+
+### Health Check Endpoint
+
+```
+GET /healthz → 200 OK
+GET /readyz  → 200 OK (catalog loaded, billing adapter reachable, WAL writable)
+```
+
+```go
+type ReadinessCheck struct {
+    CatalogLoaded    bool   `json:"catalog_loaded"`
+    CatalogAge       string `json:"catalog_age"` // e.g., "2m30s"
+    TenantCount      int    `json:"tenant_count"`
+    BillingReachable bool   `json:"billing_reachable"`
+    WALWritable      bool   `json:"wal_writable"`
+    WALUtilization   float64 `json:"wal_utilization"` // 0.0-1.0
+}
+```
+
+`/readyz` returns 503 if:
+- No catalog has ever been loaded
+- WAL utilization > 90%
+- Billing adapter has failed 10 consecutive health checks
+
+### Structured Logging
+
+All logs use `log/slog` with structured key-value pairs. No `log.Printf` or custom loggers. Every error path MUST log before returning.
+
+**Redaction rules** (per threat model):
+- `buyer_license`: last 4 characters only (e.g., `****a1b2`)
+- Signing keys: never logged
+- Signed URLs: hash only, never full URL
+- Request/response bodies: logged at DEBUG level only
+
+### Distributed Tracing
+
+Connect-Go interceptors propagate OpenTelemetry trace context. Each RPC creates a span. Sub-operations (billing, signing, catalog lookup) create child spans.
+
+```go
+// Interceptor for tracing
+func tracingInterceptor() connect.UnaryInterceptorFunc {
+    return func(next connect.UnaryFunc) connect.UnaryFunc {
+        return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+            ctx, span := tracer.Start(ctx, req.Spec().Procedure)
+            defer span.End()
+
+            span.SetAttributes(
+                attribute.String("rpc.method", req.Spec().Procedure),
+            )
+
+            resp, err := next(ctx, req)
+            if err != nil {
+                span.RecordError(err)
+                span.SetStatus(codes.Error, err.Error())
+            }
+            return resp, err
+        }
+    }
+}
+```

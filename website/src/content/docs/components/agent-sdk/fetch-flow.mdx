@@ -1,0 +1,354 @@
+---
+title: "Fetch Flow"
+description: "Step-by-step walkthrough of how the RAMP Agent SDK discovers, transacts, and fetches licensed content -- from URL to delivered content."
+---
+
+## Single URL Fetch
+
+Step-by-step what happens inside `client.Fetch(ctx, url)`:
+
+```
+client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
+  |
+  |  1. Parse domain from URL
+  |     domain = "techcrunch.com"
+  |
+  |  2. Resolve Exchanges
+  |     ExchangeRegistry.Resolve(domain)
+  |       - Check in-memory cache for domain -> Exchange mappings
+  |       - Cache hit: return known Exchange endpoints
+  |       - Cache miss: fetch https://techcrunch.com/.well-known/ramp.json
+  |         - Parse ProviderManifest, extract authorized Exchanges
+  |         - Cache result (TTL: 1 hour, configurable)
+  |         - If ramp.json fetch fails: attempt direct GET to URL
+  |           - If 403 + X-Content-Rules header: extract Exchange endpoint
+  |           - If 403 without header or non-403: return NoExchangeError
+  |
+  |  3. Pre-flight budget check
+  |     BudgetTracker.CanSpend(MaxPerRequest)
+  |       - If session budget exhausted: return BudgetExceededError
+  |       - If period budget exhausted: return BudgetExceededError
+  |
+  |  4. Discover supply
+  |     SupplyDiscoverer.Discover(ctx, exchanges, url)
+  |       - Build ResourceQuery with AISystem, agent_signature
+  |       - Fan out DiscoverResources RPC to all resolved Exchanges (parallel)
+  |       - Collect ResourceResponses (respect deadline, drop slow responders)
+  |       - Flatten all Offers into candidate list
+  |
+  |  5. Select best offer
+  |     SelectionEngine.Select(candidates, constraints)
+  |       - Filter by AccessRestrictions (function, geo)
+  |       - Group by ResourceIdentity (deduplication)
+  |       - Rank: subscription offers first (rate=0)
+  |              -> preferred Exchange offers second
+  |              -> lowest unit_cost third
+  |       - Return winning Offer + its Exchange
+  |
+  |  6. Budget check (exact amount)
+  |     BudgetTracker.Check(offer.Pricing.Rate)
+  |       - If offer.rate > MaxPerRequest: return BudgetExceededError
+  |       - If session cumulative + rate > MaxPerSession: return BudgetExceededError
+  |       - If period cumulative + rate > MaxPerPeriod: return BudgetExceededError
+  |
+  |  7. Execute transaction
+  |     TransactionExecutor.Execute(ctx, exchange, offer)
+  |       - Build TransactionRequest with offer_id, offer_signature, agent_signature
+  |       - Send ExecuteTransaction RPC to winning Exchange
+  |       - On DenialReason: return typed error (see Error Handling below)
+  |       - On success: extract signed URL from package.retrieval.endpoint
+  |
+  |  8. Record spend
+  |     BudgetTracker.Record(txn.Cost)
+  |       - Add to session cumulative
+  |       - Add to period cumulative (persisted)
+  |
+  |  9. Fetch content
+  |     ContentFetcher.Fetch(ctx, signedURL)
+  |       - GET signed URL with X-Agent-License-Id header
+  |       - Read response body
+  |       - On HTTP error: return ContentFetchError
+  |
+  |  9b. Verify attestation (v1.0)
+  |      AttestationVerifier.Verify(offer.Attestations, contentBytes)
+  |        - Level 1 (self-attested): compute SHA-256 of received bytes,
+  |          compare to attested content_hash. Mismatch = integrity violation.
+  |        - Level 2 (third-party): trust attestation, check attested_at
+  |          freshness against agent policy threshold.
+  |        - Level 0 (no attestation): skip verification.
+  |        - On mismatch and AutoDispute enabled:
+  |          file UsageReport -> get report_id -> file DisputeRequest
+  |          with reason CONTENT_MISMATCH
+  |
+  | 10. Auto-report usage (background, non-blocking)
+  |     UsageReporter.Enqueue(UsageReport{
+  |         TransactionID, BillingID, Function, TokenCount,
+  |         Attribution, ...
+  |     })
+  |       - Queued in memory, submitted by background goroutine
+  |       - Deadline tracked per ReportingObligation.window
+  |       - UsageReportResponse returns report_id (stored on FetchResult)
+  |       - report_id is required for any subsequent DisputeRequest
+  |
+  | 11. Return FetchResult
+  |     FetchResult{Content, Cost, BillingID, TransactionID, ReportID,
+  |                 Exchange, Attestations, AttestationResult, ...}
+```
+
+### Latency Budget (Single URL)
+
+| Step | Target (p50) | Target (p99) | Notes |
+|---|---|---|---|
+| Parse domain | &lt;1ms | &lt;1ms | String operation |
+| Resolve Exchanges (cache hit) | &lt;1ms | &lt;1ms | In-memory lookup |
+| Resolve Exchanges (cache miss) | 50ms | 200ms | HTTP fetch of ramp.json |
+| Pre-flight budget check | &lt;1ms | &lt;1ms | In-memory arithmetic |
+| DiscoverResources RPC | 10ms | 50ms | Per NFR targets |
+| Select best offer | &lt;1ms | &lt;1ms | In-memory sort |
+| Budget check (exact) | &lt;1ms | &lt;1ms | In-memory arithmetic |
+| ExecuteTransaction RPC | 20ms | 100ms | Per NFR targets |
+| Record spend | &lt;1ms | &lt;1ms | In-memory write |
+| Fetch content | 20ms | 200ms | CDN-dependent |
+| Enqueue report | &lt;1ms | &lt;1ms | Channel write |
+| **Total (cache hit)** | **~55ms** | **~355ms** | Competitive with normal web request |
+
+## Batch Fetch
+
+Step-by-step what happens inside `client.FetchBatch(ctx, urls)`:
+
+```
+client.FetchBatch(ctx, [url1, url2, url3])
+  |
+  |  1. Group URLs by domain
+  |     {"techcrunch.com": [url1, url2], "arstechnica.com": [url3]}
+  |
+  |  2. Resolve Exchanges per domain (parallel)
+  |     ExchangeRegistry.Resolve(domain) for each unique domain
+  |
+  |  3. Pre-flight budget check
+  |     BudgetTracker.CanSpend(MaxPerRequest * len(urls))
+  |       - Rough check: enough headroom for worst case?
+  |
+  |  4. Discover supply (parallel, multi-URI per Exchange)
+  |     For each Exchange: send ONE ResourceQuery with ALL URIs it covers
+  |       - Exchange returns OfferGroups (one per URI)
+  |       - If a Exchange covers multiple domains, one query per domain
+  |
+  |  5. Select best offer per URI
+  |     For each URI: merge offers from all Exchanges, select best
+  |       - Same ranking: subscription > preferred > lowest unit_cost
+  |       - Deduplicate by ResourceIdentity across Exchanges
+  |
+  |  6. Budget check (total)
+  |     Sum selected offer costs across all URIs
+  |     BudgetTracker.Check(totalCost)
+  |       - If total > remaining session budget: return BudgetExceededError
+  |       - If total > remaining period budget: return BudgetExceededError
+  |       - Individual MaxPerRequest checked per URI
+  |
+  |  7. Execute transactions (batch, grouped by Exchange)
+  |     Group selected offers by winning Exchange
+  |     For each Exchange: send ONE batch TransactionRequest with items[]
+  |       - Each item: offer_id + offer_signature
+  |       - Exchange returns TransactionResultItem per offer
+  |       - Individual items can fail (non-atomic batch)
+  |
+  |  8. Record spend (per item)
+  |     BudgetTracker.Record(item.Cost) for each successful item
+  |
+  |  9. Fetch content (parallel)
+  |     ContentFetcher.FetchAll(ctx, signedURLs)
+  |       - Concurrent GET requests with X-Agent-License-Id header
+  |       - Individual URLs can fail independently
+  |
+  | 10. Auto-report usage (per item, background)
+  |     UsageReporter.Enqueue(report) for each successfully fetched item
+  |       - One UsageReport per resource (not per batch)
+  |
+  | 11. Return []FetchResult
+  |     One FetchResult per input URL (Err set for failures)
+```
+
+### Batch Optimizations
+
+- **One ResourceQuery per Exchange**: N URLs in one request instead of N separate requests. Reduces network round trips from N*M to M (where M = number of Exchanges).
+- **One TransactionRequest per winning Exchange**: batch items[] instead of individual transactions.
+- **Parallel content fetch**: all signed URLs fetched concurrently after all transactions complete.
+- **Non-atomic**: individual URLs can fail while others succeed. Each FetchResult carries its own Err.
+
+## Code Example: Single URL
+
+```go
+client, err := ramp.NewClient(ramp.Config{
+    LicenseID:  "LIC-BUYER-001",
+    SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
+    Budget:     ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close(ctx)
+
+result, err := client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(result.Content)    // HTML content
+fmt.Println(result.Cost)       // 0.05 USD
+fmt.Println(result.BillingID)  // bill-93a7f2-001
+```
+
+## Code Example: Batch
+
+```go
+results, err := client.FetchBatch(ctx, []string{
+    "https://techcrunch.com/premium/ai-infrastructure.html",
+    "https://techcrunch.com/premium/gpu-shortage-2026.html",
+    "https://arstechnica.com/premium/quantum-computing.html",
+})
+if err != nil {
+    log.Fatal(err)
+}
+for _, r := range results {
+    if r.Err != nil {
+        fmt.Printf("FAILED %s: %v\n", r.URL, r.Err)
+        continue
+    }
+    fmt.Printf("OK %s -- %s %.4f\n", r.URL, r.Content[:80], r.Cost.Amount)
+}
+```
+
+## Error Handling
+
+All errors are typed. The caller can switch on error type for programmatic handling.
+
+### Error Types
+
+```go
+// BudgetExceededError -- the request would exceed a budget constraint.
+// Returned BEFORE any network call is made.
+type BudgetExceededError struct {
+    Layer     string  // "per_request", "per_session", "per_period"
+    Limit     float64
+    Current   float64
+    Requested float64
+    Currency  string
+}
+
+// NoExchangeError -- no Exchange found for this domain.
+type NoExchangeError struct {
+    Domain string
+    Cause  error
+}
+
+// NoOfferError -- Exchanges responded but no offer matches.
+type NoOfferError struct {
+    URL          string
+    Exchanges []string
+}
+
+// TransactionDeniedError -- Exchange denied the transaction.
+type TransactionDeniedError struct {
+    Reason      DenialReason // INVALID_LICENSE, EXPIRED_LICENSE, etc.
+    Exchange string
+    OfferID     string
+}
+
+// ContentFetchError -- signed URL fetch failed.
+type ContentFetchError struct {
+    URL        string
+    SignedURL  string
+    StatusCode int
+    Cause      error
+}
+
+// ExchangeTimeoutError -- all Exchanges timed out.
+type ExchangeTimeoutError struct {
+    Exchanges []string
+    Deadline     time.Duration
+}
+```
+
+### Error Recovery Strategy
+
+| Error | Recovery | User Impact |
+|---|---|---|
+| `BudgetExceededError` | None -- intentional constraint | Caller adjusts budget or skips URL |
+| `NoExchangeError` | Retry after TTL, or configure Exchange manually | Content not available via RAMP |
+| `NoOfferError` | None -- content genuinely unavailable | Caller falls back to non-RAMP access |
+| `TransactionDeniedError` (RATE_LIMITED) | Automatic retry with backoff | Transparent if retry succeeds |
+| `TransactionDeniedError` (REPORTING_OVERDUE) | Flush pending reports, retry | SDK logs warning |
+| `TransactionDeniedError` (other) | None -- terminal | Caller handles denial |
+| `ContentFetchError` | Retry once (signed URL may be CDN-transient) | Transparent if retry succeeds |
+| `ExchangeTimeoutError` | Retry with longer deadline | Caller may increase timeout |
+
+## State Management
+
+### Exchange Registry
+
+- **Storage**: in-memory map + LRU eviction
+- **Key**: provider domain (e.g. "techcrunch.com")
+- **Value**: list of authorized Exchange endpoints with trust level
+- **TTL**: configurable, default 1 hour
+- **Capacity**: LRU eviction at 10,000 domains (configurable)
+- **Cold start**: first request to a new domain incurs ramp.json fetch latency
+
+### Budget Tracker
+
+Three enforcement layers, checked in order:
+
+| Layer | Scope | Storage | Lifecycle |
+|---|---|---|---|
+| **Per-request** | Single Fetch call | Comparison only (no state) | Instant |
+| **Per-session** | Client instance lifetime | In-memory counter | Resets on `NewClient` |
+| **Per-period** | Calendar period (e.g. 30 days) | Local file or Redis | Survives restarts |
+
+Per-period persistence: by default, the SDK writes period budget state to a local JSON file (`~/.ramp/budget/<scope>.json`). For multi-process agents, configure a shared Redis instance via `Config.Budget.RedisURL`.
+
+### Usage Reporter
+
+- **Storage**: in-memory bounded channel (default capacity: 1000)
+- **Background goroutine**: drains channel, submits reports via ReportUsage RPC
+- **Deadline tracking**: reports approaching deadline are prioritized
+- **Retry**: failed submissions re-enqueued with exponential backoff (30s, 60s, 120s, max 10 min)
+- **Shutdown**: `client.Close()` blocks until all pending reports are submitted or context is cancelled
+- **Overflow**: if channel is full, the oldest report is dropped and a warning is logged
+
+## Testing with Mock Exchange
+
+The SDK ships a `MockExchange` for testing agent code without network calls:
+
+```go
+import "github.com/postindustria-tech/ramp-protocol/sdk-go/testutil"
+
+func TestAgentLogic(t *testing.T) {
+    mock := testutil.NewMockExchange(testutil.MockConfig{
+        Offers: map[string][]testutil.MockOffer{
+            "https://example.com/article.html": {{
+                OfferID: "offer-1",
+                Rate:    0.05,
+                Content: "<html>Premium article content</html>",
+            }},
+        },
+    })
+    defer mock.Close()
+
+    client, _ := ramp.NewClient(ramp.Config{
+        LicenseID: "test-license",
+        SigningKey: "test-key",
+        Budget:    ramp.Budget{MaxPerRequest: 1.00, Currency: "USD"},
+        Exchanges: []ramp.ExchangeConfig{{
+            Domain:   "mock.exchange.test",
+            Endpoint: mock.URL(),
+            Trust:    ramp.TrustVerified,
+        }},
+        Discovery: ramp.DiscoveryConfig{AutoDiscover: false},
+    })
+    defer client.Close(context.Background())
+
+    result, err := client.Fetch(context.Background(), "https://example.com/article.html")
+    require.NoError(t, err)
+    assert.Contains(t, result.Content, "Premium article")
+    assert.Equal(t, 0.05, result.Cost.Amount)
+}
+```

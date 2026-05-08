@@ -1,0 +1,330 @@
+---
+title: "Budget and Usage Reporting"
+description: "How the RAMP Agent SDK tracks budgets across three enforcement layers and automatically submits usage reports to Exchanges."
+---
+
+## Budget Management
+
+The SDK enforces three budget layers, checked in order before any network call is made. A budget-exceeded condition never reaches the wire.
+
+### Budget Enforcement Layers
+
+| Layer | Scope | Storage | Lifecycle |
+|---|---|---|---|
+| **Per-request** | Single Fetch call | Comparison only (no state) | Instant |
+| **Per-session** | Client instance lifetime | In-memory counter | Resets on `NewClient` |
+| **Per-period** | Calendar period (e.g. 30 days) | Local file or Redis | Survives restarts |
+
+### Configuration
+
+```go
+type Budget struct {
+    // Maximum cost per individual request. Transactions above this
+    // are rejected before querying Exchanges.
+    MaxPerRequest float64
+
+    // Maximum cumulative spend per session (in-memory, resets on restart).
+    MaxPerSession float64
+
+    // Maximum cumulative spend per period (persisted).
+    MaxPerPeriod float64
+
+    // Period duration for MaxPerPeriod (e.g. 720h = 30 days).
+    Period time.Duration
+
+    // Budget scope identifier for per-period tracking.
+    // E.g. "user:u-12345" for per-user, "team:eng" for per-team.
+    // Required when MaxPerPeriod is set.
+    Scope string
+
+    // ISO 4217 currency code. Default: "USD".
+    Currency string
+}
+```
+
+### Per-Request Enforcement
+
+The simplest layer. Before querying any Exchange, the SDK checks whether the `MaxPerRequest` budget can accommodate the request. After offer selection, it checks the actual offer price:
+
+```go
+// Pre-flight: is this request even possible?
+if !budget.CanSpend(config.Budget.MaxPerRequest) {
+    return BudgetExceededError{Layer: "per_request", ...}
+}
+
+// Post-selection: does the specific offer fit?
+if offer.Pricing.Rate > config.Budget.MaxPerRequest {
+    return BudgetExceededError{Layer: "per_request", ...}
+}
+```
+
+### Per-Session Enforcement
+
+Tracks cumulative spend across the lifetime of a `Client` instance. Resets when the client is created (no persistence).
+
+**Thread safety**: the session counter uses `atomic.AddInt64`.
+
+```go
+// Before transaction
+if sessionSpent + offer.Rate > config.Budget.MaxPerSession {
+    return BudgetExceededError{Layer: "per_session", ...}
+}
+
+// After successful transaction
+atomic.AddInt64(&sessionSpent, int64(txn.Cost.Amount * 10000)) // fixed-point
+```
+
+### Per-Period Enforcement
+
+Tracks cumulative spend across a calendar period (e.g., 30 days). Persisted to survive restarts.
+
+**Default persistence**: local JSON file at `~/.ramp/budget/<scope>.json`:
+
+```go
+// budget file: ~/.ramp/budget/user:u-12345.json
+{
+    "scope": "user:u-12345",
+    "period_start": "2026-03-01T00:00:00Z",
+    "period_duration": "720h",
+    "currency": "USD",
+    "spent": 4.27,
+    "limit": 50.00
+}
+```
+
+**Multi-process agents**: configure a shared Redis instance via `Config.Budget.RedisURL` for shared budget state across processes.
+
+**Thread safety**: the period tracker uses a mutex for read-check-write.
+
+### Budget Exceeded Error
+
+When any budget layer is exceeded, the SDK returns a typed error before making any network call:
+
+```go
+type BudgetExceededError struct {
+    Layer     string  // "per_request", "per_session", "per_period"
+    Limit     float64
+    Current   float64
+    Requested float64
+    Currency  string
+}
+```
+
+### Budget as Security Boundary
+
+- Budget limits are enforced client-side. They protect the agent operator from runaway spend.
+- The Exchange independently enforces its own credit/balance limits server-side.
+- Both layers must agree for a transaction to proceed.
+- The SDK checks budget BEFORE making any network call to the Exchange.
+
+### Budget Tracker Tests
+
+```go
+func TestBudgetTracker_PerSession(t *testing.T) {
+    bt := budget.NewTracker(budget.Config{
+        MaxPerRequest: 0.10,
+        MaxPerSession: 0.50,
+        Currency:      "USD",
+    })
+
+    // First four requests: ok
+    for i := 0; i < 4; i++ {
+        require.NoError(t, bt.Check(0.10))
+        bt.Record(budget.Cost{Amount: 0.10, Currency: "USD"})
+    }
+
+    // Fifth request: would exceed session limit
+    err := bt.Check(0.10)
+    require.ErrorAs(t, err, &ramp.BudgetExceededError{})
+    assert.Equal(t, "per_session", err.(*ramp.BudgetExceededError).Layer)
+}
+```
+
+## Usage Reporting
+
+The SDK automatically submits usage reports after each successful `Fetch`. This is the default behavior (`Config.Reporting.AutoReport = true`).
+
+### How Auto-Reporting Works
+
+1. After a successful content fetch, the SDK enqueues a `UsageReport` in an in-memory bounded channel.
+2. A background goroutine drains the channel and submits reports to the appropriate Exchange via `ReportUsage` RPC.
+3. Reports approaching their deadline are prioritized.
+4. Failed submissions are re-enqueued with exponential backoff.
+5. Reporting never blocks the `Fetch` call -- it is entirely non-blocking.
+
+### Reporting Configuration
+
+```go
+type ReportingConfig struct {
+    // Whether to auto-submit usage reports after each Fetch. Default: true.
+    AutoReport bool
+
+    // Maximum number of pending reports before blocking. Default: 1000.
+    MaxPendingReports int
+
+    // Retry interval for failed report submissions. Default: 30s.
+    RetryInterval time.Duration
+}
+```
+
+### Report Queue Internals
+
+```go
+type pendingReport struct {
+    Report   *rampv1.UsageReport
+    Deadline time.Time       // obligation window end
+    Retries  int
+    NextTry  time.Time
+}
+```
+
+- **Capacity**: bounded channel, default 1000 pending reports
+- **Overflow**: if the channel is full, the oldest report is dropped and a warning is logged. This is a soft failure -- the Exchange may eventually block the agent for overdue reports (`DENIAL_REASON_REPORTING_OVERDUE`), but the current fetch is not affected.
+- **Priority**: reports approaching their deadline are submitted first
+- **Retry**: exponential backoff -- 30s, 60s, 120s, max 10 minutes
+
+### report_id and the Dispute Chain (v1.0)
+
+`UsageReportResponse` now returns a `report_id` -- a Exchange-assigned identifier for the accepted report. The SDK stores this on `FetchResult.ReportID`.
+
+The `report_id` is required for filing disputes. The dispute chain enforces reporting-before-disputing:
+
+```
+UsageReport -> UsageReportResponse{report_id} -> DisputeRequest{report_id}
+```
+
+If the agent needs to dispute a transaction, it must have a valid `report_id`. The SDK tracks this automatically when `AutoReport` is enabled.
+
+### Attribution Details (v1.0)
+
+The `Usage` message now includes structured attribution reporting via `CitationFormat` and `AttributionDetail`:
+
+```go
+type Attribution struct {
+    Format   CitationFormat    // e.g., CITATION_FORMAT_INLINE, CITATION_FORMAT_FOOTNOTE
+    Details  []AttributionDetail // per-asset attribution specifics
+}
+```
+
+The SDK populates attribution fields in the `UsageReport` when the caller provides them via `FetchResult` or `ReportUsage`.
+
+### Manual Reporting
+
+When `AutoReport` is disabled, the caller is responsible for submitting usage reports:
+
+```go
+resp, err := client.ReportUsage(ctx, ramp.UsageReport{
+    TransactionID: result.TransactionID,
+    BillingID:     result.BillingID,
+    Function:      "FUNCTION_AI_INPUT",
+    TokenCount:    1500,
+})
+// resp.ReportID is needed for any subsequent dispute
+```
+
+Previously `ReportUsage` returned only an error. In v1.0, it returns a `UsageReportResult` containing `ReportID`:
+
+```go
+err := client.ReportUsage(ctx, ramp.UsageReport{
+    TransactionID: result.TransactionID,
+    BillingID:     result.BillingID,
+    Function:      "FUNCTION_AI_INPUT",
+    TokenCount:    1500,
+})
+```
+
+### Reporting Obligations
+
+Each transaction may carry a `ReportingObligation` that specifies:
+
+- Whether reporting is required or optional
+- The reporting window (deadline by which the report must be submitted)
+- What fields are required in the report
+
+The SDK tracks these obligations automatically. If a Exchange denies a future transaction with `DENIAL_REASON_REPORTING_OVERDUE`, the SDK flushes pending reports and retries.
+
+### Shutdown Behavior
+
+`client.Close(ctx)` blocks until all pending usage reports are submitted or the context is cancelled:
+
+```go
+// Graceful shutdown -- flushes all pending reports
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+err := client.Close(ctx)
+```
+
+If the context is cancelled before all reports are submitted, remaining reports are lost. The Exchange will track them as overdue.
+
+## Observability
+
+### Structured Logging
+
+The SDK emits structured log events for every significant operation:
+
+```go
+client, _ := ramp.NewClient(ramp.Config{
+    // ...
+    Logger: slog.New(slog.NewJSONHandler(os.Stderr, nil)),
+})
+```
+
+### Key Log Events
+
+| Event | Level | Fields |
+|---|---|---|
+| `ramp.fetch.start` | Info | url, domain |
+| `ramp.discovery.cache_hit` | Debug | domain, exchange_count |
+| `ramp.discovery.cache_miss` | Info | domain |
+| `ramp.discovery.ramp_json` | Info | domain, exchange_count, latency_ms |
+| `ramp.supply.query` | Info | exchange, uri_count, latency_ms |
+| `ramp.selection.winner` | Info | exchange, offer_id, unit_cost, subscription_id |
+| `ramp.budget.check` | Debug | layer, limit, current, requested |
+| `ramp.budget.exceeded` | Warn | layer, limit, current, requested |
+| `ramp.transaction.execute` | Info | exchange, offer_id, latency_ms |
+| `ramp.transaction.denied` | Warn | exchange, reason |
+| `ramp.content.fetch` | Info | url, status_code, latency_ms, content_length |
+| `ramp.report.enqueue` | Debug | transaction_id, deadline |
+| `ramp.report.submit` | Info | transaction_id, accepted |
+| `ramp.report.failed` | Warn | transaction_id, error, retry_count |
+
+### Prometheus Metrics
+
+The SDK exposes Prometheus-compatible metrics via an optional `metrics.Handler`:
+
+| Metric | Type | Description |
+|---|---|---|
+| `ramp_fetch_total` | Counter | Fetches by status (success, budget_exceeded, no_exchange, denied, error) |
+| `ramp_fetch_duration_seconds` | Histogram | End-to-end Fetch latency |
+| `ramp_supply_query_duration_seconds` | Histogram | Per-Exchange query latency |
+| `ramp_transaction_duration_seconds` | Histogram | Per-Exchange transaction latency |
+| `ramp_budget_spent_total` | Counter | Cumulative spend by currency |
+| `ramp_budget_remaining` | Gauge | Remaining budget by scope |
+| `ramp_reports_pending` | Gauge | Pending usage reports |
+| `ramp_reports_overdue` | Gauge | Reports past their deadline |
+
+## Security
+
+### Signing Key Protection
+
+- The `SigningKey` (Ed25519 private key) is stored in the `Config` struct and never serialized, logged, or included in error messages.
+- Ed25519 signatures are computed per-request. The private key produces `agent_signature` on `ResourceQuery` and `TransactionRequest` messages.
+- The Exchange verifies signatures using the agent's registered public key (looked up by `LicenseID`). The private key never leaves the agent.
+
+### Transport Security
+
+- All Exchange RPCs use HTTPS (TLS 1.2+)
+- Content fetch (signed URL) uses HTTPS
+- ramp.json discovery uses HTTPS
+- No plaintext HTTP, even for localhost development (use `http://localhost` only with explicit opt-in)
+
+### Test Categories
+
+| Category | What It Tests | Tooling |
+|---|---|---|
+| **Unit: selection** | unit_cost ranking, subscription preference, dedup | Table-driven tests, no I/O |
+| **Unit: budget** | Per-request/session/period enforcement, edge cases | In-memory tracker |
+| **Unit: reporting** | Queue overflow, deadline priority, retry backoff | Fake clock |
+| **Integration: mock** | Full Fetch flow against MockExchange | `testutil.NewMockExchange` |
+| **Integration: reference** | Full Fetch flow against reference Exchange | Real Connect server |
+| **E2E** | SDK to reference Exchange to reference CDN to report | Docker compose |

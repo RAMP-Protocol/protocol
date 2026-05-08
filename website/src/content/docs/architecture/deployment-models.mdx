@@ -1,0 +1,170 @@
+---
+title: "Deployment Models"
+description: "Three RAMP deployment models: Exchange-managed, self-service, and CMS plugin for the full provider spectrum"
+---
+
+Three deployment models cover the full provider spectrum: enterprise providers with Exchange operator relationships, mid-market providers with technical teams, and long-tail providers on CMS platforms. Each model provides the same protocol compliance but with different operational trade-offs.
+
+## Provider Onboarding: Domain Verification (v1.0)
+
+Before any deployment model, the provider must prove domain ownership via ACME HTTP-01 style verification. This is handled by `ramp-cli`:
+
+1. Provider runs `ramp-cli verify --domain techcrunch.com --exchange exchange.ssp-alpha.com`
+2. CLI calls `RequestDomainVerification` -- Exchange returns a challenge token
+3. CLI places the token at `{domain}/.well-known/ramp-verify/{token}` (the edge function can auto-serve this from KV store)
+4. CLI calls `ConfirmDomainVerification` -- Exchange fetches the challenge URL to verify domain control
+5. If verified: Exchange accepts subsequent operations (signing key registration, catalog pushes) for this domain
+
+The Exchange also checks `ramp.json` to verify it is listed as an authorized exchange for this provider -- providing double protection.
+
+### catalog_contributors in ramp.json
+
+Providers can authorize third parties (verification vendors, enrichment services) to push resource metadata on their behalf. This is declared in `ramp.json`:
+
+```json
+{
+  "ver": "1.0",
+  "provider": "techcrunch.com",
+  "catalog_contributors": [
+    { "domain": "gumgum.com", "relationship": "verifier" }
+  ],
+  "exchanges": [...]
+}
+```
+
+The Exchange validates incoming `CatalogService.PushContent` requests against this list -- unauthorized pushers are rejected.
+
+## Model 1: Exchange-Managed (Recommended, Enterprise)
+
+The Exchange operator deploys and maintains the RAMP edge function on the provider's CDN on their behalf. This is the **Prebid Server model** -- "we handle everything."
+
+### How It Works
+
+1. Provider signs a contract with the Exchange operator and grants CDN access (e.g., AWS IAM role for CloudFront, Cloudflare API token for Workers)
+2. Exchange operator runs domain verification on behalf of the provider (`ramp-cli verify`)
+3. Exchange operator deploys the edge function to the provider's CDN
+4. Exchange operator configures: `ramp.json` (including `catalog_contributors`), `rsl.txt` generation from the Exchange, bot detection rules
+5. Exchange operator maintains, updates, and monitors the edge function on an ongoing basis
+
+### Provider Actions
+
+- Sign contract with Exchange operator
+- Grant CDN role/access to the Exchange operator
+- Nothing else -- the Exchange operator handles all RAMP infrastructure
+
+### Exchange Operator Responsibilities
+
+- Deploy edge function to provider's CDN account
+- Generate and serve `ramp.json` from Exchange tenant config
+- Generate and serve `rsl.txt` from Exchange catalog
+- Configure bot detection rules (User-Agent matching, behavioral signals)
+- Rotate signing keys on schedule (default: 90 days)
+- Monitor edge function health, latency, and error rates
+- Push updates when the protocol evolves
+
+### When to Use
+
+- Enterprise providers with Exchange operator relationships (news organizations, media companies)
+- Providers who don't have CDN engineering expertise
+- Any provider who wants the "just works" experience
+
+## Model 2: Self-Service (Mid-Market)
+
+The provider deploys the edge function themselves using tooling provided by RAMP.
+
+### How It Works
+
+1. Provider installs the RAMP deployment package
+2. One command deploys the edge function to their CDN:
+   ```bash
+   npx @ramp/edge-deploy --cdn cloudfront --exchange exchange.ssp.com
+   ```
+3. Edge function pulls `ramp.json` and `rsl.txt` from the Exchange, caches in KV/edge storage
+4. Provider manages their own CDN access and can customize bot detection rules
+
+### Supported CDNs
+
+| CDN | Deploy Method | KV Support | Full Feature Set |
+|---|---|---|---|
+| CloudFront | Lambda@Edge via Terraform/CLI | DynamoDB or S3 | Yes |
+| Cloudflare | Workers via Wrangler | Workers KV | Yes |
+| Fastly | Compute@Edge via CLI | KV Store | Yes |
+| Akamai | EdgeWorkers via CLI | EdgeKV | Yes |
+| Vercel | Edge Functions via CLI | KV | Yes |
+| Generic | Reverse proxy config | External KV | Partial |
+
+### When to Use
+
+- Mid-market providers with technical teams
+- Providers who operate their own CDN infrastructure
+- Providers who want control over their edge configuration
+
+## Model 3: CMS Plugin (Long Tail, Community-Built)
+
+A CMS plugin (WordPress, Drupal, Ghost, Django) that integrates with the RAMP protocol at the application layer. The plugin does NOT deploy an edge function -- CMS platforms cannot control CDN configuration.
+
+### What the Plugin Does
+
+1. **Auto-generates `rsl.txt`** from the CMS content structure
+2. **Pushes content metadata to the Exchange** via `CatalogService.PushContent`
+3. **Adds `/.well-known/ramp.json` response** via CMS routing
+
+### What the Plugin Does NOT Do
+
+- Deploy an edge function (CMS cannot control CDN)
+- Enforce signed URL verification at the edge
+- Block unauthorized bots at the CDN layer
+
+Without edge enforcement, the CMS plugin model relies on the Exchange and protocol-compliant agents to respect `rsl.txt` terms. This is the "honor system" tier.
+
+### CMS Platform Support
+
+| CMS | Language | Plugin Type | Proto Support |
+|---|---|---|---|
+| WordPress | PHP | WP Plugin | via `buf.build` PHP plugin |
+| Drupal | PHP | Drupal Module | via `buf.build` PHP plugin |
+| Django | Python | Django App | via `buf.build` Python plugin |
+| Ghost | JavaScript | Ghost Integration | via `buf.build` TypeScript plugin |
+| Contentful | TypeScript | Contentful App | via `buf.build` TypeScript plugin |
+| Strapi | TypeScript | Strapi Plugin | via `buf.build` TypeScript plugin |
+
+### Example: WordPress Plugin Flow
+
+```
+Content published in WordPress
+  -> Plugin hook fires (publish_post)
+  -> Extract: title, word count, URL path, categories
+  -> Compute: estimated_quantity = word_count * 1.32
+  -> Build PushContentRequest with caller_signature
+  -> POST to Exchange CatalogService.PushContent
+  -> Exchange adds/updates catalog entry
+```
+
+## Edge Function Minimum Viable Functionality
+
+For CDNs with limited compute capabilities, the edge function can be reduced to a minimal feature set:
+
+1. **Signed URL verification**: Check signed URL query parameters -- valid? pass through : return 403
+2. **Bot detection**: Check `User-Agent` for known AI crawler strings -- match? return 403 with `X-Content-Rules` header
+3. **Serve `ramp.json`**: Return `/.well-known/ramp.json` inline or proxied from the Exchange
+
+### Minimum Viable Decision Table
+
+```
+Request arrives at edge:
+
+1. Path = /.well-known/ramp.json?
+   YES -> Return inline ramp.json (or proxy from Exchange)
+
+2. Has signed URL params (Signature, Expires)?
+   YES -> Verify signature
+          Valid + not expired? -> Pass through to origin
+          Invalid or expired? -> 403 Forbidden
+
+3. User-Agent matches known AI crawler pattern?
+   YES -> 403 Forbidden + X-Content-Rules header
+
+4. Default -> Pass through to origin (non-bot, non-protected)
+```
+
+This minimum viable feature set works on all major CDN platforms including CloudFront Functions (free tier), Cloudflare Workers, Fastly VCL, and Akamai Property Manager rules.

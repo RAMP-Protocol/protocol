@@ -1,0 +1,63 @@
+---
+title: RAMP Protocol
+description: Open-source transaction protocol for metered AI resource access
+template: splash
+hero:
+  tagline: AI agents scrape your content and don't pay. RAMP fixes that -- an open protocol that turns blocked bots into paying customers.
+  actions:
+    - text: How It Works
+      link: /getting-started/what-is-ramp/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/postindustria-tech/ramp-protocol
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## RAMP for Your Role
+
+<CardGrid>
+  <LinkCard title="I'm a Provider" description="Stop losing revenue to AI scrapers. Monetize every bot visit without changing your CMS." href="/getting-started/for-providers/" />
+  <LinkCard title="I'm an Exchange Operator" description="Add AI resource access to your existing infrastructure. New revenue, same billing." href="/getting-started/for-marketplace-operators/" />
+  <LinkCard title="I run AI Agents" description="Access premium content legally with one API call. No scraping, no legal risk." href="/getting-started/for-ai-agents/" />
+  <LinkCard title="I'm a Verification Vendor" description="Provide trusted attestations for content quality, compliance, and integrity across any resource domain." href="/getting-started/for-verification-vendors/" />
+</CardGrid>
+
+## Key Capabilities
+
+<CardGrid>
+  <Card title="Resource Attestation" icon="approve-check">
+    Three verification levels (none, self-attested, third-party) let agents verify that delivered content matches what was promised -- cryptographically.
+  </Card>
+  <Card title="Dispute Resolution" icon="warning">
+    Automated dispute handling for delivery failures, content hash mismatches, and token count discrepancies. 100% of routine disputes resolved without human review.
+  </Card>
+  <Card title="Provider Onboarding" icon="add-document">
+    ACME-style domain verification, CDN signing key provisioning, and catalog contributor authorization -- a single CLI command to join the ecosystem.
+  </Card>
+  <Card title="Multi-Exchange" icon="random">
+    No walled gardens. Exchange operators, providers, and third parties operate Exchanges. A Broker compares offers across them.
+  </Card>
+  <Card title="MCP Server" icon="laptop">
+    Zero-SDK resource access. Add the RAMP MCP server to any MCP-capable agent and discover, transact, and dispute resources without custom integration.
+  </Card>
+</CardGrid>
+
+## Dive Deeper
+
+<CardGrid>
+  <Card title="Getting Started" icon="rocket">
+    [What is RAMP?](/getting-started/what-is-ramp/) -- [How Money Flows](/getting-started/how-money-flows/) -- [Industry Landscape](/getting-started/industry-landscape/)
+  </Card>
+  <Card title="Protocol Spec" icon="document">
+    [Transaction Flow](/protocol/transaction-flow/) -- [Discovery Paths](/protocol/discovery-paths/) -- [Authentication](/protocol/authentication/)
+  </Card>
+  <Card title="Component Designs" icon="setting">
+    [Exchange](/components/marketplace/overview/) -- [Edge Function](/components/edge-function/overview/) -- [Broker](/components/orchestrator/overview/) -- [Agent SDK](/components/agent-sdk/overview/) -- [MCP Server](/components/mcp-server/overview/)
+  </Card>
+  <Card title="Reference" icon="open-book">
+    [Proto: RAMP](/reference/proto-ramp/) -- [Proto: CoMP](/reference/proto-comp/) -- [Changelog](/reference/changelog/)
+  </Card>
+</CardGrid>

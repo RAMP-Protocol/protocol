@@ -1,0 +1,971 @@
+---
+title: "Scenario Walkthrough"
+description: "End-to-end RAMP v1.0 walkthrough: provider setup, agent request, supply discovery, transaction, content fetch, usage reporting, dispute resolution, and reconciliation"
+---
+
+> Definitive walkthrough of RAMP v1.0 as of March 2026. Every field name, signature algorithm, and endpoint matches the current `ramp.proto`.
+
+## Scenario
+
+**Agent**: Anthropic's Claude (`claude.ai`), running the RAMP Agent SDK
+**Broker**: Anthropic's hosted Broker (`broker.anthropic.com`)
+**Subscription**: Anthropic has an annual deal with Hearst Media via SSP-Alpha exchange
+**Request**: Claude needs an article about AI regulation originally published by Hearst's TechCrunch (`techcrunch.com`), syndicated to The Verge (`theverge.com`) via SSP-Beta exchange
+**Extension Profiles**: Both Exchanges declare `supported_profiles: ["ramp-news-v1"]` in their manifests. The Broker forwards `supported_profiles` from the agent to enable profile-aware metadata in offers (e.g., `news.iptc_guid`, `news.correction_status`).
+
+---
+
+## Phase 0: Provider Setup
+
+Before any agent request, providers configure their domains and Exchanges ingest content into catalogs.
+
+### 0a. Hearst (TechCrunch) — RSL + ramp.json
+
+**rsl.txt** — declares licensing terms and a maximum rate (price ceiling):
+
+```xml
+<!-- https://techcrunch.com/rsl.txt -->
+<content url="/premium/*">
+  <permits type="usage">ai-input ai-index search</permits>
+  <prohibits type="usage">ai-train</prohibits>
+  <payment type="crawl" currency="USD" amount="0.08"/>
+  <!-- RSL amount is the MAXIMUM (price ceiling). Exchange may offer at or below. -->
+</content>
+```
+
+**ramp.json** — declares which Exchange is authorized to transact:
+
+```json
+// GET https://techcrunch.com/.well-known/ramp.json
+{
+  "ver": "1.0",
+  "provider": "techcrunch.com",
+  "contact": "licensing@hearst.com",
+  "exchanges": [
+    {
+      "domain": "exchange.ssp-alpha.com",
+      "endpoint": "https://exchange.ssp-alpha.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ]
+}
+```
+
+**Edge function** — deployed on Hearst's CDN (CloudFront/Akamai/Fastly). Blocks unauthorized AI bots with 403 + `X-Content-Rules` header pointing to the Exchange. Verifies HMAC-SHA256 signed URLs for authorized requests.
+
+### 0b. Agent Key Announcement
+
+Anthropic publishes its agent's Ed25519 public key at a well-known endpoint:
+
+```json
+// GET https://claude.ai/.well-known/ramp-agent.json
+{
+  "agent_id": "claude.ai",
+  "public_key": "MCowBQYDK2VwAyEA7Hd8FjXz9K2qR4nPbY1sT0vWxU3gLmN5oA8pC6dE1fI=",
+  "public_key_algorithm": "ed25519",
+  "contact": "legal@anthropic.com"
+}
+```
+
+The Broker announces its key at the same path format:
+
+```json
+// GET https://broker.anthropic.com/.well-known/ramp-agent.json
+{
+  "agent_id": "broker.anthropic.com",
+  "public_key": "MCowBQYDK2VwAyEAqW3rT8mNxVzP7sK1dL0yUoJ5bG2hF4iE6cA9nR3wS8g=",
+  "public_key_algorithm": "ed25519",
+  "contact": "legal@anthropic.com"
+}
+```
+
+### 0c. SSP-Alpha Resource Ingestion
+
+SSP-Alpha's Resource Ingestion Pipeline runs in the background:
+
+```
+1. Crawl techcrunch.com/sitemap.xml -> discover all /premium/* URLs
+2. Fetch rsl.txt -> extract permits/prohibits and RSL pricing ceiling ($0.08/crawl)
+3. HTML crawl via readability -> extract text -> word count -> estimate tokens
+4. Apply Hearst's private pricing (from SSP-Alpha config DB): $0.05/article
+   (Below the RSL ceiling of $0.08 — compliant)
+5. Third-party attestation (GumGum via CatalogService.PushResources):
+   GumGum crawls the article, signs attestation claims with Ed25519:
+   { verifier: "gumgum.com", claims: { estimated_quantity: 3300, word_count: 2500,
+     language: "en", iab_categories: ["IAB19-6"] }, signature: "..." }
+   Exchange validates: gumgum.com is in techcrunch.com's catalog_contributors,
+   verifies signature against gumgum.com/.well-known/ramp-verifier.json
+6. Build catalog entry:
+   {
+     domain: "techcrunch.com",
+     path: "/premium/ai-regulation-2026.html",
+     title: "AI Regulation: What Providers Need to Know",
+     word_count: 2500,
+     estimated_quantity: 3300,
+     pricing: { model: PRICING_MODEL_PER_ACCESS, rate: 0.05, currency: "USD", unit_cost: 0.00001515 },
+     identity: {
+       canonical_url: "https://techcrunch.com/premium/ai-regulation-2026.html",
+       iptc_guid: "urn:newsml:techcrunch:20260315:ai-reg-001",
+       content_hash: "a1b2c3d4e5f6...",
+       hash_method: "simhash-v1",
+       resource_mutability: RESOURCE_MUTABILITY_STATIC
+     },
+     attestations: [
+       { verifier: "gumgum.com", kid: "gumgum-key-2026-03",
+         attested_at: "2026-03-14T09:00:00Z",
+         uri: "https://techcrunch.com/premium/ai-regulation-2026.html",
+         claims: { estimated_quantity: 3300, word_count: 2500, language: "en" },
+         signature: "base64-ed25519-gumgum..." }
+     ],
+     restrictions: { permitted_functions: [FUNCTION_AI_INPUT, FUNCTION_AI_INDEX, FUNCTION_SEARCH],
+                     prohibited_functions: [FUNCTION_AI_TRAIN] }
+   }
+7. Compile into radix trie -> serialize to catalog.bin -> Exchange loads via atomic pointer swap
+```
+
+SSP-Alpha also knows about Anthropic's subscription:
+
+```
+BillingAdapter.CheckSubscription("LIC-ANTHROPIC-001", "hearst-media")
+  -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026", active: true, quota_remaining: 850000 }
+```
+
+### 0d. The Verge Syndication via SSP-Beta
+
+```
+1. The Verge reprinted the TechCrunch article (syndication deal):
+   theverge.com/premium/ai-regulation-republish.html
+
+2. The Verge has ramp.json pointing to SSP-Beta:
+   {
+     "ver": "1.0",
+     "provider": "theverge.com",
+     "exchanges": [{
+       "domain": "exchange.ssp-beta.com",
+       "endpoint": "https://exchange.ssp-beta.com/ramp/v1",
+       "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+     }]
+   }
+
+3. SSP-Beta's ingestion pipeline:
+   - Discovers the article, estimates 3100 tokens
+   - The Verge's pricing: $0.07/article (higher than TechCrunch, below RSL ceiling)
+   - Identity: same iptc_guid (syndicated from same TechCrunch wire)
+     {
+       canonical_url: "https://theverge.com/premium/ai-regulation-republish.html",
+       iptc_guid: "urn:newsml:techcrunch:20260315:ai-reg-001",
+       content_hash: "a1b2c3d4e5f7...",
+       hash_method: "simhash-v1",
+       resource_mutability: RESOURCE_MUTABILITY_STATIC
+     }
+   - Attestations: [{ verifier: "gumgum.com", claims: { estimated_quantity: 3100, word_count: 2350 } }]
+   - Anthropic has NO subscription with SSP-Beta
+```
+
+---
+
+## Phase 1: Agent Request (SDK with Ed25519 Signing)
+
+Claude is answering a user question about AI regulation. The SDK triggers:
+
+```go
+results, err := client.FetchBatch(ctx, []string{
+    "https://techcrunch.com/premium/ai-regulation-2026.html",
+})
+```
+
+Inside the SDK:
+
+```
+Step 1: Parse domain -> "techcrunch.com"
+
+Step 2: ExchangeRegistry lookup
+  - Cache miss for techcrunch.com
+  - Background: fetch https://techcrunch.com/.well-known/ramp.json
+  - Discovers: exchange.ssp-alpha.com is authorized (PROVIDER_RELATIONSHIP_DIRECT)
+  - Caches: techcrunch.com -> [ssp-alpha]
+
+Step 3: Prepare Ed25519 signature
+  - requester.id = "claude-agent-001"
+  - requester.domain = "claude.ai"
+  - Sign canonical payload: Ed25519(private_key, "claude-agent-001\nclaude.ai\n[uris]\n[scopes]")
+  - Authentication is asymmetric:
+    the agent signs with its Ed25519 private key (never leaves the agent),
+    the Exchange verifies with the public key fetched from
+    claude.ai/.well-known/ramp-agent.json
+```
+
+**Key insight**: The SDK discovers Exchanges from the provider's `ramp.json`. It only finds the authorized Exchange for THAT domain. Cross-provider discovery (same article on different domains) requires either a hosted Broker that has crawled multiple providers' `ramp.json`, or the agent explicitly requesting multiple URLs across providers.
+
+---
+
+## Phase 2: Supply Discovery (Requester Identity, Subscription Detection, Content Attestations, Ed25519 Verification)
+
+The SDK sends `DiscoverResources` to SSP-Alpha:
+
+```json
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-claude-001",
+  "requester": {
+    "id": "claude-agent-001",
+    "domain": "claude.ai",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": ["https://techcrunch.com/premium/ai-regulation-2026.html"],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "license_id": "LIC-ANTHROPIC-001",
+    "scopes": ["*"],
+    "signature": "ed25519:MEUCIQC7xK3p9Tz...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519"
+  },
+  "deadline": "0.5s"
+}
+```
+
+### Inside SSP-Alpha's Exchange
+
+```
+1. Validate request (proto validation) -> pass
+2. Verify requester.signature:
+   a. Extract requester.domain = "claude.ai"
+   b. Fetch public key from claude.ai/.well-known/ramp-agent.json
+   c. Verify Ed25519 signature against public key -> pass
+3. Resolve tenant: techcrunch.com -> Hearst Media tenant
+4. Find offers: lookup "/premium/ai-regulation-2026.html" in radix trie -> match
+5. Check subscription with quota (via requester.license_id):
+   BillingAdapter.CheckSubscription("LIC-ANTHROPIC-001", "hearst-media")
+     -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026",
+          active: true,
+          quota_remaining: 850000 }
+   850000 > 3300 estimated tokens -> quota sufficient
+6. Build TWO offers:
+
+   Offer A (per-request):
+     offer_id: "offer-tc-reg-001"
+     pricing: { model: PRICING_MODEL_PER_ACCESS, rate: 0.05, currency: "USD",
+                unit_cost: 0.00001515, estimated_quantity: 3300 }
+     identity: { canonical_url: "https://techcrunch.com/premium/ai-regulation-2026.html",
+                 iptc_guid: "urn:newsml:techcrunch:20260315:ai-reg-001",
+                 content_hash: "a1b2c3d4e5f6...", hash_method: "simhash-v1" }
+     attestations: [
+       { verifier: "gumgum.com", kid: "gumgum-key-2026-03",
+         claims: { estimated_quantity: 3300, word_count: 2500, language: "en" },
+         signature: "base64-ed25519-gumgum..." }
+     ]
+     restrictions: { permitted_functions: [FUNCTION_AI_INPUT, FUNCTION_AI_INDEX, FUNCTION_SEARCH],
+                     prohibited_functions: [FUNCTION_AI_TRAIN] }
+     delivery_method: DELIVERY_METHOD_INSTRUCTIONS
+     exchange_signature: "<Ed25519 signature over (offer_id, package.id, pricing, identity)>"
+     signature_algorithm: "ed25519"
+
+   Offer B (subscription):
+     offer_id: "sub-offer-tc-reg-001"
+     pricing: { model: PRICING_MODEL_PER_ACCESS, rate: 0, currency: "USD",
+                unit_cost: 0, estimated_quantity: 3300 }
+     subscription_id: "SUB-ANTHROPIC-HEARST-2026"
+     identity: { same as Offer A }
+     attestations: { same as Offer A }
+     restrictions: { same as Offer A }
+     delivery_method: DELIVERY_METHOD_INSTRUCTIONS
+     reporting: { required: true, window: "86400s",
+                  required_fields: ["transaction_id", "function", "consumed_quantity"] }
+     exchange_signature: "<Ed25519 signature>"
+     signature_algorithm: "ed25519"
+```
+
+### Response
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-claude-001",
+  "exchange": "exchange.ssp-alpha.com",
+  "offers": [
+    {
+      "offer_id": "offer-tc-reg-001",
+      "package": {
+        "id": "PKG-TC-AI-REG",
+        "title": "AI Regulation: What Providers Need to Know",
+        "seller": "techcrunch.com",
+        "citation": 1
+      },
+      "pricing": {
+        "model": "PRICING_MODEL_PER_ACCESS",
+        "rate": 0.05,
+        "currency": "USD",
+        "unit_cost": 0.00001515,
+        "estimated_quantity": 3300
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "identity": {
+        "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
+        "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
+        "content_hash": "a1b2c3d4e5f6...",
+        "hash_method": "simhash-v1"
+      },
+      "attestations": [
+        {
+          "verifier": "gumgum.com",
+          "kid": "gumgum-key-2026-03",
+          "attested_at": "2026-03-14T09:00:00Z",
+          "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
+          "claims": { "estimated_quantity": 3300, "word_count": 2500, "language": "en" },
+          "signature": "base64-ed25519-gumgum..."
+        }
+      ],
+      "restrictions": {
+        "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"],
+        "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+      },
+      "exchange_signature": "base64-ed25519-sig-A...",
+      "signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "sub-offer-tc-reg-001",
+      "package": {
+        "id": "PKG-TC-AI-REG",
+        "title": "AI Regulation: What Providers Need to Know",
+        "seller": "techcrunch.com",
+        "citation": 1
+      },
+      "pricing": {
+        "model": "PRICING_MODEL_PER_ACCESS",
+        "rate": 0,
+        "currency": "USD",
+        "unit_cost": 0,
+        "estimated_quantity": 3300
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+      "reporting": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["transaction_id", "function", "consumed_quantity"]
+      },
+      "identity": {
+        "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
+        "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
+        "content_hash": "a1b2c3d4e5f6...",
+        "hash_method": "simhash-v1"
+      },
+      "attestations": [
+        {
+          "verifier": "gumgum.com",
+          "kid": "gumgum-key-2026-03",
+          "attested_at": "2026-03-14T09:00:00Z",
+          "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
+          "claims": { "estimated_quantity": 3300, "word_count": 2500, "language": "en" },
+          "signature": "base64-ed25519-gumgum..."
+        }
+      ],
+      "restrictions": {
+        "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"],
+        "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+      },
+      "exchange_signature": "base64-ed25519-sig-B...",
+      "signature_algorithm": "ed25519"
+    }
+  ]
+}
+```
+
+---
+
+## Phase 2b: Cross-Provider via Broker (Intermediary Chain, OfferGroups, SimHash)
+
+If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `RAMPRequest` to the Broker with multiple URIs:
+
+```json
+// Agent -> Broker
+{
+  "ver": "1.0",
+  "id": "pr-claude-001",
+  "requester": {
+    "id": "claude-agent-001",
+    "domain": "claude.ai",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://techcrunch.com/premium/ai-regulation-2026.html",
+      "https://theverge.com/premium/ai-regulation-republish.html"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "license_id": "LIC-ANTHROPIC-001",
+    "scopes": ["*"],
+    "signature": "ed25519:a4c9f2e8b7d1...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519"
+  },
+  "constraints": {
+    "preferred_exchanges": ["exchange.ssp-alpha.com"],
+    "max_unit_cost": 0.00005,
+    "reporting_capable": true,
+    "budget_scope": "team:claude-rag",
+    "period_budget": { "amount": 500.00, "currency": "USD" },
+    "budget_period": "2592000s"
+  }
+}
+```
+
+### Broker Fans Out with Intermediary Chain
+
+The Broker queries both Exchanges. For each `ResourceQuery`, the Broker:
+1. Preserves the agent's original `requester` message (including the agent's signature)
+2. Appends an `IntermediaryHop` to the `intermediaries` array (proves the Broker forwarded it)
+3. Signs the forwarded payload with its own Ed25519 key
+
+```json
+// Broker -> SSP-Alpha (multi-URI batch query)
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-orch-alpha-001",
+  "requester": {
+    "id": "claude-agent-001",
+    "domain": "claude.ai",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://techcrunch.com/premium/ai-regulation-2026.html",
+      "https://theverge.com/premium/ai-regulation-republish.html"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "license_id": "LIC-ANTHROPIC-001",
+    "scopes": ["*"],
+    "signature": "ed25519:a4c9f2e8b7d1...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519"
+  },
+  "request_id": "pr-claude-001",
+  "intermediaries": [
+    {
+      "domain": "broker.anthropic.com",
+      "id": "broker-001",
+      "forwarded_at": "2026-03-15T15:20:01Z",
+      "signature": "ed25519:MEQCIGnR5sW2aH...base64-ed25519-sig...",
+      "signature_algorithm": "ed25519"
+    }
+  ],
+  "deadline": "0.4s"
+}
+```
+
+SSP-Alpha's Exchange verifies the full chain:
+1. `requester.signature` -- fetch public key from `claude.ai/.well-known/ramp-agent.json`, Ed25519 verify
+2. `intermediaries` chain -- for each hop, fetch public key from `{hop.domain}/.well-known/ramp-agent.json`, Ed25519 verify
+
+SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-orch-alpha-001",
+  "exchange": "exchange.ssp-alpha.com",
+  "offer_groups": [
+    {
+      "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
+      "offers": [
+        {
+          "offer_id": "offer-tc-reg-001",
+          "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515, "estimated_quantity": 3300 },
+          "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
+          "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
+          "exchange_signature": "base64-ed25519-sig-A...",
+          "signature_algorithm": "ed25519"
+        },
+        {
+          "offer_id": "sub-offer-tc-reg-001",
+          "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0, "currency": "USD", "unit_cost": 0, "estimated_quantity": 3300 },
+          "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+          "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
+          "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
+          "reporting": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] },
+          "exchange_signature": "base64-ed25519-sig-B...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    },
+    {
+      "uri": "https://theverge.com/premium/ai-regulation-republish.html",
+      "offers": [],
+      "absence_reason": "OFFER_ABSENCE_REASON_NOT_IN_CATALOG"
+    }
+  ]
+}
+```
+
+Note: SSP-Alpha returns an empty `offers` array for the `theverge.com` URI with `absence_reason: NOT_IN_CATALOG` because The Verge is not an SSP-Alpha tenant. This v1.0 diagnostic lets the Broker distinguish "not in catalog" from "resource blocked for your use case." The Broker also queries SSP-Beta:
+
+```json
+// SSP-Beta returns (single-URI, flat offers):
+{
+  "ver": "1.0",
+  "id": "sq-orch-beta-001",
+  "exchange": "exchange.ssp-beta.com",
+  "offers": [
+    {
+      "offer_id": "offer-verge-reg-001",
+      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.07, "currency": "USD", "unit_cost": 0.00002258, "estimated_quantity": 3100 },
+      "identity": {
+        "canonical_url": "https://theverge.com/premium/ai-regulation-republish.html",
+        "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
+        "content_hash": "a1b2c3d4e5f7...",
+        "hash_method": "simhash-v1"
+      },
+      "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3100, "word_count": 2350 }, "signature": "..." }],
+      "exchange_signature": "base64-ed25519-sig-C...",
+      "signature_algorithm": "ed25519"
+    }
+  ]
+}
+```
+
+### Content Deduplication: IPTC GUID + SimHash Fallback
+
+The Broker groups offers by content identity:
+
+```
+Step 1: Group by iptc_guid
+  - iptc_guid "urn:newsml:techcrunch:20260315:ai-reg-001" matches across all 3 offers
+  - These are ALL the same underlying article (TechCrunch original, syndicated to The Verge)
+
+Step 2: SimHash cross-check (for non-news content without IPTC guids)
+  - SSP-Alpha hash: "a1b2c3d4e5f6..." (simhash-v1)
+  - SSP-Beta hash:  "a1b2c3d4e5f7..." (simhash-v1)
+  - Hamming distance = 1 bit -> substantially similar (threshold < 3 bits)
+  - For 99% of web content that lacks IPTC guids, SimHash is the primary dedup signal.
+    The Exchange computes SimHash during ingestion from extracted article text.
+    The Broker groups by SimHash similarity (Hamming distance).
+    This is approximate but catches obvious syndication and republication.
+```
+
+### Broker Selection Engine
+
+```
+Step 3: Rank within content group
+  Priority order:
+  a) Subscription from preferred exchange
+     -> sub-offer-tc-reg-001 ($0, SSP-Alpha, attested by gumgum.com) <- WINNER
+  b) Subscription from any exchange
+     -> none
+  c) Per-request from preferred exchange (rank by attestation trust, then unit_cost)
+     -> offer-tc-reg-001 ($0.05, SSP-Alpha, attested by gumgum.com)
+  d) Per-request by unit_cost (all exchanges)
+     -> offer-verge-reg-001 ($0.07, SSP-Beta, attested by gumgum.com)
+
+  Note: attestation claims enable selection beyond cheapest price.
+  Offers with third-party attestations (Level 2) are preferred over
+  self-attested (Level 1) or unattested (Level 0) content.
+
+  Selected: sub-offer-tc-reg-001 (subscription, zero marginal cost, third-party attested)
+
+Step 4: Budget check
+  - Subscription offer: cost = $0 -> always within budget
+  - Cumulative spend for scope "team:claude-rag": $142.50 of $500.00 period budget
+  - Proceed
+```
+
+---
+
+## Phase 3: Transaction (Requester + Intermediary Signatures, Subscription Skip, Quota Check)
+
+SDK or Broker commits to the subscription offer.
+
+### Direct (SDK) request -- `requester` with no intermediaries:
+
+```json
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-claude-001",
+  "offer_id": "sub-offer-tc-reg-001",
+  "requester": {
+    "id": "claude-agent-001",
+    "domain": "claude.ai",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": ["https://techcrunch.com/premium/ai-regulation-2026.html"],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "license_id": "LIC-ANTHROPIC-001",
+    "scopes": ["*"],
+    "signature": "ed25519:MEUCIQDr8nW4tK...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519"
+  },
+  "offer_signature": "base64-ed25519-sig-B...",
+  "offer_signature_algorithm": "ed25519"
+}
+```
+
+### Orchestrated request -- `requester` with `intermediaries` chain:
+
+```json
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-claude-001",
+  "offer_id": "sub-offer-tc-reg-001",
+  "requester": {
+    "id": "claude-agent-001",
+    "domain": "claude.ai",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": ["https://techcrunch.com/premium/ai-regulation-2026.html"],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "license_id": "LIC-ANTHROPIC-001",
+    "scopes": ["*"],
+    "signature": "ed25519:MEUCIQDr8nW4tK...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519"
+  },
+  "request_id": "pr-claude-001",
+  "intermediaries": [
+    {
+      "domain": "broker.anthropic.com",
+      "id": "broker-001",
+      "forwarded_at": "2026-03-15T15:20:01Z",
+      "signature": "ed25519:MEQCIHvL6mR3pJ...base64-ed25519-sig...",
+      "signature_algorithm": "ed25519"
+    }
+  ],
+  "offer_signature": "base64-ed25519-sig-B...",
+  "offer_signature_algorithm": "ed25519"
+}
+```
+
+The Broker preserves the agent's original `requester` message (including the agent's signature) and appends an `IntermediaryHop` to the `intermediaries` array. The Exchange verifies both: the agent's identity (via `requester.signature` + public key fetched from `requester.domain/.well-known/ramp-agent.json`) and each intermediary in the chain (via each hop's `signature` + public key fetched from `{hop.domain}/.well-known/ramp-agent.json`).
+
+### Inside SSP-Alpha's Exchange
+
+```
+1. Validate request (proto validation) -> pass
+2. Verify requester.signature:
+   - Fetch public key from claude.ai/.well-known/ramp-agent.json (requester.domain key lookup)
+   - Ed25519 verify -> pass
+2b. Verify intermediaries chain (if intermediaries array is non-empty):
+   - For each IntermediaryHop: fetch public key from {hop.domain}/.well-known/ramp-agent.json
+   - Ed25519 verify each hop's signature -> pass
+3. Check idempotency: tx-claude-001 not seen before -> proceed
+4. Verify offer signature:
+   - Ed25519 verify exchange_signature on offer -> pass
+   - Reconstruct offer data from signed token (stateless, no offer storage)
+5. subscription_id present on offer -> SKIP billing.Authorize (already paid under subscription)
+6. Quota check:
+   - BillingAdapter.CheckSubscription("LIC-ANTHROPIC-001", "hearst-media")
+     -> quota_remaining: 850000 tokens
+   - Estimated consumption: 3300 tokens
+   - 850000 > 3300 -> sufficient quota, proceed
+   - Deduct 3300 from quota -> new remaining: 846700
+7. Compute agent identity hash:
+   agentHash = SHA256(requester.id + ":" + requester.domain) = SHA256("claude-agent-001:claude.ai") = "e3b0c442..."
+8. Write transaction log (WAL) — MUST succeed before signing URL:
+   {
+     transaction_id: "txn-alpha-001",
+     billing_id: "bill-sub-alpha-001",
+     offer_id: "sub-offer-tc-reg-001",
+     subscription_id: "SUB-ANTHROPIC-HEARST-2026",
+     amount: 0,
+     agent_identity_hash: "e3b0c442...",
+     offer_snapshot_json: "<full offer at transaction time, including exchange_signature>",
+     reporting_required: true,
+     reporting_deadline: "2026-03-16T15:00:00Z"
+   }
+9. Sign URL (HMAC-SHA256 — Exchange<->CDN shared secret, separate from Ed25519 offer signing):
+   baseURL = "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html"
+   canonical = baseURL + "\n" + expires + "\n" + agent_id + "\n" + txn_id
+   sig = HMAC-SHA256(canonical, shared_secret)
+
+   Signed URL:
+   https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html
+     ?expires=1710517800
+     &agent_id=e3b0c442...
+     &txn_id=txn-alpha-001
+     &sig=<HMAC-SHA256 of "baseURL\nexpires\nagent_id\ntxn_id">
+
+10. Create reporting obligation: due by 2026-03-16T15:00:00Z
+```
+
+### Response
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-claude-001",
+  "transaction_id": "txn-alpha-001",
+  "billing_id": "bill-sub-alpha-001",
+  "package": {
+    "id": "PKG-TC-AI-REG",
+    "title": "AI Regulation: What Providers Need to Know",
+    "seller": "techcrunch.com",
+    "citation": 1,
+    "retrieval": {
+      "auth": "RETRIEVAL_AUTH_NONE",
+      "endpoint": "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html?expires=1710517800&agent_id=e3b0c442...&txn_id=txn-alpha-001&sig=d4e5f6a7b8c9...",
+      "type": ["RETRIEVAL_TYPE_HTML"]
+    }
+  },
+  "cost": { "amount": 0, "currency": "USD", "unit_cost": 0 },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+  "subscription_unit_value": { "amount": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
+  "agent_identity_hash": "e3b0c442...",
+  "reporting_obligation": {
+    "required": true,
+    "window": "86400s",
+    "required_fields": ["transaction_id", "function", "consumed_quantity"]
+  },
+  "expires_at": "2026-03-15T15:30:00Z"
+}
+```
+
+The `subscription_unit_value` field carries the per-unit cost ($0.05) even though `cost.amount` is 0. This enables financial attribution under ASC 606 prepaid drawdown accounting: Anthropic can track the value of content consumed against the subscription's total prepaid amount.
+
+---
+
+## Phase 4: Content Fetch (HMAC Signed URL, Agent Identity Binding)
+
+```
+Agent -> CDN: GET https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html
+              ?expires=1710517800
+              &agent_id=e3b0c442...
+              &txn_id=txn-alpha-001
+              &sig=d4e5f6a7b8c9...
+              Header: X-Agent-Id: claude-agent-001
+              Header: X-Agent-Domain: claude.ai
+
+Edge Function:
+  1. Has signed URL params? YES
+  2. Verify HMAC-SHA256 signature:
+     canonical = "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html\n1710517800\ne3b0c442...\ntxn-alpha-001"
+     HMAC-SHA256(canonical, shared_secret) == sig param? -> PASS
+  3. Check expiry: 1710517800 > now? -> PASS (URL valid for 5 minutes)
+  4. Check agent identity binding:
+     SHA256(requester.id + ":" + requester.domain) == "e3b0c442..."? -> PASS
+     (Prevents one agent from using another agent's signed URL)
+  5. Pass through -> CDN serves content from S3/origin
+
+CDN access log records:
+  - URL with all params (txn_id, agent_id, sig)
+  - Client IP, timestamp, bytes transferred, HTTP 200
+  - This log is controlled by the provider (Hearst) and used for reconciliation
+```
+
+**HMAC canonicalization format**: The signed URL uses `\n` (newline) as the delimiter between fields in the canonical string. The order is: `baseURL\nexpires\nagent_id\ntxn_id`. This is a Exchange-CDN concern (symmetric HMAC-SHA256 shared secret), entirely separate from the Ed25519 asymmetric signatures used for offer signing and request authentication.
+
+---
+
+## Phase 5: Usage Reporting (Mandatory, with Token Count)
+
+The SDK auto-submits a usage report (background, non-blocking). Usage reporting is mandatory for subscription transactions -- failure to report within the window triggers `DENIAL_REASON_REPORTING_OVERDUE` on subsequent transactions.
+
+```json
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+
+{
+  "ver": "1.0",
+  "id": "ur-claude-001",
+  "transaction_id": "txn-alpha-001",
+  "billing_id": "bill-sub-alpha-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "subfn": ["SUB_FUNCTION_RAG"],
+    "consumed_quantity": 3150,
+    "displayed_to_user": true,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-15T15:30:00Z",
+  "request_id": "pr-claude-001",
+  "exchange": "exchange.ssp-alpha.com",
+  "assets": [
+    {
+      "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
+      "title": "AI Regulation: What Providers Need to Know",
+      "package_id": "PKG-TC-AI-REG"
+    }
+  ]
+}
+```
+
+### Inside the Exchange
+
+```
+1. Validate request fields -> pass
+2. Lookup transaction: txn-alpha-001 -> found, billing_id matches -> pass
+3. Submit to Reporting Tracker:
+   a. Validate required_fields present: transaction_id, function, consumed_quantity -> all present
+   b. Check reporting window: deadline 2026-03-16T15:00:00Z, current time 2026-03-15T15:30:00Z -> within window
+   c. Validate consumed_quantity: 3150 actual vs 3300 estimated -> within +/-20% tolerance
+   d. Transition obligation: Pending -> Fulfilled
+4. Write usage report to transaction log (durable)
+```
+
+### Response
+
+```json
+{
+  "accepted": true
+}
+```
+
+---
+
+## Phase 6: Reconciliation + Provider Audit
+
+### Three-Sided Reconciliation
+
+Three independent records that must agree:
+
+```
+1. CDN access log (Hearst controls):
+   - txn_id=txn-alpha-001 fetched at 15:25:00, 200 OK, 45KB
+   - agent_id=e3b0c442..., sig verified by edge function
+
+2. Exchange transaction log (SSP-Alpha controls):
+   - txn-alpha-001: subscription SUB-ANTHROPIC-HEARST-2026, amount=$0
+   - subscription_unit_value: $0.05 (value of the access for accounting)
+   - offer_snapshot: article "AI Regulation...", 3300 est tokens
+   - offer_snapshot includes exchange_signature (Ed25519, non-repudiable)
+   - reporting_deadline: 2026-03-16T15:00:00Z
+
+3. Usage report (Anthropic filed):
+   - txn-alpha-001: 3150 actual tokens, function=FUNCTION_AI_INPUT, citation=yes
+   - Filed at 15:30:00, within reporting window
+```
+
+### Reconciliation Checks
+
+```
+PASS: CDN log has txn-alpha-001 -> content was actually served
+PASS: Exchange has txn-alpha-001 -> transaction was authorized
+PASS: Usage report received before deadline -> reporting obligation fulfilled
+PASS: Token count 3150 vs estimate 3300 -> within +/-20% tolerance
+PASS: Function FUNCTION_AI_INPUT matches permitted_functions
+PASS: Citation included as required by Package.citation=1
+```
+
+### Provider Audit Access
+
+Hearst queries the Exchange's provider audit API to independently verify all transactions for their content:
+
+```
+GET https://exchange.ssp-alpha.com/provider/techcrunch.com/transactions
+    ?from=2026-03-15T00:00:00Z
+    &to=2026-03-16T00:00:00Z
+```
+
+Response includes signed Offer snapshots for every transaction:
+
+```json
+{
+  "transactions": [
+    {
+      "transaction_id": "txn-alpha-001",
+      "billing_id": "bill-sub-alpha-001",
+      "offer_snapshot": {
+        "offer_id": "sub-offer-tc-reg-001",
+        "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0, "currency": "USD" },
+        "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+        "exchange_signature": "base64-ed25519-sig-B...",
+        "signature_algorithm": "ed25519"
+      },
+      "cost": { "amount": 0, "currency": "USD" },
+      "subscription_unit_value": { "amount": 0.05, "currency": "USD" },
+      "agent_id": "e3b0c442...",
+      "timestamp": "2026-03-15T15:25:00Z"
+    }
+  ]
+}
+```
+
+**What Hearst can verify**:
+
+1. **Offer authenticity**: Hearst verifies the `exchange_signature` on each `offer_snapshot` using SSP-Alpha's published Ed25519 public key (from `exchange.ssp-alpha.com/exchange/v1/keys`). This proves the Exchange actually issued this Offer -- it cannot deny having offered these terms.
+
+2. **RSL price ceiling compliance**: Hearst's RSL declares a maximum rate of $0.08/crawl. The subscription's `subscription_unit_value` of $0.05 is below this ceiling. If any per-request Offer exceeded $0.08, Hearst would detect it by comparing `offer_snapshot.pricing.rate` against their RSL terms.
+
+3. **Private floor compliance**: Hearst's contract with SSP-Alpha specifies a private minimum rate of $0.04/article. The `subscription_unit_value` of $0.05 is above this floor. Private floor pricing is contractual (not protocol-enforced), but the audit data makes violations detectable.
+
+### What Hearst Sees (Subscription Summary)
+
+```
+Under subscription SUB-ANTHROPIC-HEARST-2026, Anthropic consumed
+3,150 tokens from "AI Regulation: What Providers Need to Know"
+for RAG/grounding. Citation was included. Value: $0.05 per article.
+```
+
+This data feeds into Hearst's subscription renewal negotiation:
+
+```
+"Anthropic consumed 2.3M tokens from TechCrunch last quarter under
+the current deal at $0.05/article. Given our RSL ceiling of $0.08
+and the volume, we want to renegotiate to $0.06 for next year."
+```
+
+---
+
+## Phase 7: Dispute Resolution (v1.0 -- When Things Go Wrong)
+
+If the content delivered by the CDN does not match what was promised in the Offer, the agent can file a dispute. The dispute chain enforces a strict order: the agent MUST have filed a `UsageReport` (Phase 5) before disputing.
+
+### Example: Content Hash Mismatch
+
+```
+Agent verifies delivered content:
+  1. Compute SimHash of received HTML -> "a1b2c3d4e5f9..."
+  2. Compare with Offer's identity.content_hash -> "a1b2c3d4e5f6..."
+  3. Hamming distance = 2 bits -> within SimHash tolerance (threshold 3)
+  4. No dispute needed (content is substantially similar)
+
+But if Hamming distance > threshold, or content is entirely different:
+  Agent files DisputeTransaction
+```
+
+### Dispute Request
+
+```json
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DisputeTransaction
+
+{
+  "ver": "1.0",
+  "transaction_id": "txn-alpha-001",
+  "billing_id": "bill-sub-alpha-001",
+  "report_id": "rpt-001",
+  "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+  "description": "Content hash differs from offer: expected a1b2c3d4e5f6, received a1b2c3d4ffff",
+  "received_content_hash": "a1b2c3d4ffff...",
+  "received_hash_method": "simhash-v1"
+}
+```
+
+### Dispute Response
+
+```json
+{
+  "dispute_id": "disp-alpha-001",
+  "status": "DISPUTE_STATUS_AUTO_RESOLVED",
+  "resolution": "RESOLUTION_TYPE_CREDIT",
+  "estimated_resolution": "2026-03-15T16:00:00Z"
+}
+```
+
+Three-tier resolution: Tier 1 automated (&lt;1s, auto-disputable claims like CDN failure or hash mismatch), Tier 2 rule-based (&lt;24h), Tier 3 pattern investigation (async). The dispute lifecycle progresses through: `FILED` -> `AUTO_RESOLVED` / `EVIDENCE_NEEDED` -> `UNDER_REVIEW` -> `RESOLVED` -> `FINAL`. Appeals re-enter `UNDER_REVIEW`.
+
+---
+
+## What the Broker Adds (Cross-Provider Intelligence)
+
+**Without Broker (SDK only)**: the agent found the article via SSP-Alpha (from `ramp.json`) and got the subscription deal. It never knew The Verge also had the article at $0.07 via SSP-Beta.
+
+**With Broker**: it queried both Exchanges, discovered the same article via iptc_guid match (confirmed by SimHash similarity), received attestation data from both sources, and still chose the subscription offer -- but now Anthropic has intelligence:
+
+```
+"This article is available from two sources:
+  - SSP-Alpha (TechCrunch, subscription, $0/request, third-party attested by gumgum.com)
+  - SSP-Beta (The Verge, per-request, $0.07/request, third-party attested by gumgum.com)
+
+Our subscription saves us $0.07 per request from the alternative source.
+At 10K requests/month for this provider's content, that's $700/month
+in avoided per-request costs — data for the subscription renewal.
+
+Both sources carry Level 2 (third-party) attestations from gumgum.com.
+TechCrunch original has higher word_count (2500 vs 2350) — more complete."
+```
+
+This is the Broker's value: **not just cheapest price, but market intelligence for subscription negotiations and attestation-aware content selection.**

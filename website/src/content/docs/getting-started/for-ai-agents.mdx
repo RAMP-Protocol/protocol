@@ -1,0 +1,372 @@
+---
+title: "RAMP for AI Agents"
+description: "How AI agents access any metered resource — articles, credit reports, drug databases, satellite imagery, court filings — through one protocol"
+---
+
+## The Problem You Have
+
+Your agent is building a due-diligence report. It needs a D&B credit report (one API, one auth scheme, one pricing model). It needs a PACER court filing (completely different API). It needs drug interaction data from DrugBank (yet another). Academic literature from Elsevier (yet another). A satellite image of a property from Planet (yet another).
+
+Every integration is bespoke. Every provider has its own discovery mechanism, pricing model, authentication scheme, delivery format, and terms of use. You can't compare prices across providers. You can't enforce a unified budget. You can't verify what you received in a consistent way. And if something goes wrong, every dispute process is different too.
+
+The result: your agent is locked into whichever providers your developers happened to integrate. Adding a new resource type means weeks of custom work. Neither side scales.
+
+## What RAMP Gives You
+
+**One protocol to discover, price, transact, deliver, verify, and dispute any metered resource from any participating Exchange.**
+
+```go
+// News article
+article, _ := client.Fetch(ctx, "https://cdn.ramp-protocol.org/premium/article.html")
+
+// Credit report
+report, _ := client.Fetch(ctx, "duns:123456789", ramp.WithProfile("ramp-credit-v1"))
+
+// Drug interaction check
+interactions, _ := client.Fetch(ctx, "drugbank://ddi?drugs=DB00682,DB00331")
+
+// Court filing
+filing, _ := client.Fetch(ctx, "pacer://case/1:24-cv-01234/doc/42")
+
+// Academic paper
+paper, _ := client.Fetch(ctx, "doi:10.1038/s41586-024-07487-w")
+
+// Satellite imagery
+imagery, _ := client.Fetch(ctx, "planet://PSScene/20240315_091234_01_2345?aoi=POLYGON((-73.9 40.7,-73.8 40.7,-73.8 40.8,-73.9 40.8,-73.9 40.7))")
+
+// Brain MRI scan
+scan, _ := client.Fetch(ctx, "dicom://study/1.2.840.113619.2.5.1762583153.215519.978957063.78")
+```
+
+Same SDK. Same flow. Same budget controls. Same verification. Same dispute process. The protocol handles the differences -- your agent doesn't have to.
+
+## How It Works
+
+```
+1. Your agent wants a resource (article, credit report, court filing -- anything)
+2. SDK resolves the resource identifier → finds the Exchange endpoint
+3. SDK calls DiscoverResources → gets Offers with pricing, freshness, attestations
+4. SDK calls ExecuteTransaction → gets delivery instructions + billing_id
+5. SDK fetches resource via signed URL → returns it to your agent
+6. SDK calls ReportUsage → reports actual consumption (tokens, pages, minutes, records)
+```
+
+Steps 2-6 happen behind a single `Fetch()` call. Your agent sees one function. The protocol runs underneath.
+
+## What You Need
+
+**The RAMP Agent SDK** (Go, TypeScript, or Python):
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note">
+The SDK is not yet published to package registries. Use the working implementations directly from the repository:
+
+- **Go**: Import generated types from [`gen/go/`](https://github.com/postindustria-tech/ramp-protocol/tree/main/gen/go/) and the Connect-Go client from `gen/go/ramp/v1/rampv1connect`. See [`poc/exchange/`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/exchange/) for a working server example.
+- **TypeScript**: See [`poc/agent-sdk/client.ts`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/agent-sdk/client.ts) for the working `RampClient` implementation. The npm package is not yet published.
+- **Python**: See [`poc/mcp-tool/server.py`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/mcp-tool/server.py) for the Python reference implementation (FastMCP-based).
+</Aside>
+
+Configure it with your license ID, signing key, and budget:
+
+```go
+client, _ := ramp.NewClient(ramp.Config{
+    LicenseID:  "LIC-YOUR-COMPANY-001",
+    SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
+    SupportedProfiles: []string{
+        "ramp-news-v1",       // articles, podcasts, broadcasting
+        "ramp-academic-v1",   // journal papers, preprints, datasets
+        "ramp-legal-v1",      // legislation, case law, patents
+    },
+    Budget: ramp.Budget{
+        MaxPerRequest: 100.00,    // never pay more than $100 for one resource
+        MaxPerSession: 500.00,    // cap at $500/session
+        Currency:      "USD",
+    },
+})
+```
+
+The SDK handles:
+- **Exchange discovery** from provider `ramp.json` files or Broker routing
+- **Price comparison** across multiple Exchanges (if using a Broker)
+- **Budget enforcement** -- never exceed your per-request or per-session limits
+- **Ed25519 signing** -- every request is cryptographically signed with your key
+- **Usage reporting** -- mandatory post-access reports submitted automatically
+- **Profile routing** -- `supported_profiles` tells the Broker which domains you work in
+
+## Extension Profiles
+
+Your agent declares which domains it understands via `supported_profiles` on the `RAMPRequest`. The Broker uses this to route queries to capable Exchanges and filter offers to relevant domains.
+
+Three v1 profiles exist:
+
+| Profile | Domains | Standards |
+|---------|---------|-----------|
+| **ramp-news-v1** | Articles, podcasts, live broadcasts | IPTC NewsML-G2, Podcasting 2.0, W3C TDMRep |
+| **ramp-academic-v1** | Journal papers, preprints, datasets | CrossRef, OpenAlex, JATS XML, COUNTER 5.1 |
+| **ramp-legal-v1** | Legislation, case law, patents | ELI, ECLI, Akoma Ntoso, WIPO ST.3/ST.16 |
+
+Exchanges declare conformance in their manifest. When your agent declares `supported_profiles: ["ramp-academic-v1"]`, the Broker routes your query only to Exchanges that also declare `ramp-academic-v1`, and returned offers include profile-specific metadata (e.g., `academic.doi`, `academic.oa_status`, `academic.version`).
+
+If you omit `supported_profiles`, you get offers from all Exchanges -- useful for broad discovery, less useful for domain-specific queries.
+
+## Identity and Authorization
+
+Every RAMP request carries a `Requester` message that tells the Exchange who you are and what you can access.
+
+### Constructing a Requester
+
+The `Requester` message is the identity envelope on every `ResourceQuery` and `TransactionRequest`. Your SDK builds it automatically from your configuration, but here is what it contains:
+
+| Field | What You Set | Example |
+|---|---|---|
+| `id` | Your agent's unique identifier | `"research-bot-42"` |
+| `domain` | Domain where your public key is published | `"agents.acme.com"` |
+| `type` | What kind of entity you are (see below) | `REQUESTER_TYPE_AGENT` |
+| `scopes` | What you can access | `["academic:*", "credit:read"]` |
+| `signature` | Ed25519 signature over `(id, domain, uris, scopes)` | (computed by SDK) |
+
+The SDK signs every request with your Ed25519 private key. The Exchange verifies it against the public key published at `{domain}/.well-known/ramp-agent.json`.
+
+### RequesterType
+
+Choose the type that matches your agent's operating mode:
+
+| Type | When to Use |
+|---|---|
+| `REQUESTER_TYPE_AGENT` | Autonomous AI agents — LLMs, RAG systems, research bots |
+| `REQUESTER_TYPE_HUMAN_TOOL` | Human using an AI-powered copilot or assistant |
+| `REQUESTER_TYPE_SERVICE` | Enterprise service accounts — automated pipelines, cron jobs |
+| `REQUESTER_TYPE_DELEGATED` | Agent acting on behalf of another agent or user (sub-agent) |
+| `REQUESTER_TYPE_RESEARCH` | Research pipelines — batch data collection, model training |
+
+### Scopes
+
+Scopes declare what your agent is entitled to access. The Exchange filters its catalog by your scopes — resources outside your scopes are not returned.
+
+| Scope Pattern | Meaning |
+|---|---|
+| `"subscription:bloomberg-2026"` | Active Bloomberg subscription |
+| `"credit:read"` | Can access credit reports (read-only) |
+| `"academic:*"` | Full access to academic resources |
+| `"*"` | Unrestricted (public Exchange default) |
+| `[]` (empty) | Exchange applies its default access policy |
+
+### Biscuit Delegation for Sub-Agent Scenarios
+
+If your agent delegates to sub-agents, Biscuit tokens enable safe permission narrowing without round-tripping to the original issuer. Your agent attenuates its own token — restricting scopes, lowering spend caps, shortening expiry — and hands the narrowed token to the sub-agent. The sub-agent cannot widen permissions; this is cryptographically enforced.
+
+The attenuated token is carried in the `Requester.delegation` field. Set `type` to `REQUESTER_TYPE_DELEGATED` on the sub-agent's requests.
+
+For the full delegation model — Biscuit structure, attenuation examples, and enterprise IAM integration — see [Authentication](/protocol/authentication/).
+
+### Subscription Quota
+
+When your agent holds a subscription, offers and transaction responses include `SubscriptionQuotaInfo` entries showing remaining quota for the current period. This lets you check remaining allowance proactively — before committing to a transaction — and track burn-down without a separate API call.
+
+```go
+// After a transaction, check remaining quota
+resp, _ := client.Execute(ctx, offer)
+for _, q := range resp.SubscriptionQuota {
+    fmt.Printf("Scope %s: %d/%d remaining (resets %s)\n",
+        q.Scope, q.Remaining, q.Limit, q.ResetsAt)
+}
+```
+
+### Denial Reasons You May Encounter
+
+When a request is denied, the Exchange returns a specific `DenialReason` so your agent knows what went wrong and can respond appropriately:
+
+| Denial Reason | Meaning | What to Do |
+|---|---|---|
+| `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for this period | Wait for quota reset or upgrade subscription |
+| `DENIAL_REASON_DELEGATION_EXPIRED` | Biscuit delegation token has expired | Request a fresh token from the principal |
+| `DENIAL_REASON_SCOPE_INSUFFICIENT` | Your scopes do not cover this resource | Request broader scopes or a different resource |
+| `DENIAL_REASON_INSUFFICIENT_BALANCE` | Buyer's balance too low for this transaction | Add funds or reduce request scope |
+| `DENIAL_REASON_SIGNATURE_INVALID` | Ed25519 signature verification failed | Check your signing key configuration |
+
+## What It Costs
+
+Providers set their own prices. RAMP normalizes everything to `unit_cost` (effective cost per unit) so you can compare across providers regardless of their pricing model.
+
+| Model | Unit | Example | Industry |
+|---|---|---|---|
+| Per token | tokens | $0.0001/token for news article | Media |
+| Per article | articles | $1.50 for journal paper | Academic |
+| Per page | pages | $0.10/page for court filing | Legal |
+| Per minute | minutes | $0.05/min for podcast episode | Media |
+| Per record | records | $61.99 for credit report | Financial |
+| Per study | studies | $25 for brain MRI | Medical |
+| Per sq_km | sq_km | $3/sq_km for satellite imagery | Geospatial |
+| Per query | queries | $0.50 for drug interaction check | Pharma |
+| Subscription | -- | $0/request under enterprise deal | Any |
+| Free | -- | $0 with attribution (CC-BY) | Academic, Government |
+
+## Budget Controls
+
+You control spend at three levels:
+
+1. **Per-request**: "Never pay more than $100 for one credit report"
+2. **Per-session**: "Cap total spend at $500 for this due-diligence job"
+3. **Per-period**: "Spend no more than $10,000/month on content across all agents"
+
+If a request would exceed any limit, the SDK returns a `BudgetExceededError` **before** making any network call.
+
+## Content Mutability and Data Freshness
+
+Not all resources are static files. RAMP classifies resources by mutability, which determines how your agent verifies delivered content:
+
+| Mutability | Example | Hash Behavior | Agent Action |
+|---|---|---|---|
+| **STATIC** | Journal article, patent filing, archived news story | Hash is stable -- verify it | Compare SHA-256 of received bytes to attested `content_hash`. Mismatch is disputable. |
+| **DYNAMIC** | D&B credit report, DrugBank interaction database, satellite catalog | Hash changes between offer and fetch | Do NOT auto-dispute hash mismatch. Check `data_as_of` for freshness instead. |
+| **LIVE** | Bloomberg quote feed, NPR live broadcast, news monitoring stream | No content exists at offer time | No hash verification. Metering is time-based (minutes, hours). |
+
+For dynamic resources, the `data_as_of` field on the Offer tells you when the data was current. Your agent can set `max_data_age` to filter out stale offers:
+
+```go
+// "I need a credit report updated within the last 7 days"
+report, _ := client.Fetch(ctx, "duns:123456789",
+    ramp.WithProfile("ramp-credit-v1"),
+    ramp.WithMaxDataAge(7 * 24 * time.Hour),
+)
+```
+
+The Broker drops offers where `now() - data_as_of` exceeds your threshold.
+
+## Batch Access
+
+Need multiple resources at once? `FetchBatch` groups requests by Exchange and executes them in parallel.
+
+A literature review pulling 50 papers across publishers:
+
+```go
+dois := []string{
+    "doi:10.1038/s41586-024-07487-w",   // Nature
+    "doi:10.1126/science.adq3858",       // Science
+    "doi:10.1016/j.cell.2024.03.012",    // Cell (Elsevier)
+    "doi:10.1001/jama.2024.5678",        // JAMA
+    // ... 46 more DOIs
+}
+papers, _ := client.FetchBatch(ctx, dois, ramp.WithProfile("ramp-academic-v1"))
+```
+
+A due-diligence package pulling credit, legal, and property records:
+
+```go
+results, _ := client.FetchBatch(ctx, []string{
+    "duns:123456789",                            // D&B credit report
+    "pacer://case/1:24-cv-01234/doc/42",         // Federal court filing
+    "pacer://case/2:23-cv-05678/doc/15",         // Related proceeding
+    "county://cook-il/property/12-34-567-890",   // Property record
+})
+```
+
+The SDK groups identifiers by domain, sends one query per Exchange, and executes batch transactions. Network round trips go from N*M to M (where M is the number of distinct Exchanges).
+
+## Streaming Delivery
+
+RAMP supports streaming resources (WebSocket, SSE, HLS, Icecast) via `DELIVERY_METHOD_STREAMING`. The flow is the same -- `ExecuteTransaction` returns a signed URL, but that URL points to a streaming endpoint.
+
+```go
+// Connect to a live Bloomberg quote feed
+stream, _ := client.Fetch(ctx, "bloomberg://stream/equities/AAPL,MSFT,GOOGL",
+    ramp.WithDeliveryMethod(ramp.Streaming),
+)
+
+// stream.URL points to a WebSocket endpoint
+// stream.Expiry is 2 hours from now
+// Usage is metered per minute of connection time
+```
+
+Your agent connects and receives continuous data for the session duration. When the signed URL expires, request a new one through the same RAMP flow. The protocol handles session lifecycle -- heartbeat, reconnection, and concurrent connection limits are managed by the provider.
+
+## Direct vs. Brokered
+
+**Direct mode** (default): Your agent talks to each provider's Exchange directly. Simple. Works for known providers.
+
+**Brokered mode**: A RAMP Broker queries multiple Exchanges in parallel, deduplicates offers (same article on different sites), filters by freshness and profile compatibility, and picks the cheapest or highest-quality source. Better for cost optimization at scale and cross-domain queries.
+
+## Content Attestation
+
+Every Offer returned by `DiscoverResources` can carry `ResourceAttestation` entries -- signed claims about the content from a trusted party (provider or verification vendor). Three verification levels determine what your agent can verify:
+
+| Level | Attester | What You Can Verify |
+|---|---|---|
+| **0 -- None** | Nobody | CDN delivery only (did you get a 200?) |
+| **1 -- Self-attested** | Provider | Content hash: compute SHA-256 of received bytes and compare to the attested `content_hash` |
+| **2 -- Third-party** | Verification vendor (e.g., DoubleVerify) | Trust the attestation without re-verifying -- an independent party measured the content |
+
+At Level 1, your agent can re-compute the content hash from delivered bytes and compare it to the provider's signed claim. A mismatch is cryptographic proof that the delivered content differs from what was promised.
+
+At Level 2, an independent verification vendor (listed at `https://{verifier}/.well-known/ramp-verifier.json`) has crawled and measured the content. Your agent trusts the vendor's attestation without re-verifying.
+
+## Dispute Resolution
+
+If something goes wrong -- delivery failure, content hash mismatch, token count discrepancy -- your agent can file a dispute. The flow requires a usage report first:
+
+```
+1. ReportUsage       -> get report_id
+2. DisputeTransaction -> reference transaction_id + report_id + evidence
+3. Exchange resolves automatically (< 1 second for routine disputes)
+```
+
+**What's auto-disputable at each attestation level:**
+
+| Evidence | Level 0 | Level 1 | Level 2 |
+|---|---|---|---|
+| CDN delivery failure (4xx/5xx) | Auto-credit | Auto-credit | Auto-credit |
+| Signed URL expired before fetch | Auto-credit | Auto-credit | Auto-credit |
+| Content hash mismatch | N/A (no hash) | Auto-credit | N/A (vendor algorithm) |
+| Token discrepancy + CDN size corroboration | Flagged | Auto-credit | Auto-credit |
+| Token discrepancy alone (agent-reported) | Not auto-creditable | Not auto-creditable | Not auto-creditable |
+
+The `report_id` is required on every `DisputeRequest` -- the Exchange rejects disputes without a prior usage report on file.
+
+## MCP Access
+
+You can also access RAMP via MCP -- add the RAMP MCP server to your agent's tool configuration and discover/license content without a custom SDK. The MCP server exposes six tools (`discover_supply`, `execute_transaction`, `report_usage`, `dispute_transaction`, `check_health`, `get_rate_limit_status`) and handles protocol details (signing, field population, response simplification) automatically.
+
+For Claude Desktop, add to your config:
+
+```json
+{
+  "mcpServers": {
+    "ramp": {
+      "command": "ramp-mcp-server",
+      "args": ["--transport", "stdio"],
+      "env": {
+        "RAMP_MARKETPLACE_URL": "https://exchange.example.com",
+        "RAMP_PROXY_KEY_PATH": "/path/to/ed25519-private.pem"
+      }
+    }
+  }
+}
+```
+
+See [MCP Server Overview](/components/mcp-server/overview/) for full details on deployment, authentication, and tool schemas.
+
+## FAQ
+
+**What providers are on RAMP?**
+Any provider whose Exchange operator runs a RAMP Exchange. The protocol is open -- no central registry required.
+
+**What if the provider doesn't use RAMP?**
+The SDK returns `NoExchangeError`. Fall back to your existing content access strategy.
+
+**Is this legal?**
+Yes. Every transaction is explicitly authorized by the provider (via their Exchange) and cryptographically signed. You have a receipt for every piece of content.
+
+**What about robots.txt?**
+RAMP handles inference/RAG access (real-time, user-facing). `robots.txt` handles training crawlers. Different traffic types.
+
+**How does RAMP handle resources outside the three v1 profiles?**
+The core protocol is domain-agnostic. Extension profiles add domain-specific metadata but are not required. A Exchange can serve credit reports or satellite imagery without conforming to any profile -- the core fields (`unit_cost`, `unit`, `resource_mutability`, `data_as_of`) handle metering and verification for any resource type. New profiles are added by domain communities as adoption grows.
+
+## Next Steps
+
+1. Get a license ID from a participating Exchange operator
+2. Install the SDK, declare your `supported_profiles`, and configure your budget
+3. Replace your per-provider integrations with `client.Fetch()`
+
+For the full API, see [Agent SDK Overview](/components/agent-sdk/overview/) and [Fetch Flow](/components/agent-sdk/fetch-flow/).

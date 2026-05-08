@@ -1,0 +1,149 @@
+---
+title: "Industry Landscape"
+description: "The current state of AI metered resource access: standards ecosystem, closed platforms, and where RAMP fits in the timeline."
+---
+
+## The robots.txt Era Is Ending
+
+For decades, `robots.txt` was the only interface between web crawlers and providers. It offered a binary choice: allow or block. For search engines, this was sufficient -- crawling led to indexing, which led to traffic back to the provider.
+
+AI changes this equation. When an LLM ingests content for RAG, grounding, or training, the provider gets no return traffic. The content's value is extracted without compensation. Providers are responding by blocking AI crawlers wholesale, but this sacrifices the discovery benefits that AI-powered search and assistants could provide.
+
+The industry needs transactional infrastructure -- a way to say "yes, you can use this content, for this price, under these terms."
+
+## The Standards Ecosystem
+
+Three complementary standards are emerging to fill this gap:
+
+### RSL 1.0 (Really Simple Licensing)
+
+Released December 2025. Like `robots.txt` but for licensing.
+
+- Provider drops an `rsl.txt` file on their domain
+- Machine-readable terms: attribution requirements, pay-per-crawl, pay-per-inference, training restrictions
+- 1,500+ media organizations endorsing
+- **Limitation**: Declares terms but provides no transaction infrastructure. An agent can read what content costs but has no way to pay for it through RSL alone.
+
+### IAB Tech Lab CoMP v1.0 (Content Monetization Protocol)
+
+Released March 2026, in public comment through April 2026.
+
+- Defines the **data model** for resource access: Package, AISystem, Retrieval, Scope objects
+- Provides a logging component for audit and invoicing
+- Backed by IAB Tech Lab (Prebid's parent organization) -- carries significant weight with SSPs and exchanges
+- **Limitation**: Deliberately leaves out billing, settlement, and transport. Defines what to describe but not how to transact.
+
+### RAMP (Resource Access Metering Protocol)
+
+The open transaction protocol that completes the stack.
+
+- Adds discovery (`ramp.json`), transaction execution, signed URL delivery, and usage reporting
+- Resource attestation (three verification levels) and automated dispute resolution
+- ACME-style provider onboarding with domain verification and CDN key provisioning
+- Layers on RSL (ingests `rsl.txt` for pricing) and CoMP (wraps CoMP objects in transaction messages)
+- Multi-exchange architecture with an optional Broker for cross-exchange comparison
+- Originated from the Prebid LLM Content Monetization Committee
+
+## Closed Platforms
+
+Two proprietary approaches are operating today:
+
+### Microsoft Provider Content Exchange (PCM)
+
+Launched February 2026.
+
+- **Walled garden** -- Microsoft operates the exchange exclusively
+- Distinguishes **grounding** (per-request, real-time content for Copilot/Bing) from **training** (bulk licensing for model training)
+- "Pay per demonstrated value" -- providers receive compensation based on content performance metrics
+- Early partners: Associated Press, Vox Media, Conde Nast, Hearst, Business Insider
+- **Limitation**: Only works within Microsoft's ecosystem. A provider licensing through PCM cannot serve the same content to non-Microsoft AI systems through the same infrastructure.
+
+### TollBit
+
+Startup with $7M in funding, operational today.
+
+- Running per-request content licensing in production
+- Per-1000-pages pricing, providers set their own rates
+- Charges AI customers a transaction fee but does not take a provider revenue share
+- **Limitation**: Proprietary API. Providers and AI companies are locked into TollBit's infrastructure. No interoperability with other licensing systems.
+
+## Why Open Standards Matter
+
+The ad-tech industry learned this lesson two decades ago. Before OpenRTB, every ad exchange had its own proprietary protocol. Advertisers and providers had to build custom integrations for each exchange, creating lock-in and fragmentation.
+
+OpenRTB changed this by defining a common protocol that any exchange, DSP, or SSP could implement. The result: a liquid market where buyers and sellers could transact across any compliant exchange.
+
+AI resource access is at the same inflection point. Microsoft PCM and TollBit are building walled gardens -- the equivalent of pre-OpenRTB proprietary exchanges. RAMP aims to be the OpenRTB for resource access: an open protocol that any Exchange, AI company, or provider can implement.
+
+## Comparison
+
+| Layer | RSL | CoMP | Microsoft PCM | TollBit | RAMP |
+|---|---|---|---|---|---|
+| Terms declaration | rsl.txt | Package object | Provider dashboard | Provider dashboard | RSL ingestion by Exchange |
+| Discovery | File on domain | Not defined | Microsoft index | TollBit API | `ramp.json` + edge function fallback |
+| Transaction protocol | None | Not defined | Proprietary | Proprietary | **Open protocol** |
+| Content verification | None | None | Not defined | Not defined | **Three-level attestation** |
+| Dispute resolution | None | None | Not defined | Not defined | **Automated (three-tier)** |
+| Billing/settlement | None | Out of scope | Microsoft handles | TollBit handles | Billing adapter (pluggable) |
+| Multi-exchange | No | Implied | No (Microsoft only) | No (TollBit only) | **Yes (Broker)** |
+| Domain extension profiles | None | None | None | None | **Three profiles (news, academic, legal)** |
+
+## Three-Layer Governance
+
+RAMP v1.0 prevents protocol fragmentation through a three-layer governance model:
+
+| Layer | Scope | Governance | Example |
+|---|---|---|---|
+| **1. Core Proto** | Fields in `ramp.proto` | Protocol version bump | `resource_mutability`, `data_as_of` |
+| **2. Standard Extensions** | `ramp.*` namespace in ext | Defined in RAMP spec | `ramp.compliance.dua_required` |
+| **3. Domain Profiles** | Domain namespace in ext | Published by domain communities | `news.iptc_guid`, `academic.doi` |
+
+Three domain extension profiles ship with v1.0: `ramp-news-v1` (news, podcasts, broadcasting), `ramp-academic-v1` (scholarly articles, preprints, datasets), and `ramp-legal-v1` (legislation, case law, patents). Each profile is grounded in existing industry standards (IPTC NewsML-G2, CrossRef/OpenAlex, ELI/ECLI/Akoma Ntoso).
+
+Exchanges declare conformance via `supported_profiles` in their manifest. Agents declare which profiles they understand in the request. The Broker uses these declarations for routing -- a legal research agent requesting `ramp-legal-v1` is routed to Exchanges that support that profile.
+
+## Scope Boundary
+
+RAMP v1.0 draws a clear boundary: **resource access is in scope; job execution is not.**
+
+The test: "Does the resource exist before the transaction?" If yes, it is a RAMP use case. If the transaction creates something new from agent input (translation, ML inference, document generation), it is not.
+
+**In scope:** static resources (articles, papers, patents), dynamic resources (credit reports, drug databases), streaming resources (quote feeds, live broadcasts), database lookups (drug interaction queries).
+
+**Out of scope:** translation, ML inference, document generation. A Exchange offering these should use a different protocol. However, a pre-computed translation database (translations as resources) is a valid RAMP use case.
+
+## The Prebid LLM Group
+
+RAMP originated from the Prebid LLM Content Monetization Committee, an industry group within Prebid (the open-source header bidding platform). The committee is in its early stages, with no working implementations yet beyond RAMP.
+
+The Prebid connection is significant:
+
+- Prebid is the dominant open-source infrastructure for programmatic advertising
+- SSPs and providers already run Prebid infrastructure
+- RAMP leverages the same architectural patterns (multi-exchange competition, real-time bidding, pluggable adapters)
+- When Prebid adopts a resource access standard, it will have immediate distribution across the ad-tech ecosystem
+
+## Timeline
+
+| Date | Event |
+|---|---|
+| December 2025 | RSL 1.0 released, 1,500+ providers endorsing |
+| February 2026 | Microsoft PCM launched with initial provider partners |
+| March 2026 | IAB CoMP v1.0 released for public comment |
+| March 2026 | RAMP v1.0: metering generalization, streaming delivery, content mutability, extension profiles, CoMP alignment |
+| April 2026 | IAB CoMP public comment period closes |
+| 2026 Q2+ | Prebid LLM Committee evaluating working implementations |
+
+## The Window for Open Standards
+
+Three forces create urgency:
+
+1. **IAB CoMP is being defined now** -- the public comment period closes April 2026. The industry is actively shaping the data model. RAMP builds on CoMP, so alignment matters.
+2. **Walled gardens are growing** -- Microsoft and TollBit are signing providers to exclusive or preferred deals. Each provider locked into a proprietary system is one fewer participant in an open market.
+3. **AI traffic doubles quarterly** -- every month without monetization infrastructure represents lost revenue for providers and growing legal risk for AI companies operating without clear licensing.
+
+## Next Steps
+
+- [What Is RAMP?](/getting-started/what-is-ramp/) -- protocol overview and how it works
+- [Standards Layering](/protocol/standards-layering/) -- technical detail on how RSL, CoMP, and RAMP interoperate
+- [Discovery Paths](/protocol/discovery-paths/) -- how agents find and enter the RAMP flow

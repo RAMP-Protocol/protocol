@@ -1,0 +1,839 @@
+---
+title: "Walkthrough: Cross-Exchange Due Diligence"
+description: "Broker decomposes entity-based intent into 6 exchange queries with heterogeneous pricing, mixed mutability, and deal-level budget tracking."
+---
+
+> An AI agent needs a due diligence package on a company. The Broker decomposes that intent into 6 resource types across 4+ Exchanges, aggregates heterogeneous pricing, tracks costs against a deal-level budget, and delivers mixed-format results — all through the same RAMP v1.0 protocol.
+
+## The Scenario
+
+| | Details |
+|---|---|
+| **Agent** | `dd-analyst` at `lawfirm.com` |
+| **Broker** | `broker.lawfirm.com` |
+| **Target** | Acme Corp (D-U-N-S 123456789) |
+| **Budget** | $1,500 per deal (`deal:acme-acquisition`) |
+| **Resource types** | Credit report, court filings, property records, SEC filings, news articles, patents |
+| **Exchanges** | 4+ (Credit, Legal, Property, SEC/free) |
+
+The agent does not know individual document URIs — it knows a company name and an identifier. The Broker is the intelligence layer that decomposes this entity-based intent into specific resource queries across domain-specific Exchanges.
+
+### The Six Resource Types
+
+| # | Resource | Exchange | Pricing Model | Mutability | Est. Cost |
+|---|----------|-------------|---------------|------------|-----------|
+| 1 | D&B credit report | `exchange.creditdata.com` | PER_RECORD ($61.99) | DYNAMIC | $61.99 |
+| 2 | PACER court filings (3 found) | `exchange.legaldata.com` | PER_PAGE ($0.10/page, ~105 pages) | STATIC | $10.50 |
+| 3 | CoreLogic property records (5 properties) | `exchange.propertydata.com` | PER_RECORD ($2.50/record) | STATIC | $12.50 |
+| 4 | EDGAR SEC filings (4 10-K/10-Q) | `exchange.secdata.com` | FREE | STATIC | $0.00 |
+| 5 | News articles (8 recent) | `exchange.newsagg.com` | PER_ACCESS ($0.05/article) | STATIC | $0.40 |
+| 6 | Patents citing Acme tech (2 patents) | `exchange.secdata.com` | FREE | STATIC | $0.00 |
+
+**Total estimated: $85.39 out of $1,500 budget**
+
+---
+
+## Step 1 — Agent Request (RAMPRequest)
+
+The agent sends a single high-level request to its Broker. The key field is `budget_scope` — it ties all costs across every Exchange to a single deal identifier:
+
+```json
+POST https://broker.lawfirm.com/ramp/v1
+
+{
+  "ver": "1.0",
+  "id": "ramp-dd-001",
+  "requester": {
+    "id": "dd-analyst",
+    "domain": "lawfirm.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["credit:read", "legal:read", "property:read", "sec:read", "news:read"],
+    "signature": "ed25519:f1a2b3c4d5e6...",
+    "signature_algorithm": "ed25519"
+  },
+  "constraints": {
+    "budget_scope": "deal:acme-acquisition",
+    "period_budget": {
+      "amount": 1500.00,
+      "currency": "USD"
+    },
+    "max_data_age": "604800s",
+    "reporting_capable": true
+  },
+  "ext": {
+    "entity_name": "Acme Corp",
+    "entity_duns": "123456789",
+    "dd_resource_types": [
+      "credit_report",
+      "court_filings",
+      "property_records",
+      "sec_filings",
+      "news_articles",
+      "patents"
+    ]
+  }
+}
+```
+
+**Key design point**: The `uris` field is empty. The agent knows a company, not document URIs. The Broker's job is to decompose this entity-based intent into specific resource queries. This is the two-phase model: **discover** (Broker's domain-specific logic) then **access** (RAMP protocol).
+
+The `ext` field carries domain-specific metadata (entity identifiers, requested resource types). The core protocol doesn't need to understand these — the Broker does.
+
+---
+
+## Step 2 — Broker Decomposition
+
+The Broker is the intelligence layer. It takes the entity-based intent and decomposes it into 6 exchange-specific queries. This decomposition logic is Broker-internal — the protocol does not prescribe it.
+
+```
+Input:  "Due diligence on Acme Corp (DUNS: 123456789)"
+
+Broker decomposition:
+├── Credit Exchange     → D&B report for DUNS 123456789
+├── Legal Exchange      → PACER search: party="Acme Corp" + CIK from SEC
+├── Property Exchange   → CoreLogic: owner="Acme Corp" + known addresses
+├── SEC Exchange        → EDGAR: CIK 0001234567 (resolved from DUNS)
+├── News Exchange       → Entity search: "Acme Corp" last 90 days
+└── SEC Exchange (reuse)→ USPTO: assignee="Acme Corp"
+```
+
+The Broker resolves entity identifiers using domain-specific APIs (SEC EDGAR full-text search for CIK, D&B API for DUNS lookup, etc.) **before** making RAMP queries. Once it has specific resource URIs, it fans out `ResourceQuery` requests to each Exchange.
+
+---
+
+## Step 3 — SupplyQueries (6 parallel queries to 4+ Exchanges)
+
+The Broker sends 6 `ResourceQuery` requests in parallel. Each query targets a specific Exchange with resolved URIs. Here are three representative queries:
+
+### Query 1: Credit Report (Dynamic, High-Value)
+
+```json
+POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-dd-credit-001",
+  "requester": {
+    "id": "dd-analyst",
+    "domain": "lawfirm.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://creditdata.com/reports/duns/123456789"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["credit:read"],
+    "signature": "ed25519:a1b2c3d4...",
+    "signature_algorithm": "ed25519"
+  },
+  "intermediaries": [
+    {
+      "domain": "broker.lawfirm.com",
+      "id": "orch-lawfirm-001",
+      "forwarded_at": "2026-03-20T14:00:01Z",
+      "signature": "ed25519:e5f6a7b8...",
+      "signature_algorithm": "ed25519"
+    }
+  ],
+  "deadline": "5s"
+}
+```
+
+### Query 2: Court Filings (Batch, Per-Page)
+
+```json
+POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-dd-legal-001",
+  "requester": {
+    "id": "dd-analyst",
+    "domain": "lawfirm.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://pacer.uscourts.gov/case/2:24-cv-01234",
+      "https://pacer.uscourts.gov/case/3:25-cv-05678",
+      "https://pacer.uscourts.gov/case/1:23-cv-09012"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["legal:read"],
+    "signature": "ed25519:c3d4e5f6...",
+    "signature_algorithm": "ed25519"
+  },
+  "intermediaries": [
+    {
+      "domain": "broker.lawfirm.com",
+      "id": "orch-lawfirm-001",
+      "forwarded_at": "2026-03-20T14:00:01Z",
+      "signature": "ed25519:g7h8i9j0...",
+      "signature_algorithm": "ed25519"
+    }
+  ],
+  "deadline": "5s"
+}
+```
+
+### Query 4: SEC Filings (Free, Multi-URI)
+
+```json
+POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-dd-sec-001",
+  "requester": {
+    "id": "dd-analyst",
+    "domain": "lawfirm.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-K&dateb=&owner=include&count=2",
+      "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-Q&dateb=&owner=include&count=2"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["sec:read"],
+    "signature": "ed25519:k1l2m3n4...",
+    "signature_algorithm": "ed25519"
+  },
+  "intermediaries": [
+    {
+      "domain": "broker.lawfirm.com",
+      "id": "orch-lawfirm-001",
+      "forwarded_at": "2026-03-20T14:00:01Z",
+      "signature": "ed25519:o5p6q7r8...",
+      "signature_algorithm": "ed25519"
+    }
+  ],
+  "deadline": "5s"
+}
+```
+
+*Queries 3 (Property), 5 (News), and 6 (Patents) follow the same pattern — different Exchange endpoints, different URIs, same `Requester` identity forwarded by the same Broker.*
+
+---
+
+## Step 4 — ResourceResponses (6 responses, heterogeneous pricing)
+
+Each Exchange returns offers in its domain-specific pricing model. The Broker aggregates them. Here are three representative responses:
+
+### Response 1: Credit Report — DYNAMIC, PER_RECORD
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-dd-credit-001",
+  "exchange": "exchange.creditdata.com",
+  "offer_groups": [
+    {
+      "uri": "https://creditdata.com/reports/duns/123456789",
+      "offers": [
+        {
+          "offer_id": "offer-credit-acme-001",
+          "package": {
+            "id": "PKG-DNB-ACME-FULL",
+            "title": "D&B Comprehensive Business Report — Acme Corp",
+            "seller": "dnb.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_JSON"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_RECORD",
+            "rate": 61.99,
+            "currency": "USD",
+            "unit_cost": 61.99,
+            "estimated_quantity": 1,
+            "unit": "records"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://creditdata.com/reports/duns/123456789",
+            "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC"
+          },
+          "data_as_of": "2026-03-20T06:00:00Z",
+          "attestations": [
+            {
+              "verifier": "dnb.com",
+              "kid": "dnb-key-2026-q1",
+              "attested_at": "2026-03-20T06:00:00Z",
+              "uri": "https://creditdata.com/reports/duns/123456789",
+              "claims": {
+                "estimated_quantity": 1,
+                "duns_verified": true,
+                "paydex_score": 78,
+                "report_sections": ["financials", "payment_history", "legal_filings", "ownership"]
+              },
+              "signature": "base64-ed25519-dnb-self-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+          },
+          "exchange_signature": "base64-ed25519-credit-offer-sig...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Key: DYNAMIC mutability.** The credit report reflects data as of 06:00 UTC today. The `resource_mutability: DYNAMIC` signals that the content may change between offer and fetch. There is no `content_hash` — hash mismatch is expected and is not disputable. The `data_as_of` timestamp lets the Broker verify freshness against `max_data_age` (7 days).
+
+### Response 2: Court Filings — STATIC, PER_PAGE, Batch
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-dd-legal-001",
+  "exchange": "exchange.legaldata.com",
+  "offer_groups": [
+    {
+      "uri": "https://pacer.uscourts.gov/case/2:24-cv-01234",
+      "offers": [
+        {
+          "offer_id": "offer-legal-001",
+          "package": {
+            "id": "PKG-PACER-24CV01234",
+            "title": "Acme Corp v. Widget Inc — Complete Docket",
+            "seller": "pacer.uscourts.gov",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_PDF"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_PAGE",
+            "rate": 0.10,
+            "currency": "USD",
+            "unit_cost": 0.10,
+            "estimated_quantity": 45,
+            "unit": "pages"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "identity": {
+            "canonical_url": "https://pacer.uscourts.gov/case/2:24-cv-01234",
+            "content_hash": "sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "attestations": [
+            {
+              "verifier": "pacer.uscourts.gov",
+              "kid": "pacer-key-2026",
+              "attested_at": "2026-03-15T09:00:00Z",
+              "uri": "https://pacer.uscourts.gov/case/2:24-cv-01234",
+              "claims": {
+                "estimated_quantity": 45,
+                "filing_date": "2024-06-15",
+                "case_status": "closed",
+                "document_type": "docket"
+              },
+              "signature": "base64-ed25519-pacer-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+          },
+          "exchange_signature": "base64-ed25519-legal-offer-sig-001...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    },
+    {
+      "uri": "https://pacer.uscourts.gov/case/3:25-cv-05678",
+      "offers": [
+        {
+          "offer_id": "offer-legal-002",
+          "package": {
+            "id": "PKG-PACER-25CV05678",
+            "title": "State of CA v. Acme Corp — Environmental Complaint",
+            "seller": "pacer.uscourts.gov",
+            "citation": 1,
+            "retrieval": { "type": ["RETRIEVAL_TYPE_PDF"] }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_PAGE",
+            "rate": 0.10,
+            "currency": "USD",
+            "estimated_quantity": 32,
+            "unit": "pages"
+          },
+          "identity": {
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "exchange_signature": "base64-ed25519-legal-offer-sig-002...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    },
+    {
+      "uri": "https://pacer.uscourts.gov/case/1:23-cv-09012",
+      "offers": [
+        {
+          "offer_id": "offer-legal-003",
+          "package": {
+            "id": "PKG-PACER-23CV09012",
+            "title": "Acme Corp v. Former CTO — IP Dispute",
+            "seller": "pacer.uscourts.gov",
+            "citation": 1,
+            "retrieval": { "type": ["RETRIEVAL_TYPE_PDF"] }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_PAGE",
+            "rate": 0.10,
+            "currency": "USD",
+            "estimated_quantity": 28,
+            "unit": "pages"
+          },
+          "identity": {
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "exchange_signature": "base64-ed25519-legal-offer-sig-003...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Key: Per-page pricing with batch OfferGroups.** Three court filings, each priced per page. The `OfferGroup` structure maps each requested URI to its specific offers. The agent (via Broker) can see the page count estimate per filing before committing.
+
+### Response 4: SEC Filings — FREE, STATIC
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-dd-sec-001",
+  "exchange": "exchange.secdata.com",
+  "offer_groups": [
+    {
+      "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-K-2025.htm",
+      "offers": [
+        {
+          "offer_id": "offer-sec-10k-2025",
+          "package": {
+            "id": "PKG-SEC-ACME-10K-2025",
+            "title": "Acme Corp 10-K Annual Report FY2025",
+            "seller": "sec.gov",
+            "retrieval": { "type": ["RETRIEVAL_TYPE_HTML"] }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": 0,
+            "currency": "USD",
+            "estimated_quantity": 45000,
+            "unit": "tokens"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "identity": {
+            "canonical_url": "https://sec.gov/Archives/edgar/data/0001234567/10-K-2025.htm",
+            "content_hash": "sha256:b2c3d4e5f6a7...",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"]
+          },
+          "exchange_signature": "base64-ed25519-sec-offer-sig-10k-2025...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    },
+    {
+      "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-K-2024.htm",
+      "offers": [{ "offer_id": "offer-sec-10k-2024", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "exchange_signature": "...", "signature_algorithm": "ed25519" }]
+    },
+    {
+      "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-Q-2025-Q3.htm",
+      "offers": [{ "offer_id": "offer-sec-10q-q3", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "exchange_signature": "...", "signature_algorithm": "ed25519" }]
+    },
+    {
+      "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-Q-2025-Q2.htm",
+      "offers": [{ "offer_id": "offer-sec-10q-q2", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "exchange_signature": "...", "signature_algorithm": "ed25519" }]
+    }
+  ]
+}
+```
+
+*Responses for Property (5 records at $2.50/record = $12.50), News (8 articles at $0.05 = $0.40), and Patents (2 patents, FREE) follow the same structure with their respective pricing models.*
+
+---
+
+## Step 5 — Broker Aggregation and Budget Check
+
+The Broker collects all 6 `ResourceResponse` results and builds an aggregate cost picture before committing any transactions. This is the critical intelligence layer — the agent sees a unified view across heterogeneous Exchanges.
+
+### Aggregate Cost Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Due Diligence Package — Acme Corp (DUNS: 123456789)               │
+│  Budget Scope: deal:acme-acquisition                               │
+│  Budget: $1,500.00 | Prior Spend: $0.00 | Available: $1,500.00    │
+├────────────────────┬────────────┬───────────┬───────────┬──────────┤
+│ Resource           │ Exchange│ Model     │ Items     │ Est Cost │
+├────────────────────┼────────────┼───────────┼───────────┼──────────┤
+│ D&B Credit Report  │ creditdata │ PER_RECORD│ 1 report  │  $61.99  │
+│ PACER Filings      │ legaldata  │ PER_PAGE  │ 105 pages │  $10.50  │
+│ Property Records   │ propertydata│PER_RECORD│ 5 records │  $12.50  │
+│ SEC EDGAR Filings  │ secdata    │ FREE      │ 4 filings │   $0.00  │
+│ News Articles      │ newsagg    │ PER_ACCESS│8 articles│   $0.40  │
+│ USPTO Patents      │ secdata    │ FREE      │ 2 patents │   $0.00  │
+├────────────────────┴────────────┴───────────┴───────────┼──────────┤
+│ TOTAL ESTIMATED                                         │  $85.39  │
+│ Budget Remaining After Transaction                      │$1,414.61 │
+└─────────────────────────────────────────────────────────┴──────────┘
+```
+
+**Budget check passes**: $85.39 < $1,500.00 available. The Broker proceeds to execute transactions.
+
+**What the Broker verified before proceeding:**
+1. **Freshness**: Credit report `data_as_of` (today 06:00) is within `max_data_age` (7 days)
+2. **Restrictions**: All offers permit `FUNCTION_AI_INPUT`
+3. **Budget**: Total estimated cost ($85.39) is within the deal budget ($1,500)
+4. **Dedup**: No duplicate resources across Exchanges (each URI is unique)
+5. **Mutability**: Tagged each resource — agent will verify SHA-256 on STATIC resources, skip hash check on DYNAMIC (credit report)
+
+---
+
+## Step 6 — Batch ExecuteTransaction (4 Exchanges)
+
+The Broker sends batch `TransactionRequest` to each Exchange. One request per Exchange, with `TransactionItem` entries for each offer from that Exchange.
+
+### Transaction to Credit Exchange (single item)
+
+```json
+POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-dd-credit-001",
+  "requester": {
+    "id": "dd-analyst",
+    "domain": "lawfirm.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": ["https://creditdata.com/reports/duns/123456789"],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["credit:read"],
+    "signature": "ed25519:a1b2c3d4...",
+    "signature_algorithm": "ed25519"
+  },
+  "items": [
+    {
+      "offer_id": "offer-credit-acme-001",
+      "offer_signature": "base64-ed25519-credit-offer-sig...",
+      "offer_signature_algorithm": "ed25519"
+    }
+  ],
+  "agent_signature": "ed25519:a1b2c3d4...",
+  "agent_signature_algorithm": "ed25519",
+  "broker_signature": "ed25519:h8i9j0k1...",
+  "broker_signature_algorithm": "ed25519"
+}
+```
+
+### Transaction to Legal Exchange (3 items, batch)
+
+```json
+POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-dd-legal-001",
+  "requester": {
+    "id": "dd-analyst",
+    "domain": "lawfirm.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://pacer.uscourts.gov/case/2:24-cv-01234",
+      "https://pacer.uscourts.gov/case/3:25-cv-05678",
+      "https://pacer.uscourts.gov/case/1:23-cv-09012"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["legal:read"],
+    "signature": "ed25519:c3d4e5f6...",
+    "signature_algorithm": "ed25519"
+  },
+  "items": [
+    {
+      "offer_id": "offer-legal-001",
+      "offer_signature": "base64-ed25519-legal-offer-sig-001...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-legal-002",
+      "offer_signature": "base64-ed25519-legal-offer-sig-002...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-legal-003",
+      "offer_signature": "base64-ed25519-legal-offer-sig-003...",
+      "offer_signature_algorithm": "ed25519"
+    }
+  ],
+  "agent_signature": "ed25519:c3d4e5f6...",
+  "agent_signature_algorithm": "ed25519",
+  "broker_signature": "ed25519:l2m3n4o5...",
+  "broker_signature_algorithm": "ed25519"
+}
+```
+
+*Transactions to Property Exchange (5 items), SEC Exchange (4+2 items), and News Exchange (8 items) follow the same batch pattern.*
+
+### Batch TransactionResponse from Legal Exchange
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-dd-legal-001",
+  "items": [
+    {
+      "offer_id": "offer-legal-001",
+      "transaction_id": "txn-legal-001",
+      "billing_id": "bill-legal-001",
+      "package": {
+        "id": "PKG-PACER-24CV01234",
+        "retrieval": {
+          "endpoint": "https://cdn.legaldata.com/pacer/24cv01234.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-001&sig=hmac-sha256-f1e2d3..."
+        }
+      },
+      "cost": { "amount": 4.50, "currency": "USD" },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "expires_at": "2026-03-20T14:15:00Z"
+    },
+    {
+      "offer_id": "offer-legal-002",
+      "transaction_id": "txn-legal-002",
+      "billing_id": "bill-legal-002",
+      "package": {
+        "id": "PKG-PACER-25CV05678",
+        "retrieval": {
+          "endpoint": "https://cdn.legaldata.com/pacer/25cv05678.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-002&sig=hmac-sha256-a4b5c6..."
+        }
+      },
+      "cost": { "amount": 3.20, "currency": "USD" },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "expires_at": "2026-03-20T14:15:00Z"
+    },
+    {
+      "offer_id": "offer-legal-003",
+      "transaction_id": "txn-legal-003",
+      "billing_id": "bill-legal-003",
+      "package": {
+        "id": "PKG-PACER-23CV09012",
+        "retrieval": {
+          "endpoint": "https://cdn.legaldata.com/pacer/23cv09012.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-003&sig=hmac-sha256-d7e8f9..."
+        }
+      },
+      "cost": { "amount": 2.80, "currency": "USD" },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "expires_at": "2026-03-20T14:15:00Z"
+    }
+  ],
+  "total_cost": { "amount": 10.50, "currency": "USD" },
+  "agent_identity_hash": "3a2b1c0d..."
+}
+```
+
+---
+
+## Step 7 — Mixed Delivery
+
+The Broker fetches all resources in parallel. Each resource type has a different delivery format:
+
+| Resource | Delivery | Format | Hash Verification |
+|----------|----------|--------|-------------------|
+| D&B Credit Report | JSON API (signed URL) | Structured JSON | Skipped (DYNAMIC) |
+| PACER Court Filings | Signed URL to CDN | PDF | SHA-256 verified (STATIC) |
+| Property Records | JSON API (signed URL) | Structured JSON | SHA-256 verified (STATIC) |
+| SEC EDGAR Filings | Signed URL to CDN | HTML | SHA-256 verified (STATIC) |
+| News Articles | Signed URL to CDN | HTML | SHA-256 verified (STATIC) |
+| Patents | Signed URL to CDN | HTML | SHA-256 verified (STATIC) |
+
+**Hash verification by mutability:**
+- **STATIC resources** (filings, records, articles, patents): The Broker computes SHA-256 of the delivered bytes and compares against `identity.content_hash` from the Offer. Mismatch is auto-disputable.
+- **DYNAMIC resources** (credit report): No hash verification. The content reflects the latest data. `data_as_of` confirmed freshness at offer time.
+
+---
+
+## Step 8 — UsageReports (6 reports to 4+ Exchanges)
+
+The Broker files a `UsageReport` for every transaction, to every Exchange. All reports share the same `budget_scope` via the `ext` field, enabling cross-exchange spend tracking.
+
+### Report 1: Credit Report
+
+```json
+POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+
+{
+  "ver": "1.0",
+  "id": "ur-dd-credit-001",
+  "transaction_id": "txn-credit-001",
+  "billing_id": "bill-credit-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "consumed_quantity": 1,
+    "consumed_unit": "records",
+    "displayed_to_user": true,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-20T14:02:30Z",
+  "assets": [
+    {
+      "uri": "https://creditdata.com/reports/duns/123456789",
+      "title": "D&B Comprehensive Business Report — Acme Corp",
+      "package_id": "PKG-DNB-ACME-FULL"
+    }
+  ],
+  "ext": {
+    "budget_scope": "deal:acme-acquisition"
+  }
+}
+```
+
+### Report 2: Court Filings (one report per transaction)
+
+```json
+POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+
+{
+  "ver": "1.0",
+  "id": "ur-dd-legal-001",
+  "transaction_id": "txn-legal-001",
+  "billing_id": "bill-legal-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "consumed_quantity": 45,
+    "consumed_unit": "pages",
+    "displayed_to_user": true,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-20T14:03:00Z",
+  "assets": [
+    {
+      "uri": "https://pacer.uscourts.gov/case/2:24-cv-01234",
+      "title": "Acme Corp v. Widget Inc — Complete Docket",
+      "package_id": "PKG-PACER-24CV01234"
+    }
+  ],
+  "ext": {
+    "budget_scope": "deal:acme-acquisition"
+  }
+}
+```
+
+*Reports for property records (consumed_unit: "records"), SEC filings (consumed_unit: "tokens"), news articles (consumed_unit: "tokens"), and patents (consumed_unit: "tokens") follow the same pattern — each targeting its respective Exchange.*
+
+### Broker Budget Ledger (Post-Transaction)
+
+The Broker maintains a running budget ledger for `deal:acme-acquisition`:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ Budget Scope: deal:acme-acquisition                      │
+│ Period Budget: $1,500.00                                 │
+├─────────────────────┬─────────────┬──────────────────────┤
+│ Exchange         │ Actual Cost │ Report IDs           │
+├─────────────────────┼─────────────┼──────────────────────┤
+│ creditdata.com      │   $61.99    │ rpt-credit-001       │
+│ legaldata.com       │   $10.50    │ rpt-legal-001,002,003│
+│ propertydata.com    │   $12.50    │ rpt-prop-001..005    │
+│ secdata.com         │    $0.00    │ rpt-sec-001..006     │
+│ newsagg.com         │    $0.40    │ rpt-news-001..008    │
+├─────────────────────┼─────────────┼──────────────────────┤
+│ TOTAL SPENT         │   $85.39    │                      │
+│ REMAINING           │ $1,414.61   │                      │
+└─────────────────────┴─────────────┴──────────────────────┘
+```
+
+---
+
+## What This Walkthrough Demonstrates
+
+### 1. Broker as Intelligence Layer
+
+The agent sends one high-level request. The Broker handles:
+- **Entity resolution**: DUNS to CIK, company name to PACER cases, company name to property addresses
+- **Exchange routing**: 6 queries to 4+ Exchanges, each with domain-specific URIs
+- **Cost aggregation**: Heterogeneous pricing models normalized into a single budget view
+- **Freshness validation**: `max_data_age` checked against `data_as_of` for DYNAMIC resources
+- **Dedup**: `ResourceIdentity` prevents paying for the same resource twice across Exchanges
+
+### 2. Six Pricing Models in One Workflow
+
+| Model | Resource | How It Works |
+|-------|----------|-------------|
+| `PER_RECORD` | Credit report | $61.99 per report — high-value, dynamic data |
+| `PER_PAGE` | Court filings | $0.10 per page — granular, document-level metering |
+| `PER_RECORD` | Property records | $2.50 per record — structured data access |
+| `FREE` | SEC filings | $0.00 — public government data, metered for reporting |
+| `PER_ACCESS` | News articles | $0.05 per article — low-value, high-volume |
+| `FREE` | Patents | $0.00 — public data, usage tracked but not billed |
+
+All pricing models use the same `Pricing` message. The `unit_cost` field enables cross-exchange comparison regardless of the underlying model.
+
+### 3. Mixed Mutability
+
+- **DYNAMIC** (credit report): No `content_hash`. Content reflects latest data. `data_as_of` signals freshness. Hash mismatch is expected, not disputable.
+- **STATIC** (everything else): `content_hash` with SHA-256. Agent verifies integrity on delivery. Mismatch is grounds for `DisputeTransaction`.
+
+The same `ResourceIdentity` message handles both — the `resource_mutability` field drives verification behavior.
+
+### 4. Cross-Exchange Budget Tracking
+
+The `budget_scope: "deal:acme-acquisition"` field in `RequestConstraints` enables deal-level spend tracking across all Exchanges. The Broker:
+1. Checks cumulative spend before each transaction batch
+2. Denies transactions that would exceed the budget
+3. Reports actual spend per Exchange in `UsageReport.ext.budget_scope`
+4. Maintains a ledger for audit (which Exchange got how much for what)
+
+### 5. ROI: Licensed Data vs. Manual Research
+
+| | Licensed (RAMP) | Manual (Paralegal) |
+|---|---|---|
+| **Time** | ~30 seconds (parallel fetch) | 2-4 days |
+| **Cost** | $85.39 (data) + Broker fee | $6,000-$12,000 (labor) |
+| **Completeness** | 6 resource types, automated | Risk of missed sources |
+| **Audit trail** | Transaction IDs, billing IDs, report IDs per resource | Paralegal timesheets |
+| **Reproducibility** | Same query produces same results | Varies by researcher |
+
+RAMP replaces the **data acquisition** layer of due diligence, not the analysis. The agent still reasons over the data — but it acquires it in seconds instead of days, with full provenance and audit trail.
+
+---
+
+## Protocol Summary
+
+| Step | RPC | What Happens |
+|------|-----|-------------|
+| 1 | — | Agent sends entity-based intent to Broker |
+| 2 | — | Broker decomposes into 6 domain-specific queries |
+| 3 | `DiscoverResources` (x6) | 6 parallel SupplyQueries to 4+ Exchanges |
+| 4 | — | Broker aggregates offers, checks budget |
+| 5 | `ExecuteTransaction` (x4) | Batch transactions to each Exchange |
+| 6 | — | Mixed-format fetch (JSON, PDF, HTML) with hash verification |
+| 7 | `ReportUsage` (x6+) | Per-transaction usage reports, all linked via budget_scope |
+
+**Authentication at every step:**
+- **Agent to Broker**: `Requester.signature` (Ed25519)
+- **Broker to Exchange**: `IntermediaryHop.signature` + forwarded `Requester.signature`
+- **Exchange to Agent**: `exchange_signature` on every Offer (Ed25519, stateless verification)
+- **Signed URLs**: HMAC-SHA256 (Exchange-CDN shared secret, agent identity bound)
+
+## Next Steps
+
+- [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1) — simple per-article and subscription scenarios
+- [Scenario Walkthrough](/protocol/scenario-walkthrough) — multi-party narrative with Broker and dispute resolution
+- [Transaction Flow](/protocol/transaction-flow) — step-by-step protocol specification
+- [Resource Mutability](/protocol/content-mutability) — STATIC vs DYNAMIC vs LIVE
+- [Extension Profiles](/protocol/extension-profiles) — domain-specific metadata extensions

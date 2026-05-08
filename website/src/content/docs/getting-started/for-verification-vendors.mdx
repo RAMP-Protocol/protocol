@@ -1,0 +1,237 @@
+---
+title: "RAMP for Verification Vendors"
+description: "How verification and quality assessment companies provide trusted attestations across any resource domain"
+---
+
+## Where You Fit
+
+Every resource domain has a trust problem. When an AI agent sees three offers for the same resource from three different Exchanges, how does it choose? **Price alone creates a race to the bottom.** Independent verification lets premium resources command premium pricing.
+
+In advertising, companies like GumGum, IAS, and DoubleVerify solve this for content quality. But the verification role exists in every domain RAMP serves:
+
+| Domain | Verification Vendor | What They Verify |
+|---|---|---|
+| Media/News | DoubleVerify, GumGum, IAS | Content quality, token count, language, categories |
+| Academic | CrossMark, Retraction Watch | Retraction status, version lifecycle, peer review |
+| Medical | De-identification auditors | PHI removal completeness, HIPAA compliance |
+| Legal | Consolidation verifiers | Amendment incorporation accuracy, legal status |
+| Financial | Compliance auditors | Data freshness, score model version, FCRA compliance |
+| Geospatial | Quality assessment services | Cloud cover, spatial resolution, AOI coverage |
+
+RAMP provides a single protocol envelope — `ResourceAttestation` — that works for all of them. The same signature scheme, the same push API, the same trust model.
+
+## What RAMP Carries for You
+
+A `ResourceAttestation` is a signed envelope of claims from your company about a resource at a specific URI. You sign claims with your Ed25519 key, and agents verify the signature to trust your measurements without re-verifying.
+
+The `claims` field is a flexible `Struct` — it carries whatever your domain needs. Here are two examples that show the range:
+
+**Media content verification** (token count, language, categories):
+
+```json
+{
+  "verifier": "doubleverify.com",
+  "kid": "dv-2026-Q1",
+  "attested_at": "2026-03-18T08:45:00Z",
+  "uri": "https://example-news.com/article/breaking-story",
+  "claims": {
+    "estimated_quantity": 2450,
+    "word_count": 1856,
+    "language": "en",
+    "iab_categories": ["News", "Technology"],
+    "news.correction_status": "current",
+    "content_hash": "doubleverify-v1:x9y8z7w6v5u4t3s2r1q0p9o8n7m6l5k4",
+    "hash_method": "doubleverify-v1"
+  },
+  "signature": "base64-encoded-ed25519-signature"
+}
+```
+
+**Medical imaging de-identification audit** (HIPAA compliance, PHI removal):
+
+```json
+{
+  "verifier": "deid-audit.example.com",
+  "kid": "deid-2026-Q1",
+  "attested_at": "2026-03-17T14:22:00Z",
+  "uri": "https://pacs.hospital.example/wado-rs/studies/1.2.840.113619.2.55",
+  "claims": {
+    "deid_profile": "DICOM PS3.15 Basic Profile",
+    "burned_in_text_removed": true,
+    "face_defaced": true,
+    "private_tags_removed": true,
+    "phi_fields_scrubbed": 47,
+    "phi_residual_risk": "low",
+    "compliance_framework": "HIPAA Safe Harbor",
+    "audit_standard": "HHS 45 CFR 164.514(b)"
+  },
+  "signature": "base64-encoded-ed25519-signature"
+}
+```
+
+The same `ResourceAttestation` envelope. The same Ed25519 signature verification. Completely different domains.
+
+- **`verifier`**: Your company domain — used to look up your public keys
+- **`claims`**: Measurable properties of the resource (flexible `Struct` — any key-value pairs your domain requires)
+- **`signature`**: Ed25519 signature over JCS-canonicalized (RFC 8785) representation of all fields — proves origin and integrity
+
+This is Level 2 (third-party) attestation. Agents trust your attestation without re-verifying the resource themselves. Your measurements become the authoritative baseline for automated dispute resolution — if a token count discrepancy is corroborated by CDN response size, the agent gets an automatic credit.
+
+## The Regulatory Dimension
+
+Some verification is not optional. In several domains, independent verification is legally required — not just a quality enhancement:
+
+| Requirement | Domain | Why It's Mandatory |
+|---|---|---|
+| HIPAA de-identification audit | Medical imaging | PHI must be verified removed before any external access |
+| FCRA compliance certification | Credit reports | Score model version and data sources must be auditable |
+| Retraction status | Academic publishing | Citing retracted papers creates legal and reputational liability |
+| Amendment incorporation | Legal/Legislative | Relying on non-consolidated legislation creates compliance risk |
+| Export control classification | Geospatial/Defense | Spatial resolution must be verified against ITAR/EAR thresholds |
+
+For these domains, `ResourceAttestation` is not a nice-to-have — it is the mechanism that makes RAMP transactions possible at all. An AI agent accessing a brain MRI without a de-identification attestation is a HIPAA violation. An agent pulling credit data without FCRA compliance verification exposes the consumer to regulatory action.
+
+## Extension Profile Integration
+
+RAMP v1.0 defines **domain extension profiles** — standardized claim vocabularies for specific industries. As a verification vendor, you provide profile-specific claims in your `ResourceAttestation` entries:
+
+| Profile | Example Verification Claims |
+|---|---|
+| `ramp-news-v1` | `news.correction_status: "current"`, `news.iptc_subject: ["04000000"]`, `news.content_state: "usable"` |
+| `ramp-academic-v1` | `academic.retraction_status: "not_retracted"`, `academic.oa_status: "gold"`, `academic.version: "VoR"` |
+| `ramp-legal-v1` | `legal.consolidation_current: true`, `legal.in_force: true`, `legal.amendment_count: 12` |
+
+Profile-specific claims use a namespaced format. Any Exchange that declares conformance to a profile (via `supported_profiles` in its manifest) will interpret your namespaced claims consistently. This is what makes interoperability work — your `academic.retraction_status` means the same thing on every conforming Exchange.
+
+## How You Push Data
+
+You push signed `ResourceAttestation` entries to Exchanges via the **CatalogService API**:
+
+```
+POST /ramp.v1.CatalogService/PushContent
+
+{
+  "tenant_id": "hearst-media",
+  "entries": [
+    {
+      "domain": "techcrunch.com",
+      "path": "/premium/ai-regulation-2026.html",
+      "title": "AI Regulation: What Providers Need to Know",
+      "word_count": 2500,
+      "estimated_quantity": 3300,
+      "attestations": [
+        {
+          "verifier": "gumgum.com",
+          "kid": "gg-2026-Q1",
+          "attested_at": "2026-03-14T10:00:00Z",
+          "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
+          "claims": {
+            "estimated_quantity": 3300,
+            "word_count": 2500,
+            "language": "en",
+            "news.correction_status": "current",
+            "news.iptc_subject": ["04000000", "04006005"],
+            "content_hash": "gumgum-v1:a1b2c3d4...",
+            "hash_method": "gumgum-v1"
+          },
+          "signature": "base64-encoded-ed25519-signature"
+        }
+      ]
+    }
+  ],
+  "caller_id": "gumgum.com",
+  "caller_signature": "<Ed25519 signature>",
+  "caller_signature_algorithm": "ed25519"
+}
+```
+
+The same `PushContent` API works regardless of domain. A de-identification auditor pushing HIPAA compliance attestations for medical imaging uses the same endpoint — only the `claims` content differs.
+
+The Exchange verifies your signature using your public key from `/.well-known/ramp-verifier.json`, confirms you are listed in the provider's `catalog_contributors`, and attaches your attestation to the catalog entry.
+
+## What You Can Verify
+
+Your `ResourceAttestation` claims can include any measurable property relevant to your domain:
+
+**Core claims** (cross-domain):
+
+| Claim | Field in `claims` | How It's Used |
+|---|---|---|
+| Quantity estimate | `estimated_quantity` | Authoritative baseline for automated dispute resolution |
+| Word count | `word_count` | Independent verification of provider claims |
+| Content hash | `content_hash` + `hash_method` | Cross-exchange deduplication, integrity verification |
+| Language | `language` | Agents filter by language |
+
+**Domain-specific claims** (examples across industries):
+
+| Domain | Claim | Purpose |
+|---|---|---|
+| Media | `iab_categories`, `news.correction_status` | Topic classification, editorial lifecycle |
+| Academic | `academic.retraction_status`, `academic.version` | Citation safety, version tracking |
+| Medical | `deid_profile`, `phi_residual_risk` | HIPAA compliance gate |
+| Legal | `legal.in_force`, `legal.consolidation_current` | Legal validity, amendment status |
+| Financial | `fcra_compliant`, `score_model_version` | Regulatory compliance, model auditability |
+| Geospatial | `cloud_cover_pct`, `spatial_resolution_m` | Quality assessment, fitness for purpose |
+
+The `claims` Struct is extensible — add any key-value pairs your domain requires. Profile-specific claims (namespaced with `news.*`, `academic.*`, `legal.*`) are validated against the profile's JSON Schema by conforming Exchanges.
+
+## Integration Pattern
+
+```
+Your Analysis Pipeline (crawlers, APIs, audit tools, QA systems)
+       |
+  Analyze resource (domain-specific: tokens, compliance, de-id, retraction status)
+       |
+  Sign ResourceAttestation with your Ed25519 key (JCS canonicalization)
+       |
+  CatalogService.PushContent() → Exchange A
+  CatalogService.PushContent() → Exchange B
+  CatalogService.PushContent() → Exchange C
+       |
+  Exchanges verify signature, check catalog_contributors, attach attestation
+       |
+  AI agents see your attestations in Offers (Level 2 third-party verification)
+```
+
+**Prerequisites:**
+
+1. **Publish `ramp-verifier.json`**: Host your Ed25519 public keys at `https://yourcompany.com/.well-known/ramp-verifier.json` (JWKS format). Exchanges fetch this to verify your attestation signatures.
+2. **Be listed in `catalog_contributors`**: Each provider must list your domain in their `catalog_contributors` before you can push attestations for their content. The Exchange rejects pushes from unlisted contributors.
+3. **Register with Exchanges**: Ed25519 key exchange, then push data on whatever schedule makes sense — real-time on content publish, daily batch, triggered by provider CMS webhooks, or on regulatory audit cycles.
+
+## Authentication
+
+Every `PushContent` request is signed with your Ed25519 private key. Each `ResourceAttestation` also carries its own Ed25519 signature over JCS-canonicalized claims. The Exchange verifies both:
+
+1. **Request-level**: The `caller_signature` on the `PushContent` request proves the request came from your domain
+2. **Attestation-level**: The `signature` field on each `ResourceAttestation` proves the claims were signed by the key identified by `kid`
+
+The Exchange fetches your public keys from `https://yourcompany.com/.well-known/ramp-verifier.json` — no shared secrets.
+
+## Business Model
+
+The protocol doesn't prescribe your business model. Options vary by domain:
+
+- **Provider partnership**: Provider pays for quality assessment or compliance certification of their catalog
+- **Exchange fee**: Exchange pays per-entry for quality enrichment or compliance verification
+- **Regulatory mandate**: Provider must have independent verification to participate (HIPAA, FCRA) — your service is a prerequisite
+- **Attribution-based**: Your domain appears as the `verifier` in every `ResourceAttestation` you sign — visible to all agents
+- **Existing relationship extension**: If you already provide verification services (ad-tech quality signals, CrossMark for publishers, compliance audits for financial institutions), RAMP adds a new distribution channel
+
+## Three-Layer Governance
+
+RAMP uses a three-layer governance model to prevent fragmentation:
+
+| Layer | Scope | Example |
+|---|---|---|
+| **1. Core Proto** | Fields in `ramp.proto` | `resource_mutability`, `data_as_of` |
+| **2. Standard Extensions** | `ramp.*` namespace in ext | `ramp.compliance.dua_required` |
+| **3. Domain Profiles** | Domain namespace in ext | `news.iptc_guid`, `academic.doi` |
+
+Your attestation claims at Layer 3 are governed by the profile specification — each profile defines the claim names, types, and validation rules. This ensures interoperability: any Exchange that declares conformance to `ramp-news-v1` will interpret your `news.*` claims consistently.
+
+## Next Steps
+
+1. Review the [CatalogService proto](/reference/proto-ramp/) for the full API
+2. See the [Extension Profiles](/protocol/extension-profiles/) for domain-specific claim vocabularies
+3. Contact participating Exchanges to register as a verification vendor

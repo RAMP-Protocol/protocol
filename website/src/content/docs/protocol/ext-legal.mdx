@@ -1,0 +1,831 @@
+---
+title: "Extension: ramp-legal-v1"
+description: "Legislation, case law, and patents extension profile — field vocabulary, conformance levels, and examples"
+---
+
+## Overview
+
+The RAMP-Legal v1 extension profile defines a vocabulary for the `ext` fields in RAMP protocol messages, enabling Exchanges, Brokers, and AI agents to discover, compare, transact, and verify legal content across three sub-domains:
+
+- **Legislation** -- EU regulations, directives, and decisions; US statutes and bills; UK acts; national laws. Supports amendment chains, point-in-time consolidation, and the EU's 24-language all-authentic model.
+- **Case law** -- US federal court filings (PACER/CM/ECF), EU Court of Justice decisions, national court opinions. Supports sealed access, citation treatment signals, and docket container navigation.
+- **Patents** -- USPTO, EPO, and WIPO applications and grants. Supports kind codes, patent families, CPC classification, prosecution history, and legal status tracking.
+
+Every field in this profile traces to an existing industry standard (ELI, CELEX, ECLI, Akoma Ntoso, WIPO ST.3/ST.16, CPC, INPADOC). No new identifier schemes are invented.
+
+**Normative references:**
+
+| Standard | Source | Used for |
+|----------|--------|----------|
+| ELI | EU Council, 2012 | Legislation identifiers, ontology properties |
+| CELEX | EUR-Lex | Language-independent document numbers |
+| ECLI | EU Council, 2010 | Case law identifiers across EU courts |
+| Akoma Ntoso | OASIS LegalDocML v1.0 | Document type vocabulary, FRBR levels |
+| WIPO ST.3 | WIPO | Patent country codes |
+| WIPO ST.16 | WIPO | Patent kind codes |
+| CPC | EPO/USPTO | Patent classification |
+| INPADOC | EPO | Patent legal status and family data |
+| BCP 47 | IETF | Language tags |
+| ISO 3166-1 | ISO | Jurisdiction codes |
+
+## Profile Declaration
+
+A Exchange declares support for this profile by including `"ramp-legal-v1"` in the `supported_profiles` field of its `ExchangeManifest`:
+
+```json
+{
+  "ver": "1.0",
+  "domain": "legal.example.com",
+  "name": "Legal Document Exchange",
+  "supported_profiles": ["ramp-legal-v1"],
+  "ext": {
+    "legal.jurisdictions": ["EU", "US", "GB"],
+    "legal.sub_domains": ["legislation", "case_law", "patents"]
+  }
+}
+```
+
+A Broker uses `supported_profiles` to route legal queries only to Exchanges that understand this vocabulary.
+
+## Field Naming Conventions
+
+All extension keys use the `legal.` namespace prefix. Sub-domain-specific fields use a secondary prefix:
+
+| Prefix | Scope |
+|--------|-------|
+| `legal.*` | Cross-domain (jurisdiction, document type, language) |
+| `legal.legislation.*` | Legislation-specific (ELI, CELEX, consolidation) |
+| `legal.case.*` | Case-law-specific (ECLI, docket, court, treatment) |
+| `legal.patent.*` | Patent-specific (kind code, CPC, family, prosecution) |
+
+Values are strings unless otherwise noted. Dates use ISO 8601 (`YYYY-MM-DD`). Arrays are JSON arrays of strings.
+
+---
+
+## Identity Vocabulary (ResourceIdentity.ext)
+
+These fields appear in `Offer.identity.ext` to identify legal resources for cross-Exchange deduplication.
+
+### Cross-domain identity
+
+| Key | Type | Standard | Description | Broker use |
+|-----|------|----------|-------------|------------|
+| `legal.jurisdiction` | string | ISO 3166-1 / ELI | Issuing jurisdiction. ISO alpha-2 code, plus `EU` for EU institutions. | Filter offers by jurisdiction; route to jurisdiction-specific Exchanges. |
+| `legal.document_type` | string | AKN root elements | Document type. Values: `act`, `bill`, `amendment`, `judgment`, `order`, `opinion`, `patent_application`, `patent_grant`, `filing`, `docket`, `gazette`. | Distinguish legislation from case law from patents in mixed results. |
+| `legal.date_document` | string | ELI `eli:date_document` | Date of the document (adoption, decision, or filing). ISO 8601. | Temporal filtering; compare same document from different providers. |
+
+### Legislation identity
+
+| Key | Type | Standard | Description | Broker use |
+|-----|------|----------|-------------|------------|
+| `legal.legislation.eli` | string | ELI URI | Full ELI URI. Example: `http://data.europa.eu/eli/reg/2016/679/oj`. | Canonical dedup key for EU legislation across Exchanges. |
+| `legal.legislation.celex` | string | CELEX | CELEX number. Example: `32016R0679`. Language-independent. | Dedup key; lookup in EUR-Lex SPARQL endpoint. |
+| `legal.legislation.urn_lex` | string | RFC 9676 | URN:LEX identifier. Example: `urn:lex:eu:council:regulation:2016-04-27;679`. | Alternative persistent identifier for non-EU legislation. |
+| `legal.legislation.official_journal_ref` | string | OJ format | Official Journal reference. Example: `OJ L 119, 4.5.2016, p. 1`. | Verify publication provenance. |
+
+### Case law identity
+
+| Key | Type | Standard | Description | Broker use |
+|-----|------|----------|-------------|------------|
+| `legal.case.ecli` | string | ECLI | European Case Law Identifier. Example: `ECLI:EU:C:2014:317`. | Canonical dedup key for EU case law. |
+| `legal.case.docket_number` | string | Court-specific | Case/docket number. Example: `1:24-cv-05432-JSR`. | Dedup US federal cases; locate in PACER. |
+| `legal.case.court_id` | string | ECLI court code / CourtListener ID | Court identifier. Example: `scotus`, `ca9`, `nyed`, `C` (CJEU), `T` (General Court). | Filter by court; determine precedential weight. |
+| `legal.case.neutral_citation` | string | Vendor-neutral citation | Court-assigned citation. Example: `[2024] UKSC 15`, `2024 SCC 5`. | Dedup UK/Canadian decisions. |
+| `legal.case.document_number` | string | CM/ECF | Docket entry number within a case. Example: `45`, `45-1`. | Identify specific filing within a case container. |
+
+### Patent identity
+
+| Key | Type | Standard | Description | Broker use |
+|-----|------|----------|-------------|------------|
+| `legal.patent.publication_number` | string | WIPO ST.3 + number + ST.16 | Full publication number with kind code. Example: `EP3456789A1`, `US11234567B2`. | Canonical dedup key for patent documents. |
+| `legal.patent.application_number` | string | Country-specific | Application number. Example: `17/123,456` (US), `EP21234567.8` (EP). | Link pre-grant and post-grant documents. |
+| `legal.patent.kind_code` | string | WIPO ST.16 | Kind code only. Example: `A1`, `B2`, `U1`. | Distinguish application from grant; select correct document stage. |
+| `legal.patent.country_code` | string | WIPO ST.3 | Patent office country. Example: `US`, `EP`, `WO`. | Filter by patent office. |
+
+**Field count: 18 identity fields.**
+
+---
+
+## Query Vocabulary (ResourceQuery.ext)
+
+These fields appear in `ResourceQuery.ext` to express legal-specific search constraints when querying a Exchange.
+
+| Key | Type | Standard | Description | Exchange behavior |
+|-----|------|----------|-------------|-------------------|
+| `legal.jurisdiction` | string | ISO 3166-1 | Restrict to a jurisdiction. Same key as identity. | Filter catalog to matching jurisdiction. |
+| `legal.document_type` | string | AKN | Restrict to a document type. | Filter by document type. |
+| `legal.language_preferred` | string | BCP 47 | Preferred language version. Example: `de`. | Return offers in preferred language first; fall back to other available languages. |
+| `legal.date_from` | string | ISO 8601 | Documents dated on or after this date. | Temporal range filter (lower bound). |
+| `legal.date_to` | string | ISO 8601 | Documents dated on or before this date. | Temporal range filter (upper bound). |
+| `legal.legislation.in_force_at` | string | ISO 8601 | Return the version in force at this date. | Select point-in-time consolidated version. |
+| `legal.case.court_id` | string | ECLI / CL ID | Restrict to a specific court. | Filter case law offers by court. |
+| `legal.case.court_level` | string | Hierarchy | Court tier. Values: `supreme`, `appellate`, `trial`, `administrative`. | Filter by precedential weight. |
+| `legal.patent.cpc_codes` | array | CPC | Classification codes to match. Example: `["H04L9/32"]`. | Filter patents by technology area. |
+| `legal.patent.status` | string | INPADOC | Patent status filter. Values: `alive`, `dead`, `transitional`. | Return only active or expired patents. |
+
+**Field count: 10 query fields.**
+
+---
+
+## Offer Metadata (Offer.ext)
+
+These fields appear in `Offer.ext` to describe legal-specific properties of an offered resource.
+
+### Cross-domain offer metadata
+
+| Key | Type | Standard | Description | Agent use |
+|-----|------|----------|-------------|-----------|
+| `legal.language` | string | BCP 47 | Language of this specific offer. Example: `fr`. | Select language version; compare with `language_preferred`. |
+| `legal.available_languages` | array | BCP 47 | All language versions available for the same resource. Example: `["en","fr","de","es"]`. | Discover alternative languages; request additional versions. |
+| `legal.editorial_tier` | string | Publisher distinction | Content enrichment level. Values: `raw` (government/official source), `enhanced` (publisher value-add: cross-references, summaries), `annotated` (full editorial: headnotes, commentary). | Compare free raw vs paid enhanced; justify cost difference. |
+| `legal.copyright_status` | string | 17 USC 105 / OGL / EU reuse decision | Copyright status. Values: `public_domain`, `crown_copyright_ogl`, `publisher_copyright`, `database_right`. | Determine reuse rights; assess training eligibility. |
+| `legal.format_standard` | string | Various | Underlying format. Values: `akn`, `akn4eu`, `formex`, `uslm`, `clml`, `pdf_a`. | Select machine-parseable format (AKN) over PDF for extraction. |
+
+### Legislation offer metadata
+
+| Key | Type | Standard | Description | Agent use |
+|-----|------|----------|-------------|-----------|
+| `legal.legislation.in_force` | string | ELI `eli:in_force` | Force status. Values: `in_force`, `not_in_force`, `partially_in_force`. | Skip repealed legislation; flag partially-in-force acts. |
+| `legal.legislation.consolidation_status` | string | ELI lifecycle | Version type. Values: `original` (as adopted), `consolidated` (incorporating amendments to a date), `amended` (an amending act itself). | Select consolidated for current law; original for legislative history. |
+| `legal.legislation.version_date` | string | ELI `eli:version_date` | Point-in-time version date. Example: `2024-01-15`. | Retrieve law as it stood on a specific date. |
+| `legal.legislation.amendment_of` | string | ELI `eli:amends` | Identifier (ELI or CELEX) of the act this amends. | Navigate amendment chains backward. |
+| `legal.legislation.amended_by` | array | ELI `eli:amended_by` | Identifiers of acts that amend this one. | Navigate amendment chains forward. |
+| `legal.legislation.date_entry_into_force` | string | ELI | When the legislation entered into force. ISO 8601. | Determine temporal applicability. |
+
+### Case law offer metadata
+
+| Key | Type | Standard | Description | Agent use |
+|-----|------|----------|-------------|-----------|
+| `legal.case.access_level` | string | US court rules | Access restriction. Values: `public`, `sealed`, `restricted`, `redacted`. | Skip sealed content; understand redacted limitations. |
+| `legal.case.decision_type` | string | ECLI metadata / AKN | Type of judicial action. Values: `judgment`, `order`, `opinion`, `slip_opinion`. | Distinguish final decisions from procedural orders. |
+| `legal.case.treatment` | string | Shepard's/KeyCite concepts | Subsequent treatment signal. Values: `positive`, `caution`, `negative`, `overruled`. | Avoid relying on overruled precedent; flag questionable authority. |
+| `legal.case.filing_type` | string | CM/ECF categories | Type of court filing. Values: `complaint`, `answer`, `motion`, `brief`, `opinion`, `order`, `transcript`, `exhibit`. | Select specific filing types from a case docket. |
+
+### Patent offer metadata
+
+| Key | Type | Standard | Description | Agent use |
+|-----|------|----------|-------------|-----------|
+| `legal.patent.status` | string | INPADOC | Legal status. Values: `alive`, `dead`, `transitional`, `indeterminate`. | Filter out expired/abandoned patents. |
+| `legal.patent.cpc_codes` | array | CPC | Classification codes. Example: `["H04L9/32","G06F21/64"]`. | Assess technology area; find related patents. |
+| `legal.patent.content_part` | string | WIPO ST.96 | Which part of the patent this offer covers. Values: `full`, `biblio`, `description`, `claims`, `abstract`, `drawings`, `file_wrapper`. | Select specific sections (claims-only is cheaper than full). |
+| `legal.patent.expiration_date` | string | Calculated from filing + 20yr + PTA | Estimated expiration date. ISO 8601. | Assess remaining patent life. |
+| `legal.patent.family_members` | array | INPADOC simple family | Publication numbers of family members. Example: `["US11234567B2","EP3456789B1","WO2020123456A1"]`. | Navigate patent family; find equivalent grants in other jurisdictions. |
+
+**Field count: 20 offer fields.**
+
+---
+
+## Attestation Claims (ResourceAttestation.claims)
+
+These are recommended claim keys for `ResourceAttestation.claims` in the legal domain. Attestation verifiers (e.g., EUR-Lex, USPTO, Westlaw) include these in their signed claim envelopes.
+
+| Claim key | Type | Description | Verifier examples |
+|-----------|------|-------------|-------------------|
+| `legal.authority_level` | string | Source authority. Values: `official` (government publisher), `commercial_enhanced` (publisher with value-add), `aggregator` (third-party aggregator like CourtListener). | EUR-Lex attests `official`; LexisNexis attests `commercial_enhanced`. |
+| `legal.consolidation_verified` | boolean | Whether the consolidated text has been verified against all amending acts. | EUR-Lex attests true for consolidations it publishes. |
+| `legal.consolidation_date` | string | Date through which amendments are incorporated. ISO 8601. | Wolters Kluwer attests the consolidation currency date. |
+| `legal.ocr_confidence` | number | OCR quality score (0.0-1.0) for scanned documents. | PACER aggregator attests OCR quality for older filings. |
+| `legal.text_extractable` | boolean | Whether full text can be reliably extracted (vs. image-only PDF). | CourtListener attests based on PDF/A conformance level. |
+| `legal.authenticity` | string | Language version status. Values: `authentic` (legally binding), `machine_translated`, `unofficial_translation`. | EUR-Lex attests `authentic` for all 24 official language versions. |
+| `legal.patent.examination_status` | string | Patent examination stage. Values: `searched`, `examined`, `granted`, `opposed`. | EPO OPS attests based on register data. |
+| `legal.patent.maintenance_current` | boolean | Whether maintenance fees are paid and patent is in good standing. | USPTO attests based on fee payment records. |
+
+**Field count: 8 attestation claims.**
+
+---
+
+## Dispute Extensions (DisputeRequest.ext)
+
+These fields appear in `DisputeRequest.ext` to provide domain-specific evidence for legal content disputes.
+
+| Key | Type | Description | Example |
+|-----|------|-------------|---------|
+| `legal.dispute.expected_language` | string | Language agent expected (from offer). | `"de"` |
+| `legal.dispute.received_language` | string | Language actually received. | `"fr"` |
+| `legal.dispute.expected_version_date` | string | Point-in-time version requested. | `"2024-01-15"` |
+| `legal.dispute.received_version_date` | string | Version date of content actually delivered. | `"2020-06-01"` |
+| `legal.dispute.expected_content_part` | string | Patent section expected. | `"file_wrapper"` |
+| `legal.dispute.received_content_part` | string | Patent section actually received. | `"claims"` |
+| `legal.dispute.sealed_unexpected` | boolean | Content was sealed/restricted when offer indicated public. | `true` |
+
+**Field count: 7 dispute fields.**
+
+---
+
+## Legislation Modeling
+
+### Document lifecycle
+
+EU legislation follows a lifecycle from proposal to repeal. RAMP-Legal models this through the offer metadata fields:
+
+```
+Bill (status=pending) --> Adopted (in_force=in_force, consolidation_status=original)
+    --> Amended (amendment_of links to amended act)
+    --> Consolidated (consolidation_status=consolidated, version_date=point-in-time)
+    --> Repealed (in_force=not_in_force)
+```
+
+### Amendment chains
+
+An amendment chain is a sequence of legislative acts where each amends one or more previous acts. The Broker reconstructs the chain using `legal.legislation.amendment_of` (backward pointer) and `legal.legislation.amended_by` (forward pointers).
+
+For example, the GDPR (Regulation 2016/679) as consolidated on 2024-01-15:
+- The `amendment_of` field is absent (it is a base act, not an amendment).
+- The `amended_by` field lists identifiers of any amending regulations.
+- The `consolidation_status` is `consolidated`.
+- The `version_date` is `2024-01-15`.
+
+### Consolidation
+
+EUR-Lex provides consolidated texts at specific dates. The agent selects the appropriate version by querying with `legal.legislation.in_force_at`. The Exchange returns offers with `version_date` matching the requested point in time.
+
+The `ResourceMutability` for published official legislation is `STATIC` (the Official Journal publication never changes). For consolidated versions, it is `DYNAMIC` (the consolidation is recomputed as new amendments are adopted).
+
+### ELI FRBR levels
+
+ELI distinguishes three FRBR levels. RAMP maps these to separate offers:
+
+| FRBR Level | ELI term | RAMP representation |
+|------------|----------|---------------------|
+| Work | `eli:LegalResource` | The abstract act, identified by `legal.legislation.eli` at the Work level. |
+| Expression | `eli:LegalExpression` | A language version, identified by `legal.language` + `legal.legislation.version_date`. Each expression is a separate Offer. |
+| Manifestation | `eli:Format` | A file format (PDF, AKN XML, HTML). Mapped to the Offer's `content_type` field. |
+
+---
+
+## Case Law Modeling
+
+### US federal court filings
+
+A US federal case is a container (docket) with many filings. RAMP models each filing as a separate resource (separate URI, separate Offer), with the docket number as a linking key:
+
+- **Docket container**: Not an offer itself, but discoverable via `legal.case.docket_number`. The Broker queries with this docket number and receives offers for individual filings.
+- **Individual filing**: Each filing has its own URI. `legal.case.document_number` identifies it within the docket. `legal.case.filing_type` describes what kind of filing it is.
+
+### Sealed and restricted access
+
+Court-restricted documents use `legal.case.access_level`:
+
+| Value | Meaning | RAMP behavior |
+|-------|---------|---------------|
+| `public` | Available to all. | Normal transaction flow. |
+| `sealed` | Not available; court order required. | Exchange returns `CONTENT_BLOCKED` as `OfferAbsenceReason`. |
+| `restricted` | Available with credentials. | Offer includes `AccessRestrictions` requiring specific `allowed_users` or credentials. |
+| `redacted` | Public version with redactions. | Normal transaction; `legal.case.access_level` signals incompleteness. |
+
+### EU case law (ECLI)
+
+CJEU decisions are identified by ECLI. The language of the case (`legal.case.language_of_case`) is the only authentic version. Other language versions are translations, marked with `legal.authenticity = "unofficial_translation"` in attestation claims.
+
+### Citation treatment
+
+The `legal.case.treatment` field provides a simplified version of Shepard's/KeyCite signals. A Broker or agent uses this to assess whether a case is still good law:
+
+| Value | Meaning | Agent action |
+|-------|---------|--------------|
+| `positive` | Followed, affirmed, approved. | Safe to rely on. |
+| `caution` | Distinguished, criticized, questioned. | Review carefully; may not apply. |
+| `negative` | Reversed, vacated on different grounds. | Do not rely on without further analysis. |
+| `overruled` | Expressly overruled by a later case. | Do not cite as authority. |
+
+---
+
+## Patent Modeling
+
+### Patent document types
+
+A single patent number maps to multiple document types, each potentially a separate offer:
+
+| `content_part` value | Description | Typical format | Pricing |
+|---------------------|-------------|----------------|---------|
+| `full` | Complete patent document. | PDF, XML | Per patent |
+| `biblio` | Bibliographic data only (title, inventors, dates, CPC). | JSON, XML | Often free |
+| `description` | Technical description/specification. | Text | Per page |
+| `claims` | Patent claims (legal scope). | Text | Per page |
+| `abstract` | Abstract only. | Text | Free |
+| `drawings` | Technical drawings. | TIFF, PDF | Per page |
+| `file_wrapper` | Full prosecution history (office actions, responses, amendments). | PDF collection | Per document |
+
+### Kind codes
+
+Kind codes (WIPO ST.16) identify the stage of patent processing:
+
+| Code | Meaning | ResourceMutability |
+|------|---------|-------------------|
+| `A1` | Published application (USPTO) / Application with search report (EPO) | `STATIC` |
+| `A2` | Republished application (USPTO) / Application without search report (EPO) | `STATIC` |
+| `B1` | Granted patent (no prior pub, USPTO) / Granted patent (EPO) | `STATIC` |
+| `B2` | Granted patent (had prior pub, USPTO) / Amended after opposition (EPO) | `STATIC` |
+
+### Patent families
+
+The `legal.patent.family_members` field lists publication numbers of family members (same invention filed in multiple patent offices). A Broker uses this to:
+
+1. Find equivalent patents in a target jurisdiction.
+2. Compare pricing across offices (USPTO free vs. commercial enriched).
+3. Build a complete picture of global patent protection.
+
+### Legal status lifecycle
+
+```
+Filed (status=alive) --> Published A1 (status=alive) --> Examined (status=alive)
+    --> Granted B1/B2 (status=alive) --> Maintenance (status=alive)
+    --> Expired/Abandoned/Revoked (status=dead)
+```
+
+The `legal.patent.status` field reflects the current INPADOC-derived status. `legal.patent.expiration_date` gives the calculated expiry (filing date + 20 years + PTA for US, adjusted for terminal disclaimers).
+
+---
+
+## Multilingual Support
+
+### The EU all-authentic model
+
+All 24 official EU language versions of legislation are equally authentic (legally binding). This means:
+
+1. A query for `legal.legislation.celex = "32016R0679"` (the GDPR) may return up to 24 offers, one per language.
+2. Each offer carries `legal.language` with the BCP 47 code.
+3. Each offer carries `legal.available_languages` listing all available versions.
+4. The Broker selects based on the agent's `legal.language_preferred` from the query.
+
+### Language preference resolution
+
+When an agent specifies `legal.language_preferred`:
+
+1. Exchange SHOULD return the preferred language first.
+2. If unavailable, Exchange SHOULD return offers in available languages, sorted by: (a) English, (b) French, (c) German, (d) remaining alphabetically.
+3. Each offer's `legal.language` indicates what it actually is.
+
+### Authenticity status
+
+The `legal.authenticity` attestation claim distinguishes:
+
+| Value | Meaning | Legal weight |
+|-------|---------|--------------|
+| `authentic` | Official language version adopted by the issuing authority. All 24 EU legislation versions are authentic. | Full legal standing. |
+| `machine_translated` | Machine translation (e.g., eTranslation). Not legally binding. | For comprehension only. |
+| `unofficial_translation` | Human translation not adopted as official. | Informational; no legal standing. |
+
+### Case law language rules
+
+Case law is more restrictive than legislation:
+
+- **CJEU**: Authentic only in the language of the case. All other versions are translations.
+- **US federal courts**: English only (no multilingual concern).
+- **UK courts**: English (Welsh for some Welsh proceedings).
+
+The `legal.case.language_of_case` field identifies the authentic language for EU case law.
+
+---
+
+## Content Lifecycle
+
+### Legislation
+
+| Event | Offer fields affected | ResourceMutability |
+|-------|-----------------------|-------------------|
+| Initial adoption | `consolidation_status=original`, `in_force=in_force` | `STATIC` |
+| Amendment adopted | New offer for the amending act with `amendment_of` pointing to amended act | `STATIC` |
+| Consolidation updated | `consolidation_status=consolidated`, `version_date` updated | `DYNAMIC` |
+| Correction published | New offer for corrigendum; original offer unchanged | `STATIC` |
+| Repeal | `in_force=not_in_force` on subsequent queries | `STATIC` |
+
+### Case law
+
+| Event | Offer fields affected | ResourceMutability |
+|-------|-----------------------|-------------------|
+| Slip opinion published | `decision_type=slip_opinion` | `STATIC` |
+| Final opinion published | `decision_type=judgment` (replaces slip) | `STATIC` |
+| Appealed | No change to original offer; new docket created at appellate court | N/A |
+| Affirmed/Reversed | `treatment` updated on subsequent queries | `STATIC` (opinion text unchanged) |
+| Overruled | `treatment=overruled` on subsequent queries | `STATIC` |
+
+### Patents
+
+| Event | Offer fields affected | ResourceMutability |
+|-------|-----------------------|-------------------|
+| Application published (A1) | `kind_code=A1`, `status=alive` | `STATIC` |
+| Patent granted (B2) | New offer with `kind_code=B2`, `status=alive` | `STATIC` |
+| Maintenance fee missed | `status=dead` | `STATIC` (document unchanged) |
+| Patent expired | `status=dead`, `expiration_date` in the past | `STATIC` |
+| File wrapper updated | New prosecution document added | `DYNAMIC` (collection grows) |
+
+---
+
+## Behavioral Conventions
+
+### ResourceMutability mapping
+
+| Legal content type | ResourceMutability | Rationale |
+|--------------------|-------------------|-----------|
+| Published legislation (Official Journal) | `STATIC` | OJ publication never changes. |
+| Consolidated legislation (point-in-time) | `DYNAMIC` | Recomputed as new amendments are adopted. |
+| Court opinions (final) | `STATIC` | Published opinions are immutable. |
+| Docket metadata | `DYNAMIC` | New filings are continuously added. |
+| Published patent document (A1, B2) | `STATIC` | Published patents never change. |
+| Prosecution history (file wrapper) | `DYNAMIC` | New documents accumulate over time. |
+
+### Delivery methods
+
+| Content type | Recommended delivery | Unit |
+|--------------|---------------------|------|
+| Legislation (single act) | `DIRECT` (signed URL to PDF/AKN XML) | `pages` or `tokens` |
+| Case law filing (single document) | `DIRECT` (signed URL to PDF) | `pages` |
+| Patent (single section) | `DIRECT` (signed URL to PDF/XML/TIFF) | `pages` |
+| Docket sheet (case metadata) | `DIRECT` (signed URL to JSON/PDF) | `records` |
+| File wrapper (prosecution history) | `DIRECT` (signed URL to ZIP/PDF collection) | `items` |
+| Consolidated legislation bundle | `INSTRUCTIONS` (provider API endpoint) | `pages` |
+
+### Pricing conventions
+
+| Content type | Typical pricing model | Typical unit |
+|--------------|----------------------|--------------|
+| Government raw text (EUR-Lex, USPTO bulk) | `PRICING_MODEL_FREE` | N/A |
+| PACER document | `PER_PAGE` ($0.10/page, $3.00 cap) | `pages` |
+| Commercial legal database (Westlaw, LexisNexis) | `PER_ARTICLE` or `SUBSCRIPTION` | `tokens` or `items` |
+| Patent (from commercial aggregator) | `PER_ARTICLE` | `items` |
+| Annotated legislation (Wolters Kluwer) | `PER_ARTICLE` | `items` |
+
+---
+
+## Examples
+
+### Example 1: EU Regulation Offer (GDPR, German version)
+
+An offer from an Exchange connected to EUR-Lex, providing the GDPR in German:
+
+```json
+{
+  "offer_id": "off-gdpr-de-001",
+  "pricing": {
+    "model": "PRICING_MODEL_FREE",
+    "unit_cost": 0,
+    "unit": "pages"
+  },
+  "delivery_method": "DELIVERY_METHOD_DIRECT",
+  "identity": {
+    "canonical_url": "https://eur-lex.europa.eu/eli/reg/2016/679/oj/deu",
+    "content_hash": "sha256:a3f8c2...",
+    "hash_method": "sha256",
+    "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+    "ext": {
+      "legal.jurisdiction": "EU",
+      "legal.document_type": "act",
+      "legal.date_document": "2016-04-27",
+      "legal.legislation.eli": "http://data.europa.eu/eli/reg/2016/679/oj",
+      "legal.legislation.celex": "32016R0679",
+      "legal.legislation.official_journal_ref": "OJ L 119, 4.5.2016, p. 1"
+    }
+  },
+  "attestations": [
+    {
+      "verifier": "eur-lex.europa.eu",
+      "attested_at": "2025-03-01T00:00:00Z",
+      "uri": "https://eur-lex.europa.eu/eli/reg/2016/679/oj/deu",
+      "claims": {
+        "legal.authority_level": "official",
+        "legal.authenticity": "authentic",
+        "legal.text_extractable": true
+      }
+    }
+  ],
+  "ext": {
+    "legal.language": "de",
+    "legal.available_languages": ["bg","hr","cs","da","nl","en","et","fi","fr","de","el","hu","ga","it","lv","lt","mt","pl","pt","ro","sk","sl","es","sv"],
+    "legal.editorial_tier": "raw",
+    "legal.copyright_status": "public_domain",
+    "legal.format_standard": "akn4eu",
+    "legal.legislation.in_force": "in_force",
+    "legal.legislation.consolidation_status": "original",
+    "legal.legislation.date_entry_into_force": "2018-05-25"
+  }
+}
+```
+
+### Example 2: PACER Court Filing
+
+An offer from a Legal Exchange for a specific filing in a Southern District of New York case:
+
+```json
+{
+  "offer_id": "off-pacer-sdny-45",
+  "pricing": {
+    "model": "PRICING_MODEL_PER_PAGE",
+    "unit_cost": 0.10,
+    "estimated_quantity": 12,
+    "unit": "pages",
+    "currency": "USD"
+  },
+  "delivery_method": "DELIVERY_METHOD_DIRECT",
+  "identity": {
+    "canonical_url": "https://ecf.nysd.uscourts.gov/doc1/12345678901",
+    "content_hash": "sha256:b7e4d1...",
+    "hash_method": "sha256",
+    "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+    "ext": {
+      "legal.jurisdiction": "US",
+      "legal.document_type": "filing",
+      "legal.date_document": "2024-11-15",
+      "legal.case.docket_number": "1:24-cv-05432-JSR",
+      "legal.case.court_id": "nyed",
+      "legal.case.document_number": "45"
+    }
+  },
+  "attestations": [
+    {
+      "verifier": "courtlistener.com",
+      "attested_at": "2025-01-20T14:30:00Z",
+      "uri": "https://ecf.nysd.uscourts.gov/doc1/12345678901",
+      "claims": {
+        "legal.authority_level": "aggregator",
+        "legal.ocr_confidence": 0.98,
+        "legal.text_extractable": true
+      }
+    }
+  ],
+  "ext": {
+    "legal.language": "en",
+    "legal.editorial_tier": "raw",
+    "legal.copyright_status": "public_domain",
+    "legal.case.access_level": "public",
+    "legal.case.filing_type": "motion"
+  }
+}
+```
+
+### Example 3: USPTO Patent (Granted)
+
+An offer for a granted US patent from a commercial patent aggregator:
+
+```json
+{
+  "offer_id": "off-patent-us11234567",
+  "pricing": {
+    "model": "PRICING_MODEL_PER_ARTICLE",
+    "unit_cost": 5.00,
+    "estimated_quantity": 1,
+    "unit": "items",
+    "currency": "USD"
+  },
+  "delivery_method": "DELIVERY_METHOD_DIRECT",
+  "identity": {
+    "canonical_url": "https://patents.google.com/patent/US11234567B2",
+    "content_hash": "sha256:c9a2f3...",
+    "hash_method": "sha256",
+    "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+    "ext": {
+      "legal.jurisdiction": "US",
+      "legal.document_type": "patent_grant",
+      "legal.date_document": "2023-06-15",
+      "legal.patent.publication_number": "US11234567B2",
+      "legal.patent.application_number": "17/123,456",
+      "legal.patent.kind_code": "B2",
+      "legal.patent.country_code": "US"
+    }
+  },
+  "attestations": [
+    {
+      "verifier": "data.uspto.gov",
+      "attested_at": "2025-02-15T00:00:00Z",
+      "uri": "https://patents.google.com/patent/US11234567B2",
+      "claims": {
+        "legal.authority_level": "official",
+        "legal.patent.examination_status": "granted",
+        "legal.patent.maintenance_current": true,
+        "legal.text_extractable": true
+      }
+    }
+  ],
+  "ext": {
+    "legal.language": "en",
+    "legal.editorial_tier": "enhanced",
+    "legal.copyright_status": "public_domain",
+    "legal.patent.status": "alive",
+    "legal.patent.cpc_codes": ["H04L9/32", "G06F21/64"],
+    "legal.patent.content_part": "full",
+    "legal.patent.expiration_date": "2041-03-20",
+    "legal.patent.family_members": ["EP3456789B1", "WO2020123456A1", "JP2022567890A"]
+  }
+}
+```
+
+### Example 4: Multilingual Legislation Query and Response
+
+A Broker queries for the GDPR consolidated version as of 2024-01-15, preferring German:
+
+**ResourceQuery.ext:**
+```json
+{
+  "legal.jurisdiction": "EU",
+  "legal.document_type": "act",
+  "legal.language_preferred": "de",
+  "legal.legislation.in_force_at": "2024-01-15"
+}
+```
+
+The Exchange returns an OfferGroup with two offers -- one free from EUR-Lex, one paid annotated from a commercial publisher:
+
+**OfferGroup:**
+```json
+{
+  "uri": "http://data.europa.eu/eli/reg/2016/679/2024-01-15",
+  "offers": [
+    {
+      "offer_id": "off-eurlex-gdpr-de-consol",
+      "pricing": { "model": "PRICING_MODEL_FREE", "unit_cost": 0 },
+      "ext": {
+        "legal.language": "de",
+        "legal.available_languages": ["bg","hr","cs","da","nl","en","et","fi","fr","de","el","hu","ga","it","lv","lt","mt","pl","pt","ro","sk","sl","es","sv"],
+        "legal.editorial_tier": "raw",
+        "legal.copyright_status": "public_domain",
+        "legal.format_standard": "akn4eu",
+        "legal.legislation.in_force": "in_force",
+        "legal.legislation.consolidation_status": "consolidated",
+        "legal.legislation.version_date": "2024-01-15",
+        "legal.legislation.date_entry_into_force": "2018-05-25"
+      }
+    },
+    {
+      "offer_id": "off-wk-gdpr-de-annotated",
+      "pricing": { "model": "PRICING_MODEL_PER_ARTICLE", "unit_cost": 75.00, "unit": "items", "currency": "EUR" },
+      "ext": {
+        "legal.language": "de",
+        "legal.available_languages": ["en", "fr", "de"],
+        "legal.editorial_tier": "annotated",
+        "legal.copyright_status": "publisher_copyright",
+        "legal.legislation.in_force": "in_force",
+        "legal.legislation.consolidation_status": "consolidated",
+        "legal.legislation.version_date": "2024-01-15",
+        "legal.legislation.date_entry_into_force": "2018-05-25"
+      }
+    }
+  ]
+}
+```
+
+The Broker sees: free raw text from EUR-Lex vs. 75 EUR annotated version from Wolters Kluwer. The agent decides if the annotations are worth the cost.
+
+### Example 5: Patent Amendment Chain Scenario
+
+An agent researches a patent that has been through opposition at the EPO. The original application (A1), the granted patent (B1), and the amended patent after opposition (B2) are three separate offers:
+
+**Three offers in an OfferGroup:**
+```json
+{
+  "uri": "https://data.epo.org/publication-server/rest/v1.2/publication-data/EP3456789",
+  "offers": [
+    {
+      "offer_id": "off-ep-3456789-a1",
+      "pricing": { "model": "PRICING_MODEL_FREE", "unit_cost": 0 },
+      "identity": {
+        "ext": {
+          "legal.jurisdiction": "EP",
+          "legal.document_type": "patent_application",
+          "legal.date_document": "2019-03-15",
+          "legal.patent.publication_number": "EP3456789A1",
+          "legal.patent.kind_code": "A1",
+          "legal.patent.country_code": "EP"
+        }
+      },
+      "ext": {
+        "legal.language": "en",
+        "legal.editorial_tier": "raw",
+        "legal.copyright_status": "public_domain",
+        "legal.patent.status": "dead",
+        "legal.patent.content_part": "full",
+        "legal.patent.cpc_codes": ["H04L9/32"]
+      }
+    },
+    {
+      "offer_id": "off-ep-3456789-b1",
+      "identity": {
+        "ext": {
+          "legal.jurisdiction": "EP",
+          "legal.document_type": "patent_grant",
+          "legal.date_document": "2021-07-20",
+          "legal.patent.publication_number": "EP3456789B1",
+          "legal.patent.kind_code": "B1",
+          "legal.patent.country_code": "EP"
+        }
+      },
+      "ext": {
+        "legal.language": "en",
+        "legal.editorial_tier": "raw",
+        "legal.copyright_status": "public_domain",
+        "legal.patent.status": "dead",
+        "legal.patent.content_part": "full",
+        "legal.patent.cpc_codes": ["H04L9/32"]
+      }
+    },
+    {
+      "offer_id": "off-ep-3456789-b2",
+      "identity": {
+        "ext": {
+          "legal.jurisdiction": "EP",
+          "legal.document_type": "patent_grant",
+          "legal.date_document": "2023-01-10",
+          "legal.patent.publication_number": "EP3456789B2",
+          "legal.patent.kind_code": "B2",
+          "legal.patent.country_code": "EP"
+        }
+      },
+      "attestations": [
+        {
+          "verifier": "ops.epo.org",
+          "attested_at": "2025-03-01T00:00:00Z",
+          "uri": "https://data.epo.org/publication-server/rest/v1.2/publication-data/EP3456789B2",
+          "claims": {
+            "legal.authority_level": "official",
+            "legal.patent.examination_status": "opposed",
+            "legal.patent.maintenance_current": true
+          }
+        }
+      ],
+      "ext": {
+        "legal.language": "en",
+        "legal.editorial_tier": "raw",
+        "legal.copyright_status": "public_domain",
+        "legal.patent.status": "alive",
+        "legal.patent.content_part": "full",
+        "legal.patent.cpc_codes": ["H04L9/32"],
+        "legal.patent.expiration_date": "2039-03-15",
+        "legal.patent.family_members": ["US11234567B2", "WO2020123456A1", "JP2022567890A"]
+      }
+    }
+  ]
+}
+```
+
+The agent sees the progression: A1 (published application) -> B1 (granted, now superseded) -> B2 (amended after opposition, currently alive). Only B2 represents the current scope of protection.
+
+### Example 6: Dispute -- Wrong Language Delivered
+
+An agent requested the German version of an EU directive but received French:
+
+```json
+{
+  "ver": "1.0",
+  "id": "disp-lang-001",
+  "transaction_id": "txn-eurlex-dir-2024",
+  "billing_id": "bill-eurlex-dir-2024",
+  "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+  "description": "Requested German language version but received French language version of Directive 2024/1234.",
+  "report_id": "rpt-eurlex-dir-2024",
+  "ext": {
+    "legal.dispute.expected_language": "de",
+    "legal.dispute.received_language": "fr"
+  }
+}
+```
+
+### Example 7: Dispute -- Stale Consolidation
+
+An agent requested legislation consolidated as of 2024-01-15 but received a version consolidated only through 2020-06-01:
+
+```json
+{
+  "ver": "1.0",
+  "id": "disp-version-002",
+  "transaction_id": "txn-wk-reg-2024",
+  "billing_id": "bill-wk-reg-2024",
+  "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+  "description": "Requested consolidation as of 2024-01-15 but received version consolidated through 2020-06-01 only. Three amending regulations are missing.",
+  "report_id": "rpt-wk-reg-2024",
+  "ext": {
+    "legal.dispute.expected_version_date": "2024-01-15",
+    "legal.dispute.received_version_date": "2020-06-01"
+  }
+}
+```
+
+---
+
+## Field Summary
+
+| Category | Count | Fields |
+|----------|-------|--------|
+| Identity (ResourceIdentity.ext) | 18 | `legal.jurisdiction`, `legal.document_type`, `legal.date_document`, `legal.legislation.eli`, `legal.legislation.celex`, `legal.legislation.urn_lex`, `legal.legislation.official_journal_ref`, `legal.case.ecli`, `legal.case.docket_number`, `legal.case.court_id`, `legal.case.neutral_citation`, `legal.case.document_number`, `legal.patent.publication_number`, `legal.patent.application_number`, `legal.patent.kind_code`, `legal.patent.country_code`, `legal.case.language_of_case`, `legal.legislation.akn_iri` |
+| Query (ResourceQuery.ext) | 10 | `legal.jurisdiction`, `legal.document_type`, `legal.language_preferred`, `legal.date_from`, `legal.date_to`, `legal.legislation.in_force_at`, `legal.case.court_id`, `legal.case.court_level`, `legal.patent.cpc_codes`, `legal.patent.status` |
+| Offer (Offer.ext) | 20 | `legal.language`, `legal.available_languages`, `legal.editorial_tier`, `legal.copyright_status`, `legal.format_standard`, `legal.legislation.in_force`, `legal.legislation.consolidation_status`, `legal.legislation.version_date`, `legal.legislation.amendment_of`, `legal.legislation.amended_by`, `legal.legislation.date_entry_into_force`, `legal.case.access_level`, `legal.case.decision_type`, `legal.case.treatment`, `legal.case.filing_type`, `legal.patent.status`, `legal.patent.cpc_codes`, `legal.patent.content_part`, `legal.patent.expiration_date`, `legal.patent.family_members` |
+| Attestation (ResourceAttestation.claims) | 8 | `legal.authority_level`, `legal.consolidation_verified`, `legal.consolidation_date`, `legal.ocr_confidence`, `legal.text_extractable`, `legal.authenticity`, `legal.patent.examination_status`, `legal.patent.maintenance_current` |
+| Dispute (DisputeRequest.ext) | 7 | `legal.dispute.expected_language`, `legal.dispute.received_language`, `legal.dispute.expected_version_date`, `legal.dispute.received_version_date`, `legal.dispute.expected_content_part`, `legal.dispute.received_content_part`, `legal.dispute.sealed_unexpected` |
+| Exchange (ExchangeManifest.ext) | 2 | `legal.jurisdictions`, `legal.sub_domains` |
+| **Total** | **60** | 43 core vocabulary (identity + query + offer, deduplicated) + 8 attestation + 7 dispute + 2 Exchange. 5 keys are shared across core categories. |
+
+---
+
+## Normative References
+
+- [ELI Ontology](https://op.europa.eu/en/web/eu-vocabularies/eli) -- European Legislation Identifier
+- [CELEX Numbers](https://eur-lex.europa.eu/content/help/eurlex-content/celex-number.html) -- EUR-Lex document identifiers
+- [ECLI](https://e-justice.europa.eu/topics/legislation-and-case-law/european-case-law-identifier-ecli_en) -- European Case Law Identifier
+- [URN:LEX (RFC 9676)](https://www.rfc-editor.org/rfc/rfc9676.html) -- Persistent legal resource URN namespace
+- [Akoma Ntoso v1.0](https://docs.oasis-open.org/legaldocml/akn-core/v1.0/akn-core-v1.0-part1-vocabulary.html) -- OASIS LegalDocML vocabulary
+- [AKN Naming Convention](https://docs.oasis-open.org/legaldocml/akn-nc/v1.0/akn-nc-v1.0.html) -- AKN IRI structure
+- [WIPO ST.3](https://www.wipo.int/standards/en/pdf/03-03-01.pdf) -- Country codes for patent offices
+- [WIPO ST.16](https://www.wipo.int/standards/en/pdf/03-16-01.pdf) -- Kind codes for patent documents
+- [CPC](https://www.cooperativepatentclassification.org/) -- Cooperative Patent Classification
+- [Schema.org Legislation](https://schema.org/Legislation) -- Web-deployed legislation properties
+- [INPADOC](https://www.epo.org/en/searching-for-patents/helpful-resources/raw-data/inpadoc) -- Patent legal status data
+- [BCP 47](https://www.rfc-editor.org/rfc/rfc5646) -- Language tags
+- [ISO 3166-1](https://www.iso.org/iso-3166-country-codes.html) -- Country codes

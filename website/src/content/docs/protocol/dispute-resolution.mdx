@@ -1,0 +1,161 @@
+---
+title: "Dispute Resolution"
+description: "Automated dispute resolution for resource access micropayments -- three-tier system from auto-credit to pattern investigation"
+---
+
+## Design Principle
+
+Resource access in RAMP operates at $0.01--$0.10 per transaction. A single human reviewer spending 5 minutes costs $2.50 -- 25x to 250x the transaction value. **100% of routine disputes must be automated.** Manual review is reserved for aggregate fraud patterns, not individual transactions.
+
+**The agent is the paying party. The burden of proof for delivery is on the provider/Exchange.** No proof of delivery = no payment. The inverse also applies: the agent cannot fabricate disputes without evidence.
+
+## The Dispute Chain
+
+Every dispute must reference a complete evidence chain. The agent MUST file a usage report BEFORE filing a dispute.
+
+```
+Offer
+  -> ExecuteTransaction (transaction_id, billing_id)
+    -> ReportUsage (UsageReport)
+      -> UsageReportResponse (report_id)
+        -> DisputeTransaction (transaction_id + report_id)
+          -> DisputeResponse (dispute_id, status, resolution)
+```
+
+`DisputeRequest.report_id` is **required** -- the Exchange rejects any dispute without a prior usage report. This prevents fire-and-forget disputes and fabricated usage data.
+
+## What Is Auto-Disputable
+
+The [attestation level](/protocol/content-attestation/) determines what evidence is available and what can be resolved automatically.
+
+| Evidence Type | Level 0 | Level 1 | Level 2 |
+|---|---|---|---|
+| CDN delivery failure (4xx/5xx) | AUTO-CREDIT | AUTO-CREDIT | AUTO-CREDIT |
+| Signed URL expired before fetch | AUTO-CREDIT | AUTO-CREDIT | AUTO-CREDIT |
+| Content hash mismatch | N/A | AUTO-CREDIT | N/A |
+| Token discrepancy + CDN corroboration | FLAG | AUTO-CREDIT | AUTO-CREDIT |
+| Token discrepancy alone | Not creditable | Not creditable | Not creditable |
+| Subjective quality claims | Not creditable | Not creditable | Not creditable |
+
+**Agent-reported token count alone is NEVER auto-creditable.** The agent can fabricate any number. Independent corroboration from CDN response size is required.
+
+## Three-Tier Resolution
+
+### Tier 1 -- Automated (< 1 second, ~99% of disputes)
+
+Evidence is independently verifiable from CDN logs or cryptographic comparison.
+
+| Condition | Evidence Source | Resolution |
+|---|---|---|
+| CDN returned 4xx/5xx | CDN access log | CREDIT |
+| Signed URL expired before fetch | CDN log timestamp | CREDIT |
+| Content hash mismatch (Level 1) | Agent hash vs catalog hash | CREDIT |
+| CDN response size anomaly | CDN log bytes vs token claim | CREDIT |
+| Freshness race (Level 1) | New attestation arrived within minutes | CREDIT |
+
+State transition: `FILED` -> `AUTO_RESOLVED`
+
+### Tier 2 -- Rule-Based Review (< 24 hours, ~0.9%)
+
+Deterministic rules applied when Tier 1 evidence is inconclusive.
+
+| Condition | Rule | Resolution |
+|---|---|---|
+| CDN 200 OK, agent reports 0 tokens | CDN response < 1KB | CREDIT |
+| Token count < 50% of estimate (Level 0) | Pattern: 3+ occurrences, same provider | CREDIT |
+| Quality dispute, Level 2 attestation fresh | Attestation < 24h, measurements align | REJECTED |
+| `WRONG_CONTENT` with hash evidence | Compare agent hash against catalog | CREDIT or REJECTED |
+
+State transition: `FILED` -> `EVIDENCE_NEEDED` -> `UNDER_REVIEW` -> `RESOLVED`
+
+### Tier 3 -- Pattern Investigation (async, ~0.1%)
+
+Triggered by aggregate patterns indicating systematic abuse.
+
+| Metric | Threshold | Indicates |
+|---|---|---|
+| Agent dispute rate | > 5% of transactions/month | Agent gaming the system |
+| Provider token discrepancy rate | > 2% of transactions | Provider inflating counts |
+| Reconciliation discrepancy | > 10% (IAB standard) | Systemic problem |
+
+State transition: `ESCALATED` -> `SETTLED` -> `FINAL`
+
+## DisputeStatus Lifecycle
+
+```
+                                ┌─────────────────┐
+                                v                 |
+            ┌────────┐    ┌───────────┐     ┌─────────┐
+ Dispute -> │ FILED  │--->│   AUTO_   │---->│  FINAL  │
+            │        │    │ RESOLVED  │     │         │
+            └───┬────┘    └───────────┘     └─────────┘
+                │                                 ^
+                │         ┌───────────┐           |
+                ├-------->│ EVIDENCE  │           |
+                │         │  NEEDED   │      ┌────────┐
+                │         └─────┬─────┘      │SETTLED │
+                │               v            └────┬───┘
+                │         ┌───────────┐           |
+                │         │  UNDER_   │<--┐       |
+                │         │  REVIEW   │   |       |
+                │         └─────┬─────┘   |       |
+                │               v         |       |
+                │         ┌───────────┐ ┌─┴─────┐ |
+                │         │ RESOLVED  │>│APPEALED│ |
+                │         └───────────┘ └───────┘ |
+                │                                 |
+                │         ┌───────────┐           |
+                └-------->│ ESCALATED │-----------┘
+                          └───────────┘
+```
+
+Terminal state is `FINAL`. The `resolution` field is populated at `RESOLVED`, `SETTLED`, or `FINAL`.
+
+## Resolution Types
+
+| Type | When Applied |
+|---|---|
+| **CREDIT** | CDN failure confirmed, hash mismatch, CDN size corroborates discrepancy, timing issues |
+| **REDELIVERY** | Transient CDN error, content still available, new signed URL issued |
+| **REJECTED** | Agent claim not corroborated, duplicate dispute, missing report_id |
+| **INVESTIGATION** | Escalated to Tier 3 pattern analysis |
+
+## Resource Mutability and Dispute Rules (v1.0)
+
+The `ResourceMutability` field on `ResourceIdentity` affects how disputes are evaluated:
+
+| Mutability | Hash Verification | Dispute Behavior |
+|---|---|---|
+| **STATIC** | Agent SHOULD verify `content_hash`. Mismatch is disputable | Standard hash mismatch auto-credit applies |
+| **DYNAMIC** | Agent MUST NOT auto-dispute hash mismatch | Hash changes are expected between offer and fetch. Use `data_as_of` for freshness disputes instead |
+| **LIVE** | No `content_hash` applicable | Metering is time-based. Disputes are limited to delivery failure and session duration discrepancies |
+
+For DYNAMIC content (e.g., stock quotes, credit reports, drug databases), a content hash mismatch is expected behavior -- the content updates between offer generation and agent fetch. Agents should use the `data_as_of` timestamp on the Offer to evaluate freshness rather than hash comparison. Disputes for DYNAMIC content should use `WRONG_CONTENT` reason only when the delivered content is categorically different from what was offered (e.g., wrong article entirely), not when the content has been updated.
+
+## Abuse Prevention
+
+### Per-Agent Monitoring
+
+| Metric | Threshold | Consequence |
+|---|---|---|
+| Dispute rate | > 3% | Warning |
+| Dispute rate | > 5% | Rate limiting on future transactions |
+| Same reason across 5+ providers | Pattern threshold | Flagged for review |
+
+### Per-Provider Monitoring
+
+| Metric | Threshold | Consequence |
+|---|---|---|
+| Token discrepancy rate | > 2% | Investigation opened |
+| CDN delivery failure rate | > 1% | CDN health investigation |
+| Content hash mismatches (Level 1) | > 0.5% | Attestation pipeline investigation |
+
+### Graduated Consequences
+
+Month 1--2 above threshold: warning. Month 3: remediation plan required. Month 4+: rate limiting. Month 12+: termination consideration.
+
+## Next Steps
+
+- [Content Attestation](/protocol/content-attestation/) -- how attestation levels determine auto-disputability
+- [Transaction Flow](/protocol/transaction-flow/) -- the transaction that precedes a dispute
+- [Proto: RAMP v1](/reference/proto-ramp/) -- full `DisputeRequest`/`DisputeResponse` message reference

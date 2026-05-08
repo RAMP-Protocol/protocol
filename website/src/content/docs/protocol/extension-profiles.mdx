@@ -1,0 +1,286 @@
+---
+title: "Extension Profiles"
+description: "Three-layer governance model for domain-specific metadata, with standard profiles for news, academic, and legal content"
+---
+
+## Why Extension Profiles?
+
+The RAMP protocol handles universal resource access mechanics: discovery, pricing, transaction, delivery, attestation, dispute. But different industries need domain-specific metadata. A news Exchange needs to track article corrections and retractions. An academic Exchange needs to flag retracted papers and model open access status. A legal Exchange needs amendment chains and patent family navigation.
+
+Putting all of this into the core proto would create a bloated spec that no single implementer needs in full. Leaving it entirely unstructured would create the "USB-C problem" -- technical compliance without interoperability. Extension profiles solve this with a three-layer governance model.
+
+## Three-Layer Governance Model
+
+| Layer | Scope | Governance | Example |
+|---|---|---|---|
+| **1. Core Proto** | Fields in `ramp.proto` | Protocol version bump | `resource_mutability`, `data_as_of`, `unit_cost` |
+| **2. Standard Extensions** | `ramp.*` namespace in `ext` | Defined in RAMP spec | `ramp.compliance.dua_required` |
+| **3. Domain Profiles** | Domain namespace in `ext` | Published by domain communities | `news.iptc_guid`, `academic.doi`, `legal.legislation.eli` |
+
+### Layer 1: Core Proto
+
+Fields included in the protobuf definition (`ramp.proto`). These are cross-cutting needs validated across 30%+ of use cases, affect fundamental protocol behavior, and have consistent meaning across all domains.
+
+Examples: `ResourceMutability`, `data_as_of`, `max_data_age`, `unit_cost`, `estimated_quantity`.
+
+### Layer 2: Standard Extensions
+
+Needed by multiple domains but too specialized for the proto. Documented in the RAMP specification. Carried in the `ext` field (a `google.protobuf.Struct`) on protocol messages. Consumers SHOULD support these when present.
+
+### Layer 3: Domain Profiles
+
+Domain-specific vocabularies published as standalone specifications. Each profile defines:
+
+- **Ext field keys** -- namespaced keys for `ResourceQuery.ext`, `Offer.ext`, `ResourceIdentity.ext`, etc.
+- **Attestation claim names** -- keys for `ResourceAttestation.claims`
+- **Behavioral conventions** -- how core protocol features (mutability, delivery, pricing) apply to that domain
+- **Conformance levels** -- minimum viable, standard, and full implementation tiers
+
+A Exchange MAY implement zero, one, or multiple profiles. Profile conformance means the Exchange populates the required `ext` fields defined in the profile spec and validates them against the profile's JSON Schema.
+
+## Profile Declaration Chain
+
+Three proto fields create a complete declaration chain from agent to Exchange:
+
+```
+Agent                    Broker                 Exchange
+  │                          │                            │
+  │  RAMPRequest             │                            │
+  │  supported_profiles:     │  ResourceQuery               │
+  │  ["ramp-academic-v1"]    │  supported_profiles:       │  ExchangeManifest
+  │ ─────────────────────►   │  ["ramp-academic-v1"]      │  supported_profiles:
+  │                          │ ────────────────────────►   │  ["ramp-academic-v1"]
+  │                          │                            │
+  │                          │  ◄──── Offers with         │
+  │  ◄──── Filtered offers   │        academic.* ext      │
+  │        with academic.*   │                            │
+```
+
+### ExchangeManifest.supported_profiles (field 18)
+
+The Exchange declares which domain extension profiles it conforms to. Published in `/.well-known/ramp-exchange.json`. The Broker reads this at discovery time to route queries to capable Exchanges.
+
+```json
+{
+  "ver": "1.0",
+  "domain": "academic-exchange.example.com",
+  "name": "Example Academic Exchange",
+  "supported_profiles": ["ramp-academic-v1"],
+  "base_currency": "USD"
+}
+```
+
+### ResourceQuery.supported_profiles (field 11)
+
+The caller (Broker or direct agent) declares which profiles it understands. The Exchange SHOULD include profile-specific `ext` fields in Offers when the caller declares support. The Exchange MAY skip expensive metadata computation (e.g., retraction checking, consolidation verification) when the caller does not declare the relevant profile.
+
+Absence means "send all available metadata" -- the Exchange MUST NOT withhold `ext` fields solely because the caller omitted this field.
+
+### RAMPRequest.supported_profiles (field 5)
+
+The agent declares profiles to the Broker. The Broker uses this for:
+
+1. **Routing** -- send queries only to Exchanges whose manifest declares matching profiles
+2. **Forwarding** -- copy the agent's declared profiles into `ResourceQuery.supported_profiles`
+3. **Filtering** -- include profile-specific ext fields when returning results to the agent
+
+## Critical Extension Signaling (`ext_critical`)
+
+Every RAMP message that carries an `ext` field also carries `ext_critical` (field 90) -- a list of ext keys that the consumer **MUST** understand. If a consumer encounters a key in `ext_critical` that it does not recognize, it **MUST** reject the message.
+
+### The COSE `crit` Pattern
+
+This design follows the `crit` header parameter from [RFC 9052 (COSE)](https://www.rfc-editor.org/rfc/rfc9052). The pattern is well-established across protocol ecosystems:
+
+| Protocol | Mechanism | Approach |
+|---|---|---|
+| **COSE** (RFC 9052) | `crit` header parameter | Enumerate critical header labels |
+| **FHIR** | `modifierExtension` | Separate field for must-understand extensions |
+| **SOAP** | `mustUnderstand` attribute | Boolean flag per header block |
+| **CoAP** (RFC 7252) | Odd/even option numbers | Option number parity determines criticality |
+
+RAMP adopts the COSE enumeration approach: the sender lists which ext keys are critical in a given message, rather than marking criticality on the key definition itself.
+
+### Behavior
+
+- **Regular ext keys** (not listed in `ext_critical`): safely ignored per the robustness principle. A consumer that does not recognize `analytics.view_count` simply skips it.
+- **Keys listed in `ext_critical`**: the consumer **MUST** understand the key's semantics or reject the message. Rejection uses `OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION` (value 9).
+
+### Example
+
+```json
+{
+  "offer_id": "offer-001",
+  "ext": {
+    "medimg.deidentification_method": "Safe Harbor",
+    "medimg.irb_approval_required": true,
+    "analytics.view_count": 15000
+  },
+  "ext_critical": ["medimg.irb_approval_required"]
+}
+```
+
+In this example:
+
+- `analytics.view_count` is informational -- a consumer that does not understand it simply ignores the field.
+- `medimg.irb_approval_required` is listed in `ext_critical` -- the consumer **must** understand IRB approval requirements or reject the offer with `OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION`.
+- `medimg.deidentification_method` is not in `ext_critical`, so it is also safely ignorable despite being in the same domain namespace.
+
+### Why This Matters
+
+`ext_critical` avoids two known problems with alternative approaches:
+
+1. **Namespace migration** (the MIME `X-` prefix problem, [RFC 6648](https://www.rfc-editor.org/rfc/rfc6648)). There is no need for a naming convention to distinguish "optional" from "mandatory" keys -- the same key name works in both roles.
+2. **Static criticality**. The same extension can be critical in some messages but not others. A Exchange might mark `medimg.irb_approval_required` as critical on offers for clinical datasets but omit it from `ext_critical` on offers for de-identified teaching materials. Criticality is contextual, decided per-message by the sender.
+
+### Guidance for Profile Authors
+
+When defining a new extension profile, document which ext fields should typically appear in `ext_critical`. As a general rule:
+
+- **Critical**: fields that affect legal compliance, safety, or access restrictions (e.g., `medimg.irb_approval_required`, `legal.legislation.access_level`)
+- **Not critical**: informational metadata such as scores, counts, or supplementary identifiers (e.g., `analytics.view_count`, `academic.citation_count`)
+
+Profile specs define the defaults, but the sender always has final say -- `ext_critical` is set per-message, not per-profile.
+
+## Standard Profiles
+
+Five extension profile specifications have been developed for RAMP v1.0, each grounded in existing industry standards.
+
+### ramp-news-v1
+
+**Scope:** News articles, podcasts, broadcasting
+
+| Property | Detail |
+|---|---|
+| **Ext fields** | 36 unique keys across 6 protocol messages |
+| **Standards** | IPTC NewsML-G2, Schema.org NewsArticle, Podcasting 2.0, W3C TDMRep, ODRL/RightsML |
+| **Key capabilities** | Content lifecycle (corrections, retractions, kills via NewsML-G2 state machine); podcast support (DAI-aware attestation, transcript linking, format variants); rights (TDM reservation, ODRL action mapping) |
+| **Conformance levels** | Basic (4 fields), Standard, Full (wire services) |
+
+The news profile models the complete article lifecycle: `usable` (may be published) to `canceled` (killed, terminal). Corrections increment `news.version` while keeping the `news.iptc_guid` stable, enabling agents to track the same story across versions and Exchanges.
+
+### ramp-academic-v1
+
+**Scope:** Scholarly articles, preprints, datasets
+
+| Property | Detail |
+|---|---|
+| **Ext fields** | 32 unique keys across 7 protocol messages |
+| **Standards** | CrossRef, OpenAlex, JATS XML, COUNTER 5.1, CrossMark |
+| **Key capabilities** | DOI-based identity with cross-exchange dedup; OA status modeling (Gold/Green/Hybrid/Bronze/Diamond/Closed); version lifecycle (preprint to VoR to corrected to retracted via CrossMark); institutional subscription mapping; COUNTER 5.1 usage reporting |
+
+The academic profile models the article version lifecycle:
+
+```
+Preprint ──peer review──> AAM ──publisher production──> VoR ──correction──> Corrected VoR
+                                                         │
+                                                    (retraction)
+                                                         │
+                                                         v
+                                                   Retraction Notice (separate DOI)
+```
+
+Every published version is `STATIC` -- corrections and retractions create new resources with new DOIs, linked via `academic.related_works`.
+
+### ramp-legal-v1
+
+**Scope:** Legislation, case law, patents (cross-jurisdiction)
+
+| Property | Detail |
+|---|---|
+| **Ext fields** | 43 unique keys across 6 protocol messages |
+| **Standards** | ELI, CELEX, ECLI, Akoma Ntoso, WIPO ST.3/ST.16, CPC, INPADOC |
+| **Key capabilities** | Three sub-domains (legislation, case law, patents); first-class multilingual support (24 EU languages, all equally authentic); amendment chain modeling; patent family navigation and kind code awareness; sealed/restricted document access levels |
+
+The legal profile uses sub-domain namespacing: `legal.legislation.*` for statutes, `legal.case.*` for court filings, `legal.patent.*` for patents. This keeps the field vocabulary organized while allowing a single Exchange to serve all three sub-domains.
+
+### ramp-comp-v1
+
+**Scope:** CoMP (Content Monetization Protocol) metadata -- optional extension for Exchanges that carry CoMP-originated content objects
+
+| Property | Detail |
+|---|---|
+| **Ext fields** | CoMP `Package`, `Scope`, `Retrieval`, `License`, and media-type objects mapped to `comp.*` namespace |
+| **Standards** | CoMP v2.0 |
+| **Key capabilities** | Structured content metadata (Package, Scope, Text, Image, Video, Audio); retrieval method negotiation; license and rights modeling via `LicenseUse` enum |
+| **Conformance levels** | Basic (Package fields), Standard (Scope + media types), Full (License + Retrieval) |
+
+CoMP metadata is carried as `comp.*` extension fields in the `ext` Struct on protocol messages. Exchanges that support IAB CoMP include `comp.*` keys (e.g., `comp.package`, `comp.scope`, `comp.retrieval`). Exchanges that don't use CoMP simply omit these keys, and consumers that don't understand CoMP safely ignore them.
+
+### ramp-c2pa-v1
+
+**Scope:** C2PA content provenance integration -- bridges C2PA Content Credentials into RAMP attestations and access controls
+
+| Property | Detail |
+|---|---|
+| **Core proto fields** | `c2pa_manifest`, `c2pa_status` (C2PAStatus enum), `soft_binding`, `soft_binding_method` on ResourceIdentity |
+| **Attestation claims** | 16 standardized `c2pa.*` claim names covering identity, trust, provenance, rights, and content binding |
+| **Standards** | C2PA 2.x, COSE Sign1 (RFC 9052), X.509, JUMBF (ISO 19566-5), RFC 3161 |
+| **Key capabilities** | C2PA manifest validation bridged to RAMP attestations; `c2pa.training_mining` mapped to `AccessRestrictions.prohibited_functions`; soft binding for post-transcoding dispute resolution; TSA-grade temporal claims |
+| **Conformance levels** | Level A (status + URI), Level B (bridged attestation + rights enforcement), Level C (full provenance + soft binding + TSA) |
+
+C2PA proves **what content IS** (provenance, creator, edit history). RAMP manages **what you can DO with it** (pricing, transaction, dispute). This profile bridges the two: a C2PA verification vendor validates the manifest using X.509/COSE and publishes the results as a RAMP `ResourceAttestation` signed with Ed25519. C2PA-unaware agents benefit from the validation results and rights enforcement without needing JUMBF or COSE libraries.
+
+See the [full ramp-c2pa-v1 specification](/protocol/ext-c2pa/).
+
+## Creating a New Profile
+
+A domain community creates a new profile by publishing a specification that defines:
+
+1. **Profile name** -- format: `ramp-{domain}-v{version}` (e.g., `ramp-pharma-v1`)
+2. **Ext field vocabulary** -- namespaced keys for each protocol message (`{domain}.field_name`)
+3. **Attestation claims** -- domain-specific claim names for `ResourceAttestation.claims`
+4. **Behavioral conventions** -- how `ResourceMutability`, `data_as_of`, `DeliveryMethod`, and pricing interact with domain content
+5. **Conformance levels** -- minimum viable, standard, and full implementation tiers
+6. **JSON Schema** -- machine-readable validation for all ext fields and claim keys
+7. **Examples** -- complete `Offer` and `ResourceQuery` JSON with profile-specific fields
+
+### Design Principles
+
+- Every field key MUST be namespaced with the domain prefix (e.g., `pharma.`, `medimg.`)
+- Field names SHOULD reuse terminology from existing industry standards
+- Every field MUST serve a concrete protocol purpose: discovery, pricing, delivery, attestation, or dispute
+- The spec MUST be self-contained -- implementers should not need to read external standards documentation
+
+### JSON Schema Validation
+
+Each profile SHOULD publish a JSON Schema at `docs/protocol/extensions/{profile-name}/schema.json`. Exchanges validate their `ext` field output against this schema. Brokers MAY validate incoming offers before forwarding to agents.
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ramp-protocol.org/extensions/ramp-example-v1/schema.json",
+  "title": "RAMP-Example v1 Extension Profile",
+  "type": "object",
+  "properties": {
+    "example.field_name": {
+      "type": "string",
+      "description": "Description of the field"
+    }
+  },
+  "required": ["example.field_name"]
+}
+```
+
+## Profile Interaction with Core Protocol
+
+### Ext Fields
+
+All profile-specific metadata flows through the `google.protobuf.Struct ext` field present on every major protocol message: `ResourceQuery`, `Offer`, `ResourceIdentity`, `ResourceAttestation`, `DisputeRequest`, `ExchangeManifest`, and `UsageReport`.
+
+The `ext` field is a generic JSON object. Profiles define the keys and value types that populate it. Multiple profiles can coexist in the same `ext` -- a Exchange serving both news and academic content would include both `news.*` and `academic.*` keys.
+
+### Attestation Claims
+
+Profile-specific attestation claims use the same namespaced keys in `ResourceAttestation.claims`. For example, a news attestation might include `news.pub_status` and `news.version`, while an academic attestation includes `academic.retraction_status` and `academic.peer_review_status`.
+
+### Dispute Evidence
+
+Profiles define domain-specific dispute fields in `DisputeRequest.ext`. These supplement (not replace) the core `DisputeReason` enum with evidence that enables automated resolution. For example, `academic.retraction_not_flagged` is an unambiguous dispute -- the Exchange can verify against CrossRef in milliseconds.
+
+## Next Steps
+
+- [Content Attestation](/protocol/content-attestation/) -- how attestations carry profile-specific claims
+- [Resource Mutability](/protocol/content-mutability/) -- how mutability interacts with domain-specific content
+- [Exchange Manifest](/protocol/exchange-manifest/) -- where Exchanges declare profile support
+- [Proto: RAMP v1](/reference/proto-ramp/) -- full proto reference including `supported_profiles` fields

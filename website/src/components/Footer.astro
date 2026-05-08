@@ -1,0 +1,42 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+---
+<Default {...Astro.props}><slot /></Default>
+<footer class="license-footer">
+  <div class="license-content">
+    <p>
+      Documentation content &copy; 2025–2026 Postindustria.
+      Licensed under
+      <a href="https://creativecommons.org/licenses/by-nd/4.0/" target="_blank" rel="noopener">
+        CC BY-ND 4.0
+      </a>.
+      You may share this material with attribution, but you may not modify or create derivative works.
+    </p>
+    <p class="license-proto">
+      The RAMP protocol specification and implementation are licensed under
+      <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache 2.0</a>.
+    </p>
+  </div>
+</footer>
+
+<style>
+  .license-footer {
+    border-top: 1px solid var(--sl-color-gray-5);
+    padding: 1rem var(--sl-content-pad-x);
+    margin-top: 1.5rem;
+    text-align: center;
+  }
+  .license-content p {
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-3);
+    margin: 0.25rem 0;
+    line-height: 1.5;
+  }
+  .license-content a {
+    color: var(--sl-color-text-accent);
+    text-decoration: underline;
+  }
+  .license-proto {
+    font-size: 0.7rem !important;
+  }
+</style>

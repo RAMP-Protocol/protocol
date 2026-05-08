@@ -1,0 +1,264 @@
+---
+title: "Enterprise Access Management"
+description: "How enterprises deploy RAMP as an internal AI data gateway — agents access internal and external resources through one protocol with unified identity, scoping, and audit."
+---
+
+## The Problem
+
+Your enterprise has 200 AI agents across engineering, legal, compliance, and sales. Each needs different data: CRM records, knowledge base articles, credit reports, court filings, drug interaction databases. Today, each agent has its own credentials, its own access control, its own audit trail (or none). Nobody knows which agent accessed what, when, or why.
+
+What if every AI resource access — internal and external — flowed through one protocol with one identity system, one authorization model, and one audit trail?
+
+## Architecture
+
+```
+Employee's AI Agent
+  + Biscuit token from enterprise IAM (Azure AD / Okta)
+  + scopes derived from user's roles: ['tax:customer:read', 'legal:read']
+       │
+       ▼
+Enterprise Broker
+  ├── Verifies Biscuit token (IAM's Ed25519 key)
+  ├── Routes to internal Exchange (CRM, KB, reports)
+  ├── Routes to external Exchanges (D&B, PACER, news)
+  └── Tracks cost by dept via budget_scope
+       │                    │
+       ▼                    ▼
+Internal Exchange    External Exchanges
+  • CRM data              • D&B credit reports
+  • Knowledge base        • PACER court filings
+  • Internal reports      • DrugBank interactions
+  • Proprietary datasets  • News APIs
+```
+
+The Broker is the single chokepoint. Every AI resource access — internal or external — passes through it. Identity verified once. Scopes enforced once. Every transaction logged.
+
+## Internal Exchange
+
+Your internal Exchange serves company resources through the same RAMP protocol as external Exchanges. No separate API, no separate auth scheme, no separate audit trail.
+
+Internal resources use `PRICING_MODEL_FREE` — no money changes hands — but every transaction is **logged** for:
+
+| Purpose | How RAMP Tracks It |
+|---------|--------------------|
+| **Cost allocation** | `budget_scope: "dept:engineering"` maps to your ERP cost centers |
+| **Compliance audit** | Ed25519-signed `UsageReport` records who, what, when, which agent |
+| **Usage analytics** | Transaction volume per team, per resource, per time period |
+
+Resources are tagged with scopes that mirror your enterprise role hierarchy:
+
+```
+internal://crm/account/*          → scope: crm:account:read
+internal://kb/engineering/*       → scope: kb:engineering:read
+internal://reports/financial/*    → scope: reports:financial:read
+internal://datasets/ml-training/* → scope: datasets:ml:read
+```
+
+Even at $0, the transaction creates an evidence chain. For regulated industries — finance, healthcare, government — this audit trail is not optional.
+
+## Scope-Based Catalog Filtering
+
+Enterprise IAM maps user roles to RAMP scopes. The Exchange filters its catalog by those scopes. Resources outside the requester's scopes are denied with a diagnostic reason — no silent omission inside the enterprise.
+
+### How It Works
+
+1. User authenticates via SSO (SAML/OIDC to enterprise IdP)
+2. Enterprise token service maps AD groups to RAMP scopes
+3. Service mints a Biscuit token signed by `iam.acme.com`'s Ed25519 key
+4. Agent carries this token in the `Delegation.token` field for all RAMP requests
+5. Exchange verifies the token's authority block against IAM's published key
+6. Each requested URI is checked against the token's scopes
+
+### Concrete Example
+
+Jane is a tax analyst. Her IAM roles map to these RAMP scopes: `tax:customer:read`, `legal:read`.
+
+Her AI agent requests 5 internal resources:
+
+| # | URI | Required Scope | Jane's Scopes | Result |
+|---|-----|---------------|---------------|--------|
+| 1 | `internal://crm/account/ACME-001` | `crm:account:read` | `tax:customer:read`, `legal:read` | **Denied** |
+| 2 | `internal://tax/customer/ACME-001` | `tax:customer:read` | `tax:customer:read`, `legal:read` | **Offer returned** |
+| 3 | `internal://legal/contract/ACME-001` | `legal:read` | `tax:customer:read`, `legal:read` | **Offer returned** |
+| 4 | `internal://hr/employee/jane` | `hr:read` | `tax:customer:read`, `legal:read` | **Denied** |
+| 5 | `internal://reports/financial/q4` | `reports:financial:read` | `tax:customer:read`, `legal:read` | **Denied** |
+
+The 3 denied URIs come back with `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` — the agent knows *why* access was denied, not just that it failed. This is the internal Exchange behavior; a public Exchange would silently omit the resources to avoid revealing their existence.
+
+## Token Minting Flow
+
+The enterprise token service bridges your existing IAM into RAMP's Biscuit-based authorization.
+
+```
+┌──────────────┐     SAML/OIDC     ┌──────────────┐
+│  User (Jane) │ ──────────────► │  Enterprise   │
+│  via SSO     │                   │  IdP (Azure   │
+└──────────────┘                   │  AD / Okta)   │
+                                   └──────┬───────┘
+                                          │ AD groups:
+                                          │  • tax-analysts
+                                          │  • legal-viewers
+                                          ▼
+                                   ┌──────────────┐
+                                   │  RAMP Token   │
+                                   │  Service      │
+                                   │               │
+                                   │  Maps groups   │
+                                   │  → scopes:     │
+                                   │  tax:customer: │
+                                   │    read        │
+                                   │  legal:read    │
+                                   └──────┬───────┘
+                                          │ Signs Biscuit
+                                          │ with iam.acme.com
+                                          │ Ed25519 key
+                                          ▼
+                                   ┌──────────────┐
+                                   │  Biscuit      │
+                                   │  Token        │
+                                   └──────────────┘
+```
+
+The Biscuit authority block contains RAMP-specific facts:
+
+```
+// Authority block (signed by iam.acme.com Ed25519 key)
+user("jane@acme.com");
+scope("tax:customer:read");
+scope("legal:read");
+max_spend_cents(100000);        // $1,000 department budget
+expires("2026-03-20T18:00:00Z"); // 2-hour session
+```
+
+The `Delegation` message carries this token on the wire:
+
+```protobuf
+Delegation {
+  principal_domain: "iam.acme.com"
+  principal_id: "jane@acme.com"
+  scopes: ["tax:customer:read", "legal:read"]
+  expires_at: "2026-03-20T18:00:00Z"
+  max_spend: { amount: 1000.00, currency: "USD" }
+  token: "<base64-encoded Biscuit>"
+  token_format: "biscuit-v2"
+}
+```
+
+Key properties of this flow:
+
+- **No RAMP-specific password.** Users authenticate through existing SSO. The token service is the only component that needs RAMP awareness.
+- **Scopes derived from roles.** A single mapping table (`AD group → RAMP scopes`) governs all access. Update the mapping, and every future token reflects the change.
+- **Time-bounded.** Tokens expire with the SSO session. A leaked token is useless after expiry.
+- **Spend-capped.** `max_spend` prevents runaway costs. The Exchange tracks cumulative spend against this cap.
+
+## Agent Delegation Within the Enterprise
+
+Biscuit tokens support offline attenuation — an agent can narrow a token's permissions without calling back to IAM. This enables safe sub-agent delegation.
+
+### The Pattern
+
+```
+┌─────────────────────────┐
+│  Copilot Agent           │
+│  Token: full scopes      │
+│  • tax:customer:read     │
+│  • legal:read            │
+│  • max_spend: $1,000     │
+└──────────┬──────────────┘
+           │ Attenuate
+           ▼
+┌─────────────────────────┐
+│  Tax Lookup Sub-Agent    │
+│  Token: narrowed scopes  │
+│  • tax:customer:read     │  ← legal:read removed
+│  • max_spend: $200       │  ← spend cap reduced
+│  • uris: internal://tax/ │  ← URI prefix restricted
+└─────────────────────────┘
+```
+
+The attenuated token is a new signed block appended to the Biscuit chain. The sub-agent **cannot** widen permissions — it can only further restrict scope, spend, time, and URI patterns.
+
+This happens entirely offline. No call to IAM. No network round-trip. No central bottleneck.
+
+**Why this matters:**
+- A research agent spawns 10 sub-agents for parallel data gathering. Each gets a narrowly scoped token. If one is compromised, damage is bounded by its attenuated scope and spend cap.
+- A compliance agent delegates to a document retrieval agent with read-only scope and a $50 spend limit. The retrieval agent cannot access resources outside its scope or exceed its budget — cryptographically enforced.
+
+## Data Classification
+
+Resources carry classification labels in the `ext` field:
+
+```json
+{
+  "ramp.classification": "confidential"
+}
+```
+
+The Broker enforces classification policies before forwarding requests:
+
+| Classification | Required Scope | Example Resources |
+|---------------|---------------|-------------------|
+| `public` | Any authenticated user | Company blog, public KB articles |
+| `internal` | Any employee scope | Internal wiki, team updates |
+| `confidential` | `classification:confidential` | Financial reports, M&A docs |
+| `restricted` | `classification:restricted` | PII, trade secrets, board materials |
+
+A user without `classification:confidential` in their scopes never sees confidential resources — even if their other scopes would match the resource's URI pattern. Classification enforcement is a second gate, independent of URI-based scoping.
+
+## Audit Trail
+
+Every RAMP transaction is Ed25519-signed. This is not optional — it is part of the protocol.
+
+The `UsageReport` records:
+
+| Field | What It Captures |
+|-------|-----------------|
+| `transaction_id` | Links to the original offer and delivery |
+| `billing_id` | Links to the billing record (even at $0) |
+| `usage` | How the resource was used (function, consumed quantity) |
+| Timestamp | When the resource was accessed |
+| Requester identity | Which user, which agent, which department |
+| Delegation token | The Biscuit token — proves what authorization was granted |
+
+The Biscuit token is logged alongside the transaction. This creates a complete evidence chain:
+
+```
+Who:   jane@acme.com (via Copilot Agent)
+What:  internal://tax/customer/ACME-001
+When:  2026-03-20T14:32:00Z
+Auth:  Biscuit token [scopes: tax:customer:read, legal:read]
+How:   FUNCTION_SEARCH (consumed 1 record)
+Cost:  $0.00 (budget_scope: dept:tax)
+```
+
+For compliance officers, this means:
+- **Full provenance**: every resource access traced to a user, an agent, a scope, and a time
+- **Tamper evidence**: Ed25519 signatures on every transaction — altering the log breaks the signature chain
+- **Scope proof**: the Biscuit token proves what the user was authorized to access at the time of access, not what they are authorized for now
+
+## Deployment Phases
+
+### Phase 1: External resources through RAMP (weeks)
+
+Deploy a Broker. Configure Biscuit token minting from your IAM. Route to external Exchanges (D&B, PACER, news). All external AI resource access flows through one protocol with unified identity and audit.
+
+### Phase 2: Internal Exchange (one deployment)
+
+Deploy an internal Exchange that indexes CRM, knowledge base, and datasets. Wire it to the Broker alongside external Exchanges. Agents access internal and external resources identically.
+
+### Phase 3: Full governance
+
+The Broker is your AI data gateway:
+- Every resource access goes through it
+- Every access is Ed25519-signed
+- Every department's spend is tracked via `budget_scope`
+- Every classification policy is enforced before delivery
+- Compliance can audit the full history of what any agent accessed
+
+## Next Steps
+
+- [What Is RAMP?](/getting-started/what-is-ramp/) — the protocol overview
+- [Universal Data Layer](/getting-started/for-ai-platforms/) — the broader vision for RAMP as a single integration point
+- [Authentication (Ed25519)](/protocol/authentication/) — how RAMP's signature scheme works
+- [For AI Agents](/getting-started/for-ai-agents/) — SDK integration guide
+- [Transaction Flow](/protocol/transaction-flow/) — the full request-offer-deliver-report cycle

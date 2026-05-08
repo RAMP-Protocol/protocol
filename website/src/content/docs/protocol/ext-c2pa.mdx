@@ -1,0 +1,265 @@
+---
+title: "Extension: ramp-c2pa-v1"
+description: "C2PA content credentials integration — provenance verification, training/mining rights enforcement, and soft binding for dispute resolution"
+---
+
+## Overview
+
+RAMP-C2PA v1 integrates the [C2PA](https://c2pa.org/) (Coalition for Content Provenance and Authenticity) standard into RAMP, enabling agents and Exchanges to:
+
+- **Verify** content provenance — who created it, what tools were used, whether it's been modified
+- **Enforce** creator-declared training/mining restrictions commercially via RAMP access controls
+- **Resolve** disputes with stronger evidence using C2PA hard and soft content bindings
+- **Filter** for provenance-verified content at discovery time
+
+C2PA proves **what content IS** (provenance). RAMP manages **what you can DO with it** (commercial access). This profile bridges the two.
+
+### Design Principle: Consume Results, Not Structures
+
+RAMP does not re-implement C2PA internals. C2PA has its own container format (JUMBF), its own PKI (X.509 certificates), and its own validation algorithm (COSE Sign1). This profile defines how **C2PA validation results** are carried in RAMP's existing attestation mechanism — not how to parse JUMBF or verify COSE signatures.
+
+A **C2PA verification vendor** (the Exchange itself, or a third party like Truepic or a C2PA Trust List validator) validates the manifest and publishes results as a standard RAMP `ResourceAttestation`. C2PA-unaware agents benefit from the results without needing C2PA libraries.
+
+### Who Should Implement This
+
+- **Exchanges** serving content with C2PA credentials (news photos, AI-generated images, medical imaging, legal documents)
+- **Verification vendors** that validate C2PA manifests and bridge the results into RAMP attestations
+- **Agents** that need provenance assurance for high-stakes content (medical, legal, financial)
+- **Providers** that embed C2PA credentials in their content and want RAMP to enforce their training/mining declarations
+
+### Prerequisites
+
+Implementers must be familiar with:
+
+- RAMP protocol (`proto/ramp/v1/ramp.proto`)
+- `ResourceIdentity`, `ResourceAttestation`, and `AccessRestrictions` messages
+- The `ext` field mechanism (`google.protobuf.Struct`)
+- [C2PA Specification 2.3](https://spec.c2pa.org/specifications/specifications/2.3/specs/C2PA_Specification.html) (recommended, not required for consumers)
+
+---
+
+## Profile Declaration
+
+An Exchange declares support by including `"ramp-c2pa-v1"` in `ExchangeManifest.supported_profiles`:
+
+```json
+{
+  "ver": "1.0",
+  "domain": "exchange.example.com",
+  "supported_profiles": ["ramp-c2pa-v1"],
+  "accepted_verifiers": ["truepic.com", "contentcredentials.org"]
+}
+```
+
+---
+
+## Core Proto Fields
+
+These fields are in the core `ramp.proto` (Layer 1), not in `ext`:
+
+### ResourceIdentity
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `c2pa_manifest` | `string` | URI to the C2PA content credentials manifest (sidecar, embedded, or Content Credentials Cloud) |
+| `c2pa_status` | `C2PAStatus` | Summary validation result: `TRUSTED`, `VALID`, `INVALID`, or `ABSENT` |
+| `soft_binding` | `string` | Content-derived identifier surviving format transcoding (from C2PA soft binding assertion) |
+| `soft_binding_method` | `string` | Algorithm: `"phash-v1"`, `"c2pa-watermark"`, `"chromaprint"` |
+
+### C2PAStatus Enum
+
+| Value | C2PA Equivalent | Meaning |
+|-------|----------------|---------|
+| `TRUSTED` | Well-formed + valid + trusted | Signature verifies AND signer chains to C2PA Trust List |
+| `VALID` | Well-formed + valid | Signature verifies, but signer not in C2PA Trust List |
+| `INVALID` | Validation failed | Signature mismatch, malformed manifest, or broken binding |
+| `ABSENT` | No manifest | Content was checked — no C2PA credentials present |
+
+---
+
+## Attestation Claims Vocabulary
+
+When a C2PA verification vendor validates a manifest, it publishes results as a RAMP `ResourceAttestation` with these standardized claim names:
+
+### Identity & Trust Claims
+
+| Claim Key | Type | Description |
+|-----------|------|-------------|
+| `c2pa.status` | string | `"trusted"`, `"valid"`, `"invalid"` — mirrors `C2PAStatus` enum |
+| `c2pa.signer` | string | X.509 subject common name from the signing certificate |
+| `c2pa.signer_org` | string | Organization from the signing certificate |
+| `c2pa.signer_domain` | string | Domain extracted from the signer's certificate (SAN or CN) |
+| `c2pa.trust_list` | string | URI of the trust list used for validation (e.g., `"c2pa.org/trust-list-v2"`) |
+| `c2pa.signed_at` | string | ISO 8601 timestamp from the claim signature |
+| `c2pa.tsa` | string | Time Stamping Authority domain (if RFC 3161 timestamp present) |
+| `c2pa.tsa_time` | string | ISO 8601 authenticated time from TSA (stronger than `signed_at`) |
+
+### Provenance Claims
+
+| Claim Key | Type | Description |
+|-----------|------|-------------|
+| `c2pa.actions` | string[] | Summary of c2pa.actions.v2 history. Values: `"c2pa.created"`, `"c2pa.edited"`, `"c2pa.color_adjusted"`, `"c2pa.cropped"`, `"c2pa.redacted"`, `"c2pa.watermarked"`, etc. |
+| `c2pa.source_type` | string | `"human"`, `"ai"`, `"hybrid"` — from C2PA sourcetype (0, 1, 2) |
+| `c2pa.claim_generator` | string | Software that generated the manifest (e.g., `"Adobe Photoshop 26.0"`) |
+| `c2pa.ingredients_count` | integer | Number of c2pa.ingredient.v3 assertions (composition depth) |
+
+### Rights & Mining Claims
+
+| Claim Key | Type | Description |
+|-----------|------|-------------|
+| `c2pa.training_allowed` | boolean | From `c2pa.training_mining` assertion — whether content may be used for AI/ML training |
+| `c2pa.mining_allowed` | boolean | From `c2pa.training_mining` assertion — whether content may be data-mined |
+
+### Content Binding Claims
+
+| Claim Key | Type | Description |
+|-----------|------|-------------|
+| `c2pa.hard_binding_alg` | string | Hard binding algorithm: `"sha256"`, `"sha384"`, `"sha512"` |
+| `c2pa.hard_binding_valid` | boolean | Whether the hard binding hash matches current content |
+| `c2pa.soft_binding_alg` | string | Soft binding algorithm (if present): `"phash-v1"`, watermark ID |
+| `c2pa.soft_binding_hash` | string | Soft binding value (copied to `ResourceIdentity.soft_binding`) |
+
+### Example: Bridged C2PA Attestation
+
+```json
+{
+  "verifier": "truepic.com",
+  "kid": "truepic-2026-Q1",
+  "attested_at": "2026-03-20T14:00:00Z",
+  "uri": "https://reuters.com/photos/2026/03/20/climate-summit.jpg",
+  "claims": {
+    "c2pa.status": "trusted",
+    "c2pa.signer": "Reuters News & Media Inc.",
+    "c2pa.signer_domain": "reuters.com",
+    "c2pa.trust_list": "c2pa.org/trust-list-v2",
+    "c2pa.signed_at": "2026-03-20T11:30:00Z",
+    "c2pa.tsa": "digicert.com",
+    "c2pa.actions": ["c2pa.created", "c2pa.color_adjusted"],
+    "c2pa.source_type": "human",
+    "c2pa.claim_generator": "Reuters IPTC Photo Desk 4.1",
+    "c2pa.ingredients_count": 0,
+    "c2pa.training_allowed": false,
+    "c2pa.mining_allowed": false,
+    "c2pa.hard_binding_alg": "sha256",
+    "c2pa.hard_binding_valid": true,
+    "content_hash": "sha256:a1b2c3d4e5f6...",
+    "hash_method": "sha256"
+  },
+  "signature": "base64-encoded-ed25519-signature"
+}
+```
+
+---
+
+## Rights Enforcement Mapping
+
+The Exchange SHOULD automatically map C2PA training/mining declarations to RAMP access restrictions:
+
+| C2PA Assertion | RAMP Mapping |
+|----------------|-------------|
+| `c2pa.training_mining.training_allowed == false` | `AccessRestrictions.prohibited_functions += "ai_train"` |
+| `c2pa.training_mining.mining_allowed == false` | `AccessRestrictions.prohibited_functions += "ai_index"` |
+| `c2pa.training_mining` absent | No restriction inferred (absence is not prohibition) |
+
+This creates a two-layer enforcement model:
+
+1. **Declaration layer** (C2PA): The content creator embeds their intent in the content itself. This travels with the content, even outside RAMP channels.
+2. **Enforcement layer** (RAMP): The Exchange reads the C2PA declaration and enforces it commercially — an agent requesting `intended_use: "ai_train"` will not receive offers for content where training is prohibited.
+
+---
+
+## Dispute Enhancement
+
+C2PA content bindings strengthen RAMP's dispute resolution:
+
+### Hard Binding Disputes
+
+When an agent files `DISPUTE_REASON_CONTENT_MISMATCH` and the offer carried `c2pa_status: TRUSTED`, the Exchange can:
+
+1. Re-validate the C2PA hard binding against the `received_content_hash` in the dispute
+2. If the C2PA hard binding was `sha256` and the agent's received hash matches the C2PA hash but differs from the offer's `content_hash` — the provider modified the content after attestation (provider fault)
+3. Auto-resolve as `RESOLUTION_TYPE_CREDIT`
+
+### Soft Binding Disputes
+
+When content is legitimately transcoded (image resized, PDF extracted to text) and the hard hash no longer matches:
+
+1. The agent computes a soft binding hash from received content using `soft_binding_method`
+2. Compares against `ResourceIdentity.soft_binding`
+3. If the soft binding matches, the content is substantively the same despite format change — dispute SHOULD be rejected
+4. If the soft binding also mismatches, this is genuine content substitution — dispute SHOULD be upheld
+
+---
+
+## Trust Bridging
+
+C2PA and RAMP use different PKI:
+
+| Aspect | C2PA | RAMP |
+|--------|------|------|
+| Key format | X.509 certificates | Ed25519 JWKS |
+| Trust model | Centrally curated Trust Lists (CA hierarchy) | Decentralized (provider ↔ exchange manifests) |
+| Signature format | COSE Sign1 (RFC 9052) | JWS Compact (RFC 7515) |
+| Timestamping | RFC 3161 TSA (cryptographic proof) | Self-declared `attested_at` |
+
+The verification vendor bridges these worlds:
+
+```
+C2PA World                          RAMP World
+─────────────────                   ──────────────────
+X.509 cert chain                    Ed25519 JWKS
+COSE Sign1 signature    ──►        JWS EdDSA signature
+C2PA Trust List          Vendor     RAMP accepted_verifiers
+JUMBF manifest          bridges     ResourceAttestation.claims
+RFC 3161 TSA                        attested_at timestamp
+```
+
+The vendor's Ed25519 key (published at `/.well-known/ramp-verifier.json`) attests to the results of X.509/COSE validation. RAMP participants trust the vendor; the vendor trusts the C2PA Trust List. One-way bridge, clean separation.
+
+---
+
+## Conformance Levels
+
+### Minimum Viable (Level A)
+
+- Populate `ResourceIdentity.c2pa_manifest` when content has C2PA credentials
+- Populate `c2pa_status` with validation result
+- Declare `"ramp-c2pa-v1"` in `ExchangeManifest.supported_profiles`
+
+### Standard (Level B)
+
+All of Level A, plus:
+
+- Publish a C2PA-bridged `ResourceAttestation` with identity and rights claims (`c2pa.status`, `c2pa.signer`, `c2pa.training_allowed`, `c2pa.mining_allowed`)
+- Map `c2pa.training_mining` to `AccessRestrictions.prohibited_functions`
+- Extract `content_hash` from C2PA hard binding into attestation claims
+
+### Full (Level C)
+
+All of Level B, plus:
+
+- Include provenance claims (`c2pa.actions`, `c2pa.source_type`, `c2pa.ingredients_count`)
+- Extract and populate `soft_binding` / `soft_binding_method` from C2PA soft binding assertions
+- Use soft binding evidence in dispute resolution
+- Support TSA-grade temporal claims (`c2pa.tsa`, `c2pa.tsa_time`)
+
+---
+
+## Crypto Stack Compatibility
+
+Both C2PA and RAMP support Ed25519/EdDSA. A verification vendor that holds both an X.509 certificate (for C2PA signing) and an Ed25519 key (for RAMP attestation signing) can participate in both ecosystems.
+
+| Algorithm | C2PA Support | RAMP Support |
+|-----------|-------------|-------------|
+| Ed25519 | Yes (EdDSA via COSE) | Yes (EdDSA via JWS) |
+| ECDSA P-256 | Yes | No |
+| RSA | Yes | No |
+| SHA-256 | Yes (hard binding) | Yes (content_hash) |
+| SHA-384/512 | Yes | Yes (hash_method field) |
+
+---
+
+## Relationship to Other Profiles
+
+- **ramp-news-v1**: News photos with C2PA credentials benefit from both profiles. The news profile tracks editorial metadata (corrections, retractions); the C2PA profile tracks content provenance (camera, edits, creator identity). They compose — an offer can carry both `news.*` and `c2pa.*` claims.
+- **ramp-comp-v1**: CoMP's `Video.c2pa`, `Image.c2pa`, and `Audio.c2pa` fields carry C2PA manifest URIs at the media asset level. This profile operates at the RAMP resource level — the `ResourceIdentity.c2pa_manifest` is the canonical pointer, independent of CoMP.

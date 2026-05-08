@@ -1,0 +1,659 @@
+---
+title: "Transaction Flow"
+description: "The four Exchange RPCs that form the core RAMP protocol: DiscoverResources, ExecuteTransaction, ReportUsage, and DisputeTransaction."
+---
+
+## The Exchange Protocol
+
+The Exchange exposes four RPCs. This is the core protocol -- everything else is built on top of it. Both agents and Brokers are clients of the same Exchange interface. The Exchange does not know or care whether the request came from an Broker or directly from an agent.
+
+```
+With Broker (multi-exchange, budget control, reporting):
+  Agent -> Broker -> Exchange A, B, C -> select best -> deliver
+
+Without Broker (direct, single exchange):
+  Agent -> Exchange -> deliver
+```
+
+## RPC 1: DiscoverResources
+
+The agent or Broker queries the Exchange to discover available content and pricing.
+
+```
+POST /ramp.v1.ExchangeService/DiscoverResources
+Content-Type: application/json
+```
+
+### Request (`ResourceQuery`)
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-8f3a2b",
+  "requester": {
+    "id": "research-bot",
+    "domain": "buyer.example.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "license_id": "LIC-BUYER-001",
+    "scopes": ["*"],
+    "signature": "ed25519:a4c9f2e8b7d1...",
+    "signature_algorithm": "ed25519"
+  },
+  "intermediaries": []
+}
+```
+
+Key fields:
+- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from `{domain}/.well-known/ramp-agent.json` to verify the signature
+- `requester.uris` -- the content URI(s) being requested
+- `requester.intended_use` -- the intended use (RAG, training, search, etc.)
+- `requester.license_id` -- the buyer's license ID (public identifier, not a credential)
+- `requester.scopes` -- entitlement scopes; `["*"]` means unrestricted public access
+- `requester.signature` -- Ed25519 signature over `(id, domain, uris, scopes)`
+- `intermediaries` -- forwarding chain; empty when the agent queries the Exchange directly
+
+### Response (`ResourceResponse`)
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-8f3a2b",
+  "exchange": "exchange.ssp-example.com",
+  "offers": [
+    {
+      "offer_id": "offer-tc-4921",
+      "package": {
+        "id": "PKG-TC-AI-INFRA",
+        "title": "The Future of AI Infrastructure",
+        "seller": "cdn.ramp-protocol.org",
+        "citation": 1,
+        "scope": {
+          "scope": "SCOPE_TYPE_OTHER",
+          "ctype": ["CONTENT_TYPE_TEXT"],
+          "text": [{
+            "title": "The Future of AI Infrastructure",
+            "wordcount": [2500],
+            "pubdate": "2026-03-10T08:00:00Z",
+            "published": 1,
+            "author": ["Sarah Chen"],
+            "sourcetype": 0
+          }]
+        },
+        "retrieval": {
+          "type": ["RETRIEVAL_TYPE_HTML"]
+        }
+      },
+      "pricing": {
+        "model": "PRICING_MODEL_PER_ACCESS",
+        "rate": 0.05,
+        "currency": "USD",
+        "unit_cost": 0.00001515,
+        "estimated_quantity": 3300
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "reporting": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["transaction_id", "function", "consumed_quantity"]
+      },
+      "identity": {
+        "canonical_url": "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
+        "iptc_guid": "urn:newsml:ap.org:20260310:ai-infra-001"
+      },
+      "restrictions": {
+        "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"],
+        "prohibited_functions": ["FUNCTION_AI_TRAIN"],
+        "permitted_users": ["commercial", "education"]
+      },
+      "previews": [
+        {
+          "url": "https://cdn.ramp-protocol.org/preview/ai-infrastructure-snippet.txt",
+          "media_type": "text/plain",
+          "size": "sample"
+        }
+      ],
+      "exchange_signature": "a1b2c3d4e5f6...",
+      "signature_algorithm": "ed25519"
+    }
+  ]
+}
+```
+
+Each `Offer` includes:
+- A CoMP `Package` with content metadata (title, author, word count, publication date)
+- RAMP `Pricing` with the rate, currency, and normalized unit_cost
+- `ResourceIdentity` for cross-exchange deduplication
+- `AccessRestrictions` derived from the provider's RSL terms
+- `ReportingObligation` defining post-usage reporting requirements
+- `Preview` URLs for pre-transaction evaluation (see [Resource Previews](#resource-previews))
+- An Ed25519 `exchange_signature` that proves the Exchange issued this offer
+
+### Batch Multi-URL Query
+
+When requesting multiple URIs, the response uses `offer_groups` instead of `offers`:
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-batch-01",
+  "exchange": "exchange.ssp-example.com",
+  "offer_groups": [
+    {
+      "uri": "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
+      "offers": [
+        {
+          "offer_id": "offer-tc-4921",
+          "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
+          "exchange_signature": "a1b2c3...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    },
+    {
+      "uri": "https://cdn.ramp-protocol.org/premium/gpu-shortage-2026.html",
+      "offers": [
+        {
+          "offer_id": "offer-tc-4922",
+          "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001200 },
+          "exchange_signature": "d4e5f6...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    },
+    {
+      "uri": "https://cdn.ramp-protocol.org/premium/openai-funding.html",
+      "offers": []
+    }
+  ]
+}
+```
+
+An empty `offers` array indicates the content is not available through this Exchange.
+
+### Subscription Offers
+
+When the buyer has a subscription, the Exchange includes both per-request and subscription offers:
+
+```json
+{
+  "offers": [
+    {
+      "offer_id": "offer-tc-4921",
+      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
+      "exchange_signature": "a1b2c3...",
+      "signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "sub-offer-tc-4921",
+      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0, "currency": "USD", "unit_cost": 0 },
+      "subscription_id": "SUB-12345",
+      "reporting": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] },
+      "exchange_signature": "g7h8i9...",
+      "signature_algorithm": "ed25519"
+    }
+  ]
+}
+```
+
+### Subscription Quota Info
+
+When the buyer holds a subscription, the Exchange attaches `SubscriptionQuotaInfo` entries so the agent can see remaining allowance *before* committing. After the transaction, the updated quota appears on the response so the agent can track burn-down without a separate API call.
+
+**Where it appears:**
+
+- `Offer.subscription_quota` -- proactive signal at discovery time, letting the agent decide whether to commit or switch to a pay-per-request offer.
+- `TransactionResponse.subscription_quota` -- post-transaction snapshot showing remaining quota after the decrement.
+
+**Message fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `subscription_id` | string | Subscription this quota applies to |
+| `quota_limit` | int32 | Total allowed in the current period |
+| `quota_used` | int32 | Used so far in the current period |
+| `quota_remaining` | int32 | Remaining in the current period |
+| `resets_at` | Timestamp | When the quota counter resets (UTC) |
+| `unit` | string | What is metered: `"accesses"`, `"tokens"`, `"spend_cents"`, `"burst"` |
+
+**Multi-dimensional quotas.** A subscription may impose several independent limits -- for example, an access count *and* a spend cap. The `subscription_quota` field is `repeated`, so the Exchange returns one entry per dimension:
+
+```json
+{
+  "offers": [
+    {
+      "offer_id": "sub-offer-tc-4921",
+      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0, "currency": "USD" },
+      "subscription_id": "SUB-12345",
+      "subscription_quota": [
+        {
+          "subscription_id": "SUB-12345",
+          "quota_limit": 5000,
+          "quota_used": 1247,
+          "quota_remaining": 3753,
+          "resets_at": "2026-04-01T00:00:00Z",
+          "unit": "accesses"
+        },
+        {
+          "subscription_id": "SUB-12345",
+          "quota_limit": 50000,
+          "quota_used": 12300,
+          "quota_remaining": 37700,
+          "resets_at": "2026-04-01T00:00:00Z",
+          "unit": "spend_cents"
+        }
+      ],
+      "exchange_signature": "g7h8i9...",
+      "signature_algorithm": "ed25519"
+    }
+  ]
+}
+```
+
+**Quota decrement timing.** The quota counter increments at `ExecuteTransaction` (optimistic -- the Exchange assumes the content will be consumed). If the agent later files a successful `DisputeTransaction`, the Exchange may reverse the decrement.
+
+## RPC 2: ExecuteTransaction
+
+The agent or Broker commits to a selected offer, receiving a signed URL for content delivery.
+
+```
+POST /ramp.v1.ExchangeService/ExecuteTransaction
+Content-Type: application/json
+```
+
+### Request (`TransactionRequest`)
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-req-c7d1",
+  "offer_id": "offer-tc-4921",
+  "requester": {
+    "id": "research-bot",
+    "domain": "buyer.example.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "license_id": "LIC-BUYER-001",
+    "scopes": ["*"],
+    "signature": "ed25519:a4c9f2e8b7d1...",
+    "signature_algorithm": "ed25519"
+  },
+  "request_id": "sq-8f3a2b",
+  "offer_signature": "a1b2c3d4e5f6...",
+  "offer_signature_algorithm": "ed25519"
+}
+```
+
+The `offer_signature` is the `exchange_signature` from the selected offer. The Exchange verifies this signature to confirm the offer has not been tampered with. The Exchange is stateless -- it reconstructs the offer data from the signed token rather than storing offers.
+
+### Response (`TransactionResponse`)
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-req-c7d1",
+  "transaction_id": "txn-mp-93a7f2",
+  "billing_id": "bill-93a7f2-001",
+  "package": {
+    "id": "PKG-TC-AI-INFRA",
+    "title": "The Future of AI Infrastructure",
+    "seller": "cdn.ramp-protocol.org",
+    "citation": 1,
+    "retrieval": {
+      "auth": "RETRIEVAL_AUTH_NONE",
+      "endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Expires=1773451434&Key-Pair-Id=KXYZ&Signature=abc123...",
+      "type": ["RETRIEVAL_TYPE_HTML"]
+    }
+  },
+  "cost": {
+    "amount": 0.05,
+    "currency": "USD",
+    "unit_cost": 0.00001515
+  },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "reporting_obligation": {
+    "required": true,
+    "window": "86400s",
+    "required_fields": ["transaction_id", "function", "consumed_quantity"]
+  },
+  "expires_at": "2026-03-14T02:30:00Z",
+  "agent_identity_hash": "e3b0c44298fc1c14..."
+}
+```
+
+The `retrieval.endpoint` contains a CDN signed URL. The agent fetches it directly -- no further authorization needed. The CDN verifies the signature natively.
+
+### What Happens Inside the Exchange
+
+1. Validate request (proto validation)
+2. Verify Ed25519 agent signature (and broker signature if present)
+3. Check idempotency key (prevent double-charge on retry)
+4. Verify offer signature (reconstruct offer from signed token)
+5. Authorize billing (`BillingAdapter.Authorize`) -- or skip for subscription offers
+6. Write transaction to WAL (must succeed before signing URL)
+7. Generate HMAC-SHA256 signed URL (Exchange-CDN shared secret)
+8. Create reporting obligation with deadline
+
+### Batch TransactionRequest
+
+For batch transactions, use the `items` array:
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-batch-01",
+  "requester": {
+    "id": "research-bot",
+    "domain": "buyer.example.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
+      "https://cdn.ramp-protocol.org/premium/gpu-shortage-2026.html"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "license_id": "LIC-BUYER-001",
+    "scopes": ["*"],
+    "signature": "ed25519:b5d0e3f9c8a2...",
+    "signature_algorithm": "ed25519"
+  },
+  "request_id": "sq-batch-01",
+  "items": [
+    {
+      "offer_id": "offer-tc-4921",
+      "offer_signature": "a1b2c3...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-tc-4922",
+      "offer_signature": "d4e5f6...",
+      "offer_signature_algorithm": "ed25519"
+    }
+  ]
+}
+```
+
+### Batch TransactionResponse
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-batch-01",
+  "items": [
+    {
+      "offer_id": "offer-tc-4921",
+      "transaction_id": "txn-mp-batch-001",
+      "billing_id": "bill-batch-001",
+      "package": {
+        "id": "PKG-TC-AI-INFRA",
+        "retrieval": { "endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=..." }
+      },
+      "cost": { "amount": 0.05, "currency": "USD" },
+      "expires_at": "2026-03-14T02:30:00Z"
+    },
+    {
+      "offer_id": "offer-tc-4922",
+      "transaction_id": "txn-mp-batch-002",
+      "billing_id": "bill-batch-002",
+      "package": {
+        "id": "PKG-TC-GPU",
+        "retrieval": { "endpoint": "https://cdn.ramp-protocol.org/server/premium/gpu-shortage.html?Signature=..." }
+      },
+      "cost": { "amount": 0.05, "currency": "USD" },
+      "expires_at": "2026-03-14T02:30:00Z"
+    }
+  ],
+  "total_cost": { "amount": 0.10, "currency": "USD" },
+  "agent_identity_hash": "e3b0c44298fc1c14..."
+}
+```
+
+Each item gets its own `transaction_id`, `billing_id`, and signed URL. Batch transactions are non-atomic -- individual items can fail independently.
+
+### Subscription TransactionResponse
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-sub-01",
+  "transaction_id": "txn-sub-001",
+  "billing_id": "bill-sub-001",
+  "package": {
+    "id": "PKG-TC-AI-INFRA",
+    "retrieval": { "endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=..." }
+  },
+  "cost": { "amount": 0, "currency": "USD" },
+  "subscription_id": "SUB-12345",
+  "subscription_unit_value": { "amount": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
+  "agent_identity_hash": "e3b0c44298fc1c14...",
+  "reporting_obligation": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] }
+}
+```
+
+## RPC 3: ReportUsage
+
+After content has been used, the agent submits a usage report. When `ReportingObligation.required` is set on the offer, reporting is mandatory -- failure to report within the window may trigger `DENIAL_REASON_REPORTING_OVERDUE` on subsequent transactions.
+
+```
+POST /ramp.v1.ExchangeService/ReportUsage
+Content-Type: application/json
+```
+
+### Request (`UsageReport`)
+
+```json
+{
+  "ver": "1.0",
+  "id": "ur-e4f2a1",
+  "transaction_id": "txn-mp-93a7f2",
+  "billing_id": "bill-93a7f2-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "subfn": ["SUB_FUNCTION_RAG"],
+    "consumed_quantity": 3150,
+    "displayed_to_user": true,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-14T01:45:00Z",
+  "exchange": "exchange.ssp-example.com",
+  "assets": [{
+    "uri": "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
+    "title": "The Future of AI Infrastructure",
+    "package_id": "PKG-TC-AI-INFRA"
+  }]
+}
+```
+
+### Response (`UsageReportResponse`)
+
+```json
+{
+  "accepted": true
+}
+```
+
+### What the Exchange Validates
+
+1. Required fields present (as defined by `ReportingObligation.required_fields`)
+2. Report received within the reporting window (typically 24 hours)
+3. Consumed quantity within tolerance: reported vs. estimated must be within +/-20%
+4. Transaction exists and `billing_id` matches
+
+## Content Delivery (Outside Protocol Scope)
+
+The RAMP protocol covers discovery, negotiation, and transaction execution. Content delivery is outside protocol scope -- it is handled by the Exchange implementation and the provider's CDN.
+
+The `TransactionResponse` carries two relevant fields:
+
+- `DeliveryMethod` -- a hint indicating whether the Exchange is providing content directly or providing retrieval instructions
+- `package.retrieval.endpoint` -- the URL or access info the agent should use to fetch content
+
+How the agent actually retrieves content (signed URLs, access tokens, inline content) depends on the Exchange and CDN implementation, not the protocol.
+
+### Streaming Delivery
+
+RAMP v1.0 adds `DELIVERY_METHOD_STREAMING` for real-time resource access (WebSocket, SSE, HLS, Icecast). The signed URL points to a streaming endpoint. Stream mechanics (heartbeat, reconnection, concurrent connection limits) are managed by the provider, not the RAMP protocol.
+
+**Session lifecycle:**
+
+1. `ExecuteTransaction` returns a signed URL with expiry (e.g., 2 hours)
+2. Agent connects to the stream endpoint
+3. Agent receives data continuously
+4. URL expires -- agent re-requests through the same RAMP flow
+5. `ReportUsage`: `consumed_quantity` in minutes/hours, `consumed_unit` matching the offer's unit
+
+Streaming applies to live broadcasts, quote feeds, monitoring feeds, and any resource where content is delivered continuously rather than as a single fetch.
+
+### Resource Mutability
+
+`ResourceIdentity.resource_mutability` signals whether a resource's content is stable across time:
+
+| Value | Meaning | Hash Behavior |
+|---|---|---|
+| `RESOURCE_MUTABILITY_STATIC` | Content does not change (articles, papers, legislation) | Agent SHOULD verify `content_hash`. Mismatch is disputable. |
+| `RESOURCE_MUTABILITY_DYNAMIC` | Content updates between offer and fetch (credit reports, drug databases) | Agent MUST NOT auto-dispute hash mismatch. Use `data_as_of` for freshness. |
+| `RESOURCE_MUTABILITY_LIVE` | No content exists at offer time (streams, broadcasts) | No `content_hash` applicable. Metering is time-based. |
+
+The Exchange MUST set `resource_mutability` on every `ResourceIdentity`. For `DYNAMIC` resources, the Exchange MUST set `data_as_of` on the Offer. For `LIVE` resources, the Exchange MUST NOT set `content_hash`.
+
+## Reconciliation via Signed URLs
+
+```mermaid
+sequenceDiagram
+    participant MP as Exchange
+    participant Agent as AI Agent
+    participant CDN as Provider CDN
+    participant PUB as Provider
+
+    MP->>Agent: TransactionResponse (signed URL + billing_id)
+    Agent->>CDN: GET signed URL
+    CDN-->>Agent: 200 OK + content
+    CDN->>PUB: Access log (signed URL params, timestamp)
+    Agent->>MP: UsageReport (transaction_id, consumed_quantity)
+
+    Note over PUB,MP: Reconciliation
+
+    PUB->>PUB: CDN logs: every signed URL access
+    MP->>MP: Transaction log: every billing_id issued
+    PUB->>MP: Compare: signed URL accesses vs transactions
+```
+
+Three independent records -- CDN logs, Exchange transactions, usage reports -- that must agree. This provides stronger reconciliation than ad-tech's two-sided model.
+
+## Consistency Model
+
+RAMP uses **at-most-once with reconciliation**, same as OpenRTB:
+
+- Idempotency keys on every `TransactionRequest` (prevent double-charge on retry)
+- "Authorize first, deliver second" ordering (do not issue signed URL until billing succeeds)
+- Reconciliation via `UsageReport` -- if content was not actually used, the report says so
+- No refunds in the protocol -- handle offline like ad-tech discrepancy resolution (~5-10% tolerance)
+
+## RPC 4: DisputeTransaction
+
+When delivered content does not match what was promised, the agent files a dispute. The agent MUST file a `UsageReport` before disputing -- `DisputeRequest.report_id` is required.
+
+```
+POST /ramp.v1.ExchangeService/DisputeTransaction
+Content-Type: application/json
+```
+
+### Request (`DisputeRequest`)
+
+```json
+{
+  "ver": "1.0",
+  "id": "dsp-20260318-abc123",
+  "transaction_id": "txn-mp-93a7f2",
+  "billing_id": "bill-93a7f2-001",
+  "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+  "description": "Content hash does not match attested hash",
+  "received_content_hash": "sha256:e5f6a7b8...",
+  "received_hash_method": "sha256",
+  "report_id": "rpt-20260318-xyz789"
+}
+```
+
+### Response (`DisputeResponse`)
+
+```json
+{
+  "accepted": true,
+  "dispute_id": "case-20260318-def456",
+  "estimated_resolution": "1s",
+  "status": "DISPUTE_STATUS_AUTO_RESOLVED",
+  "resolution": "RESOLUTION_TYPE_CREDIT"
+}
+```
+
+The Exchange resolves most disputes automatically in under 1 second using CDN logs and cryptographic evidence. See [Dispute Resolution](/protocol/dispute-resolution/) for the three-tier resolution system, auto-credit rules, and the complete dispute lifecycle.
+
+## Resource Previews
+
+Offers may include lightweight preview URLs for pre-transaction evaluation. The Exchange holds only the URL (50–200 bytes); the provider's CDN serves the actual bytes. Agents fetch previews only when evaluating offers -- not on every discovery query.
+
+```proto
+message Preview {
+  string url = 1;            // CDN-hosted preview URL
+  string media_type = 2;     // MIME type ("image/jpeg", "audio/mpeg", "text/plain")
+  optional int32 width = 3;  // Pixels (images/video)
+  optional int32 height = 4;
+  optional int32 duration = 5; // Seconds (audio/video clips)
+  optional string size = 6;  // "thumbnail", "preview", "sample"
+}
+```
+
+### Per Content Type
+
+| Content Type | Preview | What the URL Points To |
+|---|---|---|
+| **Image** | Watermarked thumbnail | Small JPEG, 150–450px, provider-watermarked |
+| **Video** | Short clip | 10–30 second MP4/WebM, watermarked |
+| **Audio** | Short clip | 15–30 second MP3, low-bitrate or watermarked |
+| **Text** | Snippet or abstract | First 200 words or abstract as text/plain |
+| **Data / records** | Sample record | 1–3 sample rows as application/json |
+| **Stream** | Optional frame capture | Or none -- streams are priced by time, not by content |
+
+### Example: Image Offer with Previews
+
+```json
+{
+  "offer_id": "offer-reuters-001",
+  "title": "Climate Summit Photo - Reuters",
+  "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.50, "currency": "USD" },
+  "previews": [
+    {
+      "url": "https://cdn.reuters.com/preview/150/climate-summit.jpg",
+      "media_type": "image/jpeg",
+      "width": 150, "height": 100,
+      "size": "thumbnail"
+    },
+    {
+      "url": "https://cdn.reuters.com/preview/450/climate-summit.jpg?sig=abc&exp=300",
+      "media_type": "image/jpeg",
+      "width": 450, "height": 300,
+      "size": "preview"
+    }
+  ]
+}
+```
+
+### Design Rationale
+
+This follows the universal content marketplace pattern:
+
+- **Shutterstock**: `small_thumb.url` (100px, unwatermarked), `preview.url` (450px, watermarked), `preview_1500.url` (1500px, watermarked)
+- **Spotify**: `preview_url` -- URL to a 30-second MP3 clip
+- **IIIF**: Parameterized URL template -- client requests any size
+- **OpenRTB**: `img.url` + `img.w` + `img.h` per asset
+
+Nobody puts image bytes in offer metadata. The Exchange holds a URL string; the CDN holds the pixels.
+
+## Next Steps
+
+- [Authentication](/protocol/authentication/) -- Ed25519 signature chain details
+- [Content Attestation](/protocol/content-attestation/) -- cryptographic content verification
+- [Dispute Resolution](/protocol/dispute-resolution/) -- three-tier dispute resolution system
+- [Scenario Walkthrough](/protocol/scenario-walkthrough/) -- complete end-to-end scenario with all phases
+- [Discovery Paths](/protocol/discovery-paths/) -- all entry points into the protocol

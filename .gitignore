@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.astro/
+.env
+.dev.vars
+*.local
+review-*.md
+research-*.md

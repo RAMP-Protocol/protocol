@@ -1,0 +1,1137 @@
+---
+title: "Walkthrough: Academic Literature Review"
+description: "Batch 50-DOI query with mixed free/paid offers, institutional subscription detection, retraction flagging, and the ramp-academic-v1 extension profile."
+---
+
+> Complete walkthrough of a 50-paper academic literature review using RAMP v1.0. Demonstrates batch DOI queries, mixed free/paid/subscription offers, retraction detection, and the `ramp-academic-v1` extension profile. Every field name and message structure matches the current `ramp.proto`.
+
+## Scenario
+
+A university AI research agent needs 50 academic papers for a literature review on "transformer architectures in medical imaging." The papers span four sources:
+
+| Source | Type | Papers | Pricing |
+|---|---|---|---|
+| **arXiv** | Open Access (Gold) | 12 | Free |
+| **University subscription** | Institutional deal via Elsevier | 20 | $0.00 (subscription) |
+| **Elsevier** (no subscription) | Paywalled | 17 | $1.50/article |
+| **Springer Nature** | Paywalled, retracted | 1 | $1.50/article (flagged) |
+
+The agent carries a Biscuit delegation token from the university, granting `academic:*` scope. The Broker resolves DOIs via OpenAlex, discovers Exchanges via `ramp.json`, and uses the `ramp-academic-v1` extension profile to access version, OA status, and retraction metadata.
+
+**Six-step flow:**
+
+```
+Discovery → ResourceQuery → ResourceResponse → Broker Selection → Batch ExecuteTransaction → ReportUsage
+```
+
+---
+
+## Step 1 — Discovery
+
+The Broker already has 50 DOIs from an OpenAlex search. It needs to find which Exchanges serve these publishers. Each publisher domain hosts a `ramp.json` manifest:
+
+```bash
+curl -s https://www.elsevier.com/.well-known/ramp.json | jq
+```
+
+```json
+{
+  "ver": "1.0",
+  "provider": "elsevier.com",
+  "contact": "ai-licensing@elsevier.com",
+  "exchanges": [
+    {
+      "domain": "exchange.scholarsgate.com",
+      "endpoint": "https://exchange.scholarsgate.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-academic-v1"]
+}
+```
+
+```bash
+curl -s https://arxiv.org/.well-known/ramp.json | jq
+```
+
+```json
+{
+  "ver": "1.0",
+  "provider": "arxiv.org",
+  "contact": "ramp@arxiv.org",
+  "exchanges": [
+    {
+      "domain": "exchange.scholarsgate.com",
+      "endpoint": "https://exchange.scholarsgate.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-academic-v1"]
+}
+```
+
+```bash
+curl -s https://www.springer.com/.well-known/ramp.json | jq
+```
+
+```json
+{
+  "ver": "1.0",
+  "provider": "springer.com",
+  "contact": "ai-access@springernature.com",
+  "exchanges": [
+    {
+      "domain": "exchange.scholarsgate.com",
+      "endpoint": "https://exchange.scholarsgate.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-academic-v1"]
+}
+```
+
+All three publishers route through the same academic aggregator Exchange (`exchange.scholarsgate.com`). This is the aggregator-as-Exchange pattern: academic aggregators (like Semantic Scholar, OpenAlex, or a commercial equivalent) already normalize metadata across publishers. RAMP gives them a standard protocol for what they already do. The Broker sends a single batch query instead of querying each publisher separately.
+
+---
+
+## Step 2 — ResourceQuery
+
+The Broker sends a batch `ResourceQuery` with all 50 DOIs in `requester.uris`. The `Requester` carries the university's Biscuit delegation token with `academic:*` scope, and the query declares support for `ramp-academic-v1` so the Exchange includes version, OA status, and retraction metadata in its response.
+
+```json
+POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-litrev-001",
+  "requester": {
+    "id": "litrev-agent",
+    "domain": "cs.stanford.edu",
+    "type": "REQUESTER_TYPE_AGENT",
+    "name": "Stanford CS Literature Review Agent",
+    "uris": [
+      "doi:10.1016/j.media.2024.103250",
+      "doi:10.1016/j.media.2024.103178",
+      "doi:10.1016/j.media.2024.103095",
+      "doi:10.1016/j.media.2023.103012",
+      "doi:10.1016/j.media.2023.102956",
+      "doi:10.1016/j.media.2023.102891",
+      "doi:10.1016/j.media.2023.102834",
+      "doi:10.1016/j.media.2023.102770",
+      "doi:10.1016/j.media.2022.102689",
+      "doi:10.1016/j.media.2022.102615",
+      "doi:10.1016/j.media.2022.102542",
+      "doi:10.1016/j.media.2022.102478",
+      "doi:10.1016/j.media.2022.102410",
+      "doi:10.1016/j.media.2021.102345",
+      "doi:10.1016/j.media.2021.102287",
+      "doi:10.1016/j.media.2021.102219",
+      "doi:10.1016/j.media.2021.102154",
+      "doi:10.1038/s41592-024-02401-5",
+      "doi:10.1038/s41592-024-02318-0",
+      "doi:10.1038/s41592-024-02245-7",
+      "doi:10.1038/s41592-023-02112-4",
+      "doi:10.1038/s41592-023-02038-1",
+      "doi:10.1038/s41592-023-01975-3",
+      "doi:10.1038/s41592-023-01901-x",
+      "doi:10.1038/s41592-023-01847-2",
+      "doi:10.1038/s41592-022-01789-5",
+      "doi:10.1038/s41592-022-01714-6",
+      "doi:10.1038/s41592-022-01648-3",
+      "doi:10.1038/s41592-022-01581-5",
+      "doi:10.1038/s41592-022-01517-1",
+      "doi:10.1038/s41592-021-01389-9",
+      "doi:10.1038/s41592-021-01312-y",
+      "doi:10.48550/arXiv.2406.11838",
+      "doi:10.48550/arXiv.2405.09781",
+      "doi:10.48550/arXiv.2404.18021",
+      "doi:10.48550/arXiv.2403.12590",
+      "doi:10.48550/arXiv.2402.08471",
+      "doi:10.48550/arXiv.2401.15034",
+      "doi:10.48550/arXiv.2312.09250",
+      "doi:10.48550/arXiv.2311.14521",
+      "doi:10.48550/arXiv.2310.07893",
+      "doi:10.48550/arXiv.2309.16588",
+      "doi:10.48550/arXiv.2308.13042",
+      "doi:10.48550/arXiv.2307.09534",
+      "doi:10.1016/j.media.2024.103301",
+      "doi:10.1016/j.media.2024.103267",
+      "doi:10.1016/j.media.2023.103189",
+      "doi:10.1016/j.media.2023.103145",
+      "doi:10.1016/j.media.2023.103078",
+      "doi:10.1038/s41592-024-02467-x"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["academic:*"],
+    "signature": "ed25519:d7e8f9a0b1c2...",
+    "signature_algorithm": "ed25519",
+    "delegation": {
+      "principal_domain": "stanford.edu",
+      "principal_id": "inst-sub-stanford-2026",
+      "scopes": ["academic:*"],
+      "expires_at": "2026-12-31T23:59:59Z",
+      "max_accesses": 100000,
+      "quota_period": "720h",
+      "token": "biscuit-v2:EpQBCk...(base64 Biscuit token)",
+      "token_format": "biscuit-v2"
+    }
+  },
+  "supported_profiles": ["ramp-academic-v1"]
+}
+```
+
+**Key fields in this request:**
+
+- **`requester.uris`** — 50 DOIs in `doi:` URI scheme. The Exchange resolves these against its catalog. DOIs are the universal dedup key for academic content: the same paper on arXiv and Elsevier shares the same DOI (or is linked via `academic.related_works`).
+- **`requester.scopes`** — `["academic:*"]` declares full academic access. The Exchange will check this against the Biscuit token to determine subscription entitlements.
+- **`delegation`** — A Biscuit token signed by `stanford.edu`'s Ed25519 key. The authority block contains:
+  ```
+  user("inst-sub-stanford-2026");
+  scope("academic:*");
+  max_accesses(100000);
+  quota_period_hours(720);
+  expires(2026-12-31T23:59:59Z);
+  ```
+  The Exchange verifies the Biscuit offline (no call to Stanford needed), confirms the subscription covers Elsevier content, and returns zero-cost offers for covered papers.
+- **`supported_profiles`** — `["ramp-academic-v1"]` tells the Exchange to include academic-specific `ext` fields (OA status, version, retraction status) and attestation claims. Without this declaration, the Exchange MAY skip expensive metadata computation like retraction checking.
+
+---
+
+## Step 3 — ResourceResponse
+
+The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delegation for institutional subscription coverage, and returns 50 `OfferGroup` entries. Below are representative examples from each category — the full response contains all 50 groups.
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-litrev-001",
+  "exchange": "exchange.scholarsgate.com",
+  "offer_groups": [
+    {
+      "uri": "doi:10.48550/arXiv.2406.11838",
+      "offers": [
+        {
+          "offer_id": "offer-arxiv-2406-11838",
+          "package": {
+            "id": "PKG-ARXIV-2406-11838",
+            "title": "MedViT: A Robust Vision Transformer for Medical Image Classification",
+            "seller": "arxiv.org",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_PDF"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": 0,
+            "currency": "USD",
+            "unit_cost": 0,
+            "estimated_quantity": 12800,
+            "unit": "tokens"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://arxiv.org/abs/2406.11838",
+            "doi": "10.48550/arXiv.2406.11838",
+            "content_hash": "sha256:a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "attestations": [
+            {
+              "verifier": "arxiv.org",
+              "kid": "arxiv-key-2026-03",
+              "attested_at": "2026-03-15T08:00:00Z",
+              "uri": "doi:10.48550/arXiv.2406.11838",
+              "claims": {
+                "estimated_quantity": 12800,
+                "word_count": 9700,
+                "language": "en",
+                "academic.oa_status": "gold",
+                "academic.version": "preprint",
+                "academic.retraction_status": "active",
+                "academic.peer_review_status": "not_peer_reviewed",
+                "academic.license": "CC-BY-4.0",
+                "academic.subject_areas": ["cs.CV", "cs.AI"]
+              },
+              "signature": "base64-ed25519-arxiv-self-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH", "FUNCTION_AI_TRAIN"],
+            "prohibited_functions": []
+          },
+          "exchange_signature": "base64-ed25519-arxiv-offer-sig...",
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "academic.oa_status": "gold",
+            "academic.version": "preprint",
+            "academic.license": "CC-BY-4.0",
+            "academic.subject_areas": ["cs.CV", "cs.AI"]
+          }
+        }
+      ]
+    },
+    {
+      "uri": "doi:10.1016/j.media.2024.103250",
+      "offers": [
+        {
+          "offer_id": "offer-elsevier-sub-103250",
+          "package": {
+            "id": "PKG-ELSEVIER-MEDIA-103250",
+            "title": "TransUNet++: Rethinking Multi-Scale Feature Fusion for Medical Image Segmentation",
+            "seller": "elsevier.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_PDF", "RETRIEVAL_TYPE_XML"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_SUBSCRIPTION",
+            "rate": 0,
+            "currency": "USD",
+            "unit_cost": 0,
+            "estimated_quantity": 15200,
+            "unit": "tokens"
+          },
+          "subscription_id": "inst-sub-stanford-2026",
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://www.sciencedirect.com/science/article/pii/S1361841524001250",
+            "doi": "10.1016/j.media.2024.103250",
+            "content_hash": "sha256:b2c3d4e5f6a789012345678bcdefa0123456789abcdef0123456789abcdef02",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "attestations": [
+            {
+              "verifier": "elsevier.com",
+              "kid": "elsevier-key-2026-q1",
+              "attested_at": "2026-03-10T06:00:00Z",
+              "uri": "doi:10.1016/j.media.2024.103250",
+              "claims": {
+                "estimated_quantity": 15200,
+                "word_count": 11500,
+                "language": "en",
+                "academic.oa_status": "closed",
+                "academic.version": "vor",
+                "academic.retraction_status": "active",
+                "academic.peer_review_status": "peer_reviewed"
+              },
+              "signature": "base64-ed25519-elsevier-self-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+          },
+          "subscription_quota": [
+            {
+              "subscription_id": "inst-sub-stanford-2026",
+              "quota_limit": 100000,
+              "quota_used": 23480,
+              "quota_remaining": 76520,
+              "resets_at": "2026-04-01T00:00:00Z",
+              "unit": "accesses"
+            }
+          ],
+          "exchange_signature": "base64-ed25519-elsevier-sub-offer-sig...",
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "academic.oa_status": "closed",
+            "academic.version": "vor",
+            "academic.journal": "Medical Image Analysis",
+            "academic.issn": "1361-8415",
+            "academic.publisher": "Elsevier"
+          }
+        }
+      ]
+    },
+    {
+      "uri": "doi:10.1038/s41592-024-02401-5",
+      "offers": [
+        {
+          "offer_id": "offer-springer-paid-02401",
+          "package": {
+            "id": "PKG-SPRINGER-NM-02401",
+            "title": "CellViT: Vision Transformers for Precise Cell Segmentation and Classification",
+            "seller": "springer.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_PDF"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_ACCESS",
+            "rate": 1.50,
+            "currency": "USD",
+            "unit_cost": 0.0001136,
+            "estimated_quantity": 13200,
+            "unit": "tokens"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://www.nature.com/articles/s41592-024-02401-5",
+            "doi": "10.1038/s41592-024-02401-5",
+            "content_hash": "sha256:c3d4e5f6a7b8901234567890cdef0123456789abcdef0123456789abcdef03",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "attestations": [
+            {
+              "verifier": "springer.com",
+              "kid": "springer-key-2026-q1",
+              "attested_at": "2026-03-12T09:00:00Z",
+              "uri": "doi:10.1038/s41592-024-02401-5",
+              "claims": {
+                "estimated_quantity": 13200,
+                "word_count": 10000,
+                "language": "en",
+                "academic.oa_status": "closed",
+                "academic.version": "vor",
+                "academic.retraction_status": "active",
+                "academic.peer_review_status": "peer_reviewed"
+              },
+              "signature": "base64-ed25519-springer-self-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+          },
+          "exchange_signature": "base64-ed25519-springer-paid-offer-sig...",
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "academic.oa_status": "closed",
+            "academic.version": "vor",
+            "academic.journal": "Nature Methods",
+            "academic.issn": "1548-7105",
+            "academic.publisher": "Springer Nature"
+          }
+        }
+      ]
+    },
+    {
+      "uri": "doi:10.1038/s41592-024-02467-x",
+      "offers": [
+        {
+          "offer_id": "offer-springer-retracted-02467",
+          "package": {
+            "id": "PKG-SPRINGER-NM-02467",
+            "title": "RETRACTED: Attention-Guided Pathology Detection via Self-Supervised Transformers",
+            "seller": "springer.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_PDF"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_ACCESS",
+            "rate": 1.50,
+            "currency": "USD",
+            "unit_cost": 0.0001071,
+            "estimated_quantity": 14000,
+            "unit": "tokens"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://www.nature.com/articles/s41592-024-02467-x",
+            "doi": "10.1038/s41592-024-02467-x",
+            "content_hash": "sha256:d4e5f6a7b8c9012345678901defa0123456789abcdef0123456789abcdef04",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "attestations": [
+            {
+              "verifier": "springer.com",
+              "kid": "springer-key-2026-q1",
+              "attested_at": "2026-03-01T12:00:00Z",
+              "uri": "doi:10.1038/s41592-024-02467-x",
+              "claims": {
+                "estimated_quantity": 14000,
+                "word_count": 10600,
+                "language": "en",
+                "academic.oa_status": "closed",
+                "academic.version": "vor",
+                "academic.retraction_status": "retracted",
+                "academic.retraction_date": "2026-02-15",
+                "academic.retraction_reason": "data_fabrication",
+                "academic.peer_review_status": "peer_reviewed"
+              },
+              "signature": "base64-ed25519-springer-retraction-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+          },
+          "exchange_signature": "base64-ed25519-springer-retracted-offer-sig...",
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "academic.oa_status": "closed",
+            "academic.version": "vor",
+            "academic.retraction_status": "retracted",
+            "academic.retraction_date": "2026-02-15",
+            "academic.retraction_reason": "data_fabrication",
+            "academic.journal": "Nature Methods",
+            "academic.issn": "1548-7105",
+            "academic.publisher": "Springer Nature"
+          },
+          "ext_critical": ["academic.retraction_status"]
+        }
+      ]
+    }
+  ],
+  "rate_limit": {
+    "limit": 100,
+    "remaining": 94,
+    "reset_at": "2026-03-20T13:00:00Z",
+    "window": "3600s"
+  }
+}
+```
+
+**What the Broker learns from the 50 OfferGroups:**
+
+### Offer Categories
+
+The Exchange classified each of the 50 DOIs into one of four categories based on the publisher's access model and the Biscuit delegation:
+
+| Category | Count | Pricing Model | Rate | Key Signal |
+|---|---|---|---|---|
+| **Free OA (arXiv)** | 12 | `PRICING_MODEL_FREE` | $0.00 | `academic.oa_status: "gold"`, `academic.version: "preprint"` |
+| **Subscription (Elsevier)** | 20 | `PRICING_MODEL_SUBSCRIPTION` | $0.00 | `subscription_id: "inst-sub-stanford-2026"` |
+| **Paid (Springer + Elsevier)** | 17 | `PRICING_MODEL_PER_ACCESS` | $1.50 | No subscription match, `academic.oa_status: "closed"` |
+| **Retracted (Springer)** | 1 | `PRICING_MODEL_PER_ACCESS` | $1.50 | `academic.retraction_status: "retracted"` in `ext_critical` |
+
+### Extension Profile Fields (`ramp-academic-v1`)
+
+Because the ResourceQuery declared `supported_profiles: ["ramp-academic-v1"]`, every offer includes academic-specific metadata:
+
+- **`academic.oa_status`** — Open Access classification. Values: `gold` (fully OA), `green` (author self-archived), `hybrid` (OA in subscription journal), `bronze` (free-to-read but no license), `diamond` (no APC), `closed` (paywalled). The Broker uses this to prefer free sources.
+- **`academic.version`** — Article lifecycle stage. Values: `preprint` (author's original), `aam` (accepted author manuscript), `vor` (Version of Record, publisher-formatted). The Broker prefers VoR when available, falls back to preprint.
+- **`academic.retraction_status`** — Publication integrity status. Values: `active` (valid), `retracted` (withdrawn), `expression_of_concern` (under investigation). When `retracted` appears in `ext_critical`, the consumer MUST understand retraction semantics or reject the offer.
+- **`academic.peer_review_status`** — Whether the paper has been peer-reviewed. Values: `peer_reviewed`, `not_peer_reviewed`. Useful for weighting evidence quality.
+
+### Retraction Flagging
+
+The retracted paper (DOI `10.1038/s41592-024-02467-x`) is immediately identifiable:
+
+1. **Attestation claim**: `academic.retraction_status: "retracted"` in `ResourceAttestation.claims`, signed by `springer.com`.
+2. **Ext field**: `academic.retraction_status: "retracted"` in `Offer.ext`.
+3. **Critical signaling**: `ext_critical: ["academic.retraction_status"]` — the consumer MUST understand retraction semantics. An agent that does not support `ramp-academic-v1` would reject this offer with `OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION` rather than silently consuming a retracted paper.
+4. **Package title**: Prefixed with "RETRACTED:" as a human-readable signal.
+
+### Content Identity and Dedup
+
+Every offer carries a `ResourceIdentity` with:
+- **`doi`** — The DOI serves as the universal dedup key. If the same paper were available from multiple Exchanges (e.g., via a different aggregator), the Broker groups offers by DOI to compare pricing.
+- **`content_hash`** — SHA-256 hash for post-delivery verification. Because `resource_mutability` is `RESOURCE_MUTABILITY_STATIC` for all academic papers (published articles do not change — corrections and retractions create new resources), the agent SHOULD verify the hash on delivery.
+- **`canonical_url`** — The publisher's authoritative URL. Different from the DOI URI but resolves to the same resource.
+
+### Subscription Detection
+
+For the 20 Elsevier papers covered by Stanford's institutional subscription:
+- `pricing.model` is `PRICING_MODEL_SUBSCRIPTION` with `rate: 0`
+- `subscription_id` matches the Biscuit token's `principal_id` (`inst-sub-stanford-2026`)
+- `subscription_quota` shows remaining capacity (76,520 of 100,000 accesses this period)
+- The Exchange verified the Biscuit offline — no call to Stanford's identity provider was needed
+
+---
+
+## Step 4 — Broker Selection
+
+The Broker applies a cost-minimization strategy across all 50 OfferGroups:
+
+### Selection Rules
+
+1. **Exclude retracted papers** — The retracted paper is flagged to the research agent. The agent decides whether to exclude it from the review or include it with a retraction annotation.
+2. **Prefer free OA** — 12 arXiv papers at $0.00 each.
+3. **Prefer subscription** — 20 Elsevier papers at $0.00 each (institutional deal).
+4. **Cheapest paid for the rest** — 17 papers at $1.50 each from Springer and Elsevier (no subscription coverage).
+
+### Cost Summary
+
+| Category | Papers | Unit Cost | Subtotal |
+|---|---|---|---|
+| Free OA (arXiv) | 12 | $0.00 | $0.00 |
+| Subscription (Elsevier) | 20 | $0.00 | $0.00 |
+| Paid (Springer + Elsevier) | 17 | $1.50 | $25.50 |
+| Retracted (excluded) | 1 | — | $0.00 |
+| **Total** | **49 acquired** | | **$25.50** |
+
+Without the institutional subscription, all 50 papers at $1.50 each would cost $75.00. The Biscuit delegation saved $30.00 (40%), and free OA saved another $18.00 (24%). The Broker reports the savings breakdown to the research agent.
+
+The Broker also flags the retracted paper to the agent:
+
+> **Warning:** DOI `10.1038/s41592-024-02467-x` ("Attention-Guided Pathology Detection via Self-Supervised Transformers") was retracted on 2026-02-15. Reason: data fabrication. This paper has been excluded from the batch transaction. Include it explicitly if needed for retraction analysis.
+
+---
+
+## Step 5 — Batch ExecuteTransaction
+
+The Broker commits to all 49 selected offers in a single batch `TransactionRequest`. Each offer is referenced by its `offer_id` and the Exchange's own `exchange_signature` (stateless verification — the Exchange does not need to store offers).
+
+```json
+POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-litrev-001",
+  "requester": {
+    "id": "litrev-agent",
+    "domain": "cs.stanford.edu",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "doi:10.48550/arXiv.2406.11838",
+      "doi:10.48550/arXiv.2405.09781",
+      "doi:10.48550/arXiv.2404.18021",
+      "doi:10.48550/arXiv.2403.12590",
+      "doi:10.48550/arXiv.2402.08471",
+      "doi:10.48550/arXiv.2401.15034",
+      "doi:10.48550/arXiv.2312.09250",
+      "doi:10.48550/arXiv.2311.14521",
+      "doi:10.48550/arXiv.2310.07893",
+      "doi:10.48550/arXiv.2309.16588",
+      "doi:10.48550/arXiv.2308.13042",
+      "doi:10.48550/arXiv.2307.09534",
+      "doi:10.1016/j.media.2024.103250",
+      "doi:10.1016/j.media.2024.103178",
+      "doi:10.1016/j.media.2024.103095",
+      "doi:10.1016/j.media.2023.103012",
+      "doi:10.1016/j.media.2023.102956",
+      "doi:10.1016/j.media.2023.102891",
+      "doi:10.1016/j.media.2023.102834",
+      "doi:10.1016/j.media.2023.102770",
+      "doi:10.1016/j.media.2022.102689",
+      "doi:10.1016/j.media.2022.102615",
+      "doi:10.1016/j.media.2022.102542",
+      "doi:10.1016/j.media.2022.102478",
+      "doi:10.1016/j.media.2022.102410",
+      "doi:10.1016/j.media.2021.102345",
+      "doi:10.1016/j.media.2021.102287",
+      "doi:10.1016/j.media.2021.102219",
+      "doi:10.1016/j.media.2021.102154",
+      "doi:10.1016/j.media.2024.103301",
+      "doi:10.1016/j.media.2024.103267",
+      "doi:10.1016/j.media.2023.103189",
+      "doi:10.1038/s41592-024-02401-5",
+      "doi:10.1038/s41592-024-02318-0",
+      "doi:10.1038/s41592-024-02245-7",
+      "doi:10.1038/s41592-023-02112-4",
+      "doi:10.1038/s41592-023-02038-1",
+      "doi:10.1038/s41592-023-01975-3",
+      "doi:10.1038/s41592-023-01901-x",
+      "doi:10.1038/s41592-023-01847-2",
+      "doi:10.1038/s41592-022-01789-5",
+      "doi:10.1038/s41592-022-01714-6",
+      "doi:10.1038/s41592-022-01648-3",
+      "doi:10.1038/s41592-022-01581-5",
+      "doi:10.1038/s41592-022-01517-1",
+      "doi:10.1038/s41592-021-01389-9",
+      "doi:10.1038/s41592-021-01312-y",
+      "doi:10.1016/j.media.2023.103145",
+      "doi:10.1016/j.media.2023.103078"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["academic:*"],
+    "signature": "ed25519:e8f9a0b1c2d3...",
+    "signature_algorithm": "ed25519",
+    "delegation": {
+      "principal_domain": "stanford.edu",
+      "principal_id": "inst-sub-stanford-2026",
+      "scopes": ["academic:*"],
+      "expires_at": "2026-12-31T23:59:59Z",
+      "max_accesses": 100000,
+      "quota_period": "720h",
+      "token": "biscuit-v2:EpQBCk...(base64 Biscuit token)",
+      "token_format": "biscuit-v2"
+    }
+  },
+  "items": [
+    {
+      "offer_id": "offer-arxiv-2406-11838",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2405-09781",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-2...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2404-18021",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-3...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2403-12590",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-4...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2402-08471",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-5...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2401-15034",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-6...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2312-09250",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-7...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2311-14521",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-8...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2310-07893",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-9...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2309-16588",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-10...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2308-13042",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-11...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-arxiv-2307-09534",
+      "offer_signature": "base64-ed25519-arxiv-offer-sig-12...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-103250",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-103178",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-2...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-103095",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-3...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-103012",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-4...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102956",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-5...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102891",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-6...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102834",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-7...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102770",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-8...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102689",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-9...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102615",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-10...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102542",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-11...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102478",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-12...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102410",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-13...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102345",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-14...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102287",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-15...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102219",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-16...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-102154",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-17...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-103301",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-18...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-103267",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-19...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-sub-103189",
+      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-20...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-02401",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-02318",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-2...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-02245",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-3...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-02112",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-4...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-02038",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-5...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01975",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-6...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01901",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-7...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01847",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-8...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01789",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-9...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01714",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-10...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01648",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-11...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01581",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-12...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01517",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-13...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01389",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-14...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-springer-paid-01312",
+      "offer_signature": "base64-ed25519-springer-paid-offer-sig-15...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-paid-103145",
+      "offer_signature": "base64-ed25519-elsevier-paid-offer-sig...",
+      "offer_signature_algorithm": "ed25519"
+    },
+    {
+      "offer_id": "offer-elsevier-paid-103078",
+      "offer_signature": "base64-ed25519-elsevier-paid-offer-sig-2...",
+      "offer_signature_algorithm": "ed25519"
+    }
+  ],
+  "agent_signature": "ed25519:f9a0b1c2d3e4...",
+  "agent_signature_algorithm": "ed25519"
+}
+```
+
+The Exchange processes all 49 items in a single batch:
+
+1. **Signature verification** — verifies each `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
+2. **Agent authentication** — verifies `agent_signature` against the agent's published public key at `cs.stanford.edu/.well-known/ramp-agent.json`.
+3. **Biscuit verification** — verifies the delegation token for the 20 subscription items. Confirms `academic:*` scope covers Elsevier content.
+4. **Balance check** — confirms `litrev-agent@cs.stanford.edu` has sufficient balance ($25.50 for 17 paid items).
+5. **Quota check** — confirms 49 accesses fit within the subscription's remaining quota (76,520).
+6. **WAL write** — records all 49 transactions in the write-ahead log before generating signed URLs (write-before-sign invariant).
+7. **Signed URL generation** — generates 49 HMAC-SHA256 signed URLs, each binding `agent_id` and `txn_id`.
+
+Response (abbreviated — showing one item from each category):
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-litrev-001",
+  "items": [
+    {
+      "offer_id": "offer-arxiv-2406-11838",
+      "transaction_id": "txn-arxiv-001",
+      "billing_id": "bill-arxiv-001",
+      "package": {
+        "id": "PKG-ARXIV-2406-11838",
+        "retrieval": {
+          "endpoint": "https://cdn.arxiv.org/ramp/2406.11838.pdf?expires=1742478600&agent_id=3c8f2a1d...&txn_id=txn-arxiv-001&sig=hmac-sha256-a1b2c3..."
+        }
+      },
+      "cost": {
+        "amount": 0,
+        "currency": "USD"
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "expires_at": "2026-03-20T12:35:00Z",
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["consumed_quantity"]
+      }
+    },
+    {
+      "offer_id": "offer-elsevier-sub-103250",
+      "transaction_id": "txn-elsevier-sub-001",
+      "billing_id": "bill-elsevier-sub-001",
+      "package": {
+        "id": "PKG-ELSEVIER-MEDIA-103250",
+        "retrieval": {
+          "endpoint": "https://cdn.sciencedirect.com/ramp/S1361841524001250.pdf?expires=1742478600&agent_id=3c8f2a1d...&txn_id=txn-elsevier-sub-001&sig=hmac-sha256-d4e5f6..."
+        }
+      },
+      "cost": {
+        "amount": 0,
+        "currency": "USD"
+      },
+      "subscription_id": "inst-sub-stanford-2026",
+      "subscription_unit_value": {
+        "amount": 1.50,
+        "currency": "USD"
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "expires_at": "2026-03-20T12:35:00Z",
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["consumed_quantity"]
+      }
+    },
+    {
+      "offer_id": "offer-springer-paid-02401",
+      "transaction_id": "txn-springer-paid-001",
+      "billing_id": "bill-springer-paid-001",
+      "package": {
+        "id": "PKG-SPRINGER-NM-02401",
+        "retrieval": {
+          "endpoint": "https://cdn.nature.com/ramp/s41592-024-02401-5.pdf?expires=1742478600&agent_id=3c8f2a1d...&txn_id=txn-springer-paid-001&sig=hmac-sha256-g7h8i9..."
+        }
+      },
+      "cost": {
+        "amount": 1.50,
+        "currency": "USD"
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "expires_at": "2026-03-20T12:35:00Z",
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["consumed_quantity"]
+      }
+    }
+  ],
+  "total_cost": {
+    "amount": 25.50,
+    "currency": "USD"
+  },
+  "agent_identity_hash": "3c8f2a1d...",
+  "subscription_quota": [
+    {
+      "subscription_id": "inst-sub-stanford-2026",
+      "quota_limit": 100000,
+      "quota_used": 23500,
+      "quota_remaining": 76500,
+      "resets_at": "2026-04-01T00:00:00Z",
+      "unit": "accesses"
+    }
+  ]
+}
+```
+
+**Key observations from the batch response:**
+
+- **`total_cost`**: $25.50 for all 49 papers. The 12 free OA papers and 20 subscription papers cost $0.00 each.
+- **`subscription_unit_value`**: $1.50 on each subscription item. This is the imputed value for accounting purposes (ASC 606 prepaid drawdown). Stanford's subscription is "spending" this value even though the marginal cost is zero.
+- **`subscription_quota`**: After the transaction, 76,500 accesses remain (20 were consumed from the previous 76,520). The quota resets on April 1.
+- **Signed URLs**: Each URL is valid for 5 minutes (`expires_at`), contains the `agent_identity_hash` to prevent URL sharing, and embeds the `txn_id` for three-sided reconciliation (agent, Exchange, CDN).
+
+The agent then fetches all 49 PDFs via the signed URLs. For each paper, because `resource_mutability` is `RESOURCE_MUTABILITY_STATIC`, the agent computes SHA-256 of the delivered PDF and compares against the `identity.content_hash` from the offer. A mismatch would be grounds for a `DisputeTransaction`.
+
+---
+
+## Step 6 — ReportUsage
+
+Usage reporting is mandatory for all 49 transactions. The agent submits an aggregated report with per-DOI consumption data:
+
+```json
+POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+
+{
+  "ver": "1.0",
+  "id": "ur-litrev-001",
+  "transaction_id": "txn-litrev-batch-001",
+  "billing_id": "bill-litrev-batch-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "consumed_quantity": 614200,
+    "consumed_unit": "tokens",
+    "displayed_to_user": true,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-20T13:00:00Z",
+  "assets": [
+    {
+      "uri": "doi:10.48550/arXiv.2406.11838",
+      "title": "MedViT: A Robust Vision Transformer for Medical Image Classification",
+      "package_id": "PKG-ARXIV-2406-11838"
+    },
+    {
+      "uri": "doi:10.48550/arXiv.2405.09781",
+      "title": "SwinMed: Swin Transformer for Multi-Organ Segmentation",
+      "package_id": "PKG-ARXIV-2405-09781"
+    },
+    {
+      "uri": "doi:10.1016/j.media.2024.103250",
+      "title": "TransUNet++: Rethinking Multi-Scale Feature Fusion for Medical Image Segmentation",
+      "package_id": "PKG-ELSEVIER-MEDIA-103250"
+    },
+    {
+      "uri": "doi:10.1038/s41592-024-02401-5",
+      "title": "CellViT: Vision Transformers for Precise Cell Segmentation and Classification",
+      "package_id": "PKG-SPRINGER-NM-02401"
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "report_id": "rpt-litrev-001"
+}
+```
+
+**Reporting details:**
+
+- **`consumed_quantity: 614200`** — total tokens consumed across all 49 papers. The Exchange cross-references this against the sum of `estimated_quantity` values from the offers to detect significant discrepancies.
+- **`citation_included: true`** — the literature review includes proper citations for all 49 papers. This is relevant for publishers who offer attribution-only pricing or require citation as a license condition.
+- **`assets`** — per-DOI breakdown enables the Exchange to attribute usage to individual publishers. Elsevier sees 20 accesses against Stanford's subscription. Springer sees 15 paid accesses. arXiv sees 12 free accesses. Each publisher receives its share of the usage data.
+- **`report_id: "rpt-litrev-001"`** — enables the dispute chain. If any paper's content hash mismatched during fetch, the agent would reference this report when filing a `DisputeTransaction`.
+
+---
+
+## Protocol Summary
+
+| Step | RPC | Free OA (12) | Subscription (20) | Paid (17) | Retracted (1) |
+|------|-----|---|---|---|---|
+| 1 | -- | `ramp.json` discovery | `ramp.json` discovery | `ramp.json` discovery | `ramp.json` discovery |
+| 2 | `DiscoverResources` | `Requester` with `academic:*` scope | Same + Biscuit delegation | Same | Same |
+| 3 | -- | Offers at $0, `oa_status: "gold"` | Offers at $0, `subscription_id` set | Offers at $1.50 | Offer with `retraction_status: "retracted"` in `ext_critical` |
+| 4 | -- | Broker selects (free) | Broker selects (free via sub) | Broker selects (cheapest) | Broker flags and excludes |
+| 5 | `ExecuteTransaction` | Batch, cost $0 | Batch, cost $0, sub quota decremented | Batch, cost $1.50/ea | Not transacted |
+| 6 | `ReportUsage` | Aggregated report, 614K tokens across 49 papers | | | |
+
+**Authentication at every step:**
+- **Agent to Exchange**: `Requester.signature` (Ed25519 over identity + URIs + scopes)
+- **Institutional delegation**: Biscuit token signed by `stanford.edu`'s Ed25519 key (offline-verifiable)
+- **Exchange to Agent**: `exchange_signature` on each Offer (Ed25519, stateless verification)
+- **Signed URLs**: HMAC-SHA256 (Exchange-CDN shared secret, agent identity bound)
+- **Content integrity**: SHA-256 hash verification on all 49 delivered PDFs (`RESOURCE_MUTABILITY_STATIC`)
+
+**Key academic-specific capabilities demonstrated:**
+- **DOI as universal dedup key** -- cross-exchange resource identification
+- **Mixed pricing in single batch** -- FREE + SUBSCRIPTION + PER_ACCESS in one transaction
+- **Institutional subscription via Biscuit** -- offline-verifiable delegation, no call to Stanford
+- **Retraction flagging via `ext_critical`** -- consumers MUST understand retraction semantics or reject
+- **`ramp-academic-v1` profile** -- OA status, version lifecycle, peer review status, retraction metadata
+- **Aggregator as Exchange** -- one Exchange serves content from multiple publishers
+
+## Next Steps
+
+- [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1/) -- per-article and subscription scenarios with news and financial content
+- [Scenario Walkthrough](/protocol/scenario-walkthrough/) -- multi-party narrative with Broker, cross-provider dedup, and dispute resolution
+- [Extension Profiles](/protocol/extension-profiles/) -- `ramp-academic-v1`, `ramp-news-v1`, and `ramp-legal-v1` specifications
+- [Content Attestation](/protocol/content-attestation/) -- how attestation levels carry profile-specific claims
+- [Transaction Flow](/protocol/transaction-flow/) -- step-by-step protocol specification
+- [Authentication (Ed25519)](/protocol/authentication/) -- signature chains at every boundary

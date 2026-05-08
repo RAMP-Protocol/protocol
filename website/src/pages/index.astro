@@ -1,0 +1,1793 @@
+---
+// Landing page — overrides Starlight's default index
+// Links into Starlight docs at /getting-started/what-is-ramp/
+---
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RAMP Protocol — Open Transaction Protocol for AI Content Access</title>
+  <meta name="description" content="The open protocol that turns blocked bots into paying customers. Discover, price, transact, deliver, verify — one protocol for any content." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #4f6df5;
+      --accent-glow: #4f6df533;
+      --accent-dark: #3d58d6;
+      --black: #0a0a0f;
+      --near-black: #12121a;
+      --dark: #1a1a26;
+      --mid: #2a2a3a;
+      --gray: #8888a0;
+      --light-gray: #c0c0d0;
+      --off-white: #e8e8f0;
+      --white: #f5f5fa;
+      --bg-light: #fafafa;
+      --mono: 'DM Mono', monospace;
+      --sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      color: var(--off-white);
+      background: var(--black);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ========= HERO ========= */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, var(--accent-glow) 0%, transparent 70%),
+        linear-gradient(180deg, var(--near-black) 0%, var(--black) 100%);
+      pointer-events: none;
+    }
+
+    .hero-nav {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 2.5rem;
+      max-width: 1280px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .logo {
+      font-family: var(--sans);
+      font-size: 1.125rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      text-decoration: none;
+      color: var(--off-white);
+      text-transform: lowercase;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--gray);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--off-white); }
+
+    .hero-content {
+      position: relative;
+      z-index: 10;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem 2rem 4rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .hero-badge {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 1.5rem;
+      padding: 0.4rem 1rem;
+      border: 1px solid var(--accent);
+      border-radius: 2px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.25rem, 5vw, 3.5rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      color: var(--white);
+      margin-bottom: 1.25rem;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .hero-sub {
+      font-size: 1.125rem;
+      color: var(--gray);
+      line-height: 1.6;
+      max-width: 640px;
+      margin-bottom: 2.5rem;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.75rem;
+      font-family: var(--sans);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 3px;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: 1px solid var(--accent);
+    }
+    .btn-primary:hover {
+      background: var(--accent-dark);
+      border-color: var(--accent-dark);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--off-white);
+      border: 1px solid var(--mid);
+    }
+    .btn-ghost:hover {
+      border-color: var(--gray);
+      background: var(--dark);
+    }
+
+    /* ========= FLOW SECTION ========= */
+    .flow-section {
+      background: var(--black);
+      padding: 5rem 2rem;
+      position: relative;
+    }
+
+    .flow-section::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--mid), transparent);
+    }
+
+    .section-header {
+      text-align: center;
+      max-width: 640px;
+      margin: 0 auto 3rem;
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-header h2 {
+      font-size: clamp(1.5rem, 3vw, 2.25rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--white);
+      margin-bottom: 0.75rem;
+    }
+
+    .section-header p {
+      color: var(--gray);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    /* Flow Steps */
+    .flow-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    .flow-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .flow-step {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem 0;
+      opacity: 0.35;
+      transition: opacity 0.5s, transform 0.5s;
+      position: relative;
+      cursor: pointer;
+    }
+    .flow-step:hover {
+      opacity: 0.7;
+    }
+    .flow-step.active {
+      opacity: 1;
+    }
+    .flow-step.active:hover {
+      opacity: 1;
+    }
+
+    .step-indicator {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+      width: 2.5rem;
+    }
+
+    .step-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--mid);
+      border: 2px solid var(--mid);
+      transition: all 0.4s;
+      flex-shrink: 0;
+    }
+    .flow-step.active .step-dot {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    .step-line {
+      width: 2px;
+      flex: 1;
+      background: var(--mid);
+      transition: background 0.4s;
+    }
+    .flow-step.active .step-line { background: var(--accent); }
+    .flow-step:last-child .step-line { display: none; }
+
+    .step-content {
+      padding-bottom: 0.5rem;
+    }
+
+    .step-num {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.25rem;
+    }
+
+    .step-title {
+      font-size: 1.0625rem;
+      font-weight: 600;
+      color: var(--white);
+      margin-bottom: 0.25rem;
+    }
+
+    .step-desc {
+      font-size: 0.9375rem;
+      color: var(--gray);
+      line-height: 1.5;
+    }
+
+    .step-desc code {
+      font-family: var(--mono);
+      font-size: 0.8125rem;
+      color: #7ec8a0;
+      background: rgba(126, 200, 160, 0.1);
+      padding: 0.125rem 0.375rem;
+      border-radius: 2px;
+    }
+
+    .step-link {
+      display: inline-block;
+      margin-top: 0.375rem;
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      color: var(--accent);
+      text-decoration: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .step-link:hover { text-decoration: underline; }
+    .flow-step.active .step-link { opacity: 1; }
+
+    /* Flow JSON preview */
+    .flow-json {
+      background: var(--near-black);
+      border: 1px solid var(--mid);
+      border-radius: 4px;
+      padding: 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.875rem;
+      line-height: 1.7;
+      color: var(--gray);
+      overflow: hidden;
+      position: sticky;
+      top: 2rem;
+      align-self: start;
+    }
+
+    .flow-json {
+      transition: opacity 0.3s;
+    }
+    .flow-json.fading { opacity: 0.3; }
+
+    /* JSON syntax colors are applied via inline styles in JS
+       because Astro scopes class-based CSS and dynamically
+       injected innerHTML won't have the scoping attributes. */
+
+    /* ========= NxM SECTION ========= */
+    .nxm-section {
+      background: var(--bg-light);
+      color: var(--near-black);
+      padding: 6rem 2rem;
+    }
+
+    .nxm-grid {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+    }
+
+    .nxm-panel {
+      padding: 2rem;
+      border-radius: 6px;
+      position: relative;
+    }
+    .nxm-panel.without {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+    }
+    .nxm-panel.with {
+      background: #fff;
+      border: 2px solid var(--accent);
+    }
+
+    .nxm-label {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 1.5rem;
+      font-weight: 500;
+    }
+    .nxm-panel.without .nxm-label { color: #999; }
+    .nxm-panel.with .nxm-label { color: var(--accent); }
+
+    .nxm-diagram {
+      position: relative;
+      margin-bottom: 1.25rem;
+    }
+    .nxm-diagram canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .nxm-nodes {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .nxm-nodes.left { left: 0; top: 50%; transform: translateY(-50%); }
+    .nxm-nodes.right { right: 0; top: 50%; transform: translateY(-50%); }
+    .nxm-nodes.center {
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .nxm-node {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      padding: 0.375rem 0.75rem;
+      border-radius: 3px;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .nxm-node.agent {
+      background: var(--near-black);
+      color: var(--off-white);
+    }
+    .nxm-node.exchange {
+      background: #e8e8e8;
+      color: #444;
+    }
+    .nxm-node.ramp-hub {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.75rem 1.25rem;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      font-family: var(--sans);
+    }
+
+    /* SVG lines removed — using canvas for accurate DOM-position lines */
+
+    .nxm-stat {
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 0.375rem;
+    }
+    .nxm-panel.without .nxm-stat { color: #bbb; }
+    .nxm-panel.with .nxm-stat { color: var(--accent); }
+
+    .nxm-caption {
+      font-size: 0.875rem;
+      color: #777;
+      line-height: 1.5;
+    }
+
+    /* ========= ARCHITECTURE FLOW ========= */
+    .arch-section {
+      background: var(--black);
+      padding: 5rem 2rem;
+      border-top: 1px solid var(--mid);
+    }
+
+    .arch-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+    }
+    .arch-tab {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      padding: 0.5rem 1.25rem;
+      background: var(--dark);
+      border: 1px solid var(--mid);
+      color: var(--gray);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .arch-tab:hover { border-color: var(--accent); color: var(--off-white); }
+    .arch-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .arch-story {
+      max-width: 1000px;
+      margin: 0 auto 1.5rem;
+      padding: 1.25rem 1.5rem;
+      background: var(--dark);
+      border-radius: 4px;
+      border-left: 3px solid var(--accent);
+      font-size: 1rem;
+      color: var(--light-gray);
+      line-height: 1.7;
+    }
+
+    .arch-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 2rem;
+    }
+
+    .arch-steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    /* Each step row: number | from → to | description */
+    .arch-step-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.625rem 0.75rem;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .arch-step-row:hover {
+      background: var(--dark);
+    }
+    .arch-step-row.active {
+      background: rgba(79, 109, 245, 0.08);
+      border-color: rgba(79, 109, 245, 0.3);
+    }
+
+    .arch-step-num {
+      width: 1.625rem;
+      height: 1.625rem;
+      border-radius: 50%;
+      background: var(--mid);
+      color: var(--gray);
+      font-family: var(--mono);
+      font-size: 0.625rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+    .arch-step-row.active .arch-step-num {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    .arch-step-parties {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      flex-shrink: 0;
+      min-width: 10rem;
+    }
+
+    .arch-party {
+      font-family: var(--mono);
+      font-size: 0.625rem;
+      padding: 0.2rem 0.4rem;
+      border-radius: 2px;
+      background: var(--dark);
+      color: var(--light-gray);
+      border: 1px solid var(--mid);
+      white-space: nowrap;
+    }
+    .arch-party.exchange {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .arch-step-row.active .arch-party {
+      border-color: var(--accent);
+    }
+
+    .arch-step-arrow {
+      color: var(--gray);
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+    .arch-step-row.active .arch-step-arrow { color: var(--accent); }
+
+    .arch-step-desc {
+      font-size: 0.75rem;
+      color: var(--gray);
+      line-height: 1.4;
+    }
+    .arch-step-row.active .arch-step-desc { color: var(--light-gray); }
+
+    /* Detail panel */
+    .arch-detail {
+      background: var(--near-black);
+      border: 1px solid var(--mid);
+      border-radius: 4px;
+      padding: 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.875rem;
+      line-height: 1.7;
+      color: var(--gray);
+      align-self: start;
+      position: sticky;
+      top: 2rem;
+      transition: opacity 0.3s;
+      min-height: 200px;
+    }
+
+    @media (max-width: 768px) {
+      .arch-container { grid-template-columns: 1fr; }
+      .arch-detail { position: static; }
+      .arch-step { right: -1.5rem !important; }
+    }
+
+    /* ========= ROLES SECTION ========= */
+    .roles-section {
+      background: var(--black);
+      padding: 6rem 2rem;
+    }
+
+    .roles-grid {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    .role-card {
+      background: var(--near-black);
+      border: 1px solid var(--mid);
+      border-radius: 4px;
+      padding: 2rem 1.5rem;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .role-card:hover, .role-card.expanded {
+      border-color: var(--accent);
+      background: var(--dark);
+    }
+
+    .role-icon {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .role-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--white);
+      margin-bottom: 0.5rem;
+    }
+
+    .role-teaser {
+      font-size: 0.8125rem;
+      color: var(--gray);
+      line-height: 1.5;
+      margin-bottom: 0;
+      transition: margin 0.3s;
+    }
+    .role-card.expanded .role-teaser { margin-bottom: 1.25rem; }
+
+    .role-steps {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease;
+    }
+    .role-card.expanded .role-steps {
+      max-height: 20rem;
+    }
+
+    .role-step {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .role-step-num {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      color: var(--accent);
+      font-weight: 500;
+      flex-shrink: 0;
+      padding-top: 0.125rem;
+    }
+
+    .role-step-text {
+      font-size: 0.8125rem;
+      color: var(--light-gray);
+      line-height: 1.5;
+    }
+    .role-step-text code {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      background: var(--mid);
+      padding: 0.125rem 0.375rem;
+      border-radius: 2px;
+      color: var(--off-white);
+    }
+
+    .role-footer {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      margin-top: 0.5rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .role-card.expanded .role-footer { opacity: 1; }
+
+    /* ========= STANDARDS STACK ========= */
+    .standards-section {
+      background: var(--near-black);
+      padding: 5rem 2rem;
+    }
+
+    .stack-table {
+      max-width: 720px;
+      margin: 0 auto 2.5rem;
+    }
+
+    .stack-row {
+      display: grid;
+      grid-template-columns: 4rem 10rem 1fr;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--mid);
+    }
+    .stack-row:last-child { border-bottom: none; }
+
+    .stack-row.stack-ramp {
+      background: rgba(79, 109, 245, 0.08);
+      border: 1px solid rgba(79, 109, 245, 0.25);
+      border-radius: 4px;
+      margin: 0.25rem -0.25rem;
+      padding: 0.625rem 1rem;
+    }
+
+    .stack-layer {
+      font-family: var(--mono);
+      font-size: 0.625rem;
+      color: var(--gray);
+      text-transform: uppercase;
+    }
+
+    .stack-name {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--off-white);
+    }
+    .stack-ramp .stack-name {
+      color: var(--accent);
+    }
+
+    .stack-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+      align-items: center;
+    }
+
+    .standard-tag {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      color: var(--light-gray);
+      padding: 0.2rem 0.5rem;
+      background: var(--dark);
+      border-radius: 2px;
+      white-space: nowrap;
+    }
+
+    .standard-tag.ramp-tag {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 500;
+    }
+
+    .stack-note {
+      font-size: 0.6875rem;
+      color: var(--accent);
+      font-style: italic;
+    }
+
+    .standards-feeds {
+      max-width: 720px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .feeds-row {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+    }
+
+    .feeds-group {
+      text-align: center;
+    }
+
+    .feeds-label {
+      font-family: var(--mono);
+      font-size: 0.625rem;
+      color: var(--gray);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
+    }
+
+    .standard-tag.feed-tag {
+      background: transparent;
+      border: 1px solid var(--mid);
+      color: var(--light-gray);
+    }
+
+    .feeds-link {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .feeds-link:hover { text-decoration: underline; }
+
+    @media (max-width: 768px) {
+      .stack-row { grid-template-columns: 1fr; gap: 0.25rem; }
+      .feeds-row { flex-direction: column; gap: 1.25rem; }
+    }
+
+    /* ========= CTA ========= */
+    .cta-section {
+      background: var(--black);
+      padding: 6rem 2rem;
+      text-align: center;
+    }
+
+    .cta-section h2 {
+      font-size: clamp(1.5rem, 3vw, 2.25rem);
+      font-weight: 700;
+      color: var(--white);
+      letter-spacing: -0.02em;
+      margin-bottom: 1rem;
+    }
+
+    .cta-section p {
+      color: var(--gray);
+      font-size: 1rem;
+      margin-bottom: 2rem;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.6;
+    }
+
+    .cta-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ========= FOOTER ========= */
+    .site-footer {
+      background: var(--near-black);
+      border-top: 1px solid var(--mid);
+      padding: 2.5rem 2rem;
+      text-align: center;
+    }
+
+    .footer-logo {
+      font-family: var(--sans);
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      color: var(--off-white);
+      text-transform: lowercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .footer-tagline {
+      font-size: 0.8125rem;
+      color: var(--gray);
+      margin-bottom: 0.75rem;
+    }
+
+    .footer-license {
+      font-size: 0.6875rem;
+      color: var(--gray);
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .footer-license a {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    /* ========= RESPONSIVE ========= */
+    @media (max-width: 768px) {
+      .hero-nav { padding: 1rem 1.5rem; }
+      .nav-links { display: none; }
+      .hero-content { padding: 3rem 1.5rem; }
+      .flow-container { grid-template-columns: 1fr; }
+      .flow-json { display: none; }
+      .nxm-grid { grid-template-columns: 1fr; }
+      .roles-grid { grid-template-columns: 1fr; }
+      .role-card { padding: 1.5rem; }
+    }
+
+    /* ========= ANIMATIONS ========= */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-in {
+      animation: fadeUp 0.6s ease both;
+    }
+
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+      50% { box-shadow: 0 0 16px 4px var(--accent-glow); }
+    }
+    .flow-step.active .step-dot {
+      animation: pulse-dot 2s ease infinite;
+    }
+
+    /* Canvas lines drawn by JS — no SVG animation needed */
+  </style>
+</head>
+<body>
+
+  <!-- HERO -->
+  <section class="hero">
+    <nav class="hero-nav">
+      <a href="/" class="logo">ramp protocol</a>
+      <ul class="nav-links">
+        <li><a href="/getting-started/what-is-ramp/">Docs</a></li>
+        <li><a href="/protocol/transaction-flow/">Protocol</a></li>
+        <li><a href="https://github.com/postindustria-tech/ramp-protocol">GitHub</a></li>
+      </ul>
+    </nav>
+
+    <div class="hero-content">
+      <div class="hero-badge animate-in">Open Protocol · Apache 2.0</div>
+      <h1 class="animate-in delay-1">AI agents consume content.<br><em>Nobody gets paid.</em></h1>
+      <p class="hero-sub animate-in delay-2">RAMP is the open transaction protocol that turns blocked bots into paying customers. Discover, price, transact, deliver, verify — one protocol for any content.</p>
+      <div class="hero-buttons animate-in delay-3">
+        <a href="/getting-started/what-is-ramp/" class="btn btn-primary">Read the Docs</a>
+        <a href="https://github.com/postindustria-tech/ramp-protocol" class="btn btn-ghost">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE FLOW (scenarios) -->
+  <section class="arch-section">
+    <div class="section-header">
+      <div class="section-label">How RAMP Works</div>
+      <h2>Multiple scenarios. Same protocol. Click each step.</h2>
+    </div>
+
+    <div class="arch-tabs">
+      <button class="arch-tab active" id="archTab0" onclick="switchScenario(0)">Web article access</button>
+      <button class="arch-tab" id="archTab1" onclick="switchScenario(1)">Music sample licensing</button>
+    </div>
+
+    <div class="arch-story" id="archStory"></div>
+
+    <div class="arch-container">
+      <div class="arch-steps-list" id="archStepsList"></div>
+      <div class="arch-detail" id="archDetail">
+        <div class="arch-detail-inner" id="archDetailInner"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRANSACTION FLOW -->
+  <section class="flow-section">
+    <div class="section-header">
+      <div class="section-label">How It Works</div>
+      <h2>Six steps. One protocol.</h2>
+      <p>Every RAMP transaction follows the same flow — regardless of content type, pricing model, or Exchange.</p>
+    </div>
+
+    <div class="flow-container">
+      <div class="flow-steps" id="flowSteps">
+        <div class="flow-step active" data-step="0">
+          <div class="step-indicator">
+            <div class="step-dot"></div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-num">Step 1</div>
+            <div class="step-title">Discover</div>
+            <div class="step-desc">Agent checks <code>/.well-known/ramp.json</code> — finds the Exchange endpoint for this publisher.</div>
+            <a class="step-link" href="/protocol/discovery-paths/">Discovery Paths →</a>
+          </div>
+        </div>
+        <div class="flow-step" data-step="1">
+          <div class="step-indicator">
+            <div class="step-dot"></div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-num">Step 2</div>
+            <div class="step-title">Query</div>
+            <div class="step-desc">Agent calls <code>DiscoverResources</code> — Exchange returns signed Offers with pricing, attestations, and previews.</div>
+            <a class="step-link" href="/protocol/transaction-flow/">Transaction Flow →</a>
+          </div>
+        </div>
+        <div class="flow-step" data-step="2">
+          <div class="step-indicator">
+            <div class="step-dot"></div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-num">Step 3</div>
+            <div class="step-title">Transact</div>
+            <div class="step-desc">Agent commits via <code>ExecuteTransaction</code> — gets a signed delivery URL and <code>billing_id</code>.</div>
+            <a class="step-link" href="/protocol/transaction-flow/#rpc-2-executetransaction">ExecuteTransaction →</a>
+          </div>
+        </div>
+        <div class="flow-step" data-step="3">
+          <div class="step-indicator">
+            <div class="step-dot"></div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-num">Step 4</div>
+            <div class="step-title">Deliver</div>
+            <div class="step-desc">Agent fetches from CDN via signed URL. Time-limited, identity-bound, <code>content_hash</code> verifiable.</div>
+            <a class="step-link" href="/protocol/content-attestation/">Content Attestation →</a>
+          </div>
+        </div>
+        <div class="flow-step" data-step="4">
+          <div class="step-indicator">
+            <div class="step-dot"></div>
+            <div class="step-line"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-num">Step 5</div>
+            <div class="step-title">Report</div>
+            <div class="step-desc">Agent calls <code>ReportUsage</code> — reports actual consumption: tokens, pages, minutes, records.</div>
+            <a class="step-link" href="/protocol/transaction-flow/#rpc-3-reportusage">ReportUsage →</a>
+          </div>
+        </div>
+        <div class="flow-step" data-step="5">
+          <div class="step-indicator">
+            <div class="step-dot"></div>
+          </div>
+          <div class="step-content">
+            <div class="step-num">Step 6</div>
+            <div class="step-title">Dispute</div>
+            <div class="step-desc">If content doesn't match — <code>DisputeTransaction</code> triggers automated 3-tier resolution.</div>
+            <a class="step-link" href="/protocol/dispute-resolution/">Dispute Resolution →</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-json" id="flowJson"></div>
+    </div>
+  </section>
+
+  <!-- N×M vs N+M -->
+  <section class="nxm-section">
+    <div class="section-header" style="color: var(--near-black);">
+      <div class="section-label">The Problem RAMP Solves</div>
+      <h2 style="color: var(--near-black);">Publishers locked behind walled gardens vs. open access</h2>
+      <p style="color: #777;">Today, publishers are gated behind exclusive platform deals. Agents need separate integrations for each. RAMP opens the market.</p>
+    </div>
+
+    <div class="nxm-grid">
+      <!-- Without RAMP -->
+      <div class="nxm-panel without" id="nxmWithout">
+        <div class="nxm-label">Today — walled gardens</div>
+        <div class="nxm-diagram" id="diagramWithout" style="display:flex;justify-content:space-between;align-items:center;gap:0;padding:1.5rem 0;position:relative;">
+          <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+            <div class="nxm-node agent" data-nxm="a" style="padding:0.3rem 0.5rem;font-size:0.625rem;">A1</div>
+            <div class="nxm-node agent" data-nxm="a" style="padding:0.3rem 0.5rem;font-size:0.625rem;">A2</div>
+            <div class="nxm-node agent" data-nxm="a" style="padding:0.3rem 0.5rem;font-size:0.625rem;">A3</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;flex-shrink:0;">
+            <div class="nxm-node" style="background:#e74c3c;color:#fff;font-weight:600;font-size:0.625rem;padding:0.3rem 0.75rem;" data-nxm="p">TollBit</div>
+            <div class="nxm-node" style="background:#e74c3c;color:#fff;font-weight:600;font-size:0.625rem;padding:0.3rem 0.75rem;" data-nxm="p">PCM</div>
+            <div class="nxm-node" style="background:#e74c3c;color:#fff;font-weight:600;font-size:0.625rem;padding:0.3rem 0.75rem;" data-nxm="p">Dappier</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+            <div class="nxm-node" style="background:#f5f5f5;color:#888;font-size:0.75rem;border:1px dashed #ccc;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub">NYT</div>
+            <div class="nxm-node" style="background:#f5f5f5;color:#888;font-size:0.75rem;border:1px dashed #ccc;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub">Reuters</div>
+            <div class="nxm-node" style="background:#f5f5f5;color:#888;font-size:0.75rem;border:1px dashed #ccc;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub">AP</div>
+            <div class="nxm-node" style="background:#f5f5f5;color:#888;font-size:0.75rem;border:1px dashed #ccc;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub">WSJ</div>
+            <div class="nxm-node" style="background:#f5f5f5;color:#888;font-size:0.75rem;border:1px dashed #ccc;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub">Nature</div>
+          </div>
+          <canvas id="canvasWithout"></canvas>
+        </div>
+        <div class="nxm-stat">Walled gardens</div>
+        <div class="nxm-caption">Publishers locked behind exclusive platform deals. Each agent needs a separate proprietary integration. Publishers can't switch. Agents can't compare.</div>
+      </div>
+
+      <!-- With RAMP -->
+      <div class="nxm-panel with" id="nxmWith">
+        <div class="nxm-label">With RAMP — open market</div>
+        <div class="nxm-diagram" id="diagramWith" style="display:flex;justify-content:space-between;align-items:center;gap:0;padding:1.5rem 0;position:relative;">
+          <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+            <div class="nxm-node agent" data-nxm="a2" style="padding:0.3rem 0.5rem;font-size:0.625rem;">A1</div>
+            <div class="nxm-node agent" data-nxm="a2" style="padding:0.3rem 0.5rem;font-size:0.625rem;">A2</div>
+            <div class="nxm-node agent" data-nxm="a2" style="padding:0.3rem 0.5rem;font-size:0.625rem;">A3</div>
+          </div>
+          <div style="flex-shrink:0;">
+            <div class="nxm-node ramp-hub" data-nxm="ramp" style="padding:0.5rem 1rem;font-size:0.75rem;">RAMP</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+            <div class="nxm-node" style="background:#4f6df5;color:#fff;font-size:0.6rem;font-weight:500;padding:0.25rem 0.5rem;" data-nxm="ex">Ex 1</div>
+            <div class="nxm-node" style="background:#4f6df5;color:#fff;font-size:0.6rem;font-weight:500;padding:0.25rem 0.5rem;" data-nxm="ex">Ex 2</div>
+            <div class="nxm-node" style="background:#4f6df5;color:#fff;font-size:0.6rem;font-weight:500;padding:0.25rem 0.5rem;" data-nxm="ex">Ex 3</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
+            <div class="nxm-node" style="background:#f0f5ff;color:#4f6df5;font-size:0.75rem;border:1px solid #c0d0ff;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub2">NYT</div>
+            <div class="nxm-node" style="background:#f0f5ff;color:#4f6df5;font-size:0.75rem;border:1px solid #c0d0ff;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub2">Reuters</div>
+            <div class="nxm-node" style="background:#f0f5ff;color:#4f6df5;font-size:0.75rem;border:1px solid #c0d0ff;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub2">AP</div>
+            <div class="nxm-node" style="background:#f0f5ff;color:#4f6df5;font-size:0.75rem;border:1px solid #c0d0ff;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub2">WSJ</div>
+            <div class="nxm-node" style="background:#f0f5ff;color:#4f6df5;font-size:0.75rem;border:1px solid #c0d0ff;padding:0.35rem 0.75rem;font-weight:500;" data-nxm="pub2">Nature</div>
+          </div>
+          <canvas id="canvasWith"></canvas>
+        </div>
+        <div class="nxm-stat">Open market</div>
+        <div class="nxm-caption">Publishers choose Exchanges. Exchanges compete. Agents access any publisher through any Exchange — one protocol.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PICK YOUR ROLE -->
+  <section class="roles-section">
+    <div class="section-header">
+      <div class="section-label">Get Started</div>
+      <h2>Pick your role</h2>
+      <p>Three roles, three deployment paths. Click to see yours.</p>
+    </div>
+
+    <div class="roles-grid">
+      <div class="role-card" onclick="toggleRole(this)">
+        <div class="role-icon">&#9881;</div>
+        <div class="role-title">I'm a Publisher</div>
+        <div class="role-teaser">Stop losing revenue to AI scrapers. Monetize every bot visit without changing your CMS.</div>
+        <div class="role-steps">
+          <div class="role-step">
+            <div class="role-step-num">01</div>
+            <div class="role-step-text">Drop <code>rsl.txt</code> on your domain — declare your pricing and usage terms.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">02</div>
+            <div class="role-step-text">Drop <code>ramp.json</code> at <code>/.well-known/</code> — declare which Exchanges can sell your content.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">03</div>
+            <div class="role-step-text">Deploy the edge function on your CDN. One function, &lt;2ms overhead. Bots get redirected to your Exchange.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">04</div>
+            <div class="role-step-text">Done. Blocked bots become paying customers. No CMS changes. No new infrastructure.</div>
+          </div>
+          <div class="role-footer">Two files and one function &rarr;</div>
+        </div>
+      </div>
+
+      <div class="role-card" onclick="toggleRole(this)">
+        <div class="role-icon">&#9881;</div>
+        <div class="role-title">I Run AI Agents</div>
+        <div class="role-teaser">Access premium content legally with one protocol. No scraping, no legal risk, any Exchange.</div>
+        <div class="role-steps">
+          <div class="role-step">
+            <div class="role-step-num">01</div>
+            <div class="role-step-text">Add the RAMP SDK or MCP server to your agent. One dependency.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">02</div>
+            <div class="role-step-text">Query Exchanges with <code>DiscoverResources</code>. Compare offers by <code>unit_cost</code> across providers.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">03</div>
+            <div class="role-step-text">Execute, fetch, report — one protocol for articles, images, data, streams. 12 pricing models.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">04</div>
+            <div class="role-step-text">If content doesn't match, <code>DisputeTransaction</code> triggers automatic resolution. Cryptographic evidence, not arguments.</div>
+          </div>
+          <div class="role-footer">One API, any Exchange &rarr;</div>
+        </div>
+      </div>
+
+      <div class="role-card" onclick="toggleRole(this)">
+        <div class="role-icon">&#9881;</div>
+        <div class="role-title">I Run an Exchange</div>
+        <div class="role-teaser">Aggregate provider catalogs. Handle transactions. Earn a margin on every access.</div>
+        <div class="role-steps">
+          <div class="role-step">
+            <div class="role-step-num">01</div>
+            <div class="role-step-text">Implement <code>ExchangeService</code> — 4 RPCs: Discover, Transact, Report, Dispute.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">02</div>
+            <div class="role-step-text">Ingest provider catalogs from <code>rsl.txt</code>. Build your resource catalog with pricing and restrictions.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">03</div>
+            <div class="role-step-text">Serve signed offers. Ed25519 signatures prevent intermediary tampering. Stateless verification.</div>
+          </div>
+          <div class="role-step">
+            <div class="role-step-num">04</div>
+            <div class="role-step-text">Plug in your billing adapter — Stripe, x402, or custom. RAMP handles the transaction; you handle settlement.</div>
+          </div>
+          <div class="role-footer">Like an ad exchange, but for content &rarr;</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STANDARDS STACK -->
+  <section class="standards-section">
+    <div class="section-header">
+      <div class="section-label">Standards Interoperability</div>
+      <h2>RAMP doesn't replace anything. It connects everything.</h2>
+      <p>Every building block is an existing open standard. RAMP is the transaction layer that was missing.</p>
+    </div>
+
+    <div class="stack-table">
+      <div class="stack-row">
+        <div class="stack-layer">Layer 5</div>
+        <div class="stack-name">Orchestration</div>
+        <div class="stack-tags">
+          <span class="standard-tag">LangGraph</span>
+          <span class="standard-tag">CrewAI</span>
+          <span class="standard-tag">OpenAI Agents</span>
+        </div>
+      </div>
+      <div class="stack-row stack-ramp">
+        <div class="stack-layer">Layer 4</div>
+        <div class="stack-name">Transaction &amp; Metering</div>
+        <div class="stack-tags">
+          <span class="standard-tag ramp-tag">RAMP Protocol</span>
+          <span class="stack-note">← this layer was empty</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer">Layer 3</div>
+        <div class="stack-name">Payment Rails</div>
+        <div class="stack-tags">
+          <span class="standard-tag">Stripe</span>
+          <span class="standard-tag">x402</span>
+          <span class="standard-tag">L402</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer">Layer 2</div>
+        <div class="stack-name">Identity &amp; Auth</div>
+        <div class="stack-tags">
+          <span class="standard-tag">GNAP</span>
+          <span class="standard-tag">OAuth 2.0</span>
+          <span class="standard-tag">WebBotAuth</span>
+          <span class="standard-tag">Biscuit</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer">Layer 1</div>
+        <div class="stack-name">Communication</div>
+        <div class="stack-tags">
+          <span class="standard-tag">MCP</span>
+          <span class="standard-tag">A2A</span>
+          <span class="standard-tag">NLWeb</span>
+        </div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-layer">Layer 0</div>
+        <div class="stack-name">Transport</div>
+        <div class="stack-tags">
+          <span class="standard-tag">HTTP/2</span>
+          <span class="standard-tag">gRPC</span>
+          <span class="standard-tag">WebSocket</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="standards-feeds">
+      <div class="feeds-row">
+        <div class="feeds-group">
+          <div class="feeds-label">RAMP ingests</div>
+          <div class="stack-tags">
+            <span class="standard-tag feed-tag">RSL 1.0</span>
+            <span class="standard-tag feed-tag">TDMRep</span>
+            <span class="standard-tag feed-tag">C2PA</span>
+            <span class="standard-tag feed-tag">CoMP</span>
+          </div>
+        </div>
+        <div class="feeds-group">
+          <div class="feeds-label">RAMP signs with</div>
+          <div class="stack-tags">
+            <span class="standard-tag feed-tag">Ed25519</span>
+            <span class="standard-tag feed-tag">JWS</span>
+            <span class="standard-tag feed-tag">JWKS</span>
+            <span class="standard-tag feed-tag">RFC 9421</span>
+          </div>
+        </div>
+        <div class="feeds-group">
+          <div class="feeds-label">RAMP encodes with</div>
+          <div class="stack-tags">
+            <span class="standard-tag feed-tag">Protobuf</span>
+            <span class="standard-tag feed-tag">JSON</span>
+            <span class="standard-tag feed-tag">Connect</span>
+          </div>
+        </div>
+      </div>
+      <a href="/protocol/standards-layering/" class="feeds-link">Full standards landscape →</a>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <h2>The fragmentation clock is running.</h2>
+    <p>Every bilateral deal signed today makes a universal standard harder tomorrow. RAMP is the open protocol — adopt it before the window closes.</p>
+    <div class="cta-buttons">
+      <a href="/getting-started/what-is-ramp/" class="btn btn-primary">Read the Docs</a>
+      <a href="/protocol/transaction-flow/" class="btn btn-ghost">Protocol Spec</a>
+      <a href="https://github.com/postindustria-tech/ramp-protocol" class="btn btn-ghost">GitHub</a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-logo">ramp protocol</div>
+    <div class="footer-tagline">Open-source transaction protocol for AI content access</div>
+    <div class="footer-license">
+      Documentation licensed under <a href="https://creativecommons.org/licenses/by-nd/4.0/" target="_blank">CC BY-ND 4.0</a>.
+      Protocol specification and implementation licensed under <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank">Apache 2.0</a>.
+    </div>
+  </footer>
+
+  <script is:inline>
+    // Per-step JSON payloads
+    // Inline style helpers (Astro scopes class CSS, so dynamic innerHTML needs inline styles)
+    const K = 'color:#9cdcfe';       // key
+    const S = 'color:#7ec8a0';       // string
+    const N = 'color:#d4a56a';       // number
+    const B = 'color:#666';          // brace
+    const C = 'color:#555;font-style:italic'; // comment
+    const SIG = 'color:#4f6df5;opacity:0.8';  // signature (accent)
+    const LINK = 'display:block;margin-top:1rem;padding-top:0.75rem;border-top:1px solid #2a2a3a;font-family:Instrument Sans,sans-serif;font-size:0.75rem;color:#4f6df5;text-decoration:none';
+    const LABEL = 'font-family:Instrument Sans,sans-serif;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#4f6df5;margin-bottom:1rem;display:block';
+
+    const k = (v) => `<span style="${K}">"${v}"</span>`;
+    const s = (v) => `<span style="${S}">"${v}"</span>`;
+    const n = (v) => `<span style="${N}">${v}</span>`;
+    const b = (v) => `<span style="${B}">${v}</span>`;
+    const c = (v) => `<span style="${C}">${v}</span>`;
+
+    const stepPayloads = [
+      {
+        label: 'ProviderManifest',
+        link: '/protocol/discovery-paths/',
+        linkText: 'Discovery Paths docs →',
+        json: `${c('// GET /.well-known/ramp.json')}
+${b('{')}
+  ${k('ver')}: ${s('1.0')},
+  ${k('provider')}: ${s('example.com')},
+  ${k('marketplaces')}: ${b('[{')}
+    ${k('domain')}: ${s('exchange.example.com')},
+    ${k('endpoint')}: ${s('/ramp/v1')},
+    ${k('relationship')}: ${s('DIRECT')}
+  ${b('}]')}
+${b('}')}`
+      },
+      {
+        label: 'ResourceResponse → Offer',
+        link: '/protocol/transaction-flow/',
+        linkText: 'Transaction Flow docs →',
+        json: `${c('// POST ExchangeService/DiscoverResources')}
+${b('{')}
+  ${k('offer_id')}: ${s('offer-4921')},
+  ${k('title')}: ${s('Solar Panel Efficiency 2026')},
+  ${k('pricing')}: ${b('{')}
+    ${k('model')}: ${s('PER_ACCESS')},
+    ${k('rate')}: ${n('0.05')},
+    ${k('unit_cost')}: ${n('0.000015')}
+  ${b('}')},
+  ${k('signature')}: <span style="${SIG}">"ed25519:a4c9f2e8..."</span>
+${b('}')}`
+      },
+      {
+        label: 'TransactionResponse',
+        link: '/protocol/transaction-flow/#rpc-2-executetransaction',
+        linkText: 'ExecuteTransaction docs →',
+        json: `${c('// POST ExchangeService/ExecuteTransaction')}
+${b('{')}
+  ${k('transaction_id')}: ${s('txn-93a7f2')},
+  ${k('billing_id')}: ${s('bill-93a7f2-001')},
+  ${k('cost')}: ${b('{')}
+    ${k('amount')}: ${n('0.05')},
+    ${k('currency')}: ${s('USD')}
+  ${b('}')},
+  ${k('delivery_method')}: ${s('INSTRUCTIONS')}
+${b('}')}`
+      },
+      {
+        label: 'Signed URL + Verification',
+        link: '/protocol/content-attestation/',
+        linkText: 'Content Attestation docs →',
+        json: `${c('// CDN delivery with identity binding')}
+${b('{')}
+  ${k('url')}: ${s('https://cdn.example.com/solar')},
+  ${k('expires_at')}: ${s('2026-04-07T16:35:00Z')},
+  ${k('agent_identity_hash')}: ${s('sha256:b7d1...')},
+  ${k('content_hash')}: ${s('sha256:a1b2c3...')}
+${b('}')}`
+      },
+      {
+        label: 'UsageReport',
+        link: '/protocol/transaction-flow/#rpc-3-reportusage',
+        linkText: 'ReportUsage docs →',
+        json: `${c('// POST ExchangeService/ReportUsage')}
+${b('{')}
+  ${k('transaction_id')}: ${s('txn-93a7f2')},
+  ${k('function')}: ${s('AI_INPUT')},
+  ${k('consumed_quantity')}: ${n('3247')},
+  ${k('consumed_unit')}: ${s('tokens')},
+  ${k('used_at')}: ${s('2026-04-07T16:35:12Z')}
+${b('}')}`
+      },
+      {
+        label: 'DisputeRequest → auto-resolve',
+        link: '/protocol/dispute-resolution/',
+        linkText: 'Dispute Resolution docs →',
+        json: `${c('// POST ExchangeService/DisputeTransaction')}
+${b('{')}
+  ${k('transaction_id')}: ${s('txn-93a7f2')},
+  ${k('reason')}: ${s('CONTENT_MISMATCH')},
+  ${k('received_hash')}: ${s('sha256:e5f6a7...')},
+  ${k('report_id')}: ${s('rpt-xyz789')}
+${b('}')}
+${c('// → AUTO_RESOLVED in <1s')}
+${c('// → RESOLUTION_TYPE_CREDIT applied')}`
+      }
+    ];
+
+    const steps = document.querySelectorAll('.flow-step');
+    const jsonPanel = document.getElementById('flowJson');
+    let currentStep = 0;
+    let autoTimer = null;
+
+    function setActiveStep(index) {
+      currentStep = index;
+      steps.forEach(s => s.classList.remove('active'));
+      steps[currentStep].classList.add('active');
+
+      // Fade JSON, swap content, fade back
+      jsonPanel.classList.add('fading');
+      setTimeout(() => {
+        const payload = stepPayloads[currentStep];
+        jsonPanel.innerHTML = `<span style="${LABEL}">${payload.label}</span>\n${payload.json}\n<a style="${LINK}" href="${payload.link}">${payload.linkText}</a>`;
+        jsonPanel.classList.remove('fading');
+      }, 200);
+    }
+
+    function advanceStep() {
+      setActiveStep((currentStep + 1) % steps.length);
+    }
+
+    // Click to select a step (pauses auto-advance, resumes after 8s)
+    steps.forEach((step, i) => {
+      step.addEventListener('click', () => {
+        setActiveStep(i);
+        clearInterval(autoTimer);
+        autoTimer = setInterval(advanceStep, 4000);
+      });
+    });
+
+    // Start auto-advance
+    autoTimer = setInterval(advanceStep, 2500);
+
+    // Initialize first step JSON
+    setActiveStep(0);
+
+    // Role card expand/collapse
+    function toggleRole(card) {
+      const wasExpanded = card.classList.contains('expanded');
+      document.querySelectorAll('.role-card').forEach(c => c.classList.remove('expanded'));
+      if (!wasExpanded) card.classList.add('expanded');
+    }
+
+    // Draw lines between actual DOM node positions on canvas
+    function drawLines() {
+      drawDiagramWithout();
+      drawDiagramWith();
+    }
+
+    function nodeCenter(el, container) {
+      const cr = container.getBoundingClientRect();
+      const nr = el.getBoundingClientRect();
+      const pad = 3; // gap so lines don't touch node edges
+      return {
+        x: nr.left - cr.left + nr.width / 2,
+        y: nr.top - cr.top + nr.height / 2,
+        r: nr.right - cr.left + pad,
+        l: nr.left - cr.left - pad
+      };
+    }
+
+    function drawDiagramWithout() {
+      const container = document.getElementById('diagramWithout');
+      const canvas = document.getElementById('canvasWithout');
+      if (!container || !canvas) return;
+      canvas.width = container.offsetWidth;
+      canvas.height = container.offsetHeight;
+      canvas.style.position = 'absolute';
+      canvas.style.top = '0';
+      canvas.style.left = '0';
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const agents = container.querySelectorAll('[data-nxm="a"]');
+      const platforms = container.querySelectorAll('[data-nxm="p"]');
+      const pubs = container.querySelectorAll('[data-nxm="pub"]');
+
+      // Agents → Platforms (spaghetti — every agent to every platform)
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = 1;
+      agents.forEach(a => {
+        platforms.forEach(p => {
+          const from = nodeCenter(a, container);
+          const to = nodeCenter(p, container);
+          ctx.beginPath();
+          ctx.moveTo(from.r, from.y);
+          ctx.lineTo(to.l, to.y);
+          ctx.stroke();
+        });
+      });
+
+      // Platforms → Publishers (locked, dashed)
+      ctx.strokeStyle = '#ddd';
+      ctx.setLineDash([3, 3]);
+      // TollBit → NYT, Reuters, AP
+      [0,1,2].forEach(i => {
+        if (pubs[i]) {
+          const from = nodeCenter(platforms[0], container);
+          const to = nodeCenter(pubs[i], container);
+          ctx.beginPath(); ctx.moveTo(from.r, from.y); ctx.lineTo(to.l, to.y); ctx.stroke();
+        }
+      });
+      // MS PCM → WSJ, Nature
+      [3,4].forEach(i => {
+        if (pubs[i]) {
+          const from = nodeCenter(platforms[1], container);
+          const to = nodeCenter(pubs[i], container);
+          ctx.beginPath(); ctx.moveTo(from.r, from.y); ctx.lineTo(to.l, to.y); ctx.stroke();
+        }
+      });
+      // Dappier → BMJ, Bloomberg
+      [5,6].forEach(i => {
+        if (pubs[i]) {
+          const from = nodeCenter(platforms[2], container);
+          const to = nodeCenter(pubs[i], container);
+          ctx.beginPath(); ctx.moveTo(from.r, from.y); ctx.lineTo(to.l, to.y); ctx.stroke();
+        }
+      });
+      ctx.setLineDash([]);
+    }
+
+    function drawDiagramWith() {
+      const container = document.getElementById('diagramWith');
+      const canvas = document.getElementById('canvasWith');
+      if (!container || !canvas) return;
+      canvas.width = container.offsetWidth;
+      canvas.height = container.offsetHeight;
+      canvas.style.position = 'absolute';
+      canvas.style.top = '0';
+      canvas.style.left = '0';
+      canvas.style.gridColumn = '1 / -1';
+      canvas.style.gridRow = '1';
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const agents = container.querySelectorAll('[data-nxm="a2"]');
+      const ramp = container.querySelector('[data-nxm="ramp"]');
+      const exchanges = container.querySelectorAll('[data-nxm="ex"]');
+
+      if (!ramp) return;
+      const rampPos = nodeCenter(ramp, container);
+
+      // Agents → RAMP
+      ctx.strokeStyle = '#4f6df5';
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.4;
+      agents.forEach(a => {
+        const from = nodeCenter(a, container);
+        ctx.beginPath();
+        ctx.moveTo(from.r, from.y);
+        ctx.lineTo(rampPos.l, rampPos.y);
+        ctx.stroke();
+      });
+
+      // RAMP → Exchanges
+      ctx.globalAlpha = 0.5;
+      exchanges.forEach(ex => {
+        const to = nodeCenter(ex, container);
+        ctx.beginPath();
+        ctx.moveTo(rampPos.r, rampPos.y);
+        ctx.lineTo(to.l, to.y);
+        ctx.stroke();
+      });
+
+      // Exchanges → Publishers (all connected — open access)
+      const pubs2 = container.querySelectorAll('[data-nxm="pub2"]');
+      ctx.globalAlpha = 0.2;
+      ctx.lineWidth = 1;
+      exchanges.forEach(ex => {
+        pubs2.forEach(pub => {
+          const from = nodeCenter(ex, container);
+          const to = nodeCenter(pub, container);
+          ctx.beginPath();
+          ctx.moveTo(from.r, from.y);
+          ctx.lineTo(to.l, to.y);
+          ctx.stroke();
+        });
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    // Draw on load and resize
+    window.addEventListener('load', () => setTimeout(drawLines, 100));
+    window.addEventListener('resize', drawLines);
+
+    // Also draw when scrolled into view
+    const nxmObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) drawLines();
+      });
+    }, { threshold: 0.2 });
+    document.querySelectorAll('.nxm-panel').forEach(p => nxmObserver.observe(p));
+
+    // ========= Architecture Flow =========
+    const archDetailEl = document.getElementById('archDetailInner');
+    const archStepsList = document.getElementById('archStepsList');
+    let currentArchStep = 0;
+    let currentScenario = 0;
+
+    // party(name, isExchange) → styled inline tag
+    function party(name, isEx) {
+      if (isEx) return `<span style="font-family:var(--mono);font-size:0.75rem;padding:0.25rem 0.5rem;border-radius:2px;background:#4f6df5;border:1px solid #4f6df5;color:#fff;white-space:nowrap;">${name}</span>`;
+      return `<span style="font-family:var(--mono);font-size:0.75rem;padding:0.25rem 0.5rem;border-radius:2px;background:#1a1a26;border:1px solid #2a2a3a;color:#c0c0d0;white-space:nowrap;">${name}</span>`;
+    }
+    const arrow = '<span style="color:#8888a0;font-size:0.875rem;margin:0 0.25rem;">→</span>';
+
+    const scenarios = [
+      { title: 'Web article access',
+        story: 'An AI research assistant needs a New York Times article for a user query. It tries to fetch the URL directly but hits the provider\u2019s edge function, which returns a 403 with a redirect to the RAMP Exchange. The agent discovers the article is available for $0.05, commits to the offer, receives a time-limited signed URL, fetches the full article from the provider\u2019s CDN, and reports how many tokens it consumed.',
+        steps: [
+        { from: 'Agent', to: 'Edge', exFrom: false, exTo: false, desc: '403 redirect to Exchange', link: '/protocol/discovery-paths/', linkText: 'Discovery Paths →',
+          json: `${c('// Agent hits publisher URL, gets 403')}\n${c('// X-Content-Rules header → Exchange')}\n\n${b('{')}\n  ${k('status')}: ${n('403')},\n  ${k('header')}: ${s('X-Content-Rules')},\n  ${k('exchange')}: ${s('exchange.example.com')}\n${b('}')}`},
+        { from: 'Agent', to: 'Exchange', exFrom: false, exTo: true, desc: 'DiscoverResources request', link: '/protocol/transaction-flow/', linkText: 'Transaction Flow →',
+          json: `${c('// POST DiscoverResources')}\n\n${b('{')}\n  ${k('requester')}: ${b('{')}\n    ${k('domain')}: ${s('agent.acme.com')},\n    ${k('intended_use')}: ${s('ai_input')}\n  ${b('}')},\n  ${k('uris')}: [${s('https://nyt.com/article')}]\n${b('}')}`},
+        { from: 'Exchange', to: 'Agent', exFrom: true, exTo: false, desc: 'Signed offers with pricing', link: '/protocol/transaction-flow/', linkText: 'Offer Response →',
+          json: `${c('// ResourceResponse')}\n\n${b('{')}\n  ${k('offer_id')}: ${s('offer-4921')},\n  ${k('pricing')}: ${b('{')}\n    ${k('rate')}: ${n('0.05')},\n    ${k('unit_cost')}: ${n('0.000015')}\n  ${b('}')},\n  ${k('signature')}: <span style="${SIG}">"ed25519:a4c9..."</span>\n${b('}')}`},
+        { from: 'Agent', to: 'Exchange', exFrom: false, exTo: true, desc: 'ExecuteTransaction', link: '/protocol/transaction-flow/#rpc-2-executetransaction', linkText: 'ExecuteTransaction →',
+          json: `${c('// Commit to offer')}\n\n${b('{')}\n  ${k('offer_id')}: ${s('offer-4921')},\n  ${k('offer_signature')}: <span style="${SIG}">"ed25519:a4c9..."</span>\n${b('}')}`},
+        { from: 'Exchange', to: 'Billing', exFrom: true, exTo: false, desc: 'Billing authorization', link: '/getting-started/how-money-flows/', linkText: 'How Money Flows →',
+          json: `${c('// Billing adapter (Stripe, x402, etc)')}\n\n${b('{')}\n  ${k('billing_id')}: ${s('bill-93a7f2')},\n  ${k('amount')}: ${n('0.05')},\n  ${k('status')}: ${s('AUTHORIZED')}\n${b('}')}`},
+        { from: 'Exchange', to: 'Agent', exFrom: true, exTo: false, desc: 'Signed URL + billing_id', link: '/protocol/content-attestation/', linkText: 'Content Attestation →',
+          json: `${c('// TransactionResponse')}\n\n${b('{')}\n  ${k('transaction_id')}: ${s('txn-93a7f2')},\n  ${k('billing_id')}: ${s('bill-93a7f2')},\n  ${k('url')}: ${s('https://cdn.nyt.com/...?sig=...')},\n  ${k('content_hash')}: ${s('sha256:a1b2...')}\n${b('}')}`},
+        { from: 'Agent', to: 'Provider', exFrom: false, exTo: false, desc: 'Fetch article via signed URL', link: '/protocol/transaction-flow/', linkText: 'Signed URL Delivery →',
+          json: `${c('// CDN verifies signed URL natively')}\n${c('// 5-min TTL, identity-bound')}\n\n${b('{')}\n  ${k('status')}: ${n('200')},\n  ${k('content_type')}: ${s('text/html')},\n  ${k('content_hash')}: ${s('sha256:a1b2...')} ${c('✓ match')}\n${b('}')}`},
+        { from: 'Agent', to: 'Exchange', exFrom: false, exTo: true, desc: 'ReportUsage', link: '/protocol/transaction-flow/#rpc-3-reportusage', linkText: 'ReportUsage →',
+          json: `${c('// Post-usage report')}\n\n${b('{')}\n  ${k('transaction_id')}: ${s('txn-93a7f2')},\n  ${k('function')}: ${s('AI_INPUT')},\n  ${k('consumed_quantity')}: ${n('3247')},\n  ${k('consumed_unit')}: ${s('tokens')}\n${b('}')}`}
+      ]},
+      { title: 'Music sample licensing',
+        story: 'An AI music production tool needs a funk sample for a user\u2019s track. A song has two separate rights: the master recording (owned by the label or distributor) and the composition (owned by the songwriter\u2019s publisher). Traditionally, clearing both requires weeks of emails and lawyers. With RAMP, the Broker queries two Exchanges \u2014 one for masters, one for compositions \u2014 and returns both offers in one response. The agent licenses both for $0.03 total, fetches the audio file and the MIDI notation, and reports usage to each rights holder.',
+        steps: [
+        { from: 'Agent', to: 'Broker', exFrom: false, exTo: false, desc: 'Search: "funk loop 120bpm clearable for AI"', link: '/protocol/discovery-paths/', linkText: 'Discovery Paths →',
+          json: `${c('// AI music tool needs a sample')}\n${c('// Two rights needed: master + composition')}\n\n${b('{')}\n  ${k('query')}: ${s('funk loop 120bpm clearable')},\n  ${k('search_filters')}: ${b('{')}\n    ${k('music.genre')}: ${s('funk')},\n    ${k('music.bpm_range')}: ${s('115-125')}\n  ${b('}')},\n  ${k('supported_profiles')}: [${s('ramp-music-v1')}]\n${b('}')}`},
+        { from: 'Broker', to: 'Exchanges', exFrom: false, exTo: true, desc: 'Fan-out: label catalog + publishing catalog', link: '/protocol/transaction-flow/', linkText: 'Transaction Flow →',
+          json: `${c('// Broker queries two Exchanges:')}\n${c('// Exchange A = label/distributor (masters)')}\n${c('// Exchange B = publisher (compositions)')}\n\n${c('// → Exchange A (DistroKid catalog)')}\n${b('{')}\n  ${k('uris')}: [${s('isrc:USRC11700001')}],\n  ${k('intended_use')}: [${s('ai_input')}]\n${b('}')}\n\n${c('// → Exchange B (Songtrust catalog)')}\n${b('{')}\n  ${k('uris')}: [${s('iswc:T-070.237.108-8')}],\n  ${k('intended_use')}: [${s('ai_input')}]\n${b('}')}`},
+        { from: 'Exchanges', to: 'Broker', exFrom: true, exTo: false, desc: 'Two offers: master recording + composition', link: '/protocol/transaction-flow/', linkText: 'Multi-Exchange Offers →',
+          json: `${c('// Exchange A: master recording')}\n${b('{')}\n  ${k('offer_id')}: ${s('offer-master-4401')},\n  ${k('title')}: ${s('Funk Brothers - Get Up Loop')},\n  ${k('pricing')}: ${b('{')}\n    ${k('model')}: ${s('PER_ACCESS')},\n    ${k('rate')}: ${n('0.02')}\n  ${b('}')},\n  ${k('identity')}: ${b('{')}\n    ${k('isrc')}: ${s('USRC11700001')}\n  ${b('}')}\n${b('}')}\n\n${c('// Exchange B: composition')}\n${b('{')}\n  ${k('offer_id')}: ${s('offer-comp-8820')},\n  ${k('title')}: ${s('Get Up (Composition)')},\n  ${k('pricing')}: ${b('{')}\n    ${k('model')}: ${s('PER_ACCESS')},\n    ${k('rate')}: ${n('0.01')}\n  ${b('}')},\n  ${k('identity')}: ${b('{')}\n    ${k('iswc')}: ${s('T-070.237.108-8')}\n  ${b('}')}\n${b('}')}`},
+        { from: 'Broker', to: 'Agent', exFrom: false, exTo: false, desc: 'Linked offers: $0.02 master + $0.01 composition', link: '/protocol/transaction-flow/', linkText: 'Offer Selection →',
+          json: `${c('// Broker presents both as a bundle')}\n${c('// Agent sees total cost: $0.03')}\n\n${b('{')}\n  ${k('offers')}: [\n    ${b('{')}\n      ${k('title')}: ${s('Master: Funk Brothers Loop')},\n      ${k('rate')}: ${n('0.02')},\n      ${k('exchange')}: ${s('distrokid-exchange.com')}\n    ${b('}')},\n    ${b('{')}\n      ${k('title')}: ${s('Composition: Get Up')},\n      ${k('rate')}: ${n('0.01')},\n      ${k('exchange')}: ${s('songtrust-exchange.com')}\n    ${b('}')}\n  ],\n  ${k('total')}: ${n('0.03')}\n${b('}')}`},
+        { from: 'Agent', to: 'Exchange A', exFrom: false, exTo: true, desc: 'ExecuteTransaction for master recording', link: '/protocol/transaction-flow/#rpc-2-executetransaction', linkText: 'ExecuteTransaction →',
+          json: `${c('// Transaction 1: master recording')}\n\n${b('{')}\n  ${k('offer_id')}: ${s('offer-master-4401')},\n  ${k('transaction_id')}: ${s('txn-master-a1')},\n  ${k('cost')}: ${b('{')}\n    ${k('amount')}: ${n('0.02')},\n    ${k('currency')}: ${s('USD')}\n  ${b('}')}\n${b('}')}`},
+        { from: 'Agent', to: 'Exchange B', exFrom: false, exTo: true, desc: 'ExecuteTransaction for composition', link: '/protocol/transaction-flow/#rpc-2-executetransaction', linkText: 'ExecuteTransaction →',
+          json: `${c('// Transaction 2: composition rights')}\n\n${b('{')}\n  ${k('offer_id')}: ${s('offer-comp-8820')},\n  ${k('transaction_id')}: ${s('txn-comp-b2')},\n  ${k('cost')}: ${b('{')}\n    ${k('amount')}: ${n('0.01')},\n    ${k('currency')}: ${s('USD')}\n  ${b('}')}\n${b('}')}`},
+        { from: 'Agent', to: 'CDN', exFrom: false, exTo: false, desc: 'Fetch audio (master) + notation (composition)', link: '/protocol/content-attestation/', linkText: 'Content Attestation →',
+          json: `${c('// Two signed URLs, two fetches')}\n\n${c('// Master: audio/wav from label CDN')}\n${b('{')}\n  ${k('url')}: ${s('https://cdn.distrokid.com/...')},\n  ${k('content_type')}: ${s('audio/wav')},\n  ${k('content_hash')}: ${s('sha256:f1a2...')} ${c('✓')}\n${b('}')}\n\n${c('// Composition: MIDI from publisher')}\n${b('{')}\n  ${k('url')}: ${s('https://cdn.songtrust.com/...')},\n  ${k('content_type')}: ${s('audio/midi')},\n  ${k('content_hash')}: ${s('sha256:b3c4...')} ${c('✓')}\n${b('}')}`},
+        { from: 'Agent', to: 'Exchanges', exFrom: false, exTo: true, desc: 'ReportUsage to both Exchanges', link: '/protocol/transaction-flow/#rpc-3-reportusage', linkText: 'ReportUsage →',
+          json: `${c('// Usage report to each Exchange')}\n\n${c('// → Exchange A (master)')}\n${b('{')}\n  ${k('transaction_id')}: ${s('txn-master-a1')},\n  ${k('function')}: ${s('AI_INPUT')},\n  ${k('consumed_unit')}: ${s('seconds')},\n  ${k('consumed_quantity')}: ${n('8')}\n${b('}')}\n\n${c('// → Exchange B (composition)')}\n${b('{')}\n  ${k('transaction_id')}: ${s('txn-comp-b2')},\n  ${k('function')}: ${s('AI_INPUT')},\n  ${k('consumed_unit')}: ${s('bars')},\n  ${k('consumed_quantity')}: ${n('4')}\n${b('}')}`}
+      ]}
+    ];
+
+    const ROW_BASE = 'display:flex;align-items:center;gap:0.75rem;padding:0.625rem 0.75rem;cursor:pointer;border-radius:4px;border:1px solid transparent;transition:all 0.2s;';
+    const ROW_ACTIVE = ROW_BASE + 'background:rgba(79,109,245,0.08);border-color:rgba(79,109,245,0.3);';
+    const NUM_BASE = 'width:1.75rem;height:1.75rem;border-radius:50%;background:#2a2a3a;color:#8888a0;font-family:DM Mono,monospace;font-size:0.75rem;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.3s;';
+    const NUM_ACTIVE = NUM_BASE.replace('background:#2a2a3a;color:#8888a0','background:#4f6df5;color:#fff') + 'box-shadow:0 0 10px rgba(79,109,245,0.2);';
+    const PARTIES = 'display:flex;align-items:center;gap:0.3rem;flex-shrink:0;min-width:11rem;';
+    const DESC_BASE = 'font-size:0.875rem;color:#8888a0;line-height:1.5;';
+    const DESC_ACTIVE = 'font-size:0.875rem;color:#c0c0d0;line-height:1.5;';
+
+    function renderArchSteps() {
+      const scenario = scenarios[currentScenario];
+      let html = '';
+      scenario.steps.forEach((step, i) => {
+        const isActive = i === currentArchStep;
+        html += `<div style="${isActive ? ROW_ACTIVE : ROW_BASE}" onclick="setArchStep(${i},true)" onmouseenter="this.style.background='#1a1a26'" onmouseleave="this.style.background='${isActive ? 'rgba(79,109,245,0.08)' : 'transparent'}'">
+          <div style="${isActive ? NUM_ACTIVE : NUM_BASE}">${i + 1}</div>
+          <div style="${PARTIES}">${party(step.from, step.exFrom)}${arrow}${party(step.to, step.exTo)}</div>
+          <div style="${isActive ? DESC_ACTIVE : DESC_BASE}">${step.desc}</div>
+        </div>`;
+      });
+      archStepsList.innerHTML = html;
+    }
+
+    function stopArchAuto() {
+      clearInterval(archTimer);
+      archTimer = null;
+    }
+
+    function setArchStep(index, fromUser) {
+      if (fromUser) stopArchAuto();
+      currentArchStep = index;
+      const scenario = scenarios[currentScenario];
+      const step = scenario.steps[index];
+
+      // Update active row
+      renderArchSteps();
+
+      // Update detail panel
+      const stepLabel = `<span style="display:block;margin-bottom:0.75rem;font-family:Instrument Sans,sans-serif;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#4f6df5;">Step ${index+1} — ${step.from} → ${step.to}</span>`;
+      const descLine = `<span style="font-size:0.6875rem;color:#8888a0;display:block;margin-bottom:0.5rem;">${step.desc}</span>`;
+      const docLink = `<a style="display:block;margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2a3a;font-family:Instrument Sans,sans-serif;font-size:0.75rem;color:#4f6df5;text-decoration:none;" href="${step.link}">${step.linkText}</a>`;
+      archDetailEl.innerHTML = `${stepLabel}${descLine}\n${step.json}\n${docLink}`;
+    }
+
+    function renderStory() {
+      const scenario = scenarios[currentScenario];
+      document.getElementById('archStory').innerHTML = scenario.story;
+    }
+
+    function switchScenario(idx) {
+      stopArchAuto();
+      currentScenario = idx;
+      currentArchStep = 0;
+      document.getElementById('archTab0').classList.toggle('active', idx === 0);
+      document.getElementById('archTab1').classList.toggle('active', idx === 1);
+      renderStory();
+      renderArchSteps();
+      setArchStep(0);
+    }
+
+    let archTimer = null;
+    function advanceArchStep() {
+      const scenario = scenarios[currentScenario];
+      setArchStep((currentArchStep + 1) % scenario.steps.length);
+    }
+
+    // Init
+    renderStory();
+    renderArchSteps();
+    setArchStep(0);
+    archTimer = setInterval(advanceArchStep, 5000);
+  </script>
+
+</body>
+</html>

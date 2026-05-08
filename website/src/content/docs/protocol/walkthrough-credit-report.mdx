@@ -1,0 +1,604 @@
+---
+title: "Walkthrough: Business Credit Report"
+description: "DYNAMIC content mutability, multi-tier pricing offers, entity resolution, redistribution restrictions, and the ramp-credit-v1 extension profile."
+---
+
+> Complete walkthrough of RAMP v1.0 applied to business credit data. Demonstrates DYNAMIC content mutability, multi-tier offers (same resource at different completeness/price), entity resolution as an Broker concern, and redistribution restrictions enforced via signed URLs and agent identity binding.
+
+## Scenario
+
+**Agent**: `due-diligence-bot` at `legalcorp.com` — a corporate due diligence agent evaluating a potential acquisition target
+**Broker**: `broker.legalcorp.com` — routes credit data requests to D&B's Exchange
+**Content**: Dun & Bradstreet business credit report for "Acme Corp."
+**Subscription**: None — the agent pays per report
+**Extension Profile**: `ramp-credit-v1` (D&B-specific business entity identifiers, credit scoring metadata)
+
+The agent knows the company name ("Acme Corp.") but not the D-U-N-S number. The Broker handles entity resolution before querying the Exchange. The credit report is **DYNAMIC** — it changes as new trade data arrives.
+
+---
+
+## Step 0 — Entity Resolution (Broker)
+
+Before any RAMP interaction, the Broker must convert the company name to a D-U-N-S number. This is a separate paid service with its own failure modes.
+
+The Broker queries D&B's entity resolution API:
+
+```bash
+curl -s "https://plus.dnb.com/v1/match/cleanseMatch?name=Acme+Corp&countryISOAlpha2Code=US" \
+  -H "Authorization: Bearer dnb-api-token..."
+```
+
+```json
+{
+  "matchCandidates": [
+    {
+      "organization": {
+        "duns": "123456789",
+        "primaryName": "ACME CORPORATION",
+        "addressCountry": { "isoAlpha2Code": "US" },
+        "tradeStyleNames": [{ "name": "Acme Corp" }]
+      },
+      "matchQualityInformation": {
+        "confidenceCode": 10,
+        "matchGrade": "AAAAAZZAFFF"
+      }
+    }
+  ]
+}
+```
+
+**Cost**: $0.50 for the entity resolution call. The Broker absorbs this cost — it is not part of the RAMP transaction. If the resolution returns ambiguous matches (multiple candidates), the Broker must resolve the ambiguity before proceeding. RAMP does not handle entity resolution — it accesses resources that have known identifiers.
+
+The Broker now has the D-U-N-S number `123456789` and constructs a `duns:` URI for the RAMP query.
+
+---
+
+## Step 1 — Discovery
+
+The Broker resolves D&B's RAMP configuration:
+
+```bash
+curl -s https://dnb.com/.well-known/ramp.json | jq
+```
+
+```json
+{
+  "ver": "1.0",
+  "provider": "dnb.com",
+  "contact": "data-licensing@dnb.com",
+  "exchanges": [
+    {
+      "domain": "exchange.dnb.com",
+      "endpoint": "https://exchange.dnb.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-credit-v1"]
+}
+```
+
+The `supported_profiles` field declares that D&B's Exchange understands the `ramp-credit-v1` extension profile. The Broker will forward this in the ResourceQuery so the Exchange includes credit-specific metadata in its response.
+
+---
+
+## Step 2 — ResourceQuery
+
+The Broker sends a `ResourceQuery` with the resolved D-U-N-S number as a `duns:` URI. The `supported_profiles` field tells the Exchange to include credit-specific `ext` fields in the response.
+
+```json
+POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-dnb-001",
+  "requester": {
+    "id": "due-diligence-bot",
+    "domain": "legalcorp.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "duns:123456789"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["credit:read"],
+    "signature": "ed25519:d7e8f9a0b1c2...",
+    "signature_algorithm": "ed25519"
+  },
+  "supported_profiles": ["ramp-credit-v1"],
+  "ext": {
+    "max_data_age": "604800s"
+  }
+}
+```
+
+**Key fields:**
+- **`uris: ["duns:123456789"]`** — the D-U-N-S number as a URI. RAMP is URI-centric; the Broker performed entity resolution before this step.
+- **`supported_profiles: ["ramp-credit-v1"]`** — the Broker declares it understands the credit extension profile. The Exchange includes credit-specific `ext` fields (PAYDEX, trade count, score model) in the response.
+- **`ext.max_data_age: "604800s"`** — freshness constraint. The agent needs a report updated within the last 7 days (604,800 seconds). The Exchange SHOULD exclude offers whose `data_as_of` is older than this threshold.
+- **`scopes: ["credit:read"]`** — the agent is authorized to read credit data. No subscription — pay-per-report pricing.
+
+---
+
+## Step 3 — ResourceResponse
+
+The Exchange returns an `OfferGroup` with **three tiered offers** for the same resource — different completeness levels at different prices. All three are `RESOURCE_MUTABILITY_DYNAMIC` because credit reports change as new trade data arrives.
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-dnb-001",
+  "exchange": "exchange.dnb.com",
+  "offer_groups": [
+    {
+      "uri": "duns:123456789",
+      "offers": [
+        {
+          "offer_id": "offer-dnb-acme-basic",
+          "package": {
+            "id": "PKG-DNB-123456789-BASIC",
+            "title": "Acme Corporation — Basic Credit Summary",
+            "seller": "dnb.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_JSON"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_RECORD",
+            "rate": 2.00,
+            "currency": "USD",
+            "unit_cost": 2.00,
+            "estimated_quantity": 1,
+            "unit": "reports"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://api.dnb.com/report/123456789/basic",
+            "content_hash": "sha256:1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC",
+            "ext": {
+              "duns": "123456789",
+              "entity_name": "ACME CORPORATION",
+              "country": "US"
+            }
+          },
+          "data_as_of": "2026-03-18T23:59:59Z",
+          "attestations": [
+            {
+              "verifier": "dnb.com",
+              "kid": "dnb-key-2026-q1",
+              "attested_at": "2026-03-18T23:59:59Z",
+              "uri": "duns:123456789",
+              "claims": {
+                "credit.paydex_score": 72,
+                "credit.trade_count": 45,
+                "credit.data_blocks": ["paydex", "summary"],
+                "credit.score_model": "DNB-PAYDEX-v4.2"
+              },
+              "signature": "base64-ed25519-dnb-self-attestation-basic..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX"]
+          },
+          "exchange_signature": "base64-ed25519-dnb-offer-basic-sig...",
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "credit.tier": "basic",
+            "credit.data_blocks": ["paydex", "summary"],
+            "credit.completeness": 0.25
+          }
+        },
+        {
+          "offer_id": "offer-dnb-acme-standard",
+          "package": {
+            "id": "PKG-DNB-123456789-STD",
+            "title": "Acme Corporation — Standard Credit Report",
+            "seller": "dnb.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_JSON"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_RECORD",
+            "rate": 61.99,
+            "currency": "USD",
+            "unit_cost": 61.99,
+            "estimated_quantity": 1,
+            "unit": "reports"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://api.dnb.com/report/123456789/standard",
+            "content_hash": "sha256:2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890ab",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC",
+            "ext": {
+              "duns": "123456789",
+              "entity_name": "ACME CORPORATION",
+              "country": "US"
+            }
+          },
+          "data_as_of": "2026-03-18T23:59:59Z",
+          "attestations": [
+            {
+              "verifier": "dnb.com",
+              "kid": "dnb-key-2026-q1",
+              "attested_at": "2026-03-18T23:59:59Z",
+              "uri": "duns:123456789",
+              "claims": {
+                "credit.paydex_score": 72,
+                "credit.trade_count": 45,
+                "credit.data_blocks": ["paydex", "summary", "trade_payments", "public_filings", "company_info", "risk_indicators"],
+                "credit.score_model": "DNB-PAYDEX-v4.2",
+                "credit.commercial_score": 580,
+                "credit.financial_stress_score": 1420
+              },
+              "signature": "base64-ed25519-dnb-self-attestation-std..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX"]
+          },
+          "exchange_signature": "base64-ed25519-dnb-offer-std-sig...",
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "credit.tier": "standard",
+            "credit.data_blocks": ["paydex", "summary", "trade_payments", "public_filings", "company_info", "risk_indicators"],
+            "credit.completeness": 0.70
+          }
+        },
+        {
+          "offer_id": "offer-dnb-acme-comprehensive",
+          "package": {
+            "id": "PKG-DNB-123456789-COMP",
+            "title": "Acme Corporation — Comprehensive Credit Report with Financials",
+            "seller": "dnb.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_JSON"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_RECORD",
+            "rate": 150.00,
+            "currency": "USD",
+            "unit_cost": 150.00,
+            "estimated_quantity": 1,
+            "unit": "reports"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://api.dnb.com/report/123456789/comprehensive",
+            "content_hash": "sha256:3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890abcd",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC",
+            "ext": {
+              "duns": "123456789",
+              "entity_name": "ACME CORPORATION",
+              "country": "US"
+            }
+          },
+          "data_as_of": "2026-03-18T23:59:59Z",
+          "attestations": [
+            {
+              "verifier": "dnb.com",
+              "kid": "dnb-key-2026-q1",
+              "attested_at": "2026-03-18T23:59:59Z",
+              "uri": "duns:123456789",
+              "claims": {
+                "credit.paydex_score": 72,
+                "credit.trade_count": 45,
+                "credit.data_blocks": ["paydex", "summary", "trade_payments", "public_filings", "company_info", "risk_indicators", "financial_statements", "corporate_linkage", "government_activity", "special_events"],
+                "credit.score_model": "DNB-PAYDEX-v4.2",
+                "credit.commercial_score": 580,
+                "credit.financial_stress_score": 1420,
+                "credit.has_financials": true,
+                "credit.financial_statement_date": "2025-12-31"
+              },
+              "signature": "base64-ed25519-dnb-self-attestation-comp..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"]
+          },
+          "exchange_signature": "base64-ed25519-dnb-offer-comp-sig...",
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "credit.tier": "comprehensive",
+            "credit.data_blocks": ["paydex", "summary", "trade_payments", "public_filings", "company_info", "risk_indicators", "financial_statements", "corporate_linkage", "government_activity", "special_events"],
+            "credit.completeness": 1.00
+          }
+        }
+      ]
+    }
+  ],
+  "rate_limit": {
+    "limit": 300,
+    "remaining": 294,
+    "reset_at": "2026-03-19T12:00:00Z",
+    "window": "60s"
+  }
+}
+```
+
+**What the agent learns from this response:**
+
+### Three Tiers, Same Resource
+
+All three offers share the same D-U-N-S identifier (`123456789`) and the same `data_as_of` timestamp. The difference is **completeness** — how many data blocks are included:
+
+| Tier | Price | Data Blocks | Completeness |
+|---|---|---|---|
+| **Basic** ($2.00) | PAYDEX score + summary only | `paydex`, `summary` | 25% |
+| **Standard** ($61.99) | Full report | `paydex`, `summary`, `trade_payments`, `public_filings`, `company_info`, `risk_indicators` | 70% |
+| **Comprehensive** ($150.00) | Full report + financials + filings | All 10 data blocks including `financial_statements`, `corporate_linkage` | 100% |
+
+The `credit.completeness` field in `ext` (0.25, 0.70, 1.00) lets the Broker compare tiers programmatically. The agent decides which tier provides sufficient depth for the due diligence analysis.
+
+### DYNAMIC Mutability
+
+All three offers carry `resource_mutability: "RESOURCE_MUTABILITY_DYNAMIC"`. The `content_hash` reflects the report state as of March 18 (`data_as_of: "2026-03-18T23:59:59Z"`). If new trade data arrives between offer generation and content fetch, the delivered JSON will differ from the hash — and that is expected behavior, not grounds for dispute.
+
+### Credit-Specific Attestation Claims
+
+The `ramp-credit-v1` profile defines attestation claims specific to business credit:
+- **`credit.paydex_score: 72`** — D&B's trade payment index (1-100 scale, 80+ is good)
+- **`credit.trade_count: 45`** — number of trade payment experiences on file
+- **`credit.commercial_score: 580`** — D&B Commercial Credit Score (101-670 range)
+- **`credit.financial_stress_score: 1420`** — Financial Stress Score (1001-1875 range)
+- **`credit.score_model: "DNB-PAYDEX-v4.2"`** — which scoring model generated these values
+
+### Redistribution Restrictions
+
+All tiers carry `prohibited_functions` that block AI training and indexing. The comprehensive tier is even more restrictive — `FUNCTION_SEARCH` is also prohibited, limiting usage to direct AI input only. D&B's terms prohibit caching, compilation, and resale of credit data. The signed URL with agent identity binding (enforced at delivery) is the protocol-level mechanism for preventing URL sharing.
+
+### Rate Limiting
+
+The `rate_limit` on the response signals that D&B enforces per-caller rate limits: 300 queries per 60-second window. The Broker uses this to throttle proactively — critical when running batch supply chain assessments across 20 vendors.
+
+---
+
+## Step 4 — ExecuteTransaction
+
+The agent selects the **standard tier** ($61.99) — sufficient depth for due diligence without the premium cost of the comprehensive report. The agent sends the offer's `exchange_signature` back to the Exchange for stateless verification:
+
+```json
+POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-dnb-001",
+  "offer_id": "offer-dnb-acme-standard",
+  "offer_signature": "base64-ed25519-dnb-offer-std-sig...",
+  "offer_signature_algorithm": "ed25519",
+  "requester": {
+    "id": "due-diligence-bot",
+    "domain": "legalcorp.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "duns:123456789"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["credit:read"],
+    "signature": "ed25519:e8f9a0b1c2d3...",
+    "signature_algorithm": "ed25519"
+  },
+  "agent_signature": "ed25519:e8f9a0b1c2d3...",
+  "agent_signature_algorithm": "ed25519"
+}
+```
+
+The Exchange performs:
+1. **Signature verification** — verifies the `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
+2. **Agent authentication** — verifies `agent_signature` against the agent's published public key at `legalcorp.com/.well-known/ramp-agent.json`.
+3. **Balance check** — confirms `due-diligence-bot@legalcorp.com` has sufficient balance ($61.99).
+4. **WAL write** — records the transaction in the write-ahead log before generating the signed URL (write-before-sign invariant).
+5. **Signed URL generation** — HMAC-SHA256 over `(base_url, expires, agent_id, txn_id)` using the Exchange-CDN shared secret.
+
+Response:
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-dnb-001",
+  "transaction_id": "txn-dnb-acme-001",
+  "billing_id": "bill-dnb-acme-001",
+  "package": {
+    "id": "PKG-DNB-123456789-STD",
+    "retrieval": {
+      "endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1..."
+    }
+  },
+  "cost": {
+    "amount": 61.99,
+    "currency": "USD"
+  },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "reporting_obligation": {
+    "required": true,
+    "window": "86400s",
+    "required_fields": ["consumed_quantity"]
+  },
+  "expires_at": "2026-03-19T12:05:00Z",
+  "agent_identity_hash": "9c5f0d3e..."
+}
+```
+
+The signed URL is valid for 5 minutes. The `agent_identity_hash` (SHA-256 of the agent's license ID) is embedded in the URL — a different agent cannot use this URL. This is D&B's primary enforcement mechanism against redistribution: the credit report is delivered to one specific agent, and the URL cannot be shared.
+
+---
+
+## Step 5 — Fetch + Hash Verification
+
+The agent fetches the credit report via the signed URL:
+
+```bash
+GET https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1...
+```
+
+D&B's delivery endpoint verifies:
+1. HMAC-SHA256 signature matches (Exchange-CDN shared secret)
+2. URL has not expired
+3. `agent_id` in URL matches the requesting agent's identity hash
+4. `txn_id` is recorded for three-sided reconciliation
+
+The agent receives the credit report as JSON:
+
+```json
+{
+  "duns": "123456789",
+  "primaryName": "ACME CORPORATION",
+  "paydex": {
+    "score": 72,
+    "tradeCount": 47,
+    "paymentBehavior": "Pays 15 days beyond terms"
+  },
+  "tradePayments": [ "..." ],
+  "publicFilings": [ "..." ],
+  "companyInfo": { "..." },
+  "riskIndicators": { "..." }
+}
+```
+
+### Hash Mismatch — Expected for DYNAMIC Content
+
+The agent computes SHA-256 of the delivered JSON: `sha256:4d5e6f7890abcdef...`. This does **not** match the `content_hash` from the offer (`sha256:2b3c4d5e6f789...`).
+
+**Why?** Two new trade payment experiences were reported between offer generation (March 18) and fetch (March 19). The `tradeCount` changed from 45 to 47. The delivered bytes are different from what was hashed at offer time.
+
+**Agent behavior:** The agent checks `resource_mutability` from the offer's `ResourceIdentity`. It is `RESOURCE_MUTABILITY_DYNAMIC`. The RAMP protocol is explicit: for DYNAMIC resources, hash mismatch is expected and MUST NOT trigger automatic dispute. The `data_as_of` field (`2026-03-18T23:59:59Z`) confirms the offer was fresh within the agent's 7-day `max_data_age` requirement. The agent proceeds normally.
+
+The agent could still dispute if the content were fundamentally wrong — wrong D-U-N-S number, wrong entity, or data older than the `max_data_age` constraint. But a hash mismatch alone is not disputable for DYNAMIC content.
+
+---
+
+## Step 6 — ReportUsage
+
+Usage reporting is mandatory. The agent reports actual consumption:
+
+```json
+POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+
+{
+  "ver": "1.0",
+  "id": "ur-dnb-001",
+  "transaction_id": "txn-dnb-acme-001",
+  "billing_id": "bill-dnb-acme-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "consumed_quantity": 1,
+    "consumed_unit": "reports",
+    "displayed_to_user": true,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-19T12:01:30Z",
+  "assets": [
+    {
+      "uri": "duns:123456789",
+      "title": "Acme Corporation — Standard Credit Report",
+      "package_id": "PKG-DNB-123456789-STD"
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "report_id": "rpt-dnb-acme-001"
+}
+```
+
+The `report_id` enables the dispute chain: if the agent needs to dispute this transaction later (e.g., the report contained data for the wrong entity), it must reference this report to prove usage was reported first.
+
+**Metering note:** Credit reports use `consumed_unit: "reports"` with `consumed_quantity: 1`. Unlike text content (metered in tokens) or audio (metered in minutes), credit data is metered per report — the atomic unit of business credit information.
+
+---
+
+## Key Protocol Concepts Demonstrated
+
+### DYNAMIC Resource Mutability
+
+This is the defining characteristic of this walkthrough. Credit reports change continuously as new trade data, public filings, and financial statements are reported. The RAMP protocol handles this via:
+
+| Feature | How It Works |
+|---|---|
+| `resource_mutability: DYNAMIC` | Signals that hash mismatch is expected |
+| `data_as_of` | Timestamp of the data snapshot — agent evaluates freshness |
+| `max_data_age` (in query `ext`) | Agent's freshness requirement — Exchange filters stale offers |
+| Hash verification | Informational only — agent MUST NOT auto-dispute on mismatch |
+
+### Multi-Tier Offers
+
+RAMP's `OfferGroup` naturally supports multiple offers for the same resource at different price/completeness levels. The Broker or agent selects the appropriate tier based on the task requirements. The `credit.completeness` field in `ext` enables programmatic tier comparison.
+
+### Entity Resolution as Broker Concern
+
+RAMP is URI-centric — it accesses resources by known identifier. Converting "Acme Corp." to `duns:123456789` is the Broker's job, with its own cost ($0.50), failure modes (ambiguous matches), and API credentials. This separation is by design: RAMP handles the metered content transaction, not the discovery and resolution that precedes it.
+
+### Redistribution Restrictions
+
+D&B's terms prohibit caching, compilation, and resale of credit data. RAMP enforces this at multiple levels:
+
+1. **`prohibited_functions`** in `AccessRestrictions` — blocks training, indexing (and search for the comprehensive tier)
+2. **Agent identity binding** — the `agent_identity_hash` is embedded in the signed URL, preventing URL sharing between agents
+3. **Signed URL TTL** — 5-minute expiry prevents URL reuse
+4. **Usage reporting** — creates an audit trail of who accessed what, enabling post-hoc enforcement
+
+### Extension Profile: ramp-credit-v1
+
+The `ramp-credit-v1` profile defines:
+- **Identity vocabulary:** D-U-N-S, EIN, LEI in `ResourceIdentity.ext`
+- **Attestation claims:** `credit.paydex_score`, `credit.trade_count`, `credit.commercial_score`, `credit.financial_stress_score`, `credit.score_model`
+- **Offer metadata:** `credit.tier`, `credit.data_blocks`, `credit.completeness`
+- **Freshness integration:** `data_as_of` + `max_data_age` for dynamic credit data
+
+All credit-specific fields live in `ext` — the core protocol does not need credit-specific message types.
+
+---
+
+## Comparison with Static Content (Scenario A from RAMP v1.0 Walkthrough)
+
+| Aspect | TechCrunch Article (Static) | D&B Credit Report (Dynamic) |
+|---|---|---|
+| Content mutability | `STATIC` | `DYNAMIC` |
+| Hash verification | SHOULD verify; mismatch is disputable | Informational; mismatch is expected |
+| `data_as_of` | Not set (content does not change) | `2026-03-18T23:59:59Z` |
+| Pricing model | `PER_ACCESS` ($0.05) | `PER_RECORD` ($2 / $61.99 / $150) |
+| Metering unit | `tokens` (3,200 estimated) | `reports` (1) |
+| Multi-tier offers | No (single offer per article) | Yes (3 tiers, same D-U-N-S) |
+| Entity resolution | Not needed (URL is the identifier) | Required (company name to D-U-N-S) |
+| Redistribution | Training prohibited | Training, indexing, and (for comprehensive) search prohibited |
+
+---
+
+## Next Steps
+
+- [Resource Mutability](/protocol/content-mutability) — STATIC vs DYNAMIC vs LIVE behavior in depth
+- [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1) — per-article and subscription scenarios with static content
+- [Scenario Walkthrough](/protocol/scenario-walkthrough) — multi-party narrative with Broker, cross-provider dedup, and dispute resolution
+- [Extension Profiles](/protocol/extension-profiles) — how domain profiles define metadata vocabularies
+- [Transaction Flow](/protocol/transaction-flow) — step-by-step protocol specification
+- [Dispute Resolution](/protocol/dispute-resolution) — dispute rules per mutability level

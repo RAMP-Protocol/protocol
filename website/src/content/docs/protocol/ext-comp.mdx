@@ -1,0 +1,91 @@
+---
+title: "Extension: ramp-comp-v1"
+description: "IAB CoMP metadata extension profile — Package, Function, Scope as optional ext fields"
+---
+
+## Purpose
+
+Maps IAB Tech Lab CoMP (Content Metadata Protocol) fields into RAMP ext
+conventions. This extension profile enables publishers and ad-tech participants to carry CoMP
+metadata alongside RAMP transactions without requiring the core protocol
+to depend on CoMP.
+
+Exchanges that declare `supported_profiles: ["ramp-comp-v1"]` include
+these ext fields in Offers and expect them in UsageReports.
+
+## ext Fields
+
+### Resource Metadata (on Offer.ext)
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `comp.package_id` | string | Yes | CoMP Package.id — unique package identifier |
+| `comp.title` | string | No | Package title (if different from Offer.title) |
+| `comp.seller` | string | No | Canonical domain of the content owner |
+| `comp.packager` | string | No | Domain of the packager (if different from seller) |
+| `comp.license_url` | string | No | URL for license terms |
+| `comp.citation_required` | boolean | No | Whether citation of content owner is required |
+
+### Retrieval (on Offer.ext)
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `comp.retrieval_endpoint` | string | No | Entry point / feed URI |
+| `comp.retrieval_auth` | string | No | Authorization type ("none", "api_key", "oauth2") |
+| `comp.retrieval_type` | string[] | No | Endpoint type(s) ("api", "feed", "crawl") |
+| `comp.retrieval_ratelimit` | integer | No | Rate limit (requests per minute) |
+
+### Scope (on Offer.ext)
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `comp.scope_type` | string | No | Scope type ("full", "partial", "sample") |
+| `comp.scope_max` | integer | No | Upper limit on access (0=unlimited) |
+| `comp.content_types` | string[] | No | Content type(s) included |
+
+### License (on Offer.ext)
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `comp.license` | object[] | No | Array of license terms |
+| `comp.license[].use` | string | No | License use type |
+| `comp.license[].duration_months` | integer | No | License duration |
+| `comp.license[].maxword` | integer | No | Max display words |
+
+### Usage Functions (on AccessRestrictions.ext and Usage.ext)
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `comp.function` | string[] | No | CoMP Function enum values: "ALL", "AI_ALL", "AI_TRAIN", "AI_INPUT", "AI_INDEX", "SEARCH" |
+| `comp.subfn` | string[] | No | CoMP SubFunction: "TRAINING", "RAG", "GROUNDING", "AGENT_VIEW", "AGENT_ACTIONS", "OTHER" |
+
+### IAB Content Taxonomy (on Offer.ext)
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `comp.content_categories` | string[] | No | IAB Content Taxonomy 3.1 codes |
+
+## Conformance
+
+An Exchange declaring `ramp-comp-v1` support MUST:
+- Include `comp.package_id` on every Offer
+- Forward `comp.function` from AccessRestrictions to UsageReport processing
+- Validate `comp.*` ext fields against this profile's schema
+
+An Agent using `ramp-comp-v1` MUST:
+- Include `comp.function` in Usage when reporting
+
+## Relationship to Core Protocol
+
+The core RAMP protocol carries universal fields:
+- `Offer.title` — human-readable resource title
+- `AccessRestrictions.permitted_functions` / `prohibited_functions` — string-based (not CoMP enums)
+- `Usage.function` / `Usage.subfn` — string-based
+
+The `ramp-comp-v1` profile adds CoMP-specific semantics:
+- `comp.package_id` links to the CoMP package model
+- `comp.function` values map to CoMP Function enum integers
+- `comp.retrieval_*` maps to CoMP Retrieval message
+
+Agents and Exchanges that don't use CoMP simply ignore these ext fields
+(robustness principle). The core protocol works without them.

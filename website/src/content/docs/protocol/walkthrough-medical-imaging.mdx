@@ -1,0 +1,576 @@
+---
+title: "Walkthrough: Medical Imaging (Brain MRI)"
+description: "Pre-transaction compliance gate (DUA), multi-file DICOM delivery, de-identification attestation, per-study metering, and the ramp-medimg-v1 extension profile."
+---
+
+> Complete walkthrough of a regulated medical imaging transaction. Shows how RAMP handles pre-transaction legal gates, multi-file binary delivery, de-identification attestation, per-study metering, and regulatory dispute escalation — all via standard protocol messages plus the `ramp-medimg-v1` extension profile.
+
+## What Makes Medical Imaging Different
+
+Medical imaging stresses RAMP in ways that text content does not:
+
+| Dimension | News Article (Scenario A) | Brain MRI Study |
+|---|---|---|
+| **Resource type** | Single HTML page | 847 DICOM files across 8 series |
+| **Size** | ~15 KB | ~1.2 GB |
+| **Pricing unit** | Per article ($0.05) | Per study ($25.00) |
+| **Legal prerequisite** | None | Data Use Agreement (DUA) on file |
+| **Regulatory regime** | None | HIPAA Safe Harbor de-identification |
+| **Dispute consequence** | Billing credit | Mandatory HIPAA breach notification |
+| **Delivery** | Single signed URL | Delivery manifest (847 signed URLs) |
+| **Content hash** | SHA-256 of HTML body | Merkle root over 847 instance hashes |
+
+This walkthrough follows the same six-step flow as the [core walkthrough](/protocol/walkthrough-v1), but exercises three protocol mechanisms that text-only scenarios never touch: **`ext_critical`** (must-understand extension keys), **pre-transaction compliance gates**, and **multi-file delivery manifests**.
+
+```
+Discovery -> ResourceQuery -> ResourceResponse -> ExecuteTransaction -> Delivery -> ReportUsage
+```
+
+---
+
+## The Scenario
+
+A research institution's AI agent (`neuro-bot` at `brainlab.edu`) needs a de-identified brain MRI study from The Cancer Imaging Archive (TCIA), hosted through a medical imaging Exchange. The agent will use the scan as input for a glioma segmentation model — inference only, not training. The institution has a signed Data Use Agreement (DUA) on file with TCIA.
+
+---
+
+## Step 1 — Discovery
+
+The agent resolves the imaging repository's RAMP configuration. TCIA publishes a machine-readable manifest:
+
+```bash
+curl -s https://imaging.tcia.org/.well-known/ramp.json | jq
+```
+
+```json
+{
+  "ver": "1.0",
+  "provider": "imaging.tcia.org",
+  "contact": "help@cancerimagingarchive.net",
+  "exchanges": [
+    {
+      "domain": "exchange.medimg-exchange.com",
+      "endpoint": "https://exchange.medimg-exchange.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-medimg-v1"]
+}
+```
+
+The `supported_profiles` field tells the agent that this Exchange speaks the medical imaging extension vocabulary. The agent knows to include `ramp-medimg-v1` in its query so the Exchange returns imaging-specific metadata (modality, sequences, field strength, de-identification method).
+
+---
+
+## Step 2 — ResourceQuery
+
+The agent sends a `ResourceQuery` using a DICOM-style URI that encodes the Study Instance UID. This is a non-web identifier — RAMP's URI field is not limited to HTTP URLs.
+
+```json
+POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-mri-001",
+  "requester": {
+    "id": "neuro-bot",
+    "domain": "brainlab.edu",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["*"],
+    "signature": "ed25519:f7a2b8c3d4e5...",
+    "signature_algorithm": "ed25519"
+  },
+  "supported_profiles": ["ramp-medimg-v1"]
+}
+```
+
+**Key observations:**
+
+- **`uris`** — `dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42` is a Study Instance UID, the globally unique identifier for a DICOM imaging study. The Broker resolved "brain MRI from TCIA TCGA-GBM collection, patient TCGA-06-0152" into this UID before querying the Exchange.
+- **`intended_use`** — `FUNCTION_AI_INPUT` (inference), not `FUNCTION_AI_TRAIN`. This distinction matters: training use requires a different DUA class and often carries different pricing.
+- **`supported_profiles`** — declares that the agent understands `ramp-medimg-v1` extension fields. The Exchange will include imaging-specific metadata in the response.
+
+---
+
+## Step 3 — ResourceResponse
+
+The Exchange looks up the study in TCIA's catalog, verifies the agent's identity, and returns an offer with imaging-specific metadata in `ext` fields and a critical extension flag requiring DUA compliance:
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-mri-001",
+  "exchange": "exchange.medimg-exchange.com",
+  "offer_groups": [
+    {
+      "uri": "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42",
+      "offers": [
+        {
+          "offer_id": "offer-tcia-gbm-0152-001",
+          "package": {
+            "id": "PKG-TCIA-TCGA-GBM-0152",
+            "title": "Brain MRI — TCGA-GBM Subject TCGA-06-0152",
+            "seller": "imaging.tcia.org",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_BINARY"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_RECORD",
+            "rate": 25.00,
+            "currency": "USD",
+            "unit_cost": 0.0295,
+            "estimated_quantity": 847,
+            "unit": "instances"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "604800s",
+            "required_fields": ["consumed_quantity", "function"]
+          },
+          "identity": {
+            "canonical_url": "https://imaging.tcia.org/studies/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42",
+            "doi": "10.7937/K9/TCIA.2016.RNYFUYE9",
+            "content_hash": "sha256-merkle:b3a7d2f4e8c1...root-hash-of-847-instances",
+            "hash_method": "sha256-merkle",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "attestations": [
+            {
+              "verifier": "imaging.tcia.org",
+              "kid": "tcia-key-2026-01",
+              "attested_at": "2026-02-15T09:00:00Z",
+              "uri": "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42",
+              "claims": {
+                "medimg.deidentification_method": "Safe Harbor",
+                "medimg.modality": "MRI",
+                "medimg.sequences": ["T1", "T2", "FLAIR", "DWI"],
+                "medimg.field_strength": "3T",
+                "medimg.manufacturer": "GE Medical Systems",
+                "medimg.series_count": 8,
+                "medimg.instance_count": 847,
+                "medimg.study_size_bytes": 1284505600,
+                "medimg.burned_in_text_removed": true,
+                "medimg.defacing_applied": true
+              },
+              "signature": "base64-ed25519-tcia-self-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX"]
+          },
+          "exchange_signature": "base64-ed25519-medimg-offer-sig...",
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "medimg.dua_required": true,
+            "medimg.dua_type": "TCIA-Standard-v3",
+            "medimg.irb_exemption": "de-identified-public-dataset",
+            "medimg.hipaa_classification": "limited-dataset",
+            "medimg.dicom_transfer_syntax": "1.2.840.10008.1.2.4.90",
+            "medimg.delivery_format": "dicom-manifest"
+          },
+          "ext_critical": ["medimg.dua_required"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**What the agent learns from this response:**
+
+- **Pricing**: `PRICING_MODEL_PER_RECORD` at $25.00 per study. The `unit_cost` ($0.0295/instance) and `estimated_quantity` (847 DICOM instances) enable cross-exchange comparison — an alternative Exchange offering the same study at a higher per-instance rate would be less economical.
+
+- **De-identification attestation**: TCIA self-attests (Level 1) that the study was de-identified using HIPAA Safe Harbor method. The claims include specific de-identification steps: `burned_in_text_removed` (no patient name baked into pixel data) and `defacing_applied` (facial features removed from volumetric data). These are not generic quality claims — they are regulatory compliance attestations.
+
+- **Imaging metadata**: The attestation carries domain-specific claims under the `medimg.*` namespace: MRI modality, four sequence types (T1, T2, FLAIR, DWI), 3 Tesla field strength, 8 series, 847 instances totaling ~1.2 GB. The agent can evaluate clinical suitability before committing.
+
+- **Content mutability**: `RESOURCE_MUTABILITY_STATIC`. Archived imaging studies do not change. The `sha256-merkle` hash is a Merkle root over all 847 instance hashes — the agent can verify any subset of files without downloading the entire study.
+
+- **`ext_critical`: `["medimg.dua_required"]`** — This is the critical extension mechanism in action. The `medimg.dua_required` key appears in `ext_critical`, which means: **if the consuming agent does not understand what `medimg.dua_required` means, it MUST reject this offer.** An agent that ignores this field would proceed to `ExecuteTransaction` without a DUA reference and get denied. The `ext_critical` flag turns a soft metadata hint into a hard protocol gate — the same COSE crit pattern (RFC 9052) used in CBOR Web Tokens.
+
+  Regular `ext` keys (like `medimg.dicom_transfer_syntax`) follow the robustness principle: unknown keys are safely ignored. Critical keys break the transaction if not understood.
+
+- **Restrictions**: `FUNCTION_AI_INPUT` and `FUNCTION_SEARCH` are permitted. Training (`FUNCTION_AI_TRAIN`) is explicitly prohibited under the standard TCIA DUA for inference-only access. A separate DUA class (and different pricing) would be required for training use.
+
+---
+
+## Step 4 — ExecuteTransaction (with Compliance Gate)
+
+The agent commits to the offer. Because `medimg.dua_required` was flagged as critical, the agent MUST include a valid DUA reference in `ext`. This is the pre-transaction compliance gate — the Exchange will reject the transaction if the DUA cannot be verified.
+
+```json
+POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-mri-001",
+  "offer_id": "offer-tcia-gbm-0152-001",
+  "offer_signature": "base64-ed25519-medimg-offer-sig...",
+  "offer_signature_algorithm": "ed25519",
+  "requester": {
+    "id": "neuro-bot",
+    "domain": "brainlab.edu",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["*"],
+    "signature": "ed25519:a8b9c0d1e2f3...",
+    "signature_algorithm": "ed25519"
+  },
+  "agent_signature": "ed25519:a8b9c0d1e2f3...",
+  "agent_signature_algorithm": "ed25519",
+  "ext": {
+    "compliance.dua_id": "DUA-TCIA-2026-042",
+    "compliance.dua_signatory": "Dr. Sarah Chen, PI",
+    "compliance.dua_institution": "brainlab.edu",
+    "compliance.dua_signed_at": "2026-01-10T00:00:00Z",
+    "compliance.intended_use_statement": "Glioma segmentation model inference — no model training, no redistribution"
+  },
+  "ext_critical": ["compliance.dua_id"]
+}
+```
+
+**The Exchange performs these checks, in order:**
+
+1. **Signature verification** — verifies `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
+2. **Agent authentication** — verifies `agent_signature` against `brainlab.edu/.well-known/ramp-agent.json`.
+3. **DUA verification** — looks up `DUA-TCIA-2026-042` in its compliance registry. Verifies the DUA is (a) signed, (b) covers `brainlab.edu`, (c) covers `FUNCTION_AI_INPUT` use, (d) has not expired. **If the DUA is invalid, missing, or does not cover the requested use, the transaction is denied.**
+4. **Balance check** — confirms `neuro-bot@brainlab.edu` has sufficient balance ($25.00).
+5. **WAL write** — records the transaction before generating delivery credentials (write-before-sign invariant).
+6. **Delivery manifest generation** — instead of a single signed URL, generates a manifest containing 847 per-instance signed URLs grouped by series.
+
+**What happens without a valid DUA:**
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-mri-001",
+  "error": {
+    "code": "COMPLIANCE_GATE_FAILED",
+    "message": "DUA-TCIA-2026-042 not found or does not cover brainlab.edu for FUNCTION_AI_INPUT",
+    "details": {
+      "required_dua_type": "TCIA-Standard-v3",
+      "apply_url": "https://imaging.tcia.org/access/dua-application"
+    }
+  }
+}
+```
+
+The error includes an actionable URL where the institution can apply for a DUA. The agent or Broker can surface this to the human researcher.
+
+**Successful response:**
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-mri-001",
+  "transaction_id": "txn-mri-gbm-0152-001",
+  "billing_id": "bill-mri-001",
+  "package": {
+    "id": "PKG-TCIA-TCGA-GBM-0152",
+    "retrieval": {
+      "endpoint": "https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?expires=1742410800&agent_id=c4d5e6f7...&sig=hmac-sha256-9a8b7c..."
+    }
+  },
+  "cost": {
+    "amount": 25.00,
+    "currency": "USD"
+  },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "reporting_obligation": {
+    "required": true,
+    "window": "604800s",
+    "required_fields": ["consumed_quantity", "function"]
+  },
+  "expires_at": "2026-03-20T14:00:00Z",
+  "agent_identity_hash": "c4d5e6f7...",
+  "ext": {
+    "medimg.delivery_type": "manifest",
+    "medimg.total_instances": 847,
+    "medimg.total_series": 8,
+    "medimg.estimated_download_bytes": 1284505600,
+    "medimg.estimated_download_time_seconds": 180,
+    "medimg.resumable": true
+  }
+}
+```
+
+**Key differences from text delivery:**
+- **`expires_at`** is 2 hours out, not 5 minutes. A 1.2 GB download needs more time than a 15 KB HTML page.
+- **`retrieval.endpoint`** points to a **delivery manifest**, not the content itself. The manifest contains per-file signed URLs.
+- **`medimg.resumable: true`** signals that the CDN supports HTTP Range requests — if the download is interrupted, the agent can resume without re-transacting.
+- **Reporting window** is 7 days (`604800s`), not 24 hours. Medical imaging analysis takes longer than reading an article.
+
+---
+
+## Step 5 — Delivery (Multi-File Manifest)
+
+The agent fetches the delivery manifest via the signed URL:
+
+```bash
+GET https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?expires=1742410800&agent_id=c4d5e6f7...&sig=hmac-sha256-9a8b7c...
+```
+
+The manifest is a JSON document listing all 847 DICOM instances grouped by series, each with its own signed URL:
+
+```json
+{
+  "transaction_id": "txn-mri-gbm-0152-001",
+  "study_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42",
+  "merkle_root": "sha256-merkle:b3a7d2f4e8c1...root-hash-of-847-instances",
+  "total_instances": 847,
+  "total_bytes": 1284505600,
+  "series": [
+    {
+      "series_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.1",
+      "description": "T1 Axial Pre-Contrast",
+      "modality": "MR",
+      "instances": 176,
+      "series_hash": "sha256:a1b2c3d4...",
+      "files": [
+        {
+          "sop_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.1.1",
+          "instance_number": 1,
+          "url": "https://cdn.medimg-exchange.com/dicom/txn-mri-gbm-0152-001/series-1/instance-001.dcm?sig=hmac-sha256-...",
+          "size_bytes": 1524736,
+          "hash": "sha256:e5f6a7b8..."
+        },
+        {
+          "sop_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.1.2",
+          "instance_number": 2,
+          "url": "https://cdn.medimg-exchange.com/dicom/txn-mri-gbm-0152-001/series-1/instance-002.dcm?sig=hmac-sha256-...",
+          "size_bytes": 1524736,
+          "hash": "sha256:c9d0e1f2..."
+        }
+      ]
+    },
+    {
+      "series_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.2",
+      "description": "T2 Axial",
+      "modality": "MR",
+      "instances": 176,
+      "series_hash": "sha256:b2c3d4e5...",
+      "files": ["...176 entries..."]
+    },
+    {
+      "series_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.3",
+      "description": "FLAIR Axial",
+      "modality": "MR",
+      "instances": 176,
+      "series_hash": "sha256:c3d4e5f6...",
+      "files": ["...176 entries..."]
+    },
+    {
+      "series_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.4",
+      "description": "DWI Axial",
+      "modality": "MR",
+      "instances": 72,
+      "series_hash": "sha256:d4e5f6a7...",
+      "files": ["...72 entries..."]
+    },
+    {
+      "series_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.5",
+      "description": "T1 Axial Post-Contrast",
+      "modality": "MR",
+      "instances": 176,
+      "series_hash": "sha256:e5f6a7b8...",
+      "files": ["...176 entries..."]
+    },
+    {
+      "series_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.6",
+      "description": "T1 Sagittal Post-Contrast",
+      "modality": "MR",
+      "instances": 25,
+      "series_hash": "sha256:f6a7b8c9...",
+      "files": ["...25 entries..."]
+    },
+    {
+      "series_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.7",
+      "description": "T1 Coronal Post-Contrast",
+      "modality": "MR",
+      "instances": 25,
+      "series_hash": "sha256:a7b8c9d0...",
+      "files": ["...25 entries..."]
+    },
+    {
+      "series_instance_uid": "1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.8",
+      "description": "ADC Map",
+      "modality": "MR",
+      "instances": 21,
+      "series_hash": "sha256:b8c9d0e1...",
+      "files": ["...21 entries..."]
+    }
+  ]
+}
+```
+
+**Multi-file verification**: The agent does not need to download all 847 files to verify integrity. The manifest provides three verification levels:
+
+1. **Merkle root** — verify the study-level hash matches the `content_hash` from the Offer's `ResourceIdentity`. This proves the manifest itself is authentic.
+2. **Series hash** — verify each series hash. If the agent only needs T1 and FLAIR, it downloads and verifies only those two series (352 instances instead of 847).
+3. **Instance hash** — verify individual DICOM file hashes after download. Detects single-file corruption or tampering.
+
+**Download pattern**: The agent downloads files in parallel (the CDN supports concurrent connections), verifying each file's SHA-256 hash against the manifest. If a file fails verification, the agent retries from the same signed URL (HTTP Range for partial failures). The 2-hour expiry gives ample time for a 1.2 GB download even on modest bandwidth.
+
+---
+
+## Step 6 — ReportUsage
+
+The agent reports consumption after completing its analysis. Medical imaging uses per-study metering, not per-token:
+
+```json
+POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+
+{
+  "ver": "1.0",
+  "id": "ur-mri-001",
+  "transaction_id": "txn-mri-gbm-0152-001",
+  "billing_id": "bill-mri-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "consumed_quantity": 1,
+    "consumed_unit": "studies",
+    "displayed_to_user": false,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-20T15:30:00Z",
+  "assets": [
+    {
+      "uri": "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42",
+      "title": "Brain MRI — TCGA-GBM Subject TCGA-06-0152",
+      "package_id": "PKG-TCIA-TCGA-GBM-0152"
+    }
+  ],
+  "ext": {
+    "medimg.series_accessed": ["T1", "T2", "FLAIR", "DWI"],
+    "medimg.instances_downloaded": 600,
+    "medimg.bytes_downloaded": 914457600,
+    "medimg.inference_model": "glioma-seg-v4.2"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "report_id": "rpt-mri-001"
+}
+```
+
+**Key differences from text usage reporting:**
+
+- **`consumed_quantity: 1`** with **`consumed_unit: "studies"`** — the pricing model is per-study, not per-token. The agent consumed one study regardless of how many of the 847 instances it actually downloaded.
+- **`displayed_to_user: false`** — medical imaging is processed by the AI model, not displayed to a human in a chat interface.
+- **`ext` metadata** — the agent reports which series it accessed (4 of 8), how many instances it downloaded (600 of 847), and which model processed the data. This level of audit detail is important for regulated data — if a DUA violation investigation occurs, the Exchange has a complete record of what data was accessed and how it was used.
+- **7-day reporting window** — the longer window accommodates the reality that imaging analysis pipelines are batch processes, not interactive sessions.
+
+---
+
+## Hypothetical: PHI Discovered in Delivered Data
+
+Six weeks after the transaction, the research team discovers that one DICOM instance in the DWI series contains Protected Health Information (PHI) — a patient name embedded in a private DICOM tag that the de-identification pipeline missed. This triggers a fundamentally different dispute path than a billing disagreement.
+
+### Filing the Dispute
+
+```json
+POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/DisputeTransaction
+
+{
+  "ver": "1.0",
+  "id": "disp-mri-001",
+  "transaction_id": "txn-mri-gbm-0152-001",
+  "billing_id": "bill-mri-001",
+  "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+  "description": "PHI discovered in delivered data. Private DICOM tag (0009,0010) in DWI series instance 47 contains unredacted patient name. De-identification attestation claimed Safe Harbor compliance. Requesting regulatory incident escalation — this is not a billing dispute.",
+  "received_content_hash": "sha256:d4e5f6a7...",
+  "received_hash_method": "sha256",
+  "agent_signature": "ed25519:b9c0d1e2f3a4...",
+  "report_id": "rpt-mri-001",
+  "ext": {
+    "medimg.dispute_type": "REGULATORY_INCIDENT",
+    "medimg.phi_type": "patient_name",
+    "medimg.affected_instances": ["1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42.4.47"],
+    "medimg.dicom_tag": "(0009,0010)",
+    "medimg.discovery_date": "2026-04-30T14:22:00Z",
+    "medimg.containment_actions": [
+      "Affected instance quarantined from processing pipeline",
+      "Local copy flagged for secure deletion pending investigation"
+    ]
+  },
+  "ext_critical": ["medimg.dispute_type"]
+}
+```
+
+**Why this is not a normal dispute:**
+
+The core protocol defines `DISPUTE_REASON_CONTENT_MISMATCH` — the content does not match what was promised. This is technically accurate (the attestation promised Safe Harbor de-identification, and the delivered data contains PHI), but the consequences are categorically different:
+
+| Aspect | Normal Content Mismatch | PHI Regulatory Incident |
+|---|---|---|
+| **Resolution** | Billing credit or redelivery | Mandatory HIPAA breach notification |
+| **Timeline** | Days to weeks | 60-day notification deadline (500+ individuals) |
+| **Scope** | Single transaction | All transactions that delivered this study |
+| **Parties involved** | Agent + Exchange | Agent + Exchange + Provider + HHS OCR |
+| **Financial exposure** | Transaction cost ($25) | HIPAA penalties ($100 - $50,000 per violation) |
+
+The `ext.medimg.dispute_type: "REGULATORY_INCIDENT"` field (marked `ext_critical`) signals that this dispute requires regulatory escalation, not standard billing resolution. The Exchange MUST understand this field — if it does not recognize `medimg.dispute_type` and it appears in `ext_critical`, the Exchange MUST reject the dispute and inform the agent that it cannot process this dispute type, rather than silently treating it as a standard billing credit.
+
+### Dispute Response
+
+```json
+{
+  "ver": "1.0",
+  "id": "disp-mri-001",
+  "dispute_id": "dispute-mri-001",
+  "status": "DISPUTE_STATUS_FILED",
+  "resolution": null,
+  "ext": {
+    "medimg.incident_id": "INC-2026-04-0892",
+    "medimg.escalation_path": "regulatory",
+    "medimg.provider_notified_at": "2026-04-30T14:25:00Z",
+    "medimg.containment_directive": "Quarantine all instances from study 1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42. Do not delete — preserve for investigation.",
+    "medimg.expected_resolution_date": "2026-05-30T00:00:00Z"
+  }
+}
+```
+
+The Exchange generates a regulatory incident ID, notifies the provider (TCIA), and issues a containment directive. The 30-day expected resolution date reflects HIPAA's 60-day breach notification window. This is not a billing credit — it is a regulatory compliance workflow that happens to be initiated through the same dispute RPC.
+
+---
+
+## Protocol Mechanisms Exercised
+
+| Mechanism | How This Walkthrough Uses It |
+|---|---|
+| **`ext_critical`** | `medimg.dua_required` on Offer forces agent to acknowledge DUA requirement. `medimg.dispute_type` on Dispute forces Exchange to handle regulatory escalation. |
+| **Pre-transaction gate** | DUA reference in `ExecuteTransaction.ext` — Exchange denies transaction if DUA is invalid. |
+| **Multi-file delivery** | Manifest of 847 signed URLs with per-instance hashes and Merkle verification tree. |
+| **Merkle content hash** | `sha256-merkle` hash method enables partial verification without downloading all files. |
+| **Domain extension profile** | `ramp-medimg-v1` vocabulary: `medimg.*` claims in attestations, `compliance.*` fields in transactions. |
+| **Per-record metering** | `PRICING_MODEL_PER_RECORD` with `unit: "studies"` — one study = one billing unit regardless of file count. |
+| **Non-HTTP URI** | `dicom://study/...` — RAMP's URI field is not limited to web URLs. |
+| **Extended reporting window** | 7-day reporting obligation (vs. 24 hours for text) accommodates batch analysis pipelines. |
+| **Regulatory dispute path** | Same `DisputeTransaction` RPC, but `ext_critical` elevates to regulatory incident handling. |
+
+---
+
+## Next Steps
+
+- [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1) — per-article and subscription access with Biscuit delegation
+- [Extension Profiles](/protocol/extension-profiles) — how domain-specific metadata flows through `ext` fields
+- [Content Attestation](/protocol/content-attestation) — attestation levels and de-identification claims
+- [Resource Mutability](/protocol/content-mutability) — STATIC vs DYNAMIC vs LIVE
+- [Dispute Resolution](/protocol/dispute-resolution) — the full dispute lifecycle
+- [Transaction Flow](/protocol/transaction-flow) — step-by-step protocol specification

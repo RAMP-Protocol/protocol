@@ -1,0 +1,233 @@
+---
+title: "RAMP for Resource Providers"
+description: "How any organization with digital resources can expose them through RAMP — discover, price, deliver, and get paid for every AI access"
+---
+
+## The Problem You Have
+
+You have valuable digital resources — articles, credit reports, court filings, medical imaging, satellite data, research papers, drug interaction databases. AI agents need these resources to do their jobs. Today, every integration is bespoke: each AI company wants its own API, its own contract, its own authentication. You either build custom integrations for every consumer (expensive, doesn't scale) or you don't participate (leave money on the table).
+
+For web-facing providers, the problem is even more immediate: AI bots are crawling your site right now, taking content and using it to answer questions while you get nothing.
+
+RAMP gives you a standard way to **expose, price, and deliver any digital resource** to any AI agent through any Exchange — one protocol, not a hundred integrations.
+
+## What RAMP Does for You
+
+RAMP turns your resources into products that AI agents can discover, evaluate, purchase, and verify. Here's how:
+
+1. **A Exchange catalogs your resources** with pricing, metadata, and attestations. AI agents query the Exchange, not your systems directly.
+
+2. **Agents pay before they access.** The Exchange handles the transaction and issues time-limited, identity-bound delivery credentials. No payment = no access.
+
+3. **You get paid through your Exchange operator.** No billing system to build, no contracts with individual AI companies. The Exchange handles settlement.
+
+The specific deployment model depends on your resource type:
+
+| Provider Type | Resource | Delivery Model | Integration |
+|---|---|---|---|
+| News publisher | Articles, podcasts | CDN edge function blocks bots, redirects to Exchange | Edge function + `ramp.json` |
+| Academic publisher | Journal articles, preprints | Exchange proxies access to existing repository | Catalog push via API |
+| Data provider (D&B) | Credit reports | Exchange wraps existing API | API adapter |
+| Government agency | Court filings, legislation | Exchange indexes public + premium resources | Catalog push or crawl |
+| Medical data provider | Clinical data, imaging | Exchange mediates access to PACS/DICOMweb | API adapter |
+| Geospatial provider | Satellite imagery | Exchange brokers access to imagery archive | Catalog push via API |
+| Pharma data provider | Drug interaction database | Exchange wraps query API | API adapter |
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Deployment Models
+
+### Model A: CDN Edge Function (Web-Facing Content)
+
+If your resources are served through a CDN — news articles, editorial content, research papers hosted on your site — deploy the RAMP edge function. This is the standard approach for CDN-hosted resources.
+
+**Nothing to deploy if your Exchange operator supports RAMP.** Your Exchange operator deploys the CDN edge function on your behalf and manages everything. You sign a contract, grant CDN access, done.
+
+If you self-manage, deploy using the [Terraform module](https://github.com/postindustria-tech/ramp-protocol/tree/main/terraform/aws-ramp-edge/) or the reference [CloudFront Function](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/edge-function/cloudfront-function.js):
+
+```hcl
+module "ramp_edge" {
+  source = "github.com/postindustria-tech/ramp-protocol//terraform/aws-ramp-edge"
+
+  cloudfront_distribution_id = aws_cloudfront_distribution.main.id
+  exchange_endpoint       = "https://exchange.your-ssp.com/ramp/v1"
+  exchange_domain         = "exchange.your-ssp.com"
+  protected_paths            = ["/premium/*", "/archive/*"]
+  signing_key_pair_id        = aws_cloudfront_public_key.ramp.id
+}
+```
+
+The edge function does three things:
+- Blocks unauthorized AI bots and tells them where to buy access
+- Verifies signed URLs for bots that paid
+- Serves a `ramp.json` file declaring your Exchange relationships
+
+**You don't change your CMS. You don't change your content workflow. You don't talk to AI companies directly.**
+
+### Model B: API Adapter (Data Products and Services)
+
+If your resources live behind an API — credit reports, drug interaction queries, medical imaging, satellite data — you don't need an edge function. Instead, your Exchange wraps your existing API.
+
+**Example: D&B Credit Reports**
+
+D&B's credit report API already exists. A Exchange operator builds an adapter that:
+1. Catalogs available report types with pricing (per-report, per-data-block)
+2. Accepts RAMP transactions from agents
+3. Calls the D&B API on the agent's behalf
+4. Delivers the report through a signed URL
+5. Reports usage back through the RAMP billing chain
+
+The provider's existing API doesn't change. The Exchange handles the RAMP protocol surface.
+
+**Example: EUR-Lex Legislation**
+
+A government agency like EUR-Lex can offer legislation through RAMP with tiered pricing:
+- Raw legislative text: `PRICING_MODEL_FREE` (public domain, but metered for usage tracking)
+- Annotated versions with ELI metadata and amendment chains: paid per document
+- Cross-referenced compilations: paid per page
+
+The Exchange catalogs EUR-Lex content, sets pricing tiers, and handles delivery. EUR-Lex provides a catalog feed and delivery endpoint.
+
+**Example: TCIA Medical Imaging**
+
+The Cancer Imaging Archive (TCIA) hosts thousands of imaging studies (CT, MRI, PET). Through RAMP:
+- A Exchange catalogs available studies with metadata (modality, body part, study date)
+- Agents query for specific imaging data ("brain MRI studies from 2024")
+- The Exchange mediates access to TCIA's DICOMweb endpoint
+- Metering is per-study or per-series, reported via `consumed_quantity`
+
+### Model C: Catalog Push (Hybrid)
+
+Some providers push their catalog to an Exchange but handle delivery themselves. The Exchange manages discovery and transactions; the provider's infrastructure handles delivery. This works well for providers with existing CDN infrastructure who want Exchange discovery without changing their delivery stack.
+
+## How the Money Works
+
+The billing chain is the same regardless of resource type:
+
+```
+AI Agent pays for a resource
+       |
+Exchange processes the transaction
+       |
+Exchange pays you via your agreement
+```
+
+You set your prices through your Exchange operator. Pricing models include:
+
+| Model | Unit | Example |
+|---|---|---|
+| Per-article | tokens | News article at $0.05/article |
+| Per-page | pages | Court filing at $0.02/page |
+| Per-minute | minutes | Live audio stream at $0.01/minute |
+| Per-record | records | Credit report at $2.50/report |
+| Per-query | queries | Drug interaction check at $0.10/query |
+| Per-study | studies | Medical imaging study at $5.00/study |
+| Per-sq-km | sq_km | Satellite imagery at $0.50/sq_km |
+| Subscription | flat | Unlimited access for $500/month |
+| Free | any | Public domain content, metered for tracking |
+
+You can also publish an `rsl.txt` file on your domain to declare pricing and terms (see [Standards Layering](/protocol/standards-layering/)).
+
+## What Changes vs. Today
+
+| Today | With RAMP |
+|---|---|
+| Build custom API integrations per consumer | One protocol handles all AI buyers |
+| No standard discovery mechanism | Agents find your resources through Exchange queries |
+| No usage visibility | See exactly which agents access what, when, and how much |
+| Block AI bots or give content away free | Sell metered access at your price |
+| Each AI company wants a separate deal | One Exchange relationship handles all buyers |
+| No way to verify delivered content | Cryptographic attestation proves content integrity |
+
+## Content Mutability
+
+RAMP classifies your resources into three mutability levels. This drives how agents verify what they receive and how disputes work.
+
+| Level | Meaning | Hash Behavior | Provider Examples |
+|---|---|---|---|
+| **STATIC** | Content does not change after publication | Agent verifies content hash — mismatch is disputable | News articles, journal papers, legislation, patents, satellite imagery |
+| **DYNAMIC** | Content updates between offer and fetch | Hash mismatch expected, not disputable. `data_as_of` indicates freshness | Credit reports, drug interaction databases, stock snapshots, property records |
+| **LIVE** | No content exists at offer time | No content hash. Metering is time-based | Quote feeds, live broadcasts, continuous monitoring feeds |
+
+Your Exchange sets `resource_mutability` on every resource. For DYNAMIC resources, the Exchange also sets `data_as_of` — a timestamp indicating when the data was current. Agents can filter by freshness using `max_data_age` (e.g., "credit report updated within 7 days").
+
+## Resource Attestation (Self-Attestation)
+
+As a provider, you can sign claims about your own resources — Level 1 self-attestation. This gives AI agents cryptographic proof that the delivered resource matches what was promised.
+
+**How it works:**
+
+1. You compute a SHA-256 hash of the resource content at publish time (or catalog push time)
+2. You sign a `ResourceAttestation` with your Ed25519 key, covering the content hash, quantity estimates, and other claims
+3. The attestation is pushed to the Exchange via `CatalogService.PushContent`
+4. When an agent fetches your resource, it can recompute the hash and verify the match
+
+<Aside type="note">
+Attestation is most useful for STATIC resources where the hash remains stable. For DYNAMIC resources, attestation covers metadata claims (provider identity, resource type, data source) rather than content hashes. For LIVE resources, attestation covers the stream endpoint and format claims.
+</Aside>
+
+**Key provisioning uses ACME domain verification.** You prove you control your domain (just like getting a TLS certificate from Let's Encrypt), and the Exchange provisions your Ed25519 signing key:
+
+```
+1. ramp-cli key push  -> Exchange issues ACME challenge
+2. Place challenge at   /.well-known/ramp-verify/{token}
+3. Exchange fetches  -> domain ownership proven
+4. Key is provisioned   -> ready to sign attestations
+```
+
+**`ramp-verifier.json`**: Your domain hosts a `/.well-known/ramp-verifier.json` file containing your public keys (JWKS format). Agents and Exchanges fetch this to verify your attestation signatures.
+
+**`catalog_contributors`**: You can authorize third-party verification vendors to push attestations on your behalf. Declare authorized contributors in your provider manifest. Only contributors listed in `catalog_contributors` can push resource metadata to the Exchange for your domain.
+
+## Extension Profiles
+
+RAMP v1.0 uses domain extension profiles — standardized metadata vocabularies for specific industries. If your resources fall into one of these domains, your Exchange can enrich offers with profile-specific metadata that agents understand.
+
+| Profile | Scope | Key Metadata | Standards |
+|---|---|---|---|
+| **ramp-news-v1** | News articles, podcasts, broadcasting | IPTC subject codes, correction/retraction status, transcript linking | IPTC NewsML-G2, Podcasting 2.0, W3C TDMRep |
+| **ramp-academic-v1** | Scholarly articles, preprints, datasets | DOI, open access status, version lifecycle (preprint/AAM/VoR) | CrossRef, OpenAlex, COUNTER 5.1, CrossMark |
+| **ramp-legal-v1** | Legislation, case law, patents | Jurisdiction, amendment chains, ELI/ECLI identifiers, patent families | ELI, CELEX, ECLI, Akoma Ntoso, WIPO ST.3 |
+
+Your provider manifest can declare `supported_profiles` to signal which profiles apply to your resources. The Exchange uses this to include the right metadata in offers.
+
+**No profile for your domain?** That's fine. RAMP's core protocol is domain-agnostic — pricing, delivery, attestation, and dispute all work without any extension profile. Profiles add richer metadata for agents that understand them, but they're not required. Data providers (credit, geospatial, pharma, medical) work with RAMP's core fields today. As communities develop, new profiles can be proposed through the extension governance process.
+
+## The `ramp.json` Provider Manifest
+
+Every provider with a web presence can host a `ramp.json` file at their domain root (like `ads.txt` for advertising). This file declares:
+
+- Which Exchange(s) are authorized to sell your resources
+- Which extension profiles your resources support
+- Your public verification keys (or a pointer to `/.well-known/ramp-verifier.json`)
+- Authorized catalog contributors
+
+AI agents and Brokers read `ramp.json` to discover how to access your resources through RAMP.
+
+## FAQ
+
+**Do I need to negotiate with OpenAI, Anthropic, etc. individually?**
+No. Your Exchange handles all buyer relationships. AI companies buy from the Exchange, not from you directly.
+
+**What if I already have deals with some AI companies?**
+Those continue as subscription deals within RAMP. The agent gets access at $0/request under the subscription, and the Exchange tracks usage against the deal terms.
+
+**Does this only work for web content?**
+No. RAMP handles any digital resource — articles, credit reports, court filings, medical imaging, satellite data, drug databases, live feeds. The protocol is resource-agnostic. Web content served through a CDN is one deployment model; API-backed data products are another.
+
+**What about my robots.txt?**
+Keep it. `robots.txt` blocks training crawlers. RAMP handles real-time inference access (the agent needs a resource right now to complete a task). Different traffic, different treatment.
+
+**What if a bot ignores the CDN block?**
+The edge function runs on your CDN — bots can't bypass it. No signed URL = no content. For API-backed resources, the Exchange controls access directly.
+
+**What if there's no extension profile for my resource type?**
+RAMP's core protocol works without profiles. You get discovery, pricing, transactions, delivery, attestation, and disputes out of the box. Profiles add domain-specific metadata richness but aren't required.
+
+## Next Steps
+
+1. **Web-facing content providers**: Ask your Exchange operator if they support RAMP. If yes, they deploy everything. If no, [self-service deployment](/architecture/deployment-models/) takes 15 minutes.
+2. **Data and API providers**: Contact a [Exchange operator](/getting-started/for-exchange-operators/) to discuss integration.
+3. **All providers**: Review [How Money Flows](/getting-started/how-money-flows/) to understand the billing chain and pricing models.
+
+For the full protocol details, see the [Scenario Walkthrough](/protocol/scenario-walkthrough/) and [Extension Profiles](/protocol/extension-profiles/).

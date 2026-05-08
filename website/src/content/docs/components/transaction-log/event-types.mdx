@@ -1,0 +1,260 @@
+---
+title: "Event Types"
+description: "The six transaction log event types that capture every state transition in the RAMP transaction lifecycle."
+---
+
+## Event Type Overview
+
+Every state transition in the transaction lifecycle produces a log event. There are six event types, each with different durability requirements:
+
+| Event Type | Durability | Purpose |
+|---|---|---|
+| ResourceQueryReceived | Best-effort | Telemetry, demand analytics |
+| OffersPresented | Best-effort | Price discrimination analysis |
+| TransactionRequested | Durable | Agent commitment record |
+| BillingAuthorizationResult | Durable | Financial decision record |
+| SignedURLIssued | Durable, WAL-protected | Critical financial record |
+| UsageReportReceived | Durable | Compliance enforcement |
+| DisputeRequested (v1.0) | Durable | Dispute filing record |
+| DisputeResolved (v1.0) | Durable | Dispute resolution record |
+
+## ResourceQueryReceived
+
+Logged when a `DiscoverResources` RPC is received. Used for query-to-transaction ratio monitoring (threat T12: metadata harvesting) and demand analytics.
+
+Loss is acceptable -- this is telemetry, not financial data.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | `string` | yes | UUIDv7, monotonically ordered |
+| `event_type` | `EventType` | yes | `EVENT_SUPPLY_QUERY_RECEIVED` |
+| `timestamp` | `time.Time` | yes | Server receipt time (UTC, nanosecond precision) |
+| `query_id` | `string` | yes | `ResourceQuery.id` |
+| `buyer_lid` | `string` | yes | `aisystem.aisysuse.lid` (license ID) |
+| `buyer_name` | `string` | yes | `aisystem.name` (e.g. "claude.ai") |
+| `requested_uris` | `[]string` | yes | `aisystem.aisysuse.uri` |
+| `requested_functions` | `[]string` | yes | `aisystem.aisysuse.function` |
+| `broker` | `string` | no | Broker domain, if present |
+| `source_ip` | `string` | yes | Client IP (for rate limiting forensics) |
+| `exchange_id` | `string` | yes | This Exchange's identity |
+
+## OffersPresented
+
+Logged when the Exchange returns a `ResourceResponse`. Captures what was offered and at what price -- critical for post-hoc price discrimination analysis (T2).
+
+Rebuildable from supply query + catalog state.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | `string` | yes | UUIDv7 |
+| `event_type` | `EventType` | yes | `EVENT_OFFERS_PRESENTED` |
+| `timestamp` | `time.Time` | yes | Server response time |
+| `query_id` | `string` | yes | Corresponding `ResourceQuery.id` |
+| `buyer_lid` | `string` | yes | License ID of the requester |
+| `offer_count` | `int32` | yes | Number of offers returned |
+| `offers` | `[]OfferSummary` | yes | Summarized offer data |
+| `exchange_id` | `string` | yes | This Exchange's identity |
+
+**OfferSummary** (embedded, not a separate event):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `offer_id` | `string` | yes | `Offer.offer_id` |
+| `package_id` | `string` | yes | `Offer.package.id` |
+| `provider_domain` | `string` | yes | `Offer.package.seller` |
+| `content_url` | `string` | no | `ResourceIdentity.canonical_url` |
+| `pricing_model` | `string` | yes | `Pricing.model` |
+| `rate` | `float64` | yes | `Pricing.rate` |
+| `currency` | `string` | yes | `Pricing.currency` |
+| `unit_cost` | `float64` | no | `Pricing.unit_cost` |
+| `delivery_method` | `string` | yes | `Offer.delivery_method` |
+
+## TransactionRequested
+
+Logged when an `ExecuteTransaction` RPC is received, before billing authorization. This is the agent's commitment record.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | `string` | yes | UUIDv7 |
+| `event_type` | `EventType` | yes | `EVENT_TRANSACTION_REQUESTED` |
+| `timestamp` | `time.Time` | yes | Server receipt time |
+| `request_id` | `string` | yes | `TransactionRequest.id` (idempotency key) |
+| `offer_id` | `string` | yes | `TransactionRequest.offer_id` |
+| `buyer_lid` | `string` | yes | `aisystem.aisysuse.lid` |
+| `buyer_name` | `string` | yes | `aisystem.name` |
+| `provider_domain` | `string` | yes | From cached offer lookup |
+| `content_url` | `string` | no | From cached offer's ResourceIdentity |
+| `expected_cost` | `float64` | yes | From the offer's pricing |
+| `currency` | `string` | yes | From the offer's pricing |
+| `exchange_id` | `string` | yes | This Exchange's identity |
+
+## BillingAuthorizationResult
+
+Logged after the Billing Adapter returns its authorization decision. Captures both approvals and denials.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | `string` | yes | UUIDv7 |
+| `event_type` | `EventType` | yes | `EVENT_BILLING_AUTHORIZATION` |
+| `timestamp` | `time.Time` | yes | Authorization decision time |
+| `request_id` | `string` | yes | Corresponding `TransactionRequest.id` |
+| `offer_id` | `string` | yes | The offer being authorized |
+| `buyer_lid` | `string` | yes | License ID |
+| `authorized` | `bool` | yes | Whether billing was approved |
+| `denial_reason` | `DenialReason` | cond | Required when `authorized=false` |
+| `billing_id` | `string` | cond | Assigned by billing adapter (only on approval) |
+| `transaction_id` | `string` | cond | Exchange-assigned (only on approval) |
+| `authorized_amount` | `float64` | cond | Amount authorized (only on approval) |
+| `currency` | `string` | cond | Currency of authorized amount |
+| `billing_latency_ms` | `int32` | yes | Time spent in billing adapter call |
+| `subscription_id` | `string` | no | Present for subscription transactions |
+| `exchange_id` | `string` | yes | This Exchange's identity |
+
+### DenialReason Vocabulary
+
+Authorization denials use a closed enum:
+
+| Enum Value | Description |
+|---|---|
+| `DENIAL_REASON_INVALID_LICENSE` | License ID not recognized by the billing adapter |
+| `DENIAL_REASON_EXPIRED_LICENSE` | License exists but has expired |
+| `DENIAL_REASON_INSUFFICIENT_BALANCE` | Buyer's prepaid balance or credit limit exhausted |
+| `DENIAL_REASON_RATE_LIMITED` | Buyer exceeded per-period transaction rate limit |
+| `DENIAL_REASON_CONTENT_UNAVAILABLE` | Provider has withdrawn or paused the content |
+| `DENIAL_REASON_FUNCTION_PROHIBITED` | Requested function not permitted under license |
+| `DENIAL_REASON_GEO_RESTRICTED` | Buyer's jurisdiction disallowed for this content |
+| `DENIAL_REASON_REPORTING_OVERDUE` | Buyer blocked due to overdue usage reports |
+| `DENIAL_REASON_OFFER_EXPIRED` | The referenced offer has expired since presentation |
+| `DENIAL_REASON_SIGNATURE_INVALID` | Request signature verification failed |
+
+## SignedURLIssued
+
+The critical financial record. Logged via WAL **before** the signed URL is returned to the agent. This is the record that must survive any failure. It is the Exchange's side of the three-sided reconciliation triangle.
+
+The Exchange MUST NOT return the `TransactionResponse` until this event is durably committed.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | `string` | yes | UUIDv7 |
+| `event_type` | `EventType` | yes | `EVENT_SIGNED_URL_ISSUED` |
+| `timestamp` | `time.Time` | yes | URL generation time |
+| `transaction_id` | `string` | yes | `TransactionResponse.transaction_id` |
+| `billing_id` | `string` | yes | `TransactionResponse.billing_id` |
+| `request_id` | `string` | yes | `TransactionRequest.id` (idempotency key) |
+| `offer_id` | `string` | yes | Selected offer |
+| `buyer_lid` | `string` | yes | License ID |
+| `buyer_name` | `string` | yes | AI system name |
+| `provider_domain` | `string` | yes | Content owner domain |
+| `content_url` | `string` | yes | Canonical URL of content |
+| `package_id` | `string` | yes | CoMP Package ID |
+| `cost_amount` | `float64` | yes | Transaction cost |
+| `cost_currency` | `string` | yes | ISO 4217 currency code |
+| `cost_unit_cost` | `float64` | yes | Effective cost per unit |
+| `signed_url_hash` | `string` | yes | SHA-256 of the issued signed URL |
+| `signed_url_expiry` | `time.Time` | yes | When the signed URL expires |
+| `agent_identity_hash` | `string` | yes | Hash of agent identity bound to URL |
+| `delivery_method` | `string` | yes | DIRECT or INSTRUCTIONS |
+| `offer_snapshot_json` | `string` | yes | JSON-serialized offer at transaction time |
+| `reporting_required` | `bool` | yes | Whether usage report is mandatory |
+| `reporting_deadline` | `time.Time` | no | Required when `reporting_required=true` |
+| `content_integrity_hash` | `string` | no | SHA-256 of content at offer time |
+| `subscription_id` | `string` | no | Present for subscription transactions |
+| `exchange_id` | `string` | yes | This Exchange's identity |
+
+### Offer Snapshot
+
+The `offer_snapshot_json` field captures the complete offer as it existed at transaction time (~500 bytes per event). It enables audit queries like "what exactly was promised in transaction X?" without needing to reconstruct from the catalog, which may have changed since.
+
+### Signed URL Logging
+
+By default, only the SHA-256 hash of the signed URL is logged (`signed_url_hash`). A configuration option `log_full_signed_url` (default: `false`) enables logging the full URL for debugging.
+
+| Setting | `signed_url_hash` | `signed_url_full` | Use Case |
+|---|---|---|---|
+| `log_full_signed_url=false` (default) | SHA-256 hash | omitted | Production: privacy, minimal attack surface |
+| `log_full_signed_url=true` | SHA-256 hash | full URL | Debug/security: CDN troubleshooting, leak forensics |
+
+### Batch and Subscription Transactions
+
+**Batch**: Each item in a batch gets its own `transaction_id`, `billing_id`, and signed URL. The WAL write-before-sign invariant applies per item. A failure on item N does not affect already-committed items 1 through N-1.
+
+**Subscription**: `authorized_amount=0` but all six event types are still produced. The `subscription_id` enables querying consumption per subscription for reconciliation.
+
+## UsageReportReceived
+
+Logged when a `ReportUsage` RPC is received. Completes the transaction lifecycle.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | `string` | yes | UUIDv7 |
+| `event_type` | `EventType` | yes | `EVENT_USAGE_REPORT_RECEIVED` |
+| `timestamp` | `time.Time` | yes | Server receipt time |
+| `report_id` | `string` | yes | `UsageReport.id` |
+| `transaction_id` | `string` | yes | `UsageReport.transaction_id` |
+| `billing_id` | `string` | yes | `UsageReport.billing_id` |
+| `buyer_lid` | `string` | yes | Extracted from transaction record |
+| `reported_functions` | `[]string` | yes | `Usage.function` |
+| `reported_consumed_quantity` | `int32` | yes | `Usage.consumed_quantity` |
+| `displayed_to_user` | `bool` | no | `Usage.displayed_to_user` |
+| `citation_included` | `bool` | no | `Usage.citation_included` |
+| `report_latency_sec` | `int64` | yes | Seconds between URL issuance and report receipt |
+| `within_window` | `bool` | yes | Whether report arrived within reporting_deadline |
+| `accepted` | `bool` | yes | Whether the report was accepted |
+| `rejection_reason` | `string` | no | Reason if rejected |
+| `exchange_id` | `string` | yes | This Exchange's identity |
+
+## DisputeRequested (v1.0)
+
+Logged when a `DisputeTransaction` RPC is received. Captures the dispute filing with the required `report_id` linkage to the agent's prior usage report.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | `string` | yes | UUIDv7 |
+| `event_type` | `EventType` | yes | `EVENT_DISPUTE_REQUESTED` |
+| `timestamp` | `time.Time` | yes | Server receipt time |
+| `dispute_id` | `string` | yes | Exchange-assigned dispute identifier |
+| `transaction_id` | `string` | yes | `DisputeRequest.transaction_id` |
+| `billing_id` | `string` | yes | `DisputeRequest.billing_id` |
+| `report_id` | `string` | yes | `DisputeRequest.report_id` -- links to the filed UsageReport |
+| `buyer_lid` | `string` | yes | Extracted from transaction record |
+| `reason` | `DisputeReason` | yes | `DisputeRequest.reason` (e.g., `DELIVERY_FAILED`, `CONTENT_MISMATCH`) |
+| `description` | `string` | no | `DisputeRequest.description` |
+| `received_content_hash` | `string` | no | Agent-computed hash of received content |
+| `received_hash_method` | `string` | no | Hash algorithm used by agent |
+| `exchange_id` | `string` | yes | This Exchange's identity |
+
+## DisputeResolved (v1.0)
+
+Logged when a dispute reaches a resolution state (`AUTO_RESOLVED`, `RESOLVED`, or `SETTLED`). Captures the resolution outcome.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | `string` | yes | UUIDv7 |
+| `event_type` | `EventType` | yes | `EVENT_DISPUTE_RESOLVED` |
+| `timestamp` | `time.Time` | yes | Resolution time |
+| `dispute_id` | `string` | yes | The resolved dispute |
+| `transaction_id` | `string` | yes | The original transaction |
+| `report_id` | `string` | yes | The linked usage report |
+| `buyer_lid` | `string` | yes | License ID |
+| `status` | `DisputeStatus` | yes | Final status (e.g., `AUTO_RESOLVED`, `RESOLVED`, `SETTLED`) |
+| `resolution` | `ResolutionType` | yes | Resolution outcome (`CREDIT`, `REDELIVERY`, `REJECTED`, `INVESTIGATION`) |
+| `credit_amount` | `float64` | no | Credit amount if resolution is `CREDIT` |
+| `currency` | `string` | no | Credit currency |
+| `tier` | `int32` | yes | Resolution tier (1=automated, 2=rule-based, 3=investigation) |
+| `exchange_id` | `string` | yes | This Exchange's identity |
+
+## Approximate Event Sizes
+
+| Event Type | Estimated Size (JSON) | Estimated Size (Protobuf) |
+|---|---|---|
+| ResourceQueryReceived | ~300 bytes | ~150 bytes |
+| OffersPresented (3 offers) | ~800 bytes | ~400 bytes |
+| TransactionRequested | ~350 bytes | ~180 bytes |
+| BillingAuthorization | ~300 bytes | ~150 bytes |
+| SignedURLIssued | ~600 bytes | ~300 bytes |
+| UsageReportReceived | ~400 bytes | ~200 bytes |
+
+| DisputeRequested | ~400 bytes | ~200 bytes |
+| DisputeResolved | ~350 bytes | ~175 bytes |
+
+Weighted average per transaction lifecycle (all 6 core events): ~2,750 bytes JSON, ~1,380 bytes Protobuf. Dispute events add ~750 bytes JSON per disputed transaction (rare -- expected for less than 1% of transactions).

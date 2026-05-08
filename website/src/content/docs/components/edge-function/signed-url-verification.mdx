@@ -1,0 +1,254 @@
+---
+title: "Signed URL Verification"
+description: "HMAC-SHA256 verification, URL parameter parsing, TTL checking, agent identity binding, and timing-safe comparison"
+---
+
+The Edge Function verifies signed URLs to gate access to protected content. Two verification modes are available, chosen per deployment: CDN-native verification and custom HMAC verification.
+
+## Verification Modes
+
+### Mode A: CDN-Native Verification (CloudFront, Akamai)
+
+The CDN platform handles signature verification at the infrastructure level, before the edge function code runs.
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI Agent
+    participant CDN as CDN Infrastructure
+    participant Edge as Edge Function
+    participant Origin as Origin Server
+
+    Agent->>CDN: GET /premium/article.html?Signature=...&Key-Pair-Id=...&Expires=...
+
+    Note over CDN: CDN infrastructure verifies signature<br/>against trusted_key_groups (CloudFront)<br/>or EdgeAuth token (Akamai)
+
+    alt Signature invalid or expired
+        CDN-->>Agent: 403 Forbidden (CDN-generated)
+    else Signature valid
+        CDN->>Edge: Forward request (signature already verified)
+        Note over Edge: Agent identity binding check<br/>Single-use enforcement<br/>(if enabled)
+        Edge->>Origin: Forward to origin
+        Origin-->>Agent: 200 OK + content
+    end
+```
+
+**CloudFront implementation**: Configure a `trusted_key_groups` reference on the cache behavior for `/premium/*`. Upload the RSA public key to CloudFront Key Management. CloudFront verifies the `Signature`, `Key-Pair-Id`, and `Expires` (or canned/custom `Policy`) parameters before the request reaches any function code.
+
+**Akamai implementation**: Configure EdgeAuth token verification on the property manager for protected paths. The EdgeAuth token includes a hash, expiry, and optional IP binding. Verification happens at the property level.
+
+The Edge Function does not verify the cryptographic signature in this mode. It only performs additional checks (agent binding, single-use) that the CDN cannot do natively.
+
+### Mode B: Custom HMAC Verification (Cloudflare, Fastly)
+
+The edge function code verifies the signature using HMAC-SHA256.
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI Agent
+    participant Edge as Edge Function (Worker/Compute)
+    participant Origin as Origin Server
+
+    Agent->>Edge: GET /premium/article.html?sig=abc...&expires=1773451434&agent_id=sha256hex&txn_id=txn-mp-93a7f2
+
+    Note over Edge: 1. Extract sig, expires, agent_id, txn_id from URL<br/>2. Reconstruct base URL<br/>3. Canonicalize: baseURL\nexpires\nagent_id\ntxn_id<br/>4. HMAC-SHA256(canonical_string, secret)<br/>5. Timing-safe compare expected vs provided<br/>6. Check expiry
+
+    alt Verification fails
+        Edge-->>Agent: 403 Forbidden
+    else Verification passes
+        Note over Edge: Agent identity binding check<br/>Single-use enforcement<br/>(if enabled)
+        Edge->>Origin: Forward to origin
+        Origin-->>Agent: 200 OK + content
+    end
+```
+
+## URL Parameter Parsing
+
+**HMAC signed URL format** (current implementation):
+
+```
+https://cdn.provider.com/premium/article.html?expires=1773451434&sig=a7f3b2c1...
+```
+
+- `expires` -- Unix timestamp (seconds since epoch).
+- `sig` -- HMAC-SHA256 hex digest of `{baseURL}{expires}` using the shared secret.
+
+**Production enhancement** -- add delimiter and agent binding:
+
+```
+https://cdn.provider.com/premium/article.html
+  ?expires=1773451434
+  &agent_id=sha256(LIC-BUYER-001)
+  &txn_id=txn-mp-93a7f2
+  &sig=HMAC-SHA256(baseURL\nexpires\nagent_id\ntxn_id, secret)
+```
+
+- `agent_id` -- SHA-256 hash of the agent's license ID. The URL parameter `agent_id` carries the value from proto's `TransactionResponse.agent_identity_hash` field (SHA-256 of the agent's license ID).
+- `txn_id` -- transaction ID for reconciliation and single-use enforcement.
+- `\n` delimiter between fields prevents canonicalization ambiguity (as noted in the threat model's HMAC implementation note).
+
+## HMAC Canonicalization
+
+Both the Exchange (signer) and the edge function (verifier) MUST use the same canonical format for HMAC input. Fields are concatenated with `\n` delimiters in this fixed order:
+
+```
+baseURL\nexpires\nagent_id\ntxn_id
+```
+
+Where:
+- `baseURL` -- the content URL without query parameters (e.g., `https://cdn.example.com/premium/article.html`)
+- `expires` -- Unix timestamp in seconds (string representation)
+- `agent_id` -- SHA-256 hex hash of the agent's license ID (matches `TransactionResponse.agent_identity_hash`)
+- `txn_id` -- the transaction ID (ULID)
+
+All four fields are REQUIRED in production signed URLs. The `agent_id` field binds the URL to a specific agent (preventing sharing, Threat T8). The `txn_id` field enables three-sided reconciliation (CDN logs, Exchange transactions, Usage reports).
+
+This canonicalization format MUST match the Exchange's signing format. Any mismatch between signer and verifier will cause all signed URLs to be rejected.
+
+## TTL Checking
+
+Signed URLs include an expiry timestamp. The edge function enforces two checks:
+
+1. **Expiry check** -- reject URLs where `expires` < current time.
+2. **Max TTL check** -- reject URLs where `expires` is more than `maxUrlTtlSeconds` from the current time (prevents URLs signed too far in the future).
+
+The default max TTL is 300 seconds (5 minutes). This limits the replay window even without single-use enforcement.
+
+## Timing-Safe Comparison
+
+HMAC comparisons use constant-time comparison (XOR loop), never `===`. This prevents timing side-channel attacks where an attacker could determine partial signature matches based on response timing.
+
+| Operation | Time |
+|---|---|
+| HMAC-SHA256 computation (Web Crypto) | 0.1-0.5ms |
+| Timing-safe comparison (64-byte hex) | < 0.01ms |
+
+## Agent Identity Binding
+
+When `agentBindingEnabled` is true, the edge function validates that the requester matches the `agent_id` bound into the signed URL.
+
+**End-to-end agent identity flow**:
+
+1. Agent calls `ExecuteTransaction` with `aisystem.aisysuse.lid` (license ID, e.g., `LIC-BUYER-001`).
+2. Exchange computes `agent_id_hash = SHA256(license_id)`.
+3. Exchange embeds `agent_id_hash` in the signed URL: `?Signature=...&agent_id=abc123...`
+4. Agent fetches the signed URL with header: `X-Agent-License-Id: LIC-BUYER-001`
+5. Edge function extracts `agent_id` from URL parameter, extracts `license_id` from `X-Agent-License-Id` header, computes `SHA256(header_value)`, compares against URL parameter.
+   - Match: serve content.
+   - Mismatch: 403.
+
+The agent does not need to know the hash -- it just sends its `license_id` in a header. The Exchange and the edge function independently compute the same hash.
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI Agent
+    participant MP as Exchange
+    participant Edge as Edge Function
+
+    Agent->>MP: ExecuteTransaction(license_id="LIC-BUYER-001")
+    Note over MP: agent_id_hash = SHA256("LIC-BUYER-001")
+    MP-->>Agent: signed URL with ?agent_id=abc123...&sig=...
+
+    Agent->>Edge: GET /premium/article?agent_id=abc123...&sig=...<br/>Header: X-Agent-License-Id: LIC-BUYER-001
+    Note over Edge: 1. Extract agent_id from URL param<br/>2. Extract license_id from header<br/>3. Compute SHA256("LIC-BUYER-001")<br/>4. Compare against URL param
+    alt Hash matches
+        Edge-->>Agent: 200 OK + content
+    else Hash mismatch
+        Edge-->>Agent: 403: Agent identity mismatch
+    end
+```
+
+**Identity verification methods**:
+
+| Method | Reliability | Notes |
+|---|---|---|
+| `X-Agent-License-Id` request header | Medium | Agent self-reports. Can be spoofed. |
+| TLS client certificate `CN` or `SAN` | High | Requires mTLS setup. Not common yet. |
+| OAuth2 `access_token` introspection | High | Requires network call. Expensive at edge. |
+| IP address hash | Low | Multi-tenant IPs, NAT, proxies. |
+
+**Recommended approach for v1**: `X-Agent-License-Id` header with SHA-256 hash comparison against the `agent_id` URL parameter. This prevents casual URL sharing but does not prevent a determined attacker who knows the license ID.
+
+**Future**: mTLS with agent certificates issued by a RAMP-recognized CA.
+
+## Single-Use URL Enforcement
+
+For providers wanting additional replay protection, the edge function can enforce single-use URLs via edge KV:
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI Agent
+    participant Edge as Edge Function
+    participant KV as Edge KV Store
+
+    Agent->>Edge: GET /premium/article.html?sig=...&txn_id=txn-93a7
+
+    Note over Edge: Signature verified OK
+
+    Edge->>KV: PUT-IF-ABSENT<br/>key: "used:txn-93a7"<br/>value: timestamp<br/>TTL: 600s
+
+    alt Key did not exist (first use)
+        KV-->>Edge: success (inserted)
+        Edge-->>Agent: 200 OK + content
+    else Key already exists (replay)
+        KV-->>Edge: conflict (already exists)
+        Edge-->>Agent: 403: URL already consumed
+    end
+```
+
+**KV TTL**: Set to `maxUrlTtlSeconds + 60s` (URL max TTL plus a safety buffer). After this period, the signed URL is expired anyway, so the KV entry can be evicted.
+
+**Single-use enforcement is best-effort.** CDN edge KV stores are eventually consistent across locations. The primary replay protection is agent identity binding + short TTL (5 minutes). Authoritative deduplication happens during reconciliation via CDN access logs and Exchange transaction records.
+
+**CDN KV consistency reality**:
+
+| Platform | KV Mechanism | Consistency Model | Propagation Delay |
+|---|---|---|---|
+| CloudFront | No native KV; Lambda@Edge + DynamoDB | Per-region, eventually consistent (DynamoDB Global Tables) | Seconds across regions |
+| Cloudflare Workers KV | Workers KV | Eventually consistent | ~60s propagation across PoPs |
+| Cloudflare Durable Objects | Durable Objects | Strong consistency | Single-location (latency tradeoff) |
+| Akamai EdgeKV | EdgeKV | Eventually consistent | ~5-10s in-region |
+| Fastly KV Store | KV Store | Eventually consistent | Seconds across PoPs |
+
+**Recommendation: Do not enforce strict single-use at the edge.** Instead, use:
+
+1. **Agent identity binding** -- the signed URL is bound to a specific agent_id. Even if replayed, only the authorized agent can use it.
+2. **Short TTL (5 minutes)** -- limits the replay window to a narrow period.
+3. **Reconciliation (detect abuse after the fact)** -- the Exchange transaction log and CDN access logs contain `txn_id` for every request. Cross-reference to detect replays and take action.
+
+This matches ad-tech's approach to impression deduplication: real-time is best-effort, reconciliation is authoritative.
+
+## Key Custody Model
+
+**The edge function verifies, it does not sign.**
+
+| Signing Scheme | Who Signs | Who Verifies | Edge Function Has |
+|---|---|---|---|
+| CloudFront RSA (asymmetric) | Exchange (private key) | CloudFront infra (public key) | Nothing (CDN-native) |
+| Akamai EdgeAuth (symmetric) | Exchange (shared secret) | Akamai infra (shared secret) | Nothing (CDN-native) |
+| HMAC-SHA256 (symmetric) | Exchange (shared secret) | Edge function (same secret) | **The shared secret** |
+| RSA/Ed25519 (asymmetric, custom) | Exchange (private key) | Edge function (public key) | Public key only |
+
+**Concern with HMAC**: When using HMAC verification (Cloudflare, Fastly), the edge function must hold the shared secret. If the edge function is compromised, the attacker can forge signed URLs. Key rotation requires updating both the Exchange and the edge function simultaneously.
+
+**Recommendation**: Use asymmetric signing (Ed25519 or RSA) when the CDN does not provide native signed URL verification.
+
+```mermaid
+graph LR
+    subgraph "Exchange"
+        PRIV_KEY["Private Key<br/>(signs URLs)"]
+    end
+
+    subgraph "Edge Function (Provider CDN)"
+        PUB_KEY["Public Key<br/>(verifies URLs)"]
+    end
+
+    subgraph "Key Distribution"
+        RAMP_JSON["ramp.json or<br/>config endpoint"]
+    end
+
+    PRIV_KEY -->|"Signs: URL + expiry + agent_id + txn_id"| SIGNED_URL[Signed URL]
+    SIGNED_URL -->|"Agent fetches"| PUB_KEY
+    PUB_KEY -->|"Verifies signature"| DECISION{Valid?}
+    PRIV_KEY -.->|"Public key published at"| RAMP_JSON
+    RAMP_JSON -.->|"Edge function fetches public key"| PUB_KEY
+```

@@ -1,0 +1,619 @@
+---
+title: "Extension: ramp-news-v1"
+description: "News, media, and podcast content extension profile — field vocabulary, conformance levels, and examples"
+---
+
+## Overview
+
+RAMP-News v1 defines a standardized vocabulary of `ext` field keys for news, media, and podcast content traded through RAMP Exchanges. It enables agents and Brokers to:
+
+- **Discover** news resources by article type, topic, urgency, and publication date
+- **Evaluate** offers using editorial metadata (corrections, retractions, embargo status)
+- **Verify** content provenance through syndication chain tracking
+- **Handle** the news content lifecycle (corrections, updates, kills)
+- **Access** podcast episodes with transcript, chapter, and format variant metadata
+
+This profile is built entirely on existing industry standards: IPTC NewsML-G2, IPTC NewsCodes, Schema.org, RSS 2.0, Podcasting 2.0, W3C TDMRep, and ODRL/RightsML. No field names are invented when an industry standard already defines one.
+
+### Who Should Implement This
+
+- **Exchanges** serving news publishers, wire services, podcast networks, or broadcast media
+- **Brokers** that need to filter, rank, or deduplicate news content across Exchanges
+- **Agents** that consume news articles, podcast episodes, or broadcast content via RAMP
+
+### Prerequisites
+
+Implementers must be familiar with:
+
+- RAMP protocol (`proto/ramp/v1/ramp.proto`)
+- The `ext` field mechanism (`google.protobuf.Struct` on all major messages)
+- `ResourceIdentity`, `ResourceMutability`, and `ResourceAttestation` messages
+
+---
+
+## Profile Declaration
+
+An Exchange declares support for this profile by including `"ramp-news-v1"` in its `ExchangeManifest.supported_profiles` array:
+
+```json
+{
+  "ver": "1.0",
+  "domain": "news-exchange.example.com",
+  "name": "Example News Exchange",
+  "supported_profiles": ["ramp-news-v1"],
+  "exchange_endpoint": "https://news-exchange.example.com/ramp/v1",
+  "keys_uri": "https://news-exchange.example.com/ramp/v1/keys"
+}
+```
+
+Brokers use `supported_profiles` to route news-specific queries to Exchanges that understand this vocabulary.
+
+---
+
+## Field Summary
+
+This profile defines **36 unique field names** across 6 protocol messages (44 field placements total, as some fields like `news.article_type` appear in both query and offer). Every field is namespaced with `news.` and traces to an existing industry standard.
+
+| Message | Field Count | Purpose |
+|---------|-------------|---------|
+| `ResourceIdentity.ext` | 3 | Cross-exchange news resource identification |
+| `ResourceQuery.ext` | 7 | News-specific query parameters |
+| `Offer.ext` | 23 | News metadata on resource offers (14 article + 9 podcast) |
+| `ResourceAttestation.claims` | 5 | News-specific attestation claims |
+| `DisputeRequest.ext` | 3 | News dispute evidence |
+| `ExchangeManifest.ext` | 3 | Exchange news capabilities |
+
+---
+
+## Identity Vocabulary (`ResourceIdentity.ext`)
+
+These fields enable cross-exchange deduplication of news resources. A Broker querying three Exchanges for the same AP wire story can match offers by `news.iptc_guid`.
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `news.iptc_guid` | string | Conditional | IPTC NewsML-G2 `@guid` | IPTC globally unique identifier in URN format. Present when content originates from or flows through wire services (AP, Reuters, AFP). Format: `urn:newsml:{provider}:{date}:{id}`. |
+| `news.podcast_guid` | string | Conditional | Podcasting 2.0 `podcast:guid` | UUIDv5 globally unique podcast identifier. Present for podcast series. Generated from feed URL using namespace UUID `ead4c236-bf58-58c6-a2c6-a6b28d128cb6`. Follows the podcast even if feed URL changes. |
+| `news.rss_guid` | string | Optional | RSS 2.0 `<guid>` | RSS item GUID. Often a permalink URL. Used by aggregators to detect new vs. updated items. |
+
+**Usage note:** These fields supplement, not replace, `ResourceIdentity.canonical_url` (which is always present). For wire-service content, `news.iptc_guid` is the stable cross-exchange key because the canonical URL differs per publisher. For podcasts, `news.podcast_guid` identifies the show; the episode is identified by `canonical_url` (episode page) or the enclosure URL.
+
+---
+
+## Query Vocabulary (`ResourceQuery.ext`)
+
+Agents use these fields to express news-specific query parameters. The Exchange filters its catalog accordingly.
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `news.article_type` | string | Optional | Schema.org NewsArticle subtypes | Filter by article type. Values: `reportage`, `analysis`, `opinion`, `review`, `background`, `satirical`, `live_blog`. Maps to Schema.org types (ReportageNewsArticle, AnalysisNewsArticle, etc.). |
+| `news.media_topic` | string[] | Optional | IPTC NewsCodes `mediatopic:` | Filter by IPTC Media Topic QCodes. Hierarchical taxonomy with ~1,200 terms. Example: `["mediatopic:20000139"]` (international trade). Exchange SHOULD match the requested topic and its descendants. |
+| `news.date_published_after` | string | Optional | ISO 8601 | Only return content published on or after this datetime. |
+| `news.date_published_before` | string | Optional | ISO 8601 | Only return content published on or before this datetime. |
+| `news.language` | string | Optional | BCP 47 | Filter by content language. Example: `"en"`, `"fr"`, `"zh-Hans"`. |
+| `news.exclude_retracted` | boolean | Optional | NewsML-G2 `stat:canceled` | If `true`, exclude content with `pub_status = "canceled"`. Default: `true`. Agents querying for retracted content for research purposes set this to `false`. |
+| `news.source_organization` | string | Optional | Schema.org `sourceOrganization` | Filter by originating news organization name. Example: `"Associated Press"`. |
+
+---
+
+## Offer Metadata (`Offer.ext`)
+
+These fields describe news-specific properties of an offer. They help agents evaluate content relevance, freshness, editorial status, and licensing terms.
+
+### Content Description
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `news.article_type` | string | Recommended | Schema.org NewsArticle subtypes | Article type. Values: `reportage`, `analysis`, `opinion`, `review`, `background`, `satirical`, `live_blog`. Enables agents to distinguish factual reporting from opinion pieces. |
+| `news.media_topic` | string[] | Recommended | IPTC NewsCodes `mediatopic:` | Subject classification QCodes from the IPTC Media Topics vocabulary. Example: `["mediatopic:20000139", "mediatopic:20000209"]`. |
+| `news.urgency` | integer | Optional | IPTC NewsCodes `urgency:` | Editorial urgency on the IPTC 1-9 scale. 1 = flash (highest priority), 5 = normal, 9 = lowest. Helps agents prioritize breaking news over features. |
+| `news.word_count` | integer | Optional | Schema.org `wordCount` / rNews | Word count of the article body. Agents use this for cost estimation and reading time. |
+| `news.section` | string | Optional | Schema.org `articleSection` | Editorial section. Examples: `"Business"`, `"Sports"`, `"Technology"`. |
+| `news.language` | string | Recommended | BCP 47 | Content language code. Example: `"en"`, `"de"`. |
+
+### Content Lifecycle
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `news.pub_status` | string | Recommended | NewsML-G2 `pubStatus` | Publishing status of the content. Values from IPTC NewsCodes: `usable` (may be published), `withheld` (not for publication yet), `canceled` (killed, must never be published). See [Content Lifecycle](#content-lifecycle) for state machine. |
+| `news.signal` | string | Conditional | NewsML-G2 `signal` | Present when this offer represents a correction or update. Values: `update` (non-error changes), `correction` (factual error remedied), `cwarn` (content warning). |
+| `news.version` | integer | Optional | NewsML-G2 `@version` | Content version number. Starts at 1, increments on each update or correction. The `news.iptc_guid` remains constant across versions. |
+| `news.date_published` | string | Recommended | Schema.org `datePublished` | ISO 8601 datetime of first publication. Example: `"2026-03-19T14:30:00Z"`. |
+| `news.date_modified` | string | Conditional | Schema.org `dateModified` | ISO 8601 datetime of last modification. Present when content has been updated or corrected. |
+
+### Provenance and Rights
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `news.source_organization` | string | Recommended | Schema.org `sourceOrganization` | Originating news organization. Example: `"Reuters"`. For syndicated content, this is the original creator, not the re-publisher. |
+| `news.copyright_notice` | string | Optional | IPTC / Schema.org `copyrightNotice` | Copyright notice text. Example: `"Copyright 2026 The Associated Press. All rights reserved."` |
+| `news.tdm_reservation` | boolean | Optional | W3C TDMRep | Whether text/data mining rights are reserved under EU DSM Directive Article 4. When `true`, the Offer's `AccessRestrictions` define what mining is permitted. When absent, no TDM reservation is declared. |
+
+---
+
+## Attestation Claims (`ResourceAttestation.claims`)
+
+These claim names extend the core attestation vocabulary for news content. A provider or third-party verifier includes them in `ResourceAttestation.claims`.
+
+| Claim Name | Type | Source Standard | Description |
+|------------|------|-----------------|-------------|
+| `news.pub_status` | string | NewsML-G2 | Publishing status at attestation time. Enables agents to trust the lifecycle state cryptographically. |
+| `news.version` | integer | NewsML-G2 | Content version at attestation time. Agent can detect if content was updated between attestation and delivery. |
+| `news.date_published` | string | Schema.org | Publication date attested by verifier. |
+| `news.source_organization` | string | Schema.org | Attested originating organization. Verifier confirms provenance. |
+| `news.correction_of` | string | NewsML-G2 | URI of the resource this content corrects. Present only on correction attestations. Enables agents to trace the correction chain. |
+
+**Example attestation:**
+
+```json
+{
+  "verifier": "doubleverify.com",
+  "kid": "dv-key-2026-03",
+  "attested_at": "2026-03-19T12:00:00Z",
+  "uri": "https://www.nytimes.com/2026/03/19/business/trade-deal.html",
+  "claims": {
+    "estimated_quantity": 2450,
+    "word_count": 1856,
+    "language": "en",
+    "content_hash": "sha256:a1b2c3d4e5f6...",
+    "news.pub_status": "usable",
+    "news.version": 2,
+    "news.date_published": "2026-03-19T08:15:00Z",
+    "news.source_organization": "The New York Times",
+    "news.correction_of": "https://www.nytimes.com/2026/03/18/business/trade-deal.html"
+  },
+  "signature": "base64-encoded-ed25519-signature"
+}
+```
+
+---
+
+## Dispute Extensions (`DisputeRequest.ext`)
+
+News content introduces domain-specific dispute scenarios beyond the core `DisputeReason` enum.
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `news.retracted_after_delivery` | boolean | Conditional | NewsML-G2 `stat:canceled` | Set to `true` when the agent discovers that the delivered content was retracted (killed) after the transaction. The agent transacted for `usable` content but the publisher subsequently set `pub_status` to `canceled`. This warrants a credit or redelivery of the correction. |
+| `news.correction_not_reflected` | boolean | Conditional | NewsML-G2 `signal` | Set to `true` when the Offer indicated a specific `news.version` but the delivered content did not match that version. The agent expected a corrected version but received the original. |
+| `news.embargo_violated` | boolean | Conditional | NewsML-G2 `embargoed` | Set to `true` when the Exchange delivered embargoed content before the embargo end time. The agent relied on the Exchange to enforce embargo dates. |
+
+**Usage:** These fields supplement, not replace, the core `DisputeReason` enum. The agent sets the core reason (e.g., `DISPUTE_REASON_CONTENT_MISMATCH` or `DISPUTE_REASON_WRONG_CONTENT`) and adds the `news.*` ext fields to provide domain-specific context for Tier 2 resolution.
+
+---
+
+## Exchange News Capabilities (`ExchangeManifest.ext`)
+
+Exchanges declaring `ramp-news-v1` support SHOULD populate these fields to describe their news-specific capabilities.
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `news.supported_article_types` | string[] | Optional | Schema.org | Article types available in the catalog. Example: `["reportage", "analysis", "opinion"]`. Helps Brokers avoid querying an Exchange for article types it does not carry. |
+| `news.correction_propagation` | string | Optional | RAMP-News | How the Exchange handles corrections from publishers. Values: `realtime` (corrections reflected within minutes), `batch` (corrections reflected on next catalog refresh), `none` (Exchange does not track corrections). |
+| `news.podcast_support` | boolean | Optional | RAMP-News | Whether the Exchange catalogs podcast episodes. Brokers use this to route podcast queries efficiently. |
+
+---
+
+## Content Lifecycle
+
+News content follows a well-defined lifecycle governed by the `news.pub_status` and `news.signal` fields. This lifecycle originates from IPTC NewsML-G2 and is adopted industry-wide by wire services.
+
+### State Machine
+
+```
+                    +-----------+
+           publish  |           |  hold
+        +---------->|  usable   |--------+
+        |           |           |        |
+        |           +-----+-----+        v
+        |                 |         +----------+
+        |                 |  kill   | withheld |
+        |                 |         +-----+----+
+        |                 v               |
+        |           +-----------+  kill   |
+        |           |           |<--------+
+        |           | canceled  |
+        |           | (terminal)|
+        |           +-----------+
+        |
+  [first version]
+```
+
+**State definitions:**
+
+| State | QCode | Meaning | Agent Action |
+|-------|-------|---------|--------------|
+| `usable` | `stat:usable` | Content may be used without restriction | Normal consumption |
+| `withheld` | `stat:withheld` | Content must not be used until released | Do not display or process; wait for release |
+| `canceled` | `stat:canceled` | Content must never be used (terminal) | Delete cached copies; do not display |
+
+### Correction Flow
+
+When a publisher corrects an article:
+
+1. Publisher creates a new version (increments `news.version`)
+2. Publisher sets `news.signal` to `"correction"`
+3. The `news.iptc_guid` remains the same across all versions
+4. The `news.date_modified` is updated to the correction timestamp
+5. The `news.pub_status` remains `"usable"` (corrections do not retract)
+
+**What the Broker should do:**
+
+- If a Broker has a cached offer for this resource, it should re-query to get the updated version
+- The Broker SHOULD prefer offers with higher `news.version` values
+- When `news.signal` is `"correction"`, the Broker SHOULD log the correction event for the agent's audit trail
+
+### Kill (Retraction) Flow
+
+When a publisher retracts content:
+
+1. Publisher sets `news.pub_status` to `"canceled"`
+2. This is a **terminal state** -- the content cannot return to `usable`
+3. Exchange SHOULD remove the resource from active offers
+4. If a transaction has already occurred, the agent may file a dispute with `news.retracted_after_delivery = true`
+
+**What the agent should do:**
+
+- Delete any cached copies of the content
+- Do not display the content to users
+- If the content was used in a generated response, flag the response as based on retracted source material
+
+---
+
+## Podcast / Audio Extensions
+
+For podcast episodes, the following `Offer.ext` fields provide audio-specific metadata that agents need for content evaluation and delivery.
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `news.podcast_show_title` | string | Recommended | RSS / Apple Podcasts | Show name. Example: `"The Daily"`. |
+| `news.episode_number` | integer | Optional | `itunes:episode` | Episode number within the show or season. |
+| `news.season_number` | integer | Optional | `itunes:season` | Season number. |
+| `news.duration_seconds` | number | Recommended | `itunes:duration` | Episode duration in seconds. Used for cost estimation with `PRICING_MODEL_PER_MINUTE`. |
+| `news.episode_type` | string | Optional | `itunes:episodeType` | Episode classification. Values: `full` (standard episode), `trailer` (show preview), `bonus` (supplemental content). |
+| `news.transcript_url` | string | Optional | Podcasting 2.0 `podcast:transcript` | URL to a transcript file. |
+| `news.transcript_type` | string | Conditional | Podcasting 2.0 `podcast:transcript@type` | MIME type of the transcript. Values: `text/plain`, `text/html`, `text/vtt`, `application/json` (Podcasting 2.0 JSON format), `application/x-subrip`. Required when `news.transcript_url` is present. |
+| `news.has_dai` | boolean | Optional | IAB DAI | Whether dynamic ad insertion is active on this episode. When `true`, the audio content may differ between fetches (different ads stitched in). Affects content hashing -- see [Behavioral Conventions](#behavioral-conventions). |
+| `news.alternate_enclosures` | object[] | Optional | Podcasting 2.0 `podcast:alternateEnclosure` | Alternative media formats available. Each object: `{"type": "audio/opus", "bitrate": 96000, "length": 48576000, "url": "https://..."}`. Enables agents to select optimal format. |
+
+**Podcast identity model:** A podcast show is identified by `news.podcast_guid` (on `ResourceIdentity.ext`). An episode is identified by its `canonical_url`. The show-episode relationship is expressed by `news.podcast_show_title` and optionally `news.episode_number` / `news.season_number`.
+
+---
+
+## Behavioral Conventions
+
+This section defines how RAMP core protocol features interact with news content.
+
+### ResourceMutability for News
+
+| Content Type | Mutability | Rationale |
+|-------------|------------|-----------|
+| Published article (no corrections) | `STATIC` | Content is stable after publication. Hash verification applies. |
+| Article with corrections | `DYNAMIC` | Content changes when corrections are applied. Use `Offer.data_as_of` to indicate the snapshot time. |
+| Breaking news / live blog | `DYNAMIC` | Content is updated continuously during the event. |
+| Podcast episode (no DAI) | `STATIC` | Audio file is immutable once published. |
+| Podcast episode (with DAI) | `DYNAMIC` | Dynamically inserted ads change the audio between fetches. |
+| Live broadcast stream | `LIVE` | Content does not exist at offer time. |
+
+### data_as_of for News
+
+The `Offer.data_as_of` field carries particular importance for news:
+
+- For articles with corrections: `data_as_of` reflects when the latest correction was applied
+- For breaking news: `data_as_of` reflects the last update time
+- For podcast episodes: `data_as_of` is the publication date (or last DAI splice time for DAI-enabled episodes)
+
+### DeliveryMethod for News
+
+| Content Type | Typical Delivery | Notes |
+|-------------|-----------------|-------|
+| News article (full text) | `DELIVERY_METHOD_INSTRUCTIONS` | Signed URL to publisher endpoint or CDN |
+| News article (excerpt/summary) | `DELIVERY_METHOD_DIRECT` | Exchange returns excerpt inline |
+| Podcast episode | `DELIVERY_METHOD_INSTRUCTIONS` | Signed URL to audio file on CDN |
+| Live broadcast | `DELIVERY_METHOD_STREAMING` | Signed URL to HLS/Icecast endpoint |
+
+### Attribution in News
+
+News publishers have strong attribution requirements. The RAMP core `Usage.attribution` and `AttributionDetail` messages handle this:
+
+- `AttributionDetail.displayed_url` SHOULD be the article's `canonical_url`
+- `AttributionDetail.format` SHOULD be `CITATION_FORMAT_LINK` (inline link to source) or `CITATION_FORMAT_FOOTNOTE`
+- `AttributionDetail.visible_to_user` MUST be `true` when the Offer's `AccessRestrictions` require attribution
+
+---
+
+## Examples
+
+### Example 1: News Article Offer (NYT)
+
+An Exchange returns an offer for a New York Times article. The article has been corrected once.
+
+```json
+{
+  "offer_id": "offer-nyt-2026-0319-001",
+  "package": {
+    "id": "pkg-nyt-trade-deal",
+    "resource": {
+      "uri": "https://www.nytimes.com/2026/03/19/business/trade-deal.html",
+      "title": "U.S. and EU Reach Landmark Trade Agreement"
+    }
+  },
+  "pricing": {
+    "model": "PRICING_MODEL_PER_ARTICLE",
+    "rate": 0.15,
+    "currency": "USD",
+    "unit_cost": 0.000061,
+    "estimated_quantity": 2450,
+    "unit": "tokens"
+  },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "identity": {
+    "canonical_url": "https://www.nytimes.com/2026/03/19/business/trade-deal.html",
+    "iptc_guid": "urn:newsml:nytimes.com:20260319:trade-deal-2026",
+    "content_hash": "sha256:3a7f8c9d2e1b4f6a...",
+    "hash_method": "sha256",
+    "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC",
+    "ext": {
+      "news.iptc_guid": "urn:newsml:nytimes.com:20260319:trade-deal-2026"
+    }
+  },
+  "data_as_of": "2026-03-19T16:45:00Z",
+  "restrictions": {
+    "permitted_functions": ["FUNCTION_SEARCH", "FUNCTION_SUMMARIZATION"],
+    "prohibited_functions": ["FUNCTION_TRAINING"],
+    "max_display_words": 250
+  },
+  "attestations": [
+    {
+      "verifier": "nytimes.com",
+      "kid": "nyt-key-2026-q1",
+      "attested_at": "2026-03-19T16:50:00Z",
+      "uri": "https://www.nytimes.com/2026/03/19/business/trade-deal.html",
+      "claims": {
+        "estimated_quantity": 2450,
+        "word_count": 1856,
+        "language": "en",
+        "content_hash": "sha256:3a7f8c9d2e1b4f6a...",
+        "news.pub_status": "usable",
+        "news.version": 2,
+        "news.date_published": "2026-03-19T08:15:00Z",
+        "news.source_organization": "The New York Times"
+      },
+      "signature": "ZXhhbXBsZS1zaWduYXR1cmU..."
+    }
+  ],
+  "ext": {
+    "news.article_type": "reportage",
+    "news.media_topic": ["mediatopic:20000139", "mediatopic:20000209"],
+    "news.urgency": 3,
+    "news.word_count": 1856,
+    "news.section": "Business",
+    "news.language": "en",
+    "news.pub_status": "usable",
+    "news.signal": "correction",
+    "news.version": 2,
+    "news.date_published": "2026-03-19T08:15:00Z",
+    "news.date_modified": "2026-03-19T16:45:00Z",
+    "news.source_organization": "The New York Times",
+    "news.copyright_notice": "Copyright 2026 The New York Times Company. All rights reserved.",
+    "news.tdm_reservation": true
+  },
+  "exchange_signature": "bWFya2V0cGxhY2Utc2lnbmF0dXJl...",
+  "signature_algorithm": "ed25519"
+}
+```
+
+### Example 2: Podcast Episode Offer (NPR)
+
+An Exchange returns an offer for an NPR podcast episode with transcript and multiple audio formats.
+
+```json
+{
+  "offer_id": "offer-npr-upfirst-20260319",
+  "package": {
+    "id": "pkg-npr-upfirst-ep-1247",
+    "resource": {
+      "uri": "https://www.npr.org/podcasts/510318/up-first/episodes/2026-03-19",
+      "title": "Up First: March 19, 2026"
+    }
+  },
+  "pricing": {
+    "model": "PRICING_MODEL_PER_MINUTE",
+    "rate": 0.03,
+    "currency": "USD",
+    "unit_cost": 0.03,
+    "estimated_quantity": 12,
+    "unit": "minutes"
+  },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "identity": {
+    "canonical_url": "https://www.npr.org/podcasts/510318/up-first/episodes/2026-03-19",
+    "content_hash": "sha256:b4c5d6e7f8a9...",
+    "hash_method": "sha256",
+    "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+    "ext": {
+      "news.podcast_guid": "917393e3-1b1e-5cef-ace4-edaa54e1f810"
+    }
+  },
+  "restrictions": {
+    "permitted_functions": ["FUNCTION_SEARCH", "FUNCTION_SUMMARIZATION"],
+    "prohibited_functions": ["FUNCTION_TRAINING"]
+  },
+  "ext": {
+    "news.article_type": "reportage",
+    "news.language": "en",
+    "news.pub_status": "usable",
+    "news.date_published": "2026-03-19T06:00:00Z",
+    "news.source_organization": "NPR",
+    "news.podcast_show_title": "Up First",
+    "news.episode_number": 1247,
+    "news.duration_seconds": 720,
+    "news.episode_type": "full",
+    "news.transcript_url": "https://www.npr.org/transcripts/up-first-20260319.vtt",
+    "news.transcript_type": "text/vtt",
+    "news.has_dai": true,
+    "news.alternate_enclosures": [
+      {
+        "type": "audio/mpeg",
+        "bitrate": 128000,
+        "length": 11520000,
+        "url": "https://play.podtrac.com/npr-510318/edge1.pod.npr.org/anon.npr-mp3/npr/upfirst/2026/03/20260319_upfirst.mp3"
+      },
+      {
+        "type": "audio/opus",
+        "bitrate": 96000,
+        "length": 8640000,
+        "url": "https://play.podtrac.com/npr-510318/edge1.pod.npr.org/anon.npr-opus/npr/upfirst/2026/03/20260319_upfirst.opus"
+      }
+    ]
+  },
+  "exchange_signature": "bnByLXBvZGNhc3Qtc2lnbmF0dXJl...",
+  "signature_algorithm": "ed25519"
+}
+```
+
+### Example 3: Correction Scenario
+
+An agent previously purchased version 1 of an article. The publisher issues a correction. The agent queries again and receives the corrected version.
+
+**Step 1: Original offer (version 1)**
+```json
+{
+  "offer_id": "offer-ap-20260318-001",
+  "identity": {
+    "iptc_guid": "urn:newsml:ap.org:20260318:election-results",
+    "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+  },
+  "ext": {
+    "news.pub_status": "usable",
+    "news.version": 1,
+    "news.date_published": "2026-03-18T22:00:00Z",
+    "news.source_organization": "Associated Press"
+  }
+}
+```
+
+**Step 2: Corrected offer (version 2)**
+```json
+{
+  "offer_id": "offer-ap-20260319-002",
+  "identity": {
+    "iptc_guid": "urn:newsml:ap.org:20260318:election-results",
+    "content_hash": "sha256:new-corrected-hash...",
+    "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC"
+  },
+  "data_as_of": "2026-03-19T10:30:00Z",
+  "attestations": [
+    {
+      "verifier": "ap.org",
+      "kid": "ap-key-2026",
+      "attested_at": "2026-03-19T10:35:00Z",
+      "uri": "https://apnews.com/article/election-results-2026",
+      "claims": {
+        "news.pub_status": "usable",
+        "news.version": 2,
+        "news.correction_of": "https://apnews.com/article/election-results-2026?v=1"
+      },
+      "signature": "Y29ycmVjdGlvbi1zaWduYXR1cmU..."
+    }
+  ],
+  "ext": {
+    "news.pub_status": "usable",
+    "news.signal": "correction",
+    "news.version": 2,
+    "news.date_published": "2026-03-18T22:00:00Z",
+    "news.date_modified": "2026-03-19T10:30:00Z",
+    "news.source_organization": "Associated Press"
+  }
+}
+```
+
+**What the agent observes:**
+
+- Same `iptc_guid` -- this is the same story
+- `news.version` incremented from 1 to 2
+- `news.signal` is `"correction"` -- a factual error was fixed
+- `resource_mutability` changed to `DYNAMIC` because the content was updated
+- Attestation includes `news.correction_of` pointing to the original
+
+### Example 4: Batch News Query
+
+An agent queries an Exchange for multiple news articles in a single request.
+
+```json
+{
+  "ver": "1.0",
+  "id": "query-batch-20260319-001",
+  "aisystem": {
+    "name": "research-assistant",
+    "aisysuse": {
+      "lid": "license-research-2026",
+      "uri": [
+        "https://www.nytimes.com/2026/03/19/business/trade-deal.html",
+        "https://www.reuters.com/business/trade-deal-details-2026-03-19",
+        "https://apnews.com/article/trade-deal-reaction-2026"
+      ],
+      "fn": "FUNCTION_SUMMARIZATION"
+    }
+  },
+  "ext": {
+    "news.article_type": "reportage",
+    "news.exclude_retracted": true,
+    "news.language": "en"
+  }
+}
+```
+
+The Exchange returns an `OfferGroup` per URI. The Broker can then:
+
+1. Match offers across Exchanges by `news.iptc_guid` (if the Reuters and AP stories syndicated through wire)
+2. Filter out any offers where `news.pub_status` is not `"usable"`
+3. Prefer offers with higher `news.version` (latest correction)
+4. Compare `unit_cost` across Exchanges for the same underlying story
+
+---
+
+## Conformance Levels
+
+### Level 1: Basic (Minimum viable RAMP-News)
+
+An Exchange MUST implement:
+
+- `news.pub_status` on Offer.ext
+- `news.date_published` on Offer.ext
+- `news.source_organization` on Offer.ext
+- `news.language` on Offer.ext
+
+### Level 2: Standard (Recommended for production)
+
+An Exchange SHOULD additionally implement:
+
+- All Identity Vocabulary fields (as applicable)
+- `news.article_type`, `news.media_topic`, `news.version`, `news.signal`, `news.date_modified`
+- Attestation claims: `news.pub_status`, `news.version`
+- Correction propagation (update offers when publishers issue corrections)
+
+### Level 3: Full (Wire services and podcast platforms)
+
+An Exchange MAY additionally implement:
+
+- All Query Vocabulary fields
+- All Podcast/Audio fields
+- All Dispute Extension fields
+- `news.tdm_reservation`, `news.copyright_notice`
+- Exchange Manifest news capability fields
+
+---
+
+## References
+
+### Normative
+
+- [IPTC NewsML-G2 2.35 Specification](https://iptc.org/std/NewsML-G2/2.35/specification/NewsML-G2-2.35-specification.html)
+- [IPTC NewsCodes](https://iptc.org/standards/newscodes/) / [Browser](https://show.newscodes.org/)
+- [Schema.org NewsArticle](https://schema.org/NewsArticle)
+- [Schema.org CorrectionComment](https://schema.org/CorrectionComment)
+- [Podcasting 2.0 Namespace](https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md)
+- [W3C TDMRep](https://www.w3.org/community/reports/tdmrep/CG-FINAL-tdmrep-20240202/)
+- [IPTC RightsML 2.0](https://iptc.org/std/RightsML/2.0/RightsML_2.0-specification.html)
+- [RSS 2.0 Specification](https://www.rssboard.org/rss-specification)
+- [Apple Podcasts RSS Reference](https://github.com/Podcastindex-org/podcast-namespace/blob/main/itunes_reference.md)

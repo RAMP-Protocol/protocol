@@ -1,0 +1,382 @@
+---
+title: "Storage Model"
+description: "Data structures and storage systems for catalog entries, transaction records, reporting obligations, and signing keys."
+---
+
+## Content Catalog (In-Memory)
+
+The catalog is the hot data structure. It must support fast lookup by URI (exact match and prefix/glob), filtered by access restrictions and AI system function.
+
+**Data structure**: Radix trie (compressed trie) keyed by URI path, per tenant.
+
+```go
+// Catalog holds the in-memory resource catalog for all tenants.
+// Loaded from pre-built serialized binary produced by the ingestion pipeline.
+// Reads are lock-free via atomic pointer swap on reload.
+type Catalog struct {
+    // Current catalog snapshot. Replaced atomically when new serialized binary is loaded.
+    current atomic.Pointer[CatalogSnapshot]
+}
+
+// CatalogSnapshot is an immutable point-in-time view of all tenant catalogs.
+type CatalogSnapshot struct {
+    // Per-tenant catalog. Key is tenant ID.
+    Tenants map[string]*TenantCatalog
+
+    // When this snapshot was built.
+    BuiltAt time.Time
+
+    // Source hashes used to build this snapshot (for diff detection).
+    // Tracks all input sources (rsl.txt, sitemap, robots.txt, etc.), not just RSL.
+    SourceHashes map[string]string // tenant ID -> SHA-256 of combined source inputs
+}
+
+// TenantCatalog holds a single provider's content offers.
+type TenantCatalog struct {
+    TenantID string
+
+    // Radix trie for URI-based lookup.
+    // Keys are normalized URI paths (e.g., "/premium/ai-infrastructure.html").
+    // Values are OfferTemplates.
+    //
+    // Supports:
+    //   - Exact match: "/premium/article-123.html"
+    //   - Prefix match: "/premium/*" (glob from RSL)
+    //   - Longest prefix wins (radix trie property)
+    URIIndex *radixtree.Tree[*OfferTemplate]
+
+    // Glob matchers for pattern-based URI matching (e.g., "/blog/*/comments").
+    // Evaluated after trie lookup when no exact/prefix match is found.
+    GlobMatchers []GlobMatcher
+
+    // All offer templates for enumeration (e.g., broad DiscoverResources queries).
+    AllOffers []*OfferTemplate
+
+    // Default access policy for paths not in the trie.
+    DefaultPolicy rampv1.ResourceAccessPolicy
+}
+
+// OfferTemplate is the pre-computed offer skeleton. Pricing and identity
+// fields are populated at RSL ingestion time. Per-request fields (offer_id,
+// expiry) are filled at query time.
+type OfferTemplate struct {
+    // Content metadata (from RSL + provider config).
+    ContentPath   string
+    Package       *compv1.Package
+    Pricing       *rampv1.Pricing
+    Identity      *rampv1.ResourceIdentity
+    Restrictions  *rampv1.AccessRestrictions
+    DeliveryMethod rampv1.DeliveryMethod
+
+    // For fast filtering during DiscoverResources.
+    PermittedFunctions map[compv1.Function]bool
+    ProhibitedFunctions map[compv1.Function]bool
+}
+```
+
+**Memory estimate**: Each OfferTemplate is ~500 bytes per entry (Package metadata + pricing + identity). A large provider with 100K articles = ~50 MB per tenant. 100 tenants = 5 GB. Fits in a modern server's RAM. For providers with millions of articles, the trie compresses well because URLs share path prefixes.
+
+**Trie loading**: The ingestion pipeline (background process) builds and serializes the radix trie to a binary file. The Exchange process loads the pre-built binary via atomic pointer swap -- the Exchange NEVER builds the trie itself. See the Content Ingestion Pipeline design doc for the serialization format and pipeline details. Loading a pre-built binary for 100K entries takes &lt;100ms. During loading, the old catalog continues serving.
+
+---
+
+## Transaction Log (Append-Only, Durable)
+
+The transaction log is the most critical data store. Every transaction that produces a billing_id must be durably recorded before the signed URL is returned.
+
+**Write path**: Local WAL (write-ahead log) buffer -> batch flush to durable store.
+
+```go
+// TransactionRecord is the durable record written for every ExecuteTransaction.
+type TransactionRecord struct {
+    // Primary key — ULID, time-ordered.
+    TransactionID string `json:"transaction_id"`
+
+    // Billing reference for settlement.
+    BillingID string `json:"billing_id"`
+
+    // What was purchased.
+    OfferID    string `json:"offer_id"`
+    TenantID   string `json:"tenant_id"`
+    ContentURI string `json:"content_uri"`
+
+    // Who purchased.
+    BuyerLicense string `json:"buyer_license"` // Last 8 chars only in logs
+    AgentName    string `json:"agent_name"`
+
+    // Financials.
+    Amount   float64 `json:"amount"`
+    Currency string  `json:"currency"`
+    UnitCost float64 `json:"unit_cost,omitempty"`
+
+    // Traceability.
+    RequestID    string `json:"request_id"`
+    Broker string `json:"broker,omitempty"`
+
+    // Offer snapshot (serialized JSON of the offer at transaction time).
+    // Enables audit queries without reconstructing from a potentially changed catalog.
+    OfferSnapshotJSON string `json:"offer_snapshot_json"`
+
+    // Agent identity hash (SHA-256 of license ID). Non-optional string, not pointer.
+    AgentIdentityHash string `json:"agent_identity_hash"`
+
+    // Delivery metadata.
+    DeliveryMethod    string `json:"delivery_method"`
+    ReportingRequired bool   `json:"reporting_required"`
+    ReportingDeadline time.Time `json:"reporting_deadline,omitempty"`
+
+    // Chain hash for tamper-evident audit log.
+    ChainHash string `json:"chain_hash"`
+
+    // Signed URL metadata (for reconciliation with CDN logs).
+    SignedURLHash string    `json:"signed_url_hash"` // SHA-256 of the issued signed URL
+    URLExpiresAt  time.Time `json:"url_expires_at"`
+
+    // Timestamps.
+    CreatedAt time.Time `json:"created_at"`
+}
+```
+
+**Local WAL**: A pre-allocated file on local SSD. Writes are fdatasync'd in batches (every 50ms or 100 records, whichever comes first). Each WAL entry is length-prefixed + CRC32 checksummed. This gives sub-millisecond append latency with crash safety.
+
+### Durable Store Options
+
+| Store | Throughput | Latency | Cost at 10K RPS | Notes |
+|---|---|---|---|---|
+| **S3 + Parquet** (hourly roll) | Unlimited | N/A (batch) | ~$2/day | Best for archival. Queryable via Athena. |
+| **Kafka / Redpanda** | 100K+ msg/s | &lt;5ms | ~$20/day | Best for real-time streaming to analytics. |
+| **ClickHouse** | 100K+ inserts/s | &lt;10ms | ~$15/day | Best for ad-hoc queries on transaction data. |
+| **DynamoDB** | 10K WCU | &lt;10ms | ~$50/day | Simplest. Higher cost. |
+
+**Recommended**: Local WAL + Kafka for streaming + S3/Parquet for archival. The WAL provides crash safety; Kafka provides real-time fanout to billing reconciliation, analytics, and S3 archival consumers.
+
+**Retention**: 13 months minimum per NFR. S3 lifecycle policy moves to Glacier after 3 months.
+
+### Offer Snapshot in Transaction Records
+
+The transaction record includes a full offer snapshot (offer_id, package.id, package.title, pricing details, content identity) serialized as JSON. This is the "fulfilled order receipt" — approximately 500 bytes extra per event, negligible at any tier. The audit chain is: ResourceQuery -> Offers presented -> Transaction authorized -> Signed URL issued (with offer snapshot) -> Usage reported. The snapshot enables audit queries like "what exactly was promised in transaction X?" without reconstructing from the catalog, which may have changed since the transaction occurred.
+
+### Growth Tier: PostgreSQL
+
+For Growth tier (100-1K RPS), PostgreSQL with daily partitions provides sufficient write throughput with strong durability guarantees.
+
+```sql
+-- Daily partitioned transaction log (append-only)
+CREATE TABLE transactions (
+    transaction_id TEXT NOT NULL,
+    billing_id     TEXT NOT NULL,
+    offer_id       TEXT NOT NULL,
+    tenant_id      TEXT NOT NULL,
+    content_uri    TEXT NOT NULL,
+    buyer_license  TEXT NOT NULL,
+    amount         NUMERIC(12,6) NOT NULL,
+    currency       TEXT NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+) PARTITION BY RANGE (created_at);
+
+-- Daily partitions auto-created by pg_partman or cron
+CREATE TABLE transactions_2026_03_15 PARTITION OF transactions
+    FOR VALUES FROM ('2026-03-15') TO ('2026-03-16');
+
+-- Append-only enforcement
+REVOKE UPDATE, DELETE ON transactions FROM exchange_app;
+```
+
+**Volume estimate at 1K RPS**: ~86M records/day, ~1 KB/record = ~86 GB/day uncompressed, ~30 GB/day with PostgreSQL TOAST compression. Daily partition drop after export keeps disk usage bounded.
+
+**Export to S3 Parquet**: A nightly job exports each day's partition to S3 as Parquet files for long-term analytics. Queryable via Athena or Trino.
+
+**Monitoring**: Grafana dashboards on Prometheus metrics exported by `pg_stat_statements` and custom transaction counters. Key panels: transactions/second, p99 write latency, partition size, WAL lag.
+
+### Scale Tier: ClickHouse
+
+For Scale tier (10K+ RPS), ClickHouse replaces PostgreSQL as the transaction log store. ClickHouse's columnar storage and append-optimized MergeTree engine handle 100K+ inserts/second.
+
+The local WAL + Kafka architecture feeds ClickHouse as a Kafka consumer. ClickHouse is the analytical store; the local WAL remains the durability guarantee for the write-before-sign invariant.
+
+---
+
+## Reporting Obligations (State Machine)
+
+Each transaction that carries a ReportingObligation creates an obligation record. The obligation tracks whether the agent fulfilled its reporting duty.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: ExecuteTransaction creates obligation
+    Pending --> Fulfilled: ReportUsage accepted
+    Pending --> Expired: Reporting window elapsed
+    Pending --> Waived: Exchange waives requirement
+    Expired --> Blocked: Agent attempts new transaction
+    Fulfilled --> [*]
+    Waived --> [*]
+    Blocked --> Fulfilled: Late report accepted (grace)
+    Blocked --> [*]: Exchange lifts block
+```
+
+```go
+// ObligationState tracks a single reporting obligation.
+type ObligationState int
+
+const (
+    ObligationPending   ObligationState = iota // Created, awaiting report
+    ObligationFulfilled                        // Report received and accepted
+    ObligationExpired                          // Window elapsed, no report
+    ObligationWaived                           // Exchange waived requirement
+    ObligationBlocked                          // Agent blocked for non-reporting
+)
+
+// Obligation is the per-transaction reporting obligation record.
+type Obligation struct {
+    TransactionID  string
+    TenantID       string
+    BuyerLicense   string
+    State          ObligationState
+    RequiredFields []string
+    WindowEnd      time.Time       // Deadline for report submission
+    CreatedAt      time.Time
+    FulfilledAt    *time.Time      // When report was accepted
+    ReportID       string          // ID of the accepted report
+}
+```
+
+**Storage**: Obligations are stored in the same durable store as transactions. The Reporting Tracker loads recent obligations (last 48h) into memory at startup for fast lookup. A background goroutine sweeps expired obligations every minute and transitions them to `Expired`.
+
+**Enforcement**: When ExecuteTransaction resolves the buyer's license ID, it queries the Reporting Tracker for any `Expired` obligations. If found, the transaction is rejected with a `CodePermissionDenied` error indicating outstanding reporting obligations. This is the enforcement mechanism described in the RAMP protocol specification.
+
+### Two Independent Metrics: Compliance Rate vs Token Accuracy
+
+The Reporting Tracker tracks two independent metrics that must not be conflated:
+
+**a) Reporting compliance rate**: The percentage of transactions that received a usage report within the reporting window. This measures whether the agent is fulfilling its reporting obligations at all. Providers set the threshold (e.g., 98% required). The protocol RECOMMENDS 95% minimum compliance.
+
+**b) Consumption accuracy**: The deviation between reported consumption (`UsageReport.usage.consumed_quantity`) and estimated consumption (`Offer.pricing.estimated_quantity`). Per-request tolerance is +/-20%. Cumulative deviation is tracked but thresholds are Exchange implementation, not protocol.
+
+These metrics are INDEPENDENT:
+- An agent could have **100% compliance rate** but consistently underreport tokens (high compliance, low accuracy)
+- An agent could have **80% compliance rate** but be accurate when it does report (low compliance, high accuracy)
+- Enforcement gates on **compliance rate** (blocking transactions for non-reporting). Token accuracy is tracked for analytics and potential contract-level enforcement, but does not trigger protocol-level blocking.
+
+Cumulative benchmarking (same content, different agents, compare reported token counts) is a Exchange implementation concern, not a protocol requirement. The protocol accepts that token accuracy is a known limitation — agents self-report, and the Exchange's token estimate is itself approximate (word_count x 1.32).
+
+### Provider Audit Access
+
+Providers get read-only access to all signed Offers issued for their content. This enables independent verification of Exchange behavior — the provider can confirm that the Exchange is honoring pricing agreements and not under-reporting transactions.
+
+**API endpoint**: `GET /provider/{domain}/transactions?from=...&to=...`
+
+**Returns** (per transaction):
+- `transaction_id` — Exchange-assigned transaction identifier
+- `billing_id` — billing reference for settlement
+- `offer_snapshot` — full Offer at transaction time, including `exchange_signature`
+- `cost` — actual amount charged (or `0` for subscription transactions)
+- `agent_id` — hashed agent identity (`SHA256(lid)`)
+- `timestamp` — when the transaction was executed
+
+**Verification capabilities**:
+- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (announced at `{exchange_domain}/exchange/v1/keys`)
+- RSL pricing, when present, serves as the **price ceiling** — Offers exceeding the RSL-declared rate are detectable by comparing `offer_snapshot.pricing.rate` against the RSL terms
+- Private floor pricing is contractual between provider and Exchange, not protocol-enforced — the protocol provides the audit data, the contract governs the terms
+
+**Authentication**: Provider authenticates via a separate admin credential (not the RAMP protocol). The Exchange SHOULD enforce domain ownership verification (e.g., DNS TXT record or `ramp.json` presence) before granting audit access.
+
+**Rate limiting**: Audit queries are read-only and hit the archival store (S3/Parquet via Athena or equivalent), not the hot transaction log. Rate limit to prevent abuse but allow bulk export for reconciliation.
+
+---
+
+## Signing Keys (Per-Tenant)
+
+Each provider tenant brings their own CDN signing keys. The Exchange must store these securely and support rotation.
+
+```go
+// TenantSigningConfig holds the signing configuration for a single tenant.
+type TenantSigningConfig struct {
+    TenantID string
+
+    // Active signing key.
+    ActiveKey SigningKey
+
+    // Previous key (for grace period during rotation).
+    // CDN should accept signatures from both keys during rotation.
+    PreviousKey *SigningKey
+
+    // CDN type determines the signing algorithm.
+    CDNType CDNType // CloudFront, Akamai, Fastly, GenericHMAC
+}
+
+type SigningKey struct {
+    KeyID      string    // Key-Pair-Id (CloudFront), token name (Akamai), etc.
+    PrivateKey []byte    // PEM-encoded private key or HMAC secret
+    ValidFrom  time.Time
+    ValidUntil time.Time // 90-day max per NFR
+}
+
+type CDNType int
+
+const (
+    CDNCloudFront CDNType = iota
+    CDNAkamai
+    CDNFastly
+    CDNGenericHMAC
+)
+```
+
+**Key storage**: Keys are loaded from an external secrets manager (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager) at startup and cached in memory. A background goroutine polls for rotations every 60 seconds. Providers who don't operate infrastructure manage keys via the Exchange tenant management API.
+
+**Rotation protocol**:
+1. Provider uploads new key to secrets manager and configures it on their CDN.
+2. Exchange's background goroutine detects the new key.
+3. New key becomes `ActiveKey`; old key moves to `PreviousKey`.
+4. After a grace period (configurable, default 1 hour), `PreviousKey` is cleared.
+5. CDN must be configured to accept both keys during the grace period.
+
+**Key isolation**: Keys are loaded into per-tenant `SigningKey` structs. There is no shared key material between tenants. A compromised tenant's key does not affect others.
+
+---
+
+## Dispute Records (v1.0)
+
+The storage model includes dispute records linked to transactions via `transaction_id` and `report_id`. Each dispute produces a `DisputeRecord` stored alongside transaction records.
+
+```go
+// DisputeRecord tracks a content dispute through its lifecycle.
+type DisputeRecord struct {
+    DisputeID       string        `json:"dispute_id"`
+    TransactionID   string        `json:"transaction_id"`
+    ReportID        string        `json:"report_id"`        // Links to the UsageReport
+    BillingID       string        `json:"billing_id"`
+    BuyerLicense    string        `json:"buyer_license"`
+    TenantID        string        `json:"tenant_id"`
+    Reason          DisputeReason `json:"reason"`
+    Description     string        `json:"description"`
+    Status          DisputeStatus `json:"status"`
+    Resolution      ResolutionType `json:"resolution,omitempty"`
+    RejectionReason string        `json:"rejection_reason,omitempty"`
+    CreditAmount    float64       `json:"credit_amount,omitempty"`
+    Currency        string        `json:"currency,omitempty"`
+    FiledAt         time.Time     `json:"filed_at"`
+    ResolvedAt      *time.Time    `json:"resolved_at,omitempty"`
+    EvidenceJSON    string        `json:"evidence_json,omitempty"` // CDN log evidence
+}
+```
+
+The `report_id` linkage is critical -- it connects the dispute to the agent's prior usage report, establishing the evidence chain: `Offer -> Transaction -> UsageReport -> Dispute`. Disputes without a valid `report_id` are rejected.
+
+**Storage**: Dispute records share the same durable store as transaction records (PostgreSQL for Growth tier, ClickHouse for Scale tier). They are indexed by `dispute_id`, `transaction_id`, and `(buyer_license, filed_at)` for compliance queries.
+
+## Signed URL HMAC Canonicalization
+
+This section applies to **signed URLs only** (content delivery via CDN), not to offer signatures. Signed URLs use HMAC-SHA256 because the Exchange and the CDN edge function share a secret — this is a two-party relationship where symmetric signing is appropriate. Offer signatures use Ed25519 (see the Signing Keys section and the OfferSigner interface).
+
+Both the Exchange (signer) and the edge function (verifier) MUST use the same canonical format for HMAC input. Signed URL fields are concatenated with `\n` delimiters in this fixed order:
+
+```
+baseURL\nexpires\nagent_id\ntxn_id
+```
+
+Where:
+- `baseURL` — the content URL without query parameters (e.g., `https://cdn.example.com/premium/article.html`)
+- `expires` — Unix timestamp in seconds (string representation)
+- `agent_id` — SHA-256 hex hash of the agent's license ID (matches `TransactionResponse.agent_identity_hash`)
+- `txn_id` — the transaction ID (ULID)
+
+This format is shared between the Exchange SignURL implementation and the edge function verification logic. See the edge function design doc for the verifier implementation.

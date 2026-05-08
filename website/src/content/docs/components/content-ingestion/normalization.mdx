@@ -1,0 +1,217 @@
+---
+title: "Content Normalization"
+description: "How the pipeline normalizes multi-source content into a unified CatalogEntry representation with token estimation and deduplication."
+---
+
+## Multi-Source Merge
+
+All sources produce `RawEntry` structs. The Normalizer converts these into a common `CatalogEntry` representation, resolving conflicts when multiple sources provide data for the same URL path.
+
+Higher-priority sources override lower-priority sources for the same path. Fields from higher-priority sources take precedence using a first-non-zero-value-wins strategy.
+
+```go
+var sourceOrder = map[IngestionSource]int{
+    IngestionSourceRAMPSitemap: 1,
+    IngestionSourceRSL:          2,
+    IngestionSourceSitemap:      3,
+    IngestionSourceHTMLCrawl:    4,
+    IngestionSourceCMSAPI:       5,
+    IngestionSourceManual:       6,
+}
+```
+
+## CatalogEntry: The Universal Representation
+
+```go
+type CatalogEntry struct {
+    // Identity
+    TenantID        string
+    Domain          string
+    Path            string
+    URL             string
+    ContentID       string
+    Title           string
+
+    // Content metrics
+    WordCount       int
+    EstimatedTokens int
+
+    // Pricing (authoritative source: Exchange config DB;
+    //          fallback: RSL/sitemap hints)
+    PricingModel    PricingModel
+    Rate            float64
+    Currency        string
+
+    // Access control (from RSL permits/prohibits)
+    Permissions     []comp.Function
+    Prohibitions    []comp.Function
+
+    // Metadata
+    Authors         []string
+    PubDate         string
+    SourceType      int32
+    ContentType     comp.ContentType
+
+    // Content identity
+    ContentHash string
+    HashMethod  string
+
+    // Freshness
+    LastModified    time.Time
+    Source          IngestionSource
+    Freshness       time.Time
+    IsGlobPattern   bool
+}
+```
+
+## Normalizer
+
+The `Normalizer` groups entries by path, sorts by source priority, and overlays fields so that the highest-priority non-zero value wins for each field.
+
+```go
+type Normalizer struct {
+    logger *slog.Logger
+}
+
+func (n *Normalizer) Normalize(
+    tenant *TenantConfig,
+    sourceEntries map[IngestionSource][]RawEntry,
+) []CatalogEntry {
+    // Group entries by path
+    pathEntries := make(map[string][]RawEntry)
+    for _, entries := range sourceEntries {
+        for _, entry := range entries {
+            pathEntries[entry.Path] = append(pathEntries[entry.Path], entry)
+        }
+    }
+
+    var catalog []CatalogEntry
+    for path, entries := range pathEntries {
+        merged := n.mergeEntries(tenant, path, entries)
+        catalog = append(catalog, merged)
+    }
+    return catalog
+}
+```
+
+The merge strategy for each field:
+
+- **Title**: first non-empty value from highest-priority source
+- **WordCount / Tokens**: first non-zero value
+- **ContentID**: first non-empty value
+- **PricingModel**: first non-unspecified value (along with rate and currency)
+- **Permissions / Prohibitions**: first non-empty slice
+- **LastModified**: first non-zero time
+- **Authors / PubDate**: first non-empty values
+
+Tenant defaults fill in any remaining gaps:
+
+```go
+if result.PricingModel == PricingModelUnspecified {
+    result.PricingModel = tenant.DefaultPricingModel
+    result.Rate = tenant.DefaultRate
+    result.Currency = tenant.DefaultCurrency
+}
+if result.Currency == "" {
+    result.Currency = "USD"
+}
+```
+
+Pricing from public sources (RSL/sitemap hints) or tenant defaults is preliminary. The Pricer stage (Stage 4) overrides with authoritative private pricing.
+
+## Content Extraction via Readability
+
+For URLs without token estimates from higher-priority sources, the pipeline crawls the page and extracts main content using a readability algorithm (Go port of Mozilla's Readability.js).
+
+The extraction flow:
+1. Check robots.txt (cached per domain)
+2. Rate limit (1 req/sec per domain)
+3. Fetch page with `RAMP-Exchange/1.0 (content-indexer)` user agent
+4. Extract text using readability algorithm
+5. Count words and estimate tokens
+
+```go
+func (s *HTMLCrawlSource) EnrichEntry(
+    ctx context.Context, entry *CatalogEntry,
+) error {
+    if !s.isAllowed(entry.Domain, entry.Path) {
+        return fmt.Errorf("blocked by robots.txt: %s%s", entry.Domain, entry.Path)
+    }
+
+    if err := s.rateLimiter.Wait(ctx); err != nil {
+        return fmt.Errorf("rate limit wait: %w", err)
+    }
+
+    // Fetch and extract
+    article, err := readability.FromReader(resp.Body, parsedURL)
+    if err != nil {
+        return fmt.Errorf("readability extraction: %w", err)
+    }
+
+    wordCount := countWords(article.TextContent)
+    entry.WordCount = wordCount
+    entry.EstimatedTokens = estimateTokens(wordCount)
+    entry.Title = article.Title
+    return nil
+}
+```
+
+## Token Estimation
+
+Token estimation drives the unit_cost (cost per unit of consumption) metric used throughout the offer lifecycle:
+
+- **Exchange uses unit_cost** to construct and rank offers for a given agent request.
+- **Agents/Brokers use unit_cost** to compare offers across providers and Exchanges.
+- **The charged amount** uses the provider's pricing model (e.g., per_article=$0.05), not unit_cost directly.
+- **unit_cost appears on offers and invoices** as a reference metric, analogous to eCPM on programmatic ad invoices.
+
+### Estimation Methods (Priority Order)
+
+| Method | Source | Formula | Accuracy |
+|---|---|---|---|
+| Provider-provided tokens | RAMP sitemap `ramp:tokens` | Direct value | Best (provider knows their tokenizer) |
+| Provider-provided word count | RAMP sitemap `ramp:wordcount`, CoMP `text.wordcount`, RSL metadata | `tokens = wordcount * 1.32` | Good (+/-10%) |
+| HTML crawl extraction | Readability algorithm on fetched page | Extract text -> count words -> `* 1.32` | Good (+/-15%) |
+| CMS API word count | WordPress content field, Ghost html field | Strip HTML -> count words -> `* 1.32` | Good (+/-10%) |
+| Tenant default | Manual config | Configured average word count -> `* 1.32` | Rough (+/-30%) |
+| Content-length heuristic | HTTP `Content-Length` header | `wordcount = content_length_bytes / 5.5` -> `* 1.32` | Rough (+/-40%) |
+
+### The 1.32 Multiplier
+
+```
+estimated_quantity = word_count * 1.32
+```
+
+The 1.32 multiplier is derived from empirical analysis of English-language web content across BPE-based tokenizers (GPT-4, Claude). It accounts for subword tokenization splitting longer words into multiple tokens, punctuation and whitespace tokens, and HTML entity remnants after text extraction.
+
+For non-English content, the multiplier varies:
+
+| Language | Multiplier | Notes |
+|---|---|---|
+| English | 1.32 | Baseline |
+| German | 1.45 | Longer compound words |
+| Chinese/Japanese | 2.0-3.0 | Character-based, higher token density |
+| Arabic/Hebrew | 1.5 | Morphological complexity |
+
+Tenant config can override the multiplier per domain.
+
+### Acceptable Discrepancy
+
+The NFR allows +/-20% between estimated and actual consumption. This is acceptable because:
+
+1. unit_cost is a reference metric for offer construction and comparison, not a billing metric.
+2. Billing uses the provider's pricing model (per_article=$0.05, per_crawl=$0.01, etc.), not the unit_cost value directly.
+3. For `per_token` pricing, the actual token count from the UsageReport is used for billing, not the estimate.
+
+## Deduplication
+
+Deduplication is path-based. When multiple sources provide data for the same URL path, the Normalizer's merge strategy resolves them:
+
+1. Group all entries by their `Path` field
+2. Sort entries within each group by source priority (ascending = higher priority first)
+3. Overlay fields using first-non-zero-value-wins
+4. Produce a single `CatalogEntry` per unique path
+
+Glob patterns (e.g., `/premium/*`) are detected via `strings.ContainsAny(path, "*?[")` and marked with `IsGlobPattern = true` for special handling during catalog compilation.
+
+Content identity via `ContentID` (provider-assigned stable identifier) survives URL changes. When a provider moves content from `/articles/123` to `/premium/123`, the same `ContentID` links both URLs to the same logical content.

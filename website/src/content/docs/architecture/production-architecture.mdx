@@ -1,0 +1,263 @@
+---
+title: "Production Architecture"
+description: "RAMP production architecture: components, roles, protocol flows, and technology decisions"
+---
+
+## What We're Building
+
+Open-source infrastructure components for metered resource access. Like Prebid.js -- the protocol and reference implementations are free; wiring them into an Exchange operator's billing or a provider's CMS is custom consulting work.
+
+### Components
+
+| Component | Deployed By | Connects To (custom/proprietary) |
+|---|---|---|
+| **Exchange Node** | Exchange operator / Provider / 3rd party | Operator's billing, provider catalogs, resource delivery |
+| **RAMP Broker** | AI company / 3rd party | Agent's budget system, auth, multi-Exchange selection |
+| **Agent SDK** | AI agent developers | Embedded in agent process; handles discovery, negotiation, resource fetch, budget, and usage reporting via one-liner `Fetch(url)` API |
+| **Edge Function** | Provider | Provider's CDN (CF/Akamai/Fastly) |
+| **Client SDK** | AI agent developers | Low-level generated Connect client for direct Exchange RPC access (no orchestration logic) |
+
+### Role Mapping (Ad-Tech Analogy)
+
+```
+Ad Tech                    RAMP / CoMP                PoC Equivalent
+─────────────────────────────────────────────────────────────────────
+Browser (user)          →  AI Agent                  →  MCP Tool
+DSP SDK (prebid.js)     →  Agent SDK (embedded)      →  (not built yet)
+DSP server              →  RAMP Broker               →  (not built yet)
+SSP / Exchange          →  Exchange                  →  Gateway + Registry
+Provider               →  Resource Provider           →  demo.ramp-protocol.org
+CDN / Ad Creative       →  Resource Delivery Endpoint  →  CloudFront + S3
+```
+
+## Protocol Architecture
+
+### Core Principle: Exchange Protocol Is the Standard
+
+The Exchange interface is the core protocol. Both agents and Brokers are clients of it. The Broker is an optional optimization layer -- an agent can talk directly to an Exchange if it knows the endpoint and has credentials.
+
+```
+With Broker (multi-exchange, budget control, reporting):
+  Agent → Broker → Exchange A, B, C → select best → deliver
+
+Without Broker (direct, single exchange):
+  Agent → Exchange → deliver
+```
+
+The Exchange doesn't know or care whether the request came from a Broker or directly from an agent. The HTTP/JSON protocol is identical.
+
+### RAMP Authentication
+
+Every party in the protocol authenticates via Ed25519 key pairs. Each party announces its public key on a domain it controls. Private keys never leave the owning party.
+
+| Party | Key Announcement | Signs | Verifier |
+|---|---|---|---|
+| **Requester** (Agent or other client) | `{domain}/.well-known/ramp-agent.json` | `Requester.signature` (Ed25519) over `(id, domain, uris, scopes)` | Exchange |
+| **Intermediary** (e.g. Broker) | `{domain}/.well-known/ramp-agent.json` (same format) | `IntermediaryHop.signature` — each intermediary appends a signed hop to the forwarding chain | Exchange |
+| **Exchange** | `{domain}/exchange/v1/keys` | `exchange_signature` on every Offer | Agent, Broker |
+| **Provider** | `{domain}/.well-known/ramp.json` | Authorization declaration (not signatures) | Agent, Exchange |
+| **Verification Vendor** | `{domain}/.well-known/ramp-verifier.json` | `ResourceAttestation.signature` on catalog content (v1.0) | Exchange, Agent |
+
+**Verification at Exchange:**
+- **Requester signature** — Exchange verifies `Requester.signature` against the requester's published Ed25519 key at `/.well-known/ramp-agent.json`
+- **Intermediary chain** — when present, Exchange verifies each `IntermediaryHop.signature` in the `intermediaries[]` chain, proving the forwarding path is legitimate
+- **Biscuit delegation** — when a `Delegation` token is attached, Exchange verifies the Biscuit authority block signature against the principal's published Ed25519 key (`principal_domain`)
+- **Scope-based access control** — Exchange filters its catalog by the requester's `scopes`. Resources outside the requester's scopes are not returned (the requester never learns they exist)
+
+### Supported Transaction Patterns
+
+The protocol supports three transaction patterns:
+
+1. **Single-offer transactions** (default): one URI, one offer, one signed URL
+2. **Batch multi-URL transactions**: multiple URIs in a single `ResourceQuery`, `OfferGroups` in the response, batch `TransactionRequest` with `items[]`
+3. **Subscription-based transactions**: when the buyer has a subscription deal with an Exchange, offers come with `rate=0` and `subscription_id`
+
+### Content Attestation Verification (v1.0)
+
+The Exchange is responsible for attestation verification at two points:
+
+1. **At catalog push time**: when a verification vendor (e.g., GumGum, DoubleVerify) pushes content metadata via `CatalogService.PushContent`, the Exchange validates that the vendor is in the provider's `catalog_contributors` list and verifies the attestation signature against the vendor's public key from `/.well-known/ramp-verifier.json`.
+2. **At offer construction time**: attestations from the catalog are attached to `Offer.attestations` so agents can evaluate content trust level (Level 0/1/2) during selection.
+
+### Dispute Resolution Handler (v1.0)
+
+The `DisputeTransaction` RPC handles content disputes filed by agents after delivery. The Exchange records the dispute and initiates resolution via three tiers:
+
+- **Tier 1 (automated, &lt;1s)**: auto-disputable claims (CDN delivery failure, content hash mismatch with Level 1+ attestation)
+- **Tier 2 (rule-based, &lt;24h)**: claims requiring evidence evaluation (consumption quantity discrepancy)
+- **Tier 3 (pattern investigation, async)**: complex disputes requiring human review
+
+Dispute lifecycle: `FILED` -> `AUTO_RESOLVED` / `EVIDENCE_NEEDED` -> `UNDER_REVIEW` -> `RESOLVED` -> `FINAL`. Resolution types: `CREDIT`, `REDELIVERY`, `REJECTED`, `INVESTIGATION`.
+
+### Provider Domain Verification (v1.0)
+
+The `RequestDomainVerification` and `ConfirmDomainVerification` RPCs provide ACME HTTP-01 style domain verification for provider onboarding. Providers prove domain control before the Exchange accepts signing keys or configuration changes. The `ramp-verifier.json` endpoint enables verification vendors to publish their Ed25519 keys for attestation validation.
+
+### Discovery: Three Complementary Standards
+
+Provider-side discovery uses three files that work together:
+
+```
+robots.txt     → who can crawl (existing standard)
+rsl.txt        → licensing terms and pricing signals (RSL 1.0)
+ramp.json     → where to transact (RAMP — new)
+```
+
+**Happy path** (agent knows about RAMP):
+```
+Agent checks /.well-known/ramp.json → finds Exchange endpoint
+  → DiscoverResources → TransactionRequest → gets signed URL
+  → fetches content from CDN — edge function lets it through
+```
+
+**Fallback path** (wandering bot):
+```
+Agent crawls the web → hits provider CDN
+  → edge function blocks it: 403 + X-Content-Rules header
+  → discovers the Exchange for this content
+  → follows standard RAMP flow from here
+```
+
+### Content Delivery (Outside Protocol Scope)
+
+The RAMP protocol covers discovery and negotiation -- not content delivery. How content reaches the agent after a successful transaction is an implementation concern between the Exchange and the provider's CDN.
+
+The `TransactionResponse` carries a `DeliveryMethod` hint and a `retrieval.endpoint` URL. What happens next is up to the implementation:
+
+- The Exchange may populate `retrieval.endpoint` with a signed URL, an access token, or any other retrieval mechanism
+- The agent fetches content from the provider's CDN using whatever credentials the Exchange provided
+- The CDN verifies access independently (e.g., HMAC signature check, token validation)
+
+The protocol does not specify signed URL formats, CDN verification logic, or content transfer mechanisms. These are defined by each Exchange and Edge Function implementation.
+
+### Streaming Delivery (v1.0)
+
+RAMP v1.0 adds `DELIVERY_METHOD_STREAMING` for real-time resource access via WebSocket, SSE, HLS, or Icecast endpoints. The signed URL points to a streaming endpoint rather than a static resource.
+
+**Session lifecycle:**
+1. `ExecuteTransaction` returns a signed URL with expiry (e.g., 2 hours)
+2. Agent connects to the streaming endpoint
+3. Agent receives data continuously
+4. URL expires -- agent re-requests through the same RAMP flow
+5. `ReportUsage`: `consumed_quantity` reported in minutes/hours via `consumed_unit`
+
+Stream mechanics (heartbeat, reconnection, concurrent connection limits) are managed by the provider, not the RAMP protocol.
+
+## Extension Profiles (v1.0)
+
+RAMP v1.0 introduces a three-layer extension architecture to prevent fragmentation:
+
+| Layer | Scope | Governance | Example |
+|---|---|---|---|
+| **1. Core Proto** | Fields in `ramp.proto` | Protocol version bump | `resource_mutability`, `data_as_of` |
+| **2. Standard Extensions** | `ramp.*` namespace in ext | Defined in RAMP spec | `ramp.compliance.dua_required` |
+| **3. Domain Profiles** | Domain namespace in ext | Published by domain communities | `news.iptc_guid`, `academic.doi` |
+
+### Profile Declaration Chain
+
+Three proto fields create a complete declaration chain from agent to Exchange:
+
+- **`RAMPRequest.supported_profiles`** -- Agent declares profiles to Broker
+- **`ResourceQuery.supported_profiles`** -- Broker forwards to Exchange
+- **`ExchangeManifest.supported_profiles`** -- Exchange declares conformance in `/.well-known/ramp-exchange.json`
+
+### v1 Domain Profiles
+
+Three domain extension profiles ship with RAMP v1.0:
+
+| Profile | Scope | Standards | Ext Keys |
+|---|---|---|---|
+| **ramp-news-v1** | News articles, podcasts, broadcasting | IPTC NewsML-G2, Schema.org, Podcasting 2.0, W3C TDMRep | 36 |
+| **ramp-academic-v1** | Scholarly articles, preprints, datasets | CrossRef, OpenAlex, JATS XML, COUNTER 5.1, CrossMark | 32 |
+| **ramp-legal-v1** | Legislation, case law, patents | ELI, CELEX, ECLI, Akoma Ntoso, WIPO ST.3/ST.16, CPC | 43 |
+
+An Exchange MAY implement zero, one, or multiple profiles. Profile conformance means the Exchange sets the required ext fields defined in the profile spec and validates them against the profile's JSON Schema.
+
+## Content Identification
+
+### Layered Identity
+
+No single identifier works for cross-exchange deduplication. The protocol carries multiple layers:
+
+| Layer | Identifier | Works For |
+|---|---|---|
+| Provider-assigned | `canonical_url` | Per-provider identity (always available) |
+| Industry identifiers | `doi`, `iptc_guid`, `isni` | Persistent cross-provider IDs (when available) |
+| Content fingerprint | `content_hash` + `hash_method` | Cross-provider dedup via SimHash or SHA-256 |
+| Provenance | `c2pa_manifest` | Content credentials chain (future) |
+
+Cross-provider dedup is a **Broker-level concern**, not a protocol concern. The protocol carries identifiers; the Broker's selection engine decides whether two Offers are "the same content."
+
+## Architecture Diagram
+
+```
+                    AI Agents (any LLM)
+                         │
+                         │ HTTPS (Connect HTTP/JSON)
+                         ▼
+              ┌─────────────────────┐
+              │   Edge / CDN        │  ← Provider's existing CDN
+              │   (CF/Akamai/Fastly)│     Lightweight edge function
+              │                     │     Returns 403 + X-Content-Rules
+              └──────────┬──────────┘
+                         │
+            ┌────────────┼────────────┐
+            │            │            │
+            ▼            ▼            ▼
+     ResourceQuery TransactionReq  GET (signed URL)
+            │            │            │
+            ▼            ▼            │
+  ┌──────────────────────────┐       │
+  │   Exchange Node (Go)     │       │
+  │                          │       │
+  │  ┌─────────────────────┐ │       │
+  │  │ Supply Discovery    │ │       │
+  │  │ (resource catalog)  │ │       │
+  │  ├─────────────────────┤ │       │
+  │  │ Transaction Engine  │ │       │
+  │  │ (idempotency keys,  │ │       │
+  │  │  authorization only)│ │       │
+  │  ├─────────────────────┤ │       │
+  │  │ Signing Engine      │ │       │
+  │  │ (CDN-specific,      │ │       │
+  │  │  per-provider keys)│ │       │  ← CDN serves content
+  │  ├─────────────────────┤ │       │     with native sig verify
+  │  ├─────────────────────┤ │       │
+  │  │ Attestation Verifier│ │       │
+  │  │ (v1.0: validates    │ │       │
+  │  │  ramp-verifier.json│ │       │
+  │  │  signatures)        │ │       │
+  │  ├─────────────────────┤ │       │
+  │  │ Dispute Handler     │ │       │
+  │  │ (v1.0: 3-tier       │ │       │
+  │  │  resolution)        │ │       │
+  │  ├─────────────────────┤ │       │
+  │  │ Reporting Tracker   │ │       │
+  │  │ (obligations, state)│ │       │
+  │  └────────┬────────────┘ │       │
+  └───────────┼──────────────┘       │
+              │                      │
+              ▼                      │
+  ┌──────────────────────────┐       │
+  │  Billing Adapter          │       │
+  │  (pluggable, proprietary)│       │
+  │  Authorize + Record      │       │
+  └──────────────────────────┘
+```
+
+## Technology Decisions
+
+### Protobuf + Connect
+
+- **Single source of truth**: `.proto` files define all interfaces
+- **Polyglot**: Generate Go (primary), TypeScript, Python, Java from same source
+- **HTTP/JSON native**: Connect protocol supports both gRPC (binary, internal) and HTTP/JSON (public API)
+- **Streaming support**: Connect supports server streaming, useful for future real-time bidding
+- **Ecosystem**: buf.build for linting, breaking change detection, registry
+
+### Go for Exchange and Broker
+
+- 10k+ RPS target with sub-50ms p99 latency
+- goroutine-per-request, zero-alloc JSON, native crypto
+- Single binary deployment (no runtime dependencies)
+- Strong concurrency model for parallel exchange fanout

@@ -1,0 +1,160 @@
+---
+title: "Bot Detection"
+description: "AI crawler detection via User-Agent analysis, behavioral signals, and CDN-native bot classification"
+---
+
+The Edge Function detects AI crawlers accessing protected content without a signed URL and returns a `403 Forbidden` response directing them to the Exchange. Bot detection only applies to requests *without* signed URL parameters -- a valid signed URL always takes precedence.
+
+## Detection Signals
+
+Three layers of bot detection, from cheapest to most expensive:
+
+### Layer 1: User-Agent String Matching (< 0.01ms)
+
+Known AI crawler User-Agents. This is the primary detection mechanism.
+
+```
+# Well-known AI bot User-Agents (maintained list)
+ClaudeBot/1.0           - Anthropic training crawler
+anthropic-ai            - Anthropic inference/RAG
+GPTBot/1.0              - OpenAI training crawler
+ChatGPT-User            - OpenAI inference/RAG
+CCBot/2.0               - Common Crawl
+Google-Extended          - Google AI training
+Googlebot-Extended       - Google AI training (alternate)
+Bytespider              - ByteDance training crawler
+PerplexityBot           - Perplexity AI
+YouBot                  - You.com
+Applebot-Extended        - Apple AI training
+cohere-ai               - Cohere
+Meta-ExternalAgent       - Meta AI training
+Amazonbot               - Amazon AI
+AI2Bot                  - Allen Institute for AI
+Diffbot                 - Diffbot
+Omgilibot               - Webz.io
+FacebookBot             - Meta
+ramp-ai-buyer          - RAMP protocol agent (self-identified)
+```
+
+The edge function maintains this list in configuration (KV store or inline config). The list is additive -- new bots are added, existing entries are never removed.
+
+### Layer 2: CDN-Native Bot Classification (0ms -- pre-computed)
+
+All major CDNs maintain their own bot classification databases:
+
+- **Cloudflare**: `cf.bot_management.score` (0-99, lower = more likely bot), `cf.bot_management.verified_bot`, `cf.bot_management.ja3_hash`.
+- **Akamai**: Bot Manager Premier -- behavioral analysis, device fingerprinting.
+- **Fastly**: Signal Sciences WAF -- bot detection signals.
+- **CloudFront**: AWS WAF Bot Control -- managed rule group with bot categorization.
+
+These are available as request metadata without any computation cost at the edge. The edge function can check CDN-native bot signals as a second layer.
+
+### Layer 3: Behavioral Signals (0ms -- pattern matching)
+
+Heuristic patterns that indicate automated access:
+
+- **Request rate**: More than N requests to protected paths within T seconds from the same IP.
+- **Missing headers**: Real browsers send `Accept`, `Accept-Language`, `Accept-Encoding`. Bots often omit them.
+- **No cookie/session**: Legitimate users have session cookies. First-time visitors get a redirect to set a cookie (but this interferes with bot protocol flow -- use sparingly).
+- **Sequential path access**: Bots tend to walk paths sequentially (`/premium/1`, `/premium/2`, ...). Humans jump around.
+- **TLS fingerprint**: JA3/JA4 fingerprint mismatches (User-Agent claims to be Chrome but TLS fingerprint is Python `requests`).
+
+Layer 3 signals are supplementary. They can reduce false positives (bot with unknown User-Agent) but should not override a valid signed URL.
+
+## Bot Classification Tiers
+
+The edge function catches **cooperative AI bots** -- those that identify themselves via well-known User-Agent strings. It is not a replacement for the provider's CDN WAF. Both are required:
+
+| Layer | What It Catches | Mechanism |
+|---|---|---|
+| **Edge function** (RAMP) | Cooperative AI bots (ClaudeBot, GPTBot, etc.) | User-Agent string matching |
+| **CDN WAF** | Everything else: disguised bots, credential stuffing, DDoS, scraping with spoofed UAs | Fingerprinting, behavioral analysis, rate limiting, ML models |
+
+The edge function is **additive** to the WAF, not a replacement. It must deploy alongside existing WAF rules without conflict.
+
+**Integration requirement**: The edge function runs *after* the WAF (or alongside it, depending on CDN architecture). WAF rules should not block requests to `/.well-known/ramp.json` or `/rsl.txt`, and should not interfere with signed URL parameters. Providers must allowlist these paths in their WAF configuration.
+
+## CDN WAF Products by Platform
+
+| CDN | WAF / Bot Management Product |
+|---|---|
+| CloudFront | AWS WAF (Bot Control managed rule group) |
+| Cloudflare | Cloudflare Bot Management (Enterprise), Super Bot Fight Mode (Pro/Business) |
+| Akamai | Akamai Bot Manager (Premier / Standard) |
+| Fastly | Fastly Signal Sciences (next-gen WAF) |
+
+## The 403 Response
+
+When a bot is detected on a protected path without a signed URL:
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+X-Content-Rules: https://exchange.ssp-example.com/ramp/v1
+Cache-Control: no-store
+```
+
+```json
+{
+  "error": "Licensed content. Negotiate access via the Exchange.",
+  "protocol": "RAMP",
+  "version": "1.0",
+  "info_url": "https://exchange.ssp-example.com/ramp/v1/info",
+  "ramp_json_url": "https://techcrunch.com/.well-known/ramp.json"
+}
+```
+
+**Header semantics**:
+- `X-Content-Rules` -- the Exchange info endpoint. This is the key discovery mechanism for bots that did not check `ramp.json`. The header value is a URL that the agent can `GET` to learn about available content and pricing.
+- `Cache-Control: no-store` -- the 403 should not be cached. Content availability may change.
+
+**Body semantics**:
+- `error` -- human/machine readable explanation.
+- `protocol` -- identifies this as a RAMP protocol response, not a generic 403.
+- `version` -- protocol version for forward compatibility.
+- `info_url` -- same as `X-Content-Rules` header, in the body for agents that parse JSON responses.
+- `ramp_json_url` -- direct link to `ramp.json` so the agent can discover all authorized Exchanges, not just the one in `X-Content-Rules`.
+
+## Classification Algorithm
+
+The detection algorithm follows a strict priority order to minimize false positives:
+
+1. **Only process protected paths** -- never block requests to open content.
+2. **Check for signed URL parameters first** -- if present, skip bot detection entirely and proceed to signature verification.
+3. **User-Agent matching is exact substring match**, not fuzzy. Unknown User-Agents pass through.
+4. **Never block based on behavioral signals alone** -- they supplement User-Agent detection, not replace it.
+
+## False Positive Handling
+
+A false positive (regular user blocked as bot) is worse than a false negative (bot not detected). The edge function should err on the side of allowing access:
+
+- **Only block on protected paths** -- never block requests to open content.
+- **Never block requests with valid signed URLs** -- signature verification overrides bot detection.
+- **User-Agent matching is exact substring match**, not fuzzy. Unknown User-Agents pass through.
+- **Do not block based on behavioral signals alone** -- they supplement User-Agent detection, not replace it.
+
+## Rate Limiting
+
+The edge function should rate limit at two levels:
+
+**Level 1: Per-IP rate limiting on protected path 403 responses**
+
+If the same IP is generating more than N 403 responses per minute on protected paths, drop to a synthetic `429 Too Many Requests` instead of the informative 403. This prevents:
+- DoS via 403 generation (each 403 includes a JSON body).
+- Enumeration attacks (scanning all protected paths).
+
+Target: **100 requests/minute per IP** before throttling.
+
+**Level 2: Per-IP rate limiting on ramp.json**
+
+ramp.json is cacheable, but an aggressive agent might poll it. Rate limit to **10 requests/minute per IP** and rely on `Cache-Control` for normal operation.
+
+Rate limiting implementation:
+- **Cloudflare**: Use `request.cf.botManagement` and Cloudflare Rate Limiting rules (not in Worker code -- use platform rate limiting for efficiency).
+- **CloudFront**: AWS WAF rate-based rules on the distribution.
+- **Akamai**: Rate control via Property Manager.
+- **Fastly**: Use `req.http.Fastly-Client-IP` with in-memory counters in the Compute service, or Fastly rate limiting product.
+
+## Bot Pattern Updates
+
+The RAMP project should maintain a community-curated bot pattern list as a JSON file at a well-known URL (e.g., `https://ramp-protocol.org/bot-patterns.json`). Edge functions can periodically fetch updates from this list. The fetch happens on a timer (hourly), not per-request.

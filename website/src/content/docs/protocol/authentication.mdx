@@ -1,0 +1,567 @@
+---
+title: "Authentication"
+description: "Three-layer identity model: Requester identity with Ed25519 signatures, Biscuit delegation tokens for scoped authorization, and intermediary chain for request provenance."
+---
+
+## Overview
+
+RAMP authentication answers three questions for every request:
+
+1. **Who are you?** — Requester identity, proven by Ed25519 signature over a domain-bound key
+2. **What can you access?** — Scopes carried in the request (and optionally in a Biscuit delegation token)
+3. **Who authorized you?** — Delegation chain from a principal (organization, user, upstream agent) via Biscuit tokens that can be attenuated without round-tripping to the issuer
+
+These three layers are independent. A public agent with no delegation still authenticates (layer 1) and declares scopes (layer 2, defaulting to public access). An enterprise agent adds a Biscuit token (layer 3) that binds the agent to a principal's entitlements with time and spend limits.
+
+## Requester Identity
+
+Every RAMP request carries a `Requester` message that identifies who is making the request.
+
+### Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | Unique requester identifier (e.g., `"agent-research-bot-001"`) |
+| `domain` | `string` | Domain for public key lookup — keys at `{domain}/.well-known/ramp-agent.json` |
+| `type` | `RequesterType` | What kind of entity is making the request |
+| `name` | `string` (optional) | Human-readable name (e.g., `"Acme Research Assistant"`) |
+| `uris` | `repeated string` | Resource URIs being requested |
+| `intended_use` | `repeated string` | What the requester intends to do with the resources |
+| `license_id` | `string` (optional) | Commercial license or subscription identifier |
+| `scopes` | `repeated string` | Entitlement scopes — what the requester can access |
+| `signature` | `string` | Ed25519 signature over `(id, domain, uris, scopes)` |
+| `signature_algorithm` | `string` | Signature algorithm (always `"ed25519"`) |
+| `delegation` | `Delegation` (optional) | Biscuit delegation token from a principal |
+| `ext` | `Struct` | Implementer-specific extensions |
+| `ext_critical` | `repeated string` | Critical extension keys (COSE crit pattern) |
+
+### RequesterType Enum
+
+| Value | Name | Description |
+|---|---|---|
+| `0` | `REQUESTER_TYPE_UNSPECIFIED` | Not specified |
+| `1` | `REQUESTER_TYPE_AGENT` | Autonomous AI agent (LLM, RAG system, research bot) |
+| `2` | `REQUESTER_TYPE_HUMAN_TOOL` | Human using an AI-powered tool (copilot, assistant) |
+| `3` | `REQUESTER_TYPE_SERVICE` | Enterprise service account (automated pipeline, cron job) |
+| `4` | `REQUESTER_TYPE_DELEGATED` | Agent acting on behalf of a user (delegated identity) |
+| `5` | `REQUESTER_TYPE_RESEARCH` | Research pipeline (batch data collection, model training) |
+
+### Key Lookup
+
+The Exchange resolves a requester's public key by fetching `{domain}/.well-known/ramp-agent.json`:
+
+```json
+// GET https://research.acme.com/.well-known/ramp-agent.json
+{
+  "agent_id": "research.acme.com",
+  "public_key": "MCowBQYDK2VwAyEA7Hd8FjXz9K2qR4nPbY1sT0vWxU3gLmN5oA8pC6dE1fI=",
+  "public_key_algorithm": "ed25519",
+  "contact": "platform@acme.com"
+}
+```
+
+This ties cryptographic identity to DNS ownership — if you control the domain, you control the key.
+
+### WebBotAuth Compatibility (IETF)
+
+RAMP's authentication stack is automatically compatible with the IETF [WebBotAuth](https://datatracker.ietf.org/wg/webbotauth/about/) working group specification (standards track, targeting April 2026). Both use:
+
+- **RFC 9421 HTTP Message Signatures** for request signing
+- **Ed25519 (EdDSA)** as the signature algorithm
+- **JWK-formatted keys** at well-known endpoints
+
+When WebBotAuth ships as an RFC, RAMP agents will be recognised as authenticated bots by any CDN or origin server that implements it (Cloudflare is already deploying). No changes to RAMP's authentication are required -- the crypto is identical.
+
+WebBotAuth solves identity ("this bot is who it claims to be"). RAMP adds the transaction layer on top of that identity ("this bot is authorised to access this content at this price").
+
+### Signature Verification
+
+The `Requester.signature` is an Ed25519 signature over the tuple `(id, domain, uris, scopes)`. The Exchange verifies it by:
+
+1. Extracting `domain` from the `Requester` message
+2. Fetching the public key from `{domain}/.well-known/ramp-agent.json`
+3. Verifying the Ed25519 signature against the fetched key
+4. Confirming that `id` matches the `agent_id` in the key announcement
+
+If verification fails, the Exchange rejects the request. No fallback, no degraded mode.
+
+## Biscuit Delegation
+
+### Why Not JWT?
+
+JWT is the default choice for bearer tokens, but it has a fundamental limitation in agentic workflows: **claims are immutable after issuance**.
+
+Consider an enterprise where Bloomberg issues a JWT granting access to quotes and earnings data. An agent receives this JWT. When the agent delegates to a sub-agent that only needs earnings data, it cannot narrow the JWT — the sub-agent gets full quote access too. The only alternative is going back to Bloomberg for a new, narrower JWT.
+
+In the real world, agents delegate to sub-agents, which delegate to further sub-agents. With JWT, each delegation requires a round trip to the original issuer. **N delegation levels = N round trips.**
+
+Biscuit solves this: the holder can append restriction blocks that narrow permissions without any call to the issuer. **N delegation levels = 1 original issuance + 0 round trips.**
+
+### How Biscuit Works
+
+A Biscuit token is a chain of signed blocks:
+
+- **Block 0 (authority block)** — Signed by the principal (the entity that issued the delegation). Contains facts: what permissions are granted, when the token expires, spending caps.
+- **Block 1..N (attenuation blocks)** — Appended by each holder in the delegation chain. Each block adds restrictions (checks) but **can never add new permissions**. Each block is signed with Ed25519 by the entity that added it.
+
+The critical property: **attenuation is append-only**. You can narrow a token arbitrarily, but you cannot widen it. The authority block sets the ceiling; every subsequent block can only lower it.
+
+### RAMP-Specific Facts
+
+The authority block (block 0) of a RAMP Biscuit contains these facts:
+
+```
+user("bloomberg.com");               // Who issued the delegation
+scope("quote:*");                     // One fact per granted scope
+scope("earnings:*");
+max_spend_cents(50000);               // Spending cap in currency minor units
+max_accesses(10000);                  // Access count cap
+quota_period_hours(720);              // Reset period (30 days)
+expires("2026-03-20T18:00:00Z");      // Expiration time (RFC 3339)
+```
+
+### The Delegation Message
+
+The Biscuit token is carried in the `Delegation` message, nested inside `Requester`:
+
+| Field | Type | Description |
+|---|---|---|
+| `principal_domain` | `string` | Who granted this delegation (domain for public key lookup) |
+| `principal_id` | `string` | Principal's identifier (e.g., `"user@acme.com"`, `"bloomberg.com"`) |
+| `scopes` | `repeated string` | Scopes granted — convenience extraction of Biscuit authority block |
+| `expires_at` | `Timestamp` | When this delegation expires. Exchange MUST reject expired tokens |
+| `max_spend` | `Cost` (optional) | Maximum spend allowed under this delegation |
+| `token` | `string` | Base64-encoded Biscuit token |
+| `token_format` | `string` | Token format (default: `"biscuit-v2"`) |
+| `revocation_uri` | `string` (optional) | URI for real-time revocation checking (high-value transactions) |
+| `max_accesses` | `int32` (optional) | Maximum number of accesses allowed under this delegation. Exchange tracks count and denies with `DENIAL_REASON_QUOTA_EXCEEDED` when count >= limit. |
+| `quota_period` | `Duration` (optional) | How often access/spend counters reset. E.g., `"720h"` for monthly subscriptions. When absent, quota is lifetime (bounded only by `expires_at`). |
+| `ext` | `Struct` | Implementer-specific extensions |
+| `ext_critical` | `repeated string` | Critical extension keys (COSE crit pattern) |
+
+The `scopes` field is a convenience extraction — the Exchange MAY use it for fast catalog filtering before performing full Biscuit cryptographic verification.
+
+### Attenuation Example
+
+Bloomberg issues a Biscuit for an agent with broad access:
+
+```
+// Authority block (signed by bloomberg.com)
+user("bloomberg.com");
+scope("quote:*");
+scope("earnings:*");
+max_spend_cents(50000);
+expires("2026-03-20T18:00:00Z");
+```
+
+The agent delegates to a sub-agent that only needs earnings data. It appends an attenuation block:
+
+```
+// Attenuation block 1 (signed by agent)
+check if scope("earnings:*");       // Only earnings access
+check if max_spend_cents($v), $v <= 10000;  // Lower spend cap
+```
+
+The sub-agent further delegates to a narrow research task:
+
+```
+// Attenuation block 2 (signed by sub-agent)
+check if scope("earnings:NVDA");    // Only NVIDIA earnings
+```
+
+**Zero round trips to Bloomberg.** Each level of delegation is local. The token encodes the full permission chain.
+
+### Verification
+
+The Exchange verifies a Biscuit delegation by:
+
+1. Deserializing the base64-encoded `token` from the `Delegation` message
+2. Verifying the Ed25519 signature chain — authority block signed by `principal_domain`'s published key, each attenuation block signed by the entity that appended it
+3. Evaluating all check conditions across all blocks
+4. Extracting effective scopes (intersection of all blocks)
+5. Checking `expires_at` against current time
+6. Optionally checking `revocation_uri` for high-value transactions
+
+This is entirely offline — no callback to the principal. The Exchange only needs the principal's published public key, which it can cache.
+
+### Delegation Denial Reasons
+
+When delegation verification fails for quota or expiration reasons, the Exchange returns a specific denial reason in the response:
+
+| Denial Reason | Meaning |
+|---|---|
+| `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for this period |
+| `DENIAL_REASON_DELEGATION_EXPIRED` | Biscuit delegation token expired |
+
+### Libraries
+
+| Language | Library | Notes |
+|---|---|---|
+| Go | `biscuit-go` | Ed25519 native, protobuf wire format |
+| TypeScript | `@biscuit-auth/biscuit-wasm` | WASM-based, works in Node and browser |
+| Python | `biscuit-python` | Ed25519 native |
+
+All libraries use Ed25519 natively (same key type as RAMP identity signatures) and protobuf as the internal wire format (same serialization as RAMP messages).
+
+## Scope-Based Access
+
+Scopes are the mechanism by which the Exchange decides what resources to show a requester. The flow is:
+
+1. Agent sends `ResourceQuery` with `Requester.scopes` (and optionally a Biscuit `Delegation` that also carries scopes)
+2. Exchange filters its catalog — only resources matching the declared scopes are returned
+3. Resources outside the scopes are **not returned**. The requester never learns they exist.
+
+### Scope Format
+
+Scopes follow the pattern `{domain}:{permission}` or `{profile}:{permission}`:
+
+| Scope | Meaning |
+|---|---|
+| `"credit:read"` | Can access credit reports (read-only) |
+| `"subscription:bloomberg-2026"` | Has active Bloomberg subscription |
+| `"academic:*"` | Full access to academic resources |
+| `"internal:reports"` | Can access internal reports |
+| `"*"` | Unrestricted (public Exchange default) |
+
+### Access Tiers
+
+**No scopes (empty):** Exchange applies its default access policy — typically all publicly available resources. This is the common case for public agents.
+
+**Subscription scopes:** A scope like `subscription:nyt-2026` signals that the requester has a subscription entitlement. The Exchange returns subscription pricing (zero marginal cost) instead of per-request pricing.
+
+**Enterprise scopes:** Specific `{domain}:{permission}` scopes grant access to restricted resources. The Exchange enforces RBAC by filtering the catalog to matching resources.
+
+### Disclosure Policy
+
+When a resource exists but the requester's scopes are insufficient, the Exchange decides how to respond based on its disclosure policy:
+
+- **Public Exchange:** Silent omission. The resource is simply not returned. No hint that it exists.
+- **Enterprise Exchange:** Returns `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` in the `OfferGroup.absence_reason` field, telling the requester that resources exist but their scopes are insufficient.
+
+This distinction prevents information leakage on public Exchanges while allowing enterprise environments to provide actionable diagnostics.
+
+## Intermediary Chain
+
+When a request passes through intermediaries (e.g., Agent to Broker to Exchange), each hop is recorded in the `intermediaries` field of `ResourceQuery`. This is modeled after the OpenRTB Supply Chain Object (schain).
+
+### IntermediaryHop Message
+
+| Field | Type | Description |
+|---|---|---|
+| `domain` | `string` | Domain of the intermediary (for public key lookup) |
+| `id` | `string` | Intermediary's identifier |
+| `forwarded_at` | `Timestamp` | When this intermediary forwarded the request |
+| `signature` | `string` | Ed25519 signature over the request payload at this hop |
+| `signature_algorithm` | `string` | Signature algorithm (always `"ed25519"`) |
+
+### How It Works
+
+Each intermediary in the chain:
+
+1. Receives the request from the previous hop
+2. Signs the request payload with its own Ed25519 key
+3. Appends an `IntermediaryHop` to the `intermediaries` list
+4. Forwards the request to the next hop
+
+The Exchange verifies the full chain by:
+
+1. For each `IntermediaryHop`, fetching the public key from `{domain}/.well-known/ramp-agent.json`
+2. Verifying the Ed25519 signature proves the intermediary handled the request
+3. Checking the `forwarded_at` timestamps for temporal consistency
+
+When `intermediaries` is empty, the agent is querying the Exchange directly — no intermediary was involved.
+
+This replaces the previous `broker_signature` / `broker_signature_algorithm` fields with a generalized chain that supports any number of intermediaries.
+
+## Signature Migration to RFC 9421
+
+### Background
+
+Starting with protocol v1.1, request signatures use [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421) rather than proto-level signature fields. This separates **identity semantics** (carried in the protobuf body) from **cryptographic proof** (carried in HTTP headers).
+
+### What Changed
+
+The following proto fields are now **reserved** and MUST NOT be populated in new implementations:
+
+| Deprecated Field | Message | Replacement |
+|---|---|---|
+| `agent_signature` | `RAMPRequest` | RFC 9421 `Signature` / `Signature-Input` headers |
+| `orchestrator_signature` | `RAMPRequest` | RFC 9421 `Signature` / `Signature-Input` headers |
+| `caller_signature` | `RAMPRequest` | RFC 9421 `Signature` / `Signature-Input` headers |
+
+The protobuf body continues to carry identity semantics — `Requester` (who is making the request), `IntermediaryHop` metadata (who forwarded it), scopes, and delegation tokens. What moves to HTTP is the **cryptographic proof** that these identities are authentic.
+
+### How RFC 9421 Signatures Work
+
+RFC 9421 defines a standard way to sign HTTP messages. Three headers work together:
+
+| Header | Purpose |
+|---|---|
+| `Content-Digest` | Hash of the request body (binds the signature to the payload) |
+| `Signature-Input` | Declares which components are signed, the key ID, and the algorithm |
+| `Signature` | The actual cryptographic signature |
+
+The Exchange verifies the signature by reconstructing the signed content from the declared components, fetching the signer's public key via `{domain}/.well-known/ramp-agent.json`, and verifying the Ed25519 signature.
+
+### Single-Hop Example
+
+An agent sends a signed request directly to the Exchange:
+
+```http
+POST /ramp.v1.ExchangeService/DiscoverResources HTTP/1.1
+Content-Type: application/json
+Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
+Signature-Input: agent=("@method" "@target-uri" "content-digest");keyid="agent-key";alg="ed25519"
+Signature: agent=:dGVzdC1zaWduYXR1cmUtYWdlbnQ=:
+```
+
+The `Signature-Input` header declares:
+- **Label**: `agent` — identifies this signature in multi-signature scenarios
+- **Covered components**: `@method` (POST), `@target-uri` (the RPC path), `content-digest` (body hash)
+- **keyid**: `agent-key` — resolved via the agent's `.well-known/ramp-agent.json`
+- **alg**: `ed25519` — same key type used throughout RAMP
+
+### Multi-Hop Example (Broker)
+
+When a request passes through a Broker, each hop adds its own signature. The Broker signs over the same components plus the agent's existing signature, creating a verifiable chain:
+
+```http
+POST /ramp.v1.ExchangeService/DiscoverResources HTTP/1.1
+Content-Type: application/json
+Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
+Signature-Input: agent=("@method" "@target-uri" "content-digest");keyid="agent-key";alg="ed25519", broker=("@method" "@target-uri" "content-digest");keyid="broker-key";alg="ed25519"
+Signature: agent=:dGVzdC1zaWduYXR1cmUtYWdlbnQ=:, broker=:dGVzdC1zaWduYXR1cmUtYnJva2Vy:
+```
+
+Each labeled signature (`agent`, `broker`) is independently verifiable. The Exchange checks every signature in the `Signature` header against the corresponding `keyid` in `Signature-Input`.
+
+### Migration Path
+
+Exchanges SHOULD accept both legacy proto-field signatures and RFC 9421 signatures during the migration period. The recommended approach:
+
+1. **Check for RFC 9421 headers first** — if `Signature` and `Signature-Input` headers are present, verify using RFC 9421
+2. **Fall back to proto fields** — if no HTTP signature headers are present, verify legacy proto-level signature fields
+3. **Reject if neither** — requests with no verifiable signature are rejected
+
+After the migration period, Exchanges MAY drop support for legacy proto-field signatures.
+
+## Examples
+
+### Public Agent (No Delegation)
+
+A research bot queries a public Exchange. No delegation token, no special scopes — it gets whatever is publicly available.
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-research-001",
+  "requester": {
+    "id": "research-bot-42",
+    "domain": "research.acme.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "name": "Acme Research Assistant",
+    "uris": [
+      "https://cdn.ramp-protocol.org/premium/ai-funding-roundup"
+    ],
+    "intended_use": ["SUMMARIZE"],
+    "scopes": [],
+    "signature": "MEUCIQC7xK3p9Tz...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519"
+  },
+  "intermediaries": []
+}
+```
+
+The Exchange verifies the signature by fetching the public key from `research.acme.com/.well-known/ramp-agent.json`, then returns all publicly available offers for the requested URI.
+
+### Subscription Agent (Bloomberg Biscuit)
+
+A financial analysis agent carries a Bloomberg-issued Biscuit that grants access to subscription-tier data.
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-finance-001",
+  "requester": {
+    "id": "finbot-alpha",
+    "domain": "fintech.example.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "name": "FinBot Alpha",
+    "uris": [
+      "bloomberg://quote/NVDA",
+      "bloomberg://earnings/NVDA/2025-Q4"
+    ],
+    "intended_use": ["RETRIEVE"],
+    "license_id": "lic-bloomberg-fintech-2026",
+    "scopes": [
+      "subscription:bloomberg-2026",
+      "quote:*",
+      "earnings:*"
+    ],
+    "signature": "MEQCIGnR5sW2aH...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519",
+    "delegation": {
+      "principal_domain": "bloomberg.com",
+      "principal_id": "bloomberg.com",
+      "scopes": ["quote:*", "earnings:*"],
+      "expires_at": "2026-03-20T18:00:00Z",
+      "max_spend": {
+        "amount": 500.00,
+        "currency": "USD"
+      },
+      "token": "EoEBCgRiaXNjdWl0...base64-biscuit-token...",
+      "token_format": "biscuit-v2"
+    }
+  },
+  "intermediaries": []
+}
+```
+
+The Exchange:
+1. Verifies `requester.signature` against `fintech.example.com`'s published key
+2. Deserializes the Biscuit `token`, verifies the authority block is signed by `bloomberg.com`'s key
+3. Extracts scopes from the Biscuit (`quote:*`, `earnings:*`)
+4. Returns subscription-tier pricing (zero marginal cost) for matching resources
+
+### Enterprise Agent (IAM-Issued Biscuit)
+
+An internal agent at a law firm carries a Biscuit issued by the firm's IAM system, granting access to legal and credit resources.
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-legal-001",
+  "requester": {
+    "id": "legal-research-agent",
+    "domain": "agents.kirkland.com",
+    "type": "REQUESTER_TYPE_SERVICE",
+    "name": "Kirkland Legal Research",
+    "uris": [
+      "westlaw://case/2025-us-456",
+      "duns://credit/123456789"
+    ],
+    "intended_use": ["RETRIEVE", "SUMMARIZE"],
+    "license_id": "lic-kirkland-enterprise-2026",
+    "scopes": [
+      "legal:case-law",
+      "credit:read"
+    ],
+    "signature": "MEUCIQDW8mNxVzP...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519",
+    "delegation": {
+      "principal_domain": "iam.kirkland.com",
+      "principal_id": "user@kirkland.com",
+      "scopes": ["legal:case-law", "legal:statutes", "credit:read"],
+      "expires_at": "2026-03-20T20:00:00Z",
+      "max_spend": {
+        "amount": 1000.00,
+        "currency": "USD"
+      },
+      "token": "EoEBCgRiaXNjdWl0...base64-biscuit-token...",
+      "token_format": "biscuit-v2"
+    }
+  },
+  "intermediaries": []
+}
+```
+
+The internal Exchange verifies the Biscuit against `iam.kirkland.com`'s published key. Because this is an enterprise Exchange, if the agent requests a resource outside its scopes, it returns `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` rather than silently omitting it.
+
+### Delegated Sub-Agent (Attenuated Biscuit)
+
+The Kirkland legal agent from the previous example delegates to a sub-agent that only needs credit data. It attenuates the Biscuit to remove legal access and lower the spend cap.
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-credit-001",
+  "requester": {
+    "id": "credit-checker-sub",
+    "domain": "agents.kirkland.com",
+    "type": "REQUESTER_TYPE_DELEGATED",
+    "name": "Kirkland Credit Sub-Agent",
+    "uris": [
+      "duns://credit/123456789"
+    ],
+    "intended_use": ["RETRIEVE"],
+    "license_id": "lic-kirkland-enterprise-2026",
+    "scopes": [
+      "credit:read"
+    ],
+    "signature": "MEUCIQCqW3rT8m...base64-ed25519-sig...",
+    "signature_algorithm": "ed25519",
+    "delegation": {
+      "principal_domain": "iam.kirkland.com",
+      "principal_id": "user@kirkland.com",
+      "scopes": ["credit:read"],
+      "expires_at": "2026-03-20T19:00:00Z",
+      "max_spend": {
+        "amount": 200.00,
+        "currency": "USD"
+      },
+      "token": "EoEBCgRiaXNjdWl0...attenuated-biscuit-token...",
+      "token_format": "biscuit-v2"
+    }
+  },
+  "intermediaries": [
+    {
+      "domain": "agents.kirkland.com",
+      "id": "legal-research-agent",
+      "forwarded_at": "2026-03-20T16:30:00Z",
+      "signature": "MEQCIGnR5sW2aH...base64-ed25519-sig...",
+      "signature_algorithm": "ed25519"
+    }
+  ]
+}
+```
+
+Key differences from the parent agent's request:
+- `type` is `REQUESTER_TYPE_DELEGATED` — signals this agent acts on behalf of another
+- `delegation.scopes` is narrowed to `["credit:read"]` (legal scopes removed)
+- `delegation.max_spend` is reduced from $1,000 to $200
+- `delegation.expires_at` is shortened (1 hour earlier)
+- `intermediaries` records the parent agent as a forwarding hop
+- The Biscuit `token` contains the original authority block (signed by IAM) plus an attenuation block (signed by the parent agent) that enforces the narrower permissions
+
+The Exchange verifies the full Biscuit chain: IAM signed the authority block, the parent agent signed the attenuation block. No call to IAM was required for the delegation.
+
+## Key Management
+
+### Where Keys Are Published
+
+| Party | Endpoint | Format |
+|---|---|---|
+| Agent / Requester | `{domain}/.well-known/ramp-agent.json` | `agent_id`, `public_key`, `public_key_algorithm`, `contact` |
+| Intermediary | `{domain}/.well-known/ramp-agent.json` | Same format as agents |
+| Exchange | `{domain}/exchange/v1/keys` | Exchange signing key for offers |
+| Biscuit Principal | `{domain}/.well-known/ramp-agent.json` | The key used to sign Biscuit authority blocks |
+
+### Key Announcement Format
+
+```json
+// GET https://agents.kirkland.com/.well-known/ramp-agent.json
+{
+  "agent_id": "agents.kirkland.com",
+  "public_key": "MCowBQYDK2VwAyEA7Hd8FjXz9K2qR4nPbY1sT0vWxU3gLmN5oA8pC6dE1fI=",
+  "public_key_algorithm": "ed25519",
+  "contact": "platform@kirkland.com"
+}
+```
+
+### Key Rotation
+
+Key rotation follows a standard overlap pattern:
+
+1. Publish the new key alongside the old key (both valid)
+2. Start signing new requests with the new key
+3. After a grace period (Exchange-defined, typically 24-48 hours), remove the old key
+4. Exchanges SHOULD cache keys with a TTL and re-fetch periodically
+
+For Biscuit delegation tokens, key rotation at the principal does not invalidate existing tokens — the authority block was signed with the key that was current at issuance time. Exchanges SHOULD accept tokens signed by recently-rotated keys within a configurable grace period.
+
+## Next Steps
+
+- [Transaction Flow](/protocol/transaction-flow/) — the RPCs that carry these signatures
+- [Scenario Walkthrough](/protocol/scenario-walkthrough/) — see the full identity model in action
+- [Standards Layering](/protocol/standards-layering/) — how authentication fits within the broader protocol stack
+- [Exchange Manifest](/protocol/exchange-manifest/) — machine-readable Exchange self-description

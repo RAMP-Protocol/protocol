@@ -1,0 +1,587 @@
+---
+title: "RAMP v1.0 Walkthrough"
+description: "End-to-end walkthrough of RAMP v1.0 with two scenarios: per-article access (no subscription) and subscription access with Biscuit delegation. Shows identical SDK code for both paths."
+---
+
+> Complete walkthrough of RAMP v1.0 as of March 2026. Every field name, message structure, and authentication mechanism matches the current `ramp.proto`. Two scenarios demonstrate how the same protocol handles pay-per-article and subscription access.
+
+## Two Scenarios, One Protocol
+
+This walkthrough covers two real-world scenarios that exercise different parts of the RAMP v1.0 protocol:
+
+| | Scenario A | Scenario B |
+|---|---|---|
+| **Agent** | `research-bot` at `startup.com` | `hedge-bot` at `hedgefund.com` |
+| **Content** | TechCrunch article (news) | Bloomberg earnings transcript (financial) |
+| **Subscription** | None | Bloomberg enterprise subscription |
+| **Delegation** | None | Biscuit token from `bloomberg.com` |
+| **Cost** | $0.05 per article | $0.00 (subscription) |
+
+Both scenarios follow the same six-step flow:
+
+```
+Discovery → ResourceQuery → ResourceResponse → ExecuteTransaction → Fetch → ReportUsage
+```
+
+---
+
+## Scenario A: Simple Article Access (No Subscription)
+
+An AI research agent at a startup wants a TechCrunch article about AI agents in commerce. No subscription exists — the agent pays per article.
+
+### Step 1 — Discovery
+
+The agent resolves the target domain's RAMP configuration. Every RAMP-enabled domain publishes a machine-readable manifest at `/.well-known/ramp.json`:
+
+```bash
+curl -s https://techcrunch.com/.well-known/ramp.json | jq
+```
+
+```json
+{
+  "ver": "1.0",
+  "provider": "techcrunch.com",
+  "contact": "licensing@techcrunch.com",
+  "exchanges": [
+    {
+      "domain": "exchange.ssp-alpha.com",
+      "endpoint": "https://exchange.ssp-alpha.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-news-v1"]
+}
+```
+
+The agent now knows which Exchange to query for TechCrunch content. The `supported_profiles` field tells the agent that this Exchange supports news-specific metadata extensions.
+
+### Step 2 — ResourceQuery
+
+The agent sends a `ResourceQuery` to the Exchange with its identity in the `Requester` message. This is the v1.0 replacement for CoMP's `AISystem` — it carries identity, scopes, signature, and optional delegation in a single envelope.
+
+```json
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-001",
+  "requester": {
+    "id": "research-bot",
+    "domain": "startup.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["*"],
+    "signature": "ed25519:a4c9f2e8b7d1...",
+    "signature_algorithm": "ed25519"
+  }
+}
+```
+
+**Key fields in `Requester`:**
+- **`id`** + **`domain`** — uniquely identifies the agent. The Exchange fetches the agent's Ed25519 public key from `startup.com/.well-known/ramp-agent.json` to verify the signature.
+- **`type`** — `REQUESTER_TYPE_AGENT` (autonomous AI agent). Other types: `HUMAN_TOOL`, `SERVICE`, `DELEGATED`, `RESEARCH`.
+- **`uris`** — the specific resources being requested.
+- **`scopes`** — `["*"]` means unrestricted public access. No subscription, no entitlement filtering.
+- **`signature`** — Ed25519 over `(id, domain, uris, scopes)`. Proves the request came from this agent.
+- **No `delegation` field** — this agent acts on its own behalf, not under a delegated credential.
+
+### Step 3 — ResourceResponse
+
+The Exchange looks up the article in its catalog, checks that the agent's `intended_use` (`FUNCTION_AI_INPUT`) is permitted, and returns an offer:
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-001",
+  "exchange": "exchange.ssp-alpha.com",
+  "offer_groups": [
+    {
+      "uri": "https://techcrunch.com/2026/03/19/ai-agents-commerce.html",
+      "offers": [
+        {
+          "offer_id": "offer-tc-agents-001",
+          "package": {
+            "id": "PKG-TC-AGENTS-COMMERCE",
+            "title": "AI Agents Are Rewriting Commerce",
+            "seller": "techcrunch.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_HTML"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_ACCESS",
+            "rate": 0.05,
+            "currency": "USD",
+            "unit_cost": 0.0000156,
+            "estimated_quantity": 3200,
+            "unit": "tokens"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://techcrunch.com/2026/03/19/ai-agents-commerce.html",
+            "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "attestations": [
+            {
+              "verifier": "techcrunch.com",
+              "kid": "tc-key-2026-03",
+              "attested_at": "2026-03-19T10:00:00Z",
+              "uri": "https://techcrunch.com/2026/03/19/ai-agents-commerce.html",
+              "claims": {
+                "estimated_quantity": 3200,
+                "word_count": 2400,
+                "language": "en"
+              },
+              "signature": "base64-ed25519-tc-self-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+          },
+          "exchange_signature": "base64-ed25519-offer-sig...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**What the agent learns from this response:**
+
+- **Pricing**: `PRICING_MODEL_PER_ACCESS` at $0.05, with an estimated 3,200 tokens. The `unit_cost` ($0.0000156/token) enables cross-exchange comparison when an Broker aggregates offers.
+- **Content mutability**: `RESOURCE_MUTABILITY_STATIC` — this article will not change. The agent SHOULD verify the SHA-256 hash on delivery. A mismatch is disputable.
+- **Attestation**: Level 1 (self-attested by `techcrunch.com`). The provider signed its own claims about word count and token estimate. A third-party attestation (Level 2, e.g., from `gumgum.com`) would carry higher trust.
+- **Restrictions**: AI input, indexing, and search are permitted. Training is prohibited.
+- **`exchange_signature`**: Ed25519 signature over the offer. The Exchange will verify this same signature when the agent commits to the offer — no server-side offer storage needed (stateless verification).
+
+### Step 4 — ExecuteTransaction
+
+The agent commits to the offer by sending the `offer_id` and the Exchange's own `exchange_signature` back:
+
+```json
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-001",
+  "offer_id": "offer-tc-agents-001",
+  "offer_signature": "base64-ed25519-offer-sig...",
+  "offer_signature_algorithm": "ed25519",
+  "requester": {
+    "id": "research-bot",
+    "domain": "startup.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["*"],
+    "signature": "ed25519:b5d0e3f9c8a2...",
+    "signature_algorithm": "ed25519"
+  },
+  "agent_signature": "ed25519:b5d0e3f9c8a2...",
+  "agent_signature_algorithm": "ed25519"
+}
+```
+
+The Exchange performs:
+1. **Signature verification** — verifies the `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
+2. **Agent authentication** — verifies `agent_signature` against the agent's published public key.
+3. **Balance check** — confirms `research-bot@startup.com` has sufficient balance ($0.05).
+4. **WAL write** — records the transaction in the write-ahead log before generating the signed URL (write-before-sign invariant).
+5. **Signed URL generation** — HMAC-SHA256 over `(base_url, expires, agent_id, txn_id)` using the Exchange-CDN shared secret.
+
+Response:
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-001",
+  "transaction_id": "txn-tc-001",
+  "billing_id": "bill-tc-001",
+  "package": {
+    "id": "PKG-TC-AGENTS-COMMERCE",
+    "retrieval": {
+      "endpoint": "https://cdn.techcrunch.com/premium/ai-agents-commerce.html?expires=1742403900&agent_id=7a3f8c1d...&txn_id=txn-tc-001&sig=hmac-sha256-d4e5f6..."
+    }
+  },
+  "cost": {
+    "amount": 0.05,
+    "currency": "USD"
+  },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "reporting_obligation": {
+    "required": true,
+    "window": "86400s",
+    "required_fields": ["consumed_quantity"]
+  },
+  "expires_at": "2026-03-19T12:05:00Z",
+  "agent_identity_hash": "7a3f8c1d..."
+}
+```
+
+The signed URL is valid for 5 minutes. The `agent_identity_hash` (SHA-256 of the agent's license ID) is embedded in the URL, preventing URL sharing between agents.
+
+### Step 5 — Fetch
+
+The agent fetches the content via the signed URL:
+
+```bash
+GET https://cdn.techcrunch.com/premium/ai-agents-commerce.html?expires=1742403900&agent_id=7a3f8c1d...&txn_id=txn-tc-001&sig=hmac-sha256-d4e5f6...
+```
+
+The CDN edge function verifies:
+1. HMAC-SHA256 signature matches (Exchange-CDN shared secret)
+2. URL has not expired
+3. `agent_id` in URL matches the requesting agent's identity hash
+4. `txn_id` is recorded for three-sided reconciliation
+
+**Content hash verification**: Because `resource_mutability` is `STATIC`, the agent computes SHA-256 of the delivered HTML and compares it against `identity.content_hash` from the offer. Match confirms the content is exactly what was promised. Mismatch would be grounds for a `DisputeTransaction`.
+
+### Step 6 — ReportUsage
+
+Usage reporting is mandatory. The agent reports actual consumption:
+
+```json
+POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+
+{
+  "ver": "1.0",
+  "id": "ur-001",
+  "transaction_id": "txn-tc-001",
+  "billing_id": "bill-tc-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "consumed_quantity": 3150,
+    "consumed_unit": "tokens",
+    "displayed_to_user": true,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-19T12:01:00Z",
+  "assets": [
+    {
+      "uri": "https://techcrunch.com/2026/03/19/ai-agents-commerce.html",
+      "title": "AI Agents Are Rewriting Commerce",
+      "package_id": "PKG-TC-AGENTS-COMMERCE"
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "report_id": "rpt-tc-001"
+}
+```
+
+The `report_id` enables the dispute chain: if the agent needs to dispute this transaction later, it must reference this report to prove usage was reported first.
+
+---
+
+## Scenario B: Subscription Access (Bloomberg Earnings Transcript)
+
+A hedge fund's AI agent wants an NVIDIA earnings call transcript from Bloomberg. The hedge fund has an enterprise Bloomberg subscription. The agent carries a Biscuit delegation token that proves its entitlement — without Bloomberg needing to be online at request time.
+
+### Step 1 — Discovery
+
+Same pattern as Scenario A. The agent resolves Bloomberg's RAMP manifest:
+
+```bash
+curl -s https://bloomberg.com/.well-known/ramp.json | jq
+```
+
+```json
+{
+  "ver": "1.0",
+  "provider": "bloomberg.com",
+  "contact": "data-licensing@bloomberg.com",
+  "exchanges": [
+    {
+      "domain": "exchange.bloomberg-data.com",
+      "endpoint": "https://exchange.bloomberg-data.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-finance-v1"]
+}
+```
+
+### Step 2 — ResourceQuery with Biscuit Delegation
+
+Here is where v1.0's `Requester` + `Delegation` model shows its power. The agent includes a Biscuit token that carries its subscription entitlement:
+
+```json
+POST https://exchange.bloomberg-data.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-bb-001",
+  "requester": {
+    "id": "hedge-bot",
+    "domain": "hedgefund.com",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["quote:*", "earnings:*", "news:read"],
+    "signature": "ed25519:c6d1e4f7a8b2...",
+    "signature_algorithm": "ed25519",
+    "delegation": {
+      "principal_domain": "bloomberg.com",
+      "principal_id": "enterprise-sub-HF-001",
+      "scopes": ["quote:*", "earnings:*", "news:read"],
+      "expires_at": "2026-12-31T23:59:59Z",
+      "token": "biscuit-v2:EoMBCj...(base64 Biscuit token)",
+      "token_format": "biscuit-v2"
+    }
+  },
+  "supported_profiles": ["ramp-finance-v1"]
+}
+```
+
+**What happens with the Biscuit token:**
+
+The `delegation.token` is a Biscuit v2 authorization token, signed by Bloomberg's Ed25519 key. The authority block (block 0) contains these facts:
+
+```
+user("enterprise-sub-HF-001");
+scope("quote:*");
+scope("earnings:*");
+scope("news:read");
+expires(2026-12-31T23:59:59Z);
+```
+
+The Exchange verifies the Biscuit:
+1. **Signature check** — Biscuit's authority block is signed by `bloomberg.com`'s Ed25519 key (fetched from `bloomberg.com/.well-known/ramp-agent.json`). This proves Bloomberg actually issued this delegation.
+2. **Scope matching** — the requested URI (`/earnings/NVDA/...`) matches the `earnings:*` scope in the Biscuit.
+3. **Expiry check** — `2026-12-31` is in the future.
+4. **No network call to Bloomberg** — Biscuit tokens are offline-verifiable. Bloomberg does not need to be online or queried. This is the key property that makes delegation scale.
+
+**Biscuit attenuation**: If the hedge fund wanted to restrict its agent further (e.g., limit to NVDA only, cap spend at $100), it could append an attenuation block to the Biscuit without going back to Bloomberg:
+
+```
+// Attenuation block (appended by hedge fund)
+check if resource($uri), $uri.starts_with("bloomberg.com/earnings/NVDA");
+check if spend($amount), $amount < 10000; // cents
+```
+
+### Step 3 — ResourceResponse
+
+The Exchange verifies the Biscuit, confirms `earnings:*` covers the requested URI, and recognizes the subscription. It returns a zero-cost offer:
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-bb-001",
+  "exchange": "exchange.bloomberg-data.com",
+  "offer_groups": [
+    {
+      "uri": "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript",
+      "offers": [
+        {
+          "offer_id": "offer-bb-nvda-q1-001",
+          "package": {
+            "id": "PKG-BB-NVDA-Q1-TRANSCRIPT",
+            "title": "NVIDIA Corp Q1 2026 Earnings Call Transcript",
+            "seller": "bloomberg.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_HTML"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_SUBSCRIPTION",
+            "rate": 0,
+            "currency": "USD",
+            "unit_cost": 0,
+            "estimated_quantity": 18500,
+            "unit": "tokens"
+          },
+          "subscription_id": "enterprise-sub-HF-001",
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["transaction_id", "function", "consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript",
+            "content_hash": "sha256:3c7d8a2b1e9f4c6d5a0b7e8f2d1c3a4b5e6f7890abcdef1234567890abcdef12",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+          },
+          "attestations": [
+            {
+              "verifier": "bloomberg.com",
+              "kid": "bb-key-2026-q1",
+              "attested_at": "2026-03-18T08:00:00Z",
+              "uri": "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript",
+              "claims": {
+                "estimated_quantity": 18500,
+                "word_count": 14200,
+                "language": "en"
+              },
+              "signature": "base64-ed25519-bb-self-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX"]
+          },
+          "subscription_quota": [
+            {
+              "subscription_id": "enterprise-sub-HF-001",
+              "quota_limit": 50000,
+              "quota_used": 12400,
+              "quota_remaining": 37600,
+              "resets_at": "2026-04-01T00:00:00Z"
+            }
+          ],
+          "exchange_signature": "base64-ed25519-bb-offer-sig...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Note the zero-cost offer and quota signaling**: `rate: 0`, `unit_cost: 0`. The `subscription_id` confirms access is covered by the enterprise subscription. The hedge fund pays nothing per request — Bloomberg already collected the annual subscription fee.
+
+### Steps 4-6 — Transaction, Fetch, Report
+
+The remaining steps follow the same pattern as Scenario A, with one key difference: **cost is $0.00**.
+
+**ExecuteTransaction** — same request structure, Exchange returns `cost.amount: 0` and `subscription_id`:
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-bb-001",
+  "transaction_id": "txn-bb-001",
+  "billing_id": "bill-bb-sub-001",
+  "package": {
+    "id": "PKG-BB-NVDA-Q1-TRANSCRIPT",
+    "retrieval": {
+      "endpoint": "https://cdn.bloomberg.com/earnings/NVDA/2026-Q1-transcript.html?expires=1742404200&agent_id=8b4f9d2e...&txn_id=txn-bb-001&sig=hmac-sha256-a7b8c9..."
+    }
+  },
+  "cost": {
+    "amount": 0,
+    "currency": "USD"
+  },
+  "subscription_id": "enterprise-sub-HF-001",
+  "subscription_unit_value": {
+    "amount": 0.15,
+    "currency": "USD"
+  },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "reporting_obligation": {
+    "required": true,
+    "window": "86400s",
+    "required_fields": ["transaction_id", "function", "consumed_quantity"]
+  },
+  "expires_at": "2026-03-19T12:10:00Z",
+  "agent_identity_hash": "8b4f9d2e..."
+}
+```
+
+The `subscription_unit_value` ($0.15) is the imputed value of this access for accounting purposes (ASC 606 prepaid drawdown). Cost is $0.00 because it is covered by the subscription.
+
+**Fetch** — same signed URL pattern. Agent verifies SHA-256 hash.
+
+**ReportUsage** — same structure, `consumed_quantity: 18200`, `consumed_unit: "tokens"`. Usage is tracked against the subscription quota, not billed per request.
+
+---
+
+## Key Differences
+
+| Aspect | Without Subscription (Scenario A) | With Subscription (Scenario B) |
+|--------|-----------------------------------|-------------------------------|
+| Delegation | None | Biscuit from `bloomberg.com` |
+| Requester scopes | `["*"]` (public) | `["earnings:*"]` (from Biscuit) |
+| Offer pricing | $0.05 per article | $0.00 (subscription) |
+| How Exchange knows | No delegation, no subscription scope — per-article | Biscuit carries subscription scope — zero cost |
+| Round trips to provider | 0 | 0 (Biscuit is offline-verifiable) |
+| `subscription_id` in response | Absent | `"enterprise-sub-HF-001"` |
+| Financial attribution | `cost.amount = 0.05` | `cost.amount = 0`, `subscription_unit_value = 0.15` |
+
+---
+
+## Developer's Perspective: Same Code, Both Paths
+
+From the SDK, both scenarios use identical code. The `Requester` message carries the delegation (if present), and the SDK handles everything transparently:
+
+```go
+// Scenario A: no delegation — SDK sends Requester without delegation field
+result, err := ramp.Fetch(ctx, "https://techcrunch.com/2026/03/19/ai-agents-commerce.html")
+// result.Cost = 0.05
+// result.SubscriptionID = ""
+
+// Scenario B: delegation present — SDK includes Biscuit in Requester.delegation
+result, err := ramp.Fetch(ctx, "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript")
+// result.Cost = 0.00
+// result.SubscriptionID = "enterprise-sub-HF-001"
+```
+
+The SDK carries the delegation token automatically when configured. The agent code does not branch on subscription vs. pay-per-article — the protocol handles the routing:
+
+```go
+client := ramp.NewClient(ramp.Config{
+    AgentID:   "hedge-bot",
+    Domain:    "hedgefund.com",
+    PrivateKey: ed25519PrivateKey,
+    // If delegation is set, SDK includes it in every Requester message.
+    // If not set, SDK sends Requester without delegation.
+    Delegation: biscuitToken, // nil for Scenario A, populated for Scenario B
+})
+
+// This call works identically in both scenarios.
+// The Exchange decides the pricing path based on the Requester.
+result, err := client.Fetch(ctx, url)
+```
+
+---
+
+## Protocol Summary
+
+| Step | RPC | Scenario A (per-article) | Scenario B (subscription) |
+|------|-----|--------------------------|---------------------------|
+| 1 | — | `ramp.json` discovery | `ramp.json` discovery |
+| 2 | `DiscoverResources` | `Requester` with no delegation | `Requester` with Biscuit `Delegation` |
+| 3 | — | Offer at $0.05 | Offer at $0.00 + `subscription_id` |
+| 4 | `ExecuteTransaction` | Charge $0.05, generate signed URL | Skip billing (subscription), generate signed URL |
+| 5 | — | Fetch + SHA-256 verify | Fetch + SHA-256 verify |
+| 6 | `ReportUsage` | Report 3,150 tokens consumed | Report 18,200 tokens consumed (tracked against quota) |
+
+**Authentication at every step:**
+- **Agent → Exchange**: `Requester.signature` (Ed25519 over identity + URIs + scopes)
+- **Delegation**: Biscuit token signed by principal's Ed25519 key (offline-verifiable)
+- **Exchange → Agent**: `exchange_signature` on Offer (Ed25519, stateless verification)
+- **Signed URLs**: HMAC-SHA256 (Exchange-CDN shared secret, agent identity bound)
+
+## Next Steps
+
+- [Scenario Walkthrough](/protocol/scenario-walkthrough) — multi-party narrative with Broker, cross-provider dedup, and dispute resolution
+- [Transaction Flow](/protocol/transaction-flow) — step-by-step protocol specification
+- [Content Attestation](/protocol/content-attestation) — how attestation levels work
+- [Resource Mutability](/protocol/content-mutability) — STATIC vs DYNAMIC vs LIVE
+- [Authentication (Ed25519)](/protocol/authentication) — signature chains at every boundary
+- [Extension Profiles](/protocol/extension-profiles) — domain-specific metadata (news, finance, academic)

@@ -1,0 +1,59 @@
+---
+title: "Changelog"
+description: "RAMP protocol changelog"
+---
+
+## v1.0 — Resource Access Metering Protocol
+
+Open transaction layer for metered resource access by AI agents. One protocol for discovering, pricing, transacting, delivering, and verifying any digital resource.
+
+### Core Protocol
+
+- **ExchangeService** — DiscoverResources, ExecuteTransaction, ReportUsage, DisputeTransaction RPCs
+- **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers
+- **RAMPRequest.query / search_filters** — Broker-side resource discovery (natural language + structured search)
+- **Requester** — universal actor identity. Types: AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH
+- **Delegation** — token-format agnostic (JWT default, Biscuit for multi-hop). Scoped, time-limited, spend-capped, attenuatable.
+- **IntermediaryHop** — schain-inspired forwarding chain for Agent → Broker → Exchange path verification
+- **Scope-based access control** — Exchange filters catalog by requester's scopes. Subscriptions are scopes.
+- **SubscriptionQuotaInfo** — proactive quota signaling on Offer and TransactionResponse. Multi-dimensional quotas (access count + spend + burst)
+- **ResourceMutability** — STATIC (hash stable), DYNAMIC (hash drifts), LIVE (streaming, no content at offer time)
+- **Data freshness** — Offer.data_as_of + RequestConstraints.max_data_age for staleness filtering
+- **ext_critical** — critical extension signaling (COSE crit pattern, RFC 9052). Consumer MUST understand listed keys or reject.
+- **Unit-agnostic metering** — unit_cost + estimated_quantity + unit. Supports tokens, pages, seconds, records, bytes, sq_km, and domain-specific units
+- **ResourceAttestation** — Ed25519-signed claim envelope for resource integrity verification. Three levels: none, self-attested, third-party verified
+- **Dispute resolution** — three-tier (automated `<1s`, rule-based `<24h`, human escalation). Evidence chain: Transaction → UsageReport → Dispute
+- **Domain verification** — ACME HTTP-01 style provider onboarding
+- **CatalogService** — PushResources, RemoveResources, RefreshCatalog for provider/third-party catalog management
+
+### Authentication
+
+- **Auth-agnostic** — Exchange advertises supported methods: GNAP (RFC 9635), OAuth+DPoP, OAuth Bearer, mTLS
+- **JWS for content signatures** — Offer and Attestation signatures use JWS Compact Serialization (alg=EdDSA)
+- **RFC 9421 for request signatures** — HTTP Message Signatures for agent and intermediary authentication
+- **JWKS key publication** — all parties publish Ed25519 keys at well-known endpoints
+
+### Pricing Models
+
+PER_ACCESS, PER_TOKEN, PER_FETCH, SUBSCRIPTION, FREE, PER_PAGE, PER_MINUTE, PER_RECORD, REVENUE_SHARE
+
+### Denial Reasons
+
+INVALID_LICENSE, EXPIRED_LICENSE, INSUFFICIENT_BALANCE, RATE_LIMITED, CONTENT_UNAVAILABLE, FUNCTION_PROHIBITED, GEO_RESTRICTED, REPORTING_OVERDUE, OFFER_EXPIRED, SIGNATURE_INVALID, QUOTA_EXCEEDED, DELEGATION_EXPIRED, SCOPE_INSUFFICIENT
+
+### Extension Profiles
+
+Domain-specific metadata carried in `ext` fields. Four profiles defined:
+
+- **ramp-news-v1** — articles, podcasts, broadcasting (IPTC NewsML-G2, Podcasting 2.0)
+- **ramp-academic-v1** — scholarly articles, preprints (CrossRef, OpenAlex, COUNTER 5.1)
+- **ramp-legal-v1** — legislation, case law, patents (ELI, ECLI, Akoma Ntoso)
+- **ramp-comp-v1** — IAB CoMP metadata (Package, Function, Scope) as optional ext fields
+
+### Wire Format
+
+Protocol Buffers (protobuf). Package: `ramp.v1`. Dual transport: Connect (HTTP/JSON + binary protobuf from same handler).
+
+### Discovery
+
+Provider publishes `ramp.json` at domain root. Exchange publishes `ramp-exchange.json` at `/.well-known/`. Broker reads manifests for routing.

@@ -1,0 +1,239 @@
+---
+title: "Multi-Tenant Architecture"
+description: "Tenant isolation, provider onboarding, domain-to-tenant mapping, and per-tenant configuration for the Exchange Node."
+---
+
+## Overview
+
+A single Exchange Node serves many providers. This is the multi-tenant model — one Exchange operator runs a Exchange that serves 10, 100, or 1000+ providers. Each provider is represented as a "tenant" with isolated configuration, catalog, signing keys, and reporting obligations.
+
+---
+
+## Per-Tenant Configuration
+
+```go
+// TenantConfig holds all provider-specific configuration.
+// A tenant represents a provider account (e.g., "Hearst Media") which may
+// operate multiple domains (cosmopolitan.com, esquire.com, elle.com, etc.).
+// URI resolution uses a domain→tenant lookup map, not offer_id prefix parsing.
+type TenantConfig struct {
+    // Identity
+    ID      string   // Unique tenant identifier (e.g., "hearst-media")
+    Domains []string // All provider domains (e.g., ["cosmopolitan.com", "esquire.com", "elle.com"])
+
+    // Resource catalog (per-domain RSL discovery)
+    RSLURLs         map[string]string // domain -> RSL URL (e.g., "cosmopolitan.com" -> "https://cosmopolitan.com/rsl.txt")
+    RSLPollInterval time.Duration     // How often to re-fetch RSL (default: 5m)
+
+    // Pricing overrides (Exchange is the price authority — RSL pricing is a fallback hint)
+    // Private pricing from Exchange config overrides RSL-derived pricing.
+    PricingOverrides map[string]*rampv1.Pricing // path pattern -> pricing
+
+    // Content delivery
+    ContentBaseURL string  // CDN base URL (e.g., "https://cdn.techcrunch.com")
+    CDNType        CDNType // CloudFront, Akamai, Fastly, GenericHMAC
+    SigningKeyRef  string  // Reference to key in secrets manager
+
+    // Signed URL configuration
+    URLTTLSeconds  int  // Default: 300 (5 minutes)
+    BindAgentID    bool // Whether to include agent identity in signed URL
+
+    // Reporting policy
+    ReportingPolicy *rampv1.ReportingObligation
+
+    // Application-level abuse thresholds (volumetric rate limiting is at infra layer)
+    MinQueryToTxnRatio float64 // If query:txn ratio drops below this, return 429 (e.g., 0.01)
+
+    // Revenue share (not protocol-relevant, but needed for billing)
+    RevenueSharePct float64 // Provider's share (e.g., 0.85 = 85%)
+
+    // v1.0: Attestation and dispute configuration
+    CatalogContributors []CatalogContributor // Authorized third-party push sources
+    VerifierTrustConfig *VerifierTrustConfig // Per-tenant verifier trust settings
+    DisputeConfig       *DisputeConfig       // Per-tenant dispute thresholds
+}
+```
+
+---
+
+## Tenant Isolation Model
+
+```
+┌──────────────────────────────────────────────────────┐
+│                   Exchange Node                    │
+│                                                      │
+│  Shared:                                             │
+│    - HTTP server (Connect-Go)                        │
+│    - Transaction log writer (WAL)                    │
+│    - Billing adapter connection pool                 │
+│    - Metrics collector                               │
+│    - (Volumetric rate limiting at infra layer)       │
+│                                                      │
+│  Per-Tenant (isolated):                              │
+│    - Resource catalog (in CatalogSnapshot.Tenants)    │
+│    - Signing keys (in SigningEngine)                  │
+│    - RSL ingestion goroutine                         │
+│    - Abuse detection counters (query:txn ratio)      │
+│    - Reporting obligations                           │
+│    - Verifier trust configuration (v1.0)             │
+│    - Dispute thresholds (v1.0)                       │
+│    - catalog_contributors authorization (v1.0)       │
+│                                                      │
+│  NOT shared across tenants:                          │
+│    - Signing key material                            │
+│    - Offer signatures (per-tenant Ed25519 key pair)   │
+│    - Content paths                                   │
+│    - Pricing configuration                           │
+└──────────────────────────────────────────────────────┘
+```
+
+### Isolation Guarantees
+
+- **Data isolation**: No tenant can access another tenant's catalog, keys, or transaction records. Offer signatures are per-tenant (different Ed25519 key pairs). Transaction log records include tenant_id for filtering.
+- **Performance isolation**: Per-tenant rate limiting prevents a noisy tenant from consuming all capacity. Optional: per-tenant goroutine pools for RSL ingestion.
+- **Failure isolation**: An RSL ingestion failure for tenant A does not affect tenant B's catalog. Each tenant's catalog is independently rebuildable.
+
+---
+
+## Domain-to-Tenant Mapping
+
+**Tenant resolution**: The Exchange resolves tenant from the requested URI(s) in the ResourceQuery. The URI's domain is matched against a domain-to-tenant lookup map. A tenant (e.g., "Hearst Media") maps to many domains (cosmopolitan.com, esquire.com, etc.). For ExecuteTransaction, the tenant is resolved from the domain embedded in the signed offer token — no offer_id prefix parsing.
+
+```go
+// Resolve tenant from ResourceQuery URIs
+tenantCfg, err := h.tenants.ResolveFromURIs(req.Msg.Aisystem.Aisysuse.Uri)
+
+// Resolve tenant from offer domain (ExecuteTransaction path)
+tenantCfg, err := h.tenants.ResolveFromDomain(offer.Domain)
+```
+
+---
+
+## Provider Onboarding
+
+Adding a new provider tenant requires:
+
+1. Adding a `TenantConfig` entry (config file, API, or database)
+2. Uploading the provider's CDN signing key to the secrets manager
+3. The provider dropping `ramp.json` pointing to this Exchange
+4. The Exchange's RSL ingestion goroutine automatically discovers and builds the catalog
+
+No restart required if hot reload is enabled (see the Configuration page).
+
+---
+
+## Provider Trust Verification
+
+The Exchange SHOULD periodically re-fetch `/.well-known/ramp.json` for each tenant's domains to confirm the provider still authorizes this Exchange to sell their resources. If the Exchange is removed from a provider's `ramp.json`:
+
+- Revoke the tenant configuration
+- Stop serving offers for that provider's resources
+- Log the revocation for audit
+
+This is ongoing verification, not just onboarding. Providers can revoke authorization at any time by updating their `ramp.json`. The Exchange SHOULD check at least once per hour (configurable via tenant settings).
+
+---
+
+## Key Rotation via Tenant Management API
+
+Providers who don't operate infrastructure manage signing keys via the Exchange tenant management API. The Exchange operator provides these endpoints as part of the tenant onboarding experience.
+
+### Key Storage
+
+- Keys stored encrypted at rest: AWS KMS envelope encryption or HashiCorp Vault transit engine
+- Per-tenant key isolation — each tenant's keys are under a separate KMS key or Vault path
+- Access audit trail on all key operations
+
+### Rotation Protocol (API-Driven)
+
+1. Provider uploads new key via `POST /admin/tenants/{tenant_id}/signing-keys`
+2. Exchange stores new key encrypted, marks as `pending_activation`
+3. Provider configures new key on their CDN (or Exchange manages CDN config for managed providers)
+4. Provider activates via `POST /admin/tenants/{tenant_id}/signing-keys/{key_id}/activate` -- new key becomes `ActiveKey`, old key becomes `PreviousKey`
+5. Dual-key grace period (configurable, default 1 hour): CDN and Exchange accept signatures from both keys
+6. After grace period: `PreviousKey` is archived (retained for audit, not used for signing)
+
+### Automatic Rotation
+
+For managed providers, the Exchange supports automatic rotation on a configurable schedule (default: 90 days per NFR). The Exchange generates a new key pair, provisions it on the CDN, and rotates with a dual-key grace period — no provider action required.
+
+---
+
+## Provider Manifest and RSL Endpoints
+
+The edge function expects to fetch `ramp.json` (ProviderManifest) and `rsl.txt` from the Exchange on behalf of provider domains. The Exchange generates these from its tenant catalog and serves them for edge caching.
+
+### Endpoints
+
+```
+GET /provider/{domain}/ramp.json
+```
+
+Returns a generated `ProviderManifest` for the given domain. The manifest is built from the tenant's catalog configuration (pricing, access restrictions, exchange endpoint). Cached by the edge function with a TTL matching the tenant's `rsl_poll_interval`.
+
+```
+GET /provider/{domain}/rsl.txt
+```
+
+Returns a generated RSL document for the given domain. The RSL is synthesized from the tenant's catalog entries (URI patterns, pricing, access policies). Cached by the edge function. Regenerated when the catalog is updated.
+
+Both endpoints return `404 Not Found` if the domain is not associated with any tenant.
+
+### Public Key Exchange
+
+```
+GET /exchange/v1/keys
+```
+
+Returns the **Exchange's** Ed25519 public keys for **offer signature** verification. Brokers and agents fetch this to verify `exchange_signature` on Offers without manual key exchange.
+
+**Note:** This endpoint serves the Exchange's offer-signing public key. Agent keys are separate — they are fetched from the agent's `/.well-known/ramp-agent.json` manifest URL (self-signup) or stored from enterprise registration (out-of-band key exchange).
+
+Since the default offer signature algorithm is Ed25519, these are **public keys** — this endpoint does NOT require authentication. Public keys are safe to expose; they can only verify signatures, not create them.
+
+**Response:**
+```json
+{
+  "keys": [
+    {
+      "id": "mk-2026-03",
+      "algorithm": "ed25519",
+      "public_key": "base64-encoded-ed25519-public-key...",
+      "status": "active",
+      "created_at": "2026-03-01T00:00:00Z"
+    },
+    {
+      "id": "mk-2026-01",
+      "algorithm": "ed25519",
+      "public_key": "base64-encoded-ed25519-public-key...",
+      "status": "rotated",
+      "created_at": "2026-01-01T00:00:00Z",
+      "rotated_at": "2026-03-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+- Returns current and previous keys (for rotation grace period)
+- **No authentication required** — Ed25519 public keys are safe to expose (they can only verify, not sign)
+- Brokers SHOULD cache with 24-hour TTL
+- On signature verification failure, refresh key cache before retrying
+- The `public_key` field contains the Ed25519 public key (32 bytes, base64-encoded)
+
+---
+
+## CatalogService Authentication
+
+The Exchange exposes `CatalogService` (PushResources, RemoveResources, RefreshCatalog) for external parties to push resource metadata. Every CatalogService request is authenticated:
+
+1. **Verify `caller_signature`**: The Exchange looks up the registered Ed25519 public key for `caller_id` and verifies the signature over the request payload. Invalid signatures are rejected with `CodeUnauthenticated`.
+
+2. **Check `caller_id` authorization**: The Exchange verifies that `caller_id` is registered and authorized to push resources for the specified `tenant_id`. Unauthorized tenant access is rejected with `CodePermissionDenied`.
+
+3. **Caller registration**: CatalogService callers are registered out-of-band (admin API or configuration). Registration includes:
+   - `caller_id` — unique identifier for the caller
+   - Ed25519 public key — for signature verification
+   - Authorized `tenant_id` set — which providers this caller can push for
+   - Caller type — "cms_plugin", "intelligence_provider", "syndicator"
+
+This prevents unauthorized parties from injecting or modifying catalog entries. The same authentication mechanism applies to RemoveResources and RefreshCatalog calls.

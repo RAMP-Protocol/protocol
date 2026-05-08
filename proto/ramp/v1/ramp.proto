@@ -1,0 +1,2205 @@
+// RAMP v1.0 — Resource Access Metering Protocol
+//
+// Extends IAB Tech Lab CoMP v1.0 with pricing, marketplace orchestration,
+// resource identity, transactions, and post-usage reporting.
+//
+// v1.0 additions (from v0.2):
+//   - Metering generalization: unit-agnostic pricing (unit_cost, estimated_quantity, unit)
+//     replaces text-specific eCPT/estimated_tokens. Supports tokens, seconds, pages,
+//     records, bytes, calls, and domain-specific units.
+//   - Usage generalization: consumed_quantity + consumed_unit replace token_count
+//   - New pricing models: PER_PAGE, PER_MINUTE, PER_RECORD
+//   - Streaming delivery: DELIVERY_METHOD_STREAMING for real-time connections (WebSocket, SSE)
+//   - CoMP decoupled: comp.v1.Package/Function moved to ramp-comp-v1 extension profile.
+//     Core protocol no longer imports comp.proto. IAB metadata is optional via ext.
+//   - Pricing.revshare + license_duration_months: revenue share pricing model
+//   - PRICING_MODEL_REVENUE_SHARE: new pricing model enum value
+//   - AccessRestrictions.max_display_words: word display limit from CoMP License.maxword
+//   - CitationFormat enum + AttributionDetail message: structured attribution in Usage
+//   - Usage.attribution: detailed citation reporting
+//   - OfferGroup.absence_reason: per-URI diagnostic when no offers available
+//   - ResourceResponse.rate_limit: rate limit signaling on discovery
+//   - OfferAbsenceReason enum (7 reasons)
+//   - RateLimitInfo message (limit, remaining, reset_at, window)
+//   - DisputeTransaction RPC: resource dispute signaling
+//   - DomainVerification messages: ACME-style provider onboarding
+//   - ResourceAttestation: signed claim envelope for resource integrity verification
+//   - DisputeStatus enum: full dispute lifecycle (FILED → FINAL)
+//   - ResolutionType enum: dispute resolution outcomes (CREDIT, REDELIVERY, etc.)
+//   - Offer.attestations: replaces ContentQuality with cryptographic attestations
+//   - ResourceEntry.attestations: attestations at catalog level
+//   - UsageReportResponse.report_id: enables dispute chain (report → dispute)
+//   - DisputeRequest.report_id: agent must file usage report before disputing
+//   - DisputeResponse.status/resolution: dispute lifecycle tracking
+//   - ProviderManifest.catalog_contributors: authorized third-party catalog pushers
+//   - ExchangeManifest: machine-readable Exchange self-description (/.well-known/ramp-exchange.json)
+//   - ResourceMutability enum: signals whether resource content is static, dynamic, or live
+//     Drives hash verification behavior: STATIC = verify hash, DYNAMIC = expect hash drift,
+//     LIVE = no content exists at offer time (streaming). Validated across 18 use cases.
+//   - Offer.data_as_of: timestamp indicating when the offered data was current.
+//     Cross-cutting need: credit reports, drug databases, stock quotes, satellite imagery.
+//   - RequestConstraints.max_data_age: agent-side freshness requirement. Marketplace
+//     SHOULD exclude offers whose data_as_of is older than this threshold.
+//   - ExchangeManifest.supported_profiles: declares conformance to domain extension
+//     profiles (e.g., "ramp-pharma-v1", "ramp-medimg-v1"). Enables Broker filtering.
+//   - ResourceQuery.supported_profiles: caller declares which profiles it understands.
+//     Exchange MAY optimize metadata computation based on declared profiles.
+//   - RAMPRequest.supported_profiles: agent declares profiles to Broker.
+//     Broker uses this for routing and profile forwarding.
+//   - ext_critical: critical extension signaling (COSE crit pattern, RFC 9052).
+//     Every message with an ext field also carries ext_critical — a list of
+//     ext keys that MUST be understood by the consumer. If a consumer encounters
+//     a key in ext_critical that it does not recognize, it MUST reject the message.
+//     Regular ext keys (not in ext_critical) follow the robustness principle:
+//     unknown keys are safely ignored. This pattern is well-established across
+//     FHIR (modifierExtension), SOAP (mustUnderstand), CoAP (odd/even options),
+//     and COSE (crit). RAMP adopts the COSE enumeration approach because it
+//     avoids the namespace migration problem (MIME X- prefix, RFC 6648) and
+//     supports contextual criticality (same extension can be critical in some
+//     messages but not others).
+//
+// The ExchangeService is the core protocol. Both AI agents and
+// Brokers are valid clients — the Exchange doesn't distinguish.
+
+syntax = "proto3";
+
+package ramp.v1;
+
+option go_package = "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// ============================================================================
+// RAMP Authentication Architecture
+//
+// Auth-agnostic protocol. RAMP defines WHAT must be verified (scopes,
+// spend caps, expiry, delegation chain). The HOW (authorization flow,
+// token format, signature envelope) is pluggable.
+//
+// Signatures: JWS (RFC 7515) with alg=EdDSA for content signatures
+// (offers, attestations). RFC 9421 HTTP Message Signatures for request
+// authentication. Same Ed25519 crypto, standard tooling everywhere.
+//
+// Authorization flows: GNAP (RFC 9635) recommended, OAuth 2.0 + DPoP
+// as enterprise adoption path. Exchange advertises supported methods.
+//
+// Token formats: JWT (universal default) or Biscuit (multi-hop attenuation).
+// Delegation message is format-agnostic.
+//
+// Key announcement endpoints (JWKS, RFC 7517):
+//   Agent:        {domain}/.well-known/ramp-agent.json
+//   Broker:      {domain}/.well-known/ramp-agent.json  (JWKS)
+//   Marketplace:  {domain}/marketplace/v1/keys
+//   Provider:     {domain}/.well-known/ramp.json (authorization, not keys)
+//
+// Request authentication via RFC 9421 HTTP Message Signatures:
+//   Agent → Exchange:  Signature header (alg=ed25519)
+//   Agent → Broker → Exchange:  multiple Signature headers (one per hop)
+//   Exchange → Agent:  JWS Compact Serialization on Offer (alg=EdDSA)
+//
+// Signed URLs use HMAC-SHA256 (Marketplace↔CDN shared secret, separate concern).
+// ============================================================================
+
+// ============================================================================
+// ExchangeService — THE core protocol.
+//
+// This is what SSPs, providers, or third parties deploy.
+// Agents and Orchestrators are both valid clients.
+// ============================================================================
+
+service ExchangeService {
+  // Discover available resource offers matching the query.
+  // Steps 2-3 in the RAMP flow.
+  rpc DiscoverResources(ResourceQuery) returns (ResourceResponse);
+
+  // Commit to an offer and receive delivery information.
+  // Steps 4-5 in the RAMP flow.
+  rpc ExecuteTransaction(TransactionRequest) returns (TransactionResponse);
+
+  // Submit a post-usage report for a completed transaction.
+  // Step 7 in the RAMP flow.
+  rpc ReportUsage(UsageReport) returns (UsageReportResponse);
+
+  // v0.3: Signal a resource dispute for a completed transaction.
+  // Filed by the agent when delivered resource does not match what was
+  // promised (hash mismatch, resource unavailable, wrong resource).
+  // The Exchange records the dispute and initiates resolution.
+  // Resolution mechanics (refund, credit, re-delivery) are implementation-
+  // specific — this RPC standardizes the dispute signal, not the outcome.
+  rpc DisputeTransaction(DisputeRequest) returns (DisputeResponse);
+
+  // v0.3: Request a domain verification challenge for provider onboarding.
+  // Used by ramp-cli to prove domain control before pushing signing keys.
+  // Follows the ACME HTTP-01 pattern (Let's Encrypt).
+  rpc RequestDomainVerification(DomainVerificationRequest) returns (DomainVerificationChallenge);
+
+  // v0.3: Confirm domain verification and register a signing key.
+  // Called after the challenge token is placed at the provider's domain.
+  rpc ConfirmDomainVerification(DomainVerificationConfirmation) returns (DomainVerificationResult);
+}
+
+// ============================================================================
+// Resource Discovery (Steps 2-3)
+// ============================================================================
+
+// ResourceQuery — Query a Exchange for available resource offers.
+//
+// Sent by an Broker or directly by an AI agent.
+// The Exchange evaluates its access policies, available inventory,
+// and reporting requirements before responding.
+message ResourceQuery {
+  // RAMP protocol version.
+  string ver = 1;
+
+  // Unique query identifier.
+  string id = 2;
+
+  // Requester identity — who is making this request, what scopes they have,
+  // and optional delegation chain. Replaces CoMP AISystem.
+  Requester requester = 3;
+
+  // Original RAMP request ID from Step 1, for traceability.
+  optional string request_id = 4;
+
+  // Intermediary forwarding chain (Agent → Broker → Marketplace).
+  // Each hop is signed, proving the request path is legitimate.
+  // Empty when agent queries Exchange directly.
+  repeated IntermediaryHop intermediaries = 5;
+
+  // Maximum time the caller will wait for a response.
+  // Exchange SHOULD prioritize speed over completeness when tight.
+  // Absent = 500ms default.
+  optional google.protobuf.Duration deadline = 8;
+
+  // Domain extension profiles the caller understands.
+  //
+  // Declares which ext field vocabularies the caller can parse and act on.
+  // The Exchange SHOULD include profile-specific ext fields in Offers
+  // when the caller declares support. The Exchange MAY skip expensive
+  // metadata computation (e.g., retraction checking, consolidation
+  // verification) when the caller does not declare the relevant profile.
+  //
+  // Absence means "send all available metadata" — Exchange MUST NOT
+  // withhold ext fields solely because the caller omitted this field.
+  //
+  // Values match ExchangeManifest.supported_profiles entries.
+  // Examples: ["ramp-news-v1", "ramp-academic-v1", "ramp-legal-v1"]
+  repeated string supported_profiles = 11;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ResourceResponse — Exchange returns candidate resource offers.
+//
+// When the ResourceQuery contains multiple URIs, offers are grouped by URI
+// via OfferGroup. When a single URI is queried, the Exchange MAY use
+// either the flat `offers` field or a single OfferGroup.
+message ResourceResponse {
+  string ver = 1;
+
+  // Echoed query identifier.
+  string id = 2;
+
+  // Canonical domain of the responding Exchange.
+  string marketplace = 3;
+
+  // Flat list of offers (for single-URI queries or backwards compat).
+  repeated Offer offers = 4;
+
+  // Offers grouped by requested URI (for multi-URI batch queries).
+  // When populated, `offers` SHOULD be empty to avoid ambiguity.
+  repeated OfferGroup offer_groups = 5;
+
+  // v0.2.1: Rate limit status for this caller.
+  // Present when the Exchange enforces per-caller rate limits on discovery.
+  // Enables agents/Orchestrators to throttle proactively rather than hitting
+  // hard limits. Particularly important when an Broker fans out the
+  // same batch query to multiple Marketplaces — mid-batch rate limiting
+  // can cause partial results if not signaled early.
+  optional RateLimitInfo rate_limit = 6;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// OfferGroup — Offers for a single requested URI.
+// Enables multi-URI batch queries where the caller needs to know
+// which offers correspond to which requested resource.
+message OfferGroup {
+  // The URI this group of offers is for (echoed from ResourceQuery.requester.uris).
+  string uri = 1;
+
+  // Zero or more offers for this URI. Empty = resource not available.
+  repeated Offer offers = 2;
+
+  // How this URI was discovered by the Broker (v2 extension point).
+  // v1: always DISCOVERY_METHOD_MARKETPLACE (Broker queried an Exchange).
+  // v2: may include DISCOVERY_METHOD_SEARCH (URI found via search engine like Exa),
+  //     DISCOVERY_METHOD_RECOMMENDATION, etc. The Broker discovers URIs
+  //     through any source, then routes through Exchange for pricing/transaction.
+  //     The discovery method does not affect the transaction flow — it's metadata
+  //     for the agent to understand how the resource was found.
+  optional DiscoveryMethod discovery_method = 3;
+
+  // v0.2.1: Why no offers are available for this URI.
+  // Present when `offers` is empty. Enables agents/Orchestrators to distinguish
+  // "resource not in catalog" from "resource blocked for your use case" without
+  // trial-and-error transactions. Analogous to OpenRTB nbr codes and
+  // Shutterstock per-item error metadata in batch responses.
+  optional OfferAbsenceReason absence_reason = 4;
+}
+
+// DiscoveryMethod — How the Broker discovered this resource URI.
+// v1 extension point for future discovery integration (search engines,
+// resource recommendation, etc.). Does not affect transaction flow.
+enum DiscoveryMethod {
+  DISCOVERY_METHOD_UNSPECIFIED = 0;
+  // URI was requested by the agent directly or found via Exchange query.
+  DISCOVERY_METHOD_MARKETPLACE = 1;
+  // URI was discovered via a search engine (e.g., Exa, Tavily, Brave Search).
+  // The Broker searched on the agent's behalf, then routed through Exchange.
+  DISCOVERY_METHOD_SEARCH = 2;
+  // URI was recommended by a resource recommendation service.
+  DISCOVERY_METHOD_RECOMMENDATION = 3;
+  // URI was found via resource syndication tracking (e.g., same article on another domain).
+  DISCOVERY_METHOD_SYNDICATION = 4;
+}
+
+// OfferAbsenceReason — Why no offers are available for a requested URI.
+// v0.2.1 addition. Used in OfferGroup.absence_reason when offers is empty.
+// Enables diagnostic feedback without requiring a transaction attempt.
+enum OfferAbsenceReason {
+  OFFER_ABSENCE_REASON_UNSPECIFIED = 0;
+  // Resource URI is not in this Exchange's catalog.
+  OFFER_ABSENCE_REASON_NOT_IN_CATALOG = 1;
+  // Resource exists but has a BLOCKED access policy (provider opted out of AI access).
+  OFFER_ABSENCE_REASON_CONTENT_BLOCKED = 2;
+  // Resource exists but the requested CoMP function is prohibited by provider terms.
+  OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED = 3;
+  // Resource exists but the requester's geography is restricted.
+  OFFER_ABSENCE_REASON_GEO_RESTRICTED = 4;
+  // Resource exists but the requester's user category is not permitted.
+  OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED = 5;
+  // Resource is temporarily unavailable (e.g., provider feed refresh in progress).
+  OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE = 6;
+  // Exchange is not authorized by the provider to sell this resource.
+  OFFER_ABSENCE_REASON_NOT_AUTHORIZED = 7;
+  // Requester's scopes do not cover this resource.
+  // Used in enterprise deployments where the requester knows resources exist
+  // but their delegation token doesn't grant access. The Exchange MAY
+  // use this instead of silent omission when the deployment context makes
+  // it appropriate (e.g., internal Exchange where resources are known).
+  // Public Marketplaces SHOULD silently omit (not reveal existence).
+  OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT = 8;
+
+  // Consumer encountered ext_critical keys it does not recognize.
+  // The unrecognized keys SHOULD be listed in the OfferGroup's ext field
+  // under "unrecognized_critical_extensions" for diagnostic purposes.
+  OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION = 9;
+}
+
+// RateLimitInfo — Caller's rate limit status on this Exchange.
+// v0.2.1 addition. Modeled after IETF RateLimit header fields (RFC 9110 §15.5.30)
+// and Shutterstock's rate limit response pattern.
+message RateLimitInfo {
+  // Maximum requests allowed in the current window.
+  int32 limit = 1;
+
+  // Requests remaining in the current window.
+  int32 remaining = 2;
+
+  // When the current window resets (UTC). After this time, `remaining` resets to `limit`.
+  google.protobuf.Timestamp reset_at = 3;
+
+  // Duration of the rate limit window (e.g. 60s = per-minute limit).
+  optional google.protobuf.Duration window = 4;
+}
+
+// SubscriptionQuotaInfo — Proactive quota signaling for subscription access.
+//
+// Analogous to RateLimitInfo (which signals API request rate limits), this
+// signals subscription consumption quotas. Enables agents to throttle
+// proactively instead of discovering exhaustion via denial.
+//
+// Returned on Offer (per-offer quota visibility) and TransactionResponse
+// (post-transaction remaining quota). A subscription may have multiple
+// independent quotas (access count + spend cap + burst limit), so this
+// message is used as a repeated field.
+//
+// Quota decrement timing: the counter increments at ExecuteTransaction
+// (optimistic decrement, before delivery). If delivery fails, the agent
+// files a DisputeTransaction which may reverse the decrement. This is
+// consistent with the billing model (billing_id created at transaction time).
+message SubscriptionQuotaInfo {
+  // Subscription this quota applies to.
+  string subscription_id = 1;
+
+  // Total allowed in the current period.
+  int32 quota_limit = 2;
+
+  // Used so far in the current period.
+  int32 quota_used = 3;
+
+  // Remaining in the current period.
+  int32 quota_remaining = 4;
+
+  // When the quota counter resets (UTC).
+  optional google.protobuf.Timestamp resets_at = 5;
+
+  // What is being metered. Distinguishes access count quotas from
+  // spend quotas from burst limits.
+  // Standard values: "accesses", "tokens", "spend_cents", "burst"
+  optional string unit = 6;
+}
+
+// ============================================================================
+// Offers and Pricing
+// ============================================================================
+
+// Offer — A single resource offer from a Exchange.
+//
+// Combines pricing, delivery method, resource identity, and reporting terms.
+// CoMP-specific metadata (Package, Function) available via ramp-comp-v1 extension profile.
+message Offer {
+  // Unique identifier for this offer, assigned by the Exchange.
+  string offer_id = 1;
+
+  // Resource title (human-readable, for display/logging).
+  optional string title = 2;
+
+  // Pricing terms including unit cost for cross-marketplace comparison.
+  Pricing pricing = 3;
+
+  // How resource will be delivered.
+  DeliveryMethod delivery_method = 4;
+
+  // Post-usage reporting requirements for this offer.
+  optional ReportingObligation reporting = 5;
+
+  // When this offer expires (ISO 8601).
+  optional google.protobuf.Timestamp expires_at = 6;
+
+  // Resource identity for cross-marketplace deduplication.
+  // Enables Orchestrators to recognize the same resource offered by
+  // different Marketplaces and compare pricing.
+  optional ResourceIdentity identity = 7;
+
+  // Access restrictions derived from provider terms (e.g. RSL permits/prohibits).
+  // Specifies which usage types, user categories, and geographies are
+  // allowed or blocked for this offer.
+  optional AccessRestrictions restrictions = 8;
+
+  // REQUIRED. JWS Compact Serialization (alg=EdDSA) over offer fields
+  // (offer_id, package.id, pricing, identity).
+  // Prevents intermediaries (Orchestrators) from tampering with price
+  // or resource description. Agent SHOULD verify signature (RFC 2119)
+  // against Exchange's public key.
+  //
+  // Also enables stateless offer verification on ExecuteTransaction —
+  // Exchange does not need to store offers, just verify the signature.
+  string signature = 9;
+
+  // JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
+  string signature_algorithm = 10;
+
+  // If set, this offer is available under an existing subscription/deal.
+  // No per-request billing — usage tracked against subscription quota.
+  // Pricing.rate = 0 for subscription offers (zero marginal cost).
+  // The Broker SHOULD prefer subscription offers when available.
+  optional string subscription_id = 11;
+
+  // IAB Content Taxonomy category codes.
+  // Enables agents to filter offers by topic (e.g., "only finance resources").
+  // Uses IAB Content Taxonomy 3.1 codes.
+  repeated string iab_categories = 13;
+
+  // Signed attestations about the resource at this URI.
+  // Replaces ContentQuality. Attestations provide cryptographic proof of
+  // resource properties from trusted parties (providers or verification vendors).
+  //
+  // Three verification levels determine what is independently verifiable:
+  //   Level 0 (no attestations): Resource may carry identifiers (DOI, IPTC GUID)
+  //     for identification, but nothing is cryptographically verifiable.
+  //     Only CDN delivery failure is auto-disputable.
+  //   Level 1 (self-attested): Provider signs own claims with Ed25519 key.
+  //     Agent can independently verify content hash and token count.
+  //     CDN delivery failure + content hash mismatch are auto-disputable.
+  //   Level 2 (third-party attested): Independent verification vendor crawled
+  //     the resource and attested to its properties. Agent trusts the attestation
+  //     (does not re-verify hash). Token count discrepancy is auto-disputable
+  //     when corroborated by CDN response size.
+  //
+  // Multiple attestations may be present (e.g., provider self-attestation
+  // plus a third-party verification). Agents choose which to trust.
+  repeated ResourceAttestation attestations = 14;
+
+  // When the offered data was current. For dynamic resources
+  // (content_mutability = DYNAMIC), this is the snapshot timestamp.
+  // Enables the Broker to evaluate freshness: "this credit report
+  // reflects data as of March 18" or "this drug database was updated today."
+  //
+  // Not set for STATIC resources (content doesn't change) or LIVE
+  // resources (content doesn't exist yet).
+  //
+  // The Broker compares this against RequestConstraints.max_data_age
+  // to filter stale offers. Example: agent requests max_data_age = 7 days,
+  // Broker drops offers where now() - data_as_of > 7 days.
+  optional google.protobuf.Timestamp data_as_of = 16;
+
+  // Subscription quota state, when this offer is under a subscription.
+  // Enables the agent to see remaining quota before committing.
+  // Multiple entries when the subscription has independent quotas
+  // (e.g., access count + spend cap).
+  repeated SubscriptionQuotaInfo subscription_quota = 17;
+
+  // Lightweight previews for offer evaluation.
+  // The Exchange holds URLs (50–200 bytes each); the provider's CDN serves
+  // the actual bytes. Agents fetch previews only when evaluating offers —
+  // not on every discovery query. Multiple previews at different sizes
+  // allow agents to pick the cheapest fetch for their evaluation needs.
+  //
+  // Per content type:
+  //   Image:  watermarked thumbnail (150–450px JPEG)
+  //   Video:  short clip (10–30s MP4, watermarked)
+  //   Audio:  short clip (15–30s MP3, low-bitrate or watermarked)
+  //   Text:   snippet or abstract (first 200 words as text/plain)
+  //   Data:   sample records (1–3 rows as application/json)
+  //   Stream: optional frame capture or none (streams are priced by time)
+  //
+  // Modeled after Shutterstock (multi-size thumbnail URLs),
+  // Spotify (preview_url to 30s clip), IIIF (parameterized image URLs),
+  // and OpenRTB native (img.url + dimensions).
+  repeated Preview previews = 18;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ResourceIdentity — Layered resource identification and verification.
+//
+// Serves two purposes:
+// 1. Cross-marketplace deduplication (Broker groups offers for
+//    the same underlying resource to compare pricing).
+// 2. Resource integrity verification (agent checks that delivered
+//    resource matches what was promised).
+//
+// Providers declare what verification level they support via
+// content_hash + hash_method. Higher verification = higher trust =
+// resource can command premium pricing.
+//
+//   Level 0: No hash (canonical_url only). Agent gets what it gets.
+//   Level 1: SimHash (fuzzy match). Tolerates minor page changes
+//            (ads, nav, timestamps). Catches bait-and-switch.
+//   Level 2: SHA-256 (exact match). Provider serves a clean,
+//            deterministic payload. Agent verifies exact content.
+//
+// This is non-blocking on current infrastructure: providers who
+// serve dynamic pages use Level 0-1. Providers who invest in
+// consistent resource delivery reach Level 2 and earn more.
+//
+// CoMP's Package.id identifies the *package* (marketplace-specific);
+// ResourceIdentity identifies the *resource* (cross-marketplace).
+message ResourceIdentity {
+  // --- Identification (who is this resource?) ---
+
+  // Provider's authoritative URL for this resource (rel="canonical").
+  // Always available. Different per provider for syndicated content.
+  optional string canonical_url = 1;
+
+  // Digital Object Identifier — persistent, never changes.
+  optional string doi = 2;
+
+  // IPTC NewsML-G2 globally unique identifier.
+  // Present when resource flows through news wire syndication (AP, Reuters).
+  optional string iptc_guid = 3;
+
+  // International Standard Name Identifier for the creator.
+  optional string isni = 4;
+
+  // --- Verification (is this the right resource?) ---
+
+  // Hash of the content. Interpretation depends on hash_method:
+  //   "simhash-v1" → locality-sensitive hash, for fuzzy dedup (Level 1)
+  //   "sha256"     → exact-match integrity hash (Level 2)
+  //
+  // Level 1 (SimHash): computed by Exchange from extracted text.
+  //   Agent verifies that fetched content is "substantially similar."
+  //   Tolerates dynamic page elements.
+  //
+  // Level 2 (SHA-256): computed by provider from deterministic payload.
+  //   Agent verifies exact match. Requires provider to serve consistent
+  //   content (e.g., API endpoint, static HTML, structured JSON).
+  //   Mismatch = dispute. Commands premium pricing.
+  optional string content_hash = 5;
+
+  // Hash algorithm and verification level.
+  // Examples: "simhash-v1", "minhash-v1", "sha256", "sha384"
+  optional string hash_method = 6;
+
+  // --- Mutability ---
+
+  // Signals whether this resource's content is stable, changes over time,
+  // or does not exist at offer time (live streaming).
+  //
+  // Drives hash verification behavior:
+  //   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.
+  //   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).
+  //            content_hash reflects state at offer generation time. Hash mismatch is
+  //            expected and MUST NOT trigger automatic dispute.
+  //   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).
+  //            content_hash is not applicable. The "resource" is the stream endpoint.
+  //
+  // Validated across 18 use cases: static content (articles, patents, legislation),
+  // dynamic data (credit reports, drug interactions, stock snapshots), and live
+  // streams (Bloomberg quotes, NPR broadcast, news monitoring feeds).
+  ResourceMutability resource_mutability = 8;
+
+  // --- Provenance (C2PA Content Credentials) ---
+
+  // C2PA content credentials manifest URI.
+  // Points to a sidecar or embedded C2PA manifest for this resource.
+  // C2PA-aware agents MAY follow this URI to validate the full provenance
+  // chain (creator identity, transformation history, ingredient composition)
+  // using C2PA libraries (JUMBF/COSE Sign1). C2PA-unaware agents can rely
+  // on c2pa_status and c2pa-bridged attestation claims instead.
+  //
+  // Formats:
+  //   Sidecar: HTTPS URI to a .c2pa manifest file
+  //   Embedded: same URI as canonical_url (manifest is inside the asset)
+  //   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...
+  optional string c2pa_manifest = 7;
+
+  // Summary validation status of the C2PA manifest.
+  // Populated by the Exchange or a verification vendor after validating
+  // the C2PA manifest. Enables agents to filter for provenance-verified
+  // content without parsing JUMBF/COSE themselves.
+  //
+  // The full C2PA validation details (signer identity, trust list,
+  // action history, training/mining status) are carried in a
+  // ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.
+  optional C2PAStatus c2pa_status = 9;
+
+  // Soft binding hash — content-derived identifier that survives format
+  // transcoding (resolution changes, compression, PDF-to-text extraction).
+  // Extracted from C2PA soft binding assertion when present.
+  // Enables post-delivery verification when the hard binding hash breaks
+  // due to legitimate format conversion.
+  //
+  // Algorithm specified in soft_binding_method. Values are algorithm-specific
+  // (e.g., perceptual hash hex string, watermark identifier).
+  optional string soft_binding = 10;
+
+  // Algorithm used for soft_binding.
+  // Examples: "phash-v1" (perceptual hash), "c2pa-watermark" (C2PA invisible
+  // watermark), "chromaprint" (audio fingerprint).
+  optional string soft_binding_method = 11;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ResourceAttestation — Signed envelope of claims from a trusted party.
+//
+// A provider or third-party verification vendor (GumGum, DoubleVerify, IAS)
+// attests to properties of the resource at a specific URI at a specific time.
+// The signature covers all fields, proving origin and integrity of the claims.
+//
+// Verification levels (determined by who the verifier is):
+//   Level 0: No attestation present. Resource may carry identifiers
+//     (DOI, IPTC GUID via ResourceIdentity) but nothing is cryptographically
+//     verifiable. Only CDN delivery failure is auto-disputable.
+//   Level 1 (self-attested): verifier == provider domain. Provider signs
+//     own claims with their Ed25519 key. Agent can independently verify
+//     content_hash by re-computing it from delivered bytes. Requires the
+//     provider to serve deterministic content at the delivery endpoint.
+//   Level 2 (third-party attested): verifier == verification vendor domain.
+//     Vendor independently crawled the resource and attested to its properties.
+//     Agent trusts the attestation — does NOT re-verify the content hash
+//     (agent lacks the vendor's extraction algorithm). The Ed25519 signature
+//     proves the vendor made the attestation; trust is binary ("do I trust
+//     this vendor?").
+//
+// Claims are limited to 4KB. Attestations are carried in-memory in the
+// Exchange catalog and in Offer responses — strict size limits protect
+// against payload poisoning and ensure catalog performance at scale.
+//
+// Verifiers MUST publish their keys and claims schema at:
+//   https://{verifier-domain}/.well-known/ramp-verifier.json
+// This endpoint follows the JWKS pattern for key management.
+message ResourceAttestation {
+  // Canonical domain of the attesting party (e.g., "nytimes.com" for
+  // self-attestation, "doubleverify.com" for third-party attestation).
+  // Used to look up the verifier's public keys at:
+  //   https://{verifier}/.well-known/ramp-verifier.json
+  string verifier = 1;
+
+  // Key ID from the verifier's JWKS (/.well-known/ramp-verifier.json).
+  // Identifies which Ed25519 key was used to sign this attestation.
+  // Enables key rotation: new keys are added with overlapping validity,
+  // new attestations use the new key, old attestations remain verifiable
+  // as long as the old key is published. Verifiers look up the public key
+  // by kid to verify the signature.
+  string kid = 2;
+
+  // When this attestation was created. Agents use this to assess freshness
+  // (e.g., "I accept attestations up to N hours old for breaking news").
+  google.protobuf.Timestamp attested_at = 3;
+
+  // The resource URI this attestation covers. Must match the URI in the
+  // Offer or ResourceEntry this attestation is attached to.
+  string uri = 4;
+
+  // Signed claims about the resource (max 4KB). A JSON object containing
+  // whatever properties the attesting party can determine about the resource.
+  // Recommended claim names for interoperability:
+  //   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)
+  //   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)
+  //   language (string): ISO 639-1 language code
+  //   iab_categories (string[]): IAB Content Taxonomy 3.1 codes
+  //   content_hash (string): hash of content in "method:hexdigest" format
+  //   hash_method (string): algorithm used for content_hash
+  // Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).
+  // The protocol does NOT define "quality score" — it is inherently subjective.
+  // If a vendor provides a proprietary score, the vendor defines what it means
+  // via their ramp-verifier.json claims_schema.
+  google.protobuf.Struct claims = 5;
+
+  // Ed25519 signature over JCS-canonicalized (RFC 8785) representation of
+  // {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization
+  // Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,
+  // ECMAScript number serialization, strict string escaping, no whitespace.
+  // Each attestation is self-contained — new claim fields do not invalidate
+  // old attestations because the signature covers the specific claims instance.
+  string signature = 6;
+}
+
+// AccessRestrictions — Provider-defined access rules.
+//
+// Maps to RSL <permits>/<prohibits> elements. Expressed as allow/deny
+// lists so agents and Orchestrators can filter offers before transacting.
+message AccessRestrictions {
+  // Permitted usage functions. Empty = all permitted.
+  // Wire format: dashed-lowercase per RSL XML standard.
+  // Standard RSL values: "ai-train", "ai-input", "ai-index", "search", "display".
+  // CoMP-specific values available via ramp-comp-v1 extension profile (same
+  // dashed-lowercase format). Intentionally `repeated string` rather than enum
+  // so RSL and CoMP can extend the vocabulary without proto changes.
+  repeated string permitted_functions = 1;
+
+  // Prohibited usage functions. Same vocabulary as `permitted_functions`.
+  repeated string prohibited_functions = 2;
+
+  // Permitted user categories (RSL: permits type="user").
+  // E.g. "commercial", "non-commercial", "education", "government".
+  repeated string permitted_users = 3;
+
+  // Prohibited user categories.
+  repeated string prohibited_users = 4;
+
+  // Permitted geographies — ISO 3166-1 alpha-2 (RSL: permits type="geo").
+  // Empty = all geographies permitted.
+  repeated string permitted_geo = 5;
+
+  // Prohibited geographies.
+  repeated string prohibited_geo = 6;
+
+  // Maximum number of words from the resource that may be displayed to users.
+  // Enforces word display limits at the access restriction level.
+  optional int32 max_display_words = 7;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// Preview — Lightweight resource preview for offer evaluation.
+//
+// The Exchange holds URLs (50–200 bytes per preview); the provider's
+// CDN serves the actual bytes. This follows the universal pattern:
+// Shutterstock (multi-size thumbnail URLs), Spotify (preview_url to
+// 30s clip), IIIF (parameterized image URLs), OpenRTB (img.url + dims).
+//
+// Previews are free to fetch — no RAMP transaction required. They are
+// the equivalent of looking at a book cover before buying. Providers
+// MAY watermark visual previews or truncate text/audio previews.
+//
+// The Exchange populates preview URLs during catalog ingestion. Preview
+// URLs MAY be signed with a short TTL to prevent hotlinking, or public
+// (provider's choice). Agents fetch previews only when evaluating
+// offers, not on every discovery query.
+message Preview {
+  // URL to a preview asset (thumbnail, clip, snippet, sample).
+  // Served by the provider's CDN, not by the Exchange.
+  string url = 1;
+
+  // MIME type of the preview.
+  // Examples: "image/jpeg", "image/webp", "audio/mpeg", "video/mp4",
+  //           "text/plain", "application/json"
+  string media_type = 2;
+
+  // Dimensions in pixels (for images and video).
+  optional int32 width = 3;
+  optional int32 height = 4;
+
+  // Duration in seconds (for audio and video clips).
+  optional int32 duration = 5;
+
+  // Size category hint. Agents use this to select the right preview
+  // without fetching all of them.
+  // Standard values:
+  //   "thumbnail"  — smallest useful preview (100–150px or 5–10s)
+  //   "preview"    — mid-size for evaluation (300–500px or 15–30s)
+  //   "sample"     — larger / more detailed (for data: 1–3 sample records)
+  optional string size = 6;
+}
+
+// Pricing — Terms for a resource offer.
+//
+// Providers set prices in their preferred model. The Exchange
+// normalizes to unit cost (effective cost per unit) for cross-marketplace
+// comparison — analogous to eCPM in programmatic advertising.
+// Unit cost is denominated in the Exchange's base currency.
+message Pricing {
+  // Provider's pricing model.
+  PricingModel model = 1;
+
+  // Price in the provider's model (e.g. 0.05 = $0.05 per article).
+  double rate = 2;
+
+  // ISO 4217 currency code (e.g. "USD", "EUR").
+  string currency = 3;
+
+  // Normalized cost per unit — the universal comparison metric.
+  // For text: cost per token (replaces eCPT). For video: cost per second.
+  // For data: cost per record. For APIs: cost per call.
+  // Denominated in the Exchange's base_currency (from ExchangeManifest).
+  optional double unit_cost = 4;
+
+  // Estimated quantity in the metering unit.
+  // For text: token count. For video: duration in seconds.
+  // For documents: page count. For data: record count.
+  optional int32 estimated_quantity = 5;
+
+  // Revenue share percentage (0.0–1.0). Used with PRICING_MODEL_REVENUE_SHARE.
+  optional double revshare = 6;
+
+  // License duration in months. How long the granted access remains valid.
+  optional int32 license_duration_months = 7;
+
+  // Metering unit for unit_cost and estimated_quantity.
+  // Standard units: "tokens", "seconds", "pages", "records", "bytes", "calls", "items"
+  // Domain-specific units allowed (e.g., "sq_km", "characters", "images").
+  optional string unit = 8;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+enum PricingModel {
+  PRICING_MODEL_UNSPECIFIED = 0;
+  PRICING_MODEL_PER_ACCESS = 1;   // One-time access fee per resource (RSL: purchase)
+  PRICING_MODEL_PER_TOKEN = 2;     // Rate per LLM token consumed (RSL: use/inference)
+  PRICING_MODEL_PER_FETCH = 3;     // Rate per fetch request (RSL: crawl)
+  PRICING_MODEL_SUBSCRIPTION = 4;  // Recurring access (RSL: subscription)
+  PRICING_MODEL_FREE = 5;          // No charge (RSL: free)
+  PRICING_MODEL_ATTRIBUTION = 6;   // Free with required attribution (RSL: attribution)
+  PRICING_MODEL_CONTRIBUTION = 7;  // Good-faith payment, amount suggested (RSL: contribution)
+  PRICING_MODEL_TRAINING = 8;       // Per training instance fee (RSL: training)
+  PRICING_MODEL_REVENUE_SHARE = 9;  // Revenue share model (percentage of agent revenue)
+  PRICING_MODEL_PER_PAGE = 10;      // Per document page (legal filings, PDFs)
+  PRICING_MODEL_PER_MINUTE = 11;    // Per minute of audio/video
+  PRICING_MODEL_PER_RECORD = 12;    // Per structured data record
+}
+
+enum DeliveryMethod {
+  DELIVERY_METHOD_UNSPECIFIED = 0;
+  // Exchange returns resource inline or via its own endpoint.
+  DELIVERY_METHOD_DIRECT = 1;
+  // Exchange returns access info (signed URL, token) for retrieval
+  // from a Resource Owner / Resource Delivery Endpoint.
+  DELIVERY_METHOD_INSTRUCTIONS = 2;
+  // Resource delivered via real-time streaming connection (WebSocket, SSE, gRPC stream).
+  // The signed URL points to a streaming endpoint. Agent connects and receives
+  // continuous data for the duration of the session.
+  DELIVERY_METHOD_STREAMING = 3;
+}
+
+// ============================================================================
+// Requester Identity
+//
+// Replaces CoMP AISystem with a universal actor model. The requester is not
+// assumed to be "an AI system consuming publisher content" — it can be any
+// entity that needs metered resource access: AI agent, human using a tool,
+// enterprise service account, research pipeline, compliance monitor.
+//
+// Identity is layered:
+//   1. Ed25519 signature proves possession of a registered key
+//   2. Scopes declare what the requester is entitled to access
+//   3. Delegation chain proves who authorized this requester
+//
+// The Exchange uses scopes to filter the catalog:
+//   - Resources outside the requester's scopes are NOT returned (not even
+//     as OfferAbsenceReason — the requester never learns they exist)
+//   - Subscription entitlements are scopes: "subscription:bloomberg-2026"
+//     tells the Exchange to return zero-cost subscription offers
+//
+// Open market: subscription providers mint delegation tokens with scopes.
+// Enterprise: IAM systems mint delegation tokens with role-derived scopes.
+// Same mechanism, different trust domain.
+// ============================================================================
+
+// Requester — Universal identity for any RAMP client.
+//
+// Carries identity, intended use, resource URIs, and entitlement scopes.
+// The Exchange verifies identity via Ed25519 signature, then filters
+// its catalog by the requester's scopes.
+message Requester {
+  // Unique requester identifier (e.g., "agent-research-bot-001").
+  string id = 1;
+
+  // Domain the requester belongs to — used for public key lookup.
+  // Keys published at {domain}/.well-known/ramp-agent.json
+  string domain = 2;
+
+  // What kind of entity is making this request.
+  RequesterType type = 3;
+
+  // Human-readable name (e.g., "Acme Research Assistant").
+  optional string name = 4;
+
+  // Resource URIs being requested.
+  repeated string uris = 5;
+
+  // What the requester intends to do with the resources.
+  // Standard values: "ai_train", "ai_input", "ai_index", "search", "display".
+  repeated string intended_use = 6;
+
+  // Commercial license or subscription identifier.
+  // Exchange uses this to look up entitlements, pricing tiers, and
+  // existing subscription deals.
+  optional string license_id = 7;
+
+  // Entitlement scopes. Declare what the requester can access.
+  //
+  // The Exchange filters its catalog to resources matching these scopes.
+  // Resources outside the scopes are not returned — the requester never
+  // learns they exist. This is the enforcement mechanism for both enterprise
+  // RBAC and open-market subscription entitlements.
+  //
+  // Scope format: "{domain}:{permission}" or "{profile}:{permission}"
+  // Examples:
+  //   "credit:read"                — can access credit reports
+  //   "subscription:bloomberg-2026" — has active Bloomberg subscription
+  //   "academic:*"                 — full access to academic resources
+  //   "internal:reports"           — can access internal reports
+  //   "*"                         — unrestricted (public Exchange default)
+  //
+  // When empty, Exchange applies its default access policy (typically
+  // returns all publicly available resources).
+  repeated string scopes = 8;
+
+  // Request authentication is handled at the HTTP layer via RFC 9421
+  // HTTP Message Signatures (alg=EdDSA). The Requester's public key
+  // is published at {domain}/.well-known/ramp-agent.json as a JWKS.
+  // Fields 9-10 reserved for future use.
+
+  // Optional delegation — present when the requester acts on behalf of
+  // another entity (user, organization, upstream agent).
+  optional Delegation delegation = 11;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// RequesterType — What kind of entity is making the request.
+enum RequesterType {
+  REQUESTER_TYPE_UNSPECIFIED = 0;
+  // Autonomous AI agent (LLM, RAG system, research bot).
+  REQUESTER_TYPE_AGENT = 1;
+  // Human using an AI-powered tool (copilot, assistant).
+  REQUESTER_TYPE_HUMAN_TOOL = 2;
+  // Enterprise service account (automated pipeline, cron job).
+  REQUESTER_TYPE_SERVICE = 3;
+  // Agent acting on behalf of a user (delegated identity).
+  REQUESTER_TYPE_DELEGATED = 4;
+  // Research pipeline (batch data collection, model training).
+  REQUESTER_TYPE_RESEARCH = 5;
+}
+
+// Delegation — Scoped, time-limited, spend-capped credential.
+//
+// Token-format agnostic. Supports JWT (universal default) and Biscuit
+// (advanced multi-hop offline attenuation). The token_format field
+// indicates which format the token field contains.
+//
+// JWT (token_format="jwt"):
+//   Standard JWT with RAMP claims (sub, scope, exp, ramp_max_spend,
+//   ramp_max_accesses, ramp_quota_period). Issued by any OAuth/GNAP
+//   authorization server. Sub-delegation requires IdP round-trip
+//   (Token Exchange RFC 8693).
+//
+// Biscuit (token_format="biscuit-v2"):
+//   Ed25519-signed block chains with offline attenuation. Each block
+//   narrows permissions — never widens. Sub-delegation is local (no
+//   server contact). Libraries: biscuit-go, @biscuit-auth/biscuit-wasm,
+//   biscuit-python.
+//
+// Both formats carry the same semantic claims. The Exchange verifies
+// the token using the appropriate library based on token_format.
+// The convenience fields (scopes, expires_at, max_spend_cents, etc.)
+// are extracted from the token for fast pre-filtering.
+//
+// Zero breach risk: if the token leaks, damage is bounded by
+// scope + time + spend cap. The token is useless after expiry.
+message Delegation {
+  // Who granted this delegation (domain for public key lookup).
+  string principal_domain = 1;
+
+  // Principal's identifier (e.g., "user@acme.com", "bloomberg.com").
+  string principal_id = 2;
+
+  // Scopes granted by this delegation. MUST be a subset of the
+  // principal's own scopes (attenuation — can only narrow, not widen).
+  repeated string scopes = 3;
+
+  // When this delegation expires. Exchange MUST reject expired tokens.
+  google.protobuf.Timestamp expires_at = 4;
+
+  // Maximum spend in currency minor units (e.g., cents for USD).
+  // Exchange tracks cumulative spend against this cap.
+  optional int64 max_spend_cents = 5;
+
+  // Maximum number of accesses allowed under this delegation.
+  // Exchange tracks cumulative access count against this cap.
+  // Deny with DENIAL_REASON_QUOTA_EXCEEDED when count >= limit.
+  // For subscriptions with "10,000 accesses/month", this carries the ceiling.
+  optional int32 max_accesses = 9;
+
+  // Quota reset period. How often the access/spend counters reset.
+  // Example: 720h (30 days) for monthly subscriptions.
+  // When absent, the quota is lifetime (bounded only by expires_at).
+  optional google.protobuf.Duration quota_period = 10;
+
+  // Token bytes. JWT (base64url-encoded) or Biscuit (binary, base64-encoded).
+  bytes token = 6;
+
+  // Token format: "jwt" (default) or "biscuit-v2".
+  string token_format = 7;
+
+  // Optional: URI for real-time revocation checking.
+  // Exchange MAY check this for high-value transactions.
+  // Not checked for routine low-value access (performance tradeoff).
+  optional string revocation_uri = 8;
+
+  // Token issuer. OIDC issuer URL or GNAP grant server URL.
+  // Exchange uses this for JWT validation (OIDC discovery → JWKS)
+  // or GNAP token introspection.
+  optional string issuer = 11;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ============================================================================
+// Intermediary Chain (schain-inspired)
+//
+// Tracks the forwarding path of a request: Agent → Broker → Exchange.
+// Each hop signs the request, proving it passed through legitimately.
+// Modeled after OpenRTB schain (Supply Chain Object).
+// ============================================================================
+
+// IntermediaryHop — One hop in the request forwarding chain.
+message IntermediaryHop {
+  // Domain of the intermediary (for public key lookup).
+  string domain = 1;
+
+  // Intermediary's identifier.
+  string id = 2;
+
+  // When this intermediary forwarded the request.
+  google.protobuf.Timestamp forwarded_at = 3;
+
+  // Hop authentication is handled at the HTTP layer via RFC 9421
+  // HTTP Message Signatures. Each Broker adds its own Signature header.
+  // Fields 4-5 reserved for future use.
+}
+
+// C2PAStatus — Summary validation status of a C2PA content credentials manifest.
+//
+// Populated by the Exchange or a C2PA verification vendor after validating
+// the manifest against the C2PA specification (§15 Validation Algorithm).
+// Maps to C2PA's three validation states: well-formed, valid, trusted.
+//
+// Trust is determined by the C2PA Trust List (curated X.509 roots).
+// RAMP bridges this trust via ResourceAttestation: a RAMP-trusted
+// verification vendor validates the C2PA manifest and publishes
+// the results as attestation claims signed with Ed25519.
+enum C2PAStatus {
+  C2PA_STATUS_UNSPECIFIED = 0;
+  // Manifest is valid AND signer certificate chains to a C2PA Trust List root.
+  // Highest assurance: provenance is cryptographically verified by a trusted CA.
+  C2PA_STATUS_TRUSTED = 1;
+  // Manifest is structurally correct and signature verifies, but signer
+  // certificate does NOT chain to a C2PA Trust List root. The content
+  // has provenance, but the signer is not institutionally vouched for.
+  C2PA_STATUS_VALID = 2;
+  // Manifest is present but validation failed (signature mismatch,
+  // malformed JUMBF, certificate expired, hard binding broken).
+  C2PA_STATUS_INVALID = 3;
+  // Content was checked and has no C2PA manifest.
+  C2PA_STATUS_ABSENT = 4;
+}
+
+// ResourceMutability — Signals whether resource content changes over time.
+//
+// Drives hash verification behavior and Broker expectations.
+// Cross-cutting: validated across 18 use cases spanning 10 industries.
+//
+// Examples by level:
+//   STATIC:  NYT article, academic paper, patent, EU regulation, podcast episode
+//   DYNAMIC: D&B credit report, DrugBank interactions, satellite catalog, news article (corrections)
+//   LIVE:    Bloomberg quote stream, NPR live broadcast, news monitoring feed
+enum ResourceMutability {
+  RESOURCE_MUTABILITY_UNSPECIFIED = 0;
+  // Content is immutable. Hash computed at offer time will match at delivery time.
+  // Agent SHOULD verify content_hash on delivery. Mismatch is disputable.
+  RESOURCE_MUTABILITY_STATIC = 1;
+  // Content changes between offer generation and agent fetch.
+  // Hash reflects state at offer time — mismatch is expected, not disputable.
+  // Offer.data_as_of indicates when the snapshot was taken.
+  RESOURCE_MUTABILITY_DYNAMIC = 2;
+  // Content does not exist at offer time (real-time streaming).
+  // No content_hash is applicable. The "resource" is the stream endpoint/channel.
+  // Metering is time-based (per-minute, per-hour).
+  RESOURCE_MUTABILITY_LIVE = 3;
+}
+
+// ============================================================================
+// Transaction (Steps 4-5)
+// ============================================================================
+
+// TransactionRequest — Commit to one or more offers.
+//
+// After selecting offers, the caller commits by sending this to the
+// Exchange. Supports both single-offer and batch (multi-offer) modes.
+// The Exchange validates eligibility, authorizes billing, creates
+// delivery, and logs each transaction.
+message TransactionRequest {
+  string ver = 1;
+
+  // Unique transaction request identifier (used as idempotency key).
+  string id = 2;
+
+  // Single-offer mode (backwards compatible).
+  // Use `items` for batch mode; `offer_id` + `offer_signature` for single.
+  optional string offer_id = 3;
+
+  // Requester identity — forwarded for authorization and audit.
+  Requester requester = 4;
+
+  // Original RAMP request ID for traceability.
+  optional string request_id = 5;
+
+  // Single-offer signature (backwards compatible).
+  optional string offer_signature = 6;
+
+  // Fields 7-9, 11-12 reserved. Request auth moved to RFC 9421 HTTP Message Signatures.
+  reserved 7, 8, 9, 11, 12;
+
+  // Batch mode: commit to multiple offers in one request.
+  // When populated, `offer_id` and `offer_signature` SHOULD be empty.
+  repeated TransactionItem items = 10;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// TransactionItem — A single offer commitment within a batch transaction.
+message TransactionItem {
+  // The offer_id from the selected Offer.
+  string offer_id = 1;
+
+  // The marketplace_signature from the selected Offer.
+  string offer_signature = 2;
+
+  // Field 3 reserved. Offer signature algorithm now in JWS header.
+  reserved 3;
+}
+
+// TransactionResponse — Exchange confirms the transaction(s).
+//
+// For single-offer mode, the top-level fields are populated.
+// For batch mode, `items` contains per-offer results and `total_cost`
+// summarizes the aggregate cost.
+message TransactionResponse {
+  string ver = 1;
+
+  // Echoed transaction request ID.
+  string id = 2;
+
+  // Single-offer result (backwards compatible).
+  // For batch mode, these may be empty — check `items` instead.
+  optional string transaction_id = 3;
+  optional string billing_id = 4;
+  // Resource title echoed from the Offer (for logging/display).
+  optional string resource_title = 5;
+  optional Cost cost = 6;
+
+  // How resource is delivered in this transaction.
+  DeliveryMethod delivery_method = 7;
+
+  // Reporting requirements attached to this delivery.
+  optional ReportingObligation reporting_obligation = 8;
+
+  // When the delivery endpoint (e.g. signed URL) expires.
+  optional google.protobuf.Timestamp expires_at = 9;
+
+  // REQUIRED. Hash of the agent's identity bound into signed URLs.
+  string agent_identity_hash = 10;
+
+  // Set when the transaction is denied. Absent on success.
+  optional DenialReason denial_reason = 11;
+
+  // If set, this transaction was fulfilled under a subscription/deal.
+  // No per-request charge — usage tracked against subscription quota.
+  optional string subscription_id = 12;
+
+  // Computed per-unit cost for financial attribution on subscription transactions.
+  // Even when cost.amount=0 (subscription), this field carries the value
+  // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
+  optional Cost subscription_unit_value = 16;
+
+  // Batch mode: per-offer results.
+  repeated TransactionResultItem items = 13;
+
+  // Batch mode: aggregate cost across all items.
+  optional Cost total_cost = 14;
+
+  // Post-transaction quota state. Tells the agent how much quota remains
+  // after this transaction. Enables proactive throttling ("1 access left").
+  // Multiple entries for multi-dimensional quotas.
+  repeated SubscriptionQuotaInfo subscription_quota = 17;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// TransactionResultItem — Result for a single offer in a batch transaction.
+message TransactionResultItem {
+  // The offer_id this result is for.
+  string offer_id = 1;
+
+  // Exchange-assigned transaction identifier.
+  string transaction_id = 2;
+
+  // Billing reference.
+  string billing_id = 3;
+
+  // CoMP Package with retrieval.endpoint (signed URL) populated.
+  // Resource title echoed from the Offer.
+  optional string resource_title = 4;
+
+  // Cost for this item.
+  Cost cost = 5;
+
+  // If under subscription, no per-request charge.
+  optional string subscription_id = 6;
+
+  // Computed per-unit cost for financial attribution on subscription transactions.
+  // Even when cost.amount=0 (subscription), this field carries the value
+  // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
+  optional Cost subscription_unit_value = 11;
+
+  // Set if this specific item was denied (others may succeed).
+  optional DenialReason denial_reason = 7;
+
+  // When the signed URL expires.
+  optional google.protobuf.Timestamp expires_at = 8;
+
+  // How resource is delivered for this item.
+  DeliveryMethod delivery_method = 9;
+
+  // Reporting requirements for this item.
+  optional ReportingObligation reporting_obligation = 10;
+}
+
+// Cost — Actual transaction cost.
+message Cost {
+  double amount = 1;
+  string currency = 2;        // ISO 4217
+  optional double unit_cost = 3;   // Effective cost per unit
+}
+
+// DenialReason — Standard vocabulary for transaction denial.
+// Logged as enum values, not strings. Enables automated processing
+// of denial patterns across the ecosystem.
+enum DenialReason {
+  DENIAL_REASON_UNSPECIFIED = 0;
+  DENIAL_REASON_INVALID_LICENSE = 1;      // License ID not recognized
+  DENIAL_REASON_EXPIRED_LICENSE = 2;      // License ID expired
+  DENIAL_REASON_INSUFFICIENT_BALANCE = 3; // Requester's balance too low
+  DENIAL_REASON_RATE_LIMITED = 4;         // Too many requests
+  DENIAL_REASON_CONTENT_UNAVAILABLE = 5;  // Resource no longer available
+  DENIAL_REASON_FUNCTION_PROHIBITED = 6;  // Requested function not permitted
+  DENIAL_REASON_GEO_RESTRICTED = 7;       // Requester's geography not permitted
+  DENIAL_REASON_REPORTING_OVERDUE = 8;    // Requester has >20% overdue reports (MAY threshold)
+  DENIAL_REASON_OFFER_EXPIRED = 9;        // Offer TTL exceeded
+  DENIAL_REASON_SIGNATURE_INVALID = 10;   // Offer signature verification failed
+  DENIAL_REASON_QUOTA_EXCEEDED = 11;      // Subscription access count exhausted for this period
+  DENIAL_REASON_DELEGATION_EXPIRED = 12;  // Biscuit delegation token expired
+  DENIAL_REASON_SCOPE_INSUFFICIENT = 13;  // Requester scopes don't cover this resource
+}
+
+// IngestionSource — How the catalog entry was discovered.
+// Used by the Content Ingestion Pipeline to track provenance.
+enum IngestionSource {
+  INGESTION_SOURCE_UNSPECIFIED = 0;
+  INGESTION_SOURCE_RAMP_SITEMAP = 1;  // RAMP XML namespace in sitemap
+  INGESTION_SOURCE_RSL = 2;            // RSL rsl.txt
+  INGESTION_SOURCE_SITEMAP = 3;        // Standard sitemap.xml
+  INGESTION_SOURCE_HTML_CRAWL = 4;     // HTML crawl + readability extraction
+  INGESTION_SOURCE_CMS_API = 5;        // CMS REST API (WordPress, etc.)
+  INGESTION_SOURCE_MANUAL = 6;         // Manual configuration
+  INGESTION_SOURCE_CATALOG_API = 7;    // Third-party CatalogService push
+}
+
+// CatalogService — Optional RPC for providers/CMS/third-party intelligence
+// providers to push resource metadata to a Exchange.
+service CatalogService {
+  // Push or update resource entries in the Exchange catalog.
+  rpc PushResources(PushResourcesRequest) returns (PushResourcesResponse);
+  // Remove resource entries.
+  rpc RemoveResources(RemoveResourcesRequest) returns (RemoveResourcesResponse);
+  // Trigger a full catalog refresh from configured sources.
+  rpc RefreshCatalog(RefreshCatalogRequest) returns (RefreshCatalogResponse);
+}
+
+message PushResourcesRequest {
+  string tenant_id = 1;
+  repeated ResourceEntry entries = 2;
+
+  // Fields 3-4 reserved. Caller auth moved to RFC 9421 HTTP Message Signatures.
+  reserved 3, 4;
+
+  // Identity of the caller (who is pushing this data).
+  // The Exchange verifies this matches a registered CatalogService client.
+  string caller_id = 5;
+}
+
+message ResourceEntry {
+  string domain = 1;
+  string path = 2;
+  optional string content_id = 3;
+  optional string title = 4;
+  optional int32 word_count = 5;
+  optional int32 estimated_quantity = 6;
+  optional string content_hash = 7;
+  optional string hash_method = 8;
+  optional IngestionSource source = 9;
+
+  // Who provided this resource metadata. Creates audit trail for
+  // "where did this catalog entry come from?"
+  optional string provenance_source = 10;  // e.g., "gumgum.com", "ssp-alpha.com", "wordpress-plugin"
+
+  // When this metadata was collected/generated.
+  optional google.protobuf.Timestamp provenance_timestamp = 11;
+
+  // Signed attestations about this resource entry.
+  // Same semantics as Offer.attestations — see ResourceAttestation message
+  // for verification levels and claim vocabulary. Attestations pushed via
+  // CatalogService are verified at push time: the Exchange checks that
+  // the attestation verifier is authorized to push for this provider
+  // (via catalog_contributors in ProviderManifest) and validates the
+  // attestation signature against the verifier's public key from their
+  // /.well-known/ramp-verifier.json endpoint.
+  repeated ResourceAttestation attestations = 12;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+message PushResourcesResponse {
+  int32 accepted = 1;
+  int32 rejected = 2;
+}
+
+message RemoveResourcesRequest {
+  string tenant_id = 1;
+  repeated string paths = 2;
+}
+
+message RemoveResourcesResponse {
+  int32 removed = 1;
+}
+
+message RefreshCatalogRequest {
+  string tenant_id = 1;
+}
+
+message RefreshCatalogResponse {
+  bool started = 1;
+}
+
+// ============================================================================
+// Post-Usage Reporting (Step 7)
+// ============================================================================
+
+// ReportingObligation — Requirements attached to a delivery.
+message ReportingObligation {
+  // Whether post-usage reporting is required.
+  bool required = 1;
+
+  // Duration within which the report must be submitted (e.g. 24h).
+  optional google.protobuf.Duration window = 2;
+
+  // URL to submit the usage report to (if different from Marketplace).
+  optional string endpoint = 3;
+
+  // Field names that must be present in the report.
+  repeated string required_fields = 4;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// UsageReport — Post-usage report for a completed transaction.
+//
+// Filed by the agent or Broker after resource is used.
+// Per RAMP v0.2 §4, failure to report may result in the Exchange
+// blocking subsequent access.
+message UsageReport {
+  string ver = 1;
+
+  // Unique report identifier.
+  string id = 2;
+
+  // Transaction ID from the delivery.
+  string transaction_id = 3;
+
+  // Billing reference from the delivery.
+  string billing_id = 4;
+
+  // How the resource was actually used.
+  Usage usage = 5;
+
+  // When the resource was used (ISO 8601).
+  google.protobuf.Timestamp timestamp = 6;
+
+  // Original RAMP request ID.
+  optional string request_id = 7;
+
+  // Exchange this report is for.
+  optional string marketplace = 8;
+
+  // Assets that were delivered and used.
+  repeated UsageAsset assets = 9;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// CitationFormat — How the citation is presented to the user.
+enum CitationFormat {
+  CITATION_FORMAT_LINK = 0;
+  CITATION_FORMAT_FOOTNOTE = 1;
+  CITATION_FORMAT_INLINE = 2;
+}
+
+// AttributionDetail — Structured attribution metadata for usage reporting.
+message AttributionDetail {
+  // URL displayed to the user as the attribution link.
+  optional string displayed_url = 1;
+
+  // How the citation was presented.
+  optional CitationFormat format = 2;
+
+  // Whether the attribution was visible to the end user.
+  optional bool visible_to_user = 3;
+}
+
+// Usage — How resource was actually used by the AI system.
+message Usage {
+  // How the resource was used. Standard values: "ai_train", "ai_input",
+  // "ai_index", "search", "display". Multiple allowed.
+  // CoMP-specific values available via ramp-comp-v1 extension profile.
+  repeated string function = 1;
+
+  // Sub-function detail. Standard values: "training", "rag", "grounding",
+  // "agent_view", "agent_actions".
+  repeated string subfn = 2;
+
+  // REQUIRED. Actual quantity consumed, in the metering unit from the Offer's Pricing.
+  // For text: tokens consumed. For video: seconds watched. For data: records accessed.
+  // Exchange cross-references against Offer.pricing.estimated_quantity.
+  int32 consumed_quantity = 3;
+
+  // Whether resource/output was displayed to a human.
+  optional bool displayed_to_user = 4;
+
+  // Whether citation was included as required by the offer terms.
+  optional bool citation_included = 5;
+
+  // Structured attribution details for each citation provided.
+  repeated AttributionDetail attribution = 6;
+
+  // Metering unit for consumed_quantity. Must match the Offer's Pricing.unit.
+  // If omitted, defaults to "tokens" for backward compatibility.
+  optional string consumed_unit = 8;
+}
+
+// UsageAsset — A single asset included in the usage report.
+message UsageAsset {
+  string uri = 1;
+  optional string title = 2;
+  optional string package_id = 3;
+}
+
+// UsageReportResponse — Acknowledgment of a usage report.
+message UsageReportResponse {
+  // Whether the report was accepted.
+  bool accepted = 1;
+
+  // If not accepted, reason for rejection.
+  optional string rejection_reason = 2;
+
+  // Exchange-assigned report identifier. Required for the dispute chain —
+  // the agent must reference this report_id in DisputeRequest to prove that
+  // a usage report was filed before disputing. The complete evidence chain:
+  //   Offer → Transaction (transaction_id, billing_id)
+  //        → UsageReport → UsageReportResponse (report_id)
+  //        → DisputeRequest (transaction_id + report_id)
+  string report_id = 3;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ============================================================================
+// Broker Protocol (Steps 1, 6)
+//
+// These messages are for the Agent → Broker path.
+// When an agent talks directly to a Exchange, it uses
+// ResourceQuery/TransactionRequest directly instead.
+// ============================================================================
+
+// RAMPRequest — Agent sends to Broker (Step 1).
+message RAMPRequest {
+  string ver = 1;
+
+  // Unique request identifier, assigned by the Requesting Party.
+  string id = 2;
+
+  // Requester identity — who is making this request, what scopes they have.
+  // The Broker forwards this to Marketplaces in ResourceQuery.requester.
+  Requester requester = 3;
+
+  // Constraints for marketplace filtering and offer selection.
+  optional RequestConstraints constraints = 4;
+
+  // Domain extension profiles the agent understands.
+  //
+  // The Broker uses this to:
+  //   1. Route queries to Marketplaces that support these profiles
+  //   2. Forward the profiles in ResourceQuery.supported_profiles
+  //   3. Include profile-specific ext fields when returning results
+  //
+  // Examples: ["ramp-academic-v1"] — agent working on literature review
+  repeated string supported_profiles = 5;
+
+  // Search query for Broker-side resource discovery.
+  // Used when the agent doesn't know specific URIs but wants the Broker
+  // to find matching resources across Exchanges.
+  // When present, the Broker interprets the query and discovers resources
+  // across Exchanges on the agent's behalf. Results returned as Offers
+  // in RAMPResponse, same as for specific URI requests.
+  // Can be used alongside Requester.uris (specific URIs + search in one request).
+  optional string query = 6;
+
+  // Structured search filters (optional, alongside or instead of query).
+  // Keys are profile-specific: "academic.topic", "news.category",
+  // "legal.jurisdiction", etc. The Broker maps these to Exchange-specific
+  // query parameters.
+  optional google.protobuf.Struct search_filters = 7;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// RequestConstraints — Budget and preference constraints.
+message RequestConstraints {
+  // Authorized Exchange domains. Broker queries only these.
+  repeated string marketplaces = 1;
+
+  // Maximum price the agent is willing to pay.
+  optional Cost max_price = 2;
+
+  // Maximum effective cost per unit.
+  optional double max_unit_cost = 3;
+
+  // Preferred delivery methods, in order of preference.
+  repeated DeliveryMethod delivery_preference = 4;
+
+  // Whether the agent supports post-usage reporting.
+  optional bool reporting_capable = 5;
+
+  // Exchanges the agent has existing relationships with (subscriptions,
+  // contracts). The Broker SHOULD prefer these when resource is
+  // available — subscription resource has zero marginal cost.
+  repeated string preferred_marketplaces = 6;
+
+  // Budget scope identifier for per-period tracking.
+  // E.g. "user:u-12345" for per-user budgets, "team:eng" for per-team.
+  // The Broker tracks cumulative spend per scope across sessions.
+  optional string budget_scope = 7;
+
+  // Per-period budget limit. The Broker tracks spend against this
+  // for the budget_scope. Transactions that would exceed are denied.
+  optional Cost period_budget = 8;
+
+  // Budget period (e.g. 720h = 30 days). Resets at period boundary.
+  optional google.protobuf.Duration budget_period = 9;
+
+  // Maximum acceptable age of resource data. The Broker SHOULD
+  // exclude offers where (now - Offer.data_as_of) exceeds this duration.
+  //
+  // Only relevant for DYNAMIC resources. Ignored for STATIC (content is
+  // immutable) and LIVE (content doesn't exist yet).
+  //
+  // Examples:
+  //   7 days   — "credit report updated within the last week"
+  //   1 hour   — "stock snapshot from the last hour"
+  //   30 days  — "drug interaction database updated this month"
+  optional google.protobuf.Duration max_data_age = 10;
+}
+
+// ============================================================================
+// Provider Discovery (/.well-known/ramp.json)
+//
+// Static JSON file hosted by the provider. Serves two purposes:
+//
+// 1. Proactive discovery: Agents check this before crawling to find
+//    authorized Marketplaces — no 403 needed.
+// 2. Edge function config: The Exchange endpoint(s) to redirect to
+//    when the edge function blocks a wandering bot.
+//
+// Complements RSL (rsl.txt declares licensing terms) and CoMP (defines
+// the data model). ramp.json answers: "where do you go to transact?"
+//
+// The Exchange ingests the provider's rsl.txt to build its catalog —
+// RSL is terms declaration, RAMP is transaction infrastructure.
+// ============================================================================
+
+// ProviderManifest — Served at /.well-known/ramp.json
+//
+// Answers one question: "where do you go to transact?"
+// Access policy lives in rsl.txt (RSL 1.0), not here.
+//
+// In practice, providers don't manually drop this file. The edge
+// function generates and caches it from the provider's CMS / internal
+// systems. The edge function is the single deploy for providers.
+message ProviderManifest {
+  // RAMP protocol version.
+  string ver = 1;
+
+  // Canonical domain of the provider.
+  string provider = 2;
+
+  // Contact email for licensing inquiries.
+  optional string contact = 3;
+
+  // Authorized Marketplaces for this provider's resources.
+  // Like ads.txt — declares who is authorized to sell.
+  repeated AuthorizedExchange marketplaces = 4;
+
+  // Authorized third-party catalog contributors for this provider.
+  // Lists parties authorized to push resource metadata (including attestations)
+  // on the provider's behalf via CatalogService.PushResources. When the
+  // Exchange receives a push from a third party for this provider's resources,
+  // it checks this list — unauthorized pushers are rejected.
+  // This prevents unauthorized parties from pushing fake attestations for
+  // providers they don't represent.
+  repeated CatalogContributor catalog_contributors = 5;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// CatalogContributor — A third party authorized to push catalog metadata
+// (including attestations) on behalf of a provider.
+message CatalogContributor {
+  // Canonical domain of the authorized contributor (e.g., "doubleverify.com").
+  string domain = 1;
+
+  // Relationship of this contributor to the provider.
+  // Examples: "verifier" (resource intelligence vendor that attests to resource
+  // properties), "marketplace" (a Exchange that enriches catalog entries).
+  string relationship = 2;
+}
+
+// AuthorizedExchange — A Exchange authorized to sell this provider's resources.
+message AuthorizedExchange {
+  // Canonical domain of the Exchange.
+  string domain = 1;
+
+  // RAMP ExchangeService endpoint URL.
+  string endpoint = 2;
+
+  // Relationship type (mirrors ads.txt DIRECT/RESELLER).
+  ProviderRelationship relationship = 3;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+enum ProviderRelationship {
+  PROVIDER_RELATIONSHIP_UNSPECIFIED = 0;
+  // Provider has a direct contract with this Exchange.
+  PROVIDER_RELATIONSHIP_DIRECT = 1;
+  // Exchange resells resources via another authorized party.
+  PROVIDER_RELATIONSHIP_RESELLER = 2;
+}
+
+// ============================================================================
+// Exchange Discovery (/.well-known/ramp-exchange.json)
+//
+// Machine-readable self-description of a RAMP Exchange.
+// Enables automated Exchange discovery and capability negotiation.
+// Analogous to OIDC Discovery (/.well-known/openid-configuration)
+// and IAB sellers.json.
+//
+// The Exchange MUST serve this at:
+//   https://{domain}/.well-known/ramp-exchange.json
+// MUST be served over TLS. SHOULD be cacheable (Cache-Control max-age >= 3600).
+// MUST NOT require authentication.
+//
+// Brokers fetch this on first contact with a new Exchange to
+// bootstrap: extract endpoints, capabilities, and key URIs. Replaces
+// the naive HEAD health probe with structured capability discovery.
+// ============================================================================
+
+// ExchangeManifest — Served at /.well-known/ramp-exchange.json
+message ExchangeManifest {
+  // RAMP protocol version.
+  string ver = 1;
+
+  // Canonical domain of this Exchange.
+  string domain = 2;
+
+  // Human-readable name.
+  string name = 3;
+
+  // Organization operating this Exchange.
+  string operator = 4;
+
+  // Operator's corporate domain (may differ from marketplace domain).
+  optional string operator_domain = 5;
+
+  // ExchangeService endpoint URL.
+  string endpoint = 6;
+
+  // Ed25519 public keys URL (for offer signature verification).
+  string keys_uri = 7;
+
+  // Health check endpoint URL.
+  optional string health_endpoint = 8;
+
+  // CatalogService endpoint URL (if exposed to providers/verifiers).
+  optional string catalog_endpoint = 9;
+
+  // Supported RAMP protocol versions (e.g., ["0.3"]).
+  repeated string protocol_versions_supported = 10;
+
+  // Supported pricing models. Uses the canonical PricingModel enum (line 827)
+  // — was `repeated string` historically; tightened to enum so the canonical
+  // PRICING_MODEL_* values are the only values on the wire. Producers must
+  // emit the enum; consumers reject unknown values.
+  repeated PricingModel pricing_models_supported = 11;
+
+  // Supported delivery methods. Uses the canonical DeliveryMethod enum
+  // (line 843) — was `repeated string` historically; tightened to enum.
+  repeated DeliveryMethod delivery_methods_supported = 12;
+
+  // Accepted content hash methods for attestation verification.
+  repeated string hash_methods_supported = 13;
+
+  // Trusted attestation verification vendors (canonical domains).
+  repeated string accepted_verifiers = 14;
+
+  // Contact email for integration inquiries.
+  optional string contact_email = 15;
+
+  // Terms of service URL.
+  optional string terms_uri = 16;
+
+  // Privacy policy URL.
+  optional string privacy_uri = 17;
+
+  // Domain extension profiles this Exchange conforms to.
+  //
+  // Each profile defines a standardized vocabulary of ext field keys,
+  // attestation claim names, and behavioral conventions for a specific
+  // domain. The Broker uses this to filter Marketplaces by capability.
+  //
+  // Three-layer extension governance:
+  //   Layer 1 (Core proto): Fields in this protobuf. Every implementation MUST support.
+  //   Layer 2 (Standard extensions): Defined in RAMP spec, namespaced "ramp.*" in ext.
+  //     Every conformant implementation SHOULD support.
+  //   Layer 3 (Domain profiles): Listed here. Published by domain communities,
+  //     namespaced by domain (e.g., "pharma.*", "medimg.*"). Only relevant
+  //     Marketplaces implement. Broker filters by declared profiles.
+  //
+  // Examples: ["ramp-news-v1", "ramp-academic-v1", "ramp-pharma-v1", "ramp-medimg-v1"]
+  repeated string supported_profiles = 18;
+
+  // Authorization methods this Exchange supports (ordered by preference).
+  // Agents/Brokers select the first mutually supported method.
+  repeated AuthMethod supported_auth_methods = 20;
+
+  // OIDC Discovery URL (when OAuth methods are supported).
+  // Agents use this for token endpoint discovery and JWKS retrieval.
+  optional string oidc_issuer = 21;
+
+  // GNAP grant endpoint (when GNAP is supported).
+  optional string gnap_grant_endpoint = 22;
+
+  // JWKS URI for this Exchange's signing keys (offer verification).
+  // Published as standard JWKS (RFC 7517) with Ed25519 keys.
+  optional string jwks_uri = 23;
+
+  // Base currency for pricing (ISO 4217 code, e.g., "USD", "EUR").
+  // All unit_cost values in offers from this Exchange are denominated
+  // in this currency. Enables cross-marketplace price comparison.
+  optional string base_currency = 19;
+
+  // ext = 24: moved from 20 to resolve a tag collision with
+  // supported_auth_methods at 20. Fresh tag (no prior wire usage).
+  google.protobuf.Struct ext = 24;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  repeated string ext_critical = 90;
+}
+
+// AccessPolicy — Per-path resource access rules.
+//
+// Used by Marketplaces to communicate provider access policies.
+// May be included in ResourceResponse, edge function config, or other
+// contexts. Not required in ramp.json (RSL handles terms declaration).
+message AccessPolicy {
+  // Default policy for paths not matching any rule.
+  ResourceAccessPolicy default_policy = 1;
+
+  // Path-specific overrides.
+  repeated AccessPolicyRule rules = 2;
+}
+
+// AccessPolicyRule — Access policy for a URL path pattern.
+message AccessPolicyRule {
+  // Glob pattern (e.g. "/premium/*", "/free/*", "/archive/*").
+  string pattern = 1;
+
+  // Access policy for matching paths.
+  ResourceAccessPolicy policy = 2;
+}
+
+// AuthMethod — Authorization methods an Exchange can support.
+// Advertised in ExchangeManifest.supported_auth_methods (ordered by preference).
+enum AuthMethod {
+  AUTH_METHOD_UNSPECIFIED = 0;
+  // GNAP (RFC 9635) — key-first identity, key-bound tokens. Recommended.
+  AUTH_METHOD_GNAP = 1;
+  // OAuth 2.0 + DPoP (RFC 9449) — sender-constrained tokens. Enterprise recommended.
+  AUTH_METHOD_OAUTH_DPOP = 2;
+  // OAuth 2.0 Bearer JWT — acceptable, widely deployed.
+  AUTH_METHOD_OAUTH_BEARER = 3;
+  // OAuth 2.0 + mTLS — high-security environments.
+  AUTH_METHOD_OAUTH_MTLS = 4;
+}
+
+enum ResourceAccessPolicy {
+  RESOURCE_ACCESS_POLICY_UNSPECIFIED = 0;
+  // Resource requires a RAMP transaction (licensed access).
+  RESOURCE_ACCESS_POLICY_LICENSED = 1;
+  // Resource is freely accessible, no transaction needed.
+  RESOURCE_ACCESS_POLICY_OPEN = 2;
+  // Resource is not available to AI systems.
+  RESOURCE_ACCESS_POLICY_BLOCKED = 3;
+}
+
+// RAMPResponse — Broker returns to Agent (Step 6).
+message RAMPResponse {
+  string ver = 1;
+  string id = 2;
+
+  // Echoed request ID from Step 1.
+  string request_id = 3;
+
+  // Exchange-assigned identifiers.
+  string transaction_id = 4;
+  string billing_id = 5;
+
+  // Which Exchange won the selection.
+  string marketplace = 6;
+
+  // CoMP Package with retrieval.endpoint populated.
+  // Resource title for the disputed resource.
+  optional string resource_title = 7;
+
+  // Transaction cost.
+  Cost cost = 8;
+
+  // How resource is delivered.
+  DeliveryMethod delivery_method = 9;
+
+  // Reporting obligations the agent must fulfill.
+  optional ReportingObligation reporting_obligation = 10;
+
+  // When the delivery endpoint expires.
+  optional google.protobuf.Timestamp expires_at = 11;
+
+  // Broker's fee for this transaction, if any.
+  // Absent = no per-transaction fee (governed by external agreement).
+  // Present = explicit fee the agent can see and audit.
+  // Broker MUST disclose fees when charging per-transaction.
+  optional Cost broker_fee = 12;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ============================================================================
+// Resource Disputes (v0.3)
+//
+// Full dispute lifecycle with three-tier resolution:
+//   Tier 1: Automated (<1s) — auto-credit on CDN delivery failure, hash mismatch
+//   Tier 2: Rule-based review (<24h) — concrete resolution rules
+//   Tier 3: Pattern investigation (async) — aggregate fraud detection
+//
+// Dispute chain: agent MUST file UsageReport before filing a dispute.
+//   Offer → Transaction (transaction_id, billing_id)
+//        → UsageReport → UsageReportResponse (report_id)
+//        → DisputeRequest (transaction_id + report_id) → DisputeResponse
+// ============================================================================
+
+// DisputeRequest — Agent signals a problem with delivered resource.
+message DisputeRequest {
+  string ver = 1;
+
+  // Unique dispute identifier.
+  string id = 2;
+
+  // Transaction being disputed.
+  string transaction_id = 3;
+
+  // Billing reference from the transaction.
+  string billing_id = 4;
+
+  // Reason for the dispute.
+  DisputeReason reason = 5;
+
+  // Human-readable description of the issue.
+  optional string description = 6;
+
+  // Evidence: content hash of what was actually received.
+  // Exchange compares against the hash promised in ResourceIdentity.
+  optional string received_content_hash = 7;
+  optional string received_hash_method = 8;
+
+  // Field 9 reserved. Agent auth moved to RFC 9421 HTTP Message Signatures.
+  reserved 9;
+
+  // Must reference a filed UsageReport. The agent MUST file a UsageReport
+  // (via ReportUsage RPC) and receive a report_id BEFORE filing a dispute.
+  // This prevents fire-and-forget disputes and ensures the Exchange has
+  // the complete evidence chain: what was offered, what was transacted,
+  // what the agent reported using, and what the agent disputes.
+  // The dispute chain: Transaction → UsageReport → Dispute.
+  string report_id = 10;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+enum DisputeReason {
+  DISPUTE_REASON_UNSPECIFIED = 0;
+  // Content hash does not match what was promised in the Offer.
+  DISPUTE_REASON_CONTENT_MISMATCH = 1;
+  // Resource was not delivered (signed URL returned 404/403/5xx).
+  DISPUTE_REASON_DELIVERY_FAILED = 2;
+  // Resource was delivered but is entirely different from what was described.
+  DISPUTE_REASON_WRONG_CONTENT = 3;
+  // Signed URL expired before the agent could fetch the resource.
+  DISPUTE_REASON_EXPIRED_BEFORE_FETCH = 4;
+  // Resource was truncated or incomplete.
+  DISPUTE_REASON_INCOMPLETE_CONTENT = 5;
+}
+
+// DisputeStatus — Lifecycle state of a resource dispute.
+//
+// Disputes progress through a three-tier resolution process:
+//   Tier 1 (automated, <1 second, ~99% of cases): Auto-credit when evidence
+//     is independently verifiable (CDN logs, cryptographic hash comparison).
+//     FILED → AUTO_RESOLVED.
+//   Tier 2 (rule-based review, <24 hours, ~0.9%): Exchange applies concrete
+//     resolution rules when Tier 1 evidence is inconclusive.
+//     FILED → EVIDENCE_NEEDED → UNDER_REVIEW → RESOLVED.
+//   Tier 3 (pattern investigation, async, ~0.1%): Triggered by aggregate
+//     patterns (e.g., agent dispute rate >5%, provider token discrepancy >2%).
+//     ESCALATED → SETTLED → FINAL.
+//
+// Appeals: losing party may appeal with new evidence.
+//   RESOLVED → APPEALED → UNDER_REVIEW (re-enters Tier 2).
+enum DisputeStatus {
+  DISPUTE_STATUS_UNSPECIFIED = 0;
+  // Agent submitted DisputeRequest. Initial state.
+  DISPUTE_STATUS_FILED = 1;
+  // Exchange auto-resolved via Tier 1 rules (CDN logs, hash comparison).
+  DISPUTE_STATUS_AUTO_RESOLVED = 2;
+  // Exchange requests additional evidence from the agent or provider.
+  DISPUTE_STATUS_EVIDENCE_NEEDED = 3;
+  // Exchange is reviewing with Tier 2 resolution rules.
+  DISPUTE_STATUS_UNDER_REVIEW = 4;
+  // Escalated to Tier 3 pattern-based investigation.
+  DISPUTE_STATUS_ESCALATED = 5;
+  // Decision made (credit, redelivery, rejected). See resolution field.
+  DISPUTE_STATUS_RESOLVED = 6;
+  // Losing party appealed with new evidence. Re-enters review.
+  DISPUTE_STATUS_APPEALED = 7;
+  // Financial settlement applied.
+  DISPUTE_STATUS_SETTLED = 8;
+  // No further appeals. Dispute closed.
+  DISPUTE_STATUS_FINAL = 9;
+}
+
+// ResolutionType — Outcome of a resolved dispute.
+//
+// Populated in DisputeResponse.resolution when the dispute reaches a
+// terminal state (RESOLVED, SETTLED, or FINAL).
+enum ResolutionType {
+  RESOLUTION_TYPE_UNSPECIFIED = 0;
+  // Account credit applied to the agent's next billing cycle.
+  RESOLUTION_TYPE_CREDIT = 1;
+  // New signed URL issued for the same resource (e.g., when content hash
+  // now matches after provider correction).
+  RESOLUTION_TYPE_REDELIVERY = 2;
+  // Dispute rejected with a specific reason (see DisputeResponse.rejection_reason).
+  RESOLUTION_TYPE_REJECTED = 3;
+  // Escalated to Tier 3 pattern analysis for further investigation.
+  RESOLUTION_TYPE_INVESTIGATION = 4;
+}
+
+// DisputeResponse — Exchange acknowledges the dispute.
+message DisputeResponse {
+  // Whether the dispute was accepted for processing.
+  bool accepted = 1;
+
+  // Exchange-assigned dispute case identifier.
+  optional string dispute_id = 2;
+
+  // If not accepted, why.
+  optional string rejection_reason = 3;
+
+  // Expected resolution timeline.
+  optional google.protobuf.Duration estimated_resolution = 4;
+
+  // Current lifecycle status of the dispute. Tracks progression through
+  // the three-tier resolution process:
+  //   Tier 1 (automated, <1s): FILED → AUTO_RESOLVED or EVIDENCE_NEEDED
+  //   Tier 2 (rule-based, <24h): UNDER_REVIEW → RESOLVED
+  //   Tier 3 (pattern investigation, async): ESCALATED → SETTLED → FINAL
+  // Losing party may appeal: RESOLVED → APPEALED → back to UNDER_REVIEW.
+  DisputeStatus status = 5;
+
+  // Resolution outcome, populated when the dispute reaches a terminal
+  // state (RESOLVED, SETTLED, or FINAL). Absent while dispute is in
+  // progress (FILED, UNDER_REVIEW, ESCALATED, etc.).
+  optional ResolutionType resolution = 6;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ============================================================================
+// Provider Domain Verification (v0.3)
+//
+// ACME HTTP-01 style domain verification for provider onboarding.
+// Proves that the caller controls the provider domain before accepting
+// signing keys or configuration changes. Used by ramp-cli.
+//
+// Flow:
+//   1. Provider calls RequestDomainVerification with their domain
+//   2. Exchange returns a challenge token
+//   3. Provider places the token at {domain}/.well-known/ramp-verify/{token}
+//      (edge function can auto-serve this from KV store)
+//   4. Provider calls ConfirmDomainVerification
+//   5. Exchange fetches the challenge URL to verify domain control
+//   6. If verified: Exchange accepts subsequent operations for this domain
+//
+// Double protection: Exchange also checks ramp.json to verify it is
+// listed as an authorized marketplace for this provider.
+// ============================================================================
+
+// DomainVerificationRequest — Provider requests a verification challenge.
+message DomainVerificationRequest {
+  string ver = 1;
+
+  // The provider domain to verify (e.g., "techcrunch.com").
+  string domain = 2;
+
+  // Field 3 reserved. Caller auth moved to RFC 9421 HTTP Message Signatures.
+  reserved 3;
+
+  // Caller identity (registered with the Exchange).
+  optional string caller_id = 4;
+}
+
+// DomainVerificationChallenge — Exchange returns a challenge.
+message DomainVerificationChallenge {
+  // Opaque challenge token. Provider must serve this at:
+  // https://{domain}/.well-known/ramp-verify/{token}
+  string token = 1;
+
+  // When this challenge expires. Provider must confirm before this time.
+  google.protobuf.Timestamp expires_at = 2;
+
+  // The exact URL the Exchange will fetch to verify.
+  string verification_url = 3;
+}
+
+// DomainVerificationConfirmation — Provider confirms the challenge is placed.
+message DomainVerificationConfirmation {
+  string ver = 1;
+
+  // The domain being verified.
+  string domain = 2;
+
+  // The challenge token (echoed from DomainVerificationChallenge).
+  string token = 3;
+
+  // Optional: signing key to register upon successful verification.
+  // If present, the key is registered atomically with verification.
+  // Key format depends on CDN type (PEM for CloudFront, hex for HMAC).
+  optional string signing_key = 4;
+
+  // CDN type this key is for.
+  optional string cdn_type = 5;  // "cloudfront", "akamai", "fastly", "hmac"
+
+  // Field 6 reserved. Caller auth moved to RFC 9421 HTTP Message Signatures.
+  reserved 6;
+}
+
+// DomainVerificationResult — Exchange confirms verification.
+message DomainVerificationResult {
+  // Whether domain verification succeeded.
+  bool verified = 1;
+
+  // If verified and signing_key was provided: confirmation of key registration.
+  optional string key_id = 2;
+
+  // If not verified, why.
+  optional string failure_reason = 3;
+
+  // Verification is valid until this time. Provider must re-verify periodically.
+  optional google.protobuf.Timestamp valid_until = 4;
+}

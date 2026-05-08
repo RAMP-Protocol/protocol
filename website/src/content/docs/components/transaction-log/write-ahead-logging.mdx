@@ -1,0 +1,295 @@
+---
+title: "Write-Ahead Logging"
+description: "The WAL subsystem that ensures no signed URL is issued without a durable transaction record, with crash recovery and ordering guarantees."
+---
+
+## The Write-Before-Sign Invariant
+
+The `ExecuteTransaction` flow has a critical ordering dependency:
+
+```
+1. Receive TransactionRequest
+2. Look up offer, validate
+3. Call BillingAdapter.Authorize() -> billing_id
+4. Generate signed URL
+5. *** Write transaction record ***
+6. Return TransactionResponse (signed URL + billing_id)
+```
+
+If the Exchange crashes between steps 4 and 5, the signed URL is live on the CDN -- the agent can fetch content -- but no billing record exists. This is an unbillable content access (threat T5: revenue skimming).
+
+WAL ensures step 5 completes durably before step 6 executes.
+
+## WAL Design
+
+Two-phase write: the per-request `fsync` in the synchronous path is to local SSD (~1-2ms), not to the durable store. This is the same pattern as PostgreSQL's own WAL.
+
+1. `ExecuteTransaction` received, billing authorized, signed URL generated.
+2. Write single `SignedURLIssued` record to local WAL file. `fsync` this record (~1-2ms on NVMe SSD).
+3. Return signed URL immediately after WAL `fsync`.
+4. Background goroutine batches WAL records and flushes to Postgres/ClickHouse (~100ms / 100 records).
+
+```go
+type WAL struct {
+    mu       sync.Mutex
+    file     *os.File
+    encoder  *binary.Encoder
+    dir      string
+    segment  int64
+    offset   int64
+    maxSize  int64      // max segment size before rotation (default 64MB)
+    flushCh  chan struct{}
+    doneCh   chan struct{}
+}
+
+func (w *WAL) Append(event *TransactionEvent) error {
+    w.mu.Lock()
+    defer w.mu.Unlock()
+
+    data, err := proto.Marshal(event)
+    if err != nil {
+        return fmt.Errorf("marshal event: %w", err)
+    }
+
+    record := encodeRecord(data)
+    if _, err := w.file.Write(record); err != nil {
+        return fmt.Errorf("write WAL: %w", err)
+    }
+
+    // fsync -- this is the durability guarantee.
+    if err := w.file.Sync(); err != nil {
+        return fmt.Errorf("fsync WAL: %w", err)
+    }
+
+    w.offset += int64(len(record))
+    if w.offset >= w.maxSize {
+        return w.rotate()
+    }
+    return nil
+}
+```
+
+## WAL Frame Format
+
+Custom frame wrapping a protobuf payload:
+
+```
+[4 bytes: payload length (big-endian uint32)]
+[N bytes: protobuf-serialized TransactionEvent]
+[4 bytes: CRC32C of the protobuf bytes]
+```
+
+The frame is custom (length + CRC32C + payload bytes). The payload is protobuf-serialized -- structured, versionable, and language-neutral. CRC32C enables torn write detection during recovery.
+
+```go
+func encodeRecord(data []byte) []byte {
+    buf := make([]byte, 4+len(data)+4)
+    binary.BigEndian.PutUint32(buf[0:4], uint32(len(data)))
+    copy(buf[4:4+len(data)], data)
+    checksum := crc32.Checksum(data, crc32.MakeTable(crc32.Castagnoli))
+    binary.BigEndian.PutUint32(buf[4+len(data):], checksum)
+    return buf
+}
+```
+
+## WAL Segment Management
+
+```go
+const (
+    DefaultSegmentSize = 64 * 1024 * 1024 // 64 MB
+    DefaultFlushInterval = 100 * time.Millisecond
+    DefaultFlushBatchSize = 100
+)
+
+func (w *WAL) rotate() error {
+    if err := w.file.Close(); err != nil {
+        return err
+    }
+    w.segment++
+    w.offset = 0
+    f, err := os.OpenFile(
+        filepath.Join(w.dir, fmt.Sprintf("wal-%012d.log", w.segment)),
+        os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+        0600,
+    )
+    if err != nil {
+        return err
+    }
+    w.file = f
+    return nil
+}
+```
+
+## Async Flush to Durable Store
+
+A background goroutine reads completed WAL segments and flushes them to the durable store in batches:
+
+```go
+func (w *WAL) FlushLoop(ctx context.Context, store DurableStore) {
+    ticker := time.NewTicker(DefaultFlushInterval)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            w.flushAllSegments(store)
+            return
+        case <-ticker.C:
+            w.flushSealedSegments(store)
+        }
+    }
+}
+
+func (w *WAL) flushSealedSegments(store DurableStore) {
+    segments := w.listSealedSegments()
+    for _, seg := range segments {
+        events, err := w.readSegment(seg)
+        if err != nil {
+            log.Error("read WAL segment", "segment", seg, "err", err)
+            continue
+        }
+
+        if err := store.WriteBatch(events); err != nil {
+            log.Error("flush to store", "segment", seg, "err", err)
+            return // Do NOT delete the segment -- retry on next tick.
+        }
+
+        if err := os.Remove(seg); err != nil {
+            log.Error("remove flushed segment", "segment", seg, "err", err)
+        }
+    }
+}
+```
+
+Only `SignedURLIssued` events use synchronous WAL writes (one `fsync` per event). All other event types are buffered and flushed in batches to reduce fsync frequency:
+
+```go
+type EventBuffer struct {
+    mu     sync.Mutex
+    events []*TransactionEvent
+    wal    *WAL
+    maxBatch    int           // default: 100
+    maxInterval time.Duration // default: 100ms
+}
+```
+
+Flush trigger: whichever comes first -- 100 events or 100ms elapsed.
+
+## Crash Recovery
+
+On startup, the Exchange replays the WAL before accepting new traffic. This is identical to PostgreSQL's crash recovery: scan WAL, replay uncommitted records, resume.
+
+Recovery is idempotent: the durable store uses `event_id` (UUIDv7) for deduplication. Replaying an already-flushed event is a no-op.
+
+```go
+func (w *WAL) Recover(store DurableStore) error {
+    segments := w.listAllSegments()
+    if len(segments) == 0 {
+        return nil
+    }
+
+    log.Info("WAL recovery", "segments", len(segments))
+
+    var totalEvents int
+    for _, seg := range segments {
+        events, err := w.readSegment(seg)
+        if err != nil {
+            // Partial last segment: read what we can, discard torn records.
+            log.Warn("partial WAL segment", "segment", seg, "err", err)
+        }
+
+        if len(events) > 0 {
+            if err := store.WriteBatch(events); err != nil {
+                return fmt.Errorf("recovery flush: %w", err)
+            }
+            totalEvents += len(events)
+        }
+
+        if err := os.Remove(seg); err != nil {
+            return fmt.Errorf("remove recovered segment: %w", err)
+        }
+    }
+
+    log.Info("WAL recovery complete", "events_replayed", totalEvents)
+    return nil
+}
+```
+
+On recovery, any record where CRC32C does not match the protobuf bytes is discarded (incomplete write from crash).
+
+**Panic handling**: The background flush goroutine wraps work in `recover()` to convert panics to errors. The synchronous `Append` path does NOT use `recover()` -- a panic there propagates and crashes the process, triggering container restart and full WAL replay.
+
+## Ordering Guarantees
+
+- Events within a single transaction are ordered by `event_type` (ResourceQueryReceived < OffersPresented < ... < UsageReportReceived)
+- Events across transactions are ordered by UUIDv7 `event_id` (monotonically increasing)
+- The WAL provides sequential write ordering within a single Exchange instance
+- Cross-instance ordering is resolved by timestamp during export/reconciliation
+
+## Durability
+
+| Event Type | WAL Write | Durability |
+|---|---|---|
+| ResourceQueryReceived | Async (buffered) | Best-effort |
+| OffersPresented | Async (buffered) | Best-effort |
+| TransactionRequested | Async (buffered) | Durable (eventual) |
+| BillingAuthorization | Async (buffered) | Durable (eventual) |
+| SignedURLIssued | **Synchronous (fsync)** | **Durable (immediate)** |
+| UsageReportReceived | Async (buffered) | Durable (eventual) |
+
+## Backpressure: WAL Full
+
+If the durable store is down and WAL segments accumulate past a threshold, the Exchange must stop issuing signed URLs:
+
+| WAL Size | Action | Effect |
+|---|---|---|
+| < 256 MB | Normal | No impact |
+| 256 MB - 1 GB | Warning | Log warning, alert ops. Increase flush batch size. |
+| > 1 GB | Backpressure | Reject new `ExecuteTransaction` with `503 Service Unavailable` + `Retry-After: 5` |
+
+At 10K RPS with ~300 bytes/event, the WAL grows at ~3 MB/sec. The 1 GB threshold gives ~5.5 minutes of buffering before the Exchange starts rejecting transactions.
+
+```go
+func (w *WAL) Append(event *TransactionEvent) error {
+    if w.totalSize() > w.backpressureThreshold {
+        return ErrWALBackpressure
+    }
+    // ... normal append ...
+}
+```
+
+## Integration with ExecuteTransaction
+
+The critical path showing WAL integration:
+
+```go
+func (s *ExchangeServer) ExecuteTransaction(
+    ctx context.Context,
+    req *connect.Request[rampv1.TransactionRequest],
+) (*connect.Response[rampv1.TransactionResponse], error) {
+    msg := req.Msg
+
+    // 1. Idempotency check
+    // 2. Compliance check (is buyer blocked?)
+    // 3. Look up the offer
+    // 4. Log: TransactionRequested (async, non-blocking)
+    // 5. Authorize billing with billing adapter
+    // 6. Log: BillingAuthorization (async, non-blocking)
+    // 7. Generate signed URL
+    // 8. Build the response
+
+    // 9. *** WAL: Write SignedURLIssued event SYNCHRONOUSLY ***
+    event := newSignedURLIssuedEvent(msg, offer, authResp, signedURL, resp)
+    if err := s.wal.Append(event); err != nil {
+        // WAL write failed. Do NOT return the signed URL.
+        return nil, connect.NewError(connect.CodeUnavailable,
+            fmt.Errorf("transaction log unavailable"))
+    }
+
+    // 10. Cache for idempotency
+    // 11. Return signed URL to agent
+    return connResp, nil
+}
+```
+
+The critical invariant: step 9 (WAL append) MUST succeed before step 11 (return response). If the WAL write fails, the signed URL is never returned. A "wasted" authorization (authorized but never delivered) is detectable during reconciliation and can be reversed.

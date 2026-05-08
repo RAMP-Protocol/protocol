@@ -1,0 +1,220 @@
+---
+title: "RAMP as Universal Data Layer"
+description: "How AI platforms, labs, and enterprises use RAMP as a single integration point for every resource an agent needs — internal and external, any domain, any metering unit."
+---
+
+## The Vision
+
+Your AI agent needs a weather forecast, a stock quote, three court filings, a credit report, a drug interaction check, the latest EU regulation on AI, and a transcript of yesterday's earnings call. That's 8 APIs, 8 authentication schemes, 8 billing relationships, 8 response formats, 8 error handling patterns.
+
+What if it were one?
+
+```
+agent.Fetch("weather://NYC/forecast/48h")           → $0.001
+agent.Fetch("doi:10.1038/s41586-024-07487-w")        → $1.50
+agent.Fetch("duns:123456789")                         → $61.99
+agent.Fetch("drugbank://ddi?drugs=DB00682,DB00331")   → $0.50
+agent.Fetch("pacer://case/1:24-cv-01234/doc/42")      → $0.30
+agent.Fetch("eli:reg/2024/1689/oj")                   → $0.00
+agent.Fetch("https://nytimes.com/2026/03/19/tech.html") → $0.05
+agent.Fetch("internal://crm/account/ACME-001")        → $0.00 (cost allocation)
+```
+
+Same protocol. Same budget. Same audit trail. 100ms each.
+
+## Who This Is For
+
+**AI labs** building foundation models and agents that need diverse training and inference data across domains.
+
+**Enterprise AI teams** building internal copilots, research assistants, and automated workflows that need both internal knowledge bases AND external data sources.
+
+**AI application developers** building vertical products (legal AI, medical AI, financial AI) who need domain-specific resources without per-provider integrations.
+
+**AI infrastructure companies** building agent frameworks, orchestration layers, and tool ecosystems that need a standard resource access primitive.
+
+## The Integration Equation
+
+Without RAMP, every resource type is a separate integration:
+
+| Resource | Integration Effort | Billing | Auth | Format |
+|----------|-------------------|---------|------|--------|
+| News articles | Custom API per publisher | Per-publisher contract | API keys per publisher | HTML/JSON varies |
+| Academic papers | CrossRef + publisher APIs | Per-publisher subscription | IP auth + Shibboleth | PDF/JATS XML |
+| Court filings | PACER API | PACER account | Login + per-page billing | PDF |
+| Credit reports | D&B Direct+ API | D&B contract | OAuth 2.0 | JSON |
+| Drug interactions | DrugBank API | DrugBank license | API key | JSON |
+| Satellite imagery | Planet/Maxar APIs | Per-provider contract | OAuth 2.0 | GeoTIFF |
+| EU legislation | EUR-Lex SPARQL | Free | None | Akoma Ntoso XML |
+| Internal docs | SharePoint/Confluence API | Internal | SSO | HTML/JSON |
+
+That's 8 integrations. Each takes weeks. Each breaks independently. Each has its own error handling, rate limiting, pagination, and billing reconciliation.
+
+With RAMP:
+
+| Resource | Integration | Billing | Auth | Format |
+|----------|------------|---------|------|--------|
+| All of the above | `client.Fetch()` | One Broker budget | Ed25519 | Standard RAMP Offer → signed URL |
+
+One integration. One SDK. One billing relationship (per Exchange, or aggregated through a Broker). Resources behind the signed URL come in their native format — RAMP handles the transaction layer, not the content format.
+
+## Enterprise Architecture
+
+For enterprise deployments, the Broker becomes your **AI data gateway** — the single point through which all AI resource access flows, internal and external.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    ENTERPRISE AI PLATFORM                        │
+│                                                                  │
+│  Copilot    Research    Compliance    Risk         Sales         │
+│  Agent      Assistant   Monitor       Analyzer    Intelligence  │
+│    │           │           │            │             │          │
+│    └───────────┴───────────┴────────────┴─────────────┘          │
+│                            │                                     │
+│                    ┌───────▼────────┐                            │
+│                    │  Enterprise    │                            │
+│                    │  Broker  │                            │
+│                    │                │                            │
+│                    │ • Azure AD/Okta integration                 │
+│                    │ • Role-based routing                        │
+│                    │ • Department cost allocation                │
+│                    │ • Data classification enforcement           │
+│                    │ • Audit trail (every access logged)         │
+│                    │ • Budget per team/project/deal              │
+│                    └──┬──────────┬──┘                            │
+│                       │          │                               │
+│              ┌────────▼──┐  ┌───▼──────────┐                    │
+│              │ Internal   │  │ External      │                   │
+│              │ Exchange│  │ Exchanges  │                   │
+│              │            │  │               │                   │
+│              │ • CRM data │  │ • D&B credit  │                   │
+│              │ • Wiki/KB  │  │ • PACER legal │                   │
+│              │ • Reports  │  │ • DrugBank    │                   │
+│              │ • Datasets │  │ • News APIs   │                   │
+│              └────────────┘  └───────────────┘                   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Access Control: The Broker's Job
+
+RAMP doesn't replace your enterprise IAM — the Broker integrates with it. This is the same design pattern as discovery: enterprise access control is a Broker concern, not a wire-protocol concern.
+
+| Layer | Who Handles It | How |
+|-------|---------------|-----|
+| **Authentication** | Broker | Integrates with Azure AD, Okta, SAML. Maps user identity → RAMP license ID |
+| **Authorization (RBAC)** | Broker | "Analysts can query credit and legal. Only compliance team can access medical." Enforced before forwarding to Exchange |
+| **Data classification** | Broker + Exchange | Internal Exchange tags resources with classification levels. Broker enforces "Confidential resources only to authorized roles" |
+| **Cost allocation** | Broker | `budget_scope: "dept:engineering"` or `"deal:acme-acquisition"`. Maps to cost centers in your ERP |
+| **Audit trail** | Protocol-native | Every RAMP transaction is Ed25519-signed. `UsageReport` records who accessed what, when, for what purpose. Immutable evidence chain |
+
+### Identity Model for Platform Agents
+
+Enterprise agents use RAMP's `Requester` identity model with two platform-relevant types:
+
+- **`REQUESTER_TYPE_SERVICE`** — for enterprise service accounts: automated pipelines, cron jobs, and backend integrations that access resources without a human in the loop. The Broker maps service accounts to RAMP scopes via your IAM (Azure AD, Okta).
+
+- **`REQUESTER_TYPE_DELEGATED`** — for delegated access patterns where one agent acts on behalf of another. A copilot agent spawns a sub-agent for a narrow task and passes it an attenuated Biscuit token with reduced scopes, a lower spend cap, and a shorter expiry. The sub-agent cannot widen permissions — cryptographically enforced.
+
+Biscuit delegation tokens enable safe, offline permission narrowing across any number of delegation levels without round-tripping to the original issuer. This is critical for agentic workflows where agents routinely delegate to sub-agents.
+
+For the full enterprise identity flow — IAM integration, token minting, scope mapping, attenuation examples, and audit trails — see [Enterprise Access Management](/getting-started/enterprise/).
+
+### Internal Exchange
+
+Your internal Exchange serves company resources through the same RAMP protocol:
+
+```json
+{
+  "name": "Acme Corp Internal Exchange",
+  "domain": "ramp-internal.acme.com",
+  "supported_profiles": [],
+  "base_currency": "USD",
+  "pricing_models_supported": ["free", "per_record"],
+  "delivery_methods_supported": ["direct", "instructions"]
+}
+```
+
+Internal resources are typically `PRICING_MODEL_FREE` — no money changes hands, but the transaction is recorded for cost allocation, compliance, and usage analytics. The `budget_scope` field tracks which team/project consumed the resource.
+
+| Internal Resource | Metering Unit | Why Meter It |
+|------------------|---------------|-------------|
+| CRM account data | per record | Track which AI agents access customer data (compliance) |
+| Knowledge base articles | per token | Measure AI adoption across teams |
+| Internal reports | per document | Cost allocation to requesting department |
+| Proprietary datasets | per query | Rate limiting + abuse prevention |
+| Model training data | per record | Track training data provenance |
+
+Even at $0, the transaction creates an audit trail: who accessed what, when, which agent, which function. For regulated industries (finance, healthcare, government), this audit trail is not optional.
+
+### External Exchange Routing
+
+The Broker routes external requests based on the agent's `supported_profiles` and the Exchange's declared capabilities:
+
+```
+Agent: supported_profiles: ["ramp-legal-v1", "ramp-news-v1"]
+  │
+  ├── Legal request (court filing) → routes to Legal Exchange
+  │   (declared: supported_profiles: ["ramp-legal-v1"])
+  │
+  ├── News request (article) → routes to Media Exchange
+  │   (declared: supported_profiles: ["ramp-news-v1"])
+  │
+  └── Credit request (D&B report) → routes to Financial Exchange
+      (no profile needed — core protocol handles it)
+```
+
+## What You Can Do Today
+
+### Phase 1: External resources only (weeks, not months)
+
+Deploy a Broker. Configure it to talk to participating Exchanges. Your agents get access to news, academic, legal, financial, medical, and government resources through one protocol. No per-provider integrations.
+
+### Phase 2: Add internal resources (one Exchange deployment)
+
+Deploy an internal Exchange that indexes your company's knowledge base, CRM, and datasets. Wire it to your Broker alongside the external Exchanges. Your agents now access internal AND external resources identically.
+
+### Phase 3: Unified AI data governance
+
+The Broker becomes your AI data gateway:
+- Every resource access goes through it
+- Every access is logged with Ed25519 signatures
+- Every department's spend is tracked via `budget_scope`
+- Every data classification policy is enforced before delivery
+- Compliance can audit the full history of what any agent accessed
+
+## The Numbers
+
+At 100ms per transaction (Exchange round-trip + signed URL generation), and typical agent workflows accessing 5-20 resources per task:
+
+| Workflow | Resources Accessed | Total Latency | Total Cost |
+|----------|-------------------|---------------|------------|
+| Literature review (50 papers) | 50 | ~5s (batch) | $0 - $75 |
+| Due diligence package | 20 (credit + legal + property) | ~2s (batch) | $100 - $500 |
+| Clinical decision support | 3 (drug interactions + guidelines) | ~300ms | $1 - $5 |
+| Daily news briefing | 10 articles | ~1s (batch) | $0.50 - $1.00 |
+| Regulatory compliance check | 5 regulations | ~500ms | $0 (public domain) |
+| Internal knowledge query | 3 KB articles | ~300ms | $0 (cost allocation only) |
+
+## FAQ
+
+**Does every resource provider need to support RAMP?**
+No. Exchange operators aggregate providers. D&B doesn't need to implement RAMP — a financial data Exchange wraps D&B's API behind a RAMP interface. Same pattern as EUR-Lex: the Exchange wraps the CELLAR API.
+
+**What about resources that don't have an Exchange yet?**
+The core protocol works for any resource type. Extension profiles add domain-specific metadata but aren't required. A Exchange operator can serve any resource using core RAMP fields. The three v1 profiles (news, academic, legal) are starting points, not limits.
+
+**How is this different from a universal API gateway?**
+API gateways route requests. RAMP adds metering, pricing, attestation, and dispute resolution. Your agent doesn't just "call an API" — it gets a priced offer, executes a transaction, verifies delivered content, and has a dispute path if something goes wrong. The economic layer is what makes it a protocol, not just a proxy.
+
+**What about latency-sensitive use cases?**
+RAMP adds ~50-100ms per transaction (Exchange lookup + signed URL generation). For resources already behind APIs (stock quotes, drug databases), this overhead is negligible. For bulk operations, batch transactions amortize the overhead.
+
+**Can I run an Exchange for my own internal resources?**
+Yes. An internal Exchange indexes your company resources and serves them through the same protocol. No money changes hands — transactions are logged for cost allocation and compliance. The Broker routes to internal and external Exchanges identically.
+
+## Next Steps
+
+- [What Is RAMP?](/getting-started/what-is-ramp/) — the protocol overview
+- [For AI Agents](/getting-started/for-ai-agents/) — SDK integration guide
+- [For Exchange Operators](/getting-started/for-exchange-operators/) — how to run an Exchange
+- [Extension Profiles](/protocol/extension-profiles/) — domain-specific metadata governance
+- [Content Mutability](/protocol/content-mutability/) — static, dynamic, and live resources

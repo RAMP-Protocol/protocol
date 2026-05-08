@@ -1,0 +1,164 @@
+---
+title: "Content Deduplication"
+description: "How the Broker deduplicates identical content offered by multiple Exchanges using ResourceIdentity matching, SimHash comparison, and canonical URL grouping."
+---
+
+## Purpose
+
+The same resource can appear on multiple Exchanges. An AP wire story might be available from Exchange A and Exchange B. A syndicated article might be offered by the original provider's Exchange and a resource aggregator. The Broker deduplicates these offers so the agent pays the lowest price for each unique resource.
+
+## ResourceIdentity Matching
+
+Each Offer carries an optional `ResourceIdentity` that the Broker uses for deduplication. The identity key is derived from a priority-ordered set of fields:
+
+```go
+// contentIdentityKey produces a deduplication key from layered identity fields.
+// Matching priority: iptc_guid > doi > content_hash > canonical_url
+func contentIdentityKey(id *rampv1.ResourceIdentity) string {
+    if id == nil {
+        return uuid.NewString() // no identity = unique (no dedup)
+    }
+    if id.IptcGuid != nil && *id.IptcGuid != "" {
+        return "iptc:" + *id.IptcGuid
+    }
+    if id.Doi != nil && *id.Doi != "" {
+        return "doi:" + *id.Doi
+    }
+    if id.ContentHash != nil && *id.ContentHash != "" {
+        return "hash:" + *id.ContentHash
+    }
+    if id.CanonicalUrl != nil && *id.CanonicalUrl != "" {
+        return "url:" + *id.CanonicalUrl
+    }
+    return uuid.NewString()
+}
+```
+
+### Identity Field Priority
+
+| Priority | Field | Description | Example |
+|---|---|---|---|
+| 1 (highest) | `iptc_guid` | IPTC globally unique identifier for news content | `urn:newsml:apnews.com:20260315:article-123` |
+| 2 | `doi` | Digital Object Identifier for academic/scientific content | `10.1038/s41586-026-01234-5` |
+| 3 | `content_hash` | Content fingerprint (method depends on hash_method: simhash-v1 for fuzzy dedup, sha256 for exact match) | `sha256:abc123...` |
+| 4 (lowest) | `canonical_url` | Canonical URL of the content | `https://apnews.com/article/ai-regulation` |
+
+When no `ResourceIdentity` is present on an offer, the offer is treated as unique and is never deduplicated. This is the conservative default -- it is better to pay twice for the same content than to accidentally merge two different articles.
+
+## SimHash Comparison
+
+For content available from multiple sources that may have minor editorial differences (e.g., AP wire stories republished with small modifications), strict hash matching (`content_hash`) may miss duplicates. The Broker supports SimHash comparison for fuzzy matching:
+
+- **Level 2 verification** uses SHA-256 exact hash -- content is byte-for-byte identical
+- **Level 1 verification** uses SimHash similarity -- content is structurally similar (e.g., 95%+ similarity)
+- **Level 0** -- no content verification
+
+SimHash comparison is applied when:
+
+1. Two offers share the same `canonical_url` but have different `content_hash` values
+2. Two offers from different Exchanges reference the same article by title/author metadata but have no shared identifier
+
+The SimHash comparison operates on the content identity metadata provided by the Exchange, not on the content itself (which is not yet fetched at selection time).
+
+## Canonical URL Grouping
+
+When higher-priority identifiers are not available, the Broker falls back to `canonical_url` grouping. This catches the common case where the same article is offered by multiple Exchanges that all reference the same provider URL.
+
+Canonical URL matching is exact string comparison after normalization:
+
+- Strip trailing slashes
+- Lowercase the hostname
+- Sort query parameters
+- Remove tracking parameters (utm_*, ref, etc.)
+
+## Cross-Exchange Dedup Strategy
+
+The full deduplication pipeline operates across all Exchange responses:
+
+```go
+type contentGroup struct {
+    Key    string
+    Offers []rankedOffer
+}
+
+func deduplicateOffers(offers []rankedOffer) []rankedOffer {
+    groups := make(map[string][]rankedOffer)
+
+    for _, o := range offers {
+        key := contentIdentityKey(o.Offer.Identity)
+        groups[key] = append(groups[key], o)
+    }
+
+    var deduped []rankedOffer
+    for _, group := range groups {
+        // Sort by unit_cost ascending within group
+        sort.Slice(group, func(i, j int) bool {
+            return unitCostOf(group[i]) < unitCostOf(group[j])
+        })
+        deduped = append(deduped, group[0]) // cheapest wins
+    }
+    return deduped
+}
+```
+
+### How It Works
+
+1. **Collect offers** from all Exchange responses.
+2. **Compute identity key** for each offer using the priority-ordered fields.
+3. **Group offers** by identity key. Offers with the same key are considered duplicates.
+4. **Within each group**, sort by effective cost per unit (unit_cost) ascending.
+5. **Keep only the cheapest** offer from each group.
+
+### Example
+
+An agent requests content at `https://apnews.com/article/ai-regulation`. Two Exchanges respond:
+
+| Exchange | Offer ID | unit_cost | ResourceIdentity |
+|---|---|---|---|
+| Exchange Alpha | offer-a1 | $0.0003/token | `iptc:urn:newsml:apnews.com:20260315:ai-reg` |
+| Exchange Beta | offer-b1 | $0.0005/token | `iptc:urn:newsml:apnews.com:20260315:ai-reg` |
+
+Both offers share the same `iptc_guid`. The deduplicator groups them and selects `offer-a1` (lower unit_cost). The agent pays $0.0003/unit instead of $0.0005/unit.
+
+## Deduplication in Batch Queries
+
+For batch (multi-URI) queries, deduplication runs per URI. Each URI's offers are deduplicated independently:
+
+1. For each URI in the batch, collect all offers from all Exchange responses that match that URI.
+2. Within each URI's offer set, run the standard deduplication pipeline.
+3. Select the best (cheapest) offer per URI after dedup.
+
+Cross-URI deduplication (e.g., "the agent requested two URLs that happen to be the same article") is handled by the batch selection engine, which checks `ResourceIdentity` across URIs before executing transactions.
+
+## Deduplication Metrics
+
+The Broker tracks deduplication effectiveness through Prometheus metrics:
+
+```go
+var (
+    // How often deduplication found the same content from multiple Exchanges
+    deduplicationRate = promauto.NewHistogram(
+        prometheus.HistogramOpts{
+            Name:    "broker_dedup_sets",
+            Help:    "Number of content groups with offers from multiple Exchanges",
+            Buckets: []float64{0, 1, 2, 3, 5, 10},
+        },
+    )
+)
+```
+
+The `SelectionRationale` returned with every selection decision includes `DeduplicatedSets` -- the count of content groups that had offers from multiple Exchanges. This provides visibility into how often deduplication produces savings.
+
+## Content Attestation Levels (v1.0)
+
+In v1.0, content attestation level replaces the former content verification concept. Attestation level is both a deduplication tiebreaker and a selection ranking factor:
+
+| Level | Attestation | Guarantee |
+|---|---|---|
+| 0 | None | No attestation. Content may carry identifiers (DOI, IPTC GUID) for dedup, but nothing is cryptographically verifiable. |
+| 1 | Self-attested (provider) | Provider signed claims with Ed25519. Agent can recompute content hash from delivered bytes. |
+| 2 | Third-party (verification vendor) | Independent verification. Vendor crawled and measured the content. Agent trusts the attestation without re-verifying. |
+
+Higher attestation levels rank higher in the [Selection Engine](/components/broker/selection-engine/) because they provide stronger guarantees. When two offers for the same content have different attestation levels, the higher level is preferred even at slightly higher cost, because it enables automated dispute resolution and reduces the risk of receiving content that does not match what was advertised.
+
+Content identifiers (DOI, ISBN, IPTC GUID) used for deduplication are orthogonal to attestation level. A Level 0 article may carry a DOI -- that identifies WHAT content it is but does NOT verify that the delivered bytes match the identified content.

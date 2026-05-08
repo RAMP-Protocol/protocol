@@ -1,0 +1,492 @@
+---
+title: "Walkthrough: EU Regulation (Free vs Value-Added)"
+description: "Same legislation available free (EUR-Lex) and paid (Wolters Kluwer annotated), with ELI identifiers, multilingual support, and the ramp-legal-v1 extension profile."
+---
+
+> An AI agent needs the EU AI Act (Regulation 2024/1689). The same legislation is available FREE from EUR-Lex (official text) and for $85 from Wolters Kluwer (annotated, consolidated). RAMP enables transparent comparison -- the agent decides whether annotations are worth the price.
+
+## Scenario
+
+| | EUR-Lex (Free) | Wolters Kluwer (Paid) |
+|---|---|---|
+| **Provider** | EUR-Lex (`eur-lex.europa.eu`) | Wolters Kluwer (`wolterskluwer.com`) |
+| **Content** | Official Journal text (original) | Annotated, consolidated with amendments |
+| **Price** | FREE | $85 per article |
+| **Mutability** | STATIC (original OJ text, never changes) | DYNAMIC (consolidated to latest amendments) |
+| **Attestation** | Level 2 (Official Journal = highest legal authority) | Level 1 (self-attested) |
+| **Format** | Akoma Ntoso XML | HTML with annotations |
+
+Both scenarios follow the same six-step flow:
+
+```
+Discovery -> ResourceQuery -> ResourceResponse -> ExecuteTransaction -> Fetch -> ReportUsage
+```
+
+---
+
+## Step 1 -- Discovery
+
+The agent knows the EU AI Act's ELI URI: `http://data.europa.eu/eli/reg/2024/1689/oj`. The Broker resolves both providers' RAMP manifests.
+
+**EUR-Lex:**
+
+```json
+// GET https://eur-lex.europa.eu/.well-known/ramp.json
+{
+  "ver": "1.0",
+  "provider": "eur-lex.europa.eu",
+  "contact": "eurlex-helpdesk@publications.europa.eu",
+  "exchanges": [
+    {
+      "domain": "exchange.eurlex.europa.eu",
+      "endpoint": "https://exchange.eurlex.europa.eu/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-legal-v1"]
+}
+```
+
+**Wolters Kluwer:**
+
+```json
+// GET https://wolterskluwer.com/.well-known/ramp.json
+{
+  "ver": "1.0",
+  "provider": "wolterskluwer.com",
+  "contact": "licensing@wolterskluwer.com",
+  "exchanges": [
+    {
+      "domain": "exchange.wk-legal.com",
+      "endpoint": "https://exchange.wk-legal.com/ramp/v1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  ],
+  "supported_profiles": ["ramp-legal-v1"]
+}
+```
+
+Both Exchanges declare `ramp-legal-v1`, signaling support for legislation-specific `ext` fields (ELI, CELEX, consolidation status, amendment chains).
+
+---
+
+## Step 2 -- ResourceQuery
+
+The Broker fans out the same query to both Exchanges. The agent identifies the resource by its ELI URI and requests legal-profile metadata:
+
+```json
+POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+
+{
+  "ver": "1.0",
+  "id": "sq-eli-001",
+  "requester": {
+    "id": "legal-research-agent",
+    "domain": "lawfirm.eu",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "http://data.europa.eu/eli/reg/2024/1689/oj"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["*"],
+    "signature": "ed25519:a4c9f2e8b7d1...",
+    "signature_algorithm": "ed25519"
+  },
+  "supported_profiles": ["ramp-legal-v1"],
+  "ext": {
+    "legal.legislation.language_preference": "en"
+  }
+}
+```
+
+The same `ResourceQuery` (with a different `id`) is sent to `exchange.wk-legal.com`. The `legal.legislation.language_preference` field (from the `ramp-legal-v1` profile) tells both Exchanges to return the English version. EU legislation exists in 24 official languages -- all equally authentic under EU treaty law.
+
+---
+
+## Step 3 -- Two ResourceResponses Compared
+
+The Broker receives one response from each Exchange. Here are both offers side by side.
+
+### EUR-Lex: Free, Original OJ Text
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-eli-001",
+  "exchange": "exchange.eurlex.europa.eu",
+  "offer_groups": [
+    {
+      "uri": "http://data.europa.eu/eli/reg/2024/1689/oj",
+      "offers": [
+        {
+          "offer_id": "offer-eurlex-aiact-001",
+          "package": {
+            "id": "PKG-EURLEX-REG-2024-1689",
+            "title": "Regulation (EU) 2024/1689 — EU AI Act",
+            "seller": "eur-lex.europa.eu",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_XML"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_FREE",
+            "rate": 0,
+            "currency": "EUR",
+            "unit_cost": 0,
+            "estimated_quantity": 89000,
+            "unit": "tokens"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/XML/?uri=CELEX:32024R1689",
+            "content_hash": "sha256:b7e23fa1c8d94e6a2f10b5d3c7e89f01234567890abcdef1234567890abcdef",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_STATIC",
+            "ext": {
+              "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
+              "legal.legislation.celex": "32024R1689",
+              "legal.legislation.oj_reference": "OJ L, 12.7.2024"
+            }
+          },
+          "attestations": [
+            {
+              "verifier": "publications.europa.eu",
+              "kid": "opoce-key-2024-07",
+              "attested_at": "2024-07-12T00:00:00Z",
+              "uri": "http://data.europa.eu/eli/reg/2024/1689/oj",
+              "claims": {
+                "estimated_quantity": 89000,
+                "word_count": 67500,
+                "language": "en",
+                "legal.legislation.document_type": "regulation",
+                "legal.legislation.authority": "European Parliament and Council",
+                "legal.legislation.consolidation_status": "original",
+                "legal.legislation.in_force": true
+              },
+              "signature": "base64-ed25519-opoce-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": [
+              "FUNCTION_AI_INPUT",
+              "FUNCTION_AI_INDEX",
+              "FUNCTION_SEARCH",
+              "FUNCTION_AI_TRAIN"
+            ],
+            "prohibited_functions": []
+          },
+          "ext": {
+            "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
+            "legal.legislation.celex": "32024R1689",
+            "legal.legislation.consolidation_status": "original",
+            "legal.legislation.date_document": "2024-06-13",
+            "legal.legislation.date_publication": "2024-07-12",
+            "legal.legislation.languages_available": [
+              "bg","cs","da","de","el","en","es","et","fi","fr",
+              "ga","hr","hu","it","lt","lv","mt","nl","pl","pt",
+              "ro","sk","sl","sv"
+            ]
+          },
+          "exchange_signature": "base64-ed25519-eurlex-offer-sig...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Wolters Kluwer: Paid, Annotated + Consolidated
+
+```json
+{
+  "ver": "1.0",
+  "id": "sq-eli-002",
+  "exchange": "exchange.wk-legal.com",
+  "offer_groups": [
+    {
+      "uri": "http://data.europa.eu/eli/reg/2024/1689/oj",
+      "offers": [
+        {
+          "offer_id": "offer-wk-aiact-001",
+          "package": {
+            "id": "PKG-WK-AIACT-ANNOTATED",
+            "title": "EU AI Act — Annotated & Consolidated (Wolters Kluwer)",
+            "seller": "wolterskluwer.com",
+            "citation": 1,
+            "retrieval": {
+              "type": ["RETRIEVAL_TYPE_HTML"]
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_ACCESS",
+            "rate": 85.00,
+            "currency": "EUR",
+            "unit_cost": 0.000764,
+            "estimated_quantity": 111200,
+            "unit": "tokens"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "required_fields": ["consumed_quantity"]
+          },
+          "identity": {
+            "canonical_url": "https://wolterskluwer.com/legal/eu/reg-2024-1689-annotated",
+            "content_hash": "sha256:d4f89a2b3c6e7d1f0a5b8c9e2d3f4a5b6c7d8e9f0123456789abcdef012345",
+            "hash_method": "sha256",
+            "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC",
+            "ext": {
+              "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
+              "legal.legislation.celex": "32024R1689"
+            }
+          },
+          "attestations": [
+            {
+              "verifier": "wolterskluwer.com",
+              "kid": "wk-legal-key-2026-01",
+              "attested_at": "2026-01-15T12:00:00Z",
+              "uri": "http://data.europa.eu/eli/reg/2024/1689/oj",
+              "claims": {
+                "estimated_quantity": 111200,
+                "word_count": 84000,
+                "language": "en",
+                "legal.legislation.document_type": "regulation",
+                "legal.legislation.consolidation_status": "consolidated_to_2026-01-15",
+                "legal.legislation.annotations": true,
+                "legal.legislation.cross_references": 47,
+                "legal.legislation.in_force": true
+              },
+              "signature": "base64-ed25519-wk-self-attestation..."
+            }
+          ],
+          "restrictions": {
+            "permitted_functions": [
+              "FUNCTION_AI_INPUT",
+              "FUNCTION_AI_INDEX",
+              "FUNCTION_SEARCH"
+            ],
+            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
+          },
+          "ext": {
+            "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
+            "legal.legislation.celex": "32024R1689",
+            "legal.legislation.consolidation_status": "consolidated_to_2026-01-15",
+            "legal.legislation.annotations": true,
+            "legal.legislation.cross_references": 47,
+            "legal.legislation.amendment_chain": [
+              "http://data.europa.eu/eli/reg/2024/1689/oj",
+              "http://data.europa.eu/eli/reg/2025/127/oj"
+            ],
+            "legal.legislation.date_document": "2024-06-13",
+            "legal.legislation.date_consolidation": "2026-01-15",
+            "legal.legislation.languages_available": ["en", "de", "fr", "nl"]
+          },
+          "exchange_signature": "base64-ed25519-wk-offer-sig...",
+          "signature_algorithm": "ed25519"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### What the Broker Learns
+
+| Dimension | EUR-Lex | Wolters Kluwer |
+|---|---|---|
+| **Price** | FREE | $85.00 |
+| **Pricing model** | `PRICING_MODEL_FREE` | `PRICING_MODEL_PER_ACCESS` |
+| **Tokens (est.)** | 89,000 | 111,200 (more due to annotations) |
+| **Mutability** | `STATIC` (original OJ text) | `DYNAMIC` (consolidated, updates with amendments) |
+| **Attestation** | Level 2 -- `publications.europa.eu` (Publications Office) | Level 1 -- self-attested by `wolterskluwer.com` |
+| **Consolidation** | `original` (as published July 2024) | `consolidated_to_2026-01-15` (includes all amendments) |
+| **Annotations** | None | 47 cross-references, expert commentary |
+| **Training permitted** | Yes (public domain, Decision 2011/833/EU) | No (`FUNCTION_AI_TRAIN` prohibited) |
+| **Format** | Akoma Ntoso XML | HTML |
+| **Languages** | 24 (all EU official) | 4 (en, de, fr, nl) |
+
+The agent sees both options with transparent pricing. The free EUR-Lex version carries a **higher attestation level** (Level 2, from the Publications Office of the EU -- the entity that publishes the Official Journal). The Wolters Kluwer version carries a **higher token count** because annotations, cross-references, and consolidation notes add ~22,000 tokens of value-added content.
+
+---
+
+## Step 4 -- Agent Choice + Transaction
+
+The Broker presents both offers. The agent's choice depends on context:
+
+- **Need the original enacted text?** EUR-Lex. Free, STATIC, Level 2 attested, hash-verifiable.
+- **Need the latest consolidated version with expert annotations?** Wolters Kluwer. $85, DYNAMIC, includes 47 cross-references and amendment chain.
+
+Assume the agent chooses EUR-Lex (free). The `ExecuteTransaction` follows the standard pattern:
+
+```json
+POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+
+{
+  "ver": "1.0",
+  "id": "tx-eli-001",
+  "offer_id": "offer-eurlex-aiact-001",
+  "offer_signature": "base64-ed25519-eurlex-offer-sig...",
+  "offer_signature_algorithm": "ed25519",
+  "requester": {
+    "id": "legal-research-agent",
+    "domain": "lawfirm.eu",
+    "type": "REQUESTER_TYPE_AGENT",
+    "uris": [
+      "http://data.europa.eu/eli/reg/2024/1689/oj"
+    ],
+    "intended_use": ["FUNCTION_AI_INPUT"],
+    "scopes": ["*"],
+    "signature": "ed25519:b5d0e3f9c8a2...",
+    "signature_algorithm": "ed25519"
+  },
+  "agent_signature": "ed25519:b5d0e3f9c8a2...",
+  "agent_signature_algorithm": "ed25519"
+}
+```
+
+Response:
+
+```json
+{
+  "ver": "1.0",
+  "id": "tx-eli-001",
+  "transaction_id": "txn-eurlex-001",
+  "billing_id": "bill-eurlex-001",
+  "package": {
+    "id": "PKG-EURLEX-REG-2024-1689",
+    "retrieval": {
+      "endpoint": "https://cdn.eurlex.europa.eu/legal-content/EN/TXT/XML/?uri=CELEX:32024R1689&expires=1742404200&agent_id=3e8f1a2b...&txn_id=txn-eurlex-001&sig=hmac-sha256-e7f8a9..."
+    }
+  },
+  "cost": {
+    "amount": 0,
+    "currency": "EUR"
+  },
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "reporting_obligation": {
+    "required": true,
+    "window": "86400s",
+    "required_fields": ["consumed_quantity"]
+  },
+  "expires_at": "2026-03-20T12:05:00Z",
+  "agent_identity_hash": "3e8f1a2b..."
+}
+```
+
+Cost is zero. The signed URL still includes agent identity binding and HMAC verification -- even free content flows through the standard transaction pipeline for auditability.
+
+---
+
+## Step 5 -- Fetch
+
+The agent fetches via the signed URL:
+
+```
+GET https://cdn.eurlex.europa.eu/legal-content/EN/TXT/XML/?uri=CELEX:32024R1689
+    &expires=1742404200&agent_id=3e8f1a2b...&txn_id=txn-eurlex-001
+    &sig=hmac-sha256-e7f8a9...
+```
+
+EUR-Lex delivers the regulation as **Akoma Ntoso XML** -- the OASIS standard for legislative documents. Because `resource_mutability` is `STATIC`, the agent verifies the SHA-256 hash against `identity.content_hash`. A match confirms this is the exact Official Journal text as published on 12 July 2024.
+
+If the agent had chosen the Wolters Kluwer offer instead, the signed URL would point to `cdn.wk-legal.com`. Because `resource_mutability` is `DYNAMIC`, hash verification is informational only -- the consolidated text changes whenever new amendments are incorporated.
+
+---
+
+## Step 6 -- ReportUsage
+
+Even for free access, usage reporting is required for transparency:
+
+```json
+POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+
+{
+  "ver": "1.0",
+  "id": "ur-eli-001",
+  "transaction_id": "txn-eurlex-001",
+  "billing_id": "bill-eurlex-001",
+  "usage": {
+    "function": ["FUNCTION_AI_INPUT"],
+    "consumed_quantity": 87200,
+    "consumed_unit": "tokens",
+    "displayed_to_user": true,
+    "citation_included": true
+  },
+  "timestamp": "2026-03-20T12:02:00Z",
+  "assets": [
+    {
+      "uri": "http://data.europa.eu/eli/reg/2024/1689/oj",
+      "title": "Regulation (EU) 2024/1689 — EU AI Act",
+      "package_id": "PKG-EURLEX-REG-2024-1689"
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "report_id": "rpt-eurlex-001"
+}
+```
+
+Free does not mean untracked. EUR-Lex gains visibility into how AI agents consume EU legislation -- aggregate usage data that informs the Publications Office's digital strategy.
+
+---
+
+## Key Takeaways
+
+### Same Content, Different Value
+
+EU legislation is **public domain** (Decision 2011/833/EU). The raw text is free from EUR-Lex. Wolters Kluwer's $85 price is for the **value-add**: expert annotations, 47 cross-references, and consolidated text that incorporates amendments. RAMP makes this transparent -- the agent compares both offers side by side and decides if the annotations are worth the cost.
+
+### ELI URI as Universal Identifier
+
+The [European Legislation Identifier](http://data.europa.eu/eli) (ELI) provides a stable, machine-readable URI for every EU legal act. Both Exchanges use the same ELI (`http://data.europa.eu/eli/reg/2024/1689/oj`), enabling the Broker to match offers for the same legislation across providers -- even when `canonical_url` differs.
+
+### STATIC vs DYNAMIC for the Same Legislation
+
+The original OJ text is `STATIC` -- it was published once and never changes. The Wolters Kluwer consolidated version is `DYNAMIC` -- it evolves as amendments are incorporated. The `legal.legislation.consolidation_status` ext field tells the agent exactly what version it is getting: `original` vs `consolidated_to_2026-01-15`.
+
+### ramp-legal-v1 Extension Profile
+
+The `ramp-legal-v1` profile provides the vocabulary that makes this walkthrough possible:
+
+| Ext field | Purpose |
+|---|---|
+| `legal.legislation.eli` | ELI URI for cross-exchange matching |
+| `legal.legislation.celex` | CELEX number (EU-internal identifier) |
+| `legal.legislation.consolidation_status` | `original`, `consolidated_to_{date}` |
+| `legal.legislation.amendment_chain` | Ordered list of ELI URIs showing how the act has been amended |
+| `legal.legislation.cross_references` | Count of cross-references to other legislation |
+| `legal.legislation.annotations` | Whether expert annotations are included |
+| `legal.legislation.language_preference` | Requested language (ResourceQuery ext) |
+| `legal.legislation.languages_available` | Available language versions (Offer ext) |
+
+### Attestation Levels Tell the Trust Story
+
+EUR-Lex carries a **Level 2** attestation from `publications.europa.eu` -- the EU's own Publications Office. For legislation, this is the highest possible authority: the entity that publishes the Official Journal is attesting to the content. Wolters Kluwer carries a **Level 1** (self) attestation -- trustworthy as a legal publisher, but not the authoritative source.
+
+### Free Access Still Flows Through RAMP
+
+Even at $0, the full protocol pipeline applies: signed URLs, agent identity binding, usage reporting, and the dispute chain. This creates an audit trail that benefits both sides -- the agent proves it accessed content legitimately, and EUR-Lex gains aggregate usage intelligence.
+
+---
+
+## Next Steps
+
+- [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1) -- pay-per-article and subscription scenarios
+- [Scenario Walkthrough](/protocol/scenario-walkthrough) -- multi-party narrative with Broker, dedup, and disputes
+- [Extension Profiles](/protocol/extension-profiles) -- how `ramp-legal-v1` and other profiles work
+- [Resource Mutability](/protocol/content-mutability) -- STATIC vs DYNAMIC vs LIVE
+- [Content Attestation](/protocol/content-attestation) -- attestation levels and trust chains

@@ -1,0 +1,21 @@
+version: v2
+modules:
+  - path: .
+    name: buf.build/ramp-protocol/protocol
+lint:
+  use:
+    - STANDARD
+  except:
+    # We keep message names consistent with the RAMP/CoMP JSON Schema
+    # naming (SupplyQuery, TransactionRequest, etc.) rather than following
+    # the buf convention of ServiceNameMethodNameRequest.
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    # CoMP enums map proto3 value 0 to a real CoMP value (not a sentinel).
+    # RAMP-native enums keep _UNSPECIFIED = 0, but CoMP-aligned enums
+    # intentionally break this convention for 1:1 integer alignment.
+    - ENUM_ZERO_VALUE_SUFFIX
+breaking:
+  use:
+    - FILE

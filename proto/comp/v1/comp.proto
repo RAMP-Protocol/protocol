@@ -1,0 +1,356 @@
+// CoMP v1.0 — IAB Tech Lab Content Monetization Protocol
+//
+// 1:1 mapping from the official CoMP WG specification.
+// Source: https://github.com/IABTechLab/CoMP/blob/dev/CoMP-1.0.md
+//
+// v0.2 additions:
+//   - License message + LicenseUse enum (CoMP §license.json)
+//   - Package.license: repeated License for per-package licensing terms
+//   - Retrieval.ratelmt: rate limit signaling on retrieval endpoints
+//   - Text.authority, Text.originality: content quality signals
+//   - Video.c2pa, Image.c2pa, Audio.c2pa: C2PA content credentials
+//   - Image.alt, Image.caption: accessibility and display metadata
+//
+// Enum alignment: proto3 enum values map directly to CoMP integer values
+// (first real CoMP value = 0). No UNSPECIFIED sentinels — proto3 default
+// zero is a valid CoMP value, not a sentinel.
+//
+// This file preserves CoMP field names, enum values, and semantics exactly.
+// RAMP extensions live in ramp/v1/ramp.proto, never here.
+
+syntax = "proto3";
+
+package comp.v1;
+
+option go_package = "github.com/RAMP-Protocol/protocol/gen/go/comp/v1;compv1";
+
+import "google/protobuf/struct.proto";
+
+// AISystem — Information about the AI System making the request.
+// CoMP §aisystem.json
+message AISystem {
+  // Canonical domain of the AI System requesting access.
+  string name = 1;
+
+  // User agent of the AI System.
+  optional string ua = 2;
+
+  // ID of the AI system, as registered by Tech Lab Agent Registry.
+  optional string id = 3;
+
+  // How the AI system will use the content.
+  AISystemUse aisysuse = 4;
+
+  // Implementer-specific extensions.
+  google.protobuf.Struct ext = 15;
+}
+
+// AISystemUse — Intended use of the requested content.
+// CoMP §aisystemuse.json
+message AISystemUse {
+  // License ID — public agent identifier. NOT a credential.
+  // Authentication is via agent_signature (Ed25519). Treat lid like a
+  // username, not a password. Marketplace looks up agent's registered
+  // public key by lid.
+  string lid = 1;
+
+  // How the AI system authenticates itself.
+  AuthMethod aiauth = 2;
+
+  // URI(s) that the AI System is requesting to crawl.
+  repeated string uri = 3;
+
+  // General information about the content scope requested.
+  optional ScopeType scope = 4;
+
+  // Function(s) the AI System will use the content for.
+  repeated Function function = 5;
+
+  // Sub-function(s) for content use.
+  repeated SubFunction subfn = 6;
+
+  // Whether results will be displayed to a human user. 0=no, 1=yes.
+  optional int32 resdis = 7;
+
+  google.protobuf.Struct ext = 15;
+}
+
+// AuthMethod — How the AI system authenticates.
+// CoMP §aisystemuse.aiauth
+enum AuthMethod {
+  AUTH_METHOD_USER_AGENT = 0;   // CoMP 0
+  AUTH_METHOD_IP = 1;           // CoMP 1
+  AUTH_METHOD_TOKEN = 2;        // CoMP 2
+  AUTH_METHOD_WEBBOT = 3;       // CoMP 3
+  AUTH_METHOD_AGENT_ID = 4;     // CoMP 4 (Tech Lab Registry)
+  AUTH_METHOD_OTHER = 5;        // CoMP 5
+}
+
+// ScopeType — Content scope categories.
+// CoMP §aisystemuse.scope and §scope.scope
+enum ScopeType {
+  SCOPE_TYPE_FULL_CORPUS = 0;   // CoMP 0
+  SCOPE_TYPE_SECTION = 1;       // CoMP 1
+  SCOPE_TYPE_DATE_RANGE = 2;    // CoMP 2
+  SCOPE_TYPE_GENRE = 3;         // CoMP 3
+  SCOPE_TYPE_TOPIC = 4;         // CoMP 4
+  SCOPE_TYPE_CURATED = 5;       // CoMP 5
+  SCOPE_TYPE_OTHER = 6;         // CoMP 6
+}
+
+// Function — What the AI system will use the content for.
+// CoMP §aisystemuse.function
+enum Function {
+  FUNCTION_ALL = 0;             // CoMP 0
+  FUNCTION_AI_ALL = 1;          // CoMP 1
+  FUNCTION_AI_TRAIN = 2;        // CoMP 2
+  FUNCTION_AI_INPUT = 3;        // CoMP 3
+  FUNCTION_AI_INDEX = 4;        // CoMP 4
+  FUNCTION_SEARCH = 5;          // CoMP 5
+}
+
+// SubFunction — Specific sub-function for content use.
+// CoMP §aisystemuse.subfn
+enum SubFunction {
+  SUB_FUNCTION_TRAINING = 0;      // CoMP 0
+  SUB_FUNCTION_RAG = 1;           // CoMP 1
+  SUB_FUNCTION_GROUNDING = 2;     // CoMP 2
+  SUB_FUNCTION_AGENT_VIEW = 3;    // CoMP 3
+  SUB_FUNCTION_AGENT_ACTIONS = 4; // CoMP 4
+  SUB_FUNCTION_OTHER = 5;         // CoMP 5
+}
+
+// Package — A package of content inventory.
+// CoMP §package.json
+message Package {
+  // Unique package identifier defined by the Content Owner or Marketplace.
+  string id = 1;
+
+  // Title of the package.
+  optional string title = 2;
+
+  // Canonical domain of the business entity offering the content.
+  optional string seller = 3;
+
+  // Canonical domain of the packager, if different than the seller.
+  optional string packager = 4;
+
+  // URL for the license terms.
+  optional string licenseurl = 5;
+
+  // Whether citation of the Content Owner is required. 0=no, 1=yes.
+  optional int32 citation = 6;
+
+  // Scope of content in this package.
+  optional Scope scope = 7;
+
+  // How to retrieve the content.
+  optional Retrieval retrieval = 8;
+
+  // Licensing terms for this package.
+  repeated License license = 9;
+
+  google.protobuf.Struct ext = 15;
+}
+
+// License — Licensing terms for a content package.
+// CoMP §license.json
+message License {
+  optional string id = 1;
+  optional string turl = 2;
+  repeated LicenseUse use = 3;
+  repeated string country = 4;
+  optional int32 maxword = 5;
+  optional int32 citation = 6;  // 0=required, 1=not required
+  optional double price = 7;
+  optional double revshare = 8;
+  optional string cur = 9;
+  optional int32 dur = 10;
+  google.protobuf.Struct ext = 15;
+}
+
+// LicenseUse — Permitted use categories under a license.
+// CoMP §license.use
+enum LicenseUse {
+  LICENSE_USE_TRAINING_DISPLAY = 0;
+  LICENSE_USE_RAG_DISPLAY_UNRESTRICTED = 1;
+  LICENSE_USE_RAG_DISPLAY_MAX_WORDS = 2;
+  LICENSE_USE_RAG_DISPLAY_ATTRIBUTION = 3;
+  LICENSE_USE_RAG_NO_DISPLAY = 4;
+  LICENSE_USE_AGENT_VIEW = 5;
+  LICENSE_USE_AGENT_ACTIONS = 6;
+}
+
+// Scope — What content is included in the package.
+// CoMP §scope.json
+message Scope {
+  optional ScopeType scope = 1;
+
+  // Upper limit on crawl. 0=unlimited, 1=has maximum.
+  optional int32 max = 2;
+
+  // Content type(s) included.
+  repeated ContentType ctype = 3;
+
+  // Text assets.
+  repeated Text text = 4;
+
+  // Video assets.
+  repeated Video video = 5;
+
+  // Image assets.
+  repeated Image image = 6;
+
+  // Audio assets.
+  repeated Audio audio = 7;
+
+  google.protobuf.Struct ext = 15;
+}
+
+// ContentType — Type of content in the package.
+// CoMP §scope.ctype
+enum ContentType {
+  CONTENT_TYPE_TEXT = 0;        // CoMP 0
+  CONTENT_TYPE_VIDEO = 1;       // CoMP 1
+  CONTENT_TYPE_IMAGE = 2;       // CoMP 2
+  CONTENT_TYPE_AUDIO = 3;       // CoMP 3
+  CONTENT_TYPE_ALL = 4;         // CoMP 4
+  CONTENT_TYPE_OTHER = 5;       // CoMP 5
+}
+
+// Text — A text-based asset.
+// CoMP §text.json
+message Text {
+  optional string title = 1;
+
+  // Word count(s) of main body.
+  repeated int32 wordcount = 2;
+
+  // Original publication date (ISO 8601).
+  optional string pubdate = 3;
+
+  // Publication status. 0=not specified, 1=published, 2=unpublished/archival.
+  optional int32 published = 4;
+
+  // Most recent substantive update (ISO 8601).
+  optional string update = 5;
+
+  // Author name(s).
+  repeated string author = 6;
+
+  // Source of creation. 0=human, 1=ai, 2=hybrid.
+  optional int32 sourcetype = 7;
+
+  // Provenance available. 0=no, 1=yes.
+  optional int32 provenance = 8;
+
+  // Canonical domain of the provenance entity (e.g. c2pa.org).
+  optional string provent = 9;
+
+  // Authority score (0.0–1.0). Publisher/verifier-assessed domain authority.
+  optional double authority = 10;
+
+  // Originality score (0.0–1.0). Degree of original vs. syndicated content.
+  optional double originality = 11;
+
+  google.protobuf.Struct ext = 15;
+}
+
+// Video — A video asset.
+// CoMP §video.json
+message Video {
+  repeated string title = 1;
+  repeated int32 dur = 2;           // Duration in seconds.
+  optional int32 clip = 3;          // 0=full, 1=clip.
+  repeated int32 wordcount = 4;
+  optional int32 transcript = 5;    // 0=no, 1=yes.
+  optional string pubdate = 6;
+  optional int32 published = 7;
+  optional string update = 8;
+  repeated string author = 9;
+  optional int32 sourcetype = 10;
+  optional int32 provenance = 11;
+  optional string provent = 12;
+  // C2PA content credentials manifest URI.
+  optional string c2pa = 13;
+  google.protobuf.Struct ext = 15;
+}
+
+// Image — An image asset.
+// CoMP §image.json
+message Image {
+  repeated string title = 1;
+  optional string pubdate = 2;
+  optional int32 published = 3;
+  optional string update = 4;
+  repeated string author = 5;
+  optional int32 sourcetype = 6;
+  optional int32 provenance = 7;
+  optional string provent = 8;
+  // Alt text for the image.
+  optional string alt = 9;
+  // Caption for the image.
+  optional string caption = 10;
+  // C2PA content credentials manifest URI.
+  optional string c2pa = 11;
+  google.protobuf.Struct ext = 15;
+}
+
+// Audio — An audio asset.
+// CoMP §audio.json
+message Audio {
+  repeated string title = 1;
+  repeated int32 dur = 2;
+  repeated int32 wordcount = 3;
+  optional int32 transcript = 4;
+  optional string pubdate = 5;
+  optional int32 published = 6;
+  optional string update = 7;
+  repeated string author = 8;
+  optional int32 sourcetype = 9;
+  optional int32 provenance = 10;
+  optional string provent = 11;
+  // C2PA content credentials manifest URI.
+  optional string c2pa = 12;
+  google.protobuf.Struct ext = 15;
+}
+
+// Retrieval — How to access content after authorization.
+// CoMP §retrieval.json
+message Retrieval {
+  // Authorization type.
+  optional RetrievalAuth auth = 1;
+
+  // Entry point / feed URI.
+  optional string endpoint = 2;
+
+  // Endpoint type(s).
+  repeated RetrievalType type = 3;
+
+  // Rate limit (requests per minute) for this retrieval endpoint.
+  optional int32 ratelmt = 4;
+
+  google.protobuf.Struct ext = 15;
+}
+
+// RetrievalAuth — Authorization method for content access.
+// CoMP §retrieval.auth
+enum RetrievalAuth {
+  RETRIEVAL_AUTH_NONE = 0;       // CoMP 0
+  RETRIEVAL_AUTH_API_KEY = 1;    // CoMP 1
+  RETRIEVAL_AUTH_OAUTH2 = 2;     // CoMP 2
+  RETRIEVAL_AUTH_SSL = 3;        // CoMP 3
+}
+
+// RetrievalType — Endpoint type for content retrieval.
+// CoMP §retrieval.type
+enum RetrievalType {
+  RETRIEVAL_TYPE_HTML = 0;       // CoMP 0
+  RETRIEVAL_TYPE_RSS = 1;        // CoMP 1
+  RETRIEVAL_TYPE_API = 2;        // CoMP 2
+  RETRIEVAL_TYPE_MCP = 3;        // CoMP 3
+  RETRIEVAL_TYPE_NLWEB = 4;      // CoMP 4
+  RETRIEVAL_TYPE_XML = 5;        // CoMP 5
+  RETRIEVAL_TYPE_NEWSML = 6;     // CoMP 6
+  RETRIEVAL_TYPE_OTHER = 7;      // CoMP 7
+}

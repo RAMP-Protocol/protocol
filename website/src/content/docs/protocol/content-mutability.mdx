@@ -1,0 +1,213 @@
+---
+title: "Resource Mutability"
+description: "How RAMP classifies resource stability (static, dynamic, live) to drive hash verification, freshness filtering, and dispute behavior"
+---
+
+## The Problem
+
+An agent receives a content hash with an Offer and a different hash when it fetches the content. Is this tampering (dispute it) or a routine update (expected behavior)?
+
+Without a mutability signal, the agent cannot distinguish "content was tampered with" from "content was updated since the offer was generated." RAMP solves this with the `ResourceMutability` enum on `ResourceIdentity` and two freshness fields: `Offer.data_as_of` and `RequestConstraints.max_data_age`.
+
+## ResourceMutability Enum
+
+```proto
+enum ResourceMutability {
+  RESOURCE_MUTABILITY_UNSPECIFIED = 0;
+  RESOURCE_MUTABILITY_STATIC = 1;
+  RESOURCE_MUTABILITY_DYNAMIC = 2;
+  RESOURCE_MUTABILITY_LIVE = 3;
+}
+```
+
+Set on `ResourceIdentity.resource_mutability` (field 8) for every resource.
+
+### STATIC
+
+Content is immutable. The hash computed at offer time will match at delivery time.
+
+**Agent behavior:** SHOULD verify `content_hash` on delivery. A mismatch is disputable -- the agent received different bytes than what was attested.
+
+**Examples:**
+- A published New York Times article (no corrections)
+- An academic paper (Version of Record)
+- A granted patent (US11234567B2)
+- EU legislation as published in the Official Journal
+- A podcast episode without dynamic ad insertion
+
+### DYNAMIC
+
+Content changes between offer generation and agent fetch. The hash reflects the state at offer time -- a mismatch is expected, not disputable.
+
+**Agent behavior:** MUST NOT auto-dispute a hash mismatch. Instead, use `Offer.data_as_of` to evaluate freshness. The agent can still dispute if the content is fundamentally wrong (wrong resource, wrong language), but not on hash alone.
+
+**Examples:**
+- A Dun & Bradstreet credit report (updated as new trade data arrives)
+- A DrugBank interaction database (new interactions added weekly)
+- A news article that has been corrected (version 2 replaces version 1)
+- A podcast episode with dynamic ad insertion (ads change between fetches)
+- Consolidated EU legislation (recomputed as amendments are adopted)
+- Satellite imagery catalog (new acquisitions added daily)
+
+### LIVE
+
+Content does not exist at offer time. The resource is a stream endpoint or real-time channel. No `content_hash` is applicable.
+
+**Agent behavior:** Metering is time-based (`consumed_quantity` in minutes or hours). No hash verification is possible. The agent transacts for access to the stream, not for specific content bytes.
+
+**Examples:**
+- Bloomberg stock quote feed (WebSocket stream)
+- NPR live broadcast (HLS/Icecast stream)
+- Real-time news monitoring feed (SSE stream)
+
+## Data Freshness
+
+Two fields enable freshness-based filtering for DYNAMIC resources.
+
+### Offer.data_as_of
+
+```proto
+// On the Offer message (field 16)
+optional google.protobuf.Timestamp data_as_of = 16;
+```
+
+Indicates when the offered data was current. Set by the Exchange for DYNAMIC resources. Not set for STATIC (content does not change) or LIVE (content does not exist yet).
+
+| Resource Type | data_as_of Meaning |
+|---|---|
+| Credit report | "Data reflects trade payments reported through March 18" |
+| Drug interaction database | "Database version 6.0.15, updated March 19" |
+| Satellite imagery catalog | "Imagery acquired March 17, 14:30 UTC" |
+| News article with corrections | "Latest correction applied at 16:45 UTC" |
+| Consolidated legislation | "Amendments incorporated through January 15" |
+
+### RequestConstraints.max_data_age
+
+```proto
+// On the RequestConstraints message (field 10)
+optional google.protobuf.Duration max_data_age = 10;
+```
+
+The agent's freshness requirement. The Broker SHOULD exclude offers where `now() - Offer.data_as_of > max_data_age`. Only relevant for DYNAMIC resources.
+
+| Requirement | max_data_age |
+|---|---|
+| "Credit report updated within 7 days" | `604800s` |
+| "Stock snapshot from the last hour" | `3600s` |
+| "Drug database updated this month" | `2592000s` |
+| "News article from today" | `86400s` |
+
+## Impact on Core Protocol Features
+
+### Hash Verification
+
+| Mutability | content_hash Set? | Agent Verifies? | Mismatch Disputable? |
+|---|---|---|---|
+| **STATIC** | Yes | SHOULD | Yes |
+| **DYNAMIC** | Yes (snapshot) | MAY (informational) | No (expected) |
+| **LIVE** | No | N/A | N/A |
+
+### Attestation
+
+Attestation claims interact with mutability:
+
+- **STATIC:** The `content_hash` claim in `ResourceAttestation` is the definitive hash. If delivery does not match, the attestation is violated.
+- **DYNAMIC:** The `content_hash` claim reflects the state at `attested_at`. The agent uses `attested_at` and `data_as_of` to judge whether the attestation is still relevant.
+- **LIVE:** Attestation covers the stream endpoint and access terms, not content bytes. Claims like `estimated_quantity` (expected stream duration) are still meaningful.
+
+### Dispute Resolution
+
+| Mutability | Auto-Disputable on Hash Mismatch? | Disputable Scenarios |
+|---|---|---|
+| **STATIC** | Yes | Hash mismatch, delivery failure, wrong content |
+| **DYNAMIC** | No | Wrong resource, wrong language, stale beyond `max_data_age`, delivery failure |
+| **LIVE** | No | Stream endpoint unreachable, access denied before expiry |
+
+### Pricing
+
+| Mutability | Typical Pricing | Typical Unit |
+|---|---|---|
+| **STATIC** | Per article, per page, per token | `tokens`, `pages`, `articles` |
+| **DYNAMIC** | Per record, per query, per report | `records`, `reports`, `queries` |
+| **LIVE** | Per minute, per hour | `minutes`, `hours` |
+
+### Delivery Method
+
+| Mutability | Typical Delivery |
+|---|---|
+| **STATIC** | `DELIVERY_METHOD_DIRECT` or `DELIVERY_METHOD_INSTRUCTIONS` (signed URL to CDN) |
+| **DYNAMIC** | `DELIVERY_METHOD_INSTRUCTIONS` (signed URL to provider API) |
+| **LIVE** | `DELIVERY_METHOD_STREAMING` (signed URL to WebSocket/SSE/HLS endpoint) |
+
+## Domain Examples
+
+### Example 1: Static Article (NYT)
+
+A published news article with no corrections.
+
+```json
+{
+  "identity": {
+    "canonical_url": "https://nytimes.com/2026/03/19/tech/article.html",
+    "content_hash": "sha256:a1b2c3d4...",
+    "hash_method": "sha256",
+    "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+  }
+}
+```
+
+The agent fetches the article, computes the SHA-256 hash of the delivered bytes, and compares it to `content_hash`. A mismatch triggers an auto-dispute.
+
+### Example 2: Dynamic Credit Report (D&B)
+
+A credit report that is updated as new trade data arrives.
+
+```json
+{
+  "identity": {
+    "canonical_url": "https://api.dnb.com/report/123456789",
+    "content_hash": "sha256:e5f6a7b8...",
+    "hash_method": "sha256",
+    "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC"
+  },
+  "data_as_of": "2026-03-18T23:59:59Z"
+}
+```
+
+The agent knows the hash reflects the report as of March 18. If the agent set `max_data_age = 604800s` (7 days) and it is March 19, this offer is fresh enough. The agent does not dispute a hash mismatch -- the report may have been updated since the offer was generated.
+
+### Example 3: Live Stream (Bloomberg)
+
+A real-time stock quote feed.
+
+```json
+{
+  "identity": {
+    "canonical_url": "wss://stream.bloomberg.com/quotes/v1",
+    "resource_mutability": "RESOURCE_MUTABILITY_LIVE"
+  },
+  "pricing": {
+    "model": "PRICING_MODEL_PER_MINUTE",
+    "unit_cost": 0.50,
+    "unit": "minutes",
+    "estimated_quantity": 120
+  },
+  "delivery_method": "DELIVERY_METHOD_STREAMING"
+}
+```
+
+No `content_hash` -- the content does not exist at offer time. The agent connects to the WebSocket endpoint and receives data continuously. Usage is reported in minutes consumed.
+
+## Exchange Responsibilities
+
+- **MUST** set `resource_mutability` on every `ResourceIdentity`
+- **MUST** set `data_as_of` on Offers for DYNAMIC resources
+- **MUST NOT** set `content_hash` on LIVE resources
+- **SHOULD** respect `max_data_age` constraints from `RequestConstraints` (or from `ResourceQuery.ext` when forwarded)
+
+## Next Steps
+
+- [Content Attestation](/protocol/content-attestation/) -- how attestation interacts with mutability levels
+- [Dispute Resolution](/protocol/dispute-resolution/) -- auto-dispute rules per mutability level
+- [Extension Profiles](/protocol/extension-profiles/) -- how domain profiles define mutability conventions per content type
+- [Proto: RAMP v1](/reference/proto-ramp/) -- full `ResourceMutability` enum and field definitions

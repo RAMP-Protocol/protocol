@@ -1,0 +1,122 @@
+---
+title: "ramp.json Example"
+description: "Complete example of a provider's /.well-known/ramp.json manifest file"
+---
+
+The `ramp.json` file is served at `/.well-known/ramp.json` on the provider's domain. It declares which Exchanges are authorized to sell the provider's resources -- like `ads.txt` for AI resource access.
+
+## Complete Example
+
+```json
+{
+  "ver": "1.0",
+  "provider": "techprovider.com",
+  "contact": "licensing@techprovider.com",
+  "catalog_contributors": [
+    {
+      "domain": "doubleverify.com",
+      "relationship": "verifier"
+    },
+    {
+      "domain": "gumgum.com",
+      "relationship": "verifier"
+    }
+  ],
+  "marketplaces": [
+    {
+      "domain": "marketplace.ssp-alpha.com",
+      "endpoint": "https://marketplace.ssp-alpha.com/v1",
+      "relationship": "DIRECT"
+    },
+    {
+      "domain": "marketplace.ssp-beta.com",
+      "endpoint": "https://marketplace.ssp-beta.com/v1",
+      "relationship": "RESELLER"
+    }
+  ]
+}
+```
+
+## Field Reference
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ver` | string | Yes | RAMP protocol version |
+| `provider` | string | Yes | Canonical domain of the provider |
+| `contact` | string | No | Contact email for licensing inquiries |
+| `catalog_contributors` | array | No | Authorized third-party catalog pushers |
+| `catalog_contributors[].domain` | string | Yes | Canonical domain of the contributor (e.g., `doubleverify.com`) |
+| `catalog_contributors[].relationship` | string | Yes | Relationship type: `verifier`, `marketplace`, etc. |
+| `marketplaces` | array | Yes | Authorized Exchanges for this provider |
+| `marketplaces[].domain` | string | Yes | Canonical domain of the Exchange |
+| `marketplaces[].endpoint` | string | Yes | RAMP ExchangeService endpoint URL |
+| `marketplaces[].relationship` | string | Yes | `DIRECT` or `RESELLER` (mirrors ads.txt) |
+
+## How Agents Use ramp.json
+
+### Proactive Discovery (Preferred)
+
+The agent checks `/.well-known/ramp.json` before attempting to access content:
+
+```
+1. Agent wants content from techprovider.com
+2. GET https://techprovider.com/.well-known/ramp.json
+3. Finds Exchange endpoint: marketplace.ssp-alpha.com/v1
+4. Calls DiscoverResources → gets Offers with pricing
+5. Calls ExecuteTransaction → gets signed URL
+6. Fetches content from CDN
+```
+
+### Fallback Discovery (via 403)
+
+If the agent doesn't know about RAMP and tries to crawl directly:
+
+```
+1. Agent hits techprovider.com/premium/article
+2. Edge function returns 403 + X-Content-Rules header
+3. Agent discovers ramp.json from the header
+4. Follows standard RAMP flow from step 2 above
+```
+
+## Relationship Types
+
+| Relationship | Description | Ad-Tech Equivalent |
+|---|---|---|
+| `DIRECT` | Provider has a direct contract with this Exchange | ads.txt DIRECT |
+| `RESELLER` | Exchange resells content via another authorized party | ads.txt RESELLER |
+
+## Provider Trust Model
+
+The Exchange periodically re-fetches `ramp.json` for each provider's domain. If the Exchange is removed from a provider's `ramp.json`, the tenant is revoked and offers stop being served. This provides ongoing verification, not just onboarding.
+
+## Protobuf Definition
+
+The `ramp.json` structure maps to the `ProviderManifest` message in `ramp/v1/ramp.proto`:
+
+```protobuf
+message ProviderManifest {
+  string ver = 1;
+  string provider = 2;
+  optional string contact = 3;
+  repeated AuthorizedExchange marketplaces = 4;
+  repeated CatalogContributor catalog_contributors = 5;
+}
+
+message AuthorizedExchange {
+  string domain = 1;
+  string endpoint = 2;
+  ProviderRelationship relationship = 3;
+}
+
+// Third party authorized to push catalog metadata on behalf of a provider.
+message CatalogContributor {
+  string domain = 1;        // e.g., "doubleverify.com"
+  string relationship = 2;  // e.g., "verifier", "marketplace"
+}
+
+enum ProviderRelationship {
+  PROVIDER_RELATIONSHIP_UNSPECIFIED = 0;
+  PROVIDER_RELATIONSHIP_DIRECT = 1;
+  PROVIDER_RELATIONSHIP_RESELLER = 2;
+}
+```

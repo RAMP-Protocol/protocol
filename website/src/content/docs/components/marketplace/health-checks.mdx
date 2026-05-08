@@ -1,0 +1,121 @@
+---
+title: "Health Checks"
+description: "Three-layer health checking for the RAMP Exchange -- gRPC health, HTTP liveness, and HTTP readiness with subsystem health matrix."
+---
+
+## Three Health Layers
+
+The Exchange implements three complementary health check mechanisms:
+
+| Layer | Protocol | Purpose | Consumer |
+|---|---|---|---|
+| **gRPC Health** | `grpc.health.v1.Health/Check` | Per-service health for gRPC-native probes | Kubernetes gRPC probes, Broker |
+| **HTTP Liveness** | `GET /healthz` | Process alive, no external I/O | Kubernetes livenessProbe |
+| **HTTP Readiness** | `GET /readyz` | All subsystems ready to serve traffic | Kubernetes readinessProbe, load balancers |
+
+The gRPC Health layer is the primary probe mechanism for the [Broker](/components/broker/overview/). HTTP endpoints exist for Kubernetes and non-gRPC consumers. All three layers derive status from the same internal subsystem health matrix.
+
+## Subsystem Health Matrix
+
+Each subsystem is classified as relevant to liveness, readiness, or both. Background goroutines probe subsystems and cache their status -- health endpoints read cached status only, with no synchronous I/O.
+
+| Subsystem | Liveness? | Readiness? | Rationale |
+|---|---|---|---|
+| **Process alive** | Yes | Yes | Base signal |
+| **Catalog loaded** | No | Yes | Cannot serve offers without a catalog |
+| **Catalog age within threshold** | No | Yes | Stale catalog means ingestion is stuck |
+| **WAL writable** | No | Yes | Cannot record transactions |
+| **WAL utilization below 90%** | No | Yes | Prevents transaction loss under pressure |
+| **Billing adapter reachable** | No | Yes | Cannot authorize purchases |
+| **Signing keys loaded** | No | Yes | Cannot sign offers or generate signed URLs |
+
+### Background Probe Intervals
+
+| Subsystem | Interval | Mechanism |
+|---|---|---|
+| Catalog loaded | 5s | Check in-memory catalog pointer |
+| Catalog age | 5s | Compare timestamp to 2x poll interval |
+| WAL writable | 10s | No-op write attempt |
+| WAL utilization | 10s | Size / max capacity |
+| Billing adapter | 15s | TCP connect |
+| Signing keys | 30s | Check key ring for valid keys |
+
+## HTTP Endpoints
+
+### GET /healthz -- Liveness
+
+Returns `200 OK` with body `ok` if the process is alive. No external I/O, no subsystem checks, no JSON body.
+
+**Why no external I/O**: Liveness probes that call external services can cause cascading failures. If a dependency slows down, the liveness probe times out, Kubernetes restarts the pod, which increases load on remaining pods, causing more restarts. The `/healthz` endpoint avoids this by checking only that the process can handle HTTP requests.
+
+### GET /readyz -- Readiness
+
+Returns `200 OK` with subsystem detail when all readiness subsystems are healthy. Returns `503 Service Unavailable` with detail when any subsystem is unhealthy.
+
+```json
+{
+  "ready": true,
+  "subsystems": [
+    {"name": "catalog_loaded", "healthy": true, "message": "2847 entries"},
+    {"name": "catalog_age", "healthy": true, "message": "age: 2m14s (max: 10m)"},
+    {"name": "wal_writable", "healthy": true, "message": "write latency: 0.4ms"},
+    {"name": "wal_utilization", "healthy": true, "message": "42% (limit: 90%)"},
+    {"name": "billing_adapter", "healthy": true, "message": "reachable: 1.2ms"},
+    {"name": "signing_keys", "healthy": true, "message": "2 active keys"}
+  ],
+  "checked_at": "2025-01-15T10:30:01Z"
+}
+```
+
+## Kubernetes Probe Configuration
+
+```yaml
+containers:
+  - name: exchange
+    ports:
+      - containerPort: 8080
+        name: grpc
+    startupProbe:
+      httpGet:
+        path: /readyz
+        port: 8080
+      periodSeconds: 10
+      failureThreshold: 30  # 5 minutes for first catalog build
+    readinessProbe:
+      grpc:
+        port: 8080
+        service: "ramp.v1.ExchangeService"
+      periodSeconds: 10
+      failureThreshold: 3
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      periodSeconds: 20
+      failureThreshold: 3   # 60s before restart
+```
+
+| Probe | Type | Rationale |
+|---|---|---|
+| **startupProbe** | HTTP `/readyz` | First catalog build can take minutes. HTTP gives subsystem detail for debugging slow starts |
+| **readinessProbe** | gRPC `ramp.v1.ExchangeService` | Once started, use gRPC-native probing. Removes pod from Service endpoints when unhealthy |
+| **livenessProbe** | HTTP `/healthz` | Lightweight -- no external I/O. Detects deadlocked processes |
+
+## Broker Health Probing
+
+The Broker's Exchange Registry uses `grpc.health.v1.Health/Check` instead of naive HEAD probes. This enables structured routing decisions:
+
+| Scenario | HEAD Probe | gRPC Health | Broker Action |
+|---|---|---|---|
+| Catalog stale but billing works | 200 (looks healthy) | NOT_SERVING | Skip for discovery |
+| Billing down but catalog fresh | 200 (looks healthy) | NOT_SERVING | Can serve read-only, not transactions |
+| Process alive, nothing ready | 200 (looks healthy) | NOT_SERVING | Skip entirely |
+| Process dead | Connection refused | Connection refused | Mark unhealthy |
+
+With HEAD probes, scenarios 1-3 are indistinguishable. With gRPC health, the Broker knows the Exchange is degraded and routes accordingly.
+
+## Next Steps
+
+- [Exchange Overview](/components/exchange/overview/) -- full architecture
+- [Exchange Manifest](/protocol/exchange-manifest/) -- machine-readable self-description
+- [Broker Overview](/components/broker/overview/) -- how the Broker uses health data

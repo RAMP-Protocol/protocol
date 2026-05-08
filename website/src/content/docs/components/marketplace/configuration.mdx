@@ -1,0 +1,272 @@
+---
+title: "Configuration"
+description: "Environment variables, config file structure, secrets management, hot reload, and deployment procedures for the Exchange Node."
+---
+
+## Configuration Sources
+
+Three-tier configuration with precedence: environment variables > config file > defaults.
+
+| Setting | Source | Hot Reload? | Example |
+|---|---|---|---|
+| Listen address | Env var | No (restart) | `MARKETPLACE_LISTEN_ADDR=:8080` |
+| Exchange domain | Env var | No | `MARKETPLACE_DOMAIN=exchange.ssp.com` |
+| TLS cert/key | Env var / file | No | `MARKETPLACE_TLS_CERT=/etc/tls/cert.pem` |
+| Tenant configs | Config file (YAML/JSON) | Yes (SIGHUP) | `MARKETPLACE_CONFIG=/etc/exchange/config.yaml` |
+| Signing keys | Secrets manager | Yes (polled) | `MARKETPLACE_SECRETS_PROVIDER=aws-sm` |
+| Billing adapter endpoint | Config file | Yes (SIGHUP) | In tenant config |
+| Log level | Env var | Yes (signal) | `MARKETPLACE_LOG_LEVEL=info` |
+| WAL directory | Env var | No | `MARKETPLACE_WAL_DIR=/var/lib/exchange/wal` |
+| Transaction store DSN | Env var | No | `MARKETPLACE_TXN_STORE_DSN=kafka://...` |
+
+---
+
+## Config File Structure
+
+```yaml
+# /etc/exchange/config.yaml
+exchange:
+  domain: "exchange.ssp-example.com"
+  version: "1.0"
+
+billing:
+  adapter: "dynamodb"         # or "http", "in-memory"
+  endpoint: "https://billing.internal.ssp.com/v1"
+  timeout: "30ms"
+  timeout_policy: "reject"    # or "defer"
+
+transaction_log:
+  store: "kafka"
+  kafka:
+    brokers: ["kafka-1:9092", "kafka-2:9092"]
+    topic: "exchange-transactions"
+  wal:
+    dir: "/var/lib/exchange/wal"
+    max_bytes: 1073741824     # 1 GB
+    flush_interval: "50ms"
+    flush_batch_size: 100
+
+tenants:
+  - id: "hearst-media"
+    domains:
+      - "cosmopolitan.com"
+      - "esquire.com"
+      - "elle.com"
+    rsl_urls:
+      cosmopolitan.com: "https://cosmopolitan.com/rsl.txt"
+      esquire.com: "https://esquire.com/rsl.txt"
+      elle.com: "https://elle.com/rsl.txt"
+    rsl_poll_interval: "5m"
+    content_base_url: "https://cdn.hearst.com"
+    cdn_type: "cloudfront"
+    signing_key_ref: "arn:aws:secretsmanager:us-east-1:123456:secret:hearst-signing-key"
+    url_ttl_seconds: 300
+    bind_agent_id: true
+    reporting:                                           # Tenant-level default — inherited by all offers
+      required: true
+      window: "86400s"
+      required_fields: ["transaction_id", "function", "consumed_quantity"]
+    abuse_thresholds:
+      min_query_to_txn_ratio: 0.01                       # Application-level only; volumetric limiting at infra
+    catalog_contributors:                                  # v1.0: authorized third-party push sources
+      - domain: "doubleverify.com"
+        relationship: "verifier"
+    verifier_trust:                                        # v1.0: trusted attestation verifiers
+      cache_ttl: "1h"
+      trusted_verifiers:
+        - "doubleverify.com"
+        - "gumgum.com"
+    dispute_thresholds:                                    # v1.0: per-tenant dispute policy
+      auto_credit_max_amount: 0.50                         # Max auto-credit per dispute (USD)
+      agent_dispute_rate_warning: 0.03                     # 3% warning threshold
+      agent_dispute_rate_block: 0.05                       # 5% blocking threshold
+
+  - id: "techcrunch-com"
+    domains: ["techcrunch.com"]
+    rsl_urls:
+      techcrunch.com: "https://techcrunch.com/rsl.txt"
+    # ...
+```
+
+---
+
+## Secrets Management
+
+### Key Storage
+
+- Keys stored encrypted at rest: AWS KMS envelope encryption or HashiCorp Vault transit engine
+- Per-tenant key isolation — each tenant's keys are under a separate KMS key or Vault path
+- Access audit trail on all key operations
+
+### Supported Secrets Providers
+
+| Provider | Config Value | Notes |
+|---|---|---|
+| AWS Secrets Manager | `aws-sm` | Production recommended for AWS deployments |
+| HashiCorp Vault | `vault` | For multi-cloud or on-premises |
+| GCP Secret Manager | `gcp-sm` | For GCP deployments |
+| Local file | `file` | Development only |
+
+### Key Reference Format
+
+The `signing_key_ref` in tenant configuration points to the key's location in the secrets provider:
+
+```yaml
+# AWS Secrets Manager
+signing_key_ref: "arn:aws:secretsmanager:us-east-1:123456:secret:hearst-signing-key"
+
+# HashiCorp Vault
+signing_key_ref: "vault://secret/exchange/tenants/hearst-media/signing-key"
+
+# Local file (development only)
+signing_key_ref: "file:///var/lib/exchange/keys/hearst-media.pem"
+```
+
+Keys are loaded from the secrets provider at startup and cached in memory. A background goroutine polls for rotations every 60 seconds.
+
+---
+
+## Hot Reload
+
+Tenant configuration changes are reloaded on SIGHUP without restarting the process:
+
+```go
+func (s *Server) watchConfig(ctx context.Context) {
+    sigCh := make(chan os.Signal, 1)
+    signal.Notify(sigCh, syscall.SIGHUP)
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-sigCh:
+            newCfg, err := LoadConfig(s.configPath)
+            if err != nil {
+                slog.Error("config reload failed", slog.Any("error", err))
+                continue
+            }
+            s.applyConfig(newCfg) // Updates tenant map, triggers RSL re-ingestion
+            slog.Info("config reloaded", slog.Int("tenants", len(newCfg.Tenants)))
+        }
+    }
+}
+```
+
+### What Reloads Without Restart
+
+| Component | Trigger | Behavior |
+|---|---|---|
+| Tenant configs | SIGHUP | Tenant map updated, new tenants' RSL ingestion started |
+| Signing keys | Background poll (60s) | New key becomes active, old key moves to previous |
+| Content catalog | RSL poll interval (default 5m) | Atomic pointer swap of CatalogSnapshot |
+| Billing adapter endpoint | SIGHUP | Connection pool updated |
+| Log level | SIGHUP or env var | Immediate effect |
+
+### What Requires Restart
+
+| Component | Reason |
+|---|---|
+| Listen address | Bound at startup |
+| TLS certificates | Loaded at startup |
+| WAL directory | File handles opened at startup |
+| Transaction store DSN | Connection established at startup |
+| Exchange domain | Used in response construction |
+
+### Admin API for Catalog Refresh
+
+Catalog changes (RSL re-ingestion) happen automatically on the poll interval. An explicit re-ingestion can be triggered via the admin API:
+
+```
+POST /admin/tenants/{tenant_id}/refresh-catalog
+```
+
+---
+
+## Resource Ingestion Pipeline
+
+Resource ingestion is a background pipeline, separate from request handling. It builds and maintains the resource catalog.
+
+### Ingestion Tiers
+
+**Tier 1 (best): Provider provides token estimates**
+- Via RSL word count extension, sitemap XML extension, or CoMP Package.scope.text.wordcount
+- Exchange uses directly, no crawling needed
+
+**Tier 2 (good): Exchange crawls and estimates**
+- Crawl URLs from sitemap.xml
+- Extract main text using readability algorithm (Mozilla Readability.js equivalent in Go)
+- Count words -> estimate tokens (wordcount x 1.32)
+- Store in catalog, refresh periodically (daily or on provider webhook)
+
+**Tier 3 (fallback): Tenant-level defaults**
+- Provider sets average word count per content type via tenant management API
+- "My articles average 2000 words" -> estimated_quantity = 2640
+- Crude but functional for unit_cost comparison
+
+### Ingestion Flow
+
+```
+1. Crawl sitemap.xml for each tenant domain → discover all content URLs
+2. Check for rsl.txt at each domain → parse pricing, restrictions, terms
+3. If no rsl.txt: fall back to tenant-level defaults from config
+4. Build OfferTemplates from merged data (sitemap URLs + RSL pricing + tenant defaults)
+5. Atomic pointer swap into CatalogSnapshot
+```
+
+### Sitemap Extension for RAMP
+
+Providers can add token estimates and content IDs directly in sitemap.xml using XML namespace extensions:
+
+```xml
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:ramp="https://ramp.ai/sitemap/1.0">
+  <url>
+    <loc>https://example.com/premium/article.html</loc>
+    <lastmod>2026-03-14</lastmod>
+    <ramp:tokens>3300</ramp:tokens>
+    <ramp:content-id>article-2026-03-14-ai-infra</ramp:content-id>
+    <ramp:pricing-model>per_article</ramp:pricing-model>
+    <ramp:rate currency="USD">0.05</ramp:rate>
+  </url>
+</urlset>
+```
+
+XML namespace extensions don't break standard sitemap readers — they ignore unknown namespaces. This is established practice (Google uses image:, video:, news: extensions).
+
+### CMS API Integration
+
+For WordPress sites, the Exchange can poll the REST API (`/wp-json/wp/v2/posts`) to discover content with rich metadata (title, excerpt, word count, categories). This provides better token estimates than sitemap-only discovery. CMS integration is optional and configured per-tenant.
+
+### Pipeline Architecture
+
+The ingestion pipeline runs as a separate background process (not in the Exchange hot path):
+1. Crawl sitemap.xml -> discover content URLs
+2. For each URL: check for RAMP sitemap extensions -> use if present
+3. If no extensions: crawl HTML -> extract text (readability algorithm) -> count words -> estimate tokens
+4. Check rsl.txt -> merge pricing terms
+5. Build catalog entries with token estimates
+6. Serialize radix trie to binary file
+7. Exchange process loads pre-built binary via atomic pointer swap
+
+Refresh: daily cron, or on provider webhook notification (POST /admin/refresh-catalog).
+Not on the hot path. Never blocks DiscoverResources or ExecuteTransaction.
+
+---
+
+## Error Code Reference
+
+| Scenario | Sentinel Error | Connect Code | gRPC Code | HTTP Status |
+|---|---|---|---|---|
+| Invalid request fields | (validation) | `CodeInvalidArgument` | `INVALID_ARGUMENT` | 400 |
+| Offer signature verification failed | `ErrOfferSignature` | `CodeInvalidArgument` | `INVALID_ARGUMENT` | 400 |
+| Offer expired | `ErrOfferExpired` | `CodeNotFound` | `NOT_FOUND` | 404 |
+| Billing denied (general) | `ErrBillingDenied` | `CodePermissionDenied` | `PERMISSION_DENIED` | 403 |
+| Billing denied (insufficient balance) | `ErrBillingBalance` | `CodeResourceExhausted` | `RESOURCE_EXHAUSTED` | 429 |
+| Reporting obligation outstanding | (reporting) | `CodePermissionDenied` | `PERMISSION_DENIED` | 403 |
+| Application-level abuse (low query:txn ratio) | (abuse) | `CodeResourceExhausted` | `RESOURCE_EXHAUSTED` | 429 |
+| Billing adapter timeout | `ErrBillingTimeout` | `CodeUnavailable` | `UNAVAILABLE` | 503 |
+| Transaction log full (WAL capacity) | `ErrTransactionLog` | `CodeUnavailable` | `UNAVAILABLE` | 503 |
+| Internal error (signing, catalog) | `ErrTransactionSigning` | `CodeInternal` | `INTERNAL` | 500 |
+| Idempotent replay | (none) | Success (cached) | `OK` | 200 |
+
+Note: Volumetric rate limiting (per-IP, per-tenant RPS) is handled by the infrastructure layer (HAProxy/Envoy/API Gateway) and returns 429 before reaching the Exchange service.

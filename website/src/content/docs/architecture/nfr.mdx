@@ -1,0 +1,174 @@
+---
+title: "Non-Functional Requirements"
+description: "RAMP performance, latency, throughput, durability, and cost targets modeled on ad-tech scale"
+---
+
+## Context: The Numbers That Drive Everything
+
+### AI Resource Traffic (2025-2026)
+
+- **50 billion** AI crawler requests/day on Cloudflare alone (late 2025)
+- **6,900%** YoY growth in verified AI agent traffic
+- **4.2%** of all HTML page requests are from AI bots
+- ~80% is training crawl (bulk, erratic); ~20% is inference/RAG (real-time, user-facing)
+
+RAMP targets the **inference/RAG segment** -- real-time, per-request resource access where an agent needs a specific article to answer a user query.
+
+**Inference traffic estimate**: 20% of 50B = ~10B requests/day = ~115K requests/second globally. A single large Exchange might handle 1-10% of this = **1K-10K RPS**.
+
+### Ad-Tech Benchmarks
+
+- OpenRTB exchanges: **100ms total latency budget**, broadcast to 50+ DSPs
+- Individual SSP bid request assembly: **2-5ms**
+- AWS RTB Fabric: sub-millisecond container-to-container communication
+- Production exchanges handle **millions of QPS**
+
+RAMP doesn't need ad-tech scale day one, but the architecture must not preclude it.
+
+## Latency Requirements
+
+### Per-Hop Latency Budgets
+
+Total agent-perceived latency target: **< 200ms end-to-end** for the transaction path.
+
+| Hop | Target (p50) | Target (p99) | Notes |
+|---|---|---|---|
+| Agent → ramp.json | 0ms | 0ms | Cached locally by agent |
+| Agent → Exchange: DiscoverResources | **10ms** | **50ms** | In-memory catalog, no DB lookup |
+| Agent → Exchange: ExecuteTransaction | **20ms** | **100ms** | Billing adapter is the bottleneck |
+| Exchange → Billing Adapter: Authorize | **5ms** | **30ms** | Must be sync, pre-signing |
+| Exchange: Sign URL | **1ms** | **5ms** | In-process, pre-loaded keys |
+| Agent → CDN: Fetch signed URL | **20ms** | **100ms** | CDN-dependent |
+| Agent → Exchange: ReportUsage | **5ms** | **20ms** | Fire-and-forget |
+
+### Broker Overhead
+
+| Hop | Target (p50) | Target (p99) |
+|---|---|---|
+| Agent → Broker: RAMPRequest | **2ms** | **5ms** |
+| Broker → N Exchanges (parallel) | **15ms** | **60ms** |
+| Broker: Select best offer | **1ms** | **3ms** |
+| Broker → Exchange: ExecuteTransaction | **20ms** | **100ms** |
+| Total Broker overhead | **< 40ms** | **< 170ms** |
+
+### Latency Principles
+
+1. **DiscoverResources must be fast** -- called speculatively. In-memory catalog, no synchronous DB or external calls.
+2. **ExecuteTransaction can be slightly slower** -- called once per resource acquisition, involves billing authorization.
+3. **ReportUsage is async** -- agent fires and continues.
+4. **Billing adapter is the critical dependency** -- if the Exchange operator's billing system is slow, the whole transaction is slow.
+
+## Throughput Requirements
+
+### Tier Definitions
+
+| Tier | RPS | Transactions/Day | Target Deployment |
+|---|---|---|---|
+| **Growth** | 1,000 | 86M | Mid-size Exchange operator, regional provider network |
+| **Scale** | 10,000 | 864M | Major Exchange operator, global provider network |
+| **Extreme** | 100,000+ | 8.6B+ | Exchange-level, multi-Exchange aggregator |
+
+### Per-Component Throughput
+
+| Component | Growth | Scale | Notes |
+|---|---|---|---|
+| Exchange: DiscoverResources | 2K RPS | 20K RPS | 2x transaction rate (not every query converts) |
+| Exchange: ExecuteTransaction | 1K RPS | 10K RPS | Core transaction rate |
+| Exchange: ReportUsage | 1K RPS | 10K RPS | 1:1 with transactions (mandatory) |
+| Edge Function | 100K RPS | 1M RPS | CDN-native, scales independently |
+| Broker | 1K RPS | 10K RPS | Matches agent request rate |
+
+## Durability Requirements
+
+| Data | Durability | Recovery | Rationale |
+|---|---|---|---|
+| **Transaction log** | **Durable, append-only** | Must survive total node loss | Financial audit trail |
+| **Usage reports** | **Durable** | Must survive total node loss | Compliance enforcement |
+| **Signed URL issuance log** | **Durable** | Must survive total node loss | Reconciliation with CDN access logs |
+| **Resource catalog** | **Rebuildable** | Rebuild from RSL + provider config | In-memory for speed |
+| **ramp.json cache** | **Ephemeral** | Re-fetch from provider domain | Short TTL |
+| **Per-period spend ledger** | **Durable** | Must survive Broker restart | Budget enforcement across sessions |
+| **Session budget state** | **Ephemeral** | Lost on Broker restart | Per-session scratch (derived from ledger) |
+
+### Durability Principles
+
+1. **Transaction log is sacred.** Every transaction that results in a billing_id must be durably recorded before the signed URL is returned.
+2. **Catalog is rebuildable.** If the Exchange loses its in-memory catalog, it re-ingests RSL.
+3. **Per-period spend ledger is persistent.** The Broker's per-period spend tracking (e.g., `budget_scope: "team:claude-rag"`, `period_budget: $500/month`) must survive restarts to prevent budget overruns across sessions. The ledger is append-only (each transaction adds to cumulative spend) and resets at period boundaries.
+4. **Session budget state is ephemeral.** If the Broker crashes mid-session, agents re-declare budgets on reconnect and the Broker re-derives session state from the durable spend ledger.
+
+## Availability Requirements
+
+| Component | Target | Justification |
+|---|---|---|
+| Exchange | **99.9%** (8.7h downtime/year) | Revenue-generating |
+| Edge Function | **99.99%** (52min downtime/year) | CDN-native |
+| Broker | **99.5%** (1.8 days downtime/year) | Agents can fall back to direct Exchange access |
+| Transaction Log Store | **99.99%** | Financial data |
+
+### Failure Modes and Fallbacks
+
+| Failure | Impact | Fallback |
+|---|---|---|
+| Exchange down | Agents can't discover or transact | Broker tries other Exchanges |
+| Billing Adapter down | Transactions fail | Policy decision: reject or defer |
+| Edge Function down | Bots aren't blocked | CDN continues serving; edge function is defense-in-depth |
+| Broker down | Agents lose multi-Exchange comparison | Agents query Exchanges directly |
+| Transaction log store down | **Critical** | Exchange must stop issuing signed URLs |
+
+## Cost Model
+
+### Per-Transaction Cost Target
+
+| Cost Component | Target | At 10K RPS |
+|---|---|---|
+| Compute (Exchange) | $0.00002 | $17/day |
+| Compute (Billing Adapter) | $0.00001 | $8.6/day |
+| Transaction log write | $0.00001 | $8.6/day |
+| Signed URL generation | $0.000001 | $0.86/day |
+| Network (internal) | $0.000005 | $4.3/day |
+| **Total per transaction** | **< $0.00005** | **~$40/day** |
+
+At $0.05/article average transaction value, the infrastructure cost is **0.1% of transaction value**.
+
+### Cost Principles
+
+1. **Containers, not Lambda.** At sustained load, containers are 3-10x cheaper.
+2. **In-memory catalog.** No per-request database lookup for DiscoverResources.
+3. **Batch transaction log writes.** Buffer in local WAL, flush in batches.
+4. **Edge functions are free (provider's CDN).** The provider's existing CDN bill absorbs edge function cost.
+
+## Data Retention
+
+| Data | Retention | Rationale |
+|---|---|---|
+| Transaction log | **13 months** | Monthly billing reconciliation + 1 month buffer |
+| Usage reports | **13 months** | Match transaction log for reconciliation |
+| CDN access logs | **13 months** | Third side of reconciliation triangle |
+| Resource catalog snapshots | **30 days** | Debugging, replay, catalog drift detection |
+| RSL ingestion history | **90 days** | Track provider term changes |
+| Audit log | **90 days** | Security monitoring |
+
+## Security Requirements
+
+| Requirement | Target | Rationale |
+|---|---|---|
+| TLS version | **1.3 minimum** | All Exchange communication |
+| Signed URL TTL | **5 minutes maximum** | Prevents URL sharing window |
+| Key rotation | **90-day maximum** | Limits blast radius of key compromise |
+| Rate limiting | **Per license ID + per IP** | Prevents DoS and metadata harvesting |
+| Partner key logging | **Redacted** (last 4 chars only) | Prevents credential leakage in logs |
+| Idempotency enforcement | **Required** on ExecuteTransaction | Prevents double-billing |
+| Agent identity binding | **Required** in signed URLs | Prevents URL sharing |
+
+## Summary
+
+```
+Latency:    < 200ms end-to-end transaction (p99)
+Throughput: 10K RPS per Exchange instance (Scale tier)
+Durability: Transaction log must survive total node loss
+Availability: 99.9% Exchange, 99.99% Edge Function
+Cost:       < $0.00005 per transaction ($0.05/1000 transactions)
+Retention:  13 months for financial data
+TTL:        5 minutes max for signed URLs
+```

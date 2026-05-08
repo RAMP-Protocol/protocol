@@ -1,0 +1,256 @@
+---
+title: "Threat Model"
+description: "RAMP threat model with 41 attack vectors and countermeasures, informed by 20 years of ad-tech fraud history"
+---
+
+## Methodology
+
+Three independent adversarial analyses were conducted:
+1. **Ad-tech fraud history**: Every major fraud category from 20+ years of programmatic advertising, mapped to RAMP equivalents
+2. **Content licensing abuse brainstorm**: 56 attack vectors from each party's perspective (dishonest exchange, agent, provider, broker, attacker)
+3. **STRIDE security threat model**: Formal threat modeling of the protocol's technical surface
+
+## Key Lesson from Ad-Tech History
+
+> **Every self-reported field gets gamed.** Any claim that is not cryptographically attested by a trusted party will be falsified if there's economic incentive.
+
+This single pattern accounts for most ad-tech fraud: domain spoofing (self-reported domain), geo spoofing (self-reported location), viewability fraud (self-reported measurement), and attribution fraud (self-reported conversion). RAMP must learn from this.
+
+## 1. Supply-Side Threats (Dishonest Exchange Operator)
+
+### T1: Hidden fee inflation
+**Attack**: Exchange charges agent $0.75 but tells provider the rate was $0.50, pocketing the spread.
+**Ad-tech parallel**: The "unknown delta" from ISBA study -- 15% of spend unaccounted for.
+**Countermeasure (protocol)**: Offers are cryptographically signed by the Exchange (Ed25519). Provider can verify prices weren't inflated beyond RSL terms.
+**Countermeasure (reconciliation)**: Provider compares CDN access logs against Exchange-reported transaction volumes and revenue.
+
+### T2: Dynamic price discrimination
+**Attack**: Exchange serves different prices to different buyers for identical content.
+**Countermeasure (protocol)**: Not directly preventable -- price discrimination is a business decision. If prices are derived from RSL (provider-set), the Exchange can't inflate beyond RSL terms without detection.
+**Countermeasure (reconciliation)**: Brokers querying from different identities can detect discrepancies.
+
+### T3: Bait-and-switch content
+**Attack**: Offer describes "2026 Q4 Financial Report, 15,000 words" but signed URL delivers different content.
+**Ad-tech parallel**: Inventory misrepresentation (declaring premium placement, serving remnant).
+**Countermeasure (protocol)**: **Content hash in the Offer.** ResourceIdentity.content_hash commits to content at offer time. Agent verifies after fetch. Mismatch = dispute.
+
+### T4: Phantom transactions / ghost billing
+**Attack**: Exchange fabricates billing_ids that never corresponded to real agent requests.
+**Ad-tech parallel**: Impression inflation by exchanges.
+**Countermeasure (protocol)**: **Mutual transaction receipts.** Agent's idempotency key in TransactionRequest is agent's proof; Exchange's billing_id is Exchange's proof. Neither can forge the other's Ed25519 signature.
+
+### T5: Provider revenue skimming
+**Attack**: Exchange tells provider 1,000 transactions occurred; actually processed 1,500.
+**Countermeasure (reconciliation)**: **Three-sided reconciliation.** Provider's CDN logs, Exchange's transaction log, and usage reports must all agree.
+**Countermeasure (protocol)**: Signed URLs include transaction_id in URL parameters for CDN-to-Exchange reconciliation.
+
+### T6: Overly long signed URL expiry
+**Attack**: Exchange issues 24-hour URLs instead of 5-minute, enabling reuse.
+**Countermeasure (protocol)**: Protocol mandates maximum URL TTL (5 minutes). Provider's edge function enforces independently.
+
+### T7: Signing key leakage
+**Attack**: Exchange shares signing keys with a preferred buyer, enabling URL forgery.
+**Countermeasure (protocol)**: **Asymmetric signing.** Provider holds the private key; Exchange requests signed URLs from provider's signing service.
+
+## 2. Demand-Side Threats (Dishonest Agent / Buyer)
+
+### T8: Signed URL sharing
+**Attack**: Agent A pays, shares signed URL with Agents B, C, D before expiry.
+**Countermeasure (protocol)**: **Agent-bound signed URLs.** Include hash of agent's license ID in signed payload. Edge function validates requester matches bound identity. Implemented via `agent_identity_hash` on `TransactionResponse`.
+
+### T9: Systematic caching / content mirroring
+**Attack**: Agent fetches every article once, caches locally forever, never pays again.
+**Countermeasure (protocol)**: **Single-use signed URLs.** Edge function marks URL as consumed after first fetch.
+**Countermeasure (legal)**: License terms prohibiting caching beyond session scope.
+
+### T10: Usage underreporting (token count)
+**Attack**: Agent reports using 500 tokens of a 10,000-token document but ingested the entire thing.
+**Countermeasure (protocol)**: Exchange sets minimum billable quantity equal to document's actual size. UsageReport.consumed_quantity cannot be less than content's known size.
+
+### T11: Function misreporting (RAG vs training)
+**Attack**: Agent declares `function: ai-input` (cheaper) but uses content for `function: ai-train` (prohibited or more expensive).
+**Countermeasure**: **Not solvable at protocol level.** Agent's internal processing is a black box. Legal/contractual enforcement only.
+
+### T12: Offer metadata harvesting
+**Attack**: Agent calls DiscoverResources repeatedly, extracting metadata -- never transacting.
+**Ad-tech parallel**: Bid stream data harvesting.
+**Countermeasure (protocol)**: Rate limiting on DiscoverResources. Exchange tracks query-to-transaction ratio per agent.
+
+### T13: Credential sharing / proxy laundering
+**Attack**: One license ID shared across organizations.
+**Countermeasure (protocol)**: Exchange monitors usage patterns (IP diversity, volume spikes). Ed25519 agent signatures bind requests to specific key pairs.
+
+## 3. Provider-Side Threats (Dishonest Provider)
+
+### T14: Paywall-gated garbage
+**Attack**: Compelling headline, but behind the paywall: padding, filler, or unrelated content.
+**Countermeasure (protocol)**: Content integrity hash catches *changed* content. Exchange curation/reputation systems address quality.
+
+### T15: Word count / token count inflation
+**Attack**: Provider pads content to inflate word count, affecting unit_cost calculations.
+**Countermeasure (protocol)**: Exchange independently verifies content length during RSL ingestion. Agent independently tokenizes after fetch.
+
+### T16: Content versioning fraud
+**Attack**: Provider changes content at URL after Exchange has priced it.
+**Countermeasure (protocol)**: **Content integrity hash in the Offer.** SHA-256 of content at offer creation time. Agent verifies after fetch.
+
+### T17: Double-selling with exclusivity claims
+**Attack**: Provider grants "exclusive" licensing to multiple Exchanges.
+**Countermeasure**: ResourceIdentity enables detection (same content_hash from different exchanges). Prevention requires legal contracts.
+
+### T18: Selective enforcement / preferential access
+**Attack**: Edge function blocks some agents but quietly allows others to scrape freely.
+**Countermeasure**: Not solvable at protocol level. Market dynamics address it.
+
+## 4. Broker Threats
+
+### T19: Hidden orchestration fee
+**Attack**: Broker adds markup to every offer relayed to the agent.
+**Countermeasure (protocol)**: **Exchange signs offers (Ed25519).** Broker passes through signed offers. Agent verifies the price was not tampered with.
+
+### T20: Kickback-driven offer selection
+**Attack**: Broker always routes to a specific Exchange regardless of pricing.
+**Countermeasure (protocol)**: Agent can bypass Broker and query Exchanges directly. `broker_signature` provides non-repudiation.
+
+### T21: Query intelligence harvesting
+**Attack**: Broker logs every DiscoverResources query, sells the data.
+**Countermeasure**: Not solvable at protocol level. Data handling agreements required.
+
+## 5. Third-Party Attacks
+
+### T22: Exchange impersonation
+**Attack**: Attacker sets up fake Exchange, poisons ramp.json via DNS hijack.
+**Countermeasure (protocol)**: ramp.json served over HTTPS from provider's domain (TLS proves endorsement). Every Offer carries `exchange_signature` (Ed25519). Agent verifies against Exchange's public key.
+
+### T23: Signed URL interception (MITM)
+**Attack**: Attacker intercepts TransactionResponse, steals signed URL.
+**Countermeasure**: HTTPS everywhere. Agent identity binding prevents reuse.
+
+### T24: Transaction replay
+**Attack**: Attacker captures valid TransactionRequest and replays it.
+**Countermeasure (protocol)**: **Idempotency keys.** TransactionRequest.id is unique. Exchange rejects duplicates.
+
+### T25: Billing_id forgery in usage reports
+**Attack**: Attacker fabricates billing_ids in usage reports.
+**Countermeasure (protocol)**: Exchange validates billing_id exists in transaction log before accepting usage reports.
+
+### T26: DiscoverResources flooding (DoS)
+**Attack**: Flood DiscoverResources to exhaust Exchange resources.
+**Countermeasure (protocol)**: Per-partner rate limiting via license ID validation. Anonymous queries rejected.
+
+## 6. Systemic / Arbitrage Threats
+
+### T27: Content arbitrage (buy low, resell high)
+**Attack**: Entity buys from Exchange A at $0.04, resells via own Exchange at $0.05.
+**Countermeasure (protocol)**: ResourceIdentity enables detection. ramp.json declares authorized sellers.
+
+### T28: Free content laundering
+**Attack**: Scrape freely available content, package behind paywall as "premium."
+**Countermeasure**: Content fingerprinting against known free content databases.
+
+### T29: Synthetic content farming
+**Attack**: Generate AI content at near-zero cost, sell as human-authored.
+**Countermeasure**: CoMP's `Text.sourcetype` field. Future: C2PA content credentials.
+
+### T30: License tier arbitrage
+**Attack**: Buy at grounding rate, use for training. Collapses pricing model at scale.
+**Countermeasure**: Black box problem. Legal/contractual enforcement only.
+
+## Prevention Taxonomy
+
+| Level | Threat IDs | What It Means |
+|---|---|---|
+| **Preventable at protocol level** | T3, T4, T5, T6, T7, T8, T9, T12, T16, T19, T22, T23, T24, T25, T26, T-ATT-1, T-ATT-2, T-ATT-3, T-ATT-5, T-DEL-1, T-DEL-2, T-DEL-3, T-DEL-4, T-DEL-5, T-DEL-6 | Protocol changes make the attack structurally impossible |
+| **Detectable via reconciliation** | T1, T2, T4, T5, T13, T14, T15, T17, T27, T-ATT-4 | Three-sided reconciliation catches it |
+| **Legal/contractual only** | T10, T11, T13, T17, T18, T20, T21, T28, T29, T30 | Can't enforce technically |
+
+### The Three Lines of Defense
+
+```
+Line 1: Protocol-level prevention
+  Signed offers, content hashes, agent-bound URLs, idempotency keys,
+  Biscuit append-only attenuation, Ed25519 intermediary chain verification,
+  subscription-level quota tracking
+  Makes attacks structurally impossible
+
+Line 2: Three-sided reconciliation
+  CDN logs + Exchange transactions + Usage reports
+  Detects discrepancies that slip past Line 1
+
+Line 3: Legal/contractual enforcement
+  Audit rights, licensing terms, dispute resolution
+  Handles the black-box problem (what agent did internally)
+```
+
+## 7. Attestation-Specific Threats
+
+### T-ATT-1: Forged attestation injection
+
+**Attack**: Attacker crafts a fake `ResourceAttestation` with a fabricated `verifier` domain and pushes it via `CatalogService.PushContent`.
+**Countermeasure (protocol)**: Exchange verifies `caller_id` is listed in the provider's `catalog_contributors` (from `ramp.json`). Exchange verifies the attestation `signature` against the verifier's public key from `/.well-known/ramp-verifier.json`. Both checks must pass.
+
+### T-ATT-2: Stale attestation exploitation
+
+**Attack**: Provider updates content (e.g., replaces article with filler) but the catalog retains the old attestation claiming 5000 tokens. Agent pays based on stale claims.
+**Countermeasure (protocol)**: `attested_at` timestamp enables agent freshness checks. Agents reject attestations older than their threshold for the content type (e.g., 4 hours for breaking news). Content hash mismatch (Level 1) triggers auto-credit via the dispute system.
+**Countermeasure (reconciliation)**: CDN response size corroborates discrepancies. 800 bytes for a 5000-token claim is auto-creditable regardless of hash match.
+
+### T-ATT-3: Verification vendor compromise
+
+**Attack**: Attacker compromises a third-party verifier's Ed25519 private key and signs fraudulent attestations for arbitrary content.
+**Countermeasure (protocol)**: Key rotation via JWKS pattern -- keys have `valid_from` / `valid_until` windows. Exchange caches `ramp-verifier.json` with TTL-based refresh (1 hour default). Compromised key can be revoked by removing it from the verifier's `ramp-verifier.json`.
+**Countermeasure (operational)**: Exchange monitors attestation patterns per verifier. Sudden changes in claim distributions trigger investigation.
+
+### T-ATT-4: Claims inflation attack
+
+**Attack**: Provider self-attests inflated `estimated_quantity: 10000` for a 500-word article, computes a valid content hash for the actual (short) content, and prices based on the inflated count.
+**Countermeasure (protocol)**: CDN response size is the corroboration signal. CDN log showing a 2KB response for a 10000-token claim is auto-creditable. Agent files dispute with `INCOMPLETE_CONTENT` reason; Tier 1 auto-resolution via CDN corroboration.
+**Countermeasure (pattern)**: Provider flagged for investigation when token discrepancy rate exceeds 2%. Graduated consequences apply.
+
+### T-ATT-5: Catalog contributor spoofing
+
+**Attack**: Unauthorized party registers a domain similar to a legitimate verifier (e.g., `doub1everify.com`) and pushes attestations claiming to be a trusted vendor.
+**Countermeasure (protocol)**: `catalog_contributors` in `ramp.json` uses exact domain matching. The provider must explicitly list the contributor's domain. The Exchange fetches `ramp-verifier.json` from the exact `verifier` domain in the attestation and verifies the signature against that domain's published keys.
+
+## 8. Delegation and Authorization Threats
+
+### T-DEL-1: Biscuit token theft
+
+**Attack**: Attacker steals a delegation token (e.g., via log exfiltration, memory dump, or network interception) and uses it to access resources within the token's scope, time, and spend limits.
+**Countermeasure (protocol)**: Short TTLs (hours, not days). Spend caps via `max_spend` and access caps via `max_accesses` bound the blast radius. Optional `revocation_uri` checking for high-value transactions. Even with a stolen token, damage is bounded by the token's scope + time window + spend cap.
+
+### T-DEL-2: Delegation scope escalation
+
+**Attack**: Attacker attempts to widen permissions by manipulating Biscuit attenuation blocks (e.g., removing a restriction to escalate from `ai-search` to `ai-train`).
+**Countermeasure (protocol)**: **Biscuit's cryptographic guarantee -- attenuation is append-only.** Each block is Ed25519 signed. Blocks can only narrow permissions, never widen. Any attempt to remove or modify an existing block invalidates the entire token's signature chain. Exchange verifies the full block chain before granting access.
+
+### T-DEL-3: Revocation bypass
+
+**Attack**: Principal revokes a delegation but cached or stored tokens continue to work until their `expires_at` timestamp.
+**Countermeasure (protocol)**: Short `expires_at` (2-4 hours for standard access) limits the window of continued access. For high-value transactions, Exchange checks `revocation_uri` in real time before fulfillment. **Trade-off**: revocation checking adds latency (~50ms) so is only used for transactions above a configurable value threshold.
+
+### T-DEL-4: Intermediary chain forgery
+
+**Attack**: Attacker inserts a fake `IntermediaryHop` into the delegation chain, claiming to be a trusted Broker to gain access or inject misleading provenance.
+**Countermeasure (protocol)**: **Each IntermediaryHop is Ed25519 signed.** Exchange verifies every hop's signature against the intermediary's published public key at `{domain}/.well-known/ramp-agent.json`. A forged hop fails signature verification, causing the entire request to be rejected.
+
+### T-DEL-5: Scope pollution
+
+**Attack**: Agent declares scopes it doesn't actually have (no Biscuit to prove entitlement), hoping the Exchange trusts the declared scopes and returns premium content.
+**Countermeasure (protocol)**: Exchange treats `Requester.scopes` as an **upper bound for catalog filtering only**. Actual entitlements are verified via Biscuit token at transaction time. Without a valid Biscuit, the Exchange applies its default access policy (typically public resources only). Declared scopes without a matching Biscuit grant no additional access.
+
+### T-DEL-6: Quota gaming via multiple tokens
+
+**Attack**: Agent obtains multiple delegation tokens for the same subscription (e.g., by requesting new delegations from different intermediaries) to exceed per-subscription quotas.
+**Countermeasure (protocol)**: **Exchange tracks quotas by `subscription_id`, not by delegation token.** All tokens referencing the same subscription share one counter. Multiple tokens for the same subscription do not multiply the quota. Rate limiting is applied at the subscription level regardless of how many delegation tokens reference it.
+
+## Comparison to Ad-Tech Fixes
+
+| Ad-Tech Fix | Year | RAMP Equivalent | Status |
+|---|---|---|---|
+| ads.txt | 2017 | ramp.json (authorized sellers) | In proto |
+| sellers.json | 2019 | Exchange identity in ResourceResponse | In proto |
+| SupplyChain Object | 2019 | exchange_signature on Offer | In proto |
+| ads.cert | 2020 | exchange_signature + content_integrity_hash | In proto |
+| MRC Viewability Standard | 2014 | Minimum billable token count | Design principle |
+| Open Measurement SDK | 2018 | Three-sided reconciliation | In protocol flow |

@@ -1,0 +1,186 @@
+---
+title: "Exchange Manifest"
+description: "Machine-readable self-description of a RAMP Exchange, served at /.well-known/ramp-exchange.json for automated discovery and capability negotiation."
+---
+
+## Overview
+
+The ExchangeManifest is a machine-readable self-description of a RAMP Exchange. Analogous to OIDC Discovery (`/.well-known/openid-configuration`), it enables automated discovery and capability negotiation by Brokers and agents.
+
+The manifest answers: "What can this Exchange do, where are its endpoints, and what capabilities does it support?"
+
+**Endpoint**: `https://{domain}/.well-known/ramp-exchange.json`
+
+| Property | Value |
+|---|---|
+| Transport | TLS required (HTTPS) |
+| Authentication | None (public endpoint) |
+| Cache-Control | `max-age=3600, must-revalidate` |
+| Content-Type | `application/json` |
+| Generation | Static JSON from config at startup |
+
+## Full JSON Example
+
+```json
+{
+  "ver": "1.0",
+  "domain": "exchange.example.com",
+  "name": "Example Content Exchange",
+  "operator": "Example Media Corp",
+  "operator_domain": "examplemedia.com",
+  "exchange_endpoint": "https://exchange.example.com/exchange/v1",
+  "keys_uri": "https://exchange.example.com/exchange/v1/keys",
+  "health_endpoint": "https://exchange.example.com/healthz",
+  "catalog_endpoint": "https://exchange.example.com/catalog/v1",
+  "protocol_versions_supported": ["1.0"],
+  "pricing_models_supported": [
+    "per_article",
+    "per_token",
+    "per_page",
+    "per_minute",
+    "per_record",
+    "subscription",
+    "free",
+    "attribution",
+    "revenue_share"
+  ],
+  "delivery_methods_supported": [
+    "direct",
+    "instructions",
+    "streaming"
+  ],
+  "supported_profiles": [
+    "ramp-academic-v1",
+    "ramp-news-v1"
+  ],
+  "base_currency": "USD",
+  "hash_methods_supported": [
+    "sha-256",
+    "sha-384"
+  ],
+  "accepted_verifiers": [
+    "doubleverify.com",
+    "integralads.com"
+  ],
+  "contact_email": "ramp-integration@examplemedia.com",
+  "terms_uri": "https://examplemedia.com/ramp-terms",
+  "privacy_uri": "https://examplemedia.com/privacy"
+}
+```
+
+## Field Reference
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ver` | string | Yes | RAMP protocol version (e.g., `"1.0"`) |
+| `domain` | string | Yes | Canonical domain of this Exchange |
+| `name` | string | Yes | Human-readable Exchange name |
+| `operator` | string | Yes | Organization operating this Exchange |
+| `operator_domain` | string | No | Operator's corporate domain |
+| `exchange_endpoint` | string | Yes | ExchangeService endpoint URL |
+| `keys_uri` | string | Yes | Ed25519 public keys URL for offer signature verification |
+| `health_endpoint` | string | No | Health check endpoint URL |
+| `catalog_endpoint` | string | No | CatalogService endpoint URL |
+| `protocol_versions_supported` | string[] | Yes | Supported RAMP protocol versions |
+| `pricing_models_supported` | string[] | Yes | Supported pricing models |
+| `delivery_methods_supported` | string[] | Yes | Supported delivery methods |
+| `hash_methods_supported` | string[] | No | Accepted content hash methods |
+| `accepted_verifiers` | string[] | No | Trusted attestation verification vendor domains |
+| `contact_email` | string | No | Contact email for integration inquiries |
+| `terms_uri` | string | No | Terms of service URL |
+| `privacy_uri` | string | No | Privacy policy URL |
+| `supported_profiles` | string[] | No | Domain extension profiles this Exchange conforms to (e.g., `["ramp-academic-v1", "ramp-news-v1"]`) |
+| `base_currency` | string | No | ISO 4217 currency code for all `unit_cost` values in offers (e.g., `"USD"`) |
+| `ext` | object | No | Extension fields (forward-compatible) |
+
+## The Four RAMP Well-Known Files
+
+The RAMP protocol defines four well-known files, one per protocol participant:
+
+| File | Served By | URL Pattern | Purpose |
+|---|---|---|---|
+| `ramp.json` | Provider | `{provider}/.well-known/ramp.json` | Who is authorized to sell my content |
+| `ramp-verifier.json` | Verification Vendor | `{verifier}/.well-known/ramp-verifier.json` | My attestation public keys and claims schema |
+| `ramp-exchange.json` | Exchange | `{exchange}/.well-known/ramp-exchange.json` | My endpoints, capabilities, and accepted verifiers |
+| `ramp-agent.json` | Agent / Broker | `{agent}/.well-known/ramp-agent.json` | My Ed25519 public key for request signing |
+
+### Discovery Chain
+
+The files form a discovery chain that an Broker follows:
+
+```
+1. Agent requests content from provider.example.com
+2. Fetch provider.example.com/.well-known/ramp.json
+   --> Discovers authorized Exchange: exchange.example.com
+3. Fetch exchange.example.com/.well-known/ramp-exchange.json
+   --> Discovers endpoints, capabilities, accepted verifiers
+4. Fetch exchange.example.com/exchange/v1/keys
+   --> Fetches Ed25519 public keys for offer signature verification
+5. (If attestation required) Fetch doubleverify.com/.well-known/ramp-verifier.json
+   --> Fetches verifier's JWKS for attestation signature verification
+```
+
+Each step narrows the information needed: `ramp.json` tells you WHERE to go, `ramp-exchange.json` tells you WHAT the Exchange can do, and the keys endpoint tells you HOW to verify its signatures.
+
+## Broker Capability Negotiation
+
+The Broker uses the manifest to filter Exchanges **before** sending any RPCs. This avoids querying Exchanges that cannot fulfill the agent's requirements.
+
+| Question | Manifest Field |
+|---|---|
+| Does this Exchange support per-token pricing? | `pricing_models_supported` |
+| Can this Exchange deliver via signed URL? | `delivery_methods_supported` |
+| Does this Exchange trust DoubleVerify? | `accepted_verifiers` |
+| Does this Exchange speak protocol v1.0? | `protocol_versions_supported` |
+| Where do I verify offer signatures? | `keys_uri` |
+
+Without the manifest, the Broker discovers these answers only after sending requests and observing responses -- wasting latency and bandwidth on Exchanges that will reject the request.
+
+### Bootstrap Flow
+
+```
+1. Agent requests URI for domain "provider.example.com"
+2. Broker fetches ramp.json --> finds authorized Exchange
+3. Broker fetches ramp-exchange.json --> extracts capabilities
+4. Broker caches manifest with 1-hour TTL
+5. Broker registers Exchange in its registry with capabilities populated
+6. Subsequent requests skip steps 2-4 (cache hit)
+```
+
+## Proto Message
+
+The `ExchangeManifest` message is defined in [`ramp.proto`](/reference/proto-ramp/):
+
+```protobuf
+message ExchangeManifest {
+  string ver = 1;
+  string domain = 2;
+  string name = 3;
+  string operator = 4;
+  optional string operator_domain = 5;
+  string exchange_endpoint = 6;
+  string keys_uri = 7;
+  optional string health_endpoint = 8;
+  optional string catalog_endpoint = 9;
+  repeated string protocol_versions_supported = 10;
+  repeated string pricing_models_supported = 11;
+  repeated string delivery_methods_supported = 12;
+  repeated string hash_methods_supported = 13;
+  repeated string accepted_verifiers = 14;
+  optional string contact_email = 15;
+  optional string terms_uri = 16;
+  optional string privacy_uri = 17;
+  repeated string supported_profiles = 18;
+  optional string base_currency = 19;
+  google.protobuf.Struct ext = 20;
+}
+```
+
+The JSON endpoint serves the same data as this proto message, but as plain JSON (not protobuf wire format). It is a discovery document, not an RPC response.
+
+## Next Steps
+
+- [Discovery Paths](/protocol/discovery-paths/) -- all the ways an agent enters the RAMP flow
+- [Authentication](/protocol/authentication/) -- Ed25519 key announcement endpoints
+- [Exchange Overview](/components/exchange/overview/) -- the service that serves this manifest
+- [Broker Overview](/components/broker/overview/) -- how the Broker bootstraps from the manifest

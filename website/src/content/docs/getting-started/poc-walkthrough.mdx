@@ -1,0 +1,389 @@
+---
+title: "PoC Walkthrough"
+description: "End-to-end demonstration of the RAMP protocol using the live reference implementation. Follow along with curl or integrate the MCP tool into your AI agent."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+:::note[Reference Implementation]
+This walkthrough uses the live reference implementation with working curl examples. For the complete protocol flow with Requester identity, Biscuit delegation, and subscription quotas, see the [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1/).
+:::
+
+## What You'll See
+
+This walkthrough demonstrates the complete [RAMP transaction flow](/protocol/transaction-flow) against a **live reference [Exchange](/components/exchange/overview)** running on AWS. By the end, you will have:
+
+1. Discovered available resource offers with pricing
+2. Executed a commercial transaction and received a signed URL
+3. Fetched premium resource through the signed URL
+4. Reported usage back to the Exchange
+5. Optionally: integrated the MCP tool into Claude or another AI agent
+
+**Live Exchange endpoint**: `https://exchange.ramp-protocol.org`
+
+<Aside type="note">
+This is a demonstration Exchange with sample content. No real money changes hands. The protocol, message formats, and cryptographic signatures are production-grade.
+</Aside>
+
+## Prerequisites
+
+- `curl` and `jq` (for manual walkthrough)
+- Python 3.10+ (for MCP tool integration)
+- An AI agent that supports MCP (Claude Desktop, Claude Code, etc.)
+
+---
+
+## Part 1: Manual Protocol Walkthrough
+
+### Step 1: Check Exchange Health
+
+```bash
+curl -s https://exchange.ramp-protocol.org/health | jq
+```
+
+```json
+{
+  "status": "ok",
+  "version": "0.2.0"
+}
+```
+
+### Step 2: Retrieve Exchange Public Key
+
+The Exchange announces its [Ed25519](/protocol/authentication) public key. Agents and Brokers use this to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication).
+
+```bash
+curl -s https://exchange.ramp-protocol.org/exchange/v1/keys | jq
+```
+
+```json
+{
+  "algorithm": "ed25519",
+  "public_key": "a22b5d78a5fe1657a8c4fb7ae98da1178ccfb92b96004826be1914791ab5f3aa"
+}
+```
+
+### Step 3: Discover Supply ([DiscoverResources RPC](/components/exchange/request-flows))
+
+Query the Exchange for available resource offers. This is a [Connect-Go](https://connectrpc.com/) HTTP/JSON endpoint — standard POST with JSON body. The Exchange [looks up resources in its catalog](/components/exchange/overview), computes pricing, and signs each offer with Ed25519.
+
+```bash
+curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/DiscoverResources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ver": "1.0",
+    "id": "demo-query-001",
+    "aisystem": {
+      "name": "DemoAgent",
+      "aisysuse": {
+        "lid": "LIC-DEMO-001",
+        "uri": ["https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding"]
+      }
+    }
+  }' | jq
+```
+
+The response contains **OfferGroups** — one per requested URI — each with Ed25519-signed offers:
+
+```json
+{
+  "ver": "1.0",
+  "id": "demo-query-001",
+  "exchange": "ramp-exchange-v1.0",
+  "offerGroups": [
+    {
+      "uri": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
+      "offers": [
+        {
+          "offerId": "offer-cdn.ramp-protocol.org-1773682699693224366",
+          "package": {
+            "id": "pkg-cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
+            "retrieval": {
+              "endpoint": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding.html"
+            }
+          },
+          "pricing": {
+            "model": "PRICING_MODEL_PER_ACCESS",
+            "rate": 0.05,
+            "currency": "USD",
+            "estimated_quantity": 2000
+          },
+          "deliveryMethod": "DELIVERY_METHOD_INSTRUCTIONS",
+          "reporting": {
+            "required": true,
+            "window": "86400s",
+            "requiredFields": ["consumed_quantity"]
+          },
+          "exchangeSignature": "ae77b181...32607e08",
+          "signatureAlgorithm": "ed25519"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Key fields in each offer:
+- **offerId** — unique identifier for this offer
+- **pricing** — rate ($0.05/article), currency, estimated tokens. Pricing models are defined in the [protocol spec](/protocol/standards-layering) and follow [RSL conventions](/protocol/discovery-paths)
+- **exchangeSignature** — [Ed25519 signature](/protocol/authentication) over the offer. Stateless: the Exchange can verify this signature on ExecuteTransaction without storing the offer
+- **reporting** — usage reporting is mandatory, due within 24 hours, must include `consumed_quantity`. See [how the billing cycle works](/getting-started/how-money-flows)
+- **package** — [IAB CoMP Package object](/protocol/standards-layering) describing the content
+
+### Step 4: Execute Transaction ([ExecuteTransaction RPC](/components/exchange/request-flows))
+
+Commit to an offer. Pass the `offerId` and `offerSignature` from Step 3. The Exchange [verifies the signature](/protocol/authentication), [authorizes billing](/components/exchange/billing-adapter), writes the [transaction log](/components/exchange/storage-model) (WAL — write-before-sign invariant), and returns a **[signed URL](/components/edge-function/signed-url-verification)**.
+
+```bash
+curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ver": "1.0",
+    "id": "demo-txn-001",
+    "offerId": "<offerId from Step 3>",
+    "offerSignature": "<exchangeSignature from Step 3>",
+    "offerSignatureAlgorithm": "ed25519",
+    "aisystem": {
+      "name": "DemoAgent",
+      "aisysuse": { "lid": "LIC-DEMO-001" }
+    }
+  }' | jq
+```
+
+Response:
+```json
+{
+  "ver": "1.0",
+  "id": "demo-txn-001",
+  "transactionId": "txn-1773682700352684307",
+  "billingId": "bill-000002",
+  "package": {
+    "id": "pkg-delivered",
+    "retrieval": {
+      "endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=05f116fd...824d2d9&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307"
+    }
+  },
+  "cost": { "amount": 0.05, "currency": "USD" },
+  "deliveryMethod": "DELIVERY_METHOD_INSTRUCTIONS",
+  "reportingObligation": {
+    "required": true,
+    "window": "86400s",
+    "requiredFields": ["consumed_quantity"]
+  },
+  "expiresAt": "2026-03-16T17:43:20Z",
+  "agentIdentityHash": "05f116fdb971e44f1c59fddc8a29954018b2c5fd6a3993cec318b12ac824d2d9"
+}
+```
+
+Key fields:
+- **transactionId** — unique transaction reference, recorded in the [transaction log](/components/exchange/storage-model) before the signed URL is generated
+- **billingId** — billing record reference, managed by the [Billing Adapter](/components/exchange/billing-adapter)
+- **package.retrieval.endpoint** — the [signed URL](/components/edge-function/signed-url-verification) with HMAC-SHA256 signature, expiry, agent identity binding, and transaction ID
+- **cost** — $0.05 USD charged. See [how money flows](/getting-started/how-money-flows) for the full billing lifecycle
+- **reportingObligation** — you MUST report usage within 24 hours. See [budget and reporting](/components/agent-sdk/budget-reporting) for how the Agent SDK handles this
+- **agentIdentityHash** — SHA-256 of your license ID, bound into the signed URL to [prevent URL sharing](/security/threat-model)
+
+### Step 5: Fetch Resource via [Signed URL](/components/edge-function/signed-url-verification)
+
+The signed URL contains four verification parameters, all verified by the [CDN edge function](/components/edge-function/overview):
+- `sig` — HMAC-SHA256 signature (Exchange↔CDN shared secret). See [signed URL verification](/components/edge-function/signed-url-verification) for the canonical format
+- `expires` — Unix timestamp (URL expires after 5 minutes)
+- `agent_id` — SHA-256 of your license ID (identity binding — [prevents URL sharing](/security/threat-model))
+- `txn_id` — transaction ID (enables three-sided reconciliation: CDN logs + Exchange logs + agent reports)
+
+In production, the [edge function](/components/edge-function/overview) also performs [bot detection](/components/edge-function/bot-detection) — blocking unauthorized AI crawlers with a 403 and `X-Content-Rules` header that [redirects to the Exchange](/protocol/discovery-paths).
+
+### Step 6: Report Usage ([ReportUsage RPC](/components/exchange/request-flows))
+
+Usage reporting is **mandatory**. The Exchange tracks compliance and will deny future transactions for agents with overdue reports (see [denial reasons](/protocol/transaction-flow)). The [Agent SDK](/components/agent-sdk/budget-reporting) handles this automatically.
+
+```bash
+curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ReportUsage \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ver": "1.0",
+    "id": "demo-report-001",
+    "transactionId": "<transactionId from Step 4>",
+    "billingId": "<billingId from Step 4>",
+    "usage": { "consumed_quantity": 1500 }
+  }' | jq
+```
+
+```json
+{ "accepted": true }
+```
+
+### Step 7: Verify Denial Conditions
+
+The Exchange enforces [11 denial reasons](/protocol/transaction-flow) defined in the protocol:
+
+**Missing offer signature → DENIAL_REASON_SIGNATURE_INVALID:**
+```bash
+curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
+  -H "Content-Type: application/json" \
+  -d '{"ver":"0.2","id":"deny-001","offerId":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq .denialReason
+```
+```json
+"DENIAL_REASON_SIGNATURE_INVALID"
+```
+
+**Zero token count → rejection:**
+```json
+{ "accepted": false, "rejectionReason": "consumed_quantity is required and must be > 0" }
+```
+
+See the full [threat model](/security/threat-model) for how these protections defend against replay attacks, URL sharing, billing fraud, and reporting evasion.
+
+---
+
+## Part 2: MCP Tool Integration
+
+The RAMP MCP tool (`commercial_web_fetch`) wraps the entire [fetch flow](/components/agent-sdk/fetch-flow) into a single tool call that AI agents can use transparently. It implements the same flow as the [Agent SDK](/components/agent-sdk/overview).
+
+### How It Works
+
+```
+Agent calls: commercial_web_fetch(["https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding"])
+
+MCP Tool internally:
+  1. DiscoverResources → gets offers with pricing
+  2. Selects best offer (cheapest rate, prefers subscriptions)
+  3. ExecuteTransaction → gets signed URL + billing
+  4. Fetches resource via signed URL
+  5. ReportUsage → fulfills reporting obligation
+
+Agent receives: article content + cost + transaction details
+```
+
+This mirrors the [Agent SDK fetch flow](/components/agent-sdk/fetch-flow) — the MCP tool is a thin wrapper that exposes the same logic as an MCP server.
+
+### Add to Claude Desktop / Claude Code
+
+Add to your MCP configuration (`.mcp.json` or Claude Desktop settings):
+
+```json
+{
+  "mcpServers": {
+    "ramp-ai-buyer": {
+      "type": "http",
+      "url": "https://e2iwwg6o4byqlvn35pw3bkigpi0dkwll.lambda-url.us-east-1.on.aws/mcp"
+    }
+  }
+}
+```
+
+<Aside type="tip">
+This is a hosted MCP server — no installation, no auth, no configuration. Add the URL and your agent can immediately start accessing resources through the RAMP protocol. See [For AI Agents](/getting-started/for-ai-agents) for more integration options.
+</Aside>
+
+### Try It
+
+In Claude, ask:
+
+> Fetch the article at https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding using the commercial_web_fetch tool
+
+The tool negotiates with the Exchange and returns:
+
+```
+--- Content from https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding ---
+[RAMP v1.0 | Cost: 0.0500 USD | Transaction: txn-1773682640975288995 |
+ Billing: bill-000001 | Usage reported: True]
+
+[Content delivered via signed URL with HMAC-SHA256 + agent identity binding]
+
+--- RAMP Cost Summary ---
+Total data acquisition cost: $0.0500
+URLs processed: 1
+Exchange: https://exchange.ramp-protocol.org
+```
+
+---
+
+## Part 3: Batch Multi-URL Query
+
+RAMP supports querying multiple URLs in a single [DiscoverResources](/components/exchange/request-flows) request. Each URL gets its own OfferGroup with independent pricing:
+
+```bash
+curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/DiscoverResources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ver": "1.0",
+    "id": "demo-batch-001",
+    "aisystem": {
+      "name": "DemoAgent",
+      "aisysuse": {
+        "lid": "LIC-DEMO-001",
+        "uri": [
+          "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
+          "https://cdn.ramp-protocol.org/2024/02/20/cloud-computing-trends",
+          "https://cdn.ramp-protocol.org/2024/03/10/robotics-warehouse"
+        ]
+      }
+    }
+  }' | jq '.offerGroups[] | {uri, rate: .offers[0].pricing.rate}'
+```
+
+```json
+{ "uri": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding", "rate": 0.05 }
+{ "uri": "https://cdn.ramp-protocol.org/2024/02/20/cloud-computing-trends", "rate": 0.03 }
+{ "uri": "https://cdn.ramp-protocol.org/2024/03/10/robotics-warehouse", "rate": 0.04 }
+```
+
+In a real [Broker](/components/broker/overview) deployment, the [selection engine](/components/broker/selection-engine) would compare offers across multiple Exchanges and select the best combination based on price, quality, and [budget constraints](/components/broker/budget-enforcement).
+
+---
+
+## Part 4: Run Your Own Exchange
+
+The reference implementation is open source. See the [Exchange component docs](/components/exchange/overview) for architecture details, or run it locally:
+
+```bash
+git clone https://github.com/postindustria-tech/agentic-content-access.git
+cd agentic-content-access/v0.2-poc/exchange
+
+# Run directly (requires Go 1.23+)
+go run ./cmd/server
+
+# Or with Docker
+docker compose up
+
+# Test
+curl http://localhost:3000/health
+curl http://localhost:3000/exchange/v1/keys
+```
+
+For production deployment, see:
+- [Exchange configuration](/components/exchange/configuration) — environment variables, secrets, tenant setup
+- [Multi-tenant architecture](/components/exchange/multi-tenant) — how one Exchange serves multiple providers
+- [Scaling](/components/exchange/scaling) — from single instance to 10K+ RPS
+- [Edge function deployment](/components/edge-function/deployment) — CDN-specific adapters for [CloudFront, Cloudflare, Akamai, Fastly](/components/edge-function/cdn-adapters)
+
+---
+
+## Protocol Summary
+
+| Step | RPC | What Happens | Deep Dive |
+|------|-----|-------------|-----------|
+| 0 | — | Provider drops [`ramp.json`](/protocol/discovery-paths) on their domain | [Discovery Paths](/protocol/discovery-paths) |
+| 1 | [`DiscoverResources`](/components/exchange/request-flows) | Agent queries Exchange for offers on URIs | [Request Flows](/components/exchange/request-flows) |
+| 2 | — | Agent/[Broker](/components/broker/overview) selects best offer | [Selection Engine](/components/broker/selection-engine) |
+| 3 | [`ExecuteTransaction`](/components/exchange/request-flows) | Agent commits to offer, receives [signed URL](/components/edge-function/signed-url-verification) | [Billing Adapter](/components/exchange/billing-adapter) |
+| 4 | — | Agent fetches resource via signed URL ([edge function](/components/edge-function/overview) verifies) | [Bot Detection](/components/edge-function/bot-detection) |
+| 5 | [`ReportUsage`](/components/exchange/request-flows) | Agent reports consumed quantity (mandatory) | [Budget & Reporting](/components/agent-sdk/budget-reporting) |
+
+**Security at every boundary** ([full threat model](/security/threat-model)):
+- Agent signs requests with [**Ed25519**](/protocol/authentication) (proves identity)
+- Exchange signs offers with [**Ed25519**](/protocol/authentication) (stateless verification)
+- Signed URLs use [**HMAC-SHA256**](/components/edge-function/signed-url-verification) (Exchange↔CDN shared secret)
+- Agent identity bound into signed URL (prevents [URL sharing](/security/threat-model))
+- Transaction ID in signed URL (enables [three-sided reconciliation](/components/exchange/storage-model))
+
+## Next Steps
+
+- [Transaction Flow](/protocol/transaction-flow) — step-by-step protocol specification
+- [Scenario Walkthrough](/protocol/scenario-walkthrough) — multi-party narrative (Anthropic, Hearst, SSP-Alpha)
+- [For AI Agents](/getting-started/for-ai-agents) — build your own integration
+- [For Exchange Operators](/getting-started/for-exchange-operators) — operate an Exchange
+- [For Providers](/getting-started/for-providers) — monetize your resources
+- [Authentication](/protocol/authentication) — Ed25519 at every boundary
+- [Threat Model](/security/threat-model) — 30 attack vectors and countermeasures

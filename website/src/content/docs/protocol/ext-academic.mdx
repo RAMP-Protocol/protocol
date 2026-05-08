@@ -1,0 +1,666 @@
+---
+title: "Extension: ramp-academic-v1"
+description: "Scholarly articles, preprints, and datasets extension profile — field vocabulary, conformance levels, and examples"
+---
+
+## Overview
+
+RAMP-Academic v1 defines the standardized `ext` field vocabulary for scholarly and academic content traded through the RAMP protocol. It covers journal articles, conference papers, book chapters, preprints, and datasets.
+
+**Who should implement this profile:**
+
+- **Exchanges** serving academic content (aggregators like Semantic Scholar, OpenAlex; publisher platforms like Elsevier, Springer Nature; preprint servers like arXiv, bioRxiv)
+- **Brokers** building academic research workflows (literature review agents, systematic review tools, research assistants)
+- **Providers** publishing scholarly content who want their articles discoverable and transactable through RAMP
+
+**Primary deployment scenario:** An AI agent needs 50 academic papers for a literature review. The papers are a mix of open access and paywalled articles from multiple publishers. Some are available through institutional subscriptions. The agent must verify no papers have been retracted and must obtain the correct version (Version of Record preferred, Author Accepted Manuscript acceptable).
+
+**Design principles:**
+
+1. Every field key is namespaced with `academic.` to avoid collisions with other domain profiles
+2. Field names reuse terminology from CrossRef, OpenAlex, JATS, COUNTER 5.1, and CrossMark where possible
+3. Every field serves a concrete protocol purpose: discovery, pricing, delivery, attestation, or dispute
+4. The spec is self-contained -- implementers do not need to read JATS or CrossRef documentation
+
+**Field count:** 32 unique field keys across 7 message types (some keys appear in multiple contexts, e.g., `academic.article_version` in both Offer.ext and attestation claims).
+
+---
+
+## Profile Declaration
+
+An Exchange declares support for this profile by including `"ramp-academic-v1"` in its `ExchangeManifest.supported_profiles` array. The manifest is served at `/.well-known/ramp-exchange.json`.
+
+```json
+{
+  "ver": "1.0",
+  "domain": "academic-exchange.example.com",
+  "name": "Example Academic Exchange",
+  "supported_profiles": ["ramp-academic-v1"],
+  "ext": {
+    "academic.subject_coverage": ["medicine", "computer-science", "physics"],
+    "academic.content_types": ["journal-article", "preprint", "book-chapter"],
+    "academic.institutional_access_supported": true
+  }
+}
+```
+
+### ExchangeManifest.ext Fields
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `academic.subject_coverage` | string[] | RECOMMENDED | Broad subject areas this Exchange covers. Values from OpenAlex top-level concepts (e.g., `"medicine"`, `"computer-science"`, `"physics"`, `"biology"`). Helps Brokers route queries to relevant Exchanges. |
+| `academic.content_types` | string[] | RECOMMENDED | Article types available. Values: `"journal-article"`, `"preprint"`, `"book-chapter"`, `"proceedings-article"`, `"dataset"`, `"book"`, `"review-article"`. Derived from CrossRef `type` field. |
+| `academic.institutional_access_supported` | boolean | RECOMMENDED | Whether this Exchange can resolve institutional subscription entitlements (via GetFTR, IP, or federated authentication). |
+
+**Broker action:** Filter Exchange candidates by subject and content type before issuing `DiscoverSupply` queries. Skip Exchanges that do not cover the needed domain.
+
+---
+
+## Identity Vocabulary (ResourceIdentity.ext)
+
+These fields extend `ResourceIdentity` to carry academic-specific identifiers for cross-exchange deduplication. The core protocol already defines `ResourceIdentity.doi` -- the fields below supplement it with identifiers from other standard registries.
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `academic.pmid` | string | OPTIONAL | PubMed (NLM) | PubMed identifier. 1-8 digit number, no prefix. Example: `"34567890"`. Identifies a citation in the PubMed biomedical literature index. Does NOT guarantee full-text access. |
+| `academic.pmcid` | string | OPTIONAL | PubMed Central (NLM) | PubMed Central identifier. Format: `"PMC"` + digits. Example: `"PMC9876543"`. Identifies a full-text article in the PMC open-access archive. Presence implies full text is available. |
+| `academic.arxiv_id` | string | OPTIONAL | arXiv | arXiv preprint identifier without the `"arXiv:"` prefix. Format: `YYMM.NNNNN`. Example: `"2301.12345"`. Append `vN` for a specific version: `"2301.12345v2"`. Without version suffix, refers to the latest version. |
+| `academic.openalex_id` | string | OPTIONAL | OpenAlex (OurResearch) | OpenAlex work identifier. Format: `"W"` + digits. Example: `"W2741809807"`. Links to the free, open catalog at `https://openalex.org/{id}`. |
+| `academic.issn` | string | OPTIONAL | ISO 3297 | International Standard Serial Number of the containing journal. Prefer the electronic ISSN (e-ISSN). Format: 8 digits in two groups of 4, separated by hyphen. Example: `"1476-4687"`. Last digit may be `X`. |
+
+**Broker action:** Use `ResourceIdentity.doi` as the primary deduplication key. Fall back to `academic.pmid` or `academic.arxiv_id` when DOI is absent (common for older PubMed citations and arXiv preprints without published versions). Use `academic.issn` to group offers by journal for subscription-based pricing optimization.
+
+---
+
+## Query Vocabulary (ResourceQuery.ext)
+
+These fields enable academic-specific filtering in `DiscoverSupply` requests. They do NOT replace external discovery (OpenAlex, Semantic Scholar, PubMed search). They allow Brokers to express preferences when querying an Exchange with known DOIs.
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `academic.version_preference` | string | OPTIONAL | NISO / CrossRef | Preferred article version. Values: `"vor"` (Version of Record -- typeset, copyedited, publisher-formatted), `"aam"` (Author Accepted Manuscript -- peer-reviewed but not typeset), `"preprint"` (pre-peer-review), `"any"` (accept whatever is available). Default: `"any"`. The Exchange SHOULD prefer the requested version when multiple are available. |
+| `academic.oa_only` | boolean | OPTIONAL | Unpaywall / OpenAlex | If `true`, the Exchange SHOULD return only open access offers (where `academic.oa_status` is not `"closed"`). Useful when the agent has no institutional subscription and wants to minimize cost. |
+| `academic.require_retraction_check` | boolean | OPTIONAL | CrossRef / Retraction Watch | If `true`, the Exchange MUST include `academic.is_retracted` in `Offer.ext` and `academic.retraction_status` in `ResourceAttestation.claims`. The agent will reject offers for retracted articles. Default: `false`. |
+
+**Broker action:** Set `academic.version_preference` to `"vor"` for citation-quality content. Set `academic.oa_only` to `true` when budget is zero. Always set `academic.require_retraction_check` to `true` for systematic reviews and clinical evidence synthesis.
+
+---
+
+## Offer Metadata (Offer.ext)
+
+These fields describe academic-specific properties of an offered resource. They are populated by the Exchange from its catalog (sourced from CrossRef, OpenAlex, publisher APIs, or direct provider ingestion).
+
+### Bibliographic Metadata
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `academic.article_version` | string | REQUIRED | NISO / CrossRef / OpenAlex | Version of the content being offered. Values: `"preprint"` (submitted version, pre-peer-review), `"aam"` (Author Accepted Manuscript, peer-reviewed, not typeset), `"vor"` (Version of Record, publisher-formatted, final), `"corrected_vor"` (VoR with corrections applied). Maps to CrossRef `license[].content-version` (`"am"`, `"vor"`) and OpenAlex `version` (`"submittedVersion"`, `"acceptedVersion"`, `"publishedVersion"`). |
+| `academic.article_type` | string | RECOMMENDED | JATS / CrossRef | Type of scholarly work. Values: `"journal-article"`, `"review-article"`, `"preprint"`, `"book-chapter"`, `"proceedings-article"`, `"editorial"`, `"letter"`, `"dataset"`, `"book"`. Derived from CrossRef `type` and JATS `article-type` attribute. |
+| `academic.journal_title` | string | RECOMMENDED | CrossRef `container-title` | Full title of the containing journal or proceedings. Example: `"Nature"`, `"Physical Review Letters"`. |
+| `academic.publisher` | string | RECOMMENDED | CrossRef `publisher` | Name of the publisher. Example: `"Elsevier"`, `"Springer Nature"`, `"PLOS"`. |
+
+### Open Access and Licensing
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `academic.oa_status` | string | REQUIRED | Unpaywall / OpenAlex | Open access status. Values: `"gold"` (published in a fully OA journal, typically CC-BY, listed in DOAJ), `"green"` (free copy in a repository, journal itself is toll-access), `"hybrid"` (OA article in an otherwise toll-access journal, CC-BY, APC paid), `"bronze"` (free to read on publisher site but no open license), `"diamond"` (OA journal with no article processing charges), `"closed"` (requires subscription or purchase). |
+| `academic.license` | string | RECOMMENDED | Creative Commons / CrossRef | License identifier for this version. Values: `"cc-by-4.0"`, `"cc-by-nc-4.0"`, `"cc-by-sa-4.0"`, `"cc-by-nc-nd-4.0"`, `"cc-by-nd-4.0"`, `"cc0-1.0"`, `"publisher-specific"`, `"all-rights-reserved"`. When `"publisher-specific"`, see `academic.license_url`. |
+| `academic.license_url` | string | OPTIONAL | CrossRef `license[].URL` | URL of the applicable license text. Required when `academic.license` is `"publisher-specific"`. Example: `"https://www.elsevier.com/tdm/userlicense/1.0/"`. |
+| `academic.embargo_days` | integer | OPTIONAL | CrossRef `license[].delay-in-days` / SHERPA | Number of days after publication before this version becomes freely available. `0` means immediately available. Present only when an embargo applies. |
+
+### Integrity and Versioning
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `academic.is_retracted` | boolean | REQUIRED | CrossRef / Retraction Watch / OpenAlex | Whether this article has been retracted. The Exchange MUST check the Retraction Watch database (integrated into CrossRef since September 2023) and set this field. Agents SHOULD reject retracted articles unless explicitly studying retractions. |
+| `academic.crossmark_status` | string | OPTIONAL | CrossMark (CrossRef) | Current status of the article per CrossMark. Values: `"current"` (no updates), `"corrected"` (correction issued), `"retracted"` (retraction notice published), `"expression_of_concern"` (editor raised concerns), `"withdrawn"` (removed before formal publication). Sourced from CrossRef `update-to` field. |
+| `academic.retraction_doi` | string | OPTIONAL | CrossRef | DOI of the retraction notice. Present only when `academic.is_retracted` is `true`. Enables the agent to retrieve the retraction reason. |
+| `academic.related_works` | object[] | OPTIONAL | CrossRef relations | Array of related works. Each object: `{"doi": "10.xxxx/yyyy", "type": "isPreprintOf"}`. Relationship types from CrossRef: `"isPreprintOf"`, `"hasPreprint"`, `"isVersionOf"`, `"hasVersion"`, `"isSupplementTo"`, `"isPartOf"`, `"isCorrectedBy"`, `"isRetractedBy"`. Enables agents to navigate between preprint and published version, or from a retracted article to its retraction notice. |
+
+### Metrics
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `academic.cited_by_count` | integer | OPTIONAL | CrossRef `is-referenced-by-count` / OpenAlex `cited_by_count` | Number of times this work has been cited by other indexed works. Helps agents assess relevance and impact for literature review prioritization. |
+
+**Broker action:** Check `academic.is_retracted` on every offer -- reject retracted papers immediately. Use `academic.oa_status` to route: `"gold"`, `"green"`, `"diamond"`, or `"hybrid"` articles may be available at zero cost. Use `academic.article_version` to verify the Exchange is offering the version the agent needs. Use `academic.related_works` to discover the published VoR when only a preprint DOI is known.
+
+---
+
+## Attestation Claims (ResourceAttestation.claims)
+
+These are standardized claim names for `ResourceAttestation.claims` (the signed `google.protobuf.Struct`). Attestation verifiers (publishers self-attesting, or third-party verification services) use these keys so agents can interpret claims consistently.
+
+| Claim Key | Type | Source Standard | Description |
+|-----------|------|-----------------|-------------|
+| `academic.retraction_status` | string | CrossRef / Retraction Watch | Retraction status at the time of attestation. Values: `"none"`, `"retracted"`, `"expression_of_concern"`, `"partial_retraction"`. The attesting party (publisher or verification vendor) certifies this status as of `attested_at`. |
+| `academic.peer_review_status` | string | CrossRef / JATS | Peer review status. Values: `"peer-reviewed"` (standard single/double-blind), `"not-peer-reviewed"` (preprint, editorial), `"open-peer-reviewed"` (reviews published), `"post-publication-reviewed"`. |
+| `academic.article_version` | string | NISO / CrossRef | Version of the content the attestation covers. Same values as `Offer.ext.academic.article_version`. Enables agents to verify the attestation matches the delivered version. |
+| `academic.is_retracted` | boolean | CrossRef / Retraction Watch | Boolean retraction flag at attestation time. Redundant with `retraction_status` but simplifies automated filtering. |
+
+**Agent action:** For literature reviews, require attestations where `academic.retraction_status` is `"none"` and `academic.peer_review_status` is `"peer-reviewed"`. For systematic reviews in healthcare, require `attested_at` to be within the last 24 hours (retractions can happen at any time).
+
+---
+
+## Dispute Extensions (DisputeRequest.ext)
+
+These fields provide domain-specific evidence in academic content disputes. They supplement the core `DisputeReason` enum with details only meaningful in the scholarly publishing context.
+
+| Key | Type | Source Standard | Description |
+|-----|------|-----------------|-------------|
+| `academic.wrong_version` | string | NISO | The version that was actually delivered, when the agent expected a different version. Example: agent requested VoR but received AAM. Values: `"preprint"`, `"aam"`, `"vor"`, `"corrected_vor"`. Filed with `DISPUTE_REASON_WRONG_CONTENT`. |
+| `academic.retraction_not_flagged` | boolean | CrossRef / Retraction Watch | `true` when the Exchange delivered a retracted article without setting `academic.is_retracted` to `true` in the offer. Filed with `DISPUTE_REASON_WRONG_CONTENT`. The agent discovered the retraction independently (e.g., by querying CrossRef directly). |
+| `academic.expected_doi` | string | DOI Foundation | The DOI the agent expected to receive content for. Present when the delivered content does not match the DOI in the offer. Filed with `DISPUTE_REASON_CONTENT_MISMATCH`. |
+
+**Agent action:** When filing a dispute, include the specific academic evidence so the Exchange can automate resolution. A `academic.retraction_not_flagged` dispute is unambiguous -- the Exchange can verify against CrossRef in milliseconds and auto-resolve.
+
+---
+
+## Content Versioning
+
+Academic articles exist in multiple versions that differ in content, formatting, and legal status. RAMP-Academic models these using existing NISO and CrossRef conventions.
+
+### Version Lifecycle
+
+```
+Preprint ──peer review──> AAM ──publisher production──> VoR ──correction──> Corrected VoR
+                                                         │
+                                                    (retraction)
+                                                         │
+                                                         v
+                                                   Retraction Notice (separate DOI)
+```
+
+| Version | `academic.article_version` | Typical Access | Typical License |
+|---------|---------------------------|----------------|-----------------|
+| Preprint | `"preprint"` | Free (arXiv, bioRxiv) | Varies, often CC-BY |
+| Author Accepted Manuscript | `"aam"` | Repository (Green OA) or subscription | Often CC-BY if Rights Retention Strategy applies |
+| Version of Record | `"vor"` | Publisher (subscription or Gold OA) | Publisher license or CC-BY |
+| Corrected VoR | `"corrected_vor"` | Publisher | Same as VoR |
+
+### Versioning Rules
+
+1. Each version SHOULD have its own DOI (e.g., arXiv DOI for preprint, publisher DOI for VoR)
+2. Versions are linked via `academic.related_works` with types `"isPreprintOf"` / `"hasPreprint"` and `"isVersionOf"` / `"hasVersion"`
+3. If an Exchange offers the same article in multiple versions, each version is a separate `Offer` with its own `offer_id`, `academic.article_version`, and pricing
+4. The `ResourceIdentity.resource_mutability` SHOULD be `STATIC` for all published versions -- published articles do not change after publication (corrections create a new version)
+5. When an article is retracted, all version offers MUST set `academic.is_retracted` to `true`
+
+---
+
+## Open Access Modeling
+
+### OA Status Definitions
+
+| `academic.oa_status` | Publisher Paywalled? | Open License? | APC Charged? | Practical Meaning for Agent |
+|----------------------|---------------------|--------------|-------------|----------------------------|
+| `"gold"` | No (full OA journal) | Yes (CC-BY typical) | Usually yes | Free to access; RAMP Exchange MAY offer at `PRICING_MODEL_FREE` |
+| `"diamond"` | No (full OA journal) | Yes | No | Free to access and publish; no cost to anyone |
+| `"green"` | Yes (journal paywalled) | Varies | No (for repository copy) | Free copy available in a repository; VoR requires subscription |
+| `"hybrid"` | No (this article is OA) | Yes (CC-BY typical) | Yes (higher than gold) | Free to access; other articles in the same journal may be paywalled |
+| `"bronze"` | Technically no (free to read) | No identifiable license | No | Free to read but no license for reuse or AI input -- handle with caution |
+| `"closed"` | Yes | No | N/A | Requires subscription or per-article purchase |
+
+### OA and Pricing Interaction
+
+- `"gold"`, `"diamond"`, `"hybrid"` articles: Exchange SHOULD offer with `PRICING_MODEL_FREE` and `unit_cost = 0`
+- `"green"` articles: the repository copy is free; the publisher VoR may have a price. Two separate offers, two separate `academic.article_version` values
+- `"bronze"` articles: free to read but AI usage may not be licensed. The Exchange SHOULD set appropriate `AccessRestrictions.prohibited_functions` if the publisher's policy prohibits AI input
+- `"closed"` articles: priced per article (`PRICING_MODEL_PER_ARTICLE`) or via subscription (`subscription_id`)
+
+---
+
+## Institutional Access
+
+Academic content access often depends on institutional subscriptions. RAMP models this through the existing `Offer.subscription_id` field, extended with academic-specific context.
+
+### Subscription Resolution Flow
+
+```
+1. Broker sends DiscoverSupply with agent's institutional context
+   (subscription_id from agent configuration or institution profile)
+
+2. Exchange checks entitlement:
+   a. Internal lookup: subscription_id → entitled content set (KBART-based)
+   b. GetFTR API: DOI + institution context → entitlement decision
+   c. IP-based: agent's IP matches institutional range
+
+3. If entitled: Exchange returns Offer with:
+   - subscription_id = the institutional subscription identifier
+   - pricing.unit_cost = 0 (zero marginal cost under subscription)
+   - academic.oa_status = "closed" (access is via subscription, not OA)
+
+4. If not entitled: Exchange returns Offer with:
+   - No subscription_id
+   - pricing.unit_cost = per-article price
+   - Or OfferAbsenceReason if publisher has opted out entirely
+```
+
+### Subscription Conventions
+
+- `Offer.subscription_id`: opaque string identifying the institutional subscription. Format is Exchange-specific (e.g., `"inst:MIT:elsevier-2024"`, `"sub:UK-JISC-deal-2025"`)
+- The Exchange resolves the subscription_id against its entitlement database. The agent and Broker treat it as opaque
+- A Broker with access to multiple institutional subscriptions (e.g., a multi-university consortium) sends the most specific subscription_id available
+
+---
+
+## Usage Reporting
+
+RAMP's `ReportUsage` RPC handles per-transaction usage reporting. For Exchanges that also need COUNTER 5.1-compatible aggregate reporting, the following `UsageReport.ext` fields map RAMP transactions to COUNTER vocabulary.
+
+| Key | Type | Required | Source Standard | Description |
+|-----|------|----------|-----------------|-------------|
+| `academic.counter_metric_type` | string | OPTIONAL | COUNTER 5.1 | COUNTER metric type for this transaction. Values: `"Total_Item_Requests"` (content downloaded/viewed), `"Unique_Item_Requests"` (unique items per session), `"Total_Item_Investigations"` (metadata viewed). Most RAMP transactions map to `"Total_Item_Requests"`. |
+| `academic.counter_access_type` | string | OPTIONAL | COUNTER 5.1 | How access was obtained. Values: `"Controlled"` (via subscription), `"Open"` (Gold/Diamond OA), `"Free_To_Read"` (Bronze or temporary free access). |
+| `academic.counter_access_method` | string | OPTIONAL | COUNTER 5.1 | Access method. Values: `"Regular"` (standard human or agent use), `"TDM"` (text and data mining). RAMP transactions for AI input SHOULD use `"TDM"`. |
+
+**Exchange action:** Aggregate `UsageReport` data with these COUNTER fields to produce COUNTER 5.1-compliant Title Reports (TR) and Item Reports (IR) for institutional subscribers. This enables libraries to see RAMP-mediated usage alongside traditional usage in their COUNTER reports.
+
+---
+
+## Behavioral Conventions
+
+### ResourceMutability
+
+All published academic articles (preprints, AAMs, VoRs) are `STATIC` -- their content does not change after publication. Corrections and retractions create new resources with new DOIs, linked via `academic.related_works`.
+
+| Content Type | `resource_mutability` | Rationale |
+|-------------|---------------------|-----------|
+| Published article (VoR) | `STATIC` | Content is immutable after publication |
+| Preprint | `STATIC` | Each version is immutable; new versions get new version numbers |
+| Author Accepted Manuscript | `STATIC` | Fixed after acceptance |
+| Citation metrics | `DYNAMIC` | `academic.cited_by_count` changes as new citations are indexed |
+
+### data_as_of
+
+Not applicable for the article content itself (STATIC). However, if the Exchange enriches offers with live metadata (e.g., `academic.cited_by_count`, `academic.is_retracted`), `Offer.data_as_of` indicates when those metadata fields were last refreshed. A Broker performing retraction checking SHOULD prefer offers where `data_as_of` is recent.
+
+### DeliveryMethod
+
+Most academic content is delivered via `DELIVERY_METHOD_DIRECT` (signed URL to a PDF or XML file). Some datasets may use `DELIVERY_METHOD_STREAMING` for large files.
+
+---
+
+## Examples
+
+### Example 1: Paywalled Journal Article (Closed Access, No Subscription)
+
+An agent queries for a Nature article. No institutional subscription is available.
+
+**ResourceQuery.ext:**
+```json
+{
+  "academic.version_preference": "vor",
+  "academic.require_retraction_check": true
+}
+```
+
+**Offer (in ResourceResponse):**
+```json
+{
+  "offer_id": "off_nat_2024_abc123",
+  "package": {
+    "id": "pkg_nature_12345",
+    "seller": "Springer Nature",
+    "text": {
+      "title": "CRISPR-Cas9 gene editing in human embryos",
+      "author": "Zhang, F.",
+      "pubdate": "2024-03-15"
+    }
+  },
+  "pricing": {
+    "model": "PRICING_MODEL_PER_ARTICLE",
+    "unit_cost": 3199,
+    "currency": "USD",
+    "unit": "article",
+    "estimated_quantity": 1
+  },
+  "delivery_method": "DELIVERY_METHOD_DIRECT",
+  "identity": {
+    "doi": "10.1038/s41586-024-07234-5",
+    "canonical_url": "https://www.nature.com/articles/s41586-024-07234-5",
+    "resource_mutability": "STATIC",
+    "content_hash": "sha256:a1b2c3d4e5f6...",
+    "hash_method": "sha256",
+    "ext": {
+      "academic.pmid": "38234567",
+      "academic.openalex_id": "W4391234567",
+      "academic.issn": "1476-4687"
+    }
+  },
+  "attestations": [
+    {
+      "verifier": "crossref.org",
+      "kid": "crossref-2024-key-1",
+      "attested_at": "2024-12-01T00:00:00Z",
+      "uri": "https://www.nature.com/articles/s41586-024-07234-5",
+      "claims": {
+        "academic.retraction_status": "none",
+        "academic.peer_review_status": "peer-reviewed",
+        "academic.article_version": "vor",
+        "academic.is_retracted": false,
+        "estimated_quantity": 12400,
+        "word_count": 9400,
+        "language": "en"
+      },
+      "signature": "base64-ed25519-signature..."
+    }
+  ],
+  "ext": {
+    "academic.article_version": "vor",
+    "academic.article_type": "journal-article",
+    "academic.journal_title": "Nature",
+    "academic.publisher": "Springer Nature",
+    "academic.oa_status": "closed",
+    "academic.license": "all-rights-reserved",
+    "academic.is_retracted": false,
+    "academic.crossmark_status": "current",
+    "academic.cited_by_count": 42
+  }
+}
+```
+
+### Example 2: Gold Open Access Article
+
+An agent queries for a PLOS ONE article. No payment required.
+
+**Offer (in ResourceResponse):**
+```json
+{
+  "offer_id": "off_plos_2024_def456",
+  "package": {
+    "id": "pkg_plos_67890",
+    "seller": "PLOS",
+    "text": {
+      "title": "Machine learning for protein structure prediction: a systematic review",
+      "author": "Chen, L.; Patel, R.; Kim, S.",
+      "pubdate": "2024-06-20"
+    }
+  },
+  "pricing": {
+    "model": "PRICING_MODEL_FREE",
+    "unit_cost": 0,
+    "currency": "USD",
+    "unit": "article",
+    "estimated_quantity": 1
+  },
+  "delivery_method": "DELIVERY_METHOD_DIRECT",
+  "identity": {
+    "doi": "10.1371/journal.pone.0301234",
+    "canonical_url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0301234",
+    "resource_mutability": "STATIC",
+    "ext": {
+      "academic.pmid": "38901234",
+      "academic.pmcid": "PMC11234567",
+      "academic.openalex_id": "W4401234567",
+      "academic.issn": "1932-6203"
+    }
+  },
+  "ext": {
+    "academic.article_version": "vor",
+    "academic.article_type": "review-article",
+    "academic.journal_title": "PLOS ONE",
+    "academic.publisher": "PLOS",
+    "academic.oa_status": "gold",
+    "academic.license": "cc-by-4.0",
+    "academic.license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "academic.is_retracted": false,
+    "academic.crossmark_status": "current",
+    "academic.cited_by_count": 18,
+    "academic.related_works": []
+  }
+}
+```
+
+### Example 3: Institutional Subscription Access
+
+An agent at MIT queries for an Elsevier article. MIT has a subscription.
+
+**ResourceQuery.ext:**
+```json
+{
+  "academic.version_preference": "vor",
+  "academic.require_retraction_check": true
+}
+```
+
+**Offer (in ResourceResponse):**
+```json
+{
+  "offer_id": "off_elsevier_2024_ghi789",
+  "subscription_id": "inst:MIT:elsevier-freedom-2024",
+  "package": {
+    "id": "pkg_elsevier_11111",
+    "seller": "Elsevier",
+    "text": {
+      "title": "Quantum error correction with topological codes",
+      "author": "Williams, A.; Tanaka, H.",
+      "pubdate": "2024-09-01"
+    }
+  },
+  "pricing": {
+    "model": "PRICING_MODEL_SUBSCRIPTION",
+    "unit_cost": 0,
+    "currency": "USD",
+    "unit": "article",
+    "estimated_quantity": 1
+  },
+  "delivery_method": "DELIVERY_METHOD_DIRECT",
+  "identity": {
+    "doi": "10.1016/j.physrep.2024.09.001",
+    "canonical_url": "https://www.sciencedirect.com/science/article/pii/S0370157324003010",
+    "resource_mutability": "STATIC",
+    "ext": {
+      "academic.pmid": "39012345",
+      "academic.openalex_id": "W4411234567",
+      "academic.issn": "0370-1573"
+    }
+  },
+  "ext": {
+    "academic.article_version": "vor",
+    "academic.article_type": "journal-article",
+    "academic.journal_title": "Physics Reports",
+    "academic.publisher": "Elsevier",
+    "academic.oa_status": "closed",
+    "academic.license": "publisher-specific",
+    "academic.license_url": "https://www.elsevier.com/tdm/userlicense/1.0/",
+    "academic.is_retracted": false,
+    "academic.crossmark_status": "current",
+    "academic.cited_by_count": 7
+  }
+}
+```
+
+### Example 4: Batch Literature Review (50 DOIs, Mixed Access)
+
+A Broker sends a batch query for 50 DOIs. This example shows two of the resulting `OfferGroup` entries -- one with a paywalled article available via subscription, one with a retracted article.
+
+**ResourceQuery:**
+```json
+{
+  "ver": "1.0",
+  "id": "sq_litreview_batch_001",
+  "aisystem": {
+    "name": "research-agent",
+    "aisysuse": {
+      "lid": "agent-license-001",
+      "uri": [
+        "https://doi.org/10.1038/s41586-024-07234-5",
+        "https://doi.org/10.1126/science.retracted2023",
+        "... 48 more DOIs ..."
+      ]
+    }
+  },
+  "ext": {
+    "academic.version_preference": "vor",
+    "academic.oa_only": false,
+    "academic.require_retraction_check": true
+  }
+}
+```
+
+**ResourceResponse (partial -- 2 of 50 OfferGroups):**
+```json
+{
+  "ver": "1.0",
+  "id": "sq_litreview_batch_001",
+  "exchange": "academic-exchange.example.com",
+  "offer_groups": [
+    {
+      "uri": "https://doi.org/10.1038/s41586-024-07234-5",
+      "offers": [
+        {
+          "offer_id": "off_batch_001_item_01",
+          "subscription_id": "inst:MIT:springer-2024",
+          "pricing": {
+            "model": "PRICING_MODEL_SUBSCRIPTION",
+            "unit_cost": 0,
+            "currency": "USD",
+            "unit": "article",
+            "estimated_quantity": 1
+          },
+          "identity": {
+            "doi": "10.1038/s41586-024-07234-5",
+            "resource_mutability": "STATIC"
+          },
+          "ext": {
+            "academic.article_version": "vor",
+            "academic.oa_status": "closed",
+            "academic.is_retracted": false,
+            "academic.publisher": "Springer Nature"
+          }
+        }
+      ]
+    },
+    {
+      "uri": "https://doi.org/10.1126/science.retracted2023",
+      "offers": [
+        {
+          "offer_id": "off_batch_001_item_27",
+          "pricing": {
+            "model": "PRICING_MODEL_PER_ARTICLE",
+            "unit_cost": 2999,
+            "currency": "USD",
+            "unit": "article",
+            "estimated_quantity": 1
+          },
+          "identity": {
+            "doi": "10.1126/science.retracted2023",
+            "resource_mutability": "STATIC"
+          },
+          "ext": {
+            "academic.article_version": "vor",
+            "academic.oa_status": "closed",
+            "academic.is_retracted": true,
+            "academic.crossmark_status": "retracted",
+            "academic.retraction_doi": "10.1126/science.retraction2024",
+            "academic.publisher": "AAAS",
+            "academic.related_works": [
+              {
+                "doi": "10.1126/science.retraction2024",
+                "type": "isRetractedBy"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Broker action:** The Broker scans all 50 OfferGroups. It accepts the first offer (subscription access, not retracted). It rejects the second offer because `academic.is_retracted` is `true` -- the Broker logs the retraction, does NOT transact, and reports to the agent that 1 of 50 papers was retracted.
+
+### Example 5: Retracted Paper Dispute
+
+An agent discovers post-transaction that a paper was retracted but the Exchange did not flag it.
+
+**DisputeRequest:**
+```json
+{
+  "ver": "1.0",
+  "id": "dispute_retraction_001",
+  "transaction_id": "tx_abc123",
+  "billing_id": "bill_abc123",
+  "reason": "DISPUTE_REASON_WRONG_CONTENT",
+  "description": "Delivered article 10.xxxx/yyyy was retracted on 2024-11-15 but academic.is_retracted was false in the offer.",
+  "report_id": "rpt_abc123",
+  "ext": {
+    "academic.retraction_not_flagged": true,
+    "academic.expected_doi": "10.xxxx/yyyy"
+  }
+}
+```
+
+---
+
+## Field Reference Summary
+
+Total: **32 unique field keys** across 7 message locations (34 entries below, as 2 keys appear in multiple contexts).
+
+| # | Message | Key | Type |
+|---|---------|-----|------|
+| 1 | ExchangeManifest.ext | `academic.subject_coverage` | string[] |
+| 2 | ExchangeManifest.ext | `academic.content_types` | string[] |
+| 3 | ExchangeManifest.ext | `academic.institutional_access_supported` | boolean |
+| 4 | ResourceIdentity.ext | `academic.pmid` | string |
+| 5 | ResourceIdentity.ext | `academic.pmcid` | string |
+| 6 | ResourceIdentity.ext | `academic.arxiv_id` | string |
+| 7 | ResourceIdentity.ext | `academic.openalex_id` | string |
+| 8 | ResourceIdentity.ext | `academic.issn` | string |
+| 9 | ResourceQuery.ext | `academic.version_preference` | string |
+| 10 | ResourceQuery.ext | `academic.oa_only` | boolean |
+| 11 | ResourceQuery.ext | `academic.require_retraction_check` | boolean |
+| 12 | Offer.ext | `academic.article_version` | string |
+| 13 | Offer.ext | `academic.article_type` | string |
+| 14 | Offer.ext | `academic.journal_title` | string |
+| 15 | Offer.ext | `academic.publisher` | string |
+| 16 | Offer.ext | `academic.oa_status` | string |
+| 17 | Offer.ext | `academic.license` | string |
+| 18 | Offer.ext | `academic.license_url` | string |
+| 19 | Offer.ext | `academic.embargo_days` | integer |
+| 20 | Offer.ext | `academic.is_retracted` | boolean |
+| 21 | Offer.ext | `academic.crossmark_status` | string |
+| 22 | Offer.ext | `academic.retraction_doi` | string |
+| 23 | Offer.ext | `academic.related_works` | object[] |
+| 24 | Offer.ext | `academic.cited_by_count` | integer |
+| 25 | ResourceAttestation.claims | `academic.retraction_status` | string |
+| 26 | ResourceAttestation.claims | `academic.peer_review_status` | string |
+| 27 | ResourceAttestation.claims | `academic.article_version` | string |
+| 28 | ResourceAttestation.claims | `academic.is_retracted` | boolean |
+| 29 | DisputeRequest.ext | `academic.wrong_version` | string |
+| 30 | DisputeRequest.ext | `academic.retraction_not_flagged` | boolean |
+| 31 | DisputeRequest.ext | `academic.expected_doi` | string |
+| 32 | UsageReport.ext | `academic.counter_metric_type` | string |
+| 33 | UsageReport.ext | `academic.counter_access_type` | string |
+| 34 | UsageReport.ext | `academic.counter_access_method` | string |
+
+---
+
+## Standards Traceability
+
+Every field in this profile traces to an existing industry standard:
+
+| Standard | Fields Derived |
+|----------|---------------|
+| CrossRef REST API | `article_version`, `article_type`, `journal_title`, `publisher`, `license`, `license_url`, `embargo_days`, `is_retracted`, `retraction_doi`, `related_works`, `cited_by_count`, `issn` |
+| OpenAlex API | `oa_status`, `openalex_id`, `cited_by_count`, `is_retracted` |
+| Unpaywall (OurResearch) | `oa_status` |
+| CrossMark (CrossRef) | `crossmark_status` |
+| JATS XML (NISO Z39.96) | `article_type` |
+| PubMed / NLM | `pmid`, `pmcid` |
+| arXiv | `arxiv_id` |
+| ISO 3297 | `issn` |
+| NISO (version terminology) | `article_version`, `version_preference` |
+| Retraction Watch / CrossRef | `retraction_status`, `retraction_doi`, `retraction_not_flagged` |
+| Creative Commons | `license` |
+| COUNTER 5.1 | `counter_metric_type`, `counter_access_type`, `counter_access_method` |
+| DOAJ / SHERPA | `oa_status` categorization |
+
+---
+
+## Revision History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0-draft | 2026-03-19 | Initial draft. 32 unique field keys across 7 message types. |
