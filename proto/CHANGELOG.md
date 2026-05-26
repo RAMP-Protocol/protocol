@@ -1,5 +1,60 @@
 # RAMP Protocol Changelog
 
+## ## v1.1.0 (2026-05-26) — Unified well-known endpoint
+
+Every RAMP participant — agent, broker, exchange, publisher — now serves
+a single canonical document at `/.well-known/ramp.json`, populated from
+`WellKnownManifest`. The per-role filenames (`ramp-agent.json`,
+`ramp-exchange.json`, `ramp-verifier.json`) and the legacy
+`/marketplace/v1/keys` path are removed from the spec.
+
+### New messages
+- `WellKnownManifest` — unified self-description. Role-tagged via the new
+  `Role` enum. Carries inline `JsonWebKey` keys, optional
+  `invalidation_url`, publisher-only `exchanges[]` + `catalog_contributors[]`,
+  and exchange-only capability fields (pricing, delivery, auth methods,
+  OIDC issuer, GNAP grant endpoint, base currency, supported profiles).
+- `JsonWebKey` — inline RFC 7517 JWK. Ed25519 only in v1.1.0 (`kty="OKP"`,
+  `crv="Ed25519"`, `alg="EdDSA"`). Carries explicit `not_before` / `not_after`
+  RFC3339 time bounds.
+- `KeyInvalidationList` — kid-only revocation list served at
+  `invalidation_url`. Snapshot semantics.
+- `Role` enum: `AGENT`, `EXCHANGE`, `BROKER`, `PUBLISHER`. Verifiers fold
+  into the role their operator holds — there is no separate verifier role.
+
+### Deprecations (kept on the wire for one cycle)
+- `ProviderManifest` — replaced by `WellKnownManifest` with
+  `role=ROLE_PUBLISHER`.
+- `ExchangeManifest` — replaced by `WellKnownManifest` with
+  `role=ROLE_EXCHANGE`.
+- `ExchangeManifest.keys_uri` and `ExchangeManifest.jwks_uri` — pointer
+  patterns replaced by inline `JsonWebKey` objects.
+
+### JSON wire rename (intentional consumer-visible change)
+- `ProviderManifest.marketplaces` → `ProviderManifest.exchanges`. Proto
+  wire tag 4 preserved. JSON consumers reading the legacy key MUST update.
+  The same rename applies to the corresponding field on
+  `WellKnownManifest` (field 7).
+
+### Verifier transition
+Verifier-specific metadata historically published at
+`/.well-known/ramp-verifier.json` migrates to `WellKnownManifest`.
+Verifier signing keys appear in `public_keys`. The verifier's
+`claims_schema` URL (and any vendor-specific metadata) move into
+`WellKnownManifest.ext` under a namespaced key — recommended
+`"ramp.attestation.claims_schema"`. Implementations operating a verifier
+on a dedicated domain serve `WellKnownManifest` under whichever role
+matches the operating party (typically `ROLE_EXCHANGE`).
+
+### Compatibility
+- Wire-additive at the proto-binary layer; no existing field tags moved
+  or removed.
+- JSON consumers of `ProviderManifest.marketplaces` MUST update to read
+  `exchanges`.
+- Consumers of the deprecated `ExchangeManifest.keys_uri` /
+  `.jwks_uri` should switch to `WellKnownManifest.public_keys` before
+  the next minor release removes the deprecated fields.
+
 ## v1.0.3 (2026-05-26) — Canonical retrieval endpoint field
 
 Adds the missing scalar field for the signed retrieval URL on transaction

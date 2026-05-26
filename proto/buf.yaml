@@ -19,3 +19,9 @@ lint:
 breaking:
   use:
     - FILE
+  except:
+    # ProviderManifest.marketplaces → ProviderManifest.exchanges: intentional
+    # JSON wire rename (v1.1.0). Wire tag 4 preserved; binary
+    # compatibility holds. JSON consumers must update to read "exchanges".
+    - FIELD_SAME_NAME
+    - FIELD_SAME_JSON_NAME

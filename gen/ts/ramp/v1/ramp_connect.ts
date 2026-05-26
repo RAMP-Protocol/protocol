@@ -32,7 +32,7 @@
 //   - DisputeRequest.report_id: agent must file usage report before disputing
 //   - DisputeResponse.status/resolution: dispute lifecycle tracking
 //   - ProviderManifest.catalog_contributors: authorized third-party catalog pushers
-//   - ExchangeManifest: machine-readable Exchange self-description (/.well-known/ramp-exchange.json)
+//   - WellKnownManifest: machine-readable self-description for every role (/.well-known/ramp.json). ExchangeManifest deprecated v1.1.0.
 //   - ResourceMutability enum: signals whether resource content is static, dynamic, or live
 //     Drives hash verification behavior: STATIC = verify hash, DYNAMIC = expect hash drift,
 //     LIVE = no content exists at offer time (streaming). Validated across 18 use cases.
@@ -60,6 +60,23 @@
 //   - retrieval_endpoint: canonical signed-URL field on TransactionResponse,
 //     TransactionResultItem, and RAMPResponse. Replaces ext["signed_url"]
 //     usage; removes stranded CoMP Package comments.
+//
+// v1.1.0 additions (from v1.0.2):
+//   - WellKnownManifest: unified manifest served at /.well-known/ramp.json
+//     by every RAMP role (agent, broker, exchange, publisher). Replaces
+//     ProviderManifest and ExchangeManifest, both now Deprecated.
+//   - JsonWebKey: inline RFC 7517 JWK objects with not_before / not_after
+//     time bounds, replacing the keys_uri / jwks_uri pointer pattern.
+//   - KeyInvalidationList: snapshot-semantic kid revocation list served
+//     at WellKnownManifest.invalidation_url for emergency revocation.
+//   - Role enum (AGENT, EXCHANGE, BROKER, PUBLISHER). Verifiers fold
+//     into the role their operating domain holds.
+//   - ProviderManifest.marketplaces renamed to exchanges (wire tag 4
+//     preserved). Same rename propagates into WellKnownManifest.
+//   - Per-role well-known filenames (ramp-agent.json, ramp-exchange.json,
+//     ramp-verifier.json) and the legacy /marketplace/v1/keys path are
+//     eliminated from the spec. ExchangeManifest.keys_uri and .jwks_uri
+//     are marked Deprecated.
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.

@@ -32,7 +32,7 @@
 //   - DisputeRequest.report_id: agent must file usage report before disputing
 //   - DisputeResponse.status/resolution: dispute lifecycle tracking
 //   - ProviderManifest.catalog_contributors: authorized third-party catalog pushers
-//   - ExchangeManifest: machine-readable Exchange self-description (/.well-known/ramp-exchange.json)
+//   - WellKnownManifest: machine-readable self-description for every role (/.well-known/ramp.json). ExchangeManifest deprecated v1.1.0.
 //   - ResourceMutability enum: signals whether resource content is static, dynamic, or live
 //     Drives hash verification behavior: STATIC = verify hash, DYNAMIC = expect hash drift,
 //     LIVE = no content exists at offer time (streaming). Validated across 18 use cases.
@@ -60,6 +60,23 @@
 //   - retrieval_endpoint: canonical signed-URL field on TransactionResponse,
 //     TransactionResultItem, and RAMPResponse. Replaces ext["signed_url"]
 //     usage; removes stranded CoMP Package comments.
+//
+// v1.1.0 additions (from v1.0.2):
+//   - WellKnownManifest: unified manifest served at /.well-known/ramp.json
+//     by every RAMP role (agent, broker, exchange, publisher). Replaces
+//     ProviderManifest and ExchangeManifest, both now Deprecated.
+//   - JsonWebKey: inline RFC 7517 JWK objects with not_before / not_after
+//     time bounds, replacing the keys_uri / jwks_uri pointer pattern.
+//   - KeyInvalidationList: snapshot-semantic kid revocation list served
+//     at WellKnownManifest.invalidation_url for emergency revocation.
+//   - Role enum (AGENT, EXCHANGE, BROKER, PUBLISHER). Verifiers fold
+//     into the role their operating domain holds.
+//   - ProviderManifest.marketplaces renamed to exchanges (wire tag 4
+//     preserved). Same rename propagates into WellKnownManifest.
+//   - Per-role well-known filenames (ramp-agent.json, ramp-exchange.json,
+//     ramp-verifier.json) and the legacy /marketplace/v1/keys path are
+//     eliminated from the spec. ExchangeManifest.keys_uri and .jwks_uri
+//     are marked Deprecated.
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.
@@ -91,11 +108,16 @@ import "google/protobuf/duration.proto";
 // Token formats: JWT (universal default) or Biscuit (multi-hop attenuation).
 // Delegation message is format-agnostic.
 //
-// Key announcement endpoints (JWKS, RFC 7517):
-//   Agent:        {domain}/.well-known/ramp-agent.json
-//   Broker:      {domain}/.well-known/ramp-agent.json  (JWKS)
-//   Marketplace:  {domain}/marketplace/v1/keys
-//   Provider:     {domain}/.well-known/ramp.json (authorization, not keys)
+// Key announcement endpoint (RFC 7517 JWKs, inline) — unified across roles:
+//   Agent:      {domain}/.well-known/ramp.json
+//   Broker:     {domain}/.well-known/ramp.json
+//   Exchange:   {domain}/.well-known/ramp.json
+//   Publisher:  {domain}/.well-known/ramp.json (keys + authorization)
+//
+// Keys appear inline as JsonWebKey objects with not_before/not_after
+// time bounds. Optional invalidation_url publishes a kid-list of
+// emergency-revoked keys; consumers poll on a 300s cadence (±10% jitter)
+// and sync-fetch on unknown-kid.
 //
 // Request authentication via RFC 9421 HTTP Message Signatures:
 //   Agent → Exchange:  Signature header (alg=ed25519)
@@ -662,22 +684,25 @@ message ResourceIdentity {
 // Exchange catalog and in Offer responses — strict size limits protect
 // against payload poisoning and ensure catalog performance at scale.
 //
-// Verifiers MUST publish their keys and claims schema at:
-//   https://{verifier-domain}/.well-known/ramp-verifier.json
-// This endpoint follows the JWKS pattern for key management.
+// Verifiers MUST publish their keys at:
+//   https://{verifier-domain}/.well-known/ramp.json
+// Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or
+// ROLE_PUBLISHER depending on operator). Claims-schema location migrated to
+// `ext` under key "ramp.attestation.claims_schema" (see Verifier transition
+// in CHANGELOG).
 message ResourceAttestation {
   // Canonical domain of the attesting party (e.g., "nytimes.com" for
   // self-attestation, "doubleverify.com" for third-party attestation).
   // Used to look up the verifier's public keys at:
-  //   https://{verifier}/.well-known/ramp-verifier.json
+  //   https://{verifier}/.well-known/ramp.json (WellKnownManifest,
+  //   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).
   string verifier = 1;
 
-  // Key ID from the verifier's JWKS (/.well-known/ramp-verifier.json).
-  // Identifies which Ed25519 key was used to sign this attestation.
-  // Enables key rotation: new keys are added with overlapping validity,
-  // new attestations use the new key, old attestations remain verifiable
-  // as long as the old key is published. Verifiers look up the public key
-  // by kid to verify the signature.
+  // Key ID from the verifier's WellKnownManifest.public_keys list
+  // (/.well-known/ramp.json). Identifies which Ed25519 key was used to
+  // sign this attestation. Enables key rotation: new keys are added with
+  // overlapping validity, new attestations use the new key, old attestations
+  // remain verifiable as long as the old key is published.
   string kid = 2;
 
   // When this attestation was created. Agents use this to assess freshness
@@ -700,7 +725,7 @@ message ResourceAttestation {
   // Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).
   // The protocol does NOT define "quality score" — it is inherently subjective.
   // If a vendor provides a proprietary score, the vendor defines what it means
-  // via their ramp-verifier.json claims_schema.
+  // via their WellKnownManifest ext["ramp.attestation.claims_schema"].
   google.protobuf.Struct claims = 5;
 
   // Ed25519 signature over JCS-canonicalized (RFC 8785) representation of
@@ -906,7 +931,7 @@ message Requester {
   string id = 1;
 
   // Domain the requester belongs to — used for public key lookup.
-  // Keys published at {domain}/.well-known/ramp-agent.json
+  // Keys published at {domain}/.well-known/ramp.json (WellKnownManifest, role=ROLE_AGENT).
   string domain = 2;
 
   // What kind of entity is making this request.
@@ -948,7 +973,8 @@ message Requester {
 
   // Request authentication is handled at the HTTP layer via RFC 9421
   // HTTP Message Signatures (alg=EdDSA). The Requester's public key
-  // is published at {domain}/.well-known/ramp-agent.json as a JWKS.
+  // is published at {domain}/.well-known/ramp.json as a WellKnownManifest
+  // (role=ROLE_AGENT) with inline JWK keys.
   // Fields 9-10 reserved for future use.
 
   // Optional delegation — present when the requester acts on behalf of
@@ -1392,7 +1418,8 @@ message ResourceEntry {
   // the attestation verifier is authorized to push for this provider
   // (via catalog_contributors in ProviderManifest) and validates the
   // attestation signature against the verifier's public key from their
-  // /.well-known/ramp-verifier.json endpoint.
+  // /.well-known/ramp.json endpoint (WellKnownManifest, role determined
+  // by the verifier's operator).
   repeated ResourceAttestation attestations = 12;
 
   google.protobuf.Struct ext = 15;
@@ -1679,31 +1706,204 @@ message RequestConstraints {
 }
 
 // ============================================================================
-// Provider Discovery (/.well-known/ramp.json)
+// Well-Known Discovery (/.well-known/ramp.json)
 //
-// Static JSON file hosted by the provider. Serves two purposes:
+// /.well-known/ramp.json is served by every RAMP participant. For publishers
+// it carries both authorization data (exchanges[], catalog_contributors[]) and
+// the keys used to sign provider-issued attestations. For exchanges it carries
+// capability fields (pricing, delivery, auth methods). For agents and brokers it
+// carries their public keys. See WellKnownManifest below.
 //
-// 1. Proactive discovery: Agents check this before crawling to find
-//    authorized Marketplaces — no 403 needed.
-// 2. Edge function config: The Exchange endpoint(s) to redirect to
-//    when the edge function blocks a wandering bot.
-//
-// Complements RSL (rsl.txt declares licensing terms) and CoMP (defines
-// the data model). ramp.json answers: "where do you go to transact?"
-//
-// The Exchange ingests the provider's rsl.txt to build its catalog —
-// RSL is terms declaration, RAMP is transaction infrastructure.
+// ProviderManifest is retained Deprecated for one release cycle to ease
+// consumer migration. New producers MUST emit WellKnownManifest instead.
 // ============================================================================
 
-// ProviderManifest — Served at /.well-known/ramp.json
+// Role — Identifies which kind of RAMP participant a WellKnownManifest
+// describes. Verifiers fold into the role of the domain that operates
+// them (typically EXCHANGE or PUBLISHER); they are not a distinct role.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_AGENT = 1;
+  ROLE_EXCHANGE = 2;
+  ROLE_BROKER = 3;
+  ROLE_PUBLISHER = 4;
+}
+
+// JsonWebKey — Inline RFC 7517 JWK object.
 //
-// Answers one question: "where do you go to transact?"
-// Access policy lives in rsl.txt (RSL 1.0), not here.
+// RAMP v1.1.0 supports Ed25519 only: kty="OKP", crv="Ed25519", alg="EdDSA".
+// Additional curves are a v1.2+ concern.
 //
-// In practice, providers don't manually drop this file. The edge
-// function generates and caches it from the provider's CMS / internal
-// systems. The edge function is the single deploy for providers.
+// Time bounds are RFC3339 strings (sortable, ops-debuggable, avoids the
+// JWT nbf/exp collision). At least one key in WellKnownManifest.public_keys
+// MUST have `not_before <= now <= not_after`. Verification MUST reject
+// signatures whose key falls outside its window.
+message JsonWebKey {
+  // Key ID. Unique within a single WellKnownManifest.public_keys list.
+  string kid = 1;
+
+  // Key type. RAMP v1.1.0: MUST be "OKP".
+  string kty = 2;
+
+  // Curve. RAMP v1.1.0: MUST be "Ed25519".
+  string crv = 3;
+
+  // Intended key use. RAMP v1.1.0: MUST be "sig".
+  string use = 4;
+
+  // Signing algorithm. RAMP v1.1.0: MUST be "EdDSA".
+  string alg = 5;
+
+  // base64url-encoded 32-byte Ed25519 public key.
+  string x = 6;
+
+  // RFC3339 timestamp. Key is invalid before this instant.
+  string not_before = 7;
+
+  // RFC3339 timestamp. Key is invalid at and after this instant
+  // (strict upper bound).
+  string not_after = 8;
+}
+
+// WellKnownManifest — Served at /.well-known/ramp.json by every RAMP
+// participant (agent, exchange, broker, publisher).
+//
+// Single canonical document. Carries inline keys (RFC 7517 JWKs) with
+// explicit time bounds and an optional emergency-revocation pointer.
+// Per-role fields are populated only when that role applies; consumers
+// MUST ignore non-applicable fields based on `role`.
+//
+// Replaces ProviderManifest (publisher data) and ExchangeManifest
+// (exchange data). Both predecessor messages are marked Deprecated.
+message WellKnownManifest {
+  // RAMP protocol version. MUST equal "1.1" in v1.1.0; consumers REJECT
+  // unrecognised major versions.
+  string ver = 1;
+
+  // Role this manifest describes.
+  Role role = 2;
+
+  // Canonical domain serving this manifest.
+  string domain = 3;
+
+  // Contact email (licensing, integration, security).
+  optional string contact = 4;
+
+  // Public keys for signature verification.
+  // MUST contain at least one entry whose [not_before, not_after) window
+  // covers current time at serve time.
+  repeated JsonWebKey public_keys = 5;
+
+  // Optional emergency revocation channel. When set, consumers poll this
+  // URL on a 300s cadence (±10% jitter) and replace their local revoked
+  // set with the response. When unset, consumers rely on routine rotation
+  // and not_after expiry.
+  optional string invalidation_url = 6;
+
+  // Publisher-only. Authorized exchanges for this publisher's resources.
+  // Like ads.txt — declares who may sell. MUST be empty for non-publisher
+  // roles. (Renamed from ProviderManifest.marketplaces in v1.1.0.)
+  repeated AuthorizedExchange exchanges = 7;
+
+  // Publisher-only. Authorized third-party catalog contributors.
+  // MUST be empty for non-publisher roles.
+  repeated CatalogContributor catalog_contributors = 8;
+
+  // Exchange-only. Human-readable Exchange name.
+  optional string name = 9;
+
+  // Exchange-only. Organization operating this Exchange.
+  optional string operator = 10;
+
+  // Exchange-only. Operator's corporate domain (may differ from domain).
+  optional string operator_domain = 11;
+
+  // Exchange-only. ExchangeService endpoint URL.
+  optional string endpoint = 12;
+
+  // Exchange-only. Health check endpoint URL.
+  optional string health_endpoint = 13;
+
+  // Exchange-only. CatalogService endpoint URL (if exposed).
+  optional string catalog_endpoint = 14;
+
+  // ext is conventional field 15 in this proto; see below.
+
+  // Exchange-only. Supported RAMP protocol versions (e.g. ["1.0", "1.1"]).
+  repeated string protocol_versions_supported = 16;
+
+  // Exchange-only. Supported pricing models.
+  repeated PricingModel pricing_models_supported = 17;
+
+  // Exchange-only. Supported delivery methods.
+  repeated DeliveryMethod delivery_methods_supported = 18;
+
+  // Exchange-only. Accepted resource hash methods for attestation
+  // verification.
+  repeated string hash_methods_supported = 19;
+
+  // Exchange-only. Trusted attestation verification vendors (domains).
+  repeated string accepted_verifiers = 20;
+
+  // Exchange-only. Terms of service URL.
+  optional string terms_uri = 21;
+
+  // Exchange-only. Privacy policy URL.
+  optional string privacy_uri = 22;
+
+  // Exchange-only. Domain extension profiles this Exchange conforms to.
+  // See standards-layering docs.
+  repeated string supported_profiles = 23;
+
+  // Exchange-only. Authorization methods this Exchange supports
+  // (ordered by preference).
+  repeated AuthMethod supported_auth_methods = 24;
+
+  // Exchange-only. OIDC Discovery URL when OAuth methods are supported.
+  optional string oidc_issuer = 25;
+
+  // Exchange-only. GNAP grant endpoint when GNAP is supported.
+  optional string gnap_grant_endpoint = 26;
+
+  // Exchange-only. Base currency for pricing (ISO 4217). All unit_cost
+  // values from this Exchange are denominated in this currency.
+  optional string base_currency = 27;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052). Lists keys
+  // within ext that the consumer MUST understand. Unknown values reject
+  // with UNKNOWN_CRITICAL_EXTENSION. Empty (default) → ignore-unknown.
+  repeated string ext_critical = 90;
+}
+
+// KeyInvalidationList — Body served at WellKnownManifest.invalidation_url.
+//
+// Snapshot semantics: `revoked` is the complete list of revoked kids at
+// `as_of`. Consumers replace their local revocation set on each successful
+// poll (no diff protocol). A revoked kid stays revoked permanently; once
+// dropped from the list, consumers MAY drop it from their local set but
+// the corresponding key SHOULD NOT be re-introduced into
+// WellKnownManifest.public_keys.
+message KeyInvalidationList {
+  // Server's response time (RFC3339, UTC). Consumers use this to detect
+  // clock skew.
+  google.protobuf.Timestamp as_of = 1;
+
+  // Complete list of revoked kids at `as_of`.
+  repeated string revoked = 2;
+}
+
+// ProviderManifest — DEPRECATED in v1.1.0.
+//
+// Use WellKnownManifest with role=ROLE_PUBLISHER instead. The
+// canonical /.well-known/ramp.json now serves WellKnownManifest
+// for every role; per-role and provider-specific manifest variants
+// are eliminated.
+//
+// Kept on the wire for one release cycle to ease consumer migration.
 message ProviderManifest {
+  option deprecated = true;
   // RAMP protocol version.
   string ver = 1;
 
@@ -1713,9 +1913,10 @@ message ProviderManifest {
   // Contact email for licensing inquiries.
   optional string contact = 3;
 
-  // Authorized Marketplaces for this provider's resources.
+  // Authorized Exchanges for this provider's resources.
   // Like ads.txt — declares who is authorized to sell.
-  repeated AuthorizedExchange marketplaces = 4;
+  // Renamed from `marketplaces` in v1.1.0; wire tag preserved.
+  repeated AuthorizedExchange exchanges = 4;
 
   // Authorized third-party catalog contributors for this provider.
   // Lists parties authorized to push resource metadata (including attestations)
@@ -1776,25 +1977,22 @@ enum ProviderRelationship {
 }
 
 // ============================================================================
-// Exchange Discovery (/.well-known/ramp-exchange.json)
+// Exchange Discovery — DEPRECATED in v1.1.0
 //
-// Machine-readable self-description of a RAMP Exchange.
-// Enables automated Exchange discovery and capability negotiation.
-// Analogous to OIDC Discovery (/.well-known/openid-configuration)
-// and IAB sellers.json.
-//
-// The Exchange MUST serve this at:
-//   https://{domain}/.well-known/ramp-exchange.json
-// MUST be served over TLS. SHOULD be cacheable (Cache-Control max-age >= 3600).
-// MUST NOT require authentication.
-//
-// Brokers fetch this on first contact with a new Exchange to
-// bootstrap: extract endpoints, capabilities, and key URIs. Replaces
-// the naive HEAD health probe with structured capability discovery.
+// The legacy /.well-known/ramp-exchange.json endpoint is removed.
+// Exchanges now publish self-description at /.well-known/ramp.json
+// via WellKnownManifest with role=ROLE_EXCHANGE. The capability fields
+// (pricing_models_supported, supported_auth_methods, oidc_issuer, etc.)
+// moved into WellKnownManifest. The keys_uri / jwks_uri pointer pattern
+// is replaced by inline JsonWebKey objects in WellKnownManifest.public_keys.
 // ============================================================================
 
-// ExchangeManifest — Served at /.well-known/ramp-exchange.json
+// ExchangeManifest — DEPRECATED in v1.1.0.
+//
+// Use WellKnownManifest with role=ROLE_EXCHANGE. Kept on the wire
+// for one release cycle to ease consumer migration.
 message ExchangeManifest {
+  option deprecated = true;
   // RAMP protocol version.
   string ver = 1;
 
@@ -1814,7 +2012,8 @@ message ExchangeManifest {
   string endpoint = 6;
 
   // Ed25519 public keys URL (for offer signature verification).
-  string keys_uri = 7;
+  // Deprecated in v1.1.0: use WellKnownManifest.public_keys (inline JWKs).
+  string keys_uri = 7 [deprecated = true];
 
   // Health check endpoint URL.
   optional string health_endpoint = 8;
@@ -1879,8 +2078,8 @@ message ExchangeManifest {
   optional string gnap_grant_endpoint = 22;
 
   // JWKS URI for this Exchange's signing keys (offer verification).
-  // Published as standard JWKS (RFC 7517) with Ed25519 keys.
-  optional string jwks_uri = 23;
+  // Deprecated in v1.1.0: use WellKnownManifest.public_keys (inline JWKs).
+  optional string jwks_uri = 23 [deprecated = true];
 
   // Base currency for pricing (ISO 4217 code, e.g., "USD", "EUR").
   // All unit_cost values in offers from this Exchange are denominated
