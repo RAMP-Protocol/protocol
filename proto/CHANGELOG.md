@@ -1,12 +1,13 @@
 # RAMP Protocol Changelog
 
-## ## v1.1.0 (2026-05-26) — Unified well-known endpoint
+## v1.1.0 (2026-05-26) — Unified well-known endpoint + marketplace→exchange rename
 
 Every RAMP participant — agent, broker, exchange, publisher — now serves
 a single canonical document at `/.well-known/ramp.json`, populated from
 `WellKnownManifest`. The per-role filenames (`ramp-agent.json`,
 `ramp-exchange.json`, `ramp-verifier.json`) and the legacy
-`/marketplace/v1/keys` path are removed from the spec.
+`/marketplace/v1/keys` path are removed from the spec. The term
+"marketplace" is eliminated from the proto in favour of "exchange" throughout.
 
 ### New messages
 - `WellKnownManifest` — unified self-description. Role-tagged via the new
@@ -30,11 +31,26 @@ a single canonical document at `/.well-known/ramp.json`, populated from
 - `ExchangeManifest.keys_uri` and `ExchangeManifest.jwks_uri` — pointer
   patterns replaced by inline `JsonWebKey` objects.
 
-### JSON wire rename (intentional consumer-visible change)
-- `ProviderManifest.marketplaces` → `ProviderManifest.exchanges`. Proto
-  wire tag 4 preserved. JSON consumers reading the legacy key MUST update.
-  The same rename applies to the corresponding field on
-  `WellKnownManifest` (field 7).
+### JSON wire renames (intentional consumer-visible changes)
+
+All proto wire tags preserved; binary compatibility holds. JSON field names
+change. Every consumer reading renamed fields MUST update.
+
+| Message | Old JSON field | New JSON field | Tag |
+|---|---|---|---|
+| `ProviderManifest` | `marketplaces` | `exchanges` | 4 |
+| `WellKnownManifest` | *(new message)* | `exchanges` | 7 |
+| `ResourceResponse` | `marketplace` | `exchange` | 3 |
+| `UsageReport` | `marketplace` | `exchange` | 8 |
+| `RequestConstraints` | `marketplaces` | `exchanges` | 1 |
+| `RequestConstraints` | `preferred_marketplaces` | `preferred_exchanges` | 6 |
+| `DomainVerificationRequest` | `marketplace` | `exchange` | 6 |
+
+Enum value rename (proto number preserved):
+
+| Enum | Old name | New name | Number |
+|---|---|---|---|
+| `DiscoveryMethod` | `DISCOVERY_METHOD_MARKETPLACE` | `DISCOVERY_METHOD_EXCHANGE` | 1 |
 
 ### Verifier transition
 Verifier-specific metadata historically published at
@@ -47,13 +63,13 @@ on a dedicated domain serve `WellKnownManifest` under whichever role
 matches the operating party (typically `ROLE_EXCHANGE`).
 
 ### Compatibility
-- Wire-additive at the proto-binary layer; no existing field tags moved
-  or removed.
-- JSON consumers of `ProviderManifest.marketplaces` MUST update to read
-  `exchanges`.
-- Consumers of the deprecated `ExchangeManifest.keys_uri` /
-  `.jwks_uri` should switch to `WellKnownManifest.public_keys` before
-  the next minor release removes the deprecated fields.
+- Proto-binary layer: wire-additive; no tags moved or removed.
+- JSON consumers: all field names in the table above MUST be updated.
+- Enum consumers: `DISCOVERY_METHOD_MARKETPLACE` → `DISCOVERY_METHOD_EXCHANGE`
+  (proto number 1 unchanged).
+- Consumers of the deprecated `ExchangeManifest.keys_uri` / `.jwks_uri`
+  should switch to `WellKnownManifest.public_keys` before the next minor
+  release removes the deprecated fields.
 
 ## v1.0.3 (2026-05-26) — Canonical retrieval endpoint field
 

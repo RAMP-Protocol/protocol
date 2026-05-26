@@ -1,6 +1,6 @@
 // RAMP v1.0 — Resource Access Metering Protocol
 //
-// Extends IAB Tech Lab CoMP v1.0 with pricing, marketplace orchestration,
+// Extends IAB Tech Lab CoMP v1.0 with pricing, exchange orchestration,
 // resource identity, transactions, and post-usage reporting.
 //
 // v1.0 additions (from v0.2):
@@ -38,7 +38,7 @@
 //     LIVE = no content exists at offer time (streaming). Validated across 18 use cases.
 //   - Offer.data_as_of: timestamp indicating when the offered data was current.
 //     Cross-cutting need: credit reports, drug databases, stock quotes, satellite imagery.
-//   - RequestConstraints.max_data_age: agent-side freshness requirement. Marketplace
+//   - RequestConstraints.max_data_age: agent-side freshness requirement. Exchange
 //     SHOULD exclude offers whose data_as_of is older than this threshold.
 //   - ExchangeManifest.supported_profiles: declares conformance to domain extension
 //     profiles (e.g., "ramp-pharma-v1", "ramp-medimg-v1"). Enables Broker filtering.
@@ -115,7 +115,7 @@ type DiscoveryMethod int32
 const (
 	DiscoveryMethod_DISCOVERY_METHOD_UNSPECIFIED DiscoveryMethod = 0
 	// URI was requested by the agent directly or found via Exchange query.
-	DiscoveryMethod_DISCOVERY_METHOD_MARKETPLACE DiscoveryMethod = 1
+	DiscoveryMethod_DISCOVERY_METHOD_EXCHANGE DiscoveryMethod = 1
 	// URI was discovered via a search engine (e.g., Exa, Tavily, Brave Search).
 	// The Broker searched on the agent's behalf, then routed through Exchange.
 	DiscoveryMethod_DISCOVERY_METHOD_SEARCH DiscoveryMethod = 2
@@ -129,14 +129,14 @@ const (
 var (
 	DiscoveryMethod_name = map[int32]string{
 		0: "DISCOVERY_METHOD_UNSPECIFIED",
-		1: "DISCOVERY_METHOD_MARKETPLACE",
+		1: "DISCOVERY_METHOD_EXCHANGE",
 		2: "DISCOVERY_METHOD_SEARCH",
 		3: "DISCOVERY_METHOD_RECOMMENDATION",
 		4: "DISCOVERY_METHOD_SYNDICATION",
 	}
 	DiscoveryMethod_value = map[string]int32{
 		"DISCOVERY_METHOD_UNSPECIFIED":    0,
-		"DISCOVERY_METHOD_MARKETPLACE":    1,
+		"DISCOVERY_METHOD_EXCHANGE":       1,
 		"DISCOVERY_METHOD_SEARCH":         2,
 		"DISCOVERY_METHOD_RECOMMENDATION": 3,
 		"DISCOVERY_METHOD_SYNDICATION":    4,
@@ -196,7 +196,7 @@ const (
 	// but their delegation token doesn't grant access. The Exchange MAY
 	// use this instead of silent omission when the deployment context makes
 	// it appropriate (e.g., internal Exchange where resources are known).
-	// Public Marketplaces SHOULD silently omit (not reveal existence).
+	// Public Exchanges SHOULD silently omit (not reveal existence).
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT OfferAbsenceReason = 8
 	// Consumer encountered ext_critical keys it does not recognize.
 	// The unrecognized keys SHOULD be listed in the OfferGroup's ext field
@@ -1268,7 +1268,7 @@ type ResourceQuery struct {
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
 	// Original RAMP request ID from Step 1, for traceability.
 	RequestId *string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3,oneof" json:"request_id,omitempty"`
-	// Intermediary forwarding chain (Agent → Broker → Marketplace).
+	// Intermediary forwarding chain (Agent → Broker → Exchange).
 	// Each hop is signed, proving the request path is legitimate.
 	// Empty when agent queries Exchange directly.
 	Intermediaries []*IntermediaryHop `protobuf:"bytes,5,rep,name=intermediaries,proto3" json:"intermediaries,omitempty"`
@@ -1404,7 +1404,7 @@ type ResourceResponse struct {
 	// Echoed query identifier.
 	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	// Canonical domain of the responding Exchange.
-	Marketplace string `protobuf:"bytes,3,opt,name=marketplace,proto3" json:"marketplace,omitempty"`
+	Exchange string `protobuf:"bytes,3,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// Flat list of offers (for single-URI queries or backwards compat).
 	Offers []*Offer `protobuf:"bytes,4,rep,name=offers,proto3" json:"offers,omitempty"`
 	// Offers grouped by requested URI (for multi-URI batch queries).
@@ -1414,7 +1414,7 @@ type ResourceResponse struct {
 	// Present when the Exchange enforces per-caller rate limits on discovery.
 	// Enables agents/Orchestrators to throttle proactively rather than hitting
 	// hard limits. Particularly important when an Broker fans out the
-	// same batch query to multiple Marketplaces — mid-batch rate limiting
+	// same batch query to multiple Exchanges — mid-batch rate limiting
 	// can cause partial results if not signaled early.
 	RateLimit *RateLimitInfo   `protobuf:"bytes,6,opt,name=rate_limit,json=rateLimit,proto3,oneof" json:"rate_limit,omitempty"`
 	Ext       *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -1471,9 +1471,9 @@ func (x *ResourceResponse) GetId() string {
 	return ""
 }
 
-func (x *ResourceResponse) GetMarketplace() string {
+func (x *ResourceResponse) GetExchange() string {
 	if x != nil {
-		return x.Marketplace
+		return x.Exchange
 	}
 	return ""
 }
@@ -1523,7 +1523,7 @@ type OfferGroup struct {
 	// Zero or more offers for this URI. Empty = resource not available.
 	Offers []*Offer `protobuf:"bytes,2,rep,name=offers,proto3" json:"offers,omitempty"`
 	// How this URI was discovered by the Broker (v2 extension point).
-	// v1: always DISCOVERY_METHOD_MARKETPLACE (Broker queried an Exchange).
+	// v1: always DISCOVERY_METHOD_EXCHANGE (Broker queried an Exchange).
 	// v2: may include DISCOVERY_METHOD_SEARCH (URI found via search engine like Exa),
 	//
 	//	DISCOVERY_METHOD_RECOMMENDATION, etc. The Broker discovers URIs
@@ -1791,7 +1791,7 @@ type Offer struct {
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
 	// Resource title (human-readable, for display/logging).
 	Title *string `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	// Pricing terms including unit cost for cross-marketplace comparison.
+	// Pricing terms including unit cost for cross-exchange comparison.
 	Pricing *Pricing `protobuf:"bytes,3,opt,name=pricing,proto3" json:"pricing,omitempty"`
 	// How resource will be delivered.
 	DeliveryMethod DeliveryMethod `protobuf:"varint,4,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
@@ -1799,9 +1799,9 @@ type Offer struct {
 	Reporting *ReportingObligation `protobuf:"bytes,5,opt,name=reporting,proto3,oneof" json:"reporting,omitempty"`
 	// When this offer expires (ISO 8601).
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	// Resource identity for cross-marketplace deduplication.
+	// Resource identity for cross-exchange deduplication.
 	// Enables Orchestrators to recognize the same resource offered by
-	// different Marketplaces and compare pricing.
+	// different Exchanges and compare pricing.
 	Identity *ResourceIdentity `protobuf:"bytes,7,opt,name=identity,proto3,oneof" json:"identity,omitempty"`
 	// Access restrictions derived from provider terms (e.g. RSL permits/prohibits).
 	// Specifies which usage types, user categories, and geographies are
@@ -2052,7 +2052,7 @@ func (x *Offer) GetExtCritical() []string {
 // ResourceIdentity — Layered resource identification and verification.
 //
 // Serves two purposes:
-//  1. Cross-marketplace deduplication (Broker groups offers for
+//  1. Cross-exchange deduplication (Broker groups offers for
 //     the same underlying resource to compare pricing).
 //  2. Resource integrity verification (agent checks that delivered
 //     resource matches what was promised).
@@ -2071,8 +2071,8 @@ func (x *Offer) GetExtCritical() []string {
 // serve dynamic pages use Level 0-1. Providers who invest in
 // consistent resource delivery reach Level 2 and earn more.
 //
-// CoMP's Package.id identifies the *package* (marketplace-specific);
-// ResourceIdentity identifies the *resource* (cross-marketplace).
+// CoMP's Package.id identifies the *package* (exchange-specific);
+// ResourceIdentity identifies the *resource* (cross-exchange).
 type ResourceIdentity struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Provider's authoritative URL for this resource (rel="canonical").
@@ -2688,7 +2688,7 @@ func (x *Preview) GetSize() string {
 // Pricing — Terms for a resource offer.
 //
 // Providers set prices in their preferred model. The Exchange
-// normalizes to unit cost (effective cost per unit) for cross-marketplace
+// normalizes to unit cost (effective cost per unit) for cross-exchange
 // comparison — analogous to eCPM in programmatic advertising.
 // Unit cost is denominated in the Exchange's base currency.
 type Pricing struct {
@@ -3378,7 +3378,7 @@ type TransactionItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The offer_id from the selected Offer.
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
-	// The marketplace_signature from the selected Offer.
+	// The exchange_signature from the selected Offer.
 	OfferSignature string `protobuf:"bytes,2,opt,name=offer_signature,json=offerSignature,proto3" json:"offer_signature,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -4330,7 +4330,7 @@ type ReportingObligation struct {
 	Required bool `protobuf:"varint,1,opt,name=required,proto3" json:"required,omitempty"`
 	// Duration within which the report must be submitted (e.g. 24h).
 	Window *durationpb.Duration `protobuf:"bytes,2,opt,name=window,proto3,oneof" json:"window,omitempty"`
-	// URL to submit the usage report to (if different from Marketplace).
+	// URL to submit the usage report to (if different from Exchange).
 	Endpoint *string `protobuf:"bytes,3,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
 	// Field names that must be present in the report.
 	RequiredFields []string         `protobuf:"bytes,4,rep,name=required_fields,json=requiredFields,proto3" json:"required_fields,omitempty"`
@@ -4437,7 +4437,7 @@ type UsageReport struct {
 	// Original RAMP request ID.
 	RequestId *string `protobuf:"bytes,7,opt,name=request_id,json=requestId,proto3,oneof" json:"request_id,omitempty"`
 	// Exchange this report is for.
-	Marketplace *string `protobuf:"bytes,8,opt,name=marketplace,proto3,oneof" json:"marketplace,omitempty"`
+	Exchange *string `protobuf:"bytes,8,opt,name=exchange,proto3,oneof" json:"exchange,omitempty"`
 	// Assets that were delivered and used.
 	Assets []*UsageAsset    `protobuf:"bytes,9,rep,name=assets,proto3" json:"assets,omitempty"`
 	Ext    *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -4529,9 +4529,9 @@ func (x *UsageReport) GetRequestId() string {
 	return ""
 }
 
-func (x *UsageReport) GetMarketplace() string {
-	if x != nil && x.Marketplace != nil {
-		return *x.Marketplace
+func (x *UsageReport) GetExchange() string {
+	if x != nil && x.Exchange != nil {
+		return *x.Exchange
 	}
 	return ""
 }
@@ -4885,14 +4885,14 @@ type RAMPRequest struct {
 	// Unique request identifier, assigned by the Requesting Party.
 	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	// Requester identity — who is making this request, what scopes they have.
-	// The Broker forwards this to Marketplaces in ResourceQuery.requester.
+	// The Broker forwards this to Exchanges in ResourceQuery.requester.
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
-	// Constraints for marketplace filtering and offer selection.
+	// Constraints for exchange filtering and offer selection.
 	Constraints *RequestConstraints `protobuf:"bytes,4,opt,name=constraints,proto3,oneof" json:"constraints,omitempty"`
 	// Domain extension profiles the agent understands.
 	//
 	// The Broker uses this to:
-	//  1. Route queries to Marketplaces that support these profiles
+	//  1. Route queries to Exchanges that support these profiles
 	//  2. Forward the profiles in ResourceQuery.supported_profiles
 	//  3. Include profile-specific ext fields when returning results
 	//
@@ -5018,7 +5018,7 @@ func (x *RAMPRequest) GetExtCritical() []string {
 type RequestConstraints struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Authorized Exchange domains. Broker queries only these.
-	Marketplaces []string `protobuf:"bytes,1,rep,name=marketplaces,proto3" json:"marketplaces,omitempty"`
+	Exchanges []string `protobuf:"bytes,1,rep,name=exchanges,proto3" json:"exchanges,omitempty"`
 	// Maximum price the agent is willing to pay.
 	MaxPrice *Cost `protobuf:"bytes,2,opt,name=max_price,json=maxPrice,proto3,oneof" json:"max_price,omitempty"`
 	// Maximum effective cost per unit.
@@ -5030,7 +5030,7 @@ type RequestConstraints struct {
 	// Exchanges the agent has existing relationships with (subscriptions,
 	// contracts). The Broker SHOULD prefer these when resource is
 	// available — subscription resource has zero marginal cost.
-	PreferredMarketplaces []string `protobuf:"bytes,6,rep,name=preferred_marketplaces,json=preferredMarketplaces,proto3" json:"preferred_marketplaces,omitempty"`
+	PreferredExchanges []string `protobuf:"bytes,6,rep,name=preferred_exchanges,json=preferredExchanges,proto3" json:"preferred_exchanges,omitempty"`
 	// Budget scope identifier for per-period tracking.
 	// E.g. "user:u-12345" for per-user budgets, "team:eng" for per-team.
 	// The Broker tracks cumulative spend per scope across sessions.
@@ -5086,9 +5086,9 @@ func (*RequestConstraints) Descriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{33}
 }
 
-func (x *RequestConstraints) GetMarketplaces() []string {
+func (x *RequestConstraints) GetExchanges() []string {
 	if x != nil {
-		return x.Marketplaces
+		return x.Exchanges
 	}
 	return nil
 }
@@ -5121,9 +5121,9 @@ func (x *RequestConstraints) GetReportingCapable() bool {
 	return false
 }
 
-func (x *RequestConstraints) GetPreferredMarketplaces() []string {
+func (x *RequestConstraints) GetPreferredExchanges() []string {
 	if x != nil {
-		return x.PreferredMarketplaces
+		return x.PreferredExchanges
 	}
 	return nil
 }
@@ -5776,7 +5776,7 @@ type CatalogContributor struct {
 	Domain string `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
 	// Relationship of this contributor to the provider.
 	// Examples: "verifier" (resource intelligence vendor that attests to resource
-	// properties), "marketplace" (a Exchange that enriches catalog entries).
+	// properties), "exchange" (an Exchange that enriches catalog entries).
 	Relationship  string `protobuf:"bytes,2,opt,name=relationship,proto3" json:"relationship,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -5926,7 +5926,7 @@ type ExchangeManifest struct {
 	Name string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	// Organization operating this Exchange.
 	Operator string `protobuf:"bytes,4,opt,name=operator,proto3" json:"operator,omitempty"`
-	// Operator's corporate domain (may differ from marketplace domain).
+	// Operator's corporate domain (may differ from exchange domain).
 	OperatorDomain *string `protobuf:"bytes,5,opt,name=operator_domain,json=operatorDomain,proto3,oneof" json:"operator_domain,omitempty"`
 	// ExchangeService endpoint URL.
 	Endpoint string `protobuf:"bytes,6,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
@@ -5963,7 +5963,7 @@ type ExchangeManifest struct {
 	//
 	// Each profile defines a standardized vocabulary of ext field keys,
 	// attestation claim names, and behavioral conventions for a specific
-	// domain. The Broker uses this to filter Marketplaces by capability.
+	// domain. The Broker uses this to filter Exchanges by capability.
 	//
 	// Three-layer extension governance:
 	//
@@ -5972,7 +5972,7 @@ type ExchangeManifest struct {
 	//	  Every conformant implementation SHOULD support.
 	//	Layer 3 (Domain profiles): Listed here. Published by domain communities,
 	//	  namespaced by domain (e.g., "pharma.*", "medimg.*"). Only relevant
-	//	  Marketplaces implement. Broker filters by declared profiles.
+	//	  Exchanges implement. Broker filters by declared profiles.
 	//
 	// Examples: ["ramp-news-v1", "ramp-academic-v1", "ramp-pharma-v1", "ramp-medimg-v1"]
 	SupportedProfiles []string `protobuf:"bytes,18,rep,name=supported_profiles,json=supportedProfiles,proto3" json:"supported_profiles,omitempty"`
@@ -5991,7 +5991,7 @@ type ExchangeManifest struct {
 	JwksUri *string `protobuf:"bytes,23,opt,name=jwks_uri,json=jwksUri,proto3,oneof" json:"jwks_uri,omitempty"`
 	// Base currency for pricing (ISO 4217 code, e.g., "USD", "EUR").
 	// All unit_cost values in offers from this Exchange are denominated
-	// in this currency. Enables cross-marketplace price comparison.
+	// in this currency. Enables cross-exchange price comparison.
 	BaseCurrency *string `protobuf:"bytes,19,opt,name=base_currency,json=baseCurrency,proto3,oneof" json:"base_currency,omitempty"`
 	// ext = 24: moved from 20 to resolve a tag collision with
 	// supported_auth_methods at 20. Fresh tag (no prior wire usage).
@@ -6211,7 +6211,7 @@ func (x *ExchangeManifest) GetExtCritical() []string {
 
 // AccessPolicy — Per-path resource access rules.
 //
-// Used by Marketplaces to communicate provider access policies.
+// Used by Exchanges to communicate provider access policies.
 // May be included in ResourceResponse, edge function config, or other
 // contexts. Not required in ramp.json (RSL handles terms declaration).
 type AccessPolicy struct {
@@ -6334,7 +6334,7 @@ type RAMPResponse struct {
 	TransactionId string `protobuf:"bytes,4,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	BillingId     string `protobuf:"bytes,5,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// Which Exchange won the selection.
-	Marketplace string `protobuf:"bytes,6,opt,name=marketplace,proto3" json:"marketplace,omitempty"`
+	Exchange string `protobuf:"bytes,6,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// Resource title for the disputed resource.
 	ResourceTitle *string `protobuf:"bytes,7,opt,name=resource_title,json=resourceTitle,proto3,oneof" json:"resource_title,omitempty"`
 	// Transaction cost.
@@ -6433,9 +6433,9 @@ func (x *RAMPResponse) GetBillingId() string {
 	return ""
 }
 
-func (x *RAMPResponse) GetMarketplace() string {
+func (x *RAMPResponse) GetExchange() string {
 	if x != nil {
-		return x.Marketplace
+		return x.Exchange
 	}
 	return ""
 }
@@ -7073,11 +7073,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
 	"\v_request_idB\v\n" +
-	"\t_deadline\"\xcf\x02\n" +
+	"\t_deadline\"\xc9\x02\n" +
 	"\x10ResourceResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\x12 \n" +
-	"\vmarketplace\x18\x03 \x01(\tR\vmarketplace\x12&\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1a\n" +
+	"\bexchange\x18\x03 \x01(\tR\bexchange\x12&\n" +
 	"\x06offers\x18\x04 \x03(\v2\x0e.ramp.v1.OfferR\x06offers\x126\n" +
 	"\foffer_groups\x18\x05 \x03(\v2\x13.ramp.v1.OfferGroupR\vofferGroups\x12:\n" +
 	"\n" +
@@ -7397,7 +7397,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\t\n" +
 	"\a_windowB\v\n" +
-	"\t_endpoint\"\xba\x03\n" +
+	"\t_endpoint\"\xb1\x03\n" +
 	"\vUsageReport\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12%\n" +
@@ -7407,13 +7407,13 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05usage\x18\x05 \x01(\v2\x0e.ramp.v1.UsageR\x05usage\x128\n" +
 	"\ttimestamp\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\"\n" +
 	"\n" +
-	"request_id\x18\a \x01(\tH\x00R\trequestId\x88\x01\x01\x12%\n" +
-	"\vmarketplace\x18\b \x01(\tH\x01R\vmarketplace\x88\x01\x01\x12+\n" +
+	"request_id\x18\a \x01(\tH\x00R\trequestId\x88\x01\x01\x12\x1f\n" +
+	"\bexchange\x18\b \x01(\tH\x01R\bexchange\x88\x01\x01\x12+\n" +
 	"\x06assets\x18\t \x03(\v2\x13.ramp.v1.UsageAssetR\x06assets\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
-	"\v_request_idB\x0e\n" +
-	"\f_marketplace\"\xd1\x01\n" +
+	"\v_request_idB\v\n" +
+	"\t_exchange\"\xd1\x01\n" +
 	"\x11AttributionDetail\x12(\n" +
 	"\rdisplayed_url\x18\x01 \x01(\tH\x00R\fdisplayedUrl\x88\x01\x01\x124\n" +
 	"\x06format\x18\x02 \x01(\x0e2\x17.ramp.v1.CitationFormatH\x01R\x06format\x88\x01\x01\x12+\n" +
@@ -7459,14 +7459,14 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0e\n" +
 	"\f_constraintsB\b\n" +
 	"\x06_queryB\x11\n" +
-	"\x0f_search_filters\"\xa9\x05\n" +
-	"\x12RequestConstraints\x12\"\n" +
-	"\fmarketplaces\x18\x01 \x03(\tR\fmarketplaces\x12/\n" +
+	"\x0f_search_filters\"\x9d\x05\n" +
+	"\x12RequestConstraints\x12\x1c\n" +
+	"\texchanges\x18\x01 \x03(\tR\texchanges\x12/\n" +
 	"\tmax_price\x18\x02 \x01(\v2\r.ramp.v1.CostH\x00R\bmaxPrice\x88\x01\x01\x12'\n" +
 	"\rmax_unit_cost\x18\x03 \x01(\x01H\x01R\vmaxUnitCost\x88\x01\x01\x12H\n" +
 	"\x13delivery_preference\x18\x04 \x03(\x0e2\x17.ramp.v1.DeliveryMethodR\x12deliveryPreference\x120\n" +
-	"\x11reporting_capable\x18\x05 \x01(\bH\x02R\x10reportingCapable\x88\x01\x01\x125\n" +
-	"\x16preferred_marketplaces\x18\x06 \x03(\tR\x15preferredMarketplaces\x12&\n" +
+	"\x11reporting_capable\x18\x05 \x01(\bH\x02R\x10reportingCapable\x88\x01\x01\x12/\n" +
+	"\x13preferred_exchanges\x18\x06 \x03(\tR\x12preferredExchanges\x12&\n" +
 	"\fbudget_scope\x18\a \x01(\tH\x03R\vbudgetScope\x88\x01\x01\x127\n" +
 	"\rperiod_budget\x18\b \x01(\v2\r.ramp.v1.CostH\x04R\fperiodBudget\x88\x01\x01\x12C\n" +
 	"\rbudget_period\x18\t \x01(\v2\x19.google.protobuf.DurationH\x05R\fbudgetPeriod\x88\x01\x01\x12@\n" +
@@ -7609,7 +7609,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05rules\x18\x02 \x03(\v2\x19.ramp.v1.AccessPolicyRuleR\x05rules\"c\n" +
 	"\x10AccessPolicyRule\x12\x18\n" +
 	"\apattern\x18\x01 \x01(\tR\apattern\x125\n" +
-	"\x06policy\x18\x02 \x01(\x0e2\x1d.ramp.v1.ResourceAccessPolicyR\x06policy\"\xc1\x06\n" +
+	"\x06policy\x18\x02 \x01(\x0e2\x1d.ramp.v1.ResourceAccessPolicyR\x06policy\"\xa3\x05\n" +
 	"\fRAMPResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1d\n" +
@@ -7617,8 +7617,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"request_id\x18\x03 \x01(\tR\trequestId\x12%\n" +
 	"\x0etransaction_id\x18\x04 \x01(\tR\rtransactionId\x12\x1d\n" +
 	"\n" +
-	"billing_id\x18\x05 \x01(\tR\tbillingId\x12 \n" +
-	"\vmarketplace\x18\x06 \x01(\tR\vmarketplace\x12*\n" +
+	"billing_id\x18\x05 \x01(\tR\tbillingId\x12\x1a\n" +
+	"\bexchange\x18\x06 \x01(\tR\bexchange\x12*\n" +
 	"\x0eresource_title\x18\a \x01(\tH\x00R\rresourceTitle\x88\x01\x01\x12!\n" +
 	"\x04cost\x18\b \x01(\v2\r.ramp.v1.CostR\x04cost\x12@\n" +
 	"\x0fdelivery_method\x18\t \x01(\x0e2\x17.ramp.v1.DeliveryMethodR\x0edeliveryMethod\x12T\n" +
@@ -7700,10 +7700,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"validUntil\x88\x01\x01B\t\n" +
 	"\a_key_idB\x11\n" +
 	"\x0f_failure_reasonB\x0e\n" +
-	"\f_valid_until*\xb9\x01\n" +
+	"\f_valid_until*\xb6\x01\n" +
 	"\x0fDiscoveryMethod\x12 \n" +
-	"\x1cDISCOVERY_METHOD_UNSPECIFIED\x10\x00\x12 \n" +
-	"\x1cDISCOVERY_METHOD_MARKETPLACE\x10\x01\x12\x1b\n" +
+	"\x1cDISCOVERY_METHOD_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19DISCOVERY_METHOD_EXCHANGE\x10\x01\x12\x1b\n" +
 	"\x17DISCOVERY_METHOD_SEARCH\x10\x02\x12#\n" +
 	"\x1fDISCOVERY_METHOD_RECOMMENDATION\x10\x03\x12 \n" +
 	"\x1cDISCOVERY_METHOD_SYNDICATION\x10\x04*\xd4\x03\n" +

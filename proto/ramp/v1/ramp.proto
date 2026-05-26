@@ -1,6 +1,6 @@
 // RAMP v1.0 — Resource Access Metering Protocol
 //
-// Extends IAB Tech Lab CoMP v1.0 with pricing, marketplace orchestration,
+// Extends IAB Tech Lab CoMP v1.0 with pricing, exchange orchestration,
 // resource identity, transactions, and post-usage reporting.
 //
 // v1.0 additions (from v0.2):
@@ -38,7 +38,7 @@
 //     LIVE = no content exists at offer time (streaming). Validated across 18 use cases.
 //   - Offer.data_as_of: timestamp indicating when the offered data was current.
 //     Cross-cutting need: credit reports, drug databases, stock quotes, satellite imagery.
-//   - RequestConstraints.max_data_age: agent-side freshness requirement. Marketplace
+//   - RequestConstraints.max_data_age: agent-side freshness requirement. Exchange
 //     SHOULD exclude offers whose data_as_of is older than this threshold.
 //   - ExchangeManifest.supported_profiles: declares conformance to domain extension
 //     profiles (e.g., "ramp-pharma-v1", "ramp-medimg-v1"). Enables Broker filtering.
@@ -124,7 +124,7 @@ import "google/protobuf/duration.proto";
 //   Agent → Broker → Exchange:  multiple Signature headers (one per hop)
 //   Exchange → Agent:  JWS Compact Serialization on Offer (alg=EdDSA)
 //
-// Signed URLs use HMAC-SHA256 (Marketplace↔CDN shared secret, separate concern).
+// Signed URLs use HMAC-SHA256 (Exchange↔CDN shared secret, separate concern).
 //
 // Retrieval-URL identity binding (OPTIONAL, DPoP-style — RFC 9449):
 //   The Exchange MAY bind a signed retrieval_endpoint to the requesting agent
@@ -201,7 +201,7 @@ message ResourceQuery {
   // Original RAMP request ID from Step 1, for traceability.
   optional string request_id = 4;
 
-  // Intermediary forwarding chain (Agent → Broker → Marketplace).
+  // Intermediary forwarding chain (Agent → Broker → Exchange).
   // Each hop is signed, proving the request path is legitimate.
   // Empty when agent queries Exchange directly.
   repeated IntermediaryHop intermediaries = 5;
@@ -247,7 +247,7 @@ message ResourceResponse {
   string id = 2;
 
   // Canonical domain of the responding Exchange.
-  string marketplace = 3;
+  string exchange = 3;
 
   // Flat list of offers (for single-URI queries or backwards compat).
   repeated Offer offers = 4;
@@ -260,7 +260,7 @@ message ResourceResponse {
   // Present when the Exchange enforces per-caller rate limits on discovery.
   // Enables agents/Orchestrators to throttle proactively rather than hitting
   // hard limits. Particularly important when an Broker fans out the
-  // same batch query to multiple Marketplaces — mid-batch rate limiting
+  // same batch query to multiple Exchanges — mid-batch rate limiting
   // can cause partial results if not signaled early.
   optional RateLimitInfo rate_limit = 6;
 
@@ -284,7 +284,7 @@ message OfferGroup {
   repeated Offer offers = 2;
 
   // How this URI was discovered by the Broker (v2 extension point).
-  // v1: always DISCOVERY_METHOD_MARKETPLACE (Broker queried an Exchange).
+  // v1: always DISCOVERY_METHOD_EXCHANGE (Broker queried an Exchange).
   // v2: may include DISCOVERY_METHOD_SEARCH (URI found via search engine like Exa),
   //     DISCOVERY_METHOD_RECOMMENDATION, etc. The Broker discovers URIs
   //     through any source, then routes through Exchange for pricing/transaction.
@@ -306,7 +306,7 @@ message OfferGroup {
 enum DiscoveryMethod {
   DISCOVERY_METHOD_UNSPECIFIED = 0;
   // URI was requested by the agent directly or found via Exchange query.
-  DISCOVERY_METHOD_MARKETPLACE = 1;
+  DISCOVERY_METHOD_EXCHANGE = 1;
   // URI was discovered via a search engine (e.g., Exa, Tavily, Brave Search).
   // The Broker searched on the agent's behalf, then routed through Exchange.
   DISCOVERY_METHOD_SEARCH = 2;
@@ -340,7 +340,7 @@ enum OfferAbsenceReason {
   // but their delegation token doesn't grant access. The Exchange MAY
   // use this instead of silent omission when the deployment context makes
   // it appropriate (e.g., internal Exchange where resources are known).
-  // Public Marketplaces SHOULD silently omit (not reveal existence).
+  // Public Exchanges SHOULD silently omit (not reveal existence).
   OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT = 8;
 
   // Consumer encountered ext_critical keys it does not recognize.
@@ -418,7 +418,7 @@ message Offer {
   // Resource title (human-readable, for display/logging).
   optional string title = 2;
 
-  // Pricing terms including unit cost for cross-marketplace comparison.
+  // Pricing terms including unit cost for cross-exchange comparison.
   Pricing pricing = 3;
 
   // How resource will be delivered.
@@ -430,9 +430,9 @@ message Offer {
   // When this offer expires (ISO 8601).
   optional google.protobuf.Timestamp expires_at = 6;
 
-  // Resource identity for cross-marketplace deduplication.
+  // Resource identity for cross-exchange deduplication.
   // Enables Orchestrators to recognize the same resource offered by
-  // different Marketplaces and compare pricing.
+  // different Exchanges and compare pricing.
   optional ResourceIdentity identity = 7;
 
   // Access restrictions derived from provider terms (e.g. RSL permits/prohibits).
@@ -534,7 +534,7 @@ message Offer {
 // ResourceIdentity — Layered resource identification and verification.
 //
 // Serves two purposes:
-// 1. Cross-marketplace deduplication (Broker groups offers for
+// 1. Cross-exchange deduplication (Broker groups offers for
 //    the same underlying resource to compare pricing).
 // 2. Resource integrity verification (agent checks that delivered
 //    resource matches what was promised).
@@ -553,8 +553,8 @@ message Offer {
 // serve dynamic pages use Level 0-1. Providers who invest in
 // consistent resource delivery reach Level 2 and earn more.
 //
-// CoMP's Package.id identifies the *package* (marketplace-specific);
-// ResourceIdentity identifies the *resource* (cross-marketplace).
+// CoMP's Package.id identifies the *package* (exchange-specific);
+// ResourceIdentity identifies the *resource* (cross-exchange).
 message ResourceIdentity {
   // --- Identification (who is this resource?) ---
 
@@ -824,7 +824,7 @@ message Preview {
 // Pricing — Terms for a resource offer.
 //
 // Providers set prices in their preferred model. The Exchange
-// normalizes to unit cost (effective cost per unit) for cross-marketplace
+// normalizes to unit cost (effective cost per unit) for cross-exchange
 // comparison — analogous to eCPM in programmatic advertising.
 // Unit cost is denominated in the Exchange's base currency.
 message Pricing {
@@ -1208,7 +1208,7 @@ message TransactionItem {
   // The offer_id from the selected Offer.
   string offer_id = 1;
 
-  // The marketplace_signature from the selected Offer.
+  // The exchange_signature from the selected Offer.
   string offer_signature = 2;
 
   // Field 3 reserved. Offer signature algorithm now in JWS header.
@@ -1465,7 +1465,7 @@ message ReportingObligation {
   // Duration within which the report must be submitted (e.g. 24h).
   optional google.protobuf.Duration window = 2;
 
-  // URL to submit the usage report to (if different from Marketplace).
+  // URL to submit the usage report to (if different from Exchange).
   optional string endpoint = 3;
 
   // Field names that must be present in the report.
@@ -1507,7 +1507,7 @@ message UsageReport {
   optional string request_id = 7;
 
   // Exchange this report is for.
-  optional string marketplace = 8;
+  optional string exchange = 8;
 
   // Assets that were delivered and used.
   repeated UsageAsset assets = 9;
@@ -1618,16 +1618,16 @@ message RAMPRequest {
   string id = 2;
 
   // Requester identity — who is making this request, what scopes they have.
-  // The Broker forwards this to Marketplaces in ResourceQuery.requester.
+  // The Broker forwards this to Exchanges in ResourceQuery.requester.
   Requester requester = 3;
 
-  // Constraints for marketplace filtering and offer selection.
+  // Constraints for exchange filtering and offer selection.
   optional RequestConstraints constraints = 4;
 
   // Domain extension profiles the agent understands.
   //
   // The Broker uses this to:
-  //   1. Route queries to Marketplaces that support these profiles
+  //   1. Route queries to Exchanges that support these profiles
   //   2. Forward the profiles in ResourceQuery.supported_profiles
   //   3. Include profile-specific ext fields when returning results
   //
@@ -1661,7 +1661,7 @@ message RAMPRequest {
 // RequestConstraints — Budget and preference constraints.
 message RequestConstraints {
   // Authorized Exchange domains. Broker queries only these.
-  repeated string marketplaces = 1;
+  repeated string exchanges = 1;
 
   // Maximum price the agent is willing to pay.
   optional Cost max_price = 2;
@@ -1678,7 +1678,7 @@ message RequestConstraints {
   // Exchanges the agent has existing relationships with (subscriptions,
   // contracts). The Broker SHOULD prefer these when resource is
   // available — subscription resource has zero marginal cost.
-  repeated string preferred_marketplaces = 6;
+  repeated string preferred_exchanges = 6;
 
   // Budget scope identifier for per-period tracking.
   // E.g. "user:u-12345" for per-user budgets, "team:eng" for per-team.
@@ -1944,7 +1944,7 @@ message CatalogContributor {
 
   // Relationship of this contributor to the provider.
   // Examples: "verifier" (resource intelligence vendor that attests to resource
-  // properties), "marketplace" (a Exchange that enriches catalog entries).
+  // properties), "exchange" (an Exchange that enriches catalog entries).
   string relationship = 2;
 }
 
@@ -2005,7 +2005,7 @@ message ExchangeManifest {
   // Organization operating this Exchange.
   string operator = 4;
 
-  // Operator's corporate domain (may differ from marketplace domain).
+  // Operator's corporate domain (may differ from exchange domain).
   optional string operator_domain = 5;
 
   // ExchangeService endpoint URL.
@@ -2053,7 +2053,7 @@ message ExchangeManifest {
   //
   // Each profile defines a standardized vocabulary of ext field keys,
   // attestation claim names, and behavioral conventions for a specific
-  // domain. The Broker uses this to filter Marketplaces by capability.
+  // domain. The Broker uses this to filter Exchanges by capability.
   //
   // Three-layer extension governance:
   //   Layer 1 (Core proto): Fields in this protobuf. Every implementation MUST support.
@@ -2061,7 +2061,7 @@ message ExchangeManifest {
   //     Every conformant implementation SHOULD support.
   //   Layer 3 (Domain profiles): Listed here. Published by domain communities,
   //     namespaced by domain (e.g., "pharma.*", "medimg.*"). Only relevant
-  //     Marketplaces implement. Broker filters by declared profiles.
+  //     Exchanges implement. Broker filters by declared profiles.
   //
   // Examples: ["ramp-news-v1", "ramp-academic-v1", "ramp-pharma-v1", "ramp-medimg-v1"]
   repeated string supported_profiles = 18;
@@ -2083,7 +2083,7 @@ message ExchangeManifest {
 
   // Base currency for pricing (ISO 4217 code, e.g., "USD", "EUR").
   // All unit_cost values in offers from this Exchange are denominated
-  // in this currency. Enables cross-marketplace price comparison.
+  // in this currency. Enables cross-exchange price comparison.
   optional string base_currency = 19;
 
   // ext = 24: moved from 20 to resolve a tag collision with
@@ -2096,7 +2096,7 @@ message ExchangeManifest {
 
 // AccessPolicy — Per-path resource access rules.
 //
-// Used by Marketplaces to communicate provider access policies.
+// Used by Exchanges to communicate provider access policies.
 // May be included in ResourceResponse, edge function config, or other
 // contexts. Not required in ramp.json (RSL handles terms declaration).
 message AccessPolicy {
@@ -2153,7 +2153,7 @@ message RAMPResponse {
   string billing_id = 5;
 
   // Which Exchange won the selection.
-  string marketplace = 6;
+  string exchange = 6;
 
   // Resource title for the disputed resource.
   optional string resource_title = 7;
@@ -2374,7 +2374,7 @@ message DisputeResponse {
 //   6. If verified: Exchange accepts subsequent operations for this domain
 //
 // Double protection: Exchange also checks ramp.json to verify it is
-// listed as an authorized marketplace for this provider.
+// listed as an authorized exchange for this provider.
 // ============================================================================
 
 // DomainVerificationRequest — Provider requests a verification challenge.

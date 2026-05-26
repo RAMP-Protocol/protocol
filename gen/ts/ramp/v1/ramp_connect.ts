@@ -1,6 +1,6 @@
 // RAMP v1.0 — Resource Access Metering Protocol
 //
-// Extends IAB Tech Lab CoMP v1.0 with pricing, marketplace orchestration,
+// Extends IAB Tech Lab CoMP v1.0 with pricing, exchange orchestration,
 // resource identity, transactions, and post-usage reporting.
 //
 // v1.0 additions (from v0.2):
@@ -38,7 +38,7 @@
 //     LIVE = no content exists at offer time (streaming). Validated across 18 use cases.
 //   - Offer.data_as_of: timestamp indicating when the offered data was current.
 //     Cross-cutting need: credit reports, drug databases, stock quotes, satellite imagery.
-//   - RequestConstraints.max_data_age: agent-side freshness requirement. Marketplace
+//   - RequestConstraints.max_data_age: agent-side freshness requirement. Exchange
 //     SHOULD exclude offers whose data_as_of is older than this threshold.
 //   - ExchangeManifest.supported_profiles: declares conformance to domain extension
 //     profiles (e.g., "ramp-pharma-v1", "ramp-medimg-v1"). Enables Broker filtering.

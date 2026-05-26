@@ -20,8 +20,10 @@ breaking:
   use:
     - FILE
   except:
-    # ProviderManifest.marketplaces → ProviderManifest.exchanges: intentional
-    # JSON wire rename (v1.1.0). Wire tag 4 preserved; binary
-    # compatibility holds. JSON consumers must update to read "exchanges".
+    # marketplace → exchange repo-wide rename (v1.1.0): all wire field names
+    # and the DISCOVERY_METHOD_MARKETPLACE enum value are renamed. Wire tags
+    # preserved throughout; binary compatibility holds. JSON consumers must
+    # update field names.
     - FIELD_SAME_NAME
     - FIELD_SAME_JSON_NAME
+    - ENUM_VALUE_SAME_NAME
