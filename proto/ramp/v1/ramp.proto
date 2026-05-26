@@ -57,6 +57,9 @@
 //     avoids the namespace migration problem (MIME X- prefix, RFC 6648) and
 //     supports contextual criticality (same extension can be critical in some
 //     messages but not others).
+//   - retrieval_endpoint: canonical signed-URL field on TransactionResponse,
+//     TransactionResultItem, and RAMPResponse. Replaces ext["signed_url"]
+//     usage; removes stranded CoMP Package comments.
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.
@@ -1198,11 +1201,16 @@ message TransactionResponse {
   // Reporting requirements attached to this delivery.
   optional ReportingObligation reporting_obligation = 8;
 
-  // When the delivery endpoint (e.g. signed URL) expires.
+  // When retrieval_endpoint expires.
   optional google.protobuf.Timestamp expires_at = 9;
 
   // REQUIRED. Hash of the agent's identity bound into signed URLs.
   string agent_identity_hash = 10;
+
+  // Signed retrieval URL the agent uses to fetch the purchased resource.
+  // Bound to agent_identity_hash; expires at expires_at. Absent on denial
+  // and on transactions whose delivery_method is not signed-URL-based.
+  optional string retrieval_endpoint = 18;
 
   // Set when the transaction is denied. Absent on success.
   optional DenialReason denial_reason = 11;
@@ -1247,7 +1255,6 @@ message TransactionResultItem {
   // Billing reference.
   string billing_id = 3;
 
-  // CoMP Package with retrieval.endpoint (signed URL) populated.
   // Resource title echoed from the Offer.
   optional string resource_title = 4;
 
@@ -1267,6 +1274,10 @@ message TransactionResultItem {
 
   // When the signed URL expires.
   optional google.protobuf.Timestamp expires_at = 8;
+
+  // Signed retrieval URL for this item. Same semantics as
+  // TransactionResponse.retrieval_endpoint. Absent if this item was denied.
+  optional string retrieval_endpoint = 12;
 
   // How resource is delivered for this item.
   DeliveryMethod delivery_method = 9;
@@ -1927,7 +1938,6 @@ message RAMPResponse {
   // Which Exchange won the selection.
   string marketplace = 6;
 
-  // CoMP Package with retrieval.endpoint populated.
   // Resource title for the disputed resource.
   optional string resource_title = 7;
 
@@ -1942,6 +1952,10 @@ message RAMPResponse {
 
   // When the delivery endpoint expires.
   optional google.protobuf.Timestamp expires_at = 11;
+
+  // Signed retrieval URL returned by the Exchange and forwarded by the Broker.
+  // Lifetime governed by expires_at.
+  optional string retrieval_endpoint = 13;
 
   // Broker's fee for this transaction, if any.
   // Absent = no per-transaction fee (governed by external agreement).

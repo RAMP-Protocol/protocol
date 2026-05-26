@@ -1,5 +1,30 @@
 # RAMP Protocol Changelog
 
+## v1.0.3 (2026-05-26) — Canonical retrieval endpoint field
+
+Adds the missing scalar field for the signed retrieval URL on transaction
+responses. Resolves stranded "CoMP Package with retrieval.endpoint" comments
+left after the v1.0 CoMP decoupling.
+
+### New fields
+- `TransactionResponse.retrieval_endpoint` (string, field 18)
+- `TransactionResultItem.retrieval_endpoint` (string, field 12)
+- `RAMPResponse.retrieval_endpoint` (string, field 13)
+
+### Cleanup
+- Removed orphan `// CoMP Package with retrieval.endpoint…` comments from
+  `TransactionResultItem.resource_title` and `RAMPResponse.resource_title`.
+- Reworded `TransactionResponse.expires_at` doc to reference
+  `retrieval_endpoint` by name.
+
+### Design notes
+- Pure RAMP-native scalar; does not re-couple core to `comp.v1`.
+- No `RetrievalAuth` enum: signed URL is the only delivery auth mechanism
+  today, identity binding lives on `agent_identity_hash`, lifetime lives on
+  `expires_at`. Future auth mechanisms will be additive or extension-profile
+  based.
+- Backward compatible: optional, additive, no renumbering.
+
 ## v1.0.2 (2026-04-01) — Resource Previews
 
 Lightweight resource previews on Offers for pre-transaction evaluation.

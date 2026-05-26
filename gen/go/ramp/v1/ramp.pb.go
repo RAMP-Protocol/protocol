@@ -57,6 +57,9 @@
 //     avoids the namespace migration problem (MIME X- prefix, RFC 6648) and
 //     supports contextual criticality (same extension can be critical in some
 //     messages but not others).
+//   - retrieval_endpoint: canonical signed-URL field on TransactionResponse,
+//     TransactionResultItem, and RAMPResponse. Replaces ext["signed_url"]
+//     usage; removes stranded CoMP Package comments.
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.
@@ -3368,10 +3371,14 @@ type TransactionResponse struct {
 	DeliveryMethod DeliveryMethod `protobuf:"varint,7,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
 	// Reporting requirements attached to this delivery.
 	ReportingObligation *ReportingObligation `protobuf:"bytes,8,opt,name=reporting_obligation,json=reportingObligation,proto3,oneof" json:"reporting_obligation,omitempty"`
-	// When the delivery endpoint (e.g. signed URL) expires.
+	// When retrieval_endpoint expires.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
 	// REQUIRED. Hash of the agent's identity bound into signed URLs.
 	AgentIdentityHash string `protobuf:"bytes,10,opt,name=agent_identity_hash,json=agentIdentityHash,proto3" json:"agent_identity_hash,omitempty"`
+	// Signed retrieval URL the agent uses to fetch the purchased resource.
+	// Bound to agent_identity_hash; expires at expires_at. Absent on denial
+	// and on transactions whose delivery_method is not signed-URL-based.
+	RetrievalEndpoint *string `protobuf:"bytes,18,opt,name=retrieval_endpoint,json=retrievalEndpoint,proto3,oneof" json:"retrieval_endpoint,omitempty"`
 	// Set when the transaction is denied. Absent on success.
 	DenialReason *DenialReason `protobuf:"varint,11,opt,name=denial_reason,json=denialReason,proto3,enum=ramp.v1.DenialReason,oneof" json:"denial_reason,omitempty"`
 	// If set, this transaction was fulfilled under a subscription/deal.
@@ -3499,6 +3506,13 @@ func (x *TransactionResponse) GetAgentIdentityHash() string {
 	return ""
 }
 
+func (x *TransactionResponse) GetRetrievalEndpoint() string {
+	if x != nil && x.RetrievalEndpoint != nil {
+		return *x.RetrievalEndpoint
+	}
+	return ""
+}
+
 func (x *TransactionResponse) GetDenialReason() DenialReason {
 	if x != nil && x.DenialReason != nil {
 		return *x.DenialReason
@@ -3564,7 +3578,6 @@ type TransactionResultItem struct {
 	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// Billing reference.
 	BillingId string `protobuf:"bytes,3,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
-	// CoMP Package with retrieval.endpoint (signed URL) populated.
 	// Resource title echoed from the Offer.
 	ResourceTitle *string `protobuf:"bytes,4,opt,name=resource_title,json=resourceTitle,proto3,oneof" json:"resource_title,omitempty"`
 	// Cost for this item.
@@ -3579,6 +3592,9 @@ type TransactionResultItem struct {
 	DenialReason *DenialReason `protobuf:"varint,7,opt,name=denial_reason,json=denialReason,proto3,enum=ramp.v1.DenialReason,oneof" json:"denial_reason,omitempty"`
 	// When the signed URL expires.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
+	// Signed retrieval URL for this item. Same semantics as
+	// TransactionResponse.retrieval_endpoint. Absent if this item was denied.
+	RetrievalEndpoint *string `protobuf:"bytes,12,opt,name=retrieval_endpoint,json=retrievalEndpoint,proto3,oneof" json:"retrieval_endpoint,omitempty"`
 	// How resource is delivered for this item.
 	DeliveryMethod DeliveryMethod `protobuf:"varint,9,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
 	// Reporting requirements for this item.
@@ -3678,6 +3694,13 @@ func (x *TransactionResultItem) GetExpiresAt() *timestamppb.Timestamp {
 		return x.ExpiresAt
 	}
 	return nil
+}
+
+func (x *TransactionResultItem) GetRetrievalEndpoint() string {
+	if x != nil && x.RetrievalEndpoint != nil {
+		return *x.RetrievalEndpoint
+	}
+	return ""
 }
 
 func (x *TransactionResultItem) GetDeliveryMethod() DeliveryMethod {
@@ -5720,7 +5743,6 @@ type RAMPResponse struct {
 	BillingId     string `protobuf:"bytes,5,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// Which Exchange won the selection.
 	Marketplace string `protobuf:"bytes,6,opt,name=marketplace,proto3" json:"marketplace,omitempty"`
-	// CoMP Package with retrieval.endpoint populated.
 	// Resource title for the disputed resource.
 	ResourceTitle *string `protobuf:"bytes,7,opt,name=resource_title,json=resourceTitle,proto3,oneof" json:"resource_title,omitempty"`
 	// Transaction cost.
@@ -5731,6 +5753,9 @@ type RAMPResponse struct {
 	ReportingObligation *ReportingObligation `protobuf:"bytes,10,opt,name=reporting_obligation,json=reportingObligation,proto3,oneof" json:"reporting_obligation,omitempty"`
 	// When the delivery endpoint expires.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
+	// Signed retrieval URL returned by the Exchange and forwarded by the Broker.
+	// Lifetime governed by expires_at.
+	RetrievalEndpoint *string `protobuf:"bytes,13,opt,name=retrieval_endpoint,json=retrievalEndpoint,proto3,oneof" json:"retrieval_endpoint,omitempty"`
 	// Broker's fee for this transaction, if any.
 	// Absent = no per-transaction fee (governed by external agreement).
 	// Present = explicit fee the agent can see and audit.
@@ -5851,6 +5876,13 @@ func (x *RAMPResponse) GetExpiresAt() *timestamppb.Timestamp {
 		return x.ExpiresAt
 	}
 	return nil
+}
+
+func (x *RAMPResponse) GetRetrievalEndpoint() string {
+	if x != nil && x.RetrievalEndpoint != nil {
+		return *x.RetrievalEndpoint
+	}
+	return ""
 }
 
 func (x *RAMPResponse) GetBrokerFee() *Cost {
@@ -6643,7 +6675,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"J\x04\b\v\x10\fJ\x04\b\f\x10\r\"[\n" +
 	"\x0fTransactionItem\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12'\n" +
-	"\x0foffer_signature\x18\x02 \x01(\tR\x0eofferSignatureJ\x04\b\x03\x10\x04\"\xdb\b\n" +
+	"\x0foffer_signature\x18\x02 \x01(\tR\x0eofferSignatureJ\x04\b\x03\x10\x04\"\xa6\t\n" +
 	"\x13TransactionResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12*\n" +
@@ -6657,13 +6689,15 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\n" +
 	"expires_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampH\x05R\texpiresAt\x88\x01\x01\x12.\n" +
 	"\x13agent_identity_hash\x18\n" +
-	" \x01(\tR\x11agentIdentityHash\x12?\n" +
-	"\rdenial_reason\x18\v \x01(\x0e2\x15.ramp.v1.DenialReasonH\x06R\fdenialReason\x88\x01\x01\x12,\n" +
-	"\x0fsubscription_id\x18\f \x01(\tH\aR\x0esubscriptionId\x88\x01\x01\x12J\n" +
-	"\x17subscription_unit_value\x18\x10 \x01(\v2\r.ramp.v1.CostH\bR\x15subscriptionUnitValue\x88\x01\x01\x124\n" +
+	" \x01(\tR\x11agentIdentityHash\x122\n" +
+	"\x12retrieval_endpoint\x18\x12 \x01(\tH\x06R\x11retrievalEndpoint\x88\x01\x01\x12?\n" +
+	"\rdenial_reason\x18\v \x01(\x0e2\x15.ramp.v1.DenialReasonH\aR\fdenialReason\x88\x01\x01\x12,\n" +
+	"\x0fsubscription_id\x18\f \x01(\tH\bR\x0esubscriptionId\x88\x01\x01\x12J\n" +
+	"\x17subscription_unit_value\x18\x10 \x01(\v2\r.ramp.v1.CostH\tR\x15subscriptionUnitValue\x88\x01\x01\x124\n" +
 	"\x05items\x18\r \x03(\v2\x1e.ramp.v1.TransactionResultItemR\x05items\x121\n" +
 	"\n" +
-	"total_cost\x18\x0e \x01(\v2\r.ramp.v1.CostH\tR\ttotalCost\x88\x01\x01\x12M\n" +
+	"total_cost\x18\x0e \x01(\v2\r.ramp.v1.CostH\n" +
+	"R\ttotalCost\x88\x01\x01\x12M\n" +
 	"\x12subscription_quota\x18\x11 \x03(\v2\x1e.ramp.v1.SubscriptionQuotaInfoR\x11subscriptionQuota\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x11\n" +
@@ -6672,11 +6706,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0f_resource_titleB\a\n" +
 	"\x05_costB\x17\n" +
 	"\x15_reporting_obligationB\r\n" +
-	"\v_expires_atB\x10\n" +
+	"\v_expires_atB\x15\n" +
+	"\x13_retrieval_endpointB\x10\n" +
 	"\x0e_denial_reasonB\x12\n" +
 	"\x10_subscription_idB\x1a\n" +
 	"\x18_subscription_unit_valueB\r\n" +
-	"\v_total_cost\"\xd7\x05\n" +
+	"\v_total_cost\"\xa2\x06\n" +
 	"\x15TransactionResultItem\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12\x1d\n" +
@@ -6688,15 +6723,17 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x17subscription_unit_value\x18\v \x01(\v2\r.ramp.v1.CostH\x02R\x15subscriptionUnitValue\x88\x01\x01\x12?\n" +
 	"\rdenial_reason\x18\a \x01(\x0e2\x15.ramp.v1.DenialReasonH\x03R\fdenialReason\x88\x01\x01\x12>\n" +
 	"\n" +
-	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x04R\texpiresAt\x88\x01\x01\x12@\n" +
+	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x04R\texpiresAt\x88\x01\x01\x122\n" +
+	"\x12retrieval_endpoint\x18\f \x01(\tH\x05R\x11retrievalEndpoint\x88\x01\x01\x12@\n" +
 	"\x0fdelivery_method\x18\t \x01(\x0e2\x17.ramp.v1.DeliveryMethodR\x0edeliveryMethod\x12T\n" +
 	"\x14reporting_obligation\x18\n" +
-	" \x01(\v2\x1c.ramp.v1.ReportingObligationH\x05R\x13reportingObligation\x88\x01\x01B\x11\n" +
+	" \x01(\v2\x1c.ramp.v1.ReportingObligationH\x06R\x13reportingObligation\x88\x01\x01B\x11\n" +
 	"\x0f_resource_titleB\x12\n" +
 	"\x10_subscription_idB\x1a\n" +
 	"\x18_subscription_unit_valueB\x10\n" +
 	"\x0e_denial_reasonB\r\n" +
-	"\v_expires_atB\x17\n" +
+	"\v_expires_atB\x15\n" +
+	"\x13_retrieval_endpointB\x17\n" +
 	"\x15_reporting_obligation\"j\n" +
 	"\x04Cost\x12\x16\n" +
 	"\x06amount\x18\x01 \x01(\x01R\x06amount\x12\x1a\n" +
@@ -6905,7 +6942,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05rules\x18\x02 \x03(\v2\x19.ramp.v1.AccessPolicyRuleR\x05rules\"c\n" +
 	"\x10AccessPolicyRule\x12\x18\n" +
 	"\apattern\x18\x01 \x01(\tR\apattern\x125\n" +
-	"\x06policy\x18\x02 \x01(\x0e2\x1d.ramp.v1.ResourceAccessPolicyR\x06policy\"\xa9\x05\n" +
+	"\x06policy\x18\x02 \x01(\x0e2\x1d.ramp.v1.ResourceAccessPolicyR\x06policy\"\xf4\x05\n" +
 	"\fRAMPResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1d\n" +
@@ -6921,14 +6958,16 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x14reporting_obligation\x18\n" +
 	" \x01(\v2\x1c.ramp.v1.ReportingObligationH\x01R\x13reportingObligation\x88\x01\x01\x12>\n" +
 	"\n" +
-	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\x02R\texpiresAt\x88\x01\x01\x121\n" +
+	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\x02R\texpiresAt\x88\x01\x01\x122\n" +
+	"\x12retrieval_endpoint\x18\r \x01(\tH\x03R\x11retrievalEndpoint\x88\x01\x01\x121\n" +
 	"\n" +
-	"broker_fee\x18\f \x01(\v2\r.ramp.v1.CostH\x03R\tbrokerFee\x88\x01\x01\x12)\n" +
+	"broker_fee\x18\f \x01(\v2\r.ramp.v1.CostH\x04R\tbrokerFee\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x11\n" +
 	"\x0f_resource_titleB\x17\n" +
 	"\x15_reporting_obligationB\r\n" +
-	"\v_expires_atB\r\n" +
+	"\v_expires_atB\x15\n" +
+	"\x13_retrieval_endpointB\r\n" +
 	"\v_broker_fee\"\xf3\x03\n" +
 	"\x0eDisputeRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
