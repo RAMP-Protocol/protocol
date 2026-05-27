@@ -3373,7 +3373,10 @@ type TransactionResponse struct {
 	ReportingObligation *ReportingObligation `protobuf:"bytes,8,opt,name=reporting_obligation,json=reportingObligation,proto3,oneof" json:"reporting_obligation,omitempty"`
 	// When retrieval_endpoint expires.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	// REQUIRED. Hash of the agent's identity bound into signed URLs.
+	// Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of
+	// the agent's Ed25519 request-signing key (see "Retrieval-URL identity binding"
+	// above). Empty string when absent; non-empty iff a signed retrieval_endpoint
+	// is present. Delivery-endpoint enforcement of the binding is OPTIONAL.
 	AgentIdentityHash string `protobuf:"bytes,10,opt,name=agent_identity_hash,json=agentIdentityHash,proto3" json:"agent_identity_hash,omitempty"`
 	// Signed retrieval URL the agent uses to fetch the purchased resource.
 	// Bound to agent_identity_hash; expires at expires_at. Absent on denial
@@ -3590,10 +3593,12 @@ type TransactionResultItem struct {
 	SubscriptionUnitValue *Cost `protobuf:"bytes,11,opt,name=subscription_unit_value,json=subscriptionUnitValue,proto3,oneof" json:"subscription_unit_value,omitempty"`
 	// Set if this specific item was denied (others may succeed).
 	DenialReason *DenialReason `protobuf:"varint,7,opt,name=denial_reason,json=denialReason,proto3,enum=ramp.v1.DenialReason,oneof" json:"denial_reason,omitempty"`
-	// When the signed URL expires.
+	// When retrieval_endpoint expires.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	// Signed retrieval URL for this item. Same semantics as
-	// TransactionResponse.retrieval_endpoint. Absent if this item was denied.
+	// Signed retrieval URL for this item. Bound to the requesting agent's identity
+	// via the parent TransactionResponse.agent_identity_hash (shared across all
+	// batch items); expires at expires_at. Absent if this item was denied or its
+	// delivery_method is not signed-URL-based.
 	RetrievalEndpoint *string `protobuf:"bytes,12,opt,name=retrieval_endpoint,json=retrievalEndpoint,proto3,oneof" json:"retrieval_endpoint,omitempty"`
 	// How resource is delivered for this item.
 	DeliveryMethod DeliveryMethod `protobuf:"varint,9,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
@@ -5751,11 +5756,16 @@ type RAMPResponse struct {
 	DeliveryMethod DeliveryMethod `protobuf:"varint,9,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
 	// Reporting obligations the agent must fulfill.
 	ReportingObligation *ReportingObligation `protobuf:"bytes,10,opt,name=reporting_obligation,json=reportingObligation,proto3,oneof" json:"reporting_obligation,omitempty"`
-	// When the delivery endpoint expires.
+	// When retrieval_endpoint expires.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	// Signed retrieval URL returned by the Exchange and forwarded by the Broker.
-	// Lifetime governed by expires_at.
+	// Signed retrieval URL returned by the Exchange and forwarded unchanged by the
+	// Broker, together with agent_identity_hash. Bound to agent_identity_hash;
+	// expires at expires_at. Absent on denial and when delivery_method is not
+	// signed-URL-based.
 	RetrievalEndpoint *string `protobuf:"bytes,13,opt,name=retrieval_endpoint,json=retrievalEndpoint,proto3,oneof" json:"retrieval_endpoint,omitempty"`
+	// Identity that retrieval_endpoint is bound to. Same value and computation as
+	// TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.
+	AgentIdentityHash *string `protobuf:"bytes,14,opt,name=agent_identity_hash,json=agentIdentityHash,proto3,oneof" json:"agent_identity_hash,omitempty"`
 	// Broker's fee for this transaction, if any.
 	// Absent = no per-transaction fee (governed by external agreement).
 	// Present = explicit fee the agent can see and audit.
@@ -5881,6 +5891,13 @@ func (x *RAMPResponse) GetExpiresAt() *timestamppb.Timestamp {
 func (x *RAMPResponse) GetRetrievalEndpoint() string {
 	if x != nil && x.RetrievalEndpoint != nil {
 		return *x.RetrievalEndpoint
+	}
+	return ""
+}
+
+func (x *RAMPResponse) GetAgentIdentityHash() string {
+	if x != nil && x.AgentIdentityHash != nil {
+		return *x.AgentIdentityHash
 	}
 	return ""
 }
@@ -6942,7 +6959,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05rules\x18\x02 \x03(\v2\x19.ramp.v1.AccessPolicyRuleR\x05rules\"c\n" +
 	"\x10AccessPolicyRule\x12\x18\n" +
 	"\apattern\x18\x01 \x01(\tR\apattern\x125\n" +
-	"\x06policy\x18\x02 \x01(\x0e2\x1d.ramp.v1.ResourceAccessPolicyR\x06policy\"\xf4\x05\n" +
+	"\x06policy\x18\x02 \x01(\x0e2\x1d.ramp.v1.ResourceAccessPolicyR\x06policy\"\xc1\x06\n" +
 	"\fRAMPResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1d\n" +
@@ -6959,15 +6976,17 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	" \x01(\v2\x1c.ramp.v1.ReportingObligationH\x01R\x13reportingObligation\x88\x01\x01\x12>\n" +
 	"\n" +
 	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\x02R\texpiresAt\x88\x01\x01\x122\n" +
-	"\x12retrieval_endpoint\x18\r \x01(\tH\x03R\x11retrievalEndpoint\x88\x01\x01\x121\n" +
+	"\x12retrieval_endpoint\x18\r \x01(\tH\x03R\x11retrievalEndpoint\x88\x01\x01\x123\n" +
+	"\x13agent_identity_hash\x18\x0e \x01(\tH\x04R\x11agentIdentityHash\x88\x01\x01\x121\n" +
 	"\n" +
-	"broker_fee\x18\f \x01(\v2\r.ramp.v1.CostH\x04R\tbrokerFee\x88\x01\x01\x12)\n" +
+	"broker_fee\x18\f \x01(\v2\r.ramp.v1.CostH\x05R\tbrokerFee\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x11\n" +
 	"\x0f_resource_titleB\x17\n" +
 	"\x15_reporting_obligationB\r\n" +
 	"\v_expires_atB\x15\n" +
-	"\x13_retrieval_endpointB\r\n" +
+	"\x13_retrieval_endpointB\x16\n" +
+	"\x14_agent_identity_hashB\r\n" +
 	"\v_broker_fee\"\xf3\x03\n" +
 	"\x0eDisputeRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
