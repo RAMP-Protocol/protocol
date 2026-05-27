@@ -47,7 +47,7 @@ Agent                    Broker                 Exchange
   │                          │                            │
   │  RAMPRequest             │                            │
   │  supported_profiles:     │  ResourceQuery               │
-  │  ["ramp-academic-v1"]    │  supported_profiles:       │  ExchangeManifest
+  │  ["ramp-academic-v1"]    │  supported_profiles:       │  WellKnownManifest
   │ ─────────────────────►   │  ["ramp-academic-v1"]      │  supported_profiles:
   │                          │ ────────────────────────►   │  ["ramp-academic-v1"]
   │                          │                            │
@@ -56,9 +56,9 @@ Agent                    Broker                 Exchange
   │        with academic.*   │                            │
 ```
 
-### ExchangeManifest.supported_profiles (field 18)
+### WellKnownManifest.supported_profiles (field 23)
 
-The Exchange declares which domain extension profiles it conforms to. Published in `/.well-known/ramp-exchange.json`. The Broker reads this at discovery time to route queries to capable Exchanges.
+The Exchange declares which domain extension profiles it conforms to. Published in `/.well-known/ramp.json` (`role=ROLE_EXCHANGE`). The Broker reads this at discovery time to route queries to capable Exchanges.
 
 ```json
 {
@@ -266,7 +266,7 @@ Each profile SHOULD publish a JSON Schema at `docs/protocol/extensions/{profile-
 
 ### Ext Fields
 
-All profile-specific metadata flows through the `google.protobuf.Struct ext` field present on every major protocol message: `ResourceQuery`, `Offer`, `ResourceIdentity`, `ResourceAttestation`, `DisputeRequest`, `ExchangeManifest`, and `UsageReport`.
+All profile-specific metadata flows through the `google.protobuf.Struct ext` field present on every major protocol message: `ResourceQuery`, `Offer`, `ResourceIdentity`, `ResourceAttestation`, `DisputeRequest`, `WellKnownManifest`, and `UsageReport`.
 
 The `ext` field is a generic JSON object. Profiles define the keys and value types that populate it. Multiple profiles can coexist in the same `ext` -- a Exchange serving both news and academic content would include both `news.*` and `academic.*` keys.
 

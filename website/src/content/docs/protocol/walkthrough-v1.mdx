@@ -81,7 +81,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 ```
 
 **Key fields in `Requester`:**
-- **`id`** + **`domain`** — uniquely identifies the agent. The Exchange fetches the agent's Ed25519 public key from `startup.com/.well-known/ramp-agent.json` to verify the signature.
+- **`id`** + **`domain`** — uniquely identifies the agent. The Exchange fetches the agent's Ed25519 public key from `startup.com/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the signature.
 - **`type`** — `REQUESTER_TYPE_AGENT` (autonomous AI agent). Other types: `HUMAN_TOOL`, `SERVICE`, `DELEGATED`, `RESEARCH`.
 - **`uris`** — the specific resources being requested.
 - **`scopes`** — `["*"]` means unrestricted public access. No subscription, no entitlement filtering.
@@ -364,7 +364,7 @@ expires(2026-12-31T23:59:59Z);
 ```
 
 The Exchange verifies the Biscuit:
-1. **Signature check** — Biscuit's authority block is signed by `bloomberg.com`'s Ed25519 key (fetched from `bloomberg.com/.well-known/ramp-agent.json`). This proves Bloomberg actually issued this delegation.
+1. **Signature check** — Biscuit's authority block is signed by `bloomberg.com`'s Ed25519 key (fetched from `bloomberg.com/.well-known/ramp.json`, `role=ROLE_AGENT`). This proves Bloomberg actually issued this delegation.
 2. **Scope matching** — the requested URI (`/earnings/NVDA/...`) matches the `earnings:*` scope in the Biscuit.
 3. **Expiry check** — `2026-12-31` is in the future.
 4. **No network call to Bloomberg** — Biscuit tokens are offline-verifiable. Bloomberg does not need to be online or queried. This is the key property that makes delegation scale.

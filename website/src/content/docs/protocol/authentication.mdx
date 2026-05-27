@@ -22,7 +22,7 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 | Field | Type | Description |
 |---|---|---|
 | `id` | `string` | Unique requester identifier (e.g., `"agent-research-bot-001"`) |
-| `domain` | `string` | Domain for public key lookup — keys at `{domain}/.well-known/ramp-agent.json` |
+| `domain` | `string` | Domain for public key lookup — keys at `{domain}/.well-known/ramp.json` (`WellKnownManifest`, `role=ROLE_AGENT`) |
 | `type` | `RequesterType` | What kind of entity is making the request |
 | `name` | `string` (optional) | Human-readable name (e.g., `"Acme Research Assistant"`) |
 | `uris` | `repeated string` | Resource URIs being requested |
@@ -48,15 +48,27 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 
 ### Key Lookup
 
-The Exchange resolves a requester's public key by fetching `{domain}/.well-known/ramp-agent.json`:
+The Exchange resolves a requester's public key by fetching `{domain}/.well-known/ramp.json` (a `WellKnownManifest` with `role=ROLE_AGENT`) and selecting the `JsonWebKey` in `public_keys` whose `kid` matches the request signature:
 
 ```json
-// GET https://research.acme.com/.well-known/ramp-agent.json
+// GET https://research.acme.com/.well-known/ramp.json
 {
-  "agent_id": "research.acme.com",
-  "public_key": "MCowBQYDK2VwAyEA7Hd8FjXz9K2qR4nPbY1sT0vWxU3gLmN5oA8pC6dE1fI=",
-  "public_key_algorithm": "ed25519",
-  "contact": "platform@acme.com"
+  "ver": "1.1",
+  "role": "ROLE_AGENT",
+  "domain": "research.acme.com",
+  "contact": "platform@acme.com",
+  "public_keys": [
+    {
+      "kid": "research-acme-2026-q2",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "not_before": "2026-04-01T00:00:00Z",
+      "not_after": "2026-10-01T00:00:00Z"
+    }
+  ]
 }
 ```
 
@@ -79,9 +91,9 @@ WebBotAuth solves identity ("this bot is who it claims to be"). RAMP adds the tr
 The `Requester.signature` is an Ed25519 signature over the tuple `(id, domain, uris, scopes)`. The Exchange verifies it by:
 
 1. Extracting `domain` from the `Requester` message
-2. Fetching the public key from `{domain}/.well-known/ramp-agent.json`
-3. Verifying the Ed25519 signature against the fetched key
-4. Confirming that `id` matches the `agent_id` in the key announcement
+2. Fetching `{domain}/.well-known/ramp.json` and selecting the `JsonWebKey` in `public_keys` whose `kid` matches the signature (and whose `[not_before, not_after)` window covers now)
+3. Verifying the Ed25519 signature against that key
+4. Confirming the manifest `domain` matches the requester's `domain` and `role=ROLE_AGENT`
 
 If verification fails, the Exchange rejects the request. No fallback, no degraded mode.
 
@@ -265,7 +277,7 @@ Each intermediary in the chain:
 
 The Exchange verifies the full chain by:
 
-1. For each `IntermediaryHop`, fetching the public key from `{domain}/.well-known/ramp-agent.json`
+1. For each `IntermediaryHop`, fetching the public key from `{domain}/.well-known/ramp.json` (by `kid`)
 2. Verifying the Ed25519 signature proves the intermediary handled the request
 3. Checking the `forwarded_at` timestamps for temporal consistency
 
@@ -301,7 +313,7 @@ RFC 9421 defines a standard way to sign HTTP messages. Three headers work togeth
 | `Signature-Input` | Declares which components are signed, the key ID, and the algorithm |
 | `Signature` | The actual cryptographic signature |
 
-The Exchange verifies the signature by reconstructing the signed content from the declared components, fetching the signer's public key via `{domain}/.well-known/ramp-agent.json`, and verifying the Ed25519 signature.
+The Exchange verifies the signature by reconstructing the signed content from the declared components, fetching the signer's public key via `{domain}/.well-known/ramp.json` (selected by `kid`), and verifying the Ed25519 signature.
 
 ### Single-Hop Example
 
@@ -318,7 +330,7 @@ Signature: agent=:dGVzdC1zaWduYXR1cmUtYWdlbnQ=:
 The `Signature-Input` header declares:
 - **Label**: `agent` — identifies this signature in multi-signature scenarios
 - **Covered components**: `@method` (POST), `@target-uri` (the RPC path), `content-digest` (body hash)
-- **keyid**: `agent-key` — resolved via the agent's `.well-known/ramp-agent.json`
+- **keyid**: `agent-key` — resolved via the agent's `.well-known/ramp.json` (`public_keys[].kid`)
 - **alg**: `ed25519` — same key type used throughout RAMP
 
 ### Multi-Hop Example (Broker)
@@ -383,7 +395,7 @@ A research bot queries a public Exchange. No delegation token, no special scopes
 }
 ```
 
-The Exchange verifies the signature by fetching the public key from `research.acme.com/.well-known/ramp-agent.json`, then returns all publicly available offers for the requested URI.
+The Exchange verifies the signature by fetching the public key from `research.acme.com/.well-known/ramp.json`, then returns all publicly available offers for the requested URI.
 
 ### Subscription Agent (Bloomberg Biscuit)
 
@@ -540,22 +552,36 @@ The Exchange verifies the full Biscuit chain: IAM signed the authority block, th
 
 ### Where Keys Are Published
 
-| Party | Endpoint | Format |
+Every party publishes its keys in **one** place — `{domain}/.well-known/ramp.json` (`WellKnownManifest.public_keys`, role-tagged). The per-role files (`ramp-agent.json`, `ramp-exchange.json`, `ramp-verifier.json`) and the legacy `/exchange/v1/keys` endpoint are removed in v1.1.0; keys are inline JWKs.
+
+| Party | Endpoint | Role |
 |---|---|---|
-| Agent / Requester | `{domain}/.well-known/ramp-agent.json` | `agent_id`, `public_key`, `public_key_algorithm`, `contact` |
-| Intermediary | `{domain}/.well-known/ramp-agent.json` | Same format as agents |
-| Exchange | `{domain}/exchange/v1/keys` | Exchange signing key for offers |
-| Biscuit Principal | `{domain}/.well-known/ramp-agent.json` | The key used to sign Biscuit authority blocks |
+| Agent / Requester | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` |
+| Intermediary | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` |
+| Exchange | `{domain}/.well-known/ramp.json` | `ROLE_EXCHANGE` |
+| Biscuit Principal | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` (key signing Biscuit authority blocks) |
 
 ### Key Announcement Format
 
 ```json
-// GET https://agents.kirkland.com/.well-known/ramp-agent.json
+// GET https://agents.kirkland.com/.well-known/ramp.json
 {
-  "agent_id": "agents.kirkland.com",
-  "public_key": "MCowBQYDK2VwAyEA7Hd8FjXz9K2qR4nPbY1sT0vWxU3gLmN5oA8pC6dE1fI=",
-  "public_key_algorithm": "ed25519",
-  "contact": "platform@kirkland.com"
+  "ver": "1.1",
+  "role": "ROLE_AGENT",
+  "domain": "agents.kirkland.com",
+  "contact": "platform@kirkland.com",
+  "public_keys": [
+    {
+      "kid": "kirkland-2026-q2",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "not_before": "2026-04-01T00:00:00Z",
+      "not_after": "2026-10-01T00:00:00Z"
+    }
+  ]
 }
 ```
 
@@ -569,6 +595,24 @@ Key rotation follows a standard overlap pattern:
 4. Exchanges SHOULD cache keys with a TTL and re-fetch periodically
 
 For Biscuit delegation tokens, key rotation at the principal does not invalidate existing tokens — the authority block was signed with the key that was current at issuance time. Exchanges SHOULD accept tokens signed by recently-rotated keys within a configurable grace period.
+
+### Key Validity Windows
+
+Each `JsonWebKey` carries RFC3339 `not_before` / `not_after` bounds. The window is **half-open** `[not_before, not_after)` — a key is valid at `not_before` and invalid **at and after** `not_after`. At least one key in `public_keys` MUST be valid at serve time, and verifiers MUST reject signatures whose key falls outside its window.
+
+### Caching Contract
+
+`/.well-known/ramp.json` MAY be cached by consumers and CDNs for routine periods (minutes to hours) — keys rotate slowly and carry explicit bounds. The `invalidation_url` body, by contrast, SHOULD be served with a short or zero freshness lifetime (e.g. `Cache-Control: max-age=60`, or `no-store`) so the 300s revocation poll is not defeated by an intermediary cache.
+
+Enforcement is operational, not protocol-guaranteed: a consumer that grants access against a stale revocation set bears that as its own business risk — it is not a protocol deficiency.
+
+### Emergency Revocation
+
+When a manifest sets `invalidation_url`, consumers poll it on a 300s cadence (±10% jitter) and replace their local revoked set with the response — a `KeyInvalidationList` (kid-only snapshot: `as_of` + `revoked[]`). A revoked `kid` stays revoked; reject any signature whose `kid` is in the set. When `invalidation_url` is unset, consumers rely on routine rotation and `not_after` expiry.
+
+### Domainless Agents
+
+An individual agent with no public domain of its own is accommodated **without a protocol change**: a registry (operated by an Exchange/Broker or a third party) hosts the agent's `WellKnownManifest`, and the agent sets `Requester.domain` to that registry host (e.g. `agent-7.registry.example`). The agent generates its own keypair; the registry publishes the public half at `{registry}/.well-known/ramp.json`. The domain + well-known paradigm is preserved end to end. Relaxing the discovery anchor (an explicit per-requester keys URL) is a deliberate v1.1 deferral.
 
 ## Next Steps
 

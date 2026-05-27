@@ -923,7 +923,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
 The Exchange processes all 49 items in a single batch:
 
 1. **Signature verification** — verifies each `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
-2. **Agent authentication** — verifies `agent_signature` against the agent's published public key at `cs.stanford.edu/.well-known/ramp-agent.json`.
+2. **Agent authentication** — verifies `agent_signature` against the agent's published public key at `cs.stanford.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
 3. **Biscuit verification** — verifies the delegation token for the 20 subscription items. Confirms `academic:*` scope covers Elsevier content.
 4. **Balance check** — confirms `litrev-agent@cs.stanford.edu` has sufficient balance ($25.50 for 17 paid items).
 5. **Quota check** — confirms 49 accesses fit within the subscription's remaining quota (76,520).

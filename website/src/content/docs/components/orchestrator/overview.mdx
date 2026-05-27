@@ -53,7 +53,7 @@ graph TB
 
 | Component | Responsibility | State |
 |---|---|---|
-| **Exchange Registry** | Knows which Exchanges exist and their health status. Bootstraps from [Exchange Manifest](/protocol/exchange-manifest/) (`/.well-known/ramp-exchange.json`) instead of HEAD probes -- extracting endpoints, capabilities, and accepted verifiers in a single fetch | Long-lived, refreshed periodically |
+| **Exchange Registry** | Knows which Exchanges exist and their health status. Bootstraps from [Exchange Manifest](/protocol/exchange-manifest/) (`/.well-known/ramp.json`) instead of HEAD probes -- extracting endpoints, capabilities, and accepted verifiers in a single fetch | Long-lived, refreshed periodically |
 | **Supply Discovery** | Fans out DiscoverResources RPCs to N Exchanges concurrently | Per-request, stateless |
 | **Selection Engine** | Deduplicates, ranks, filters, and selects the best offer | Per-request, stateless |
 | **Budget Tracker** | Tracks cumulative spend per session/period and enforces limits | Per-session in-memory, per-period in Redis |
@@ -103,7 +103,7 @@ RAMP uses a two-layer signing model: the **Requester signature** proves who orig
 
 ### Requester Signature
 
-The `Requester` message carries an Ed25519 signature over `(id, domain, uris, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp-agent.json`.
+The `Requester` message carries an Ed25519 signature over `(id, domain, uris, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp.json`.
 
 The Broker passes `Requester` through unchanged -- it never modifies the requester's identity or signature.
 
@@ -136,12 +136,12 @@ func (o *Broker) signHop(query *rampv1.ResourceQuery) {
 
 The Exchange verifies both layers:
 
-1. **Requester signature** -- verified against the public key at `{requester.domain}/.well-known/ramp-agent.json`
-2. **Each intermediary hop signature** -- verified against the public key at `{hop.domain}/.well-known/ramp-agent.json`
+1. **Requester signature** -- verified against the public key at `{requester.domain}/.well-known/ramp.json`
+2. **Each intermediary hop signature** -- verified against the public key at `{hop.domain}/.well-known/ramp.json`
 
 Both must pass. This replaces the earlier flat `agent_signature` + `broker_signature` model with a chain that generalizes to multiple intermediaries.
 
-The Broker announces its public key at `{domain}/.well-known/ramp-agent.json` (same manifest format as agents). This allows any Exchange to verify the Broker's identity without prior registration.
+The Broker publishes its keys in `public_keys` (inline RFC 7517 Ed25519 JWKs, selected by `kid`) at `{domain}/.well-known/ramp.json` (same manifest format as agents, `role=ROLE_AGENT`). This allows any Exchange to verify the Broker's identity without prior registration.
 
 ## Profile-Based Routing
 
@@ -150,7 +150,7 @@ The Broker uses domain profiles to route queries to the right Exchanges.
 ### How It Works
 
 1. **Agent declares profiles** -- `RAMPRequest.supported_profiles` lists which domain extension profiles the agent understands (e.g., `["ramp-academic-v1"]`)
-2. **Broker filters Exchanges** -- the Exchange Registry checks each Exchange's `ExchangeManifest.supported_profiles` and routes queries only to Exchanges that support at least one of the requested profiles
+2. **Broker filters Exchanges** -- the Exchange Registry checks each Exchange's `WellKnownManifest.supported_profiles` and routes queries only to Exchanges that support at least one of the requested profiles
 3. **Broker forwards profiles** -- the declared profiles are forwarded in `ResourceQuery.supported_profiles`, so the Exchange knows which profile-specific `ext` fields to include in offers
 4. **Exchange responds with profile data** -- the Exchange includes profile-specific metadata (e.g., retraction status, citation counts for academic content) only when the caller declares support
 
@@ -334,13 +334,13 @@ sequenceDiagram
 | **Same protocol, transparent proxy** | The Exchange cannot distinguish Broker-mediated requests from direct agent requests. No special Exchange support needed. |
 | **Signed offer pass-through** | Exchange signatures cover pricing fields. The Broker cannot inflate prices without invalidating the signature. |
 | **Advisory budget enforcement** | The Broker pre-filters transactions by budget, but the Exchange is the authoritative enforcement point. No overspend occurs because the Exchange is the gatekeeper. |
-| **Ed25519 + intermediary chain** | Requester signs (id, domain, uris, scopes); Broker appends a signed `IntermediaryHop`. Exchange verifies both layers. Public keys discoverable via `.well-known/ramp-agent.json`. |
+| **Ed25519 + intermediary chain** | Requester signs (id, domain, uris, scopes); Broker appends a signed `IntermediaryHop`. Exchange verifies both layers. Public keys discoverable via `public_keys` in `.well-known/ramp.json`. |
 | **Partial results are normal** | If 3 of 5 Exchanges respond within the deadline, the Broker proceeds with 3 responses. Availability of any individual Exchange does not block the system. |
 
 ## Go Module Structure
 
 ```
-github.com/postindustria-tech/ramp-protocol/broker/
+github.com/RAMP-Protocol/protocol/broker/
     cmd/
         broker/           # Sidecar binary entrypoint
             main.go

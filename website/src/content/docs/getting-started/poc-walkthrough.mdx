@@ -50,16 +50,29 @@ curl -s https://exchange.ramp-protocol.org/health | jq
 
 ### Step 2: Retrieve Exchange Public Key
 
-The Exchange announces its [Ed25519](/protocol/authentication) public key. Agents and Brokers use this to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication).
+The Exchange announces its [Ed25519](/protocol/authentication) public keys inline in its `/.well-known/ramp.json` manifest under `public_keys`. Agents and Brokers fetch this and read `public_keys` to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication).
 
 ```bash
-curl -s https://exchange.ramp-protocol.org/exchange/v1/keys | jq
+curl -s https://exchange.ramp-protocol.org/.well-known/ramp.json | jq
 ```
 
 ```json
 {
-  "algorithm": "ed25519",
-  "public_key": "a22b5d78a5fe1657a8c4fb7ae98da1178ccfb92b96004826be1914791ab5f3aa"
+  "ver": "1.1",
+  "role": "ROLE_EXCHANGE",
+  "domain": "exchange.ramp-protocol.org",
+  "public_keys": [
+    {
+      "kid": "exchange-2026-Q1",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "oitdeKX-FleqMT7eumNoXjPuSuWAEgmvhkUeRq18-o0",
+      "not_before": "2026-01-01T00:00:00Z",
+      "not_after": "2026-12-31T23:59:59Z"
+    }
+  ]
 }
 ```
 

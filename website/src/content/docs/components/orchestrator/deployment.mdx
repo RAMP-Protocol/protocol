@@ -337,7 +337,7 @@ All Exchange communication uses TLS 1.3 minimum. The Broker's HTTP clients are c
 
 ### Exchange Public Keys
 
-The Broker fetches Exchange public signing keys from `GET /exchange/v1/keys`. Public keys are cached in Redis with a 24-hour TTL. On signature verification failure, the cache is refreshed before retrying.
+The Broker fetches the Exchange's `/.well-known/ramp.json` and reads `public_keys` for offer-signing keys. Public keys are cached in Redis with a 24-hour TTL. On signature verification failure, the cache is refreshed before retrying.
 
 Key rotation: Exchanges SHOULD publish both current and previous keys during a rotation window (recommended: 7 days).
 

@@ -53,8 +53,8 @@ interface EdgeKV {
 }
 
 interface EdgeConfig {
-  /** ProviderManifest for ramp.json generation. */
-  manifest: ProviderManifest;
+  /** WellKnownManifest for ramp.json generation. */
+  manifest: WellKnownManifest;
 
   /** RSL text content for /rsl.txt serving. */
   rslTxt: string;
@@ -193,9 +193,9 @@ function handler(event) {
             statusDescription: 'Forbidden',
             headers: {
                 'content-type': { value: 'application/json' },
-                'x-content-rules': { value: MARKETPLACE_INFO_URL }
+                'x-content-rules': { value: EXCHANGE_INFO_URL }
             },
-            body: '{"error":"Licensed content. Negotiate access via the Exchange.","protocol":"RAMP","version":"1.0","info_url":"' + MARKETPLACE_INFO_URL + '"}'
+            body: '{"error":"Licensed content. Negotiate access via the Exchange.","protocol":"RAMP","version":"1.0","info_url":"' + EXCHANGE_INFO_URL + '"}'
         };
     }
 

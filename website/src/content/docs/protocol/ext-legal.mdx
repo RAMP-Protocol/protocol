@@ -30,7 +30,7 @@ Every field in this profile traces to an existing industry standard (ELI, CELEX,
 
 ## Profile Declaration
 
-A Exchange declares support for this profile by including `"ramp-legal-v1"` in the `supported_profiles` field of its `ExchangeManifest`:
+A Exchange declares support for this profile by including `"ramp-legal-v1"` in the `supported_profiles` field of its `WellKnownManifest` (`role=ROLE_EXCHANGE`):
 
 ```json
 {
@@ -809,7 +809,7 @@ An agent requested legislation consolidated as of 2024-01-15 but received a vers
 | Offer (Offer.ext) | 20 | `legal.language`, `legal.available_languages`, `legal.editorial_tier`, `legal.copyright_status`, `legal.format_standard`, `legal.legislation.in_force`, `legal.legislation.consolidation_status`, `legal.legislation.version_date`, `legal.legislation.amendment_of`, `legal.legislation.amended_by`, `legal.legislation.date_entry_into_force`, `legal.case.access_level`, `legal.case.decision_type`, `legal.case.treatment`, `legal.case.filing_type`, `legal.patent.status`, `legal.patent.cpc_codes`, `legal.patent.content_part`, `legal.patent.expiration_date`, `legal.patent.family_members` |
 | Attestation (ResourceAttestation.claims) | 8 | `legal.authority_level`, `legal.consolidation_verified`, `legal.consolidation_date`, `legal.ocr_confidence`, `legal.text_extractable`, `legal.authenticity`, `legal.patent.examination_status`, `legal.patent.maintenance_current` |
 | Dispute (DisputeRequest.ext) | 7 | `legal.dispute.expected_language`, `legal.dispute.received_language`, `legal.dispute.expected_version_date`, `legal.dispute.received_version_date`, `legal.dispute.expected_content_part`, `legal.dispute.received_content_part`, `legal.dispute.sealed_unexpected` |
-| Exchange (ExchangeManifest.ext) | 2 | `legal.jurisdictions`, `legal.sub_domains` |
+| Exchange (WellKnownManifest.ext) | 2 | `legal.jurisdictions`, `legal.sub_domains` |
 | **Total** | **60** | 43 core vocabulary (identity + query + offer, deduplicated) + 8 attestation + 7 dispute + 2 Exchange. 5 keys are shared across core categories. |
 
 ---

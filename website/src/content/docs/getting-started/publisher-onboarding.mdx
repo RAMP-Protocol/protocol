@@ -159,37 +159,39 @@ Set up `/.well-known/ramp.json` to authorize Exchanges and catalog contributors:
 
 The `catalog_contributors` field authorizes third parties to push attestations and catalog metadata for your resources via `CatalogService.PushContent`.
 
-## Publish ramp-verifier.json (Optional)
+## Self-Attestation Keys (Optional)
 
-If you want to self-attest resources (Level 1 verification), publish your Ed25519 signing keys at:
-
-```
-https://{domain}/.well-known/ramp-verifier.json
-```
+If you want to self-attest resources (Level 1 verification), publish your Ed25519 signing keys in your `WellKnownManifest` at `/.well-known/ramp.json` (the same file as the previous step, `role=ROLE_PUBLISHER`). Keys go in `public_keys`; the claims schema goes under `ext["ramp.attestation.claims_schema"]`:
 
 ```json
 {
-  "verifier": "nytimes.com",
-  "name": "The New York Times",
-  "claims_schema": {
-    "content_hash": {
-      "type": "string",
-      "description": "SHA-256 hash of delivered content bytes"
-    },
-    "estimated_quantity": {
-      "type": "integer",
-      "description": "Token count computed by NYT CMS"
-    }
-  },
-  "keys": [
+  "ver": "1.1",
+  "role": "ROLE_PUBLISHER",
+  "domain": "nytimes.com",
+  "public_keys": [
     {
       "kid": "nyt-2026-Q1",
-      "algorithm": "ed25519",
-      "public_key": "MCowBQYDK2VwAyEA...",
-      "valid_from": "2026-01-01T00:00:00Z",
-      "valid_until": "2026-12-31T23:59:59Z"
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "not_before": "2026-01-01T00:00:00Z",
+      "not_after": "2026-12-31T23:59:59Z"
     }
-  ]
+  ],
+  "ext": {
+    "ramp.attestation.claims_schema": {
+      "content_hash": {
+        "type": "string",
+        "description": "SHA-256 hash of delivered content bytes"
+      },
+      "estimated_quantity": {
+        "type": "integer",
+        "description": "Token count computed by NYT CMS"
+      }
+    }
+  }
 }
 ```
 
@@ -214,7 +216,7 @@ CloudFront's asymmetric model provides the strongest security separation: the Ex
 | 2 | Configure `ramp.json` with authorized Exchange(s) | 5 min |
 | 3 | Generate and push signing key (or grant CDN access) | 5--10 min |
 | 4 | (Optional) Add `catalog_contributors` to `ramp.json` | 5 min |
-| 5 | (Optional) Publish `ramp-verifier.json` for self-attestation | 10 min |
+| 5 | (Optional) Add self-attestation keys to `ramp.json` | 10 min |
 | **Total** | | **~30--45 min** |
 
 ## Next Steps

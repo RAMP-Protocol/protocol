@@ -72,7 +72,7 @@ The pipeline has two fundamentally distinct input streams:
 
 **Private: Pricing (Exchange Authority)** -- The Exchange is the price authority, not static files. Pricing is private and dynamic. Different agents may see different prices based on volume discounts, contractual relationships, or subscription tiers.
 
-**Attestations (v1.0)** -- Content attestations enter the catalog via `CatalogService.PushResources`. Providers push self-signed attestations (Level 1) and authorized third-party verification vendors push independent attestations (Level 2). The Exchange verifies attestation signatures at push time using keys from the verifier's `/.well-known/ramp-verifier.json`. Only callers listed in the provider's `catalog_contributors` may push attestations on behalf of that provider.
+**Attestations (v1.0)** -- Content attestations enter the catalog via `CatalogService.PushResources`. Providers push self-signed attestations (Level 1) and authorized third-party verification vendors push independent attestations (Level 2). The Exchange verifies attestation signatures at push time using keys from the verifier's `/.well-known/ramp.json` `public_keys`. Only callers listed in the provider's `catalog_contributors` may push attestations on behalf of that provider.
 
 | Source | Description | Priority |
 |---|---|---|

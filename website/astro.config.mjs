@@ -7,7 +7,7 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'RAMP Protocol',
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/postindustria-tech/ramp-protocol' }],
+			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/RAMP-Protocol/protocol' }],
 			plugins: [starlightMermaid()],
 			components: {
 				Footer: './src/components/Footer.astro',

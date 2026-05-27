@@ -963,7 +963,7 @@
       <ul class="nav-links">
         <li><a href="/getting-started/what-is-ramp/">Docs</a></li>
         <li><a href="/protocol/transaction-flow/">Protocol</a></li>
-        <li><a href="https://github.com/postindustria-tech/ramp-protocol">GitHub</a></li>
+        <li><a href="https://github.com/RAMP-Protocol/protocol">GitHub</a></li>
       </ul>
     </nav>
 
@@ -973,7 +973,7 @@
       <p class="hero-sub animate-in delay-2">RAMP is the open transaction protocol that turns blocked bots into paying customers. Discover, price, transact, deliver, verify — one protocol for any content.</p>
       <div class="hero-buttons animate-in delay-3">
         <a href="/getting-started/what-is-ramp/" class="btn btn-primary">Read the Docs</a>
-        <a href="https://github.com/postindustria-tech/ramp-protocol" class="btn btn-ghost">View on GitHub</a>
+        <a href="https://github.com/RAMP-Protocol/protocol" class="btn btn-ghost">View on GitHub</a>
       </div>
     </div>
   </section>
@@ -1346,7 +1346,7 @@
     <div class="cta-buttons">
       <a href="/getting-started/what-is-ramp/" class="btn btn-primary">Read the Docs</a>
       <a href="/protocol/transaction-flow/" class="btn btn-ghost">Protocol Spec</a>
-      <a href="https://github.com/postindustria-tech/ramp-protocol" class="btn btn-ghost">GitHub</a>
+      <a href="https://github.com/RAMP-Protocol/protocol" class="btn btn-ghost">GitHub</a>
     </div>
   </section>
 
@@ -1380,14 +1380,15 @@
 
     const stepPayloads = [
       {
-        label: 'ProviderManifest',
+        label: 'WellKnownManifest',
         link: '/protocol/discovery-paths/',
         linkText: 'Discovery Paths docs →',
         json: `${c('// GET /.well-known/ramp.json')}
 ${b('{')}
-  ${k('ver')}: ${s('1.0')},
-  ${k('provider')}: ${s('example.com')},
-  ${k('marketplaces')}: ${b('[{')}
+  ${k('ver')}: ${s('1.1')},
+  ${k('role')}: ${s('ROLE_PUBLISHER')},
+  ${k('domain')}: ${s('example.com')},
+  ${k('exchanges')}: ${b('[{')}
     ${k('domain')}: ${s('exchange.example.com')},
     ${k('endpoint')}: ${s('/ramp/v1')},
     ${k('relationship')}: ${s('DIRECT')}

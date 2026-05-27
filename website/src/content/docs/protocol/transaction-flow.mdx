@@ -46,7 +46,7 @@ Content-Type: application/json
 ```
 
 Key fields:
-- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from `{domain}/.well-known/ramp-agent.json` to verify the signature
+- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the signature
 - `requester.uris` -- the content URI(s) being requested
 - `requester.intended_use` -- the intended use (RAG, training, search, etc.)
 - `requester.license_id` -- the buyer's license ID (public identifier, not a credential)
@@ -623,7 +623,7 @@ message Preview {
 
 ### Design Rationale
 
-This follows the universal content marketplace pattern:
+This follows the universal content exchange pattern:
 
 - **Shutterstock**: `small_thumb.url` (100px, unwatermarked), `preview.url` (450px, watermarked), `preview_1500.url` (1500px, watermarked)
 - **Spotify**: `preview_url` -- URL to a 30-second MP3 clip

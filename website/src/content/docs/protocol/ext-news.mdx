@@ -33,16 +33,16 @@ Implementers must be familiar with:
 
 ## Profile Declaration
 
-An Exchange declares support for this profile by including `"ramp-news-v1"` in its `ExchangeManifest.supported_profiles` array:
+An Exchange declares support for this profile by including `"ramp-news-v1"` in its `WellKnownManifest.supported_profiles` array (`role=ROLE_EXCHANGE`):
 
 ```json
 {
-  "ver": "1.0",
+  "ver": "1.1",
+  "role": "ROLE_EXCHANGE",
   "domain": "news-exchange.example.com",
   "name": "Example News Exchange",
   "supported_profiles": ["ramp-news-v1"],
-  "exchange_endpoint": "https://news-exchange.example.com/ramp/v1",
-  "keys_uri": "https://news-exchange.example.com/ramp/v1/keys"
+  "endpoint": "https://news-exchange.example.com/ramp/v1"
 }
 ```
 
@@ -61,7 +61,7 @@ This profile defines **36 unique field names** across 6 protocol messages (44 fi
 | `Offer.ext` | 23 | News metadata on resource offers (14 article + 9 podcast) |
 | `ResourceAttestation.claims` | 5 | News-specific attestation claims |
 | `DisputeRequest.ext` | 3 | News dispute evidence |
-| `ExchangeManifest.ext` | 3 | Exchange news capabilities |
+| `WellKnownManifest.ext` | 3 | Exchange news capabilities |
 
 ---
 
@@ -181,7 +181,7 @@ News content introduces domain-specific dispute scenarios beyond the core `Dispu
 
 ---
 
-## Exchange News Capabilities (`ExchangeManifest.ext`)
+## Exchange News Capabilities (`WellKnownManifest.ext`)
 
 Exchanges declaring `ramp-news-v1` support SHOULD populate these fields to describe their news-specific capabilities.
 

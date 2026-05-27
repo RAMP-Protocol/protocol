@@ -1,0 +1,210 @@
+---
+title: "Exchange Manifest"
+description: "Machine-readable self-description of a RAMP Exchange, served as a WellKnownManifest (role=ROLE_EXCHANGE) at /.well-known/ramp.json for automated discovery and capability negotiation."
+---
+
+## Overview
+
+An Exchange describes itself with a `WellKnownManifest` carrying `role=ROLE_EXCHANGE`. Analogous to OIDC Discovery (`/.well-known/openid-configuration`), it enables automated discovery and capability negotiation by Brokers and agents.
+
+The manifest answers: "What can this Exchange do, where are its endpoints, which keys sign its offers, and what capabilities does it support?"
+
+**Endpoint**: `https://{domain}/.well-known/ramp.json` — the single canonical file every RAMP participant serves, differentiated by `role`. The legacy per-role `/.well-known/ramp-exchange.json` is **removed in v1.1.0**.
+
+| Property | Value |
+|---|---|
+| Transport | TLS required (HTTPS) |
+| Authentication | None (public endpoint) |
+| Cache-Control | `max-age=3600, must-revalidate` — keys carry their own `not_before`/`not_after`; use the `invalidation_url` channel for emergency revocation |
+| Content-Type | `application/json` |
+| Generation | Static JSON from config at startup |
+
+## Full JSON Example
+
+```json
+{
+  "ver": "1.1",
+  "role": "ROLE_EXCHANGE",
+  "domain": "exchange.example.com",
+  "name": "Example Content Exchange",
+  "operator": "Example Media Corp",
+  "operator_domain": "examplemedia.com",
+  "endpoint": "https://exchange.example.com/exchange/v1",
+  "public_keys": [
+    {
+      "kid": "exchange-2026-q2",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "not_before": "2026-04-01T00:00:00Z",
+      "not_after": "2026-10-01T00:00:00Z"
+    }
+  ],
+  "invalidation_url": "https://exchange.example.com/.well-known/ramp-invalidations.json",
+  "health_endpoint": "https://exchange.example.com/healthz",
+  "catalog_endpoint": "https://exchange.example.com/catalog/v1",
+  "protocol_versions_supported": ["1.0", "1.1"],
+  "pricing_models_supported": [
+    "per_article",
+    "per_token",
+    "per_page",
+    "per_minute",
+    "per_record",
+    "subscription",
+    "free",
+    "attribution",
+    "revenue_share"
+  ],
+  "delivery_methods_supported": [
+    "direct",
+    "instructions",
+    "streaming"
+  ],
+  "supported_profiles": [
+    "ramp-academic-v1",
+    "ramp-news-v1"
+  ],
+  "base_currency": "USD",
+  "hash_methods_supported": [
+    "sha-256",
+    "sha-384"
+  ],
+  "accepted_verifiers": [
+    "doubleverify.com",
+    "integralads.com"
+  ],
+  "supported_auth_methods": ["gnap", "oauth_dpop"],
+  "oidc_issuer": "https://exchange.example.com",
+  "contact": "ramp-integration@examplemedia.com",
+  "terms_uri": "https://examplemedia.com/ramp-terms",
+  "privacy_uri": "https://examplemedia.com/privacy"
+}
+```
+
+## Field Reference
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ver` | string | Yes | RAMP protocol version (`"1.1"`) |
+| `role` | string | Yes | `ROLE_EXCHANGE` for an Exchange manifest |
+| `domain` | string | Yes | Canonical domain of this Exchange |
+| `name` | string | No | Human-readable Exchange name |
+| `operator` | string | No | Organization operating this Exchange |
+| `operator_domain` | string | No | Operator's corporate domain |
+| `endpoint` | string | No | ExchangeService endpoint URL |
+| `public_keys` | object[] | Yes | Inline RFC 7517 JWKs (Ed25519) that sign this Exchange's offers; ≥1 valid at serve time |
+| `invalidation_url` | string | No | Emergency key-revocation list URL (`KeyInvalidationList`); serve short/`no-store` |
+| `health_endpoint` | string | No | Health check endpoint URL |
+| `catalog_endpoint` | string | No | CatalogService endpoint URL |
+| `protocol_versions_supported` | string[] | No | Supported RAMP protocol versions |
+| `pricing_models_supported` | string[] | No | Supported pricing models |
+| `delivery_methods_supported` | string[] | No | Supported delivery methods |
+| `hash_methods_supported` | string[] | No | Accepted content hash methods |
+| `accepted_verifiers` | string[] | No | Trusted attestation verification vendor domains |
+| `supported_auth_methods` | string[] | No | Authorization methods supported (ordered by preference) |
+| `oidc_issuer` | string | No | OIDC Discovery URL when OAuth methods are supported |
+| `gnap_grant_endpoint` | string | No | GNAP grant endpoint when GNAP is supported |
+| `supported_profiles` | string[] | No | Domain extension profiles this Exchange conforms to (e.g., `["ramp-academic-v1", "ramp-news-v1"]`) |
+| `base_currency` | string | No | ISO 4217 currency code for all `unit_cost` values in offers (e.g., `"USD"`) |
+| `contact` | string | No | Contact email for integration inquiries |
+| `terms_uri` | string | No | Terms of service URL |
+| `privacy_uri` | string | No | Privacy policy URL |
+| `ext` | object | No | Extension fields (forward-compatible) |
+
+## The Unified RAMP Well-Known File
+
+RAMP defines **one** well-known file. Every participant serves a `WellKnownManifest` at `/.well-known/ramp.json`; the `role` field says which participant it is. (v1.0 used four per-role files — `ramp-agent.json`, `ramp-exchange.json`, `ramp-verifier.json`, and the provider `ramp.json`; the per-role variants are removed in v1.1.0.)
+
+| Role | Served By | Purpose |
+|---|---|---|
+| `ROLE_PUBLISHER` | Provider | Who is authorized to sell my content; my signing keys |
+| `ROLE_EXCHANGE` | Exchange | My endpoints, capabilities, accepted verifiers, and offer-signing keys |
+| `ROLE_AGENT` | Agent / Broker | My Ed25519 public key for request signing |
+
+A verification vendor has no dedicated role — it publishes under its operator's role (`ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor); its keys go in `public_keys` and its claims schema in `ext["ramp.attestation.claims_schema"]`.
+
+### Discovery Chain
+
+The manifests form a discovery chain that a Broker follows:
+
+```
+1. Agent requests content from provider.example.com
+2. Fetch provider.example.com/.well-known/ramp.json
+   --> role=ROLE_PUBLISHER; discovers authorized Exchange + provider keys
+3. Fetch exchange.example.com/.well-known/ramp.json
+   --> role=ROLE_EXCHANGE; discovers endpoints, capabilities, and inline
+       public_keys for offer signature verification (no separate keys fetch)
+4. (If attestation required) Fetch doubleverify.com/.well-known/ramp.json
+   --> verifier's public_keys for attestation signature verification
+```
+
+Each step narrows the information needed: a publisher manifest tells you WHERE to go, and an exchange manifest tells you WHAT the Exchange can do and HOW to verify its signatures (keys are inline).
+
+## Broker Capability Negotiation
+
+The Broker uses the manifest to filter Exchanges **before** sending any RPCs. This avoids querying Exchanges that cannot fulfill the agent's requirements.
+
+| Question | Manifest Field |
+|---|---|
+| Does this Exchange support per-token pricing? | `pricing_models_supported` |
+| Can this Exchange deliver via signed URL? | `delivery_methods_supported` |
+| Does this Exchange trust DoubleVerify? | `accepted_verifiers` |
+| Does this Exchange speak protocol v1.1? | `protocol_versions_supported` |
+| Where do I verify offer signatures? | `public_keys` (inline JWKs) |
+
+Without the manifest, the Broker discovers these answers only after sending requests and observing responses -- wasting latency and bandwidth on Exchanges that will reject the request.
+
+### Bootstrap Flow
+
+```
+1. Agent requests URI for domain "provider.example.com"
+2. Broker fetches provider's ramp.json --> finds authorized Exchange
+3. Broker fetches exchange's ramp.json (role=ROLE_EXCHANGE) --> capabilities + inline keys
+4. Broker caches manifest with 1-hour TTL (emergency revocation via invalidation_url)
+5. Broker registers Exchange in its registry with capabilities populated
+6. Subsequent requests skip steps 2-4 (cache hit)
+```
+
+## Proto Message
+
+The Exchange manifest is a `WellKnownManifest` with `role=ROLE_EXCHANGE`, defined in [`ramp.proto`](/reference/proto-ramp/). The legacy `ExchangeManifest` message is **deprecated** (kept on the wire one cycle); its `keys_uri` pointer is replaced by inline `public_keys`. Exchange-relevant fields:
+
+```protobuf
+message WellKnownManifest {
+  string ver = 1;                                  // "1.1"
+  Role role = 2;                                   // ROLE_EXCHANGE here
+  string domain = 3;
+  optional string contact = 4;
+  repeated JsonWebKey public_keys = 5;             // inline Ed25519 offer-signing keys
+  optional string invalidation_url = 6;            // emergency revocation list
+  optional string name = 9;
+  optional string operator = 10;
+  optional string operator_domain = 11;
+  optional string endpoint = 12;                   // ExchangeService URL
+  optional string health_endpoint = 13;
+  optional string catalog_endpoint = 14;
+  repeated string protocol_versions_supported = 16;
+  repeated PricingModel pricing_models_supported = 17;
+  repeated DeliveryMethod delivery_methods_supported = 18;
+  repeated string hash_methods_supported = 19;
+  repeated string accepted_verifiers = 20;
+  repeated string supported_profiles = 23;
+  repeated AuthMethod supported_auth_methods = 24;
+  optional string oidc_issuer = 25;
+  optional string gnap_grant_endpoint = 26;
+  optional string base_currency = 27;
+  google.protobuf.Struct ext = 15;
+  // ... publisher-only fields (exchanges, catalog_contributors) omitted ...
+}
+```
+
+The JSON endpoint serves the same data as this proto message, but as plain JSON (not protobuf wire format). It is a discovery document, not an RPC response.
+
+## Next Steps
+
+- [Discovery Paths](/protocol/discovery-paths/) -- all the ways an agent enters the RAMP flow
+- [Authentication](/protocol/authentication/) -- Ed25519 key announcement endpoints
+- [Exchange Overview](/components/exchange/overview/) -- the service that serves this manifest
+- [Broker Overview](/components/broker/overview/) -- how the Broker bootstraps from the manifest

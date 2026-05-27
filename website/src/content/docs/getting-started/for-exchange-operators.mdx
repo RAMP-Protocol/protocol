@@ -140,7 +140,7 @@ Every incoming request carries a `Requester` message with an Ed25519 signature. 
 ### Signature Verification
 
 1. Extract the `domain` from the `Requester` message
-2. Fetch the requester's public key from `{domain}/.well-known/ramp-agent.json`
+2. Fetch the requester's public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`), selected by `kid` from `public_keys`
 3. Verify the Ed25519 signature over the tuple `(id, domain, uris, scopes)`
 4. Reject the request if verification fails — no fallback, no degraded mode
 
@@ -151,7 +151,7 @@ Key caching is recommended. Fetch keys with a TTL and re-fetch periodically to h
 When a request includes a `Delegation` message (nested inside `Requester`), your Exchange verifies the Biscuit token chain:
 
 1. Deserialize the base64-encoded `token` from the `Delegation` message
-2. Verify the authority block (block 0) is signed by the Ed25519 key published at `{principal_domain}/.well-known/ramp-agent.json`
+2. Verify the authority block (block 0) is signed by the Ed25519 key published at `{principal_domain}/.well-known/ramp.json` (`role=ROLE_AGENT`)
 3. Verify each attenuation block's signature (each signed by the entity that appended it)
 4. Evaluate all check conditions across all blocks — scope restrictions, spend caps, URI constraints
 5. Check `expires_at` against current time — reject expired tokens with `DENIAL_REASON_DELEGATION_EXPIRED`
@@ -163,7 +163,7 @@ This verification is entirely offline — no callback to the principal is requir
 
 When the `intermediaries` list is non-empty, the request has passed through one or more intermediaries (e.g., agent to broker to your Exchange). For each `IntermediaryHop`:
 
-1. Fetch the intermediary's public key from `{hop.domain}/.well-known/ramp-agent.json`
+1. Fetch the intermediary's public key from `{hop.domain}/.well-known/ramp.json` (`role=ROLE_AGENT`)
 2. Verify the Ed25519 signature proves the intermediary handled the request
 3. Check the `forwarded_at` timestamps for temporal consistency
 
@@ -196,7 +196,7 @@ For the full identity model specification — Requester fields, Biscuit structur
 
 Your Exchange verifies `ResourceAttestation` signatures at catalog push time. When a provider or verification vendor pushes resource metadata via `CatalogService.PushContent`, your Exchange:
 
-1. Fetches the signer's public key from `https://{verifier}/.well-known/ramp-verifier.json`
+1. Fetches the signer's public key from `https://{verifier}/.well-known/ramp.json` (`public_keys`, selected by `kid`)
 2. Verifies the Ed25519 signature over JCS-canonicalized claims
 3. Checks that the `verifier` is either the provider domain (Level 1 self-attestation) or a vendor listed in the provider's `catalog_contributors` (Level 2 third-party attestation)
 4. Rejects attestations from unauthorized contributors
@@ -221,7 +221,7 @@ Delivery logs are the authoritative evidence source. They cannot be fabricated b
 
 As an Exchange operator, you are responsible for two additional capabilities:
 
-**Exchange Manifest** -- Your Exchange serves a machine-readable self-description at `/.well-known/ramp-exchange.json`. This tells Brokers and agents what your Exchange supports (pricing models, delivery methods, accepted verifiers, endpoints) without trial-and-error. The manifest includes:
+**Exchange Manifest** -- Your Exchange serves a machine-readable self-description at `/.well-known/ramp.json` (`role=ROLE_EXCHANGE`). This tells Brokers and agents what your Exchange supports (pricing models, delivery methods, accepted verifiers, endpoints) without trial-and-error, and publishes your offer-signing keys inline in `public_keys`. The manifest includes:
 
 - **`base_currency`** (ISO 4217 code) -- the currency for all `unit_cost` values. Enables cross-exchange price comparison by the Broker. A legal exchange quoting in EUR and a media exchange quoting in USD can be compared when both declare their currency.
 - **`supported_profiles`** -- domain extension profiles your Exchange conforms to.

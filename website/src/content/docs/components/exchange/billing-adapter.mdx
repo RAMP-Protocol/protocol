@@ -297,14 +297,14 @@ When a buyer has an active subscription with a tenant:
 
 ## Currency Model (v1)
 
-v1 Exchange operates in a **single currency** per deployment. All offers returned by DiscoverResources are denominated in that currency. No conversion logic is needed. The currency is declared via `base_currency` in the Exchange Manifest (`/.well-known/ramp-exchange.json`), enabling Brokers to perform cross-exchange price comparison.
+v1 Exchange operates in a **single currency** per deployment. All offers returned by DiscoverResources are denominated in that currency. No conversion logic is needed. The currency is declared via `base_currency` in the Exchange Manifest (`/.well-known/ramp.json`), enabling Brokers to perform cross-exchange price comparison.
 
 ```go
 // ExchangeConfig includes the deployment currency.
 type ExchangeConfig struct {
     // ...
     Currency string // ISO 4217 — e.g., "USD". All offers use this currency.
-                    // Published as base_currency in ExchangeManifest.
+                    // Published as base_currency in WellKnownManifest (role=ROLE_EXCHANGE).
 }
 ```
 
