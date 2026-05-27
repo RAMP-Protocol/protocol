@@ -56,7 +56,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T8: Signed URL sharing
 **Attack**: Agent A pays, shares signed URL with Agents B, C, D before expiry.
-**Countermeasure (protocol)**: **Agent-bound signed URLs.** Include hash of agent's license ID in signed payload. Edge function validates requester matches bound identity. Implemented via `agent_identity_hash` on `TransactionResponse`.
+**Countermeasure (protocol)**: **Agent-bound signed URLs.** Embed the agent's RFC 7638 JWK Thumbprint (`agent_identity_hash`) in the HMAC-signed URL; a capable edge function requires the fetcher to present its public key + an RFC 9421 signature (proof-of-possession) and checks `thumbprint(presented key) == agent_identity_hash`. Implemented via `agent_identity_hash` on `TransactionResponse`.
 
 ### T9: Systematic caching / content mirroring
 **Attack**: Agent fetches every article once, caches locally forever, never pays again.

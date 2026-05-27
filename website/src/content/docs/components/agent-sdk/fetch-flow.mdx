@@ -56,7 +56,7 @@ client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
   |       - Build TransactionRequest with offer_id, offer_signature, agent_signature
   |       - Send ExecuteTransaction RPC to winning Exchange
   |       - On DenialReason: return typed error (see Error Handling below)
-  |       - On success: extract signed URL from package.retrieval.endpoint
+  |       - On success: extract signed URL from retrieval_endpoint
   |
   |  8. Record spend
   |     BudgetTracker.Record(txn.Cost)
@@ -65,7 +65,7 @@ client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
   |
   |  9. Fetch content
   |     ContentFetcher.Fetch(ctx, signedURL)
-  |       - GET signed URL with X-Agent-License-Id header
+  |       - GET signed URL: present agent public key + RFC 9421 signature
   |       - Read response body
   |       - On HTTP error: return ContentFetchError
   |
@@ -158,7 +158,7 @@ client.FetchBatch(ctx, [url1, url2, url3])
   |
   |  9. Fetch content (parallel)
   |     ContentFetcher.FetchAll(ctx, signedURLs)
-  |       - Concurrent GET requests with X-Agent-License-Id header
+  |       - Concurrent GET requests: present agent public key + RFC 9421 signature
   |       - Individual URLs can fail independently
   |
   | 10. Auto-report usage (per item, background)

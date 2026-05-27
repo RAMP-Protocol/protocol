@@ -296,17 +296,8 @@ The `offer_signature` is the `exchange_signature` from the selected offer. The E
   "id": "tx-req-c7d1",
   "transaction_id": "txn-mp-93a7f2",
   "billing_id": "bill-93a7f2-001",
-  "package": {
-    "id": "PKG-TC-AI-INFRA",
-    "title": "The Future of AI Infrastructure",
-    "seller": "cdn.ramp-protocol.org",
-    "citation": 1,
-    "retrieval": {
-      "auth": "RETRIEVAL_AUTH_NONE",
-      "endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Expires=1773451434&Key-Pair-Id=KXYZ&Signature=abc123...",
-      "type": ["RETRIEVAL_TYPE_HTML"]
-    }
-  },
+  "resource_title": "The Future of AI Infrastructure",
+  "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Expires=1773451434&Key-Pair-Id=KXYZ&Signature=abc123...",
   "cost": {
     "amount": 0.05,
     "currency": "USD",
@@ -323,7 +314,7 @@ The `offer_signature` is the `exchange_signature` from the selected offer. The E
 }
 ```
 
-The `retrieval.endpoint` contains a CDN signed URL. The agent fetches it directly -- no further authorization needed. The CDN verifies the signature natively.
+The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A bearer-only CDN serves it on signature + expiry alone (HMAC + short TTL + TLS); a capable edge function additionally requires the agent to present its public key and an RFC 9421 signature, verifying the binding offline. See [Signed URL Verification](/components/edge-function/signed-url-verification).
 
 ### What Happens Inside the Exchange
 
@@ -385,10 +376,7 @@ For batch transactions, use the `items` array:
       "offer_id": "offer-tc-4921",
       "transaction_id": "txn-mp-batch-001",
       "billing_id": "bill-batch-001",
-      "package": {
-        "id": "PKG-TC-AI-INFRA",
-        "retrieval": { "endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=..." }
-      },
+      "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=...",
       "cost": { "amount": 0.05, "currency": "USD" },
       "expires_at": "2026-03-14T02:30:00Z"
     },
@@ -396,10 +384,7 @@ For batch transactions, use the `items` array:
       "offer_id": "offer-tc-4922",
       "transaction_id": "txn-mp-batch-002",
       "billing_id": "bill-batch-002",
-      "package": {
-        "id": "PKG-TC-GPU",
-        "retrieval": { "endpoint": "https://cdn.ramp-protocol.org/server/premium/gpu-shortage.html?Signature=..." }
-      },
+      "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/gpu-shortage.html?Signature=...",
       "cost": { "amount": 0.05, "currency": "USD" },
       "expires_at": "2026-03-14T02:30:00Z"
     }
@@ -419,10 +404,7 @@ Each item gets its own `transaction_id`, `billing_id`, and signed URL. Batch tra
   "id": "tx-sub-01",
   "transaction_id": "txn-sub-001",
   "billing_id": "bill-sub-001",
-  "package": {
-    "id": "PKG-TC-AI-INFRA",
-    "retrieval": { "endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=..." }
-  },
+  "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=...",
   "cost": { "amount": 0, "currency": "USD" },
   "subscription_id": "SUB-12345",
   "subscription_unit_value": { "amount": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
@@ -487,7 +469,7 @@ The RAMP protocol covers discovery, negotiation, and transaction execution. Cont
 The `TransactionResponse` carries two relevant fields:
 
 - `DeliveryMethod` -- a hint indicating whether the Exchange is providing content directly or providing retrieval instructions
-- `package.retrieval.endpoint` -- the URL or access info the agent should use to fetch content
+- `retrieval_endpoint` -- the signed URL the agent uses to fetch content
 
 How the agent actually retrieves content (signed URLs, access tokens, inline content) depends on the Exchange and CDN implementation, not the protocol.
 

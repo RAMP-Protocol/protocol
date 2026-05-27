@@ -276,12 +276,7 @@ The error includes an actionable URL where the institution can apply for a DUA. 
   "id": "tx-mri-001",
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",
-  "package": {
-    "id": "PKG-TCIA-TCGA-GBM-0152",
-    "retrieval": {
-      "endpoint": "https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?expires=1742410800&agent_id=c4d5e6f7...&sig=hmac-sha256-9a8b7c..."
-    }
-  },
+  "retrieval_endpoint": "https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?expires=1742410800&agent_id=c4d5e6f7...&sig=hmac-sha256-9a8b7c...",
   "cost": {
     "amount": 25.00,
     "currency": "USD"
@@ -307,7 +302,7 @@ The error includes an actionable URL where the institution can apply for a DUA. 
 
 **Key differences from text delivery:**
 - **`expires_at`** is 2 hours out, not 5 minutes. A 1.2 GB download needs more time than a 15 KB HTML page.
-- **`retrieval.endpoint`** points to a **delivery manifest**, not the content itself. The manifest contains per-file signed URLs.
+- **`retrieval_endpoint`** points to a **delivery manifest**, not the content itself. The manifest contains per-file signed URLs.
 - **`medimg.resumable: true`** signals that the CDN supports HTTP Range requests — if the download is interrupted, the agent can resume without re-transacting.
 - **Reporting window** is 7 days (`604800s`), not 24 hours. Medical imaging analysis takes longer than reading an article.
 

@@ -274,12 +274,13 @@ Fields 7-9, 11-12 reserved. Request authentication moved to RFC 9421 HTTP Messag
 | `id` | string | 2 | Echoed transaction request ID |
 | `transaction_id` | optional string | 3 | Exchange-assigned transaction ID |
 | `billing_id` | optional string | 4 | Billing reference |
-| `package` | optional comp.v1.Package | 5 | CoMP Package with signed URL |
+| `resource_title` | optional string | 5 | Resource title echoed from the Offer |
 | `cost` | optional Cost | 6 | Transaction cost |
 | `delivery_method` | DeliveryMethod | 7 | How content is delivered |
 | `reporting_obligation` | optional ReportingObligation | 8 | Reporting requirements |
-| `expires_at` | optional Timestamp | 9 | Signed URL expiry |
-| `agent_identity_hash` | string | 10 | **REQUIRED.** Agent identity bound into URLs |
+| `expires_at` | optional Timestamp | 9 | When `retrieval_endpoint` expires |
+| `agent_identity_hash` | string | 10 | RFC 7638 JWK Thumbprint of the agent's Ed25519 request-signing key, bound into the signed `retrieval_endpoint`. Empty string when absent; non-empty iff a signed `retrieval_endpoint` is present |
+| `retrieval_endpoint` | optional string | 18 | Signed URL the agent uses to fetch the resource. Bound to `agent_identity_hash`; expires at `expires_at`. Absent on denial and when `delivery_method` is not signed-URL-based |
 | `denial_reason` | optional DenialReason | 11 | Set when denied |
 | `subscription_id` | optional string | 12 | Subscription/deal identifier |
 | `subscription_unit_value` | optional Cost | 16 | Per-unit cost for subscription accounting |
@@ -310,14 +311,15 @@ Result for a single offer in a batch transaction.
 | `offer_id` | string | 1 | The offer_id this result is for |
 | `transaction_id` | string | 2 | Exchange-assigned transaction identifier |
 | `billing_id` | string | 3 | Billing reference |
-| `package` | comp.v1.Package | 4 | CoMP Package with signed URL populated |
+| `resource_title` | optional string | 4 | Resource title echoed from the Offer |
 | `cost` | Cost | 5 | Cost for this item |
 | `subscription_id` | optional string | 6 | Subscription identifier (no per-request charge) |
 | `subscription_unit_value` | optional Cost | 11 | Per-unit cost for subscription accounting (ASC 606) |
 | `denial_reason` | optional DenialReason | 7 | Set if this item was denied |
-| `expires_at` | optional Timestamp | 8 | When the signed URL expires |
+| `expires_at` | optional Timestamp | 8 | When `retrieval_endpoint` expires |
 | `delivery_method` | DeliveryMethod | 9 | How content is delivered for this item |
 | `reporting_obligation` | optional ReportingObligation | 10 | Reporting requirements for this item |
+| `retrieval_endpoint` | optional string | 12 | Signed URL for this item. Bound to the parent `TransactionResponse.agent_identity_hash` (shared across all batch items); expires at `expires_at`. Absent if this item was denied or its `delivery_method` is not signed-URL-based |
 
 ### Cost
 
@@ -621,11 +623,13 @@ Broker returns to Agent (Step 6).
 | `transaction_id` | string | 4 | Exchange-assigned transaction ID |
 | `billing_id` | string | 5 | Billing reference |
 | `exchange` | string | 6 | Which Exchange won the selection |
-| `package` | comp.v1.Package | 7 | CoMP Package with retrieval.endpoint populated |
+| `resource_title` | optional string | 7 | Resource title for the disputed resource |
 | `cost` | Cost | 8 | Transaction cost |
 | `delivery_method` | DeliveryMethod | 9 | How content is delivered |
 | `reporting_obligation` | optional ReportingObligation | 10 | Reporting obligations the agent must fulfill |
-| `expires_at` | optional Timestamp | 11 | When the delivery endpoint expires |
+| `expires_at` | optional Timestamp | 11 | When `retrieval_endpoint` expires |
+| `retrieval_endpoint` | optional string | 13 | Signed URL returned by the Exchange and forwarded unchanged by the Broker, together with `agent_identity_hash`. Bound to `agent_identity_hash`; expires at `expires_at`. Absent on denial and when `delivery_method` is not signed-URL-based |
+| `agent_identity_hash` | optional string | 14 | Identity that `retrieval_endpoint` is bound to. Same value and computation as `TransactionResponse.agent_identity_hash`. Present iff `retrieval_endpoint` is |
 | `broker_fee` | optional Cost | 12 | Broker's fee for this transaction |
 | `ext` | Struct | 15 | Extension point |
 

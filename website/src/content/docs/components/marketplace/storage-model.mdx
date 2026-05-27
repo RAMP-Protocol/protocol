@@ -117,7 +117,7 @@ type TransactionRecord struct {
     // Enables audit queries without reconstructing from a potentially changed catalog.
     OfferSnapshotJSON string `json:"offer_snapshot_json"`
 
-    // Agent identity hash (SHA-256 of license ID). Non-optional string, not pointer.
+    // Agent identity hash (RFC 7638 JWK Thumbprint of the agent's Ed25519 key). Non-optional string, not pointer.
     AgentIdentityHash string `json:"agent_identity_hash"`
 
     // Delivery metadata.
@@ -376,7 +376,7 @@ baseURL\nexpires\nagent_id\ntxn_id
 Where:
 - `baseURL` — the content URL without query parameters (e.g., `https://cdn.example.com/premium/article.html`)
 - `expires` — Unix timestamp in seconds (string representation)
-- `agent_id` — SHA-256 hex hash of the agent's license ID (matches `TransactionResponse.agent_identity_hash`)
+- `agent_id` — the agent's RFC 7638 JWK Thumbprint (matches `TransactionResponse.agent_identity_hash`)
 - `txn_id` — the transaction ID (ULID)
 
 This format is shared between the Exchange SignURL implementation and the edge function verification logic. See the edge function design doc for the verifier implementation.

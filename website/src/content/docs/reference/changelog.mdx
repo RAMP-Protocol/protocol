@@ -3,6 +3,47 @@ title: "Changelog"
 description: "RAMP protocol changelog"
 ---
 
+## v1.0.3 — Canonical retrieval endpoint field
+
+Adds the scalar signed-URL field to transaction responses and resolves the stranded "CoMP Package with retrieval.endpoint" comments left after the v1.0 CoMP decoupling.
+
+### New fields
+
+- `TransactionResponse.retrieval_endpoint` (string, field 18)
+- `TransactionResultItem.retrieval_endpoint` (string, field 12)
+- `RAMPResponse.retrieval_endpoint` (string, field 13)
+- `RAMPResponse.agent_identity_hash` (string, field 14)
+
+### Retrieval-URL identity binding
+
+- `agent_identity_hash` is the RFC 7638 JWK Thumbprint (SHA-256) of the agent's Ed25519 request-signing key. The Exchange MAY embed it into the HMAC-signed `retrieval_endpoint` (DPoP-style, RFC 9449) and echo it on the response.
+- Bound to the agent's request-signing key, never to the principal/delegation.
+- A capable delivery endpoint (edge function) verifies the binding fully offline: confirm the URL HMAC, then require the fetcher to present its public key + an RFC 9421 signature and check `thumbprint(presented key) == agent_identity_hash`. No JWKS fetch required.
+- Enforcement is OPTIONAL: bearer-only signed-URL CDNs fall back to HMAC + short TTL + TLS. RAMP reference implementations run on edge functions and enforce it.
+- `agent_identity_hash` carries a value iff a signed `retrieval_endpoint` is present (empty string on `TransactionResponse`, field absent on `RAMPResponse`).
+- Backward compatible: optional, additive, no renumbering.
+
+## v1.0.2 — Resource Previews
+
+Lightweight resource previews on Offers for pre-transaction evaluation.
+
+### Preview message (new)
+
+- `url`, `media_type`, `width` / `height`, `duration`, `size` (`"thumbnail"` / `"preview"` / `"sample"`)
+- `Offer.previews` (repeated Preview, field 18) — URLs only, bytes served by the provider CDN
+
+## v1.0.1 — C2PA Content Provenance
+
+C2PA Content Credentials integration via new core proto fields and the `ramp-c2pa-v1` extension profile.
+
+### ResourceIdentity — C2PA fields
+
+- `c2pa_manifest` (7), `c2pa_status` (9 — new `C2PAStatus` enum: `TRUSTED` / `VALID` / `INVALID` / `ABSENT`), `soft_binding` (10), `soft_binding_method` (11)
+
+### Extension profile: ramp-c2pa-v1
+
+- 16 standardized attestation claim names; rights mapping (`c2pa.training_mining` → `AccessRestrictions.prohibited_functions`); three conformance levels (A / B / C); trust bridging (C2PA X.509/COSE validated by a vendor, republished as a RAMP Ed25519 attestation)
+
 ## v1.0 — Resource Access Metering Protocol
 
 Open transaction layer for metered resource access by AI agents. One protocol for discovering, pricing, transacting, delivering, and verifying any digital resource.

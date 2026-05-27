@@ -122,9 +122,9 @@ Agent crawls the web → hits provider CDN
 
 The RAMP protocol covers discovery and negotiation -- not content delivery. How content reaches the agent after a successful transaction is an implementation concern between the Exchange and the provider's CDN.
 
-The `TransactionResponse` carries a `DeliveryMethod` hint and a `retrieval.endpoint` URL. What happens next is up to the implementation:
+The `TransactionResponse` carries a `DeliveryMethod` hint and a `retrieval_endpoint` URL. What happens next is up to the implementation:
 
-- The Exchange may populate `retrieval.endpoint` with a signed URL, an access token, or any other retrieval mechanism
+- The Exchange may populate `retrieval_endpoint` with a signed URL, an access token, or any other retrieval mechanism
 - The agent fetches content from the provider's CDN using whatever credentials the Exchange provided
 - The CDN verifies access independently (e.g., HMAC signature check, token validation)
 

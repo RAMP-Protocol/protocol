@@ -48,7 +48,7 @@ sequenceDiagram
     participant Edge as Edge Function (Worker/Compute)
     participant Origin as Origin Server
 
-    Agent->>Edge: GET /premium/article.html?sig=abc...&expires=1773451434&agent_id=sha256hex&txn_id=txn-mp-93a7f2
+    Agent->>Edge: GET /premium/article.html?sig=abc...&expires=1773451434&agent_id=<jwk-thumbprint>&txn_id=txn-mp-93a7f2
 
     Note over Edge: 1. Extract sig, expires, agent_id, txn_id from URL<br/>2. Reconstruct base URL<br/>3. Canonicalize: baseURL\nexpires\nagent_id\ntxn_id<br/>4. HMAC-SHA256(canonical_string, secret)<br/>5. Timing-safe compare expected vs provided<br/>6. Check expiry
 
@@ -77,12 +77,12 @@ https://cdn.provider.com/premium/article.html?expires=1773451434&sig=a7f3b2c1...
 ```
 https://cdn.provider.com/premium/article.html
   ?expires=1773451434
-  &agent_id=sha256(LIC-BUYER-001)
+  &agent_id=NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs
   &txn_id=txn-mp-93a7f2
   &sig=HMAC-SHA256(baseURL\nexpires\nagent_id\ntxn_id, secret)
 ```
 
-- `agent_id` -- SHA-256 hash of the agent's license ID. The URL parameter `agent_id` carries the value from proto's `TransactionResponse.agent_identity_hash` field (SHA-256 of the agent's license ID).
+- `agent_id` -- the agent's `agent_identity_hash` from `TransactionResponse`: the RFC 7638 JWK Thumbprint (SHA-256, base64url) of the agent's Ed25519 request-signing key. Because it is part of the HMAC input, a URL holder cannot swap the Exchange-issued value.
 - `txn_id` -- transaction ID for reconciliation and single-use enforcement.
 - `\n` delimiter between fields prevents canonicalization ambiguity (as noted in the threat model's HMAC implementation note).
 
@@ -97,7 +97,7 @@ baseURL\nexpires\nagent_id\ntxn_id
 Where:
 - `baseURL` -- the content URL without query parameters (e.g., `https://cdn.example.com/premium/article.html`)
 - `expires` -- Unix timestamp in seconds (string representation)
-- `agent_id` -- SHA-256 hex hash of the agent's license ID (matches `TransactionResponse.agent_identity_hash`)
+- `agent_id` -- the agent's RFC 7638 JWK Thumbprint (matches `TransactionResponse.agent_identity_hash`)
 - `txn_id` -- the transaction ID (ULID)
 
 All four fields are REQUIRED in production signed URLs. The `agent_id` field binds the URL to a specific agent (preventing sharing, Threat T8). The `txn_id` field enables three-sided reconciliation (CDN logs, Exchange transactions, Usage reports).
@@ -124,19 +124,27 @@ HMAC comparisons use constant-time comparison (XOR loop), never `===`. This prev
 
 ## Agent Identity Binding
 
-When `agentBindingEnabled` is true, the edge function validates that the requester matches the `agent_id` bound into the signed URL.
+The signed URL is bound to the agent that purchased the resource, so a leaked URL is useless to anyone else. The binding follows the **DPoP pattern ([RFC 9449](https://datatracker.ietf.org/doc/html/rfc9449))**: the Exchange embeds the agent's key thumbprint into the URL it HMAC-signs, and a capable edge function enforces proof-of-possession at fetch time — **with no outbound network call**.
 
-**End-to-end agent identity flow**:
+**Definition.** `agent_identity_hash` (URL parameter `agent_id`) is the **[RFC 7638](https://datatracker.ietf.org/doc/html/rfc7638) JWK Thumbprint (SHA-256, base64url)** of the agent's Ed25519 request-signing key — the same key published in the agent's JWKS at `{domain}/.well-known/ramp-agent.json` and used for RFC 9421 request signatures. RFC 7638 defines one canonical JSON form and one hash, so signer and verifier compute the identical value. It is present whenever a signed `retrieval_endpoint` is returned, and it is covered by the URL HMAC.
 
-1. Agent calls `ExecuteTransaction` with `aisystem.aisysuse.lid` (license ID, e.g., `LIC-BUYER-001`).
-2. Exchange computes `agent_id_hash = SHA256(license_id)`.
-3. Exchange embeds `agent_id_hash` in the signed URL: `?Signature=...&agent_id=abc123...`
-4. Agent fetches the signed URL with header: `X-Agent-License-Id: LIC-BUYER-001`
-5. Edge function extracts `agent_id` from URL parameter, extracts `license_id` from `X-Agent-License-Id` header, computes `SHA256(header_value)`, compares against URL parameter.
-   - Match: serve content.
-   - Mismatch: 403.
+:::caution
+This is **not** `SHA-256(license_id)`. The license ID is a public identifier — hashing it binds nothing an attacker cannot reproduce. The thumbprint binds the URL to a key whose *private* half the fetcher must prove it holds.
+:::
 
-The agent does not need to know the hash -- it just sends its `license_id` in a header. The Exchange and the edge function independently compute the same hash.
+**What the agent presents at fetch:**
+
+1. Its **public key** — in a header or a query parameter; the choice is security-irrelevant because the thumbprint is HMAC-locked (see below).
+2. An **RFC 9421 HTTP Message Signature** over the retrieval request (covering `@target-uri` + `created`), proving possession of the corresponding private key.
+
+**What the edge function checks -- fully offline:**
+
+1. Recompute the URL HMAC with the shared secret → proves `agent_id` is Exchange-issued and untampered.
+2. Check `expires` (local clock only).
+3. `thumbprint(presented public key) == agent_id`.
+4. Verify the RFC 9421 signature with the presented key (proof-of-possession).
+
+All four pass → serve. No JWKS fetch is required: the Exchange already authenticated the key at transaction time and froze its thumbprint into the HMAC; the edge inherits that authentication through the HMAC it can verify locally.
 
 ```mermaid
 sequenceDiagram
@@ -144,31 +152,35 @@ sequenceDiagram
     participant MP as Exchange
     participant Edge as Edge Function
 
-    Agent->>MP: ExecuteTransaction(license_id="LIC-BUYER-001")
-    Note over MP: agent_id_hash = SHA256("LIC-BUYER-001")
-    MP-->>Agent: signed URL with ?agent_id=abc123...&sig=...
+    Agent->>MP: ExecuteTransaction (signed, RFC 9421)
+    Note over MP: T = RFC 7638 thumbprint(agent key)<br/>embed T as agent_id, HMAC the whole URL
+    MP-->>Agent: retrieval_endpoint (?agent_id=T&sig=...)<br/>+ agent_identity_hash = T
 
-    Agent->>Edge: GET /premium/article?agent_id=abc123...&sig=...<br/>Header: X-Agent-License-Id: LIC-BUYER-001
-    Note over Edge: 1. Extract agent_id from URL param<br/>2. Extract license_id from header<br/>3. Compute SHA256("LIC-BUYER-001")<br/>4. Compare against URL param
-    alt Hash matches
+    Agent->>Edge: GET retrieval_endpoint<br/>present public key + RFC 9421 signature
+    Note over Edge: 1. Recompute URL HMAC (T untampered)<br/>2. Check expiry<br/>3. thumbprint(presented key) == T<br/>4. Verify RFC 9421 sig (proof-of-possession)
+    alt All four pass
         Edge-->>Agent: 200 OK + content
-    else Hash mismatch
-        Edge-->>Agent: 403: Agent identity mismatch
+    else Any check fails
+        Edge-->>Agent: 403 Forbidden
     end
 ```
 
-**Identity verification methods**:
+**Why a stolen URL is harmless.** To pass step 3 the attacker must present the agent's *public* key; to pass step 4 they must hold its *private* key. They can do one or the other, never both. Rewriting `agent_id` to match their own key fails step 1 (they do not hold the HMAC secret). The defense is `(HMAC-locked thumbprint) ∧ (proof-of-possession)`, not key secrecy — which is why the public key may travel in the clear.
 
-| Method | Reliability | Notes |
+| Attacker with a stolen URL tries to… | Fails at |
+|---|---|
+| present their own key + sign with their own private key | step 3 — `thumbprint(their key) ≠ agent_id` |
+| rewrite `agent_id` to match their own key | step 1 — HMAC fails; they lack the shared secret |
+| present the agent's public key (it is public) | step 4 — they cannot produce the RFC 9421 signature |
+
+**Enforcement is OPTIONAL -- capability depends on the delivery node:**
+
+| Delivery node | Enforces binding? | Behavior |
 |---|---|---|
-| `X-Agent-License-Id` request header | Medium | Agent self-reports. Can be spoofed. |
-| TLS client certificate `CN` or `SAN` | High | Requires mTLS setup. Not common yet. |
-| OAuth2 `access_token` introspection | High | Requires network call. Expensive at edge. |
-| IP address hash | Low | Multi-tenant IPs, NAT, proxies. |
+| Edge function (Cloudflare Workers, Lambda@Edge, Fastly Compute) | Yes | Full steps 1-4. RAMP reference implementations run here and **do** enforce. |
+| Bearer-only signed-URL CDN (CloudFront / S3 presigned, native Fastly) | No | Validates its own HMAC + expiry only; falls back to **HMAC + short TTL + TLS**. |
 
-**Recommended approach for v1**: `X-Agent-License-Id` header with SHA-256 hash comparison against the `agent_id` URL parameter. This prevents casual URL sharing but does not prevent a determined attacker who knows the license ID.
-
-**Future**: mTLS with agent certificates issued by a RAMP-recognized CA.
+Cost budget on a capable edge: HMAC-SHA256 (µs) + SHA-256 thumbprint (µs) + one Ed25519 verify (~50-100 µs) ≪ 1 ms, no socket. Because the RFC 9421 signature covers `@target-uri` + `created`, a captured fetch signature cannot be replayed against a different URL or outside the short TTL.
 
 ## Single-Use URL Enforcement
 

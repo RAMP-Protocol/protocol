@@ -351,7 +351,7 @@ RampClient
   |
   +-- ContentFetcher
   |     Fetches content from signed URL in TransactionResponse.
-  |     Sends X-Agent-License-Id header for CDN audit trail.
+  |     Presents agent public key + RFC 9421 signature for binding verification.
   |     Handles both DELIVERY_METHOD_DIRECT and DELIVERY_METHOD_INSTRUCTIONS.
   |
   +-- UsageReporter
