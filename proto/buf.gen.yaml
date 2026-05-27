@@ -4,17 +4,17 @@ managed:
 plugins:
   # Go code generation
   - remote: buf.build/protocolbuffers/go
-    out: gen/go
+    out: ../gen/go
     opt: paths=source_relative
   # Connect-Go (HTTP/JSON + gRPC)
   - remote: buf.build/connectrpc/go
-    out: gen/go
+    out: ../gen/go
     opt: paths=source_relative
   # TypeScript message types (protobuf-es)
   - remote: buf.build/bufbuild/es
-    out: gen/ts
+    out: ../gen/ts
     opt: target=ts
   # TypeScript Connect service client/handler
   - remote: buf.build/connectrpc/es
-    out: gen/ts
+    out: ../gen/ts
     opt: target=ts

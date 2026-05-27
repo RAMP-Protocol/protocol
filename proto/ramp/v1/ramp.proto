@@ -57,6 +57,9 @@
 //     avoids the namespace migration problem (MIME X- prefix, RFC 6648) and
 //     supports contextual criticality (same extension can be critical in some
 //     messages but not others).
+//   - retrieval_endpoint: canonical signed-URL field on TransactionResponse,
+//     TransactionResultItem, and RAMPResponse. Replaces ext["signed_url"]
+//     usage; removes stranded CoMP Package comments.
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.
@@ -100,6 +103,19 @@ import "google/protobuf/duration.proto";
 //   Exchange → Agent:  JWS Compact Serialization on Offer (alg=EdDSA)
 //
 // Signed URLs use HMAC-SHA256 (Marketplace↔CDN shared secret, separate concern).
+//
+// Retrieval-URL identity binding (OPTIONAL, DPoP-style — RFC 9449):
+//   The Exchange MAY bind a signed retrieval_endpoint to the requesting agent
+//   by embedding agent_identity_hash — the RFC 7638 JWK Thumbprint (SHA-256)
+//   of the agent's Ed25519 request-signing key — inside the HMAC-signed URL,
+//   and echoing it in the response. A capable delivery endpoint (edge function)
+//   verifies the binding fully offline: confirm the URL HMAC (proves the hash
+//   is Exchange-issued and untampered), then require the fetcher to present its
+//   public key and an RFC 9421 signature over the retrieval request, and check
+//   thumbprint(presented key) == agent_identity_hash. No JWKS fetch required.
+//   Enforcement is NOT mandatory: a bearer-only signed-URL CDN that cannot run
+//   code falls back to HMAC + short TTL + TLS. RAMP reference implementations
+//   run on edge functions and DO enforce it.
 // ============================================================================
 
 // ============================================================================
@@ -1198,11 +1214,19 @@ message TransactionResponse {
   // Reporting requirements attached to this delivery.
   optional ReportingObligation reporting_obligation = 8;
 
-  // When the delivery endpoint (e.g. signed URL) expires.
+  // When retrieval_endpoint expires.
   optional google.protobuf.Timestamp expires_at = 9;
 
-  // REQUIRED. Hash of the agent's identity bound into signed URLs.
+  // Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of
+  // the agent's Ed25519 request-signing key (see "Retrieval-URL identity binding"
+  // above). Empty string when absent; non-empty iff a signed retrieval_endpoint
+  // is present. Delivery-endpoint enforcement of the binding is OPTIONAL.
   string agent_identity_hash = 10;
+
+  // Signed retrieval URL the agent uses to fetch the purchased resource.
+  // Bound to agent_identity_hash; expires at expires_at. Absent on denial
+  // and on transactions whose delivery_method is not signed-URL-based.
+  optional string retrieval_endpoint = 18;
 
   // Set when the transaction is denied. Absent on success.
   optional DenialReason denial_reason = 11;
@@ -1247,7 +1271,6 @@ message TransactionResultItem {
   // Billing reference.
   string billing_id = 3;
 
-  // CoMP Package with retrieval.endpoint (signed URL) populated.
   // Resource title echoed from the Offer.
   optional string resource_title = 4;
 
@@ -1265,8 +1288,14 @@ message TransactionResultItem {
   // Set if this specific item was denied (others may succeed).
   optional DenialReason denial_reason = 7;
 
-  // When the signed URL expires.
+  // When retrieval_endpoint expires.
   optional google.protobuf.Timestamp expires_at = 8;
+
+  // Signed retrieval URL for this item. Bound to the requesting agent's identity
+  // via the parent TransactionResponse.agent_identity_hash (shared across all
+  // batch items); expires at expires_at. Absent if this item was denied or its
+  // delivery_method is not signed-URL-based.
+  optional string retrieval_endpoint = 12;
 
   // How resource is delivered for this item.
   DeliveryMethod delivery_method = 9;
@@ -1927,7 +1956,6 @@ message RAMPResponse {
   // Which Exchange won the selection.
   string marketplace = 6;
 
-  // CoMP Package with retrieval.endpoint populated.
   // Resource title for the disputed resource.
   optional string resource_title = 7;
 
@@ -1940,8 +1968,18 @@ message RAMPResponse {
   // Reporting obligations the agent must fulfill.
   optional ReportingObligation reporting_obligation = 10;
 
-  // When the delivery endpoint expires.
+  // When retrieval_endpoint expires.
   optional google.protobuf.Timestamp expires_at = 11;
+
+  // Signed retrieval URL returned by the Exchange and forwarded unchanged by the
+  // Broker, together with agent_identity_hash. Bound to agent_identity_hash;
+  // expires at expires_at. Absent on denial and when delivery_method is not
+  // signed-URL-based.
+  optional string retrieval_endpoint = 13;
+
+  // Identity that retrieval_endpoint is bound to. Same value and computation as
+  // TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.
+  optional string agent_identity_hash = 14;
 
   // Broker's fee for this transaction, if any.
   // Absent = no per-transaction fee (governed by external agreement).

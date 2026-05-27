@@ -57,6 +57,9 @@
 //     avoids the namespace migration problem (MIME X- prefix, RFC 6648) and
 //     supports contextual criticality (same extension can be critical in some
 //     messages but not others).
+//   - retrieval_endpoint: canonical signed-URL field on TransactionResponse,
+//     TransactionResultItem, and RAMPResponse. Replaces ext["signed_url"]
+//     usage; removes stranded CoMP Package comments.
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.

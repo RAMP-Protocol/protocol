@@ -1,5 +1,49 @@
 # RAMP Protocol Changelog
 
+## v1.0.3 (2026-05-26) — Canonical retrieval endpoint field
+
+Adds the missing scalar field for the signed retrieval URL on transaction
+responses. Resolves stranded "CoMP Package with retrieval.endpoint" comments
+left after the v1.0 CoMP decoupling.
+
+### New fields
+- `TransactionResponse.retrieval_endpoint` (string, field 18)
+- `TransactionResultItem.retrieval_endpoint` (string, field 12)
+- `RAMPResponse.retrieval_endpoint` (string, field 13)
+- `RAMPResponse.agent_identity_hash` (string, field 14)
+
+### Cleanup
+- Removed orphan `// CoMP Package with retrieval.endpoint…` comments from
+  `TransactionResultItem.resource_title` and `RAMPResponse.resource_title`.
+- Reworded `TransactionResponse.expires_at` doc to reference
+  `retrieval_endpoint` by name.
+- Clarified `agent_identity_hash` doc (definition + binding) and aligned the
+  `expires_at` and `retrieval_endpoint` absence wording across TransactionResponse,
+  TransactionResultItem, and RAMPResponse.
+
+### Design notes
+- Pure RAMP-native scalar; does not re-couple core to `comp.v1`.
+- No `RetrievalAuth` enum: signed URL is the only delivery auth mechanism
+  today, identity binding lives on `agent_identity_hash`, lifetime lives on
+  `expires_at`. Future auth mechanisms will be additive or extension-profile
+  based.
+- Backward compatible: optional, additive, no renumbering.
+
+### Binding semantics
+- `agent_identity_hash` is the RFC 7638 JWK Thumbprint (SHA-256) of the agent's
+  Ed25519 request-signing key. The Exchange MAY embed it into the HMAC-signed
+  `retrieval_endpoint` (DPoP-style, RFC 9449) and echo it in the response.
+- Bound to the agent's request-signing key, never to the principal/delegation.
+- A capable delivery endpoint (edge function) verifies the binding fully offline:
+  confirm the URL HMAC, then require the fetcher to present its public key + an
+  RFC 9421 signature and check `thumbprint(presented key) == agent_identity_hash`.
+  No JWKS fetch required.
+- Enforcement is OPTIONAL: bearer-only signed-URL CDNs fall back to HMAC + short
+  TTL + TLS. RAMP reference implementations run on edge functions and DO enforce it.
+- `agent_identity_hash` carries a value iff a signed `retrieval_endpoint` is
+  present (empty string on `TransactionResponse`, field absent on `RAMPResponse`,
+  otherwise).
+
 ## v1.0.2 (2026-04-01) — Resource Previews
 
 Lightweight resource previews on Offers for pre-transaction evaluation.

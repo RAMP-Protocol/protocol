@@ -157,12 +157,7 @@ Response:
   "id": "demo-txn-001",
   "transactionId": "txn-1773682700352684307",
   "billingId": "bill-000002",
-  "package": {
-    "id": "pkg-delivered",
-    "retrieval": {
-      "endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=05f116fd...824d2d9&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307"
-    }
-  },
+  "retrievalEndpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307",
   "cost": { "amount": 0.05, "currency": "USD" },
   "deliveryMethod": "DELIVERY_METHOD_INSTRUCTIONS",
   "reportingObligation": {
@@ -171,24 +166,24 @@ Response:
     "requiredFields": ["consumed_quantity"]
   },
   "expiresAt": "2026-03-16T17:43:20Z",
-  "agentIdentityHash": "05f116fdb971e44f1c59fddc8a29954018b2c5fd6a3993cec318b12ac824d2d9"
+  "agentIdentityHash": "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
 }
 ```
 
 Key fields:
 - **transactionId** — unique transaction reference, recorded in the [transaction log](/components/exchange/storage-model) before the signed URL is generated
 - **billingId** — billing record reference, managed by the [Billing Adapter](/components/exchange/billing-adapter)
-- **package.retrieval.endpoint** — the [signed URL](/components/edge-function/signed-url-verification) with HMAC-SHA256 signature, expiry, agent identity binding, and transaction ID
+- **retrievalEndpoint** — the [signed URL](/components/edge-function/signed-url-verification) with HMAC-SHA256 signature, expiry, agent identity binding, and transaction ID
 - **cost** — $0.05 USD charged. See [how money flows](/getting-started/how-money-flows) for the full billing lifecycle
 - **reportingObligation** — you MUST report usage within 24 hours. See [budget and reporting](/components/agent-sdk/budget-reporting) for how the Agent SDK handles this
-- **agentIdentityHash** — SHA-256 of your license ID, bound into the signed URL to [prevent URL sharing](/security/threat-model)
+- **agentIdentityHash** — RFC 7638 JWK Thumbprint of your Ed25519 request-signing key, bound into the signed URL to [prevent URL sharing](/security/threat-model). See [Signed URL Verification](/components/edge-function/signed-url-verification)
 
 ### Step 5: Fetch Resource via [Signed URL](/components/edge-function/signed-url-verification)
 
 The signed URL contains four verification parameters, all verified by the [CDN edge function](/components/edge-function/overview):
 - `sig` — HMAC-SHA256 signature (Exchange↔CDN shared secret). See [signed URL verification](/components/edge-function/signed-url-verification) for the canonical format
 - `expires` — Unix timestamp (URL expires after 5 minutes)
-- `agent_id` — SHA-256 of your license ID (identity binding — [prevents URL sharing](/security/threat-model))
+- `agent_id` — the agent's RFC 7638 JWK Thumbprint (identity binding — [prevents URL sharing](/security/threat-model))
 - `txn_id` — transaction ID (enables three-sided reconciliation: CDN logs + Exchange logs + agent reports)
 
 In production, the [edge function](/components/edge-function/overview) also performs [bot detection](/components/edge-function/bot-detection) — blocking unauthorized AI crawlers with a 403 and `X-Content-Rules` header that [redirects to the Exchange](/protocol/discovery-paths).

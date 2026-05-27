@@ -423,12 +423,7 @@ Response:
   "id": "tx-dnb-001",
   "transaction_id": "txn-dnb-acme-001",
   "billing_id": "bill-dnb-acme-001",
-  "package": {
-    "id": "PKG-DNB-123456789-STD",
-    "retrieval": {
-      "endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1..."
-    }
-  },
+  "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1...",
   "cost": {
     "amount": 61.99,
     "currency": "USD"
@@ -444,7 +439,7 @@ Response:
 }
 ```
 
-The signed URL is valid for 5 minutes. The `agent_identity_hash` (SHA-256 of the agent's license ID) is embedded in the URL — a different agent cannot use this URL. This is D&B's primary enforcement mechanism against redistribution: the credit report is delivered to one specific agent, and the URL cannot be shared.
+The signed URL is valid for 5 minutes. The `agent_identity_hash` (the agent's RFC 7638 JWK Thumbprint) is embedded in the URL — a different agent cannot use this URL. This is D&B's primary enforcement mechanism against redistribution: the credit report is delivered to one specific agent, and the URL cannot be shared.
 
 ---
 
