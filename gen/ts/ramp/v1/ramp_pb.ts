@@ -2674,7 +2674,7 @@ export const RequestConstraintsSchema: GenMessage<RequestConstraints> = /*@__PUR
  *
  * Time bounds are RFC3339 strings (sortable, ops-debuggable, avoids the
  * JWT nbf/exp collision). At least one key in WellKnownManifest.public_keys
- * MUST have `not_before <= now <= not_after`. Verification MUST reject
+ * MUST have `not_before <= now < not_after`. Verification MUST reject
  * signatures whose key falls outside its window.
  *
  * @generated from message ramp.v1.JsonWebKey
@@ -2803,6 +2803,8 @@ export type WellKnownManifest = Message<"ramp.v1.WellKnownManifest"> & {
    * URL on a 300s cadence (±10% jitter) and replace their local revoked
    * set with the response. When unset, consumers rely on routine rotation
    * and not_after expiry.
+   * This list's freshness bounds revocation latency — see the caching
+   * contract in the Well-Known Discovery section above.
    *
    * @generated from field: optional string invalidation_url = 6;
    */

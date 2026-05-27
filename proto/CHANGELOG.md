@@ -62,6 +62,18 @@ Verifier signing keys appear in `public_keys`. The verifier's
 on a dedicated domain serve `WellKnownManifest` under whichever role
 matches the operating party (typically `ROLE_EXCHANGE`).
 
+### Discovery & key-validity semantics
+- Caching contract: `/.well-known/ramp.json` MAY be cached (minutes–hours);
+  the `invalidation_url` body SHOULD be short/no-store so the 300s poll is not
+  defeated by an intermediary cache. Stale-revocation enforcement is operational,
+  not protocol-guaranteed.
+- Key-validity window is half-open `[not_before, not_after)`. Clarified the
+  at-least-one-valid-key invariant comment (`not_before <= now < not_after`) to
+  match the `not_after` "strict upper bound" definition — no behavior change.
+- Domainless requesters are accommodated via a registry-hosted `WellKnownManifest`
+  (agent sets `Requester.domain` to the registry host); no protocol change.
+  Relaxing the discovery anchor is deferred.
+
 ### Compatibility
 - Proto-binary layer: wire-additive; no tags moved or removed.
 - JSON consumers: all field names in the table above MUST be updated.

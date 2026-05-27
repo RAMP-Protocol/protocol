@@ -1716,6 +1716,31 @@ message RequestConstraints {
 //
 // ProviderManifest is retained Deprecated for one release cycle to ease
 // consumer migration. New producers MUST emit WellKnownManifest instead.
+//
+// Caching contract:
+//   /.well-known/ramp.json MAY be cached by consumers and CDNs for routine
+//   periods (minutes to hours) — keys rotate slowly and carry explicit
+//   not_before / not_after bounds. The invalidation_url body, by contrast,
+//   SHOULD be served with a short or zero freshness lifetime (e.g.
+//   Cache-Control: max-age=60, or no-store) so the 300s consumer poll is not
+//   defeated by an intermediary cache. Emergency-revocation latency is bounded
+//   by the freshness of that list.
+//
+//   Enforcement is operational, not protocol-guaranteed: a consumer that
+//   grants access against a stale revocation set bears that as its own
+//   business risk — it is not a protocol deficiency.
+//
+// Domainless requesters — an individual agent with no public domain of its
+// own — are accommodated without a protocol change: a registry (operated by
+// an Exchange/Broker or a third party) hosts the agent's WellKnownManifest,
+// and the agent sets Requester.domain to that registry host
+// (e.g. "agent-7.registry.example"). The agent generates its own keypair; the
+// registry publishes the public half at {registry}/.well-known/ramp.json. The
+// domain + well-known paradigm is preserved end to end.
+//
+// Relaxing the discovery anchor (e.g. an explicit per-requester keys URL) is
+// intentionally deferred: revisit at the protocol level only if self-hosting
+// or registry-hosting proves too rigid in practice.
 // ============================================================================
 
 // Role — Identifies which kind of RAMP participant a WellKnownManifest
@@ -1736,7 +1761,7 @@ enum Role {
 //
 // Time bounds are RFC3339 strings (sortable, ops-debuggable, avoids the
 // JWT nbf/exp collision). At least one key in WellKnownManifest.public_keys
-// MUST have `not_before <= now <= not_after`. Verification MUST reject
+// MUST have `not_before <= now < not_after`. Verification MUST reject
 // signatures whose key falls outside its window.
 message JsonWebKey {
   // Key ID. Unique within a single WellKnownManifest.public_keys list.
@@ -1798,6 +1823,8 @@ message WellKnownManifest {
   // URL on a 300s cadence (±10% jitter) and replace their local revoked
   // set with the response. When unset, consumers rely on routine rotation
   // and not_after expiry.
+  // This list's freshness bounds revocation latency — see the caching
+  // contract in the Well-Known Discovery section above.
   optional string invalidation_url = 6;
 
   // Publisher-only. Authorized exchanges for this publisher's resources.

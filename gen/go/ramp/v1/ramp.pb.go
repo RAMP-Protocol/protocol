@@ -5163,7 +5163,7 @@ func (x *RequestConstraints) GetMaxDataAge() *durationpb.Duration {
 //
 // Time bounds are RFC3339 strings (sortable, ops-debuggable, avoids the
 // JWT nbf/exp collision). At least one key in WellKnownManifest.public_keys
-// MUST have `not_before <= now <= not_after`. Verification MUST reject
+// MUST have `not_before <= now < not_after`. Verification MUST reject
 // signatures whose key falls outside its window.
 type JsonWebKey struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -5303,6 +5303,8 @@ type WellKnownManifest struct {
 	// URL on a 300s cadence (±10% jitter) and replace their local revoked
 	// set with the response. When unset, consumers rely on routine rotation
 	// and not_after expiry.
+	// This list's freshness bounds revocation latency — see the caching
+	// contract in the Well-Known Discovery section above.
 	InvalidationUrl *string `protobuf:"bytes,6,opt,name=invalidation_url,json=invalidationUrl,proto3,oneof" json:"invalidation_url,omitempty"`
 	// Publisher-only. Authorized exchanges for this publisher's resources.
 	// Like ads.txt — declares who may sell. MUST be empty for non-publisher
