@@ -302,8 +302,16 @@ MCP (tool discovery)  →  RAMP (metered access)  →  Payment rails (settlement
 
 This makes RAMP **Layer 4** in the emerging agent protocol stack: above transport (HTTP/gRPC), above identity (Ed25519 signatures), above tool discovery (MCP), and below payment settlement. RAMP is the protocol that answers "how does an agent pay for and receive licensed content?" without prescribing how the money moves.
 
+## Coexistence with edge-side ad insertion
+
+RAMP signed-URL verification at the edge is independent of Server-Side Ad Insertion (SSAI), the IAB Tech Lab standard for stitching ad creatives into a publisher's media stream -- see the [SSAI VAST Macros v1.0 specification](https://iabtechlab.com/wp-content/uploads/2020/11/IABTechLab_SSAI_VAST_Macros_v1.0-Nov-2020.pdf). The two run at different stages of the request (signature verification on viewer-request; SSAI on origin-response) and operate on different artefacts (URL query string vs response body). Every major CDN exposes a primitive that lets them run in series on the same distribution. RAMP does not preclude SSAI, and SSAI does not preclude RAMP.
+
+The RAMP edge function itself is also not required for delivery: any surface that verifies the signed URL -- CDN-native (CloudFront trusted key groups), publisher-operated (an LLM-optimised origin serving Markdown), or vendor-operated -- satisfies the protocol. See [Edge Function Composition](/components/edge-function/composition/) for the per-CDN composition primitives, verified per-stage compute budgets, and the SSAI coexistence pattern.
+
 ## Next Steps
 
 - [Discovery Paths](/protocol/discovery-paths/) -- all the ways an agent can enter the RAMP flow
 - [Transaction Flow](/protocol/transaction-flow/) -- the Exchange protocol in detail
 - [Authentication](/protocol/authentication/) -- Ed25519 signature chain and key announcement
+- [Role Composition](/protocol/role-composition/) -- how a single operator can run multiple RAMP roles
+- [Edge Function Composition](/components/edge-function/composition/) -- RAMP coexistence with SSAI and other edge logic

@@ -1,0 +1,80 @@
+---
+title: "Edge Function Composition"
+description: "How RAMP signed-URL verification coexists with other edge-side logic (ad insertion, bot detection, A/B routing) in the same CDN distribution, and why the RAMP edge function is not required for delivery."
+---
+
+## RAMP signature verification is one stage among many
+
+The RAMP edge function does one thing: verify that an inbound signed URL was issued by an authorised Exchange, has not expired, and (optionally) is bound to the requesting agent. Everything else a CDN does on a request — server-side ad insertion, bot detection, A/B routing, header rewriting, image optimisation, edge caching, origin selection — is independent of RAMP and can run in the same request pipeline.
+
+Every major CDN exposes a composition primitive that lets multiple edge functions execute on a single request without forcing them into one monolithic codebase. The numbers below show that the per-stage compute budget is comfortable enough to run RAMP signature verification plus several other stages in series.
+
+## Per-CDN composition mechanisms
+
+| CDN | Composition primitive | What it lets you do |
+|---|---|---|
+| **Amazon CloudFront** | [Multi-function packager](https://aws.amazon.com/blogs/networking-and-content-delivery/introducing-multi-function-packager-allowing-more-than-one-function-per-event-trigger-on-amazon-cloudfront/) | Combine multiple Lambda@Edge functions or CloudFront Functions per event trigger; execution order set in the package config |
+| **Cloudflare Workers** | [Service bindings](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/) | One Worker invokes another in-process; up to 32 invocations per request; zero added latency |
+| **Fastly Compute** | [Service chaining](https://www.fastly.com/documentation/guides/concepts/service-chaining/) | One Fastly service is the backend of another in the same POP |
+| **Akamai EdgeWorkers** | [Flexible composition](https://techdocs.akamai.com/edgeworkers/docs/flexible-composition) | A parent EdgeWorker invokes child EdgeWorkers on a single request; combined limits apply, not per-worker |
+
+## Per-stage compute budgets
+
+The realistic budget for running RAMP signature verification alongside other edge logic on each CDN, verified against current published limits:
+
+| CDN tier | CPU budget per stage | Wall budget per stage |
+|---|---|---|
+| **CloudFront Functions** | ~1 ms (compute-utilisation metric) | ~1 ms — no network access; designed for header/URL work only |
+| **Lambda@Edge — viewer events** | (no CPU / wall split) | 5 s timeout, 128 MB memory, 1 MB code, 53.2 KB body |
+| **Lambda@Edge — origin events** | (no split) | 30 s timeout, configurable memory, 50 MB code, 1.33 MB body |
+| **Cloudflare Workers — Free** | 10 ms CPU per invocation | (chain caps at 32 invocations / request) |
+| **Cloudflare Workers — Paid / Standard** | 50 ms CPU per invocation, expandable to 5 min | same chain cap |
+| **Fastly Compute** | 50 ms CPU per request | 120 s wall (60 s on trial accounts) |
+| **Akamai EdgeWorkers — Basic** | 10 ms CPU per event handler | 4 s wall |
+| **Akamai EdgeWorkers — Dynamic** | 20 ms CPU per event handler | 5.5 s wall |
+| **Akamai EdgeWorkers — Enterprise** | 70 ms CPU per event handler | 10 s wall |
+
+Sources: [CloudFront Functions restrictions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-function-restrictions.html), [Lambda@Edge restrictions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-at-edge-function-restrictions.html), [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [Fastly Compute resource limits](https://docs.fastly.com/products/compute-resource-limits), [Akamai EdgeWorkers resource tier limitations](https://techdocs.akamai.com/edgeworkers/docs/resource-tier-limitations).
+
+The tightest tier is CloudFront Functions at ~1 ms — and that is exactly the tier where RAMP needs no custom code, because CloudFront verifies RSA signed URLs natively via [trusted key groups](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-trusted-signers.html). Every other tier provides 10–70 ms of CPU and seconds of wall time per stage, enough to run RAMP signature verification plus ad insertion, plus bot detection, plus origin selection, in series.
+
+## Coexistence with Server-Side Ad Insertion (SSAI)
+
+Server-Side Ad Insertion (SSAI), also called Dynamic Ad Insertion, is the IAB Tech Lab standard for stitching ad content into a publisher's media stream at the edge. The current specification is the [SSAI VAST Macros v1.0 document](https://iabtechlab.com/wp-content/uploads/2020/11/IABTechLab_SSAI_VAST_Macros_v1.0-Nov-2020.pdf) (Nov 2020), built on VAST 4.
+
+RAMP signed-URL verification and SSAI run at different stages of the request and operate on different artefacts:
+
+- **RAMP** verifies a query-string signature on the incoming request URL and either passes it to origin or returns 403. It does not parse or modify the response body.
+- **SSAI** inspects the response body (the media playlist or manifest), resolves ad slots, fetches creatives from an ad decisioning service, and rewrites the manifest before returning it to the client.
+
+They can run on the same CDN distribution using the per-CDN composition primitives above. A typical pipeline on a publisher running both:
+
+1. **Viewer-request stage** — RAMP signed-URL verification (or 403 with `X-Content-Rules`)
+2. **Origin-request stage** — A/B routing, header rewriting
+3. **Origin-response stage** — SSAI manifest rewrite, ad slot resolution
+4. **Viewer-response stage** — caching headers, observability
+
+Nothing in RAMP precludes SSAI, and nothing in SSAI precludes RAMP. The two address different concerns at different stages.
+
+## The RAMP edge function is not required for delivery
+
+The RAMP protocol only requires that the signed retrieval URL verify before content is served. *Anything* that performs that verification satisfies the contract:
+
+- **CDN-native signed URLs.** AWS CloudFront's trusted-key-group RSA verification, for example, requires zero custom code — the CDN does it natively. RAMP exposes this path via `tenants.signing_scheme = AWS_CLOUDFRONT_RSA`.
+- **The publisher's own delivery node.** A publisher MAY serve content from a dedicated delivery node that is independent of its public CDN — for example, an LLM-optimised origin that returns content stripped of advertising, chrome, and tracking, formatted as Markdown or plain text for agentic consumption. As long as that node verifies the signed URL (and, optionally, the agent identity binding), it satisfies the protocol.
+- **A third-party delivery vendor.** Any vendor that the publisher trusts to verify signatures may serve content; the Exchange and the vendor share the verification key.
+
+The RAMP reference implementation ships an edge function for the three runtimes where signature verification is most often deployed (CloudFront, Cloudflare Workers, Fastly Compute — see [CDN Adapters](/components/edge-function/cdn-adapters/)). It is not a structural requirement of the protocol; it is one convenient deployment shape.
+
+## Implications
+
+- A publisher can adopt RAMP without removing or restructuring existing edge logic (SSAI, bot detection, paywall, AB testing).
+- A publisher can route agentic traffic to a different delivery surface (LLM-optimised origin) from human traffic while keeping a single Exchange, single offer catalog, and single RAMP `WellKnownManifest`.
+- A publisher who already runs CloudFront with trusted key groups MAY satisfy RAMP delivery with zero custom edge code; the RAMP edge function package is opt-in.
+
+## Next Steps
+
+- [Overview](/components/edge-function/overview/) — what the RAMP edge function does, and what providers deploy
+- [CDN Adapters](/components/edge-function/cdn-adapters/) — runtime-specific implementations for CloudFront, Cloudflare Workers, and Fastly Compute
+- [Signed URL Verification](/components/edge-function/signed-url-verification/) — the verification contract every delivery surface must satisfy
+- [Standards Layering](/protocol/standards-layering/) — how RAMP composes with RSL, CoMP, C2PA, and WebBotAuth
