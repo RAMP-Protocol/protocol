@@ -5,7 +5,7 @@ description: "Exchange component that manages resource catalogs, executes transa
 
 ## What the Exchange Does
 
-The Exchange Node is the core transaction component in the RAMP architecture. It is a single Go binary (using Connect-Go for gRPC/HTTP) that acts as the commercial intermediary between AI agents requesting resources and providers offering them. A single Exchange Node serves many providers — one Exchange operator runs a Exchange that serves 10, 100, or 1000+ providers.
+The Exchange Node is the core transaction component in the RAMP architecture. It is a single Go binary (using Connect-Go for gRPC/HTTP) that acts as the commercial intermediary between AI agents requesting resources and providers offering them. A single Exchange Node serves many providers — one Exchange operator runs an Exchange that serves 10, 100, or 1000+ providers.
 
 The Exchange implements the RAMP v1.0 `ExchangeService` (4 RPCs: `DiscoverResources`, `ExecuteTransaction`, `ReportUsage`, `DisputeTransaction`).
 

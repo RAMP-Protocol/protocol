@@ -161,7 +161,7 @@ The Exchange looks up the article in its catalog, checks that the agent's `inten
 
 **What the agent learns from this response:**
 
-- **Pricing**: `PRICING_MODEL_PER_ACCESS` at $0.05, with an estimated 3,200 tokens. The `unit_cost` ($0.0000156/token) enables cross-exchange comparison when an Broker aggregates offers.
+- **Pricing**: `PRICING_MODEL_PER_ACCESS` at $0.05, with an estimated 3,200 tokens. The `unit_cost` ($0.0000156/token) enables cross-exchange comparison when a Broker aggregates offers.
 - **Content mutability**: `RESOURCE_MUTABILITY_STATIC` — this article will not change. The agent SHOULD verify the SHA-256 hash on delivery. A mismatch is disputable.
 - **Attestation**: Level 1 (self-attested by `techcrunch.com`). The provider signed its own claims about word count and token estimate. A third-party attestation (Level 2, e.g., from `gumgum.com`) would carry higher trust.
 - **Restrictions**: AI input, indexing, and search are permitted. Training is prohibited.

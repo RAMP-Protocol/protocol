@@ -253,7 +253,7 @@ When an `OfferGroup` has no offers, the `absence_reason` field explains why. Thi
 
 ### RateLimitInfo (v1.0)
 
-The `ResourceResponse` carries an optional `rate_limit` field with the caller's current rate limit status: `limit`, `remaining`, `reset_at`, and `window`. This is particularly important for Broker fanout -- when an Broker sends batch queries to multiple Exchanges, mid-batch rate limiting can cause partial results if not signaled early. Modeled after IETF RateLimit header fields.
+The `ResourceResponse` carries an optional `rate_limit` field with the caller's current rate limit status: `limit`, `remaining`, `reset_at`, and `window`. This is particularly important for Broker fanout -- when a Broker sends batch queries to multiple Exchanges, mid-batch rate limiting can cause partial results if not signaled early. Modeled after IETF RateLimit header fields.
 
 ### DiscoveryMethod (v1.0)
 
@@ -272,7 +272,7 @@ Batch transactions are **non-atomic** -- individual items can fail independently
 
 ## Path F: Subscription-Based Access
 
-The agent has an existing subscription deal with a Exchange. When querying supply, the Exchange includes subscription offers with zero marginal cost. The transaction skips per-request billing but still issues a signed URL and creates a usage reporting obligation.
+The agent has an existing subscription deal with an Exchange. When querying supply, the Exchange includes subscription offers with zero marginal cost. The transaction skips per-request billing but still issues a signed URL and creates a usage reporting obligation.
 
 ```mermaid
 sequenceDiagram

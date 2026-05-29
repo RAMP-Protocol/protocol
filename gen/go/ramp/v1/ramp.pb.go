@@ -1252,9 +1252,9 @@ func (ResolutionType) EnumDescriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{16}
 }
 
-// ResourceQuery — Query a Exchange for available resource offers.
+// ResourceQuery — Query an Exchange for available resource offers.
 //
-// Sent by an Broker or directly by an AI agent.
+// Sent by a Broker or directly by an AI agent.
 // The Exchange evaluates its access policies, available inventory,
 // and reporting requirements before responding.
 type ResourceQuery struct {
@@ -1412,8 +1412,8 @@ type ResourceResponse struct {
 	OfferGroups []*OfferGroup `protobuf:"bytes,5,rep,name=offer_groups,json=offerGroups,proto3" json:"offer_groups,omitempty"`
 	// v0.2.1: Rate limit status for this caller.
 	// Present when the Exchange enforces per-caller rate limits on discovery.
-	// Enables agents/Orchestrators to throttle proactively rather than hitting
-	// hard limits. Particularly important when an Broker fans out the
+	// Enables agents/Brokers to throttle proactively rather than hitting
+	// hard limits. Particularly important when a Broker fans out the
 	// same batch query to multiple Exchanges — mid-batch rate limiting
 	// can cause partial results if not signaled early.
 	RateLimit *RateLimitInfo   `protobuf:"bytes,6,opt,name=rate_limit,json=rateLimit,proto3,oneof" json:"rate_limit,omitempty"`
@@ -1532,7 +1532,7 @@ type OfferGroup struct {
 	//	for the agent to understand how the resource was found.
 	DiscoveryMethod *DiscoveryMethod `protobuf:"varint,3,opt,name=discovery_method,json=discoveryMethod,proto3,enum=ramp.v1.DiscoveryMethod,oneof" json:"discovery_method,omitempty"`
 	// v0.2.1: Why no offers are available for this URI.
-	// Present when `offers` is empty. Enables agents/Orchestrators to distinguish
+	// Present when `offers` is empty. Enables agents/Brokers to distinguish
 	// "resource not in catalog" from "resource blocked for your use case" without
 	// trial-and-error transactions. Analogous to OpenRTB nbr codes and
 	// Shutterstock per-item error metadata in batch responses.
@@ -1781,7 +1781,7 @@ func (x *SubscriptionQuotaInfo) GetUnit() string {
 	return ""
 }
 
-// Offer — A single resource offer from a Exchange.
+// Offer — A single resource offer from an Exchange.
 //
 // Combines pricing, delivery method, resource identity, and reporting terms.
 // CoMP-specific metadata (Package, Function) available via ramp-comp-v1 extension profile.
@@ -1800,7 +1800,7 @@ type Offer struct {
 	// When this offer expires (ISO 8601).
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
 	// Resource identity for cross-exchange deduplication.
-	// Enables Orchestrators to recognize the same resource offered by
+	// Enables Brokers to recognize the same resource offered by
 	// different Exchanges and compare pricing.
 	Identity *ResourceIdentity `protobuf:"bytes,7,opt,name=identity,proto3,oneof" json:"identity,omitempty"`
 	// Access restrictions derived from provider terms (e.g. RSL permits/prohibits).
@@ -1809,7 +1809,7 @@ type Offer struct {
 	Restrictions *AccessRestrictions `protobuf:"bytes,8,opt,name=restrictions,proto3,oneof" json:"restrictions,omitempty"`
 	// REQUIRED. JWS Compact Serialization (alg=EdDSA) over offer fields
 	// (offer_id, package.id, pricing, identity).
-	// Prevents intermediaries (Orchestrators) from tampering with price
+	// Prevents intermediaries (Brokers) from tampering with price
 	// or resource description. Agent SHOULD verify signature (RFC 2119)
 	// against Exchange's public key.
 	//
@@ -2443,7 +2443,7 @@ func (x *ResourceAttestation) GetSignature() string {
 // AccessRestrictions — Provider-defined access rules.
 //
 // Maps to RSL <permits>/<prohibits> elements. Expressed as allow/deny
-// lists so agents and Orchestrators can filter offers before transacting.
+// lists so agents and Brokers can filter offers before transacting.
 type AccessRestrictions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Permitted usage functions. Empty = all permitted.
@@ -7611,7 +7611,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05rules\x18\x02 \x03(\v2\x19.ramp.v1.AccessPolicyRuleR\x05rules\"c\n" +
 	"\x10AccessPolicyRule\x12\x18\n" +
 	"\apattern\x18\x01 \x01(\tR\apattern\x125\n" +
-	"\x06policy\x18\x02 \x01(\x0e2\x1d.ramp.v1.ResourceAccessPolicyR\x06policy\"\xa3\x05\n" +
+	"\x06policy\x18\x02 \x01(\x0e2\x1d.ramp.v1.ResourceAccessPolicyR\x06policy\"\xbb\x06\n" +
 	"\fRAMPResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1d\n" +

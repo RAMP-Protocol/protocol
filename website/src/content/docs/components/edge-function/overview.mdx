@@ -19,7 +19,7 @@ The Edge Function has three jobs:
 
 The absolute minimum a provider needs to do:
 
-1. **Get a Exchange endpoint** from their Exchange operator (one-time business relationship).
+1. **Get an Exchange endpoint** from their Exchange operator (one-time business relationship).
 2. **Deploy the edge function** using the [Terraform module](https://github.com/RAMP-Protocol/protocol/tree/main/terraform/aws-ramp-edge/) or deploy the [CloudFront Function](https://github.com/RAMP-Protocol/protocol/tree/main/poc/edge-function/cloudfront-function.js) manually.
 3. **Verify** -- `curl -I https://example.com/.well-known/ramp.json` returns the manifest.
 

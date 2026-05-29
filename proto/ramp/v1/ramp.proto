@@ -144,7 +144,7 @@ import "google/protobuf/duration.proto";
 // ExchangeService — THE core protocol.
 //
 // This is what SSPs, providers, or third parties deploy.
-// Agents and Orchestrators are both valid clients.
+// Agents and Brokers are both valid clients.
 // ============================================================================
 
 service ExchangeService {
@@ -182,9 +182,9 @@ service ExchangeService {
 // Resource Discovery (Steps 2-3)
 // ============================================================================
 
-// ResourceQuery — Query a Exchange for available resource offers.
+// ResourceQuery — Query an Exchange for available resource offers.
 //
-// Sent by an Broker or directly by an AI agent.
+// Sent by a Broker or directly by an AI agent.
 // The Exchange evaluates its access policies, available inventory,
 // and reporting requirements before responding.
 message ResourceQuery {
@@ -258,8 +258,8 @@ message ResourceResponse {
 
   // v0.2.1: Rate limit status for this caller.
   // Present when the Exchange enforces per-caller rate limits on discovery.
-  // Enables agents/Orchestrators to throttle proactively rather than hitting
-  // hard limits. Particularly important when an Broker fans out the
+  // Enables agents/Brokers to throttle proactively rather than hitting
+  // hard limits. Particularly important when a Broker fans out the
   // same batch query to multiple Exchanges — mid-batch rate limiting
   // can cause partial results if not signaled early.
   optional RateLimitInfo rate_limit = 6;
@@ -293,7 +293,7 @@ message OfferGroup {
   optional DiscoveryMethod discovery_method = 3;
 
   // v0.2.1: Why no offers are available for this URI.
-  // Present when `offers` is empty. Enables agents/Orchestrators to distinguish
+  // Present when `offers` is empty. Enables agents/Brokers to distinguish
   // "resource not in catalog" from "resource blocked for your use case" without
   // trial-and-error transactions. Analogous to OpenRTB nbr codes and
   // Shutterstock per-item error metadata in batch responses.
@@ -407,7 +407,7 @@ message SubscriptionQuotaInfo {
 // Offers and Pricing
 // ============================================================================
 
-// Offer — A single resource offer from a Exchange.
+// Offer — A single resource offer from an Exchange.
 //
 // Combines pricing, delivery method, resource identity, and reporting terms.
 // CoMP-specific metadata (Package, Function) available via ramp-comp-v1 extension profile.
@@ -431,7 +431,7 @@ message Offer {
   optional google.protobuf.Timestamp expires_at = 6;
 
   // Resource identity for cross-exchange deduplication.
-  // Enables Orchestrators to recognize the same resource offered by
+  // Enables Brokers to recognize the same resource offered by
   // different Exchanges and compare pricing.
   optional ResourceIdentity identity = 7;
 
@@ -442,7 +442,7 @@ message Offer {
 
   // REQUIRED. JWS Compact Serialization (alg=EdDSA) over offer fields
   // (offer_id, package.id, pricing, identity).
-  // Prevents intermediaries (Orchestrators) from tampering with price
+  // Prevents intermediaries (Brokers) from tampering with price
   // or resource description. Agent SHOULD verify signature (RFC 2119)
   // against Exchange's public key.
   //
@@ -740,7 +740,7 @@ message ResourceAttestation {
 // AccessRestrictions — Provider-defined access rules.
 //
 // Maps to RSL <permits>/<prohibits> elements. Expressed as allow/deny
-// lists so agents and Orchestrators can filter offers before transacting.
+// lists so agents and Brokers can filter offers before transacting.
 message AccessRestrictions {
   // Permitted usage functions. Empty = all permitted.
   // Wire format: dashed-lowercase per RSL XML standard.
@@ -1371,7 +1371,7 @@ enum IngestionSource {
 }
 
 // CatalogService — Optional RPC for providers/CMS/third-party intelligence
-// providers to push resource metadata to a Exchange.
+// providers to push resource metadata to an Exchange.
 service CatalogService {
   // Push or update resource entries in the Exchange catalog.
   rpc PushResources(PushResourcesRequest) returns (PushResourcesResponse);
@@ -1606,7 +1606,7 @@ message UsageReportResponse {
 // Broker Protocol (Steps 1, 6)
 //
 // These messages are for the Agent → Broker path.
-// When an agent talks directly to a Exchange, it uses
+// When an agent talks directly to an Exchange, it uses
 // ResourceQuery/TransactionRequest directly instead.
 // ============================================================================
 

@@ -80,8 +80,8 @@ matches the operating party (typically `ROLE_EXCHANGE`).
 - Enum consumers: `DISCOVERY_METHOD_MARKETPLACE` → `DISCOVERY_METHOD_EXCHANGE`
   (proto number 1 unchanged).
 - Consumers of the deprecated `ExchangeManifest.keys_uri` / `.jwks_uri`
-  should switch to `WellKnownManifest.public_keys` before the next minor
-  release removes the deprecated fields.
+  should switch to `WellKnownManifest.public_keys` before v1.2.0 removes
+  the deprecated fields.
 
 ## v1.0.3 (2026-05-26) — Canonical retrieval endpoint field
 

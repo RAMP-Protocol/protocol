@@ -762,7 +762,7 @@ CDN access log records:
   - This log is controlled by the provider (Hearst) and used for reconciliation
 ```
 
-**HMAC canonicalization format**: The signed URL uses `\n` (newline) as the delimiter between fields in the canonical string. The order is: `baseURL\nexpires\nagent_id\ntxn_id`. This is a Exchange-CDN concern (symmetric HMAC-SHA256 shared secret), entirely separate from the Ed25519 asymmetric signatures used for offer signing and request authentication.
+**HMAC canonicalization format**: The signed URL uses `\n` (newline) as the delimiter between fields in the canonical string. The order is: `baseURL\nexpires\nagent_id\ntxn_id`. This is an Exchange-CDN concern (symmetric HMAC-SHA256 shared secret), entirely separate from the Ed25519 asymmetric signatures used for offer signing and request authentication.
 
 ---
 

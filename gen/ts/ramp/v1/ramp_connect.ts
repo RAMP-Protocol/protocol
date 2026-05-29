@@ -177,7 +177,7 @@ export const ExchangeService = {
 
 /**
  * CatalogService — Optional RPC for providers/CMS/third-party intelligence
- * providers to push resource metadata to a Exchange.
+ * providers to push resource metadata to an Exchange.
  *
  * @generated from service ramp.v1.CatalogService
  */

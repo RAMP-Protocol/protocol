@@ -17,7 +17,7 @@ The RAMP Broker is the optional demand-side router in the RAMP protocol. It sits
 - **Dispute relay (v1.0)** -- forward `DisputeRequest` messages to the correct Exchange
 - **Selection transparency** -- logged rationale for every selection decision
 
-The Exchange does not know or care whether the request came from an Broker or directly from an agent. The protocol is identical.
+The Exchange does not know or care whether the request came from a Broker or directly from an agent. The protocol is identical.
 
 ## Component Architecture
 
@@ -116,7 +116,7 @@ When the Broker forwards a request, it appends a signed `IntermediaryHop` to the
 - **`forwarded_at`** -- timestamp of when the intermediary forwarded the request
 - **`signature`** -- Ed25519 signature over the request payload at this hop
 
-This chain is modeled after OpenRTB schain (Supply Chain Object). When the agent queries a Exchange directly, `intermediaries` is empty. When the request passes through an Broker, it contains one hop.
+This chain is modeled after OpenRTB schain (Supply Chain Object). When the agent queries an Exchange directly, `intermediaries` is empty. When the request passes through a Broker, it contains one hop.
 
 ```go
 // Broker appends a signed hop when forwarding.
@@ -260,7 +260,7 @@ The Broker's internal `SupplySource` interface is the extension point for conten
 
 ```go
 // SupplySource abstracts where content offers come from.
-// v1: only ExchangeSource (queries a Exchange).
+// v1: only ExchangeSource (queries an Exchange).
 // v2: SearchSource (Exa, Tavily), RecommendationSource, etc.
 type SupplySource interface {
     // Query returns offers from this source matching the request.
@@ -274,7 +274,7 @@ type SupplySource interface {
 }
 ```
 
-The flow: search/recommendation produces URIs, the Broker looks up a Exchange for each URI's domain (via ramp.json), the Exchange provides pricing/offers, and the standard transaction flow continues. Discovery is upstream of transactions -- it produces URIs, not offers. The `OfferGroup.discovery_method` field tells the agent how each URI was found.
+The flow: search/recommendation produces URIs, the Broker looks up an Exchange for each URI's domain (via ramp.json), the Exchange provides pricing/offers, and the standard transaction flow continues. Discovery is upstream of transactions -- it produces URIs, not offers. The `OfferGroup.discovery_method` field tells the agent how each URI was found.
 
 This positions the Broker as the natural integration point for agentic search -- agents that need content don't just request known URLs, they ask "find me articles about X" and the Broker discovers, prices, and delivers.
 

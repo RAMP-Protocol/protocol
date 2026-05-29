@@ -268,7 +268,7 @@ Each profile SHOULD publish a JSON Schema at `docs/protocol/extensions/{profile-
 
 All profile-specific metadata flows through the `google.protobuf.Struct ext` field present on every major protocol message: `ResourceQuery`, `Offer`, `ResourceIdentity`, `ResourceAttestation`, `DisputeRequest`, `WellKnownManifest`, and `UsageReport`.
 
-The `ext` field is a generic JSON object. Profiles define the keys and value types that populate it. Multiple profiles can coexist in the same `ext` -- a Exchange serving both news and academic content would include both `news.*` and `academic.*` keys.
+The `ext` field is a generic JSON object. Profiles define the keys and value types that populate it. Multiple profiles can coexist in the same `ext` -- an Exchange serving both news and academic content would include both `news.*` and `academic.*` keys.
 
 ### Attestation Claims
 

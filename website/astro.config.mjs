@@ -29,6 +29,7 @@ export default defineConfig({
 						{ label: 'Transaction Flow', slug: 'protocol/transaction-flow' },
 						{ label: 'Standards Layering', slug: 'protocol/standards-layering' },
 						{ label: 'Discovery Paths', slug: 'protocol/discovery-paths' },
+						{ label: 'Exchange Manifest', slug: 'protocol/exchange-manifest' },
 						{ label: 'Resource Attestation', slug: 'protocol/content-attestation' },
 						{ label: 'Authentication', slug: 'protocol/authentication' },
 						{ label: 'Dispute Resolution', slug: 'protocol/dispute-resolution' },

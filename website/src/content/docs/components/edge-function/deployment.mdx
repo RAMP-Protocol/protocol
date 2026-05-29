@@ -36,7 +36,7 @@ sequenceDiagram
 
 The absolute minimum a provider needs to do:
 
-1. **Get a Exchange endpoint** from their Exchange operator (one-time business relationship).
+1. **Get an Exchange endpoint** from their Exchange operator (one-time business relationship).
 2. **Deploy the edge function** using the Terraform module or manual deployment (see below).
 3. **Verify** -- `curl -I https://techcrunch.com/.well-known/ramp.json` returns the manifest.
 
@@ -267,7 +267,7 @@ serving_mode: "exchange"  # pull from Exchange API, cache in KV (recommended)
 
 **Mode: exchange (recommended)**
 
-The edge function fetches both files from the Exchange API on cache miss. This is the recommended mode for providers registered with a Exchange.
+The edge function fetches both files from the Exchange API on cache miss. This is the recommended mode for providers registered with an Exchange.
 
 ```
 GET https://exchange.ssp-example.com/provider/techcrunch.com/ramp.json
