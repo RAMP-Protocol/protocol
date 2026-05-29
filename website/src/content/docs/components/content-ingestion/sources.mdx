@@ -263,7 +263,7 @@ The Exchange verifies `caller_signature` against the registered public key for `
 
 Companies like GumGum, Peer39, and DoubleVerify already index the web for contextual ad targeting. They can implement `CatalogService.PushResources` to feed enriched content metadata (topic, token estimates, content categorization) and signed `ResourceAttestation` entries to Exchanges.
 
-**Verification vendors as attestation sources**: In v1.0, third-party vendors push `ResourceAttestation` entries alongside catalog metadata. Each attestation is a signed envelope of claims (token count, language, content hash) from a trusted party. The Exchange verifies the attestation signature against the vendor's public key published at `https://{vendor-domain}/.well-known/ramp-verifier.json`.
+**Verification vendors as attestation sources**: In v1.0, third-party vendors push `ResourceAttestation` entries alongside catalog metadata. Each attestation is a signed envelope of claims (token count, language, content hash) from a trusted party. The Exchange verifies the attestation signature against the vendor's public key published in `public_keys` at `https://{vendor-domain}/.well-known/ramp.json`.
 
 **Authorization**: A verification vendor must be listed in the provider's `catalog_contributors` (declared in `/.well-known/ramp.json`) to push attestations for that provider's content. The Exchange checks this authorization on every `PushResources` call.
 

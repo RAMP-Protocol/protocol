@@ -185,7 +185,7 @@ type pendingReport struct {
 
 ### report_id and the Dispute Chain (v1.0)
 
-`UsageReportResponse` now returns a `report_id` -- a Exchange-assigned identifier for the accepted report. The SDK stores this on `FetchResult.ReportID`.
+`UsageReportResponse` now returns a `report_id` -- an Exchange-assigned identifier for the accepted report. The SDK stores this on `FetchResult.ReportID`.
 
 The `report_id` is required for filing disputes. The dispute chain enforces reporting-before-disputing:
 
@@ -241,7 +241,7 @@ Each transaction may carry a `ReportingObligation` that specifies:
 - The reporting window (deadline by which the report must be submitted)
 - What fields are required in the report
 
-The SDK tracks these obligations automatically. If a Exchange denies a future transaction with `DENIAL_REASON_REPORTING_OVERDUE`, the SDK flushes pending reports and retries.
+The SDK tracks these obligations automatically. If an Exchange denies a future transaction with `DENIAL_REASON_REPORTING_OVERDUE`, the SDK flushes pending reports and retries.
 
 ### Shutdown Behavior
 

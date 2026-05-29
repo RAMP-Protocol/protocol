@@ -40,7 +40,7 @@ Implementers must be familiar with:
 
 ## Profile Declaration
 
-An Exchange declares support by including `"ramp-c2pa-v1"` in `ExchangeManifest.supported_profiles`:
+An Exchange declares support by including `"ramp-c2pa-v1"` in `WellKnownManifest.supported_profiles` (`role=ROLE_EXCHANGE`):
 
 ```json
 {
@@ -214,7 +214,7 @@ JUMBF manifest          bridges     ResourceAttestation.claims
 RFC 3161 TSA                        attested_at timestamp
 ```
 
-The vendor's Ed25519 key (published at `/.well-known/ramp-verifier.json`) attests to the results of X.509/COSE validation. RAMP participants trust the vendor; the vendor trusts the C2PA Trust List. One-way bridge, clean separation.
+The vendor's Ed25519 key (published in `public_keys` at `/.well-known/ramp.json`) attests to the results of X.509/COSE validation. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor). RAMP participants trust the vendor; the vendor trusts the C2PA Trust List. One-way bridge, clean separation.
 
 ---
 
@@ -224,7 +224,7 @@ The vendor's Ed25519 key (published at `/.well-known/ramp-verifier.json`) attest
 
 - Populate `ResourceIdentity.c2pa_manifest` when content has C2PA credentials
 - Populate `c2pa_status` with validation result
-- Declare `"ramp-c2pa-v1"` in `ExchangeManifest.supported_profiles`
+- Declare `"ramp-c2pa-v1"` in `WellKnownManifest.supported_profiles`
 
 ### Standard (Level B)
 

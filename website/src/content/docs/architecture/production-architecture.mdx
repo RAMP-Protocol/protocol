@@ -52,14 +52,14 @@ Every party in the protocol authenticates via Ed25519 key pairs. Each party anno
 
 | Party | Key Announcement | Signs | Verifier |
 |---|---|---|---|
-| **Requester** (Agent or other client) | `{domain}/.well-known/ramp-agent.json` | `Requester.signature` (Ed25519) over `(id, domain, uris, scopes)` | Exchange |
-| **Intermediary** (e.g. Broker) | `{domain}/.well-known/ramp-agent.json` (same format) | `IntermediaryHop.signature` — each intermediary appends a signed hop to the forwarding chain | Exchange |
-| **Exchange** | `{domain}/exchange/v1/keys` | `exchange_signature` on every Offer | Agent, Broker |
-| **Provider** | `{domain}/.well-known/ramp.json` | Authorization declaration (not signatures) | Agent, Exchange |
-| **Verification Vendor** | `{domain}/.well-known/ramp-verifier.json` | `ResourceAttestation.signature` on catalog content (v1.0) | Exchange, Agent |
+| **Requester** (Agent or other client) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) | `Requester.signature` (Ed25519) over `(id, domain, uris, scopes)` | Exchange |
+| **Intermediary** (e.g. Broker) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, same format) | `IntermediaryHop.signature` — each intermediary appends a signed hop to the forwarding chain | Exchange |
+| **Exchange** | `{domain}/.well-known/ramp.json` (`role=ROLE_EXCHANGE`, offer-signing keys inline in `public_keys`) | `exchange_signature` on every Offer | Agent, Broker |
+| **Provider** | `{domain}/.well-known/ramp.json` (`role=ROLE_PUBLISHER`) | Authorization declaration (not signatures) | Agent, Exchange |
+| **Verification Vendor** | `{domain}/.well-known/ramp.json` (`public_keys`) | `ResourceAttestation.signature` on catalog content (v1.0) | Exchange, Agent |
 
 **Verification at Exchange:**
-- **Requester signature** — Exchange verifies `Requester.signature` against the requester's published Ed25519 key at `/.well-known/ramp-agent.json`
+- **Requester signature** — Exchange verifies `Requester.signature` against the requester's published Ed25519 key at `/.well-known/ramp.json` (`role=ROLE_AGENT`, selected by `kid` from `public_keys`)
 - **Intermediary chain** — when present, Exchange verifies each `IntermediaryHop.signature` in the `intermediaries[]` chain, proving the forwarding path is legitimate
 - **Biscuit delegation** — when a `Delegation` token is attached, Exchange verifies the Biscuit authority block signature against the principal's published Ed25519 key (`principal_domain`)
 - **Scope-based access control** — Exchange filters its catalog by the requester's `scopes`. Resources outside the requester's scopes are not returned (the requester never learns they exist)
@@ -76,7 +76,7 @@ The protocol supports three transaction patterns:
 
 The Exchange is responsible for attestation verification at two points:
 
-1. **At catalog push time**: when a verification vendor (e.g., GumGum, DoubleVerify) pushes content metadata via `CatalogService.PushContent`, the Exchange validates that the vendor is in the provider's `catalog_contributors` list and verifies the attestation signature against the vendor's public key from `/.well-known/ramp-verifier.json`.
+1. **At catalog push time**: when a verification vendor (e.g., GumGum, DoubleVerify) pushes content metadata via `CatalogService.PushContent`, the Exchange validates that the vendor is in the provider's `catalog_contributors` list and verifies the attestation signature against the vendor's public key from `/.well-known/ramp.json` (`public_keys`, selected by `kid`).
 2. **At offer construction time**: attestations from the catalog are attached to `Offer.attestations` so agents can evaluate content trust level (Level 0/1/2) during selection.
 
 ### Dispute Resolution Handler (v1.0)
@@ -91,7 +91,7 @@ Dispute lifecycle: `FILED` -> `AUTO_RESOLVED` / `EVIDENCE_NEEDED` -> `UNDER_REVI
 
 ### Provider Domain Verification (v1.0)
 
-The `RequestDomainVerification` and `ConfirmDomainVerification` RPCs provide ACME HTTP-01 style domain verification for provider onboarding. Providers prove domain control before the Exchange accepts signing keys or configuration changes. The `ramp-verifier.json` endpoint enables verification vendors to publish their Ed25519 keys for attestation validation.
+The `RequestDomainVerification` and `ConfirmDomainVerification` RPCs provide ACME HTTP-01 style domain verification for provider onboarding. Providers prove domain control before the Exchange accepts signing keys or configuration changes. The unified `/.well-known/ramp.json` endpoint enables verification vendors to publish their Ed25519 keys (in `public_keys`) for attestation validation. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor).
 
 ### Discovery: Three Complementary Standards
 
@@ -159,7 +159,7 @@ Three proto fields create a complete declaration chain from agent to Exchange:
 
 - **`RAMPRequest.supported_profiles`** -- Agent declares profiles to Broker
 - **`ResourceQuery.supported_profiles`** -- Broker forwards to Exchange
-- **`ExchangeManifest.supported_profiles`** -- Exchange declares conformance in `/.well-known/ramp-exchange.json`
+- **`WellKnownManifest.supported_profiles`** -- Exchange declares conformance in `/.well-known/ramp.json` (`role=ROLE_EXCHANGE`)
 
 ### v1 Domain Profiles
 
@@ -225,7 +225,7 @@ Cross-provider dedup is a **Broker-level concern**, not a protocol concern. The 
   │  ├─────────────────────┤ │       │
   │  │ Attestation Verifier│ │       │
   │  │ (v1.0: validates    │ │       │
-  │  │  ramp-verifier.json│ │       │
+  │  │  ramp.json          │ │       │
   │  │  signatures)        │ │       │
   │  ├─────────────────────┤ │       │
   │  │ Dispute Handler     │ │       │

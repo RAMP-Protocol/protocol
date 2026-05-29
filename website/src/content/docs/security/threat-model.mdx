@@ -187,7 +187,7 @@ Line 3: Legal/contractual enforcement
 ### T-ATT-1: Forged attestation injection
 
 **Attack**: Attacker crafts a fake `ResourceAttestation` with a fabricated `verifier` domain and pushes it via `CatalogService.PushContent`.
-**Countermeasure (protocol)**: Exchange verifies `caller_id` is listed in the provider's `catalog_contributors` (from `ramp.json`). Exchange verifies the attestation `signature` against the verifier's public key from `/.well-known/ramp-verifier.json`. Both checks must pass.
+**Countermeasure (protocol)**: Exchange verifies `caller_id` is listed in the provider's `catalog_contributors` (from `ramp.json`). Exchange verifies the attestation `signature` against the verifier's public key in `public_keys` from its `/.well-known/ramp.json`. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor). Both checks must pass.
 
 ### T-ATT-2: Stale attestation exploitation
 
@@ -198,7 +198,7 @@ Line 3: Legal/contractual enforcement
 ### T-ATT-3: Verification vendor compromise
 
 **Attack**: Attacker compromises a third-party verifier's Ed25519 private key and signs fraudulent attestations for arbitrary content.
-**Countermeasure (protocol)**: Key rotation via JWKS pattern -- keys have `valid_from` / `valid_until` windows. Exchange caches `ramp-verifier.json` with TTL-based refresh (1 hour default). Compromised key can be revoked by removing it from the verifier's `ramp-verifier.json`.
+**Countermeasure (protocol)**: Key rotation via JWKS pattern -- keys have `not_before` / `not_after` windows. Exchange caches the verifier's `ramp.json` with TTL-based refresh (1 hour default). Compromised key can be revoked by removing it from the verifier's `ramp.json` `public_keys`.
 **Countermeasure (operational)**: Exchange monitors attestation patterns per verifier. Sudden changes in claim distributions trigger investigation.
 
 ### T-ATT-4: Claims inflation attack
@@ -210,7 +210,7 @@ Line 3: Legal/contractual enforcement
 ### T-ATT-5: Catalog contributor spoofing
 
 **Attack**: Unauthorized party registers a domain similar to a legitimate verifier (e.g., `doub1everify.com`) and pushes attestations claiming to be a trusted vendor.
-**Countermeasure (protocol)**: `catalog_contributors` in `ramp.json` uses exact domain matching. The provider must explicitly list the contributor's domain. The Exchange fetches `ramp-verifier.json` from the exact `verifier` domain in the attestation and verifies the signature against that domain's published keys.
+**Countermeasure (protocol)**: `catalog_contributors` in `ramp.json` uses exact domain matching. The provider must explicitly list the contributor's domain. The Exchange fetches `ramp.json` from the exact `verifier` domain in the attestation and verifies the signature against that domain's `public_keys`.
 
 ## 8. Delegation and Authorization Threats
 
@@ -232,7 +232,7 @@ Line 3: Legal/contractual enforcement
 ### T-DEL-4: Intermediary chain forgery
 
 **Attack**: Attacker inserts a fake `IntermediaryHop` into the delegation chain, claiming to be a trusted Broker to gain access or inject misleading provenance.
-**Countermeasure (protocol)**: **Each IntermediaryHop is Ed25519 signed.** Exchange verifies every hop's signature against the intermediary's published public key at `{domain}/.well-known/ramp-agent.json`. A forged hop fails signature verification, causing the entire request to be rejected.
+**Countermeasure (protocol)**: **Each IntermediaryHop is Ed25519 signed.** Exchange verifies every hop's signature against the intermediary's published public key at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`). A forged hop fails signature verification, causing the entire request to be rejected.
 
 ### T-DEL-5: Scope pollution
 

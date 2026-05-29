@@ -26,7 +26,7 @@ sequenceDiagram
     Note over CDN: CloudFront: deploy CF Function + update behavior<br/>Cloudflare: wrangler deploy<br/>Akamai: upload EdgeWorker bundle<br/>Fastly: fastly compute deploy
 
     Provider->>CDN: Verify: GET /.well-known/ramp.json
-    CDN-->>Provider: 200 OK + ProviderManifest
+    CDN-->>Provider: 200 OK + WellKnownManifest
 
     Provider->>CDN: Verify: curl -A "GPTBot" /premium/article.html
     CDN-->>Provider: 403 + X-Content-Rules header
@@ -36,14 +36,14 @@ sequenceDiagram
 
 The absolute minimum a provider needs to do:
 
-1. **Get a Exchange endpoint** from their Exchange operator (one-time business relationship).
+1. **Get an Exchange endpoint** from their Exchange operator (one-time business relationship).
 2. **Deploy the edge function** using the Terraform module or manual deployment (see below).
 3. **Verify** -- `curl -I https://techcrunch.com/.well-known/ramp.json` returns the manifest.
 
 import { Aside } from '@astrojs/starlight/components';
 
 <Aside type="tip">
-The `@ramp/cli` tool is planned. For now, deploy manually using the [Terraform module](https://github.com/postindustria-tech/ramp-protocol/tree/main/terraform/aws-ramp-edge/) or follow the CDN-specific deployment steps below.
+The `@ramp/cli` tool is planned. For now, deploy manually using the [Terraform module](https://github.com/RAMP-Protocol/protocol/tree/main/terraform/aws-ramp-edge/) or follow the CDN-specific deployment steps below.
 </Aside>
 
 Target: **under 10 minutes** from Exchange operator contract to live edge function.
@@ -54,7 +54,7 @@ The edge function is distributed in multiple formats to match provider deploymen
 
 ### Format 1: CloudFront Function (Reference Implementation)
 
-The working reference implementation is a vanilla JavaScript CloudFront Function at [`poc/edge-function/cloudfront-function.js`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/edge-function/cloudfront-function.js). It handles bot detection, signed URL verification, and `ramp.json` serving.
+The working reference implementation is a vanilla JavaScript CloudFront Function at [`poc/edge-function/cloudfront-function.js`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/edge-function/cloudfront-function.js). It handles bot detection, signed URL verification, and `ramp.json` serving.
 
 <Aside type="note">
 The `@ramp/edge-function` npm package is planned. For now, use the reference implementation directly or deploy via the Terraform module.
@@ -64,7 +64,7 @@ The `@ramp/edge-function` npm package is planned. For now, use the reference imp
 
 ```hcl
 module "ramp_edge" {
-  source = "github.com/postindustria-tech/ramp-protocol//terraform/aws-ramp-edge"
+  source = "github.com/RAMP-Protocol/protocol//terraform/aws-ramp-edge"
 
   cloudfront_distribution_id = aws_cloudfront_distribution.main.id
   exchange_endpoint       = "https://exchange.ssp.com/ramp/v1"
@@ -87,7 +87,7 @@ For providers who prefer click-to-deploy:
 ### Format 4: CLI Tool (Planned)
 
 <Aside type="caution">
-The `@ramp/cli` tool is planned but not yet available. For now, use the [Terraform module](https://github.com/postindustria-tech/ramp-protocol/tree/main/terraform/aws-ramp-edge/) for automated deployment, or deploy the [CloudFront Function](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/edge-function/cloudfront-function.js) manually via the AWS console or AWS CLI.
+The `@ramp/cli` tool is planned but not yet available. For now, use the [Terraform module](https://github.com/RAMP-Protocol/protocol/tree/main/terraform/aws-ramp-edge/) for automated deployment, or deploy the [CloudFront Function](https://github.com/RAMP-Protocol/protocol/tree/main/poc/edge-function/cloudfront-function.js) manually via the AWS console or AWS CLI.
 </Aside>
 
 When available, the CLI will generate the platform-specific deployment artifact (CloudFront Function JS, Cloudflare Worker, etc.) and output deployment instructions.
@@ -267,7 +267,7 @@ serving_mode: "exchange"  # pull from Exchange API, cache in KV (recommended)
 
 **Mode: exchange (recommended)**
 
-The edge function fetches both files from the Exchange API on cache miss. This is the recommended mode for providers registered with a Exchange.
+The edge function fetches both files from the Exchange API on cache miss. This is the recommended mode for providers registered with an Exchange.
 
 ```
 GET https://exchange.ssp-example.com/provider/techcrunch.com/ramp.json
@@ -284,9 +284,9 @@ Both files are baked into the edge function's environment variables or deploymen
 ```
 # Environment variables
 RAMP_PROVIDER=techcrunch.com
-RAMP_MARKETPLACE_DOMAIN=exchange.ssp-example.com
-RAMP_MARKETPLACE_ENDPOINT=https://exchange.ssp-example.com/ramp/v1
-RAMP_MARKETPLACE_RELATIONSHIP=DIRECT
+RAMP_EXCHANGE_DOMAIN=exchange.ssp-example.com
+RAMP_EXCHANGE_ENDPOINT=https://exchange.ssp-example.com/ramp/v1
+RAMP_EXCHANGE_RELATIONSHIP=DIRECT
 RAMP_CONTACT=licensing@techcrunch.com
 ```
 

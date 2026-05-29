@@ -1,5 +1,88 @@
 # RAMP Protocol Changelog
 
+## v1.1.0 (2026-05-26) — Unified well-known endpoint + marketplace→exchange rename
+
+Every RAMP participant — agent, broker, exchange, publisher — now serves
+a single canonical document at `/.well-known/ramp.json`, populated from
+`WellKnownManifest`. The per-role filenames (`ramp-agent.json`,
+`ramp-exchange.json`, `ramp-verifier.json`) and the legacy
+`/marketplace/v1/keys` path are removed from the spec. The term
+"marketplace" is eliminated from the proto in favour of "exchange" throughout.
+
+### New messages
+- `WellKnownManifest` — unified self-description. Role-tagged via the new
+  `Role` enum. Carries inline `JsonWebKey` keys, optional
+  `invalidation_url`, publisher-only `exchanges[]` + `catalog_contributors[]`,
+  and exchange-only capability fields (pricing, delivery, auth methods,
+  OIDC issuer, GNAP grant endpoint, base currency, supported profiles).
+- `JsonWebKey` — inline RFC 7517 JWK. Ed25519 only in v1.1.0 (`kty="OKP"`,
+  `crv="Ed25519"`, `alg="EdDSA"`). Carries explicit `not_before` / `not_after`
+  RFC3339 time bounds.
+- `KeyInvalidationList` — kid-only revocation list served at
+  `invalidation_url`. Snapshot semantics.
+- `Role` enum: `AGENT`, `EXCHANGE`, `BROKER`, `PUBLISHER`. Verifiers fold
+  into the role their operator holds — there is no separate verifier role.
+
+### Deprecations (kept on the wire for one cycle)
+- `ProviderManifest` — replaced by `WellKnownManifest` with
+  `role=ROLE_PUBLISHER`.
+- `ExchangeManifest` — replaced by `WellKnownManifest` with
+  `role=ROLE_EXCHANGE`.
+- `ExchangeManifest.keys_uri` and `ExchangeManifest.jwks_uri` — pointer
+  patterns replaced by inline `JsonWebKey` objects.
+
+### JSON wire renames (intentional consumer-visible changes)
+
+All proto wire tags preserved; binary compatibility holds. JSON field names
+change. Every consumer reading renamed fields MUST update.
+
+| Message | Old JSON field | New JSON field | Tag |
+|---|---|---|---|
+| `ProviderManifest` | `marketplaces` | `exchanges` | 4 |
+| `WellKnownManifest` | *(new message)* | `exchanges` | 7 |
+| `ResourceResponse` | `marketplace` | `exchange` | 3 |
+| `UsageReport` | `marketplace` | `exchange` | 8 |
+| `RequestConstraints` | `marketplaces` | `exchanges` | 1 |
+| `RequestConstraints` | `preferred_marketplaces` | `preferred_exchanges` | 6 |
+| `DomainVerificationRequest` | `marketplace` | `exchange` | 6 |
+
+Enum value rename (proto number preserved):
+
+| Enum | Old name | New name | Number |
+|---|---|---|---|
+| `DiscoveryMethod` | `DISCOVERY_METHOD_MARKETPLACE` | `DISCOVERY_METHOD_EXCHANGE` | 1 |
+
+### Verifier transition
+Verifier-specific metadata historically published at
+`/.well-known/ramp-verifier.json` migrates to `WellKnownManifest`.
+Verifier signing keys appear in `public_keys`. The verifier's
+`claims_schema` URL (and any vendor-specific metadata) move into
+`WellKnownManifest.ext` under a namespaced key — recommended
+`"ramp.attestation.claims_schema"`. Implementations operating a verifier
+on a dedicated domain serve `WellKnownManifest` under whichever role
+matches the operating party (typically `ROLE_EXCHANGE`).
+
+### Discovery & key-validity semantics
+- Caching contract: `/.well-known/ramp.json` MAY be cached (minutes–hours);
+  the `invalidation_url` body SHOULD be short/no-store so the 300s poll is not
+  defeated by an intermediary cache. Stale-revocation enforcement is operational,
+  not protocol-guaranteed.
+- Key-validity window is half-open `[not_before, not_after)`. Clarified the
+  at-least-one-valid-key invariant comment (`not_before <= now < not_after`) to
+  match the `not_after` "strict upper bound" definition — no behavior change.
+- Domainless requesters are accommodated via a registry-hosted `WellKnownManifest`
+  (agent sets `Requester.domain` to the registry host); no protocol change.
+  Relaxing the discovery anchor is deferred.
+
+### Compatibility
+- Proto-binary layer: wire-additive; no tags moved or removed.
+- JSON consumers: all field names in the table above MUST be updated.
+- Enum consumers: `DISCOVERY_METHOD_MARKETPLACE` → `DISCOVERY_METHOD_EXCHANGE`
+  (proto number 1 unchanged).
+- Consumers of the deprecated `ExchangeManifest.keys_uri` / `.jwks_uri`
+  should switch to `WellKnownManifest.public_keys` before v1.2.0 removes
+  the deprecated fields.
+
 ## v1.0.3 (2026-05-26) — Canonical retrieval endpoint field
 
 Adds the missing scalar field for the signed retrieval URL on transaction

@@ -431,7 +431,7 @@ func unitCostOf(o rankedOffer) float64 {
 
 ## Stage 5: Verify exchange_signature
 
-The Broker SHOULD verify `exchange_signature` on the winning Offer before proceeding. This prevents a Exchange from tampering with its own offer fields after signing.
+The Broker SHOULD verify `exchange_signature` on the winning Offer before proceeding. This prevents an Exchange from tampering with its own offer fields after signing.
 
 ```go
 func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[string]crypto.PublicKey) error {

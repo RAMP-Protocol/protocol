@@ -93,7 +93,7 @@ export type AISystemUse = Message<"comp.v1.AISystemUse"> & {
   /**
    * License ID — public agent identifier. NOT a credential.
    * Authentication is via agent_signature (Ed25519). Treat lid like a
-   * username, not a password. Marketplace looks up agent's registered
+   * username, not a password. Exchange looks up agent's registered
    * public key by lid.
    *
    * @generated from field: string lid = 1;
@@ -163,7 +163,7 @@ export const AISystemUseSchema: GenMessage<AISystemUse> = /*@__PURE__*/
  */
 export type Package = Message<"comp.v1.Package"> & {
   /**
-   * Unique package identifier defined by the Content Owner or Marketplace.
+   * Unique package identifier defined by the Content Owner or Exchange.
    *
    * @generated from field: string id = 1;
    */

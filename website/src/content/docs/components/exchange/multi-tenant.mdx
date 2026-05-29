@@ -5,7 +5,7 @@ description: "Tenant isolation, provider onboarding, domain-to-tenant mapping, a
 
 ## Overview
 
-A single Exchange Node serves many providers. This is the multi-tenant model — one Exchange operator runs a Exchange that serves 10, 100, or 1000+ providers. Each provider is represented as a "tenant" with isolated configuration, catalog, signing keys, and reporting obligations.
+A single Exchange Node serves many providers. This is the multi-tenant model — one Exchange operator runs an Exchange that serves 10, 100, or 1000+ providers. Each provider is represented as a "tenant" with isolated configuration, catalog, signing keys, and reporting obligations.
 
 ---
 
@@ -161,7 +161,7 @@ For managed providers, the Exchange supports automatic rotation on a configurabl
 
 ## Provider Manifest and RSL Endpoints
 
-The edge function expects to fetch `ramp.json` (ProviderManifest) and `rsl.txt` from the Exchange on behalf of provider domains. The Exchange generates these from its tenant catalog and serves them for edge caching.
+The edge function expects to fetch `ramp.json` (WellKnownManifest, `role=ROLE_PUBLISHER`) and `rsl.txt` from the Exchange on behalf of provider domains. The Exchange generates these from its tenant catalog and serves them for edge caching.
 
 ### Endpoints
 
@@ -169,7 +169,7 @@ The edge function expects to fetch `ramp.json` (ProviderManifest) and `rsl.txt` 
 GET /provider/{domain}/ramp.json
 ```
 
-Returns a generated `ProviderManifest` for the given domain. The manifest is built from the tenant's catalog configuration (pricing, access restrictions, exchange endpoint). Cached by the edge function with a TTL matching the tenant's `rsl_poll_interval`.
+Returns a generated `WellKnownManifest` (`role=ROLE_PUBLISHER`) for the given domain. The manifest is built from the tenant's catalog configuration (pricing, access restrictions, exchange endpoint). Cached by the edge function with a TTL matching the tenant's `rsl_poll_interval`.
 
 ```
 GET /provider/{domain}/rsl.txt
@@ -181,44 +181,45 @@ Both endpoints return `404 Not Found` if the domain is not associated with any t
 
 ### Public Key Exchange
 
-```
-GET /exchange/v1/keys
-```
+Brokers and agents fetch the Exchange's `/.well-known/ramp.json` and read `public_keys` to verify `exchange_signature` on Offers without manual key exchange. The Exchange's offer-signing Ed25519 public keys are inline in that manifest as RFC 7517 JWKs, selected by `kid`.
 
-Returns the **Exchange's** Ed25519 public keys for **offer signature** verification. Brokers and agents fetch this to verify `exchange_signature` on Offers without manual key exchange.
+**Note:** The Exchange's `ramp.json` `public_keys` serve the Exchange's offer-signing keys. Agent keys are separate — they are fetched from the agent's `/.well-known/ramp.json` manifest (self-signup) or stored from enterprise registration (out-of-band key exchange).
 
-**Note:** This endpoint serves the Exchange's offer-signing public key. Agent keys are separate — they are fetched from the agent's `/.well-known/ramp-agent.json` manifest URL (self-signup) or stored from enterprise registration (out-of-band key exchange).
+Since the default offer signature algorithm is Ed25519, these are **public keys** — `ramp.json` does NOT require authentication. Public keys are safe to expose; they can only verify signatures, not create them.
 
-Since the default offer signature algorithm is Ed25519, these are **public keys** — this endpoint does NOT require authentication. Public keys are safe to expose; they can only verify signatures, not create them.
-
-**Response:**
+**`public_keys` entries (in the Exchange's `ramp.json`):**
 ```json
 {
-  "keys": [
+  "public_keys": [
     {
-      "id": "mk-2026-03",
-      "algorithm": "ed25519",
-      "public_key": "base64-encoded-ed25519-public-key...",
-      "status": "active",
-      "created_at": "2026-03-01T00:00:00Z"
+      "kid": "mk-2026-03",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "<base64url>",
+      "not_before": "2026-03-01T00:00:00Z",
+      "not_after": "2026-06-01T00:00:00Z"
     },
     {
-      "id": "mk-2026-01",
-      "algorithm": "ed25519",
-      "public_key": "base64-encoded-ed25519-public-key...",
-      "status": "rotated",
-      "created_at": "2026-01-01T00:00:00Z",
-      "rotated_at": "2026-03-01T00:00:00Z"
+      "kid": "mk-2026-01",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "<base64url>",
+      "not_before": "2026-01-01T00:00:00Z",
+      "not_after": "2026-03-01T00:00:00Z"
     }
   ]
 }
 ```
 
-- Returns current and previous keys (for rotation grace period)
+- Returns current and previous keys (for rotation grace period); each key's validity window is half-open `[not_before, not_after)`
 - **No authentication required** — Ed25519 public keys are safe to expose (they can only verify, not sign)
 - Brokers SHOULD cache with 24-hour TTL
 - On signature verification failure, refresh key cache before retrying
-- The `public_key` field contains the Ed25519 public key (32 bytes, base64-encoded)
+- The `x` field contains the base64url-encoded Ed25519 public key (32 bytes)
 
 ---
 

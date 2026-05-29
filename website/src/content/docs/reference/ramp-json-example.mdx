@@ -3,15 +3,29 @@ title: "ramp.json Example"
 description: "Complete example of a provider's /.well-known/ramp.json manifest file"
 ---
 
-The `ramp.json` file is served at `/.well-known/ramp.json` on the provider's domain. It declares which Exchanges are authorized to sell the provider's resources -- like `ads.txt` for AI resource access.
+The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKnownManifest`. **Every** RAMP participant serves one — the `role` field says which (`ROLE_PUBLISHER`, `ROLE_EXCHANGE`, `ROLE_AGENT`, `ROLE_BROKER`). The example below is a **publisher** manifest (`role=ROLE_PUBLISHER`): it carries the provider's signing keys and declares which Exchanges are authorized to sell its resources -- like `ads.txt` for AI resource access.
 
 ## Complete Example
 
 ```json
 {
-  "ver": "1.0",
-  "provider": "techprovider.com",
+  "ver": "1.1",
+  "role": "ROLE_PUBLISHER",
+  "domain": "techprovider.com",
   "contact": "licensing@techprovider.com",
+  "public_keys": [
+    {
+      "kid": "techprovider-2026-q2",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "not_before": "2026-04-01T00:00:00Z",
+      "not_after": "2026-10-01T00:00:00Z"
+    }
+  ],
+  "invalidation_url": "https://techprovider.com/.well-known/ramp-invalidations.json",
   "catalog_contributors": [
     {
       "domain": "doubleverify.com",
@@ -22,15 +36,15 @@ The `ramp.json` file is served at `/.well-known/ramp.json` on the provider's dom
       "relationship": "verifier"
     }
   ],
-  "marketplaces": [
+  "exchanges": [
     {
-      "domain": "marketplace.ssp-alpha.com",
-      "endpoint": "https://marketplace.ssp-alpha.com/v1",
+      "domain": "exchange.ssp-alpha.com",
+      "endpoint": "https://exchange.ssp-alpha.com/v1",
       "relationship": "DIRECT"
     },
     {
-      "domain": "marketplace.ssp-beta.com",
-      "endpoint": "https://marketplace.ssp-beta.com/v1",
+      "domain": "exchange.ssp-beta.com",
+      "endpoint": "https://exchange.ssp-beta.com/v1",
       "relationship": "RESELLER"
     }
   ]
@@ -41,16 +55,21 @@ The `ramp.json` file is served at `/.well-known/ramp.json` on the provider's dom
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `ver` | string | Yes | RAMP protocol version |
-| `provider` | string | Yes | Canonical domain of the provider |
+| `ver` | string | Yes | RAMP protocol version (`"1.1"`) |
+| `role` | string | Yes | Participant role — `ROLE_PUBLISHER` for a provider's manifest |
+| `domain` | string | Yes | Canonical domain serving this manifest |
 | `contact` | string | No | Contact email for licensing inquiries |
+| `public_keys` | array | Yes | Inline RFC 7517 JWKs (Ed25519) for signature verification; ≥1 valid at serve time |
+| `public_keys[].kid` | string | Yes | Key ID, referenced by `kid` in request/offer signatures |
+| `public_keys[].not_before` / `[].not_after` | string | Yes | RFC3339 validity window (half-open `[not_before, not_after)`) |
+| `invalidation_url` | string | No | Emergency key-revocation list URL (`KeyInvalidationList`); serve short/`no-store` |
 | `catalog_contributors` | array | No | Authorized third-party catalog pushers |
 | `catalog_contributors[].domain` | string | Yes | Canonical domain of the contributor (e.g., `doubleverify.com`) |
-| `catalog_contributors[].relationship` | string | Yes | Relationship type: `verifier`, `marketplace`, etc. |
-| `marketplaces` | array | Yes | Authorized Exchanges for this provider |
-| `marketplaces[].domain` | string | Yes | Canonical domain of the Exchange |
-| `marketplaces[].endpoint` | string | Yes | RAMP ExchangeService endpoint URL |
-| `marketplaces[].relationship` | string | Yes | `DIRECT` or `RESELLER` (mirrors ads.txt) |
+| `catalog_contributors[].relationship` | string | Yes | Relationship type: `verifier`, `exchange`, etc. |
+| `exchanges` | array | Yes* | Authorized Exchanges (*publisher manifests) |
+| `exchanges[].domain` | string | Yes | Canonical domain of the Exchange |
+| `exchanges[].endpoint` | string | Yes | RAMP ExchangeService endpoint URL |
+| `exchanges[].relationship` | string | Yes | `DIRECT` or `RESELLER` (mirrors ads.txt) |
 
 ## How Agents Use ramp.json
 
@@ -61,7 +80,7 @@ The agent checks `/.well-known/ramp.json` before attempting to access content:
 ```
 1. Agent wants content from techprovider.com
 2. GET https://techprovider.com/.well-known/ramp.json
-3. Finds Exchange endpoint: marketplace.ssp-alpha.com/v1
+3. Finds Exchange endpoint: exchange.ssp-alpha.com/v1
 4. Calls DiscoverResources → gets Offers with pricing
 5. Calls ExecuteTransaction → gets signed URL
 6. Fetches content from CDN
@@ -91,15 +110,31 @@ The Exchange periodically re-fetches `ramp.json` for each provider's domain. If 
 
 ## Protobuf Definition
 
-The `ramp.json` structure maps to the `ProviderManifest` message in `ramp/v1/ramp.proto`:
+The `ramp.json` structure maps to the `WellKnownManifest` message (with `role=ROLE_PUBLISHER`) in `ramp/v1/ramp.proto`. Publisher-relevant fields shown; see [Proto: RAMP v1](/reference/proto-ramp/) for the full message (exchange-only capability fields, etc.):
 
 ```protobuf
-message ProviderManifest {
-  string ver = 1;
-  string provider = 2;
-  optional string contact = 3;
-  repeated AuthorizedExchange marketplaces = 4;
-  repeated CatalogContributor catalog_contributors = 5;
+message WellKnownManifest {
+  string ver = 1;                                 // "1.1"
+  Role role = 2;                                  // ROLE_PUBLISHER here
+  string domain = 3;
+  optional string contact = 4;
+  repeated JsonWebKey public_keys = 5;            // inline Ed25519 JWKs
+  optional string invalidation_url = 6;           // emergency revocation list
+  repeated AuthorizedExchange exchanges = 7;      // publisher-only
+  repeated CatalogContributor catalog_contributors = 8;
+  // ... exchange-only capability fields (9-27) omitted ...
+  google.protobuf.Struct ext = 15;
+}
+
+message JsonWebKey {
+  string kid = 1;
+  string kty = 2;          // "OKP"
+  string crv = 3;          // "Ed25519"
+  string use = 4;          // "sig"
+  string alg = 5;          // "EdDSA"
+  string x = 6;            // base64url 32-byte public key
+  string not_before = 7;   // RFC3339
+  string not_after = 8;    // RFC3339
 }
 
 message AuthorizedExchange {
@@ -111,7 +146,15 @@ message AuthorizedExchange {
 // Third party authorized to push catalog metadata on behalf of a provider.
 message CatalogContributor {
   string domain = 1;        // e.g., "doubleverify.com"
-  string relationship = 2;  // e.g., "verifier", "marketplace"
+  string relationship = 2;  // e.g., "verifier", "exchange"
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_AGENT = 1;
+  ROLE_EXCHANGE = 2;
+  ROLE_BROKER = 3;
+  ROLE_PUBLISHER = 4;
 }
 
 enum ProviderRelationship {

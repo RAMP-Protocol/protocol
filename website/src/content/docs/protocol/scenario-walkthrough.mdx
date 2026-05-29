@@ -58,24 +58,48 @@ Before any agent request, providers configure their domains and Exchanges ingest
 Anthropic publishes its agent's Ed25519 public key at a well-known endpoint:
 
 ```json
-// GET https://claude.ai/.well-known/ramp-agent.json
+// GET https://claude.ai/.well-known/ramp.json
 {
-  "agent_id": "claude.ai",
-  "public_key": "MCowBQYDK2VwAyEA7Hd8FjXz9K2qR4nPbY1sT0vWxU3gLmN5oA8pC6dE1fI=",
-  "public_key_algorithm": "ed25519",
-  "contact": "legal@anthropic.com"
+  "ver": "1.1",
+  "role": "ROLE_AGENT",
+  "domain": "claude.ai",
+  "contact": "legal@anthropic.com",
+  "public_keys": [
+    {
+      "kid": "claude-2026-01",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "7Hd8FjXz9K2qR4nPbY1sT0vWxU3gLmN5oA8pC6dE1fI",
+      "not_before": "2026-01-01T00:00:00Z",
+      "not_after": "2026-12-31T23:59:59Z"
+    }
+  ]
 }
 ```
 
 The Broker announces its key at the same path format:
 
 ```json
-// GET https://broker.anthropic.com/.well-known/ramp-agent.json
+// GET https://broker.anthropic.com/.well-known/ramp.json
 {
-  "agent_id": "broker.anthropic.com",
-  "public_key": "MCowBQYDK2VwAyEAqW3rT8mNxVzP7sK1dL0yUoJ5bG2hF4iE6cA9nR3wS8g=",
-  "public_key_algorithm": "ed25519",
-  "contact": "legal@anthropic.com"
+  "ver": "1.1",
+  "role": "ROLE_AGENT",
+  "domain": "broker.anthropic.com",
+  "contact": "legal@anthropic.com",
+  "public_keys": [
+    {
+      "kid": "broker-2026-01",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "qW3rT8mNxVzP7sK1dL0yUoJ5bG2hF4iE6cA9nR3wS8g",
+      "not_before": "2026-01-01T00:00:00Z",
+      "not_after": "2026-12-31T23:59:59Z"
+    }
+  ]
 }
 ```
 
@@ -94,7 +118,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
    { verifier: "gumgum.com", claims: { estimated_quantity: 3300, word_count: 2500,
      language: "en", iab_categories: ["IAB19-6"] }, signature: "..." }
    Exchange validates: gumgum.com is in techcrunch.com's catalog_contributors,
-   verifies signature against gumgum.com/.well-known/ramp-verifier.json
+   verifies signature against public_keys in gumgum.com/.well-known/ramp.json
 6. Build catalog entry:
    {
      domain: "techcrunch.com",
@@ -192,7 +216,7 @@ Step 3: Prepare Ed25519 signature
   - Authentication is asymmetric:
     the agent signs with its Ed25519 private key (never leaves the agent),
     the Exchange verifies with the public key fetched from
-    claude.ai/.well-known/ramp-agent.json
+    claude.ai/.well-known/ramp.json
 ```
 
 **Key insight**: The SDK discovers Exchanges from the provider's `ramp.json`. It only finds the authorized Exchange for THAT domain. Cross-provider discovery (same article on different domains) requires either a hosted Broker that has crawled multiple providers' `ramp.json`, or the agent explicitly requesting multiple URLs across providers.
@@ -230,7 +254,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 1. Validate request (proto validation) -> pass
 2. Verify requester.signature:
    a. Extract requester.domain = "claude.ai"
-   b. Fetch public key from claude.ai/.well-known/ramp-agent.json
+   b. Fetch public key from claude.ai/.well-known/ramp.json
    c. Verify Ed25519 signature against public key -> pass
 3. Resolve tenant: techcrunch.com -> Hearst Media tenant
 4. Find offers: lookup "/premium/ai-regulation-2026.html" in radix trie -> match
@@ -450,8 +474,8 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 ```
 
 SSP-Alpha's Exchange verifies the full chain:
-1. `requester.signature` -- fetch public key from `claude.ai/.well-known/ramp-agent.json`, Ed25519 verify
-2. `intermediaries` chain -- for each hop, fetch public key from `{hop.domain}/.well-known/ramp-agent.json`, Ed25519 verify
+1. `requester.signature` -- fetch public key from `claude.ai/.well-known/ramp.json`, Ed25519 verify
+2. `intermediaries` chain -- for each hop, fetch public key from `{hop.domain}/.well-known/ramp.json`, Ed25519 verify
 
 SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
 
@@ -630,17 +654,17 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 }
 ```
 
-The Broker preserves the agent's original `requester` message (including the agent's signature) and appends an `IntermediaryHop` to the `intermediaries` array. The Exchange verifies both: the agent's identity (via `requester.signature` + public key fetched from `requester.domain/.well-known/ramp-agent.json`) and each intermediary in the chain (via each hop's `signature` + public key fetched from `{hop.domain}/.well-known/ramp-agent.json`).
+The Broker preserves the agent's original `requester` message (including the agent's signature) and appends an `IntermediaryHop` to the `intermediaries` array. The Exchange verifies both: the agent's identity (via `requester.signature` + public key fetched from `requester.domain/.well-known/ramp.json`) and each intermediary in the chain (via each hop's `signature` + public key fetched from `{hop.domain}/.well-known/ramp.json`).
 
 ### Inside SSP-Alpha's Exchange
 
 ```
 1. Validate request (proto validation) -> pass
 2. Verify requester.signature:
-   - Fetch public key from claude.ai/.well-known/ramp-agent.json (requester.domain key lookup)
+   - Fetch public key from claude.ai/.well-known/ramp.json (requester.domain key lookup)
    - Ed25519 verify -> pass
 2b. Verify intermediaries chain (if intermediaries array is non-empty):
-   - For each IntermediaryHop: fetch public key from {hop.domain}/.well-known/ramp-agent.json
+   - For each IntermediaryHop: fetch public key from {hop.domain}/.well-known/ramp.json
    - Ed25519 verify each hop's signature -> pass
 3. Check idempotency: tx-claude-001 not seen before -> proceed
 4. Verify offer signature:
@@ -738,7 +762,7 @@ CDN access log records:
   - This log is controlled by the provider (Hearst) and used for reconciliation
 ```
 
-**HMAC canonicalization format**: The signed URL uses `\n` (newline) as the delimiter between fields in the canonical string. The order is: `baseURL\nexpires\nagent_id\ntxn_id`. This is a Exchange-CDN concern (symmetric HMAC-SHA256 shared secret), entirely separate from the Ed25519 asymmetric signatures used for offer signing and request authentication.
+**HMAC canonicalization format**: The signed URL uses `\n` (newline) as the delimiter between fields in the canonical string. The order is: `baseURL\nexpires\nagent_id\ntxn_id`. This is an Exchange-CDN concern (symmetric HMAC-SHA256 shared secret), entirely separate from the Ed25519 asymmetric signatures used for offer signing and request authentication.
 
 ---
 
@@ -867,7 +891,7 @@ Response includes signed Offer snapshots for every transaction:
 
 **What Hearst can verify**:
 
-1. **Offer authenticity**: Hearst verifies the `exchange_signature` on each `offer_snapshot` using SSP-Alpha's published Ed25519 public key (from `exchange.ssp-alpha.com/exchange/v1/keys`). This proves the Exchange actually issued this Offer -- it cannot deny having offered these terms.
+1. **Offer authenticity**: Hearst verifies the `exchange_signature` on each `offer_snapshot` using SSP-Alpha's published Ed25519 public key (fetch `exchange.ssp-alpha.com/.well-known/ramp.json` and read `public_keys`). This proves the Exchange actually issued this Offer -- it cannot deny having offered these terms.
 
 2. **RSL price ceiling compliance**: Hearst's RSL declares a maximum rate of $0.08/crawl. The subscription's `subscription_unit_value` of $0.05 is below this ceiling. If any per-request Offer exceeded $0.08, Hearst would detect it by comparing `offer_snapshot.pricing.rate` against their RSL terms.
 

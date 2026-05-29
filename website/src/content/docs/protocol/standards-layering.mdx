@@ -13,7 +13,7 @@ RAMP does not replace RSL or CoMP. The three standards work together, each handl
 | **CoMP v2.0** | Defines content metadata objects | (Used internally by Exchange) | -- |
 | **C2PA 2.x** | Content provenance and authenticity | Embed Content Credentials in assets | (In-asset or sidecar manifest) |
 | **RAMP** | Transaction protocol + discovery | Drop `ramp.json` on domain | `/.well-known/ramp.json` |
-| **Content Attestation** | Cryptographic content verification | Publish keys at `ramp-verifier.json` | `/.well-known/ramp-verifier.json` |
+| **Content Attestation** | Cryptographic content verification | Publish keys in `public_keys` at `ramp.json` | `/.well-known/ramp.json` |
 | **MCP Interface** | Convenience tool layer for MCP agents | Deploy MCP server | (MCP server binary) |
 
 In plain terms:
@@ -185,10 +185,10 @@ RAMP adds its own objects on top of CoMP:
 |  |  AccessRestrictions - RSL permits/prohibits as proto  ||
 |  |  DomainVerification - Provider onboarding (v1.0)     ||
 |  |  Signed URLs --- CDN-native delivery (implementation) ||
-|  |  ramp-verifier.json - Verifier key announcement(v1.0)||
+|  |  ramp.json (ROLE_PUBLISHER) - Verifier keys (v1.0)  ||
 |  |  ResourceMutability -- Static/Dynamic/Live resources    ||
 |  |  Streaming delivery - WebSocket/SSE/HLS (v1.0)       ||
-|  |  ramp-exchange.json - Exchange manifest  (v1.0)||
+|  |  ramp.json (ROLE_EXCHANGE) - Exchange manifest (v1.0)||
 |  |  MCP Server --------- Zero-SDK agent interface  (v1.0)||
 |  |                                                       ||
 |  +------------------------------------------------------+|
@@ -223,7 +223,7 @@ RAMP uses a three-layer governance model to prevent fragmentation (the "USB-C pr
 
 **Layer 3**: domain-specific vocabularies. Each profile is a standalone specification defining ext field keys, attestation claim names, and behavioral conventions. Exchanges declare conformance via `supported_profiles` in their manifest.
 
-Three proto fields create a complete declaration chain: `RAMPRequest.supported_profiles` (agent to Broker), `ResourceQuery.supported_profiles` (Broker to Exchange), and `ExchangeManifest.supported_profiles` (Exchange self-description published at `/.well-known/ramp-exchange.json`).
+Three proto fields create a complete declaration chain: `RAMPRequest.supported_profiles` (agent to Broker), `ResourceQuery.supported_profiles` (Broker to Exchange), and `WellKnownManifest.supported_profiles` (Exchange self-description published at `/.well-known/ramp.json` with `role=ROLE_EXCHANGE`).
 
 ## Pricing Models and Delivery Methods
 
@@ -242,29 +242,27 @@ RAMP covers metered access to resources that exist before the transaction:
 
 **The test**: "Does the resource exist before the transaction?" If yes, RAMP applies. If the transaction creates something new, use a different protocol.
 
-## Discovery: Five Complementary Files
+## Discovery: Three Complementary Files
 
-Discovery uses five files that work together, each served by a different protocol participant:
+Discovery uses three files that work together. RAMP itself defines one well-known file -- `/.well-known/ramp.json` -- which every participant serves; the `role` field says which participant it is (provider, exchange, agent, publisher). The other two are existing web standards:
 
 ```
 robots.txt              -> who can crawl (existing standard)
 rsl.txt                 -> licensing terms and pricing signals (RSL 1.0)
-ramp.json              -> where to transact (RAMP, provider)
-ramp-verifier.json     -> verifier public keys and claims schema (RAMP v1.0, verifier)
-ramp-exchange.json  -> exchange capabilities and endpoints (RAMP v1.0, exchange)
+ramp.json              -> role-tagged WellKnownManifest (RAMP, all participants)
 ```
 
-`/.well-known/ramp.json` is a static JSON file declaring:
+`/.well-known/ramp.json` is a static JSON file. When served by a provider it declares:
 - Which Exchanges are authorized to sell this provider's content (like `ads.txt`)
 - The endpoint for each Exchange
 - Which third parties are authorized to push catalog metadata (`catalog_contributors`, v1.0)
 
-`/.well-known/ramp-verifier.json` is published by verification vendors (not providers). It declares:
-- Ed25519 public keys (JWKS format) for attestation signature verification
-- Supported claims schema (what claim fields the verifier attests to)
+A verification vendor serves its `ramp.json` (typically `role=ROLE_PUBLISHER`, or `role=ROLE_EXCHANGE` for a standalone vendor) declaring:
+- Ed25519 public keys in `public_keys` (inline RFC 7517 JWKs) for attestation signature verification
+- Supported claims schema in `ext["ramp.attestation.claims_schema"]` (what claim fields the verifier attests to)
 
-`/.well-known/ramp-exchange.json` is published by Exchanges. It declares:
-- ExchangeService endpoint URL and signing key URI
+An Exchange serves its `ramp.json` (`role=ROLE_EXCHANGE`) declaring:
+- ExchangeService endpoint URL and its offer-signing keys inline in `public_keys`
 - Supported protocol versions, pricing models, and delivery methods
 - Accepted verification vendors and hash methods
 - See [Exchange Manifest](/protocol/exchange-manifest/) for details

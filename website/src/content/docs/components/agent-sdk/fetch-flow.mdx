@@ -18,7 +18,7 @@ client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
   |       - Check in-memory cache for domain -> Exchange mappings
   |       - Cache hit: return known Exchange endpoints
   |       - Cache miss: fetch https://techcrunch.com/.well-known/ramp.json
-  |         - Parse ProviderManifest, extract authorized Exchanges
+  |         - Parse WellKnownManifest, extract authorized Exchanges
   |         - Cache result (TTL: 1 hour, configurable)
   |         - If ramp.json fetch fails: attempt direct GET to URL
   |           - If 403 + X-Content-Rules header: extract Exchange endpoint
@@ -132,7 +132,7 @@ client.FetchBatch(ctx, [url1, url2, url3])
   |  4. Discover supply (parallel, multi-URI per Exchange)
   |     For each Exchange: send ONE ResourceQuery with ALL URIs it covers
   |       - Exchange returns OfferGroups (one per URI)
-  |       - If a Exchange covers multiple domains, one query per domain
+  |       - If an Exchange covers multiple domains, one query per domain
   |
   |  5. Select best offer per URI
   |     For each URI: merge offers from all Exchanges, select best
@@ -319,7 +319,7 @@ Per-period persistence: by default, the SDK writes period budget state to a loca
 The SDK ships a `MockExchange` for testing agent code without network calls:
 
 ```go
-import "github.com/postindustria-tech/ramp-protocol/sdk-go/testutil"
+import "github.com/RAMP-Protocol/protocol/sdk-go/testutil"
 
 func TestAgentLogic(t *testing.T) {
     mock := testutil.NewMockExchange(testutil.MockConfig{

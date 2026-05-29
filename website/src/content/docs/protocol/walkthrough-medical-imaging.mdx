@@ -243,7 +243,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
 **The Exchange performs these checks, in order:**
 
 1. **Signature verification** — verifies `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
-2. **Agent authentication** — verifies `agent_signature` against `brainlab.edu/.well-known/ramp-agent.json`.
+2. **Agent authentication** — verifies `agent_signature` against `brainlab.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
 3. **DUA verification** — looks up `DUA-TCIA-2026-042` in its compliance registry. Verifies the DUA is (a) signed, (b) covers `brainlab.edu`, (c) covers `FUNCTION_AI_INPUT` use, (d) has not expired. **If the DUA is invalid, missing, or does not cover the requested use, the transaction is denied.**
 4. **Balance check** — confirms `neuro-bot@brainlab.edu` has sufficient balance ($25.00).
 5. **WAL write** — records the transaction before generating delivery credentials (write-before-sign invariant).

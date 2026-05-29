@@ -95,7 +95,7 @@ Exchange config DB has pricing for this path/tenant?
 
 Content attestations pushed via `CatalogService.PushResources` are attached to catalog entries during compilation. Each `CatalogEntry` may carry zero or more `ResourceAttestation` entries, which propagate to `OfferTemplate` and ultimately to `Offer.attestations` in `DiscoverResources` responses.
 
-The Exchange verifies attestation signatures at push time (not at compilation time) using keys fetched from the verifier's `/.well-known/ramp-verifier.json`. Only valid, unexpired attestations with verified signatures are stored in the catalog.
+The Exchange verifies attestation signatures at push time (not at compilation time) using keys fetched from the verifier's `/.well-known/ramp.json` `public_keys`. Only valid, unexpired attestations with verified signatures are stored in the catalog.
 
 When a catalog entry has attestations from multiple verifiers (e.g., a provider self-attestation and a DoubleVerify third-party attestation), all are carried on the offer. The agent decides which to trust.
 

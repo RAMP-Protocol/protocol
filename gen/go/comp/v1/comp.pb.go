@@ -617,7 +617,7 @@ type AISystemUse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// License ID — public agent identifier. NOT a credential.
 	// Authentication is via agent_signature (Ed25519). Treat lid like a
-	// username, not a password. Marketplace looks up agent's registered
+	// username, not a password. Exchange looks up agent's registered
 	// public key by lid.
 	Lid string `protobuf:"bytes,1,opt,name=lid,proto3" json:"lid,omitempty"`
 	// How the AI system authenticates itself.
@@ -727,7 +727,7 @@ func (x *AISystemUse) GetExt() *structpb.Struct {
 // CoMP §package.json
 type Package struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique package identifier defined by the Content Owner or Marketplace.
+	// Unique package identifier defined by the Content Owner or Exchange.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Title of the package.
 	Title *string `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`

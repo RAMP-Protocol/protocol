@@ -50,16 +50,29 @@ curl -s https://exchange.ramp-protocol.org/health | jq
 
 ### Step 2: Retrieve Exchange Public Key
 
-The Exchange announces its [Ed25519](/protocol/authentication) public key. Agents and Brokers use this to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication).
+The Exchange announces its [Ed25519](/protocol/authentication) public keys inline in its `/.well-known/ramp.json` manifest under `public_keys`. Agents and Brokers fetch this and read `public_keys` to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication).
 
 ```bash
-curl -s https://exchange.ramp-protocol.org/exchange/v1/keys | jq
+curl -s https://exchange.ramp-protocol.org/.well-known/ramp.json | jq
 ```
 
 ```json
 {
-  "algorithm": "ed25519",
-  "public_key": "a22b5d78a5fe1657a8c4fb7ae98da1178ccfb92b96004826be1914791ab5f3aa"
+  "ver": "1.1",
+  "role": "ROLE_EXCHANGE",
+  "domain": "exchange.ramp-protocol.org",
+  "public_keys": [
+    {
+      "kid": "exchange-2026-Q1",
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "oitdeKX-FleqMT7eumNoXjPuSuWAEgmvhkUeRq18-o0",
+      "not_before": "2026-01-01T00:00:00Z",
+      "not_after": "2026-12-31T23:59:59Z"
+    }
+  ]
 }
 ```
 
@@ -90,12 +103,12 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
   "ver": "1.0",
   "id": "demo-query-001",
   "exchange": "ramp-exchange-v1.0",
-  "offerGroups": [
+  "offer_groups": [
     {
       "uri": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
       "offers": [
         {
-          "offerId": "offer-cdn.ramp-protocol.org-1773682699693224366",
+          "offer_id": "offer-cdn.ramp-protocol.org-1773682699693224366",
           "package": {
             "id": "pkg-cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
             "retrieval": {
@@ -108,14 +121,14 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
             "currency": "USD",
             "estimated_quantity": 2000
           },
-          "deliveryMethod": "DELIVERY_METHOD_INSTRUCTIONS",
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
             "required": true,
             "window": "86400s",
-            "requiredFields": ["consumed_quantity"]
+            "required_fields": ["consumed_quantity"]
           },
-          "exchangeSignature": "ae77b181...32607e08",
-          "signatureAlgorithm": "ed25519"
+          "exchange_signature": "ae77b181...32607e08",
+          "signature_algorithm": "ed25519"
         }
       ]
     }
@@ -124,15 +137,15 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
 ```
 
 Key fields in each offer:
-- **offerId** — unique identifier for this offer
+- **offer_id** — unique identifier for this offer
 - **pricing** — rate ($0.05/article), currency, estimated tokens. Pricing models are defined in the [protocol spec](/protocol/standards-layering) and follow [RSL conventions](/protocol/discovery-paths)
-- **exchangeSignature** — [Ed25519 signature](/protocol/authentication) over the offer. Stateless: the Exchange can verify this signature on ExecuteTransaction without storing the offer
+- **exchange_signature** — [Ed25519 signature](/protocol/authentication) over the offer. Stateless: the Exchange can verify this signature on ExecuteTransaction without storing the offer
 - **reporting** — usage reporting is mandatory, due within 24 hours, must include `consumed_quantity`. See [how the billing cycle works](/getting-started/how-money-flows)
 - **package** — [IAB CoMP Package object](/protocol/standards-layering) describing the content
 
 ### Step 4: Execute Transaction ([ExecuteTransaction RPC](/components/exchange/request-flows))
 
-Commit to an offer. Pass the `offerId` and `offerSignature` from Step 3. The Exchange [verifies the signature](/protocol/authentication), [authorizes billing](/components/exchange/billing-adapter), writes the [transaction log](/components/exchange/storage-model) (WAL — write-before-sign invariant), and returns a **[signed URL](/components/edge-function/signed-url-verification)**.
+Commit to an offer. Pass the `offer_id` and `offer_signature` from Step 3. The Exchange [verifies the signature](/protocol/authentication), [authorizes billing](/components/exchange/billing-adapter), writes the [transaction log](/components/exchange/storage-model) (WAL — write-before-sign invariant), and returns a **[signed URL](/components/edge-function/signed-url-verification)**.
 
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
@@ -140,9 +153,9 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
   -d '{
     "ver": "1.0",
     "id": "demo-txn-001",
-    "offerId": "<offerId from Step 3>",
-    "offerSignature": "<exchangeSignature from Step 3>",
-    "offerSignatureAlgorithm": "ed25519",
+    "offer_id": "<offer_id from Step 3>",
+    "offer_signature": "<exchange_signature from Step 3>",
+    "offer_signature_algorithm": "ed25519",
     "aisystem": {
       "name": "DemoAgent",
       "aisysuse": { "lid": "LIC-DEMO-001" }
@@ -155,28 +168,28 @@ Response:
 {
   "ver": "1.0",
   "id": "demo-txn-001",
-  "transactionId": "txn-1773682700352684307",
-  "billingId": "bill-000002",
-  "retrievalEndpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307",
+  "transaction_id": "txn-1773682700352684307",
+  "billing_id": "bill-000002",
+  "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307",
   "cost": { "amount": 0.05, "currency": "USD" },
-  "deliveryMethod": "DELIVERY_METHOD_INSTRUCTIONS",
-  "reportingObligation": {
+  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+  "reporting_obligation": {
     "required": true,
     "window": "86400s",
-    "requiredFields": ["consumed_quantity"]
+    "required_fields": ["consumed_quantity"]
   },
-  "expiresAt": "2026-03-16T17:43:20Z",
-  "agentIdentityHash": "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
+  "expires_at": "2026-03-16T17:43:20Z",
+  "agent_identity_hash": "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
 }
 ```
 
 Key fields:
-- **transactionId** — unique transaction reference, recorded in the [transaction log](/components/exchange/storage-model) before the signed URL is generated
-- **billingId** — billing record reference, managed by the [Billing Adapter](/components/exchange/billing-adapter)
-- **retrievalEndpoint** — the [signed URL](/components/edge-function/signed-url-verification) with HMAC-SHA256 signature, expiry, agent identity binding, and transaction ID
+- **transaction_id** — unique transaction reference, recorded in the [transaction log](/components/exchange/storage-model) before the signed URL is generated
+- **billing_id** — billing record reference, managed by the [Billing Adapter](/components/exchange/billing-adapter)
+- **retrieval_endpoint** — the [signed URL](/components/edge-function/signed-url-verification) with HMAC-SHA256 signature, expiry, agent identity binding, and transaction ID
 - **cost** — $0.05 USD charged. See [how money flows](/getting-started/how-money-flows) for the full billing lifecycle
-- **reportingObligation** — you MUST report usage within 24 hours. See [budget and reporting](/components/agent-sdk/budget-reporting) for how the Agent SDK handles this
-- **agentIdentityHash** — RFC 7638 JWK Thumbprint of your Ed25519 request-signing key, bound into the signed URL to [prevent URL sharing](/security/threat-model). See [Signed URL Verification](/components/edge-function/signed-url-verification)
+- **reporting_obligation** — you MUST report usage within 24 hours. See [budget and reporting](/components/agent-sdk/budget-reporting) for how the Agent SDK handles this
+- **agent_identity_hash** — RFC 7638 JWK Thumbprint of your Ed25519 request-signing key, bound into the signed URL to [prevent URL sharing](/security/threat-model). See [Signed URL Verification](/components/edge-function/signed-url-verification)
 
 ### Step 5: Fetch Resource via [Signed URL](/components/edge-function/signed-url-verification)
 
@@ -198,8 +211,8 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Repor
   -d '{
     "ver": "1.0",
     "id": "demo-report-001",
-    "transactionId": "<transactionId from Step 4>",
-    "billingId": "<billingId from Step 4>",
+    "transaction_id": "<transaction_id from Step 4>",
+    "billing_id": "<billing_id from Step 4>",
     "usage": { "consumed_quantity": 1500 }
   }' | jq
 ```
@@ -216,7 +229,7 @@ The Exchange enforces [11 denial reasons](/protocol/transaction-flow) defined in
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
   -H "Content-Type: application/json" \
-  -d '{"ver":"0.2","id":"deny-001","offerId":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq .denialReason
+  -d '{"ver":"0.2","id":"deny-001","offer_id":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq .denial_reason
 ```
 ```json
 "DENIAL_REASON_SIGNATURE_INVALID"
@@ -224,7 +237,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
 
 **Zero token count → rejection:**
 ```json
-{ "accepted": false, "rejectionReason": "consumed_quantity is required and must be > 0" }
+{ "accepted": false, "rejection_reason": "consumed_quantity is required and must be > 0" }
 ```
 
 See the full [threat model](/security/threat-model) for how these protections defend against replay attacks, URL sharing, billing fraud, and reporting evasion.
@@ -315,7 +328,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Disco
         ]
       }
     }
-  }' | jq '.offerGroups[] | {uri, rate: .offers[0].pricing.rate}'
+  }' | jq '.offer_groups[] | {uri, rate: .offers[0].pricing.rate}'
 ```
 
 ```json
@@ -344,7 +357,7 @@ docker compose up
 
 # Test
 curl http://localhost:3000/health
-curl http://localhost:3000/exchange/v1/keys
+curl http://localhost:3000/.well-known/ramp.json
 ```
 
 For production deployment, see:

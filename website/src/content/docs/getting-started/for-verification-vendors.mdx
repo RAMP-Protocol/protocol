@@ -147,7 +147,7 @@ POST /ramp.v1.CatalogService/PushContent
 
 The same `PushContent` API works regardless of domain. A de-identification auditor pushing HIPAA compliance attestations for medical imaging uses the same endpoint — only the `claims` content differs.
 
-The Exchange verifies your signature using your public key from `/.well-known/ramp-verifier.json`, confirms you are listed in the provider's `catalog_contributors`, and attaches your attestation to the catalog entry.
+The Exchange verifies your signature using your public key from `/.well-known/ramp.json` (`public_keys`, selected by `kid`), confirms you are listed in the provider's `catalog_contributors`, and attaches your attestation to the catalog entry.
 
 ## What You Can Verify
 
@@ -195,7 +195,7 @@ Your Analysis Pipeline (crawlers, APIs, audit tools, QA systems)
 
 **Prerequisites:**
 
-1. **Publish `ramp-verifier.json`**: Host your Ed25519 public keys at `https://yourcompany.com/.well-known/ramp-verifier.json` (JWKS format). Exchanges fetch this to verify your attestation signatures.
+1. **Publish `ramp.json`**: Host your Ed25519 public keys at `https://yourcompany.com/.well-known/ramp.json` in `public_keys` (inline RFC 7517 JWKs, selected by `kid`). Exchanges fetch this to verify your attestation signatures. RAMP has no dedicated verifier role; a verifier publishes under its operator's role — a standalone verification vendor uses `ROLE_EXCHANGE`, and a self-attesting publisher uses `ROLE_PUBLISHER`. Expose your attestation claims schema via `ext["ramp.attestation.claims_schema"]`.
 2. **Be listed in `catalog_contributors`**: Each provider must list your domain in their `catalog_contributors` before you can push attestations for their content. The Exchange rejects pushes from unlisted contributors.
 3. **Register with Exchanges**: Ed25519 key exchange, then push data on whatever schedule makes sense — real-time on content publish, daily batch, triggered by provider CMS webhooks, or on regulatory audit cycles.
 
@@ -206,7 +206,7 @@ Every `PushContent` request is signed with your Ed25519 private key. Each `Resou
 1. **Request-level**: The `caller_signature` on the `PushContent` request proves the request came from your domain
 2. **Attestation-level**: The `signature` field on each `ResourceAttestation` proves the claims were signed by the key identified by `kid`
 
-The Exchange fetches your public keys from `https://yourcompany.com/.well-known/ramp-verifier.json` — no shared secrets.
+The Exchange fetches your public keys from `https://yourcompany.com/.well-known/ramp.json` (`public_keys`) — no shared secrets.
 
 ## Business Model
 

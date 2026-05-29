@@ -50,7 +50,7 @@ message AISystem {
 message AISystemUse {
   // License ID — public agent identifier. NOT a credential.
   // Authentication is via agent_signature (Ed25519). Treat lid like a
-  // username, not a password. Marketplace looks up agent's registered
+  // username, not a password. Exchange looks up agent's registered
   // public key by lid.
   string lid = 1;
 
@@ -123,7 +123,7 @@ enum SubFunction {
 // Package — A package of content inventory.
 // CoMP §package.json
 message Package {
-  // Unique package identifier defined by the Content Owner or Marketplace.
+  // Unique package identifier defined by the Content Owner or Exchange.
   string id = 1;
 
   // Title of the package.

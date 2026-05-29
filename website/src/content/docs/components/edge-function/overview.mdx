@@ -12,15 +12,15 @@ The Edge Function has three jobs:
 1. **Block unauthorized bots** -- detect AI crawlers hitting protected content without a signed URL and return `403 + X-Content-Rules` header pointing them to the Exchange.
 2. **Verify signed URL access** -- validate that incoming signed URLs are authentic, unexpired, bound to the correct agent identity, and (optionally) single-use.
 3. **Serve ramp.json and rsl.txt** -- generate, cache, and serve `/.well-known/ramp.json` and `/rsl.txt` so protocol-aware agents discover the Exchange without triggering a 403.
-4. **Serve ramp-verifier.json (v1.0)** -- serve `/.well-known/ramp-verifier.json` for providers that self-attest resources. This publishes the provider's Ed25519 public keys and claims schema so agents and Exchanges can verify attestation signatures.
+4. **Serve verifier keys via ramp.json (v1.0)** -- serve `/.well-known/ramp.json` for providers that self-attest resources. This publishes the provider's Ed25519 public keys in `public_keys` and the claims schema in `ext["ramp.attestation.claims_schema"]` so agents and Exchanges can verify attestation signatures. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`role=ROLE_PUBLISHER` when a publisher self-attests).
 5. **Serve ACME domain verification challenges (v1.0)** -- auto-serve challenge tokens at `/.well-known/ramp-verify/{token}` from the CDN's KV store during provider onboarding domain verification.
 
 ## Single Deploy for Providers
 
 The absolute minimum a provider needs to do:
 
-1. **Get a Exchange endpoint** from their Exchange operator (one-time business relationship).
-2. **Deploy the edge function** using the [Terraform module](https://github.com/postindustria-tech/ramp-protocol/tree/main/terraform/aws-ramp-edge/) or deploy the [CloudFront Function](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/edge-function/cloudfront-function.js) manually.
+1. **Get an Exchange endpoint** from their Exchange operator (one-time business relationship).
+2. **Deploy the edge function** using the [Terraform module](https://github.com/RAMP-Protocol/protocol/tree/main/terraform/aws-ramp-edge/) or deploy the [CloudFront Function](https://github.com/RAMP-Protocol/protocol/tree/main/poc/edge-function/cloudfront-function.js) manually.
 3. **Verify** -- `curl -I https://example.com/.well-known/ramp.json` returns the manifest.
 
 import { Aside } from '@astrojs/starlight/components';
@@ -45,7 +45,7 @@ The Edge Function sits at the CDN layer between AI agents and provider content. 
 ```mermaid
 flowchart TD
     REQ[Incoming Request] --> RAMP_JSON{Path = /.well-known/ramp.json?}
-    RAMP_JSON -->|Yes| SERVE_MANIFEST[Serve ProviderManifest<br/>200 OK + Cache-Control]
+    RAMP_JSON -->|Yes| SERVE_MANIFEST[Serve WellKnownManifest<br/>200 OK + Cache-Control]
     RAMP_JSON -->|No| RSL_TXT{Path = /rsl.txt?}
     RSL_TXT -->|Yes| SERVE_RSL[Serve rsl.txt<br/>200 OK + Cache-Control]
     RSL_TXT -->|No| PROTECTED{Path matches<br/>protected pattern?}
@@ -76,15 +76,13 @@ The decision logic is CDN-agnostic. Every adapter calls the same core function:
 ```
 handleRequest(ctx):
   1. If path == "/.well-known/ramp.json":
-       -> Serve cached ProviderManifest JSON
+       -> Serve cached WellKnownManifest JSON
+       -> For self-attesting providers, this includes verifier keys in
+          public_keys and the claims schema in ext["ramp.attestation.claims_schema"]
        -> Return 200
 
   1b. If path == "/rsl.txt":
        -> Serve cached rsl.txt content
-       -> Return 200
-
-  1c. If path == "/.well-known/ramp-verifier.json":
-       -> Serve cached verifier keys JSON (for self-attesting providers)
        -> Return 200
 
   1d. If path starts with "/.well-known/ramp-verify/":
@@ -121,7 +119,7 @@ When an AI crawler requests protected content without signed URL parameters, the
 
 ### ramp.json and rsl.txt Generation and Serving
 
-The edge function serves `/.well-known/ramp.json` containing the `ProviderManifest` message and `/rsl.txt` containing the machine-readable licensing signal. Both files are sourced from the same configuration (Exchange API, inline config, or KV store), cached aggressively with `Cache-Control: public, max-age=3600`.
+The edge function serves `/.well-known/ramp.json` containing the `WellKnownManifest` message (`role=ROLE_PUBLISHER`) and `/rsl.txt` containing the machine-readable licensing signal. Both files are sourced from the same configuration (Exchange API, inline config, or KV store), cached aggressively with `Cache-Control: public, max-age=3600`.
 
 ### Signed URL Passthrough with Agent Identity Validation
 

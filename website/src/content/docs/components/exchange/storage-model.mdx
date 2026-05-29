@@ -256,7 +256,7 @@ These metrics are INDEPENDENT:
 - An agent could have **80% compliance rate** but be accurate when it does report (low compliance, high accuracy)
 - Enforcement gates on **compliance rate** (blocking transactions for non-reporting). Token accuracy is tracked for analytics and potential contract-level enforcement, but does not trigger protocol-level blocking.
 
-Cumulative benchmarking (same content, different agents, compare reported token counts) is a Exchange implementation concern, not a protocol requirement. The protocol accepts that token accuracy is a known limitation — agents self-report, and the Exchange's token estimate is itself approximate (word_count x 1.32).
+Cumulative benchmarking (same content, different agents, compare reported token counts) is an Exchange implementation concern, not a protocol requirement. The protocol accepts that token accuracy is a known limitation — agents self-report, and the Exchange's token estimate is itself approximate (word_count x 1.32).
 
 ### Provider Audit Access
 
@@ -273,7 +273,7 @@ Providers get read-only access to all signed Offers issued for their content. Th
 - `timestamp` — when the transaction was executed
 
 **Verification capabilities**:
-- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (announced at `{exchange_domain}/exchange/v1/keys`)
+- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (fetch the Exchange's `/.well-known/ramp.json` and read `public_keys`)
 - RSL pricing, when present, serves as the **price ceiling** — Offers exceeding the RSL-declared rate are detectable by comparing `offer_snapshot.pricing.rate` against the RSL terms
 - Private floor pricing is contractual between provider and Exchange, not protocol-enforced — the protocol provides the audit data, the contract governs the terms
 

@@ -3,7 +3,7 @@ title: "Walkthrough: Business Credit Report"
 description: "DYNAMIC content mutability, multi-tier pricing offers, entity resolution, redistribution restrictions, and the ramp-credit-v1 extension profile."
 ---
 
-> Complete walkthrough of RAMP v1.0 applied to business credit data. Demonstrates DYNAMIC content mutability, multi-tier offers (same resource at different completeness/price), entity resolution as an Broker concern, and redistribution restrictions enforced via signed URLs and agent identity binding.
+> Complete walkthrough of RAMP v1.0 applied to business credit data. Demonstrates DYNAMIC content mutability, multi-tier offers (same resource at different completeness/price), entity resolution as a Broker concern, and redistribution restrictions enforced via signed URLs and agent identity binding.
 
 ## Scenario
 
@@ -410,7 +410,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
 
 The Exchange performs:
 1. **Signature verification** — verifies the `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
-2. **Agent authentication** — verifies `agent_signature` against the agent's published public key at `legalcorp.com/.well-known/ramp-agent.json`.
+2. **Agent authentication** — verifies `agent_signature` against the agent's published public key at `legalcorp.com/.well-known/ramp.json` (`role=ROLE_AGENT`).
 3. **Balance check** — confirms `due-diligence-bot@legalcorp.com` has sufficient balance ($61.99).
 4. **WAL write** — records the transaction in the write-ahead log before generating the signed URL (write-before-sign invariant).
 5. **Signed URL generation** — HMAC-SHA256 over `(base_url, expires, agent_id, txn_id)` using the Exchange-CDN shared secret.

@@ -27,7 +27,7 @@ sequenceDiagram
     participant MP as Exchange
 
     Agent->>PUB: GET /.well-known/ramp.json
-    PUB-->>Agent: ProviderManifest (exchange endpoints)
+    PUB-->>Agent: WellKnownManifest (role=ROLE_PUBLISHER, exchange endpoints)
 
     Note over Agent: Content at /premium/* requires<br/>licensed access via exchange.ssp.com
 
@@ -52,7 +52,7 @@ sequenceDiagram
 
 | Step | Message | Standard |
 |---|---|---|
-| Check ramp.json | `ProviderManifest` | **RAMP** (exchange routing) |
+| Check ramp.json | `WellKnownManifest` (role=ROLE_PUBLISHER) | **RAMP** (exchange routing) |
 | Discover supply | `ResourceQuery` / `ResourceResponse` | **RAMP** wrapping **RAMP Requester** |
 | Offers returned | `Offer` with `Package` + `Pricing` | **RAMP** Pricing + **CoMP** Package |
 | Content attestations | `Offer.attestations` | **RAMP** `ResourceAttestation` (replaces ResourceAttestation) |
@@ -170,7 +170,7 @@ sequenceDiagram
     Note over Agent: /premium/* requires payment<br/>per-crawl: $0.05 USD<br/>permits: ai-input, search<br/>prohibits: ai-train
 
     Agent->>PUB: GET /.well-known/ramp.json
-    PUB-->>Agent: ProviderManifest (exchange endpoint)
+    PUB-->>Agent: WellKnownManifest (role=ROLE_PUBLISHER, exchange endpoint)
 
     Agent->>MP: DiscoverResources -> ExecuteTransaction -> fetch content
 
@@ -253,7 +253,7 @@ When an `OfferGroup` has no offers, the `absence_reason` field explains why. Thi
 
 ### RateLimitInfo (v1.0)
 
-The `ResourceResponse` carries an optional `rate_limit` field with the caller's current rate limit status: `limit`, `remaining`, `reset_at`, and `window`. This is particularly important for Broker fanout -- when an Broker sends batch queries to multiple Exchanges, mid-batch rate limiting can cause partial results if not signaled early. Modeled after IETF RateLimit header fields.
+The `ResourceResponse` carries an optional `rate_limit` field with the caller's current rate limit status: `limit`, `remaining`, `reset_at`, and `window`. This is particularly important for Broker fanout -- when a Broker sends batch queries to multiple Exchanges, mid-batch rate limiting can cause partial results if not signaled early. Modeled after IETF RateLimit header fields.
 
 ### DiscoveryMethod (v1.0)
 
@@ -261,7 +261,7 @@ Each `OfferGroup` carries a `discovery_method` field indicating how the offers w
 
 | Value | Number | Description |
 |---|---|---|
-| `DISCOVERY_METHOD_MARKETPLACE` | 1 | Standard exchange catalog lookup |
+| `DISCOVERY_METHOD_EXCHANGE` | 1 | Standard exchange catalog lookup |
 | `DISCOVERY_METHOD_SEARCH` | 2 | Full-text or semantic search across provider inventories |
 | `DISCOVERY_METHOD_RECOMMENDATION` | 3 | Exchange-generated recommendation based on context |
 | `DISCOVERY_METHOD_SYNDICATION` | 4 | Content syndicated from a partner exchange or feed |
@@ -272,7 +272,7 @@ Batch transactions are **non-atomic** -- individual items can fail independently
 
 ## Path F: Subscription-Based Access
 
-The agent has an existing subscription deal with a Exchange. When querying supply, the Exchange includes subscription offers with zero marginal cost. The transaction skips per-request billing but still issues a signed URL and creates a usage reporting obligation.
+The agent has an existing subscription deal with an Exchange. When querying supply, the Exchange includes subscription offers with zero marginal cost. The transaction skips per-request billing but still issues a signed URL and creates a usage reporting obligation.
 
 ```mermaid
 sequenceDiagram

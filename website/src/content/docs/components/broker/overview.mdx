@@ -17,7 +17,7 @@ The RAMP Broker is the optional demand-side router in the RAMP protocol. It sits
 - **Dispute relay (v1.0)** -- forward `DisputeRequest` messages to the correct Exchange
 - **Selection transparency** -- logged rationale for every selection decision
 
-The Exchange does not know or care whether the request came from an Broker or directly from an agent. The protocol is identical.
+The Exchange does not know or care whether the request came from a Broker or directly from an agent. The protocol is identical.
 
 ## Component Architecture
 
@@ -53,7 +53,7 @@ graph TB
 
 | Component | Responsibility | State |
 |---|---|---|
-| **Exchange Registry** | Knows which Exchanges exist and their health status. Bootstraps from [Exchange Manifest](/protocol/exchange-manifest/) (`/.well-known/ramp-exchange.json`) instead of HEAD probes -- extracting endpoints, capabilities, and accepted verifiers in a single fetch | Long-lived, refreshed periodically |
+| **Exchange Registry** | Knows which Exchanges exist and their health status. Bootstraps from [Exchange Manifest](/protocol/exchange-manifest/) (`/.well-known/ramp.json`) instead of HEAD probes -- extracting endpoints, capabilities, and accepted verifiers in a single fetch | Long-lived, refreshed periodically |
 | **Supply Discovery** | Fans out DiscoverResources RPCs to N Exchanges concurrently | Per-request, stateless |
 | **Selection Engine** | Deduplicates, ranks, filters, and selects the best offer | Per-request, stateless |
 | **Budget Tracker** | Tracks cumulative spend per session/period and enforces limits | Per-session in-memory, per-period in Redis |
@@ -103,7 +103,7 @@ RAMP uses a two-layer signing model: the **Requester signature** proves who orig
 
 ### Requester Signature
 
-The `Requester` message carries an Ed25519 signature over `(id, domain, uris, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp-agent.json`.
+The `Requester` message carries an Ed25519 signature over `(id, domain, uris, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp.json`.
 
 The Broker passes `Requester` through unchanged -- it never modifies the requester's identity or signature.
 
@@ -116,7 +116,7 @@ When the Broker forwards a request, it appends a signed `IntermediaryHop` to the
 - **`forwarded_at`** -- timestamp of when the intermediary forwarded the request
 - **`signature`** -- Ed25519 signature over the request payload at this hop
 
-This chain is modeled after OpenRTB schain (Supply Chain Object). When the agent queries a Exchange directly, `intermediaries` is empty. When the request passes through an Broker, it contains one hop.
+This chain is modeled after OpenRTB schain (Supply Chain Object). When the agent queries an Exchange directly, `intermediaries` is empty. When the request passes through a Broker, it contains one hop.
 
 ```go
 // Broker appends a signed hop when forwarding.
@@ -136,12 +136,12 @@ func (o *Broker) signHop(query *rampv1.ResourceQuery) {
 
 The Exchange verifies both layers:
 
-1. **Requester signature** -- verified against the public key at `{requester.domain}/.well-known/ramp-agent.json`
-2. **Each intermediary hop signature** -- verified against the public key at `{hop.domain}/.well-known/ramp-agent.json`
+1. **Requester signature** -- verified against the public key at `{requester.domain}/.well-known/ramp.json`
+2. **Each intermediary hop signature** -- verified against the public key at `{hop.domain}/.well-known/ramp.json`
 
 Both must pass. This replaces the earlier flat `agent_signature` + `broker_signature` model with a chain that generalizes to multiple intermediaries.
 
-The Broker announces its public key at `{domain}/.well-known/ramp-agent.json` (same manifest format as agents). This allows any Exchange to verify the Broker's identity without prior registration.
+The Broker publishes its keys in `public_keys` (inline RFC 7517 Ed25519 JWKs, selected by `kid`) at `{domain}/.well-known/ramp.json` (same manifest format as agents, `role=ROLE_AGENT`). This allows any Exchange to verify the Broker's identity without prior registration.
 
 ## Profile-Based Routing
 
@@ -150,7 +150,7 @@ The Broker uses domain profiles to route queries to the right Exchanges.
 ### How It Works
 
 1. **Agent declares profiles** -- `RAMPRequest.supported_profiles` lists which domain extension profiles the agent understands (e.g., `["ramp-academic-v1"]`)
-2. **Broker filters Exchanges** -- the Exchange Registry checks each Exchange's `ExchangeManifest.supported_profiles` and routes queries only to Exchanges that support at least one of the requested profiles
+2. **Broker filters Exchanges** -- the Exchange Registry checks each Exchange's `WellKnownManifest.supported_profiles` and routes queries only to Exchanges that support at least one of the requested profiles
 3. **Broker forwards profiles** -- the declared profiles are forwarded in `ResourceQuery.supported_profiles`, so the Exchange knows which profile-specific `ext` fields to include in offers
 4. **Exchange responds with profile data** -- the Exchange includes profile-specific metadata (e.g., retraction status, citation counts for academic content) only when the caller declares support
 
@@ -260,7 +260,7 @@ The Broker's internal `SupplySource` interface is the extension point for conten
 
 ```go
 // SupplySource abstracts where content offers come from.
-// v1: only ExchangeSource (queries a Exchange).
+// v1: only ExchangeSource (queries an Exchange).
 // v2: SearchSource (Exa, Tavily), RecommendationSource, etc.
 type SupplySource interface {
     // Query returns offers from this source matching the request.
@@ -274,7 +274,7 @@ type SupplySource interface {
 }
 ```
 
-The flow: search/recommendation produces URIs, the Broker looks up a Exchange for each URI's domain (via ramp.json), the Exchange provides pricing/offers, and the standard transaction flow continues. Discovery is upstream of transactions -- it produces URIs, not offers. The `OfferGroup.discovery_method` field tells the agent how each URI was found.
+The flow: search/recommendation produces URIs, the Broker looks up an Exchange for each URI's domain (via ramp.json), the Exchange provides pricing/offers, and the standard transaction flow continues. Discovery is upstream of transactions -- it produces URIs, not offers. The `OfferGroup.discovery_method` field tells the agent how each URI was found.
 
 This positions the Broker as the natural integration point for agentic search -- agents that need content don't just request known URLs, they ask "find me articles about X" and the Broker discovers, prices, and delivers.
 
@@ -334,13 +334,13 @@ sequenceDiagram
 | **Same protocol, transparent proxy** | The Exchange cannot distinguish Broker-mediated requests from direct agent requests. No special Exchange support needed. |
 | **Signed offer pass-through** | Exchange signatures cover pricing fields. The Broker cannot inflate prices without invalidating the signature. |
 | **Advisory budget enforcement** | The Broker pre-filters transactions by budget, but the Exchange is the authoritative enforcement point. No overspend occurs because the Exchange is the gatekeeper. |
-| **Ed25519 + intermediary chain** | Requester signs (id, domain, uris, scopes); Broker appends a signed `IntermediaryHop`. Exchange verifies both layers. Public keys discoverable via `.well-known/ramp-agent.json`. |
+| **Ed25519 + intermediary chain** | Requester signs (id, domain, uris, scopes); Broker appends a signed `IntermediaryHop`. Exchange verifies both layers. Public keys discoverable via `public_keys` in `.well-known/ramp.json`. |
 | **Partial results are normal** | If 3 of 5 Exchanges respond within the deadline, the Broker proceeds with 3 responses. Availability of any individual Exchange does not block the system. |
 
 ## Go Module Structure
 
 ```
-github.com/postindustria-tech/ramp-protocol/broker/
+github.com/RAMP-Protocol/protocol/broker/
     cmd/
         broker/           # Sidecar binary entrypoint
             main.go

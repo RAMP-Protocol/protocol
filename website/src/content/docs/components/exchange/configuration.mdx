@@ -9,15 +9,15 @@ Three-tier configuration with precedence: environment variables > config file > 
 
 | Setting | Source | Hot Reload? | Example |
 |---|---|---|---|
-| Listen address | Env var | No (restart) | `MARKETPLACE_LISTEN_ADDR=:8080` |
-| Exchange domain | Env var | No | `MARKETPLACE_DOMAIN=exchange.ssp.com` |
-| TLS cert/key | Env var / file | No | `MARKETPLACE_TLS_CERT=/etc/tls/cert.pem` |
-| Tenant configs | Config file (YAML/JSON) | Yes (SIGHUP) | `MARKETPLACE_CONFIG=/etc/exchange/config.yaml` |
-| Signing keys | Secrets manager | Yes (polled) | `MARKETPLACE_SECRETS_PROVIDER=aws-sm` |
+| Listen address | Env var | No (restart) | `EXCHANGE_LISTEN_ADDR=:8080` |
+| Exchange domain | Env var | No | `EXCHANGE_DOMAIN=exchange.ssp.com` |
+| TLS cert/key | Env var / file | No | `EXCHANGE_TLS_CERT=/etc/tls/cert.pem` |
+| Tenant configs | Config file (YAML/JSON) | Yes (SIGHUP) | `EXCHANGE_CONFIG=/etc/exchange/config.yaml` |
+| Signing keys | Secrets manager | Yes (polled) | `EXCHANGE_SECRETS_PROVIDER=aws-sm` |
 | Billing adapter endpoint | Config file | Yes (SIGHUP) | In tenant config |
-| Log level | Env var | Yes (signal) | `MARKETPLACE_LOG_LEVEL=info` |
-| WAL directory | Env var | No | `MARKETPLACE_WAL_DIR=/var/lib/exchange/wal` |
-| Transaction store DSN | Env var | No | `MARKETPLACE_TXN_STORE_DSN=kafka://...` |
+| Log level | Env var | Yes (signal) | `EXCHANGE_LOG_LEVEL=info` |
+| WAL directory | Env var | No | `EXCHANGE_WAL_DIR=/var/lib/exchange/wal` |
+| Transaction store DSN | Env var | No | `EXCHANGE_TXN_STORE_DSN=kafka://...` |
 
 ---
 

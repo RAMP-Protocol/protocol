@@ -102,7 +102,7 @@ for _, r := range results {
 ### TypeScript
 
 <Aside type="note">
-The TypeScript SDK is not yet published to npm. Use the working implementation at [`poc/agent-sdk/client.ts`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/agent-sdk/client.ts).
+The TypeScript SDK is not yet published to npm. Use the working implementation at [`poc/agent-sdk/client.ts`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/agent-sdk/client.ts).
 </Aside>
 
 ```typescript
@@ -132,7 +132,7 @@ await client.close();
 ### Python
 
 <Aside type="note">
-The Python SDK is not yet published to PyPI. See [`poc/mcp-tool/server.py`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/mcp-tool/server.py) for the Python reference implementation using FastMCP.
+The Python SDK is not yet published to PyPI. See [`poc/mcp-tool/server.py`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/mcp-tool/server.py) for the Python reference implementation using FastMCP.
 </Aside>
 
 ```python
@@ -422,9 +422,9 @@ The concrete implementations differ in persistence strategy (in-memory vs Redis)
 
 | Language | Source | Status | Dependencies |
 |---|---|---|---|
-| Go | [`gen/go/`](https://github.com/postindustria-tech/ramp-protocol/tree/main/gen/go/) (types) + [`gen/go/ramp/v1/rampv1connect`](https://github.com/postindustria-tech/ramp-protocol/tree/main/gen/go/ramp/v1/rampv1connect) (Connect client) | Generated, usable via Go modules | `connectrpc.com/connect` + `google.golang.org/protobuf` + stdlib |
-| TypeScript | [`poc/agent-sdk/client.ts`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/agent-sdk/client.ts) | Working PoC (npm package planned) | `@connectrpc/connect` + `@bufbuild/protobuf` |
-| Python | [`poc/mcp-tool/server.py`](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/mcp-tool/server.py) | Working PoC (PyPI package planned) | `httpx` + `fastmcp` |
+| Go | [`gen/go/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/go/) (types) + [`gen/go/ramp/v1/rampv1connect`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/go/ramp/v1/rampv1connect) (Connect client) | Generated, usable via Go modules | `connectrpc.com/connect` + `google.golang.org/protobuf` + stdlib |
+| TypeScript | [`poc/agent-sdk/client.ts`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/agent-sdk/client.ts) | Working PoC (npm package planned) | `@connectrpc/connect` + `@bufbuild/protobuf` |
+| Python | [`poc/mcp-tool/server.py`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/mcp-tool/server.py) | Working PoC (PyPI package planned) | `httpx` + `fastmcp` |
 
 ### What Is Language-Specific vs Shared
 

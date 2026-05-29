@@ -67,7 +67,7 @@ func (h *ExchangeHandler) DiscoverResources(
     }
 
     // 2. Verify Requester identity (Ed25519 signature over domain-bound key).
-    //    Lookup the requester's public key via {domain}/.well-known/ramp-agent.json.
+    //    Lookup the requester's public key via {domain}/.well-known/ramp.json.
     //    The Exchange MUST verify the Requester.signature. Reject on failure.
     requester := req.Msg.Requester
     requesterPubKey, err := h.requesterKeys.LookupPublicKey(ctx, requester.Domain)
@@ -85,7 +85,7 @@ func (h *ExchangeHandler) DiscoverResources(
     }
 
     // 2b. Verify IntermediaryHop chain (if present).
-    //     Each hop's signature is verified against {hop.domain}/.well-known/ramp-agent.json.
+    //     Each hop's signature is verified against {hop.domain}/.well-known/ramp.json.
     //     Timestamps are checked for temporal consistency.
     for i, hop := range req.Msg.Intermediaries {
         hopPubKey, err := h.requesterKeys.LookupPublicKey(ctx, hop.Domain)
@@ -240,13 +240,13 @@ func (h *ExchangeHandler) DiscoverResources(
 
 ### Requester Authentication
 
-Requester authentication uses Ed25519 signatures over a domain-bound key. The `Requester.domain` field determines where the public key is published (`{domain}/.well-known/ramp-agent.json`). The `Requester.id` identifies the specific entity within that domain. The requester's private key never leaves the requester.
+Requester authentication uses Ed25519 signatures over a domain-bound key. The `Requester.domain` field determines where the public key is published (`{domain}/.well-known/ramp.json`). The `Requester.id` identifies the specific entity within that domain. The requester's private key never leaves the requester.
 
 **Two onboarding paths:**
 
 1. **Enterprise (out-of-band key exchange)**: During contract signing, the Exchange operator registers the requester's public key via an internal admin API: `POST /admin/requesters { requester_id, domain, public_key, subscription }`. The public key is exchanged out-of-band (email, portal, API) as part of the commercial agreement.
 
-2. **Self-signup (domain verification)**: The requester registers via the public API: `POST /exchange/v1/requesters/register { requester_id, domain }`. The Exchange fetches `/.well-known/ramp-agent.json` from the domain, extracts the public key, and verifies that `requester_id` matches. No subscription is created — self-signup requesters use per-request billing only.
+2. **Self-signup (domain verification)**: The requester registers via the public API: `POST /exchange/v1/requesters/register { requester_id, domain }`. The Exchange fetches `/.well-known/ramp.json` from the domain, reads the matching key from `public_keys` (selected by `kid`), and verifies that `requester_id` matches. No subscription is created — self-signup requesters use per-request billing only.
 
 **Requester public key storage:**
 
@@ -255,7 +255,7 @@ type RequesterRecord struct {
     RequesterID   string
     Domain        string
     PublicKey     ed25519.PublicKey
-    ManifestURL   string  // {domain}/.well-known/ramp-agent.json
+    ManifestURL   string  // {domain}/.well-known/ramp.json
     Subscriptions map[string]SubscriptionStatus  // tenantID -> status
 }
 ```
@@ -264,9 +264,9 @@ type RequesterRecord struct {
 
 When the `intermediaries` field is populated on a `ResourceQuery` or `TransactionRequest`, the Exchange MUST verify the full `IntermediaryHop` chain:
 
-1. **Verify `Requester.signature`** — proves the original requester authorized the request. The Exchange looks up the requester's public key via `{requester.domain}/.well-known/ramp-agent.json` and verifies the Ed25519 signature over `(id, domain, uris, scopes)`.
+1. **Verify `Requester.signature`** — proves the original requester authorized the request. The Exchange looks up the requester's public key via `{requester.domain}/.well-known/ramp.json` and verifies the Ed25519 signature over `(id, domain, uris, scopes)`.
 
-2. **Verify each `IntermediaryHop.signature`** — proves each intermediary in the chain (e.g., Broker) handled the request. For each hop, the Exchange fetches the public key from `{hop.domain}/.well-known/ramp-agent.json` and verifies the Ed25519 signature. Timestamps (`forwarded_at`) are checked for temporal consistency.
+2. **Verify each `IntermediaryHop.signature`** — proves each intermediary in the chain (e.g., Broker) handled the request. For each hop, the Exchange fetches the public key from `{hop.domain}/.well-known/ramp.json` and verifies the Ed25519 signature. Timestamps (`forwarded_at`) are checked for temporal consistency.
 
 All signatures must pass for the request to proceed. If any verification fails, the Exchange rejects the request with `CodeUnauthenticated`.
 
@@ -814,8 +814,8 @@ When `CatalogService.PushResources` includes attestations, the Exchange performs
 sequenceDiagram
     participant Caller as Provider / Verifier
     participant Handler as CatalogHandler
-    participant Manifest as ProviderManifest Cache
-    participant Verifier as ramp-verifier.json Cache
+    participant Manifest as WellKnownManifest Cache
+    participant Verifier as ramp.json Cache
 
     Caller->>Handler: PushResources(PushResourcesRequest)
 
@@ -833,7 +833,7 @@ sequenceDiagram
         end
 
         Handler->>Verifier: Fetch verifier keys (cached, TTL-based)
-        Verifier-->>Handler: ramp-verifier.json (JWKS)
+        Verifier-->>Handler: ramp.json (public_keys)
 
         Note over Handler: Look up attestation.kid in keys array
         Note over Handler: Verify attestation.signature (Ed25519)

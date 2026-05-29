@@ -43,11 +43,11 @@ If your resources are served through a CDN — news articles, editorial content,
 
 **Nothing to deploy if your Exchange operator supports RAMP.** Your Exchange operator deploys the CDN edge function on your behalf and manages everything. You sign a contract, grant CDN access, done.
 
-If you self-manage, deploy using the [Terraform module](https://github.com/postindustria-tech/ramp-protocol/tree/main/terraform/aws-ramp-edge/) or the reference [CloudFront Function](https://github.com/postindustria-tech/ramp-protocol/tree/main/poc/edge-function/cloudfront-function.js):
+If you self-manage, deploy using the [Terraform module](https://github.com/RAMP-Protocol/protocol/tree/main/terraform/aws-ramp-edge/) or the reference [CloudFront Function](https://github.com/RAMP-Protocol/protocol/tree/main/poc/edge-function/cloudfront-function.js):
 
 ```hcl
 module "ramp_edge" {
-  source = "github.com/postindustria-tech/ramp-protocol//terraform/aws-ramp-edge"
+  source = "github.com/RAMP-Protocol/protocol//terraform/aws-ramp-edge"
 
   cloudfront_distribution_id = aws_cloudfront_distribution.main.id
   exchange_endpoint       = "https://exchange.your-ssp.com/ramp/v1"
@@ -175,7 +175,7 @@ Attestation is most useful for STATIC resources where the hash remains stable. F
 4. Key is provisioned   -> ready to sign attestations
 ```
 
-**`ramp-verifier.json`**: Your domain hosts a `/.well-known/ramp-verifier.json` file containing your public keys (JWKS format). Agents and Exchanges fetch this to verify your attestation signatures.
+**`ramp.json`**: Your domain hosts a `/.well-known/ramp.json` file with your public keys in `public_keys` (inline RFC 7517 Ed25519 JWKs, selected by `kid`). Agents and Exchanges fetch this to verify your attestation signatures. RAMP has no dedicated verifier role; a verifier publishes under its operator's role — here `ROLE_PUBLISHER` for self-attestation.
 
 **`catalog_contributors`**: You can authorize third-party verification vendors to push attestations on your behalf. Declare authorized contributors in your provider manifest. Only contributors listed in `catalog_contributors` can push resource metadata to the Exchange for your domain.
 
@@ -199,7 +199,7 @@ Every provider with a web presence can host a `ramp.json` file at their domain r
 
 - Which Exchange(s) are authorized to sell your resources
 - Which extension profiles your resources support
-- Your public verification keys (or a pointer to `/.well-known/ramp-verifier.json`)
+- Your public verification keys (in `public_keys`)
 - Authorized catalog contributors
 
 AI agents and Brokers read `ramp.json` to discover how to access your resources through RAMP.

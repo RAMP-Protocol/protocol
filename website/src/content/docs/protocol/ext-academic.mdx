@@ -28,7 +28,7 @@ RAMP-Academic v1 defines the standardized `ext` field vocabulary for scholarly a
 
 ## Profile Declaration
 
-An Exchange declares support for this profile by including `"ramp-academic-v1"` in its `ExchangeManifest.supported_profiles` array. The manifest is served at `/.well-known/ramp-exchange.json`.
+An Exchange declares support for this profile by including `"ramp-academic-v1"` in its `WellKnownManifest.supported_profiles` array (`role=ROLE_EXCHANGE`). The manifest is served at `/.well-known/ramp.json` (`role=ROLE_EXCHANGE`).
 
 ```json
 {
@@ -44,7 +44,7 @@ An Exchange declares support for this profile by including `"ramp-academic-v1"` 
 }
 ```
 
-### ExchangeManifest.ext Fields
+### WellKnownManifest.ext Fields
 
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
@@ -600,9 +600,9 @@ Total: **32 unique field keys** across 7 message locations (34 entries below, as
 
 | # | Message | Key | Type |
 |---|---------|-----|------|
-| 1 | ExchangeManifest.ext | `academic.subject_coverage` | string[] |
-| 2 | ExchangeManifest.ext | `academic.content_types` | string[] |
-| 3 | ExchangeManifest.ext | `academic.institutional_access_supported` | boolean |
+| 1 | WellKnownManifest.ext | `academic.subject_coverage` | string[] |
+| 2 | WellKnownManifest.ext | `academic.content_types` | string[] |
+| 3 | WellKnownManifest.ext | `academic.institutional_access_supported` | boolean |
 | 4 | ResourceIdentity.ext | `academic.pmid` | string |
 | 5 | ResourceIdentity.ext | `academic.pmcid` | string |
 | 6 | ResourceIdentity.ext | `academic.arxiv_id` | string |

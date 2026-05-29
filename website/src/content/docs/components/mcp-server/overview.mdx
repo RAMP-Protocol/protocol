@@ -7,7 +7,7 @@ description: "Thin proxy that exposes RAMP ExchangeService as MCP tools -- zero-
 
 The RAMP MCP Server is a convenience interface layer that exposes ExchangeService RPCs as MCP tools. Any AI agent with MCP support can discover and access resources without custom SDK integration -- just add the MCP server to the agent's tool configuration.
 
-The MCP server is a **thin proxy**, not a performance layer. It translates simplified MCP tool calls into full RAMP protocol messages, forwards them to a Exchange via Connect-Go, and translates responses back into agent-friendly JSON. High-throughput production workloads use gRPC/Connect directly (via the [Agent SDK](/components/agent-sdk/overview/) or [Broker](/components/broker/overview/)).
+The MCP server is a **thin proxy**, not a performance layer. It translates simplified MCP tool calls into full RAMP protocol messages, forwards them to an Exchange via Connect-Go, and translates responses back into agent-friendly JSON. High-throughput production workloads use gRPC/Connect directly (via the [Agent SDK](/components/agent-sdk/overview/) or [Broker](/components/broker/overview/)).
 
 **Value proposition**: Zero-SDK resource access. An agent operator adds a server entry to their MCP config, sets an API key, and the agent gains six tools. No dependency, no generated code, no RAMP-specific client library.
 
@@ -73,7 +73,7 @@ Add to `claude_desktop_config.json`:
       "command": "ramp-mcp-server",
       "args": ["--transport", "stdio"],
       "env": {
-        "RAMP_MARKETPLACE_URL": "https://exchange.example.com",
+        "RAMP_EXCHANGE_URL": "https://exchange.example.com",
         "RAMP_PROXY_KEY_PATH": "/path/to/ed25519-private.pem",
         "RAMP_OAUTH_TOKEN": "eyJhbGciOi..."
       }
