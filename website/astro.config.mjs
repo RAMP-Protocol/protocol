@@ -32,6 +32,7 @@ export default defineConfig({
 						{ label: 'Exchange Manifest', slug: 'protocol/exchange-manifest' },
 						{ label: 'Resource Attestation', slug: 'protocol/content-attestation' },
 						{ label: 'Authentication', slug: 'protocol/authentication' },
+						{ label: 'Role Composition', slug: 'protocol/role-composition' },
 						{ label: 'Dispute Resolution', slug: 'protocol/dispute-resolution' },
 						{ label: 'Extension Profiles', slug: 'protocol/extension-profiles' },
 						{ label: 'Ext: News', slug: 'protocol/ext-news' },
@@ -39,6 +40,22 @@ export default defineConfig({
 						{ label: 'Ext: Legal', slug: 'protocol/ext-legal' },
 						{ label: 'Ext: CoMP', slug: 'protocol/ext-comp' },
 						{ label: 'Ext: C2PA', slug: 'protocol/ext-c2pa' },
+					],
+				},
+				{
+					label: 'Components',
+					items: [
+						{
+							label: 'Edge Function',
+							items: [
+								{ label: 'Overview', slug: 'components/edge-function/overview' },
+								{ label: 'CDN Adapters', slug: 'components/edge-function/cdn-adapters' },
+								{ label: 'Signed URL Verification', slug: 'components/edge-function/signed-url-verification' },
+								{ label: 'Bot Detection', slug: 'components/edge-function/bot-detection' },
+								{ label: 'Composition', slug: 'components/edge-function/composition' },
+								{ label: 'Deployment', slug: 'components/edge-function/deployment' },
+							],
+						},
 					],
 				},
 				{
