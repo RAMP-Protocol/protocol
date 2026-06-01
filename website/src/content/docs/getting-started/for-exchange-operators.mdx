@@ -182,7 +182,7 @@ When the requester holds a subscription (identifiable via `license_id` or subscr
 
 ### New Denial Reasons to Implement
 
-v1.0 adds three identity-related denial reasons your Exchange MUST return when appropriate:
+RAMP defines three identity-related denial reasons your Exchange MUST return when appropriate:
 
 | Denial Reason | When to Return |
 |---|---|
@@ -284,7 +284,7 @@ Implement these three methods against your existing billing system. The referenc
 
 ## New Pricing Models
 
-RAMP v1.0 adds three pricing models beyond the original text-centric set:
+RAMP defines three pricing models for non-text resources:
 
 | Model | Unit | Use Case |
 |---|---|---|
@@ -296,7 +296,7 @@ Pricing is now unit-agnostic: `unit_cost` replaces eCPT, `estimated_quantity` re
 
 ## Streaming Delivery
 
-RAMP v1.0 adds `DELIVERY_METHOD_STREAMING` for real-time connections (WebSocket, SSE, HLS, Icecast). Your Exchange generates a signed URL pointing to a streaming endpoint. The agent connects and receives continuous data. Stream mechanics (heartbeat, reconnection, concurrent connection limits) are managed by the provider, not the protocol.
+RAMP supports `DELIVERY_METHOD_STREAMING` for real-time connections (WebSocket, SSE, HLS, Icecast). Your Exchange generates a signed URL pointing to a streaming endpoint. The agent connects and receives continuous data. Stream mechanics (heartbeat, reconnection, concurrent connection limits) are managed by the provider, not the protocol.
 
 Streaming transactions follow the same RAMP flow, but the signed URL has a longer TTL (streaming sessions last minutes/hours) and usage is reported in time-based units (minutes, hours).
 

@@ -9,7 +9,7 @@ An Exchange describes itself with a `WellKnownManifest` carrying `role=ROLE_EXCH
 
 The manifest answers: "What can this Exchange do, where are its endpoints, which keys sign its offers, and what capabilities does it support?"
 
-**Endpoint**: `https://{domain}/.well-known/ramp.json` — the single canonical file every RAMP participant serves, differentiated by `role`. The legacy per-role `/.well-known/ramp-exchange.json` is **removed in v1.1.0**.
+**Endpoint**: `https://{domain}/.well-known/ramp.json` — the single canonical file every RAMP participant serves, differentiated by `role`.
 
 | Property | Value |
 |---|---|
@@ -23,7 +23,7 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
 
 ```json
 {
-  "ver": "1.1",
+  "ver": "1.0",
   "role": "ROLE_EXCHANGE",
   "domain": "exchange.example.com",
   "name": "Example Content Exchange",
@@ -45,7 +45,7 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
   "invalidation_url": "https://exchange.example.com/.well-known/ramp-invalidations.json",
   "health_endpoint": "https://exchange.example.com/healthz",
   "catalog_endpoint": "https://exchange.example.com/catalog/v1",
-  "protocol_versions_supported": ["1.0", "1.1"],
+  "protocol_versions_supported": ["1.0"],
   "pricing_models_supported": [
     "per_article",
     "per_token",
@@ -87,7 +87,7 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `ver` | string | Yes | RAMP protocol version (`"1.1"`) |
+| `ver` | string | Yes | RAMP protocol version (`"1.0"`) |
 | `role` | string | Yes | `ROLE_EXCHANGE` for an Exchange manifest |
 | `domain` | string | Yes | Canonical domain of this Exchange |
 | `name` | string | No | Human-readable Exchange name |
@@ -115,7 +115,7 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
 
 ## The Unified RAMP Well-Known File
 
-RAMP defines **one** well-known file. Every participant serves a `WellKnownManifest` at `/.well-known/ramp.json`; the `role` field says which participant it is. (v1.0 used four per-role files — `ramp-agent.json`, `ramp-exchange.json`, `ramp-verifier.json`, and the provider `ramp.json`; the per-role variants are removed in v1.1.0.)
+RAMP defines **one** well-known file. Every participant serves a `WellKnownManifest` at `/.well-known/ramp.json`; the `role` field says which participant it is.
 
 | Role | Served By | Purpose |
 |---|---|---|
@@ -151,7 +151,7 @@ The Broker uses the manifest to filter Exchanges **before** sending any RPCs. Th
 | Does this Exchange support per-token pricing? | `pricing_models_supported` |
 | Can this Exchange deliver via signed URL? | `delivery_methods_supported` |
 | Does this Exchange trust DoubleVerify? | `accepted_verifiers` |
-| Does this Exchange speak protocol v1.1? | `protocol_versions_supported` |
+| Does this Exchange speak protocol v1.0? | `protocol_versions_supported` |
 | Where do I verify offer signatures? | `public_keys` (inline JWKs) |
 
 Without the manifest, the Broker discovers these answers only after sending requests and observing responses -- wasting latency and bandwidth on Exchanges that will reject the request.
@@ -169,11 +169,11 @@ Without the manifest, the Broker discovers these answers only after sending requ
 
 ## Proto Message
 
-The Exchange manifest is a `WellKnownManifest` with `role=ROLE_EXCHANGE`, defined in [`ramp.proto`](/reference/proto-ramp/). The legacy `ExchangeManifest` message is **deprecated** (kept on the wire one cycle); its `keys_uri` pointer is replaced by inline `public_keys`. Exchange-relevant fields:
+The Exchange manifest is a `WellKnownManifest` with `role=ROLE_EXCHANGE`, defined in [`ramp.proto`](/reference/proto-ramp/). Keys are inline `public_keys` (no separate `keys_uri` fetch). Exchange-relevant fields:
 
 ```protobuf
 message WellKnownManifest {
-  string ver = 1;                                  // "1.1"
+  string ver = 1;                                  // "1.0"
   Role role = 2;                                   // ROLE_EXCHANGE here
   string domain = 3;
   optional string contact = 4;

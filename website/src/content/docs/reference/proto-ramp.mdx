@@ -41,13 +41,9 @@ Optional RPC for providers/CMS/third-party intelligence providers to push conten
 | `requester` | Requester | 3 | Requester identity, scopes, and optional delegation chain |
 | `request_id` | optional string | 4 | Original RAMP request ID (traceability) |
 | `intermediaries` | repeated IntermediaryHop | 5 | Intermediary forwarding chain (Agent -> Broker -> Exchange). Empty for direct queries. |
-| `deadline` | optional Duration | 8 | Max wait time (default 500ms) |
-| `supported_profiles` | repeated string | 11 | Domain extension profiles the caller understands (e.g. "ramp-academic-v1") |
+| `deadline` | optional Duration | 6 | Max wait time (default 500ms) |
+| `supported_profiles` | repeated string | 7 | Domain extension profiles the caller understands (e.g. "ramp-academic-v1") |
 | `ext` | Struct | 15 | Extension point |
-
-:::note[Breaking change]
-Field 3 changed from `comp.v1.AISystem aisystem` to `Requester requester`. Fields 5--7 (`broker`, `agent_signature`, `agent_signature_algorithm`) and 9--10 (`broker_signature`, `broker_signature_algorithm`) have been removed. Agent signatures are now in `Requester.signature`; intermediary signatures are in `IntermediaryHop.signature`.
-:::
 
 ### ResourceResponse
 
@@ -85,7 +81,7 @@ Rate limit status modeled after IETF RateLimit header fields.
 
 ### Requester
 
-Identifies who is making a request, what scopes they have, and optional delegation chain. Replaces `comp.v1.AISystem` in `ResourceQuery` and `RAMPRequest`.
+Identifies who is making a request, what scopes they have, and an optional delegation chain. Used in `ResourceQuery` and `RAMPRequest`.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -97,9 +93,7 @@ Identifies who is making a request, what scopes they have, and optional delegati
 | `intended_use` | repeated string | 6 | What the requester intends to do with the resources (CoMP Function values) |
 | `license_id` | optional string | 7 | Commercial license or subscription identifier (same role as CoMP `aisysuse.lid`) |
 | `scopes` | repeated string | 8 | Entitlement scopes declaring what the requester can access. Format: `"{domain}:{permission}"`. Empty = default access policy. |
-| `signature` | string | 9 | Ed25519 signature over (id, domain, uris, scopes) |
-| `signature_algorithm` | string | 10 | Signature algorithm (default: "ed25519") |
-| `delegation` | optional Delegation | 11 | Present when requester acts on behalf of another entity |
+| `delegation` | optional Delegation | 9 | Present when requester acts on behalf of another entity |
 | `ext` | Struct | 15 | Extension point |
 
 ### Delegation
@@ -133,15 +127,14 @@ expires({RFC3339_timestamp});    // expiration time
 
 ### IntermediaryHop
 
-One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop signs the request, proving it passed through legitimately. Modeled after OpenRTB schain (Supply Chain Object).
+One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop authenticates by adding its own RFC 9421 HTTP Message Signature, proving the request passed through legitimately. Modeled after OpenRTB schain (Supply Chain Object). Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `domain` | string | 1 | Domain of the intermediary (for public key lookup) |
 | `id` | string | 2 | Intermediary's identifier |
 | `forwarded_at` | Timestamp | 3 | When this intermediary forwarded the request |
-| `signature` | string | 4 | Ed25519 signature over the request payload at this hop |
-| `signature_algorithm` | string | 5 | Signature algorithm |
+| `signature_label` | optional string | 4 | Binds this hop to its RFC 9421 `Signature` header label, so a verifier matches a hop to its signature without inferring by ordinal position or domain |
 
 ## Messages -- Offers and Pricing
 
@@ -259,12 +252,8 @@ Quota status for a subscription within the current billing period. Appears on `O
 | `requester` | Requester | 4 | Requester identity for authorization and audit |
 | `request_id` | optional string | 5 | Original RAMP request ID |
 | `offer_signature` | optional string | 6 | Single-offer signature |
-| `items` | repeated TransactionItem | 10 | Batch mode: multiple offers |
+| `items` | repeated TransactionItem | 7 | Batch mode: multiple offers |
 | `ext` | Struct | 15 | Extension point |
-
-:::note
-Fields 7-9, 11-12 reserved. Request authentication moved to RFC 9421 HTTP Message Signatures.
-:::
 
 ### TransactionResponse
 
@@ -297,10 +286,6 @@ A single offer commitment within a batch transaction.
 |---|---|---|---|
 | `offer_id` | string | 1 | The offer_id from the selected Offer |
 | `offer_signature` | string | 2 | The exchange_signature from the selected Offer |
-
-:::note
-Field 3 reserved.
-:::
 
 ### TransactionResultItem
 
@@ -419,12 +404,8 @@ Agent signals a content delivery problem for a completed transaction.
 | `description` | optional string | 6 | Human-readable description |
 | `received_content_hash` | optional string | 7 | Agent's computed hash of received content |
 | `received_hash_method` | optional string | 8 | Hash algorithm the agent used |
-| `report_id` | string | 10 | **REQUIRED.** Must reference a filed UsageReport |
+| `report_id` | string | 9 | **REQUIRED.** Must reference a filed UsageReport |
 | `ext` | Struct | 15 | Extension point |
-
-:::note
-Field 9 reserved.
-:::
 
 ### DisputeResponse
 
@@ -450,11 +431,7 @@ Request an ACME-style domain verification challenge.
 |---|---|---|---|
 | `ver` | string | 1 | Protocol version |
 | `domain` | string | 2 | Provider domain to verify |
-| `caller_id` | optional string | 4 | Registered caller identity |
-
-:::note
-Field 3 reserved. Caller auth moved to HTTP Message Signatures.
-:::
+| `caller_id` | optional string | 3 | Registered caller identity |
 
 ### DomainVerificationChallenge
 
@@ -478,10 +455,6 @@ Confirm domain verification and register a signing key.
 | `signing_key` | optional string | 4 | PEM (CloudFront) or hex (HMAC) |
 | `cdn_type` | optional string | 5 | "cloudfront", "akamai", "fastly", "hmac" |
 
-:::note
-Field 6 reserved. Caller auth moved to HTTP Message Signatures.
-:::
-
 ### DomainVerificationResult
 
 | Field | Type | Number | Description |
@@ -495,17 +468,17 @@ Field 6 reserved. Caller auth moved to HTTP Message Signatures.
 
 ### WellKnownManifest
 
-Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Carries inline keys (`JsonWebKey`) with explicit time bounds and an optional emergency-revocation pointer. Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`. Replaces the deprecated `ProviderManifest` and `ExchangeManifest`.
+Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Carries inline keys (`JsonWebKey`) with explicit time bounds and an optional emergency-revocation pointer. Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `ver` | string | 1 | Protocol version (`"1.1"` in v1.1.0) |
+| `ver` | string | 1 | Protocol version — MUST be `"1.0"` |
 | `role` | Role | 2 | Which participant this manifest describes |
 | `domain` | string | 3 | Canonical domain serving this manifest |
 | `contact` | optional string | 4 | Contact email |
 | `public_keys` | repeated JsonWebKey | 5 | Signature-verification keys; ≥1 valid at serve time |
 | `invalidation_url` | optional string | 6 | Emergency key-revocation list URL (`KeyInvalidationList`) |
-| `exchanges` | repeated AuthorizedExchange | 7 | Publisher-only. Authorized Exchanges (renamed from `ProviderManifest.marketplaces`) |
+| `exchanges` | repeated AuthorizedExchange | 7 | Publisher-only. Authorized Exchanges (declares who may sell, like ads.txt) |
 | `catalog_contributors` | repeated CatalogContributor | 8 | Publisher-only. Authorized third-party catalog pushers |
 | `name` | optional string | 9 | Exchange-only. Human-readable Exchange name |
 | `operator` | optional string | 10 | Exchange-only. Operating organization |
@@ -526,11 +499,12 @@ Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchang
 | `oidc_issuer` | optional string | 25 | Exchange-only. OIDC Discovery URL |
 | `gnap_grant_endpoint` | optional string | 26 | Exchange-only. GNAP grant endpoint |
 | `base_currency` | optional string | 27 | Exchange-only. ISO 4217 base currency for `unit_cost` |
+| `max_intermediary_hops` | optional int32 | 28 | Exchange-only. Max intermediary hops tolerated in an inbound request chain; longer chains SHOULD be rejected |
 | `ext_critical` | repeated string | 90 | Critical extension keys (COSE `crit`, RFC 9052) |
 
 ### JsonWebKey
 
-Inline RFC 7517 JWK. RAMP v1.1.0 supports Ed25519 only. Time bounds are RFC3339 strings; the validity window is half-open `[not_before, not_after)`.
+Inline RFC 7517 JWK. RAMP v1.0 supports Ed25519 only. Time bounds are RFC3339 strings; the validity window is half-open `[not_before, not_after)`.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -552,19 +526,6 @@ Body served at `WellKnownManifest.invalidation_url`. Snapshot semantics: `revoke
 | `as_of` | Timestamp | 1 | Server response time (RFC3339, UTC) |
 | `revoked` | repeated string | 2 | Complete list of revoked `kid`s at `as_of` |
 
-### ProviderManifest (DEPRECATED v1.1.0)
-
-**Deprecated** — use `WellKnownManifest` with `role=ROLE_PUBLISHER`. The canonical `/.well-known/ramp.json` now serves `WellKnownManifest` for every role. Kept on the wire for one release cycle.
-
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `provider` | string | 2 | Canonical domain |
-| `contact` | optional string | 3 | Contact email |
-| `exchanges` | repeated AuthorizedExchange | 4 | Authorized Exchanges (renamed from `marketplaces`; wire tag preserved) |
-| `catalog_contributors` | repeated CatalogContributor | 5 | Authorized third-party catalog pushers |
-| `ext` | Struct | 15 | Extension point |
-
 ### CatalogContributor
 
 Authorizes a third party to push catalog metadata on the provider's behalf.
@@ -584,33 +545,6 @@ A Exchange authorized to sell this provider's content.
 | `endpoint` | string | 2 | RAMP ExchangeService endpoint URL |
 | `relationship` | ProviderRelationship | 3 | Relationship type (mirrors ads.txt DIRECT/RESELLER) |
 | `ext` | Struct | 15 | Extension point |
-
-### ExchangeManifest (DEPRECATED v1.1.0)
-
-**Deprecated** — the `/.well-known/ramp-exchange.json` endpoint is removed; use `WellKnownManifest` with `role=ROLE_EXCHANGE` (served at `/.well-known/ramp.json`). The `keys_uri` pointer is replaced by inline `public_keys`. Kept on the wire for one release cycle. See [Exchange Manifest](/protocol/exchange-manifest/) for details.
-
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | RAMP protocol version |
-| `domain` | string | 2 | Canonical domain |
-| `name` | string | 3 | Human-readable name |
-| `operator` | string | 4 | Operating organization |
-| `operator_domain` | optional string | 5 | Operator's corporate domain |
-| `exchange_endpoint` | string | 6 | ExchangeService endpoint URL |
-| `keys_uri` | string | 7 | Ed25519 public keys URL |
-| `health_endpoint` | optional string | 8 | Health check endpoint URL |
-| `catalog_endpoint` | optional string | 9 | CatalogService endpoint URL |
-| `protocol_versions_supported` | repeated string | 10 | Supported RAMP protocol versions |
-| `pricing_models_supported` | repeated string | 11 | Supported pricing models |
-| `delivery_methods_supported` | repeated string | 12 | Supported delivery methods |
-| `hash_methods_supported` | repeated string | 13 | Accepted hash methods |
-| `accepted_verifiers` | repeated string | 14 | Trusted verifier domains |
-| `contact_email` | optional string | 15 | Contact email |
-| `terms_uri` | optional string | 16 | Terms of service URL |
-| `privacy_uri` | optional string | 17 | Privacy policy URL |
-| `supported_profiles` | repeated string | 18 | Domain extension profiles this Exchange conforms to (e.g. "ramp-news-v1") |
-| `base_currency` | optional string | 19 | ISO 4217 base currency for all unit_cost values (e.g. "USD") |
-| `ext` | Struct | 20 | Extension point |
 
 ### AccessPolicy
 
@@ -649,10 +583,6 @@ Agent sends to Broker (Step 1).
 | `search_filters` | optional Struct | 7 | Structured search filters (alongside or instead of `query`). Keys are profile-specific: `"academic.topic"`, `"news.category"`, `"legal.jurisdiction"`, etc. The Broker maps these to Exchange-specific query parameters. |
 | `ext` | Struct | 15 | Extension point |
 
-:::note[Breaking change]
-Field 3 changed from `comp.v1.AISystem aisystem` to `Requester requester`.
-:::
-
 ### RequestConstraints
 
 Budget and preference constraints for exchange filtering and offer selection.
@@ -669,6 +599,7 @@ Budget and preference constraints for exchange filtering and offer selection.
 | `period_budget` | optional Cost | 8 | Per-period budget limit |
 | `budget_period` | optional Duration | 9 | Budget period (e.g. 720h = 30 days) |
 | `max_data_age` | optional Duration | 10 | Maximum acceptable age of resource data (for DYNAMIC resources) |
+| `max_hops` | optional int32 | 11 | Maximum intermediary hops the agent allows in its request chain; the Broker MUST NOT forward a longer chain |
 
 ### RAMPResponse
 
@@ -704,11 +635,7 @@ Push or update content entries in the Exchange catalog.
 |---|---|---|---|
 | `tenant_id` | string | 1 | Tenant identifier |
 | `entries` | repeated ResourceEntry | 2 | Content entries to push |
-| `caller_id` | string | 5 | Identity of the caller |
-
-:::note
-Fields 3-4 reserved. Caller auth moved to HTTP Message Signatures.
-:::
+| `caller_id` | string | 3 | Identity of the caller |
 
 ### ResourceEntry
 

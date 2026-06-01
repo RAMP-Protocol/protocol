@@ -60,7 +60,7 @@ Anthropic publishes its agent's Ed25519 public key at a well-known endpoint:
 ```json
 // GET https://claude.ai/.well-known/ramp.json
 {
-  "ver": "1.1",
+  "ver": "1.0",
   "role": "ROLE_AGENT",
   "domain": "claude.ai",
   "contact": "legal@anthropic.com",
@@ -84,7 +84,7 @@ The Broker announces its key at the same path format:
 ```json
 // GET https://broker.anthropic.com/.well-known/ramp.json
 {
-  "ver": "1.1",
+  "ver": "1.0",
   "role": "ROLE_AGENT",
   "domain": "broker.anthropic.com",
   "contact": "legal@anthropic.com",

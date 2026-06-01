@@ -9,7 +9,7 @@ The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKn
 
 ```json
 {
-  "ver": "1.1",
+  "ver": "1.0",
   "role": "ROLE_PUBLISHER",
   "domain": "techprovider.com",
   "contact": "licensing@techprovider.com",
@@ -55,7 +55,7 @@ The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKn
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `ver` | string | Yes | RAMP protocol version (`"1.1"`) |
+| `ver` | string | Yes | RAMP protocol version (`"1.0"`) |
 | `role` | string | Yes | Participant role — `ROLE_PUBLISHER` for a provider's manifest |
 | `domain` | string | Yes | Canonical domain serving this manifest |
 | `contact` | string | No | Contact email for licensing inquiries |
@@ -114,7 +114,7 @@ The `ramp.json` structure maps to the `WellKnownManifest` message (with `role=RO
 
 ```protobuf
 message WellKnownManifest {
-  string ver = 1;                                 // "1.1"
+  string ver = 1;                                 // "1.0"
   Role role = 2;                                  // ROLE_PUBLISHER here
   string domain = 3;
   optional string contact = 4;

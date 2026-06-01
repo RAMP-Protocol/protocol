@@ -1,82 +1,8 @@
-// RAMP v1.0 — Resource Access Metering Protocol
+// RAMP v1.0 — Resource Access Metering Protocol.
 //
-// Extends IAB Tech Lab CoMP v1.0 with pricing, exchange orchestration,
+// An open transaction protocol for licensed AI resource access. Extends
+// IAB Tech Lab CoMP v1.0 and RSL 1.0 with pricing, exchange orchestration,
 // resource identity, transactions, and post-usage reporting.
-//
-// v1.0 additions (from v0.2):
-//   - Metering generalization: unit-agnostic pricing (unit_cost, estimated_quantity, unit)
-//     replaces text-specific eCPT/estimated_tokens. Supports tokens, seconds, pages,
-//     records, bytes, calls, and domain-specific units.
-//   - Usage generalization: consumed_quantity + consumed_unit replace token_count
-//   - New pricing models: PER_PAGE, PER_MINUTE, PER_RECORD
-//   - Streaming delivery: DELIVERY_METHOD_STREAMING for real-time connections (WebSocket, SSE)
-//   - CoMP decoupled: comp.v1.Package/Function moved to ramp-comp-v1 extension profile.
-//     Core protocol no longer imports comp.proto. IAB metadata is optional via ext.
-//   - Pricing.revshare + license_duration_months: revenue share pricing model
-//   - PRICING_MODEL_REVENUE_SHARE: new pricing model enum value
-//   - AccessRestrictions.max_display_words: word display limit from CoMP License.maxword
-//   - CitationFormat enum + AttributionDetail message: structured attribution in Usage
-//   - Usage.attribution: detailed citation reporting
-//   - OfferGroup.absence_reason: per-URI diagnostic when no offers available
-//   - ResourceResponse.rate_limit: rate limit signaling on discovery
-//   - OfferAbsenceReason enum (7 reasons)
-//   - RateLimitInfo message (limit, remaining, reset_at, window)
-//   - DisputeTransaction RPC: resource dispute signaling
-//   - DomainVerification messages: ACME-style provider onboarding
-//   - ResourceAttestation: signed claim envelope for resource integrity verification
-//   - DisputeStatus enum: full dispute lifecycle (FILED → FINAL)
-//   - ResolutionType enum: dispute resolution outcomes (CREDIT, REDELIVERY, etc.)
-//   - Offer.attestations: replaces ContentQuality with cryptographic attestations
-//   - ResourceEntry.attestations: attestations at catalog level
-//   - UsageReportResponse.report_id: enables dispute chain (report → dispute)
-//   - DisputeRequest.report_id: agent must file usage report before disputing
-//   - DisputeResponse.status/resolution: dispute lifecycle tracking
-//   - ProviderManifest.catalog_contributors: authorized third-party catalog pushers
-//   - WellKnownManifest: machine-readable self-description for every role (/.well-known/ramp.json). ExchangeManifest deprecated v1.1.0.
-//   - ResourceMutability enum: signals whether resource content is static, dynamic, or live
-//     Drives hash verification behavior: STATIC = verify hash, DYNAMIC = expect hash drift,
-//     LIVE = no content exists at offer time (streaming). Validated across 18 use cases.
-//   - Offer.data_as_of: timestamp indicating when the offered data was current.
-//     Cross-cutting need: credit reports, drug databases, stock quotes, satellite imagery.
-//   - RequestConstraints.max_data_age: agent-side freshness requirement. Exchange
-//     SHOULD exclude offers whose data_as_of is older than this threshold.
-//   - ExchangeManifest.supported_profiles: declares conformance to domain extension
-//     profiles (e.g., "ramp-pharma-v1", "ramp-medimg-v1"). Enables Broker filtering.
-//   - ResourceQuery.supported_profiles: caller declares which profiles it understands.
-//     Exchange MAY optimize metadata computation based on declared profiles.
-//   - RAMPRequest.supported_profiles: agent declares profiles to Broker.
-//     Broker uses this for routing and profile forwarding.
-//   - ext_critical: critical extension signaling (COSE crit pattern, RFC 9052).
-//     Every message with an ext field also carries ext_critical — a list of
-//     ext keys that MUST be understood by the consumer. If a consumer encounters
-//     a key in ext_critical that it does not recognize, it MUST reject the message.
-//     Regular ext keys (not in ext_critical) follow the robustness principle:
-//     unknown keys are safely ignored. This pattern is well-established across
-//     FHIR (modifierExtension), SOAP (mustUnderstand), CoAP (odd/even options),
-//     and COSE (crit). RAMP adopts the COSE enumeration approach because it
-//     avoids the namespace migration problem (MIME X- prefix, RFC 6648) and
-//     supports contextual criticality (same extension can be critical in some
-//     messages but not others).
-//   - retrieval_endpoint: canonical signed-URL field on TransactionResponse,
-//     TransactionResultItem, and RAMPResponse. Replaces ext["signed_url"]
-//     usage; removes stranded CoMP Package comments.
-//
-// v1.1.0 additions (from v1.0.2):
-//   - WellKnownManifest: unified manifest served at /.well-known/ramp.json
-//     by every RAMP role (agent, broker, exchange, publisher). Replaces
-//     ProviderManifest and ExchangeManifest, both now Deprecated.
-//   - JsonWebKey: inline RFC 7517 JWK objects with not_before / not_after
-//     time bounds, replacing the keys_uri / jwks_uri pointer pattern.
-//   - KeyInvalidationList: snapshot-semantic kid revocation list served
-//     at WellKnownManifest.invalidation_url for emergency revocation.
-//   - Role enum (AGENT, EXCHANGE, BROKER, PUBLISHER). Verifiers fold
-//     into the role their operating domain holds.
-//   - ProviderManifest.marketplaces renamed to exchanges (wire tag 4
-//     preserved). Same rename propagates into WellKnownManifest.
-//   - Per-role well-known filenames (ramp-agent.json, ramp-exchange.json,
-//     ramp-verifier.json) and the legacy /marketplace/v1/keys path are
-//     eliminated from the spec. ExchangeManifest.keys_uri and .jwks_uri
-//     are marked Deprecated.
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.
@@ -158,18 +84,18 @@ type ExchangeServiceClient interface {
 	// Submit a post-usage report for a completed transaction.
 	// Step 7 in the RAMP flow.
 	ReportUsage(context.Context, *connect.Request[v1.UsageReport]) (*connect.Response[v1.UsageReportResponse], error)
-	// v0.3: Signal a resource dispute for a completed transaction.
+	// Signal a resource dispute for a completed transaction.
 	// Filed by the agent when delivered resource does not match what was
 	// promised (hash mismatch, resource unavailable, wrong resource).
 	// The Exchange records the dispute and initiates resolution.
 	// Resolution mechanics (refund, credit, re-delivery) are implementation-
 	// specific — this RPC standardizes the dispute signal, not the outcome.
 	DisputeTransaction(context.Context, *connect.Request[v1.DisputeRequest]) (*connect.Response[v1.DisputeResponse], error)
-	// v0.3: Request a domain verification challenge for provider onboarding.
+	// Request a domain verification challenge for provider onboarding.
 	// Used by ramp-cli to prove domain control before pushing signing keys.
 	// Follows the ACME HTTP-01 pattern (Let's Encrypt).
 	RequestDomainVerification(context.Context, *connect.Request[v1.DomainVerificationRequest]) (*connect.Response[v1.DomainVerificationChallenge], error)
-	// v0.3: Confirm domain verification and register a signing key.
+	// Confirm domain verification and register a signing key.
 	// Called after the challenge token is placed at the provider's domain.
 	ConfirmDomainVerification(context.Context, *connect.Request[v1.DomainVerificationConfirmation]) (*connect.Response[v1.DomainVerificationResult], error)
 }
@@ -275,18 +201,18 @@ type ExchangeServiceHandler interface {
 	// Submit a post-usage report for a completed transaction.
 	// Step 7 in the RAMP flow.
 	ReportUsage(context.Context, *connect.Request[v1.UsageReport]) (*connect.Response[v1.UsageReportResponse], error)
-	// v0.3: Signal a resource dispute for a completed transaction.
+	// Signal a resource dispute for a completed transaction.
 	// Filed by the agent when delivered resource does not match what was
 	// promised (hash mismatch, resource unavailable, wrong resource).
 	// The Exchange records the dispute and initiates resolution.
 	// Resolution mechanics (refund, credit, re-delivery) are implementation-
 	// specific — this RPC standardizes the dispute signal, not the outcome.
 	DisputeTransaction(context.Context, *connect.Request[v1.DisputeRequest]) (*connect.Response[v1.DisputeResponse], error)
-	// v0.3: Request a domain verification challenge for provider onboarding.
+	// Request a domain verification challenge for provider onboarding.
 	// Used by ramp-cli to prove domain control before pushing signing keys.
 	// Follows the ACME HTTP-01 pattern (Let's Encrypt).
 	RequestDomainVerification(context.Context, *connect.Request[v1.DomainVerificationRequest]) (*connect.Response[v1.DomainVerificationChallenge], error)
-	// v0.3: Confirm domain verification and register a signing key.
+	// Confirm domain verification and register a signing key.
 	// Called after the challenge token is placed at the provider's domain.
 	ConfirmDomainVerification(context.Context, *connect.Request[v1.DomainVerificationConfirmation]) (*connect.Response[v1.DomainVerificationResult], error)
 }

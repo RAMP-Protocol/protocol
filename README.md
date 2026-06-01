@@ -4,6 +4,12 @@ Open transaction protocol for licensed AI content access.
 
 Built on [IAB Tech Lab CoMP v1.0](https://github.com/IABTechLab/CoMP) and [RSL 1.0](https://www.journalismai.info/programmes/responsible-ai/rsl); extends both with discovery, transaction execution, and settlement infrastructure so an autonomous agent can negotiate access to a publisher's content under that publisher's licensing terms, pay through an exchange, and produce a cryptographically auditable record of the transaction.
 
+> **v1.0.0 — pre-1.0 clean-cut.** This is the initial public release. The wire
+> format was finalized in a single clean pass with **no backward-compatibility
+> guarantees** to any pre-release draft — there are no prior external clients to
+> support. The rationale behind the major design decisions is recorded in
+> [`docs/design-history.md`](docs/design-history.md).
+
 ## What's in this repo
 
 ```
