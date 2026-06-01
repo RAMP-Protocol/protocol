@@ -3,14 +3,6 @@
 // 1:1 mapping from the official CoMP WG specification.
 // Source: https://github.com/IABTechLab/CoMP/blob/dev/CoMP-1.0.md
 //
-// v0.2 additions:
-//   - License message + LicenseUse enum (CoMP §license.json)
-//   - Package.license: repeated License for per-package licensing terms
-//   - Retrieval.ratelmt: rate limit signaling on retrieval endpoints
-//   - Text.authority, Text.originality: content quality signals
-//   - Video.c2pa, Image.c2pa, Audio.c2pa: C2PA content credentials
-//   - Image.alt, Image.caption: accessibility and display metadata
-//
 // Enum alignment: proto3 enum values map directly to CoMP integer values
 // (first real CoMP value = 0). No UNSPECIFIED sentinels — proto3 default
 // zero is a valid CoMP value, not a sentinel.
