@@ -62,7 +62,7 @@ The per-request `fsync` in the synchronous path is to local SSD (~1-2ms), not to
 
 ## Event Sourcing Pattern
 
-Every state transition in the transaction lifecycle produces a log event. There are eight event types, each corresponding to a protocol step. v1.0 adds two dispute-related event types: `DisputeRequested` and `DisputeResolved`.
+Every state transition in the transaction lifecycle produces a log event. There are eight event types, each corresponding to a protocol step. Two are dispute-related: `DisputeRequested` and `DisputeResolved`.
 
 ```mermaid
 stateDiagram-v2

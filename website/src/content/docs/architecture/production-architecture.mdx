@@ -132,7 +132,7 @@ The protocol does not specify signed URL formats, CDN verification logic, or con
 
 ### Streaming Delivery (v1.0)
 
-RAMP v1.0 adds `DELIVERY_METHOD_STREAMING` for real-time resource access via WebSocket, SSE, HLS, or Icecast endpoints. The signed URL points to a streaming endpoint rather than a static resource.
+RAMP supports `DELIVERY_METHOD_STREAMING` for real-time resource access via WebSocket, SSE, HLS, or Icecast endpoints. The signed URL points to a streaming endpoint rather than a static resource.
 
 **Session lifecycle:**
 1. `ExecuteTransaction` returns a signed URL with expiry (e.g., 2 hours)

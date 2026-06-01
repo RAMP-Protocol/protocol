@@ -15,6 +15,17 @@ Without Broker (direct, single exchange):
   Agent -> Exchange -> deliver
 ```
 
+## Multi-Hop Routing
+
+Multi-hop is the common case, not the exception. A request typically travels `Agent -> Broker -> ... -> Exchange`, and the broker layer may itself be more than one hop. Each forwarding party appends an `IntermediaryHop` to the `intermediaries` array and authenticates its hop with its own [RFC 9421](https://datatracker.ietf.org/doc/html/rfc9421) HTTP Message Signature (one `Signature` / `Signature-Input` entry per hop). The Exchange verifies every hop by fetching each intermediary's key from `{hop.domain}/.well-known/ramp.json`. `IntermediaryHop.signature_label` optionally names the exact signature entry a hop added, so a verifier matches a hop to its signature without inferring by ordinal position or domain.
+
+**Chain-depth caps.** Two fields bound how deep a chain may go:
+
+- `RequestConstraints.max_hops` -- the agent caps its own chain depth. A Broker MUST NOT forward a request whose chain would exceed it.
+- `WellKnownManifest.max_intermediary_hops` -- the Exchange publishes the longest inbound chain it tolerates; longer chains SHOULD be rejected, and a Broker can prune before forwarding.
+
+**Response path: direct.** Responses do **not** retrace the hop chain. The terminal Exchange returns its `TransactionResponse` (or `ResourceResponse`) directly to the originating agent; the Exchange-facing Broker that holds the agent binding relays it back without re-fanning through every hop. This works because the signed `retrieval_endpoint` is bound to the agent's identity (`agent_identity_hash`), so delivery needs no return-path relay. Intermediaries observe requests, not responses.
+
 ## RPC 1: DiscoverResources
 
 The agent or Broker queries the Exchange to discover available content and pricing.
@@ -51,7 +62,7 @@ Key fields:
 - `requester.intended_use` -- the intended use (RAG, training, search, etc.)
 - `requester.license_id` -- the buyer's license ID (public identifier, not a credential)
 - `requester.scopes` -- entitlement scopes; `["*"]` means unrestricted public access
-- `requester.signature` -- Ed25519 signature over `(id, domain, uris, scopes)`
+- request authentication -- an RFC 9421 HTTP Message Signature over the request (the agent's key is published at its `ramp.json`)
 - `intermediaries` -- forwarding chain; empty when the agent queries the Exchange directly
 
 ### Response (`ResourceResponse`)
@@ -475,7 +486,7 @@ How the agent actually retrieves content (signed URLs, access tokens, inline con
 
 ### Streaming Delivery
 
-RAMP v1.0 adds `DELIVERY_METHOD_STREAMING` for real-time resource access (WebSocket, SSE, HLS, Icecast). The signed URL points to a streaming endpoint. Stream mechanics (heartbeat, reconnection, concurrent connection limits) are managed by the provider, not the RAMP protocol.
+RAMP supports `DELIVERY_METHOD_STREAMING` for real-time resource access (WebSocket, SSE, HLS, Icecast). The signed URL points to a streaming endpoint. Stream mechanics (heartbeat, reconnection, concurrent connection limits) are managed by the provider, not the RAMP protocol.
 
 **Session lifecycle:**
 

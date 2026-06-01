@@ -53,7 +53,7 @@ The Exchange resolves a requester's public key by fetching `{domain}/.well-known
 ```json
 // GET https://research.acme.com/.well-known/ramp.json
 {
-  "ver": "1.1",
+  "ver": "1.0",
   "role": "ROLE_AGENT",
   "domain": "research.acme.com",
   "contact": "platform@acme.com",
@@ -289,7 +289,7 @@ This replaces the previous `broker_signature` / `broker_signature_algorithm` fie
 
 ### Background
 
-Starting with protocol v1.1, request signatures use [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421) rather than proto-level signature fields. This separates **identity semantics** (carried in the protobuf body) from **cryptographic proof** (carried in HTTP headers).
+Request signatures use [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421) rather than proto-level signature fields. This separates **identity semantics** (carried in the protobuf body) from **cryptographic proof** (carried in HTTP headers).
 
 ### What Changed
 
@@ -552,7 +552,7 @@ The Exchange verifies the full Biscuit chain: IAM signed the authority block, th
 
 ### Where Keys Are Published
 
-Every party publishes its keys in **one** place — `{domain}/.well-known/ramp.json` (`WellKnownManifest.public_keys`, role-tagged). The per-role files (`ramp-agent.json`, `ramp-exchange.json`, `ramp-verifier.json`) and the legacy `/exchange/v1/keys` endpoint are removed in v1.1.0; keys are inline JWKs.
+Every party publishes its keys in **one** place — `{domain}/.well-known/ramp.json` (`WellKnownManifest.public_keys`, role-tagged). There are no per-role key files and no separate keys endpoint; keys are inline JWKs.
 
 | Party | Endpoint | Role |
 |---|---|---|
@@ -566,7 +566,7 @@ Every party publishes its keys in **one** place — `{domain}/.well-known/ramp.j
 ```json
 // GET https://agents.kirkland.com/.well-known/ramp.json
 {
-  "ver": "1.1",
+  "ver": "1.0",
   "role": "ROLE_AGENT",
   "domain": "agents.kirkland.com",
   "contact": "platform@kirkland.com",
@@ -612,7 +612,7 @@ When a manifest sets `invalidation_url`, consumers poll it on a 300s cadence (±
 
 ### Domainless Agents
 
-An individual agent with no public domain of its own is accommodated **without a protocol change**: a registry (operated by an Exchange/Broker or a third party) hosts the agent's `WellKnownManifest`, and the agent sets `Requester.domain` to that registry host (e.g. `agent-7.registry.example`). The agent generates its own keypair; the registry publishes the public half at `{registry}/.well-known/ramp.json`. The domain + well-known paradigm is preserved end to end. Relaxing the discovery anchor (an explicit per-requester keys URL) is a deliberate v1.1 deferral.
+An individual agent with no public domain of its own is accommodated **without a protocol change**: a registry (operated by an Exchange/Broker or a third party) hosts the agent's `WellKnownManifest`, and the agent sets `Requester.domain` to that registry host (e.g. `agent-7.registry.example`). The agent generates its own keypair; the registry publishes the public half at `{registry}/.well-known/ramp.json`. The domain + well-known paradigm is preserved end to end. Relaxing the discovery anchor (an explicit per-requester keys URL) is a deliberate deferral.
 
 ## Next Steps
 

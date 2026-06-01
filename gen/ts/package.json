@@ -1,6 +1,6 @@
 {
   "name": "@ramp-protocol/sdk",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "RAMP protocol — TypeScript types and services (generated from protobuf)",
   "type": "module",
   "exports": {

@@ -3,171 +3,76 @@ title: "Changelog"
 description: "RAMP protocol changelog"
 ---
 
-## v1.1.0 — Unified well-known endpoint + marketplace→exchange rename
+## v1.0.0 — Initial release
 
-Every RAMP participant — agent, broker, exchange, publisher — now serves a single canonical document at `/.well-known/ramp.json`, populated from `WellKnownManifest`. The per-role filenames (`ramp-agent.json`, `ramp-exchange.json`, `ramp-verifier.json`) and the legacy `/marketplace/v1/keys` path are removed from the spec. The term "marketplace" is eliminated from the proto in favour of "exchange" throughout.
+First public release of the RAMP Protocol (Resource Access Metering Protocol):
+the wire format, the generated Go and TypeScript SDKs, and this specification
+site. One protocol for discovering, pricing, transacting, delivering, and
+verifying access to any digital resource by an AI agent. The reasoning behind the
+major design decisions is recorded in [`docs/design-history.md`](https://github.com/RAMP-Protocol/protocol/blob/main/docs/design-history.md).
 
-### New messages
+### Core protocol
 
-- **`WellKnownManifest`** — unified self-description, role-tagged via the new `Role` enum. Carries inline `JsonWebKey` keys, optional `invalidation_url`, publisher-only `exchanges[]` + `catalog_contributors[]`, and exchange-only capability fields (pricing, delivery, auth methods, OIDC issuer, GNAP grant endpoint, base currency, supported profiles).
-- **`JsonWebKey`** — inline RFC 7517 JWK. Ed25519 only in v1.1.0 (`kty="OKP"`, `crv="Ed25519"`, `alg="EdDSA"`). Carries explicit `not_before` / `not_after` RFC3339 bounds.
-- **`KeyInvalidationList`** — kid-only revocation list served at `invalidation_url`. Snapshot semantics.
-- **`Role`** enum: `AGENT`, `EXCHANGE`, `BROKER`, `PUBLISHER`. Verifiers fold into the role their operator holds — there is no separate verifier role.
+- **ExchangeService** — `DiscoverResources`, `ExecuteTransaction`, `ReportUsage`, `DisputeTransaction`, and domain-verification RPCs. Agents and Brokers are interchangeable clients.
+- **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers.
+- **RAMPRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
+- **Requester** — universal actor identity (AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH).
+- **Delegation** — token-format-agnostic (JWT default, Biscuit for multi-hop). Scoped, time-limited, spend-capped, attenuatable.
+- **Scope-based access control** — the Exchange filters its catalog by the requester's scopes; subscriptions are scopes.
+- **SubscriptionQuotaInfo** — proactive, multi-dimensional quota signaling on `Offer` and `TransactionResponse`.
+- **ResourceMutability** — STATIC (hash stable), DYNAMIC (hash drifts), LIVE (streaming, no content at offer time).
+- **Data freshness** — `Offer.data_as_of` + `RequestConstraints.max_data_age` for staleness filtering.
+- **Unit-agnostic metering** — `unit_cost` + `estimated_quantity` + `unit`: tokens, pages, seconds, records, bytes, sq_km, and domain-specific units.
+- **ResourceAttestation** — Ed25519-signed claim envelope for resource integrity. Three levels: none, self-attested, third-party verified.
+- **Dispute resolution** — three-tier (automated `<1s`, rule-based `<24h`, human escalation). Evidence chain: Transaction → UsageReport → Dispute.
+- **Domain verification** — ACME HTTP-01-style provider onboarding.
+- **CatalogService** — `PushResources`, `RemoveResources`, `RefreshCatalog`.
+- **ext_critical** — critical-extension signaling (COSE `crit` pattern, RFC 9052): a consumer MUST understand listed keys or reject the message.
+- **Resource previews** — lightweight `Preview` assets on `Offer` for pre-transaction evaluation (URLs only, zero Exchange memory impact).
 
-### Deprecations (kept on the wire for one cycle)
+### Multi-hop
 
-- `ProviderManifest` — replaced by `WellKnownManifest` with `role=ROLE_PUBLISHER`.
-- `ExchangeManifest` — replaced by `WellKnownManifest` with `role=ROLE_EXCHANGE`.
-- `ExchangeManifest.keys_uri` / `.jwks_uri` — pointer patterns replaced by inline `JsonWebKey` objects.
+- **IntermediaryHop** — schain-inspired forwarding chain for the Agent → Broker → … → Exchange path, with per-hop RFC 9421 signatures and an optional `signature_label` binding a hop to its signature.
+- **Chain-depth caps** — `RequestConstraints.max_hops` (agent-side) and `WellKnownManifest.max_intermediary_hops` (Exchange-published).
+- **Direct response path** — the terminal Exchange returns directly to the originating agent; intermediaries are forward-path only.
 
-### JSON wire renames (intentional consumer-visible changes)
+### Discovery & keys
 
-All proto wire tags preserved; binary compatibility holds. JSON field names change. Every consumer reading renamed fields MUST update.
-
-| Message | Old JSON field | New JSON field | Tag |
-|---|---|---|---|
-| `ProviderManifest` | `marketplaces` | `exchanges` | 4 |
-| `WellKnownManifest` | *(new message)* | `exchanges` | 7 |
-| `ResourceResponse` | `marketplace` | `exchange` | 3 |
-| `UsageReport` | `marketplace` | `exchange` | 8 |
-| `RequestConstraints` | `marketplaces` | `exchanges` | 1 |
-| `RequestConstraints` | `preferred_marketplaces` | `preferred_exchanges` | 6 |
-| `DomainVerificationRequest` | `marketplace` | `exchange` | 6 |
-
-Enum value rename (proto number preserved): `DiscoveryMethod.DISCOVERY_METHOD_MARKETPLACE` → `DISCOVERY_METHOD_EXCHANGE` (number 1).
-
-### Verifier transition
-
-Verifier-specific metadata historically published at `/.well-known/ramp-verifier.json` migrates to `WellKnownManifest`. Verifier signing keys appear in `public_keys`. The verifier's `claims_schema` URL (and any vendor-specific metadata) move into `WellKnownManifest.ext` under a namespaced key — recommended `"ramp.attestation.claims_schema"`. A verifier on a dedicated domain serves `WellKnownManifest` under whichever role matches the operating party (`ROLE_PUBLISHER` when self-attesting, typically `ROLE_EXCHANGE` for a standalone vendor).
-
-### Discovery & key-validity semantics
-
-- **Caching contract**: `/.well-known/ramp.json` MAY be cached (minutes–hours); the `invalidation_url` body SHOULD be short/`no-store` so the 300s poll is not defeated by an intermediary cache. Stale-revocation enforcement is operational, not protocol-guaranteed.
-- **Key-validity window** is half-open `[not_before, not_after)` (invalid at and after `not_after`); ≥1 key in `public_keys` MUST be valid at serve time.
-- **Domainless requesters** are accommodated via a registry-hosted `WellKnownManifest` (agent sets `Requester.domain` to the registry host); no protocol change. Relaxing the discovery anchor is deferred.
-
-### Compatibility
-
-- Proto-binary layer: wire-additive; no tags moved or removed.
-- JSON consumers: all field names in the table above MUST be updated.
-- Enum consumers: `DISCOVERY_METHOD_MARKETPLACE` → `DISCOVERY_METHOD_EXCHANGE` (proto number 1 unchanged).
-- Consumers of the deprecated `ExchangeManifest.keys_uri` / `.jwks_uri` should switch to `WellKnownManifest.public_keys`.
-
-## v1.0.3 — Canonical retrieval endpoint field
-
-Adds the scalar signed-URL field to transaction responses and resolves the stranded "CoMP Package with retrieval.endpoint" comments left after the v1.0 CoMP decoupling.
-
-### New fields
-
-- `TransactionResponse.retrieval_endpoint` (string, field 18)
-- `TransactionResultItem.retrieval_endpoint` (string, field 12)
-- `RAMPResponse.retrieval_endpoint` (string, field 13)
-- `RAMPResponse.agent_identity_hash` (string, field 14)
-
-### Retrieval-URL identity binding
-
-- `agent_identity_hash` is the RFC 7638 JWK Thumbprint (SHA-256) of the agent's Ed25519 request-signing key. The Exchange MAY embed it into the HMAC-signed `retrieval_endpoint` (DPoP-style, RFC 9449) and echo it on the response.
-- Bound to the agent's request-signing key, never to the principal/delegation.
-- A capable delivery endpoint (edge function) verifies the binding fully offline: confirm the URL HMAC, then require the fetcher to present its public key + an RFC 9421 signature and check `thumbprint(presented key) == agent_identity_hash`. No JWKS fetch required.
-- Enforcement is OPTIONAL: bearer-only signed-URL CDNs fall back to HMAC + short TTL + TLS. RAMP reference implementations run on edge functions and enforce it.
-- `agent_identity_hash` carries a value iff a signed `retrieval_endpoint` is present (empty string on `TransactionResponse`, field absent on `RAMPResponse`).
-- Backward compatible: optional, additive, no renumbering.
-
-## v1.0.2 — Resource Previews
-
-Lightweight resource previews on Offers for pre-transaction evaluation.
-
-### Preview message (new)
-
-- `url`: CDN-hosted preview URL (thumbnail, clip, snippet, sample)
-- `media_type`: MIME type of the preview asset
-- `width`, `height`: dimensions in pixels (images/video)
-- `duration`: duration in seconds (audio/video clips)
-- `size`: category hint — `"thumbnail"`, `"preview"`, `"sample"`
-
-### Offer.previews (field 18)
-
-- `repeated Preview previews` on the `Offer` message
-- Zero Exchange memory impact — URLs only, bytes served by provider CDN
-- Modeled after Shutterstock (multi-size thumbnails), Spotify (preview_url), IIIF (parameterized URLs), OpenRTB native (img + dimensions)
-
-## v1.0.1 — C2PA Content Provenance Integration
-
-C2PA Content Credentials integration via new core proto fields and the `ramp-c2pa-v1` extension profile.
-
-### ResourceIdentity — C2PA fields
-
-- **`c2pa_manifest`** (field 7): documents sidecar, embedded, and Content Credentials Cloud URI formats
-- **`c2pa_status`** (field 9): new `C2PAStatus` enum — summary validation result populated by an Exchange or verification vendor
-- **`soft_binding`** (field 10): content-derived identifier surviving format transcoding (perceptual hash, watermark)
-- **`soft_binding_method`** (field 11): algorithm — `"phash-v1"`, `"c2pa-watermark"`, `"chromaprint"`
-
-### C2PAStatus enum
-
-- `C2PA_STATUS_UNSPECIFIED` (0)
-- `C2PA_STATUS_TRUSTED` (1): valid + chains to C2PA Trust List root
-- `C2PA_STATUS_VALID` (2): signature verifies, signer not in Trust List
-- `C2PA_STATUS_INVALID` (3): validation failed
-- `C2PA_STATUS_ABSENT` (4): content checked, no C2PA manifest
-
-### Extension profile: ramp-c2pa-v1
-
-- 16 standardized attestation claim names (`c2pa.status`, `c2pa.signer`, `c2pa.actions`, `c2pa.training_allowed`, etc.)
-- Rights enforcement mapping: `c2pa.training_mining` → `AccessRestrictions.prohibited_functions`
-- Soft binding dispute enhancement: post-transcoding content verification
-- Three conformance levels: Level A (status + URI), Level B (bridged attestation + rights), Level C (full provenance + soft binding + TSA)
-
-## v1.0 — Resource Access Metering Protocol
-
-Open transaction layer for metered resource access by AI agents. One protocol for discovering, pricing, transacting, delivering, and verifying any digital resource.
-
-### Core Protocol
-
-- **ExchangeService** — DiscoverResources, ExecuteTransaction, ReportUsage, DisputeTransaction RPCs
-- **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers
-- **RAMPRequest.query / search_filters** — Broker-side resource discovery (natural language + structured search)
-- **Requester** — universal actor identity. Types: AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH
-- **Delegation** — token-format agnostic (JWT default, Biscuit for multi-hop). Scoped, time-limited, spend-capped, attenuatable.
-- **IntermediaryHop** — schain-inspired forwarding chain for Agent → Broker → Exchange path verification
-- **Scope-based access control** — Exchange filters catalog by requester's scopes. Subscriptions are scopes.
-- **SubscriptionQuotaInfo** — proactive quota signaling on Offer and TransactionResponse. Multi-dimensional quotas (access count + spend + burst)
-- **ResourceMutability** — STATIC (hash stable), DYNAMIC (hash drifts), LIVE (streaming, no content at offer time)
-- **Data freshness** — Offer.data_as_of + RequestConstraints.max_data_age for staleness filtering
-- **ext_critical** — critical extension signaling (COSE crit pattern, RFC 9052). Consumer MUST understand listed keys or reject.
-- **Unit-agnostic metering** — unit_cost + estimated_quantity + unit. Supports tokens, pages, seconds, records, bytes, sq_km, and domain-specific units
-- **ResourceAttestation** — Ed25519-signed claim envelope for resource integrity verification. Three levels: none, self-attested, third-party verified
-- **Dispute resolution** — three-tier (automated `<1s`, rule-based `<24h`, human escalation). Evidence chain: Transaction → UsageReport → Dispute
-- **Domain verification** — ACME HTTP-01 style provider onboarding
-- **CatalogService** — PushResources, RemoveResources, RefreshCatalog for provider/third-party catalog management
+- **WellKnownManifest** — a single canonical document served at `/.well-known/ramp.json` by every participant, role-tagged via the `Role` enum (AGENT, EXCHANGE, BROKER, PUBLISHER). Carries inline keys, optional `invalidation_url`, publisher authorization (`exchanges[]`, `catalog_contributors[]`), and exchange capability fields (pricing, delivery, auth methods, OIDC issuer, GNAP endpoint, base currency, supported profiles).
+- **JsonWebKey** — inline RFC 7517 JWKs (Ed25519: `kty="OKP"`, `crv="Ed25519"`, `alg="EdDSA"`) with explicit `not_before` / `not_after` RFC3339 bounds. Key-validity window is half-open `[not_before, not_after)`.
+- **KeyInvalidationList** — snapshot-semantic kid revocation list served at `invalidation_url` for emergency revocation.
+- **Caching contract** — `/.well-known/ramp.json` MAY be cached (minutes–hours); the `invalidation_url` body SHOULD be short/`no-store`.
+- **Domainless requesters** — accommodated via a registry-hosted `WellKnownManifest` (the agent sets `Requester.domain` to the registry host).
 
 ### Authentication
 
-- **Auth-agnostic** — Exchange advertises supported methods: GNAP (RFC 9635), OAuth+DPoP, OAuth Bearer, mTLS
-- **JWS for content signatures** — Offer and Attestation signatures use JWS Compact Serialization (alg=EdDSA)
-- **RFC 9421 for request signatures** — HTTP Message Signatures for agent and intermediary authentication
-- **JWKS key publication** — all parties publish Ed25519 keys at well-known endpoints
+- **Auth-agnostic** — the Exchange advertises supported methods: GNAP (RFC 9635), OAuth + DPoP, OAuth Bearer, mTLS.
+- **JWS for content signatures** — `Offer` and attestation signatures use JWS Compact Serialization (`alg=EdDSA`).
+- **RFC 9421 for request signatures** — HTTP Message Signatures authenticate agents and each intermediary hop.
+- **Retrieval-URL identity binding** — the Exchange MAY bind a signed `retrieval_endpoint` to the agent via `agent_identity_hash` (RFC 7638 JWK Thumbprint, DPoP-style per RFC 9449), verifiable fully offline by a capable edge function.
 
-### Pricing Models
+### Content provenance (C2PA)
 
-PER_ACCESS, PER_TOKEN, PER_FETCH, SUBSCRIPTION, FREE, PER_PAGE, PER_MINUTE, PER_RECORD, REVENUE_SHARE
+- `ResourceIdentity` C2PA fields (`c2pa_manifest`, `c2pa_status`, `soft_binding`, `soft_binding_method`) and the `C2PAStatus` enum (TRUSTED, VALID, INVALID, ABSENT).
+- The `ramp-c2pa-v1` extension profile bridges C2PA X.509/COSE trust into RAMP Ed25519 attestations.
 
-### Denial Reasons
+### Pricing models
 
-INVALID_LICENSE, EXPIRED_LICENSE, INSUFFICIENT_BALANCE, RATE_LIMITED, CONTENT_UNAVAILABLE, FUNCTION_PROHIBITED, GEO_RESTRICTED, REPORTING_OVERDUE, OFFER_EXPIRED, SIGNATURE_INVALID, QUOTA_EXCEEDED, DELEGATION_EXPIRED, SCOPE_INSUFFICIENT
+PER_ACCESS, PER_TOKEN, PER_FETCH, SUBSCRIPTION, FREE, PER_PAGE, PER_MINUTE, PER_RECORD, REVENUE_SHARE.
 
-### Extension Profiles
+### Denial reasons
 
-Domain-specific metadata carried in `ext` fields. Four profiles defined:
+INVALID_LICENSE, EXPIRED_LICENSE, INSUFFICIENT_BALANCE, RATE_LIMITED, CONTENT_UNAVAILABLE, FUNCTION_PROHIBITED, GEO_RESTRICTED, REPORTING_OVERDUE, OFFER_EXPIRED, SIGNATURE_INVALID, QUOTA_EXCEEDED, DELEGATION_EXPIRED, SCOPE_INSUFFICIENT.
+
+### Extension profiles
+
+Domain-specific metadata carried in `ext` fields:
 
 - **ramp-news-v1** — articles, podcasts, broadcasting (IPTC NewsML-G2, Podcasting 2.0)
 - **ramp-academic-v1** — scholarly articles, preprints (CrossRef, OpenAlex, COUNTER 5.1)
 - **ramp-legal-v1** — legislation, case law, patents (ELI, ECLI, Akoma Ntoso)
 - **ramp-comp-v1** — IAB CoMP metadata (Package, Function, Scope) as optional ext fields
 
-### Wire Format
+### Wire format
 
-Protocol Buffers (protobuf). Package: `ramp.v1`. Dual transport: Connect (HTTP/JSON + binary protobuf from same handler).
-
-### Discovery
-
-Every participant publishes a single `WellKnownManifest` at `/.well-known/ramp.json` (role-tagged). Broker reads manifests for routing. (As of v1.1.0; v1.0 used per-role files.)
+Protocol Buffers. Package `ramp.v1`. Dual transport via Connect (HTTP/JSON + binary protobuf from the same handler).
