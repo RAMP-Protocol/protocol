@@ -3018,9 +3018,15 @@ func (x *Obligation) GetDescription() string {
 // and surfaces it on discovery, so agents see the same terms the publisher
 // declared — no translation or reformulation.
 //
-// Validation rules for ENUMERATED semantics:
-//   - Pricing MUST be present. Absent Pricing → reject at ingest.
-//   - model=FREE must be explicit. Absent Pricing ≠ free.
+// Validation rules:
+//   - Pricing MUST be present on EVERY term, regardless of semantics.
+//     Absent Pricing → reject at ingest: an agent cannot act on a term with
+//     no price. This holds for REFERENCE_ONLY too — its License governs the
+//     human-readable terms, but the machine-readable price is still stated
+//     here, not deferred to the document.
+//   - model=FREE must be explicit. Absent Pricing ≠ free. A term may be FREE
+//     under an arbitrary license; the agent still needs the price stated so it
+//     knows the access is free rather than unpriced.
 //   - Restriction tokens are validated against the vocab registry.
 //     Unknown tokens produce a PushResourcesResponse.warnings[] entry
 //     but do NOT cause rejection (forward-compatible).
@@ -3037,10 +3043,12 @@ type LicenseTerm struct {
 	Quotas []*Quota `protobuf:"bytes,4,rep,name=quotas,proto3" json:"quotas,omitempty"`
 	// Post-use behavioral requirements.
 	Obligations []*Obligation `protobuf:"bytes,5,rep,name=obligations,proto3" json:"obligations,omitempty"`
-	// Pricing for this term.
-	// REQUIRED when semantics = ENUMERATED; validation error if absent.
-	// model = FREE must be stated explicitly — absent Pricing is not free.
-	// Absent when semantics = REFERENCE_ONLY (pricing is in the license document).
+	// Pricing for this term. REQUIRED for every term regardless of semantics —
+	// an agent cannot act on a priceless term, so absent Pricing is a validation
+	// error at ingest. model = FREE must be stated explicitly (absent Pricing is
+	// not free). A REFERENCE_ONLY term states its price here too; its License
+	// governs the human-readable terms but does not replace the machine-readable
+	// price.
 	Pricing       *Pricing `protobuf:"bytes,6,opt,name=pricing,proto3,oneof" json:"pricing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
