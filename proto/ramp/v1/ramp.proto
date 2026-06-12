@@ -996,9 +996,12 @@ message Pricing {
   // License duration in months. How long the granted access remains valid.
   optional int32 license_duration_months = 7;
 
-  // Metering unit for unit_cost and estimated_quantity.
-  // Standard units: "tokens", "seconds", "pages", "records", "bytes", "calls", "items"
-  // Domain-specific units allowed (e.g., "sq_km", "characters", "images").
+  // Metering basis — the "per what" of PER_UNIT pricing. REQUIRED when
+  // model = PER_UNIT. Registry-governed vocabulary (vocab/pricing-units.json),
+  // linted like quota-metrics: "fetches", "accesses", "tokens", "calls",
+  // "pages", "minutes", "records", "streams", "images", "seats", "sq-km",
+  // "characters", "bytes", "items", "impressions". Custom units namespace as
+  // "vendor:unit" (lint warning until registered). Ignored for FREE / FLAT.
   optional string unit = 8;
 
   // How usage is tracked for billing reconciliation.
@@ -1016,16 +1019,18 @@ message Pricing {
   repeated string ext_critical = 90;
 }
 
-// PricingModel — the metering basis. Pre-v1: renumbered cleanly, nothing
-// reserved. Subscription is expressed as model=FREE + scopes (see LicenseTerm);
-// attribution/contribution are obligations, not pricing models (see ObligationKind).
+// PricingModel — the charging STRUCTURE only (a genuinely closed, small set;
+// changes far less than yearly, so an enum is correct per Google AIP-126). The
+// open-ended metering basis ("per what") is NOT enumerated here — it lives in
+// Pricing.unit as a registry-governed vocabulary (vocab/pricing-units.json).
+// Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
+// are obligations (see ObligationKind); revenue-share settlement is off-protocol.
+// Pre-v1: renumbered cleanly, nothing reserved.
 enum PricingModel {
   PRICING_MODEL_UNSPECIFIED = 0;  // unset — rejected at ingest (omission cannot default to FREE)
-  PRICING_MODEL_FREE        = 1;  // No charge (RSL: free)
-  PRICING_MODEL_PER_FETCH   = 2;  // Per HTTP fetch (RSL: crawl)
-  PRICING_MODEL_PER_ACCESS  = 3;  // Per use / read (RSL: purchase; per-unit manufacturing)
-  PRICING_MODEL_PER_TOKEN   = 4;  // Per output token generated using this content
-  PRICING_MODEL_PER_CALL    = 5;  // Per API / RPC call
+  PRICING_MODEL_FREE        = 1;  // no charge; rate must be 0
+  PRICING_MODEL_PER_UNIT    = 2;  // rate per Pricing.unit; unit REQUIRED (from vocab/pricing-units.json)
+  PRICING_MODEL_FLAT        = 3;  // one-time flat fee; rate is the total, no unit
 }
 
 // PricingMetering — How usage is tracked for billing reconciliation.

@@ -469,18 +469,20 @@ func (ObligationTrigger) EnumDescriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{6}
 }
 
-// PricingModel — the metering basis. Pre-v1: renumbered cleanly, nothing
-// reserved. Subscription is expressed as model=FREE + scopes (see LicenseTerm);
-// attribution/contribution are obligations, not pricing models (see ObligationKind).
+// PricingModel — the charging STRUCTURE only (a genuinely closed, small set;
+// changes far less than yearly, so an enum is correct per Google AIP-126). The
+// open-ended metering basis ("per what") is NOT enumerated here — it lives in
+// Pricing.unit as a registry-governed vocabulary (vocab/pricing-units.json).
+// Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
+// are obligations (see ObligationKind); revenue-share settlement is off-protocol.
+// Pre-v1: renumbered cleanly, nothing reserved.
 type PricingModel int32
 
 const (
 	PricingModel_PRICING_MODEL_UNSPECIFIED PricingModel = 0 // unset — rejected at ingest (omission cannot default to FREE)
-	PricingModel_PRICING_MODEL_FREE        PricingModel = 1 // No charge (RSL: free)
-	PricingModel_PRICING_MODEL_PER_FETCH   PricingModel = 2 // Per HTTP fetch (RSL: crawl)
-	PricingModel_PRICING_MODEL_PER_ACCESS  PricingModel = 3 // Per use / read (RSL: purchase; per-unit manufacturing)
-	PricingModel_PRICING_MODEL_PER_TOKEN   PricingModel = 4 // Per output token generated using this content
-	PricingModel_PRICING_MODEL_PER_CALL    PricingModel = 5 // Per API / RPC call
+	PricingModel_PRICING_MODEL_FREE        PricingModel = 1 // no charge; rate must be 0
+	PricingModel_PRICING_MODEL_PER_UNIT    PricingModel = 2 // rate per Pricing.unit; unit REQUIRED (from vocab/pricing-units.json)
+	PricingModel_PRICING_MODEL_FLAT        PricingModel = 3 // one-time flat fee; rate is the total, no unit
 )
 
 // Enum value maps for PricingModel.
@@ -488,18 +490,14 @@ var (
 	PricingModel_name = map[int32]string{
 		0: "PRICING_MODEL_UNSPECIFIED",
 		1: "PRICING_MODEL_FREE",
-		2: "PRICING_MODEL_PER_FETCH",
-		3: "PRICING_MODEL_PER_ACCESS",
-		4: "PRICING_MODEL_PER_TOKEN",
-		5: "PRICING_MODEL_PER_CALL",
+		2: "PRICING_MODEL_PER_UNIT",
+		3: "PRICING_MODEL_FLAT",
 	}
 	PricingModel_value = map[string]int32{
 		"PRICING_MODEL_UNSPECIFIED": 0,
 		"PRICING_MODEL_FREE":        1,
-		"PRICING_MODEL_PER_FETCH":   2,
-		"PRICING_MODEL_PER_ACCESS":  3,
-		"PRICING_MODEL_PER_TOKEN":   4,
-		"PRICING_MODEL_PER_CALL":    5,
+		"PRICING_MODEL_PER_UNIT":    2,
+		"PRICING_MODEL_FLAT":        3,
 	}
 )
 
@@ -3315,9 +3313,12 @@ type Pricing struct {
 	EstimatedQuantity *int32 `protobuf:"varint,5,opt,name=estimated_quantity,json=estimatedQuantity,proto3,oneof" json:"estimated_quantity,omitempty"`
 	// License duration in months. How long the granted access remains valid.
 	LicenseDurationMonths *int32 `protobuf:"varint,7,opt,name=license_duration_months,json=licenseDurationMonths,proto3,oneof" json:"license_duration_months,omitempty"`
-	// Metering unit for unit_cost and estimated_quantity.
-	// Standard units: "tokens", "seconds", "pages", "records", "bytes", "calls", "items"
-	// Domain-specific units allowed (e.g., "sq_km", "characters", "images").
+	// Metering basis — the "per what" of PER_UNIT pricing. REQUIRED when
+	// model = PER_UNIT. Registry-governed vocabulary (vocab/pricing-units.json),
+	// linted like quota-metrics: "fetches", "accesses", "tokens", "calls",
+	// "pages", "minutes", "records", "streams", "images", "seats", "sq-km",
+	// "characters", "bytes", "items", "impressions". Custom units namespace as
+	// "vendor:unit" (lint warning until registered). Ignored for FREE / FLAT.
 	Unit *string `protobuf:"bytes,8,opt,name=unit,proto3,oneof" json:"unit,omitempty"`
 	// How usage is tracked for billing reconciliation.
 	// Absent = PRICING_METERING_ONLINE (default real-time tracking).
@@ -7987,14 +7988,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x19OBLIGATION_TRIGGER_ON_USE\x10\x01\x12&\n" +
 	"\"OBLIGATION_TRIGGER_ON_DISTRIBUTION\x10\x02\x12)\n" +
 	"%OBLIGATION_TRIGGER_ON_NETWORK_SERVICE\x10\x03\x12$\n" +
-	" OBLIGATION_TRIGGER_ON_DERIVATIVE\x10\x04*\xb9\x01\n" +
+	" OBLIGATION_TRIGGER_ON_DERIVATIVE\x10\x04*y\n" +
 	"\fPricingModel\x12\x1d\n" +
 	"\x19PRICING_MODEL_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12PRICING_MODEL_FREE\x10\x01\x12\x1b\n" +
-	"\x17PRICING_MODEL_PER_FETCH\x10\x02\x12\x1c\n" +
-	"\x18PRICING_MODEL_PER_ACCESS\x10\x03\x12\x1b\n" +
-	"\x17PRICING_MODEL_PER_TOKEN\x10\x04\x12\x1a\n" +
-	"\x16PRICING_MODEL_PER_CALL\x10\x05*u\n" +
+	"\x12PRICING_MODEL_FREE\x10\x01\x12\x1a\n" +
+	"\x16PRICING_MODEL_PER_UNIT\x10\x02\x12\x16\n" +
+	"\x12PRICING_MODEL_FLAT\x10\x03*u\n" +
 	"\x0fPricingMetering\x12\x1b\n" +
 	"\x17PRICING_METERING_ONLINE\x10\x00\x12\x19\n" +
 	"\x15PRICING_METERING_NONE\x10\x01\x12*\n" +
