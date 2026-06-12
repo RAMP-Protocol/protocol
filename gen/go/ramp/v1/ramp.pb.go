@@ -189,19 +189,22 @@ func (OfferAbsenceReason) EnumDescriptor() ([]byte, []int) {
 type TermSemantics int32
 
 const (
-	TermSemantics_TERM_SEMANTICS_ENUMERATED     TermSemantics = 0
-	TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY TermSemantics = 1
+	TermSemantics_TERM_SEMANTICS_UNSPECIFIED    TermSemantics = 0 // unset — rejected at ingest
+	TermSemantics_TERM_SEMANTICS_ENUMERATED     TermSemantics = 1
+	TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY TermSemantics = 2
 )
 
 // Enum value maps for TermSemantics.
 var (
 	TermSemantics_name = map[int32]string{
-		0: "TERM_SEMANTICS_ENUMERATED",
-		1: "TERM_SEMANTICS_REFERENCE_ONLY",
+		0: "TERM_SEMANTICS_UNSPECIFIED",
+		1: "TERM_SEMANTICS_ENUMERATED",
+		2: "TERM_SEMANTICS_REFERENCE_ONLY",
 	}
 	TermSemantics_value = map[string]int32{
-		"TERM_SEMANTICS_ENUMERATED":     0,
-		"TERM_SEMANTICS_REFERENCE_ONLY": 1,
+		"TERM_SEMANTICS_UNSPECIFIED":    0,
+		"TERM_SEMANTICS_ENUMERATED":     1,
+		"TERM_SEMANTICS_REFERENCE_ONLY": 2,
 	}
 )
 
@@ -236,25 +239,28 @@ func (TermSemantics) EnumDescriptor() ([]byte, []int) {
 type RestrictionKind int32
 
 const (
-	RestrictionKind_RESTRICTION_KIND_FUNCTION  RestrictionKind = 0 // What: vocab/restriction-values/function.json
-	RestrictionKind_RESTRICTION_KIND_GEOGRAPHY RestrictionKind = 1 // Where: ISO 3166-1 alpha-2 + EU, EEA, *
-	RestrictionKind_RESTRICTION_KIND_USER_TYPE RestrictionKind = 2 // Who: vocab/restriction-values/user-type.json
-	RestrictionKind_RESTRICTION_KIND_OTHER     RestrictionKind = 3 // Custom; description in Restriction fields
+	RestrictionKind_RESTRICTION_KIND_UNSPECIFIED RestrictionKind = 0 // unset — rejected at ingest
+	RestrictionKind_RESTRICTION_KIND_FUNCTION    RestrictionKind = 1 // What: vocab/restriction-values/function.json
+	RestrictionKind_RESTRICTION_KIND_GEOGRAPHY   RestrictionKind = 2 // Where: ISO 3166-1 alpha-2 + EU, EEA, *
+	RestrictionKind_RESTRICTION_KIND_USER_TYPE   RestrictionKind = 3 // Who: vocab/restriction-values/user-type.json
+	RestrictionKind_RESTRICTION_KIND_OTHER       RestrictionKind = 4 // Custom; description in Restriction fields
 )
 
 // Enum value maps for RestrictionKind.
 var (
 	RestrictionKind_name = map[int32]string{
-		0: "RESTRICTION_KIND_FUNCTION",
-		1: "RESTRICTION_KIND_GEOGRAPHY",
-		2: "RESTRICTION_KIND_USER_TYPE",
-		3: "RESTRICTION_KIND_OTHER",
+		0: "RESTRICTION_KIND_UNSPECIFIED",
+		1: "RESTRICTION_KIND_FUNCTION",
+		2: "RESTRICTION_KIND_GEOGRAPHY",
+		3: "RESTRICTION_KIND_USER_TYPE",
+		4: "RESTRICTION_KIND_OTHER",
 	}
 	RestrictionKind_value = map[string]int32{
-		"RESTRICTION_KIND_FUNCTION":  0,
-		"RESTRICTION_KIND_GEOGRAPHY": 1,
-		"RESTRICTION_KIND_USER_TYPE": 2,
-		"RESTRICTION_KIND_OTHER":     3,
+		"RESTRICTION_KIND_UNSPECIFIED": 0,
+		"RESTRICTION_KIND_FUNCTION":    1,
+		"RESTRICTION_KIND_GEOGRAPHY":   2,
+		"RESTRICTION_KIND_USER_TYPE":   3,
+		"RESTRICTION_KIND_OTHER":       4,
 	}
 )
 
@@ -289,25 +295,28 @@ func (RestrictionKind) EnumDescriptor() ([]byte, []int) {
 type QuotaWindow int32
 
 const (
-	QuotaWindow_QUOTA_WINDOW_HOURLY  QuotaWindow = 0
-	QuotaWindow_QUOTA_WINDOW_DAILY   QuotaWindow = 1
-	QuotaWindow_QUOTA_WINDOW_MONTHLY QuotaWindow = 2
-	QuotaWindow_QUOTA_WINDOW_TOTAL   QuotaWindow = 3 // Lifetime cap — never resets
+	QuotaWindow_QUOTA_WINDOW_UNSPECIFIED QuotaWindow = 0 // unset — rejected at ingest
+	QuotaWindow_QUOTA_WINDOW_HOURLY      QuotaWindow = 1
+	QuotaWindow_QUOTA_WINDOW_DAILY       QuotaWindow = 2
+	QuotaWindow_QUOTA_WINDOW_MONTHLY     QuotaWindow = 3
+	QuotaWindow_QUOTA_WINDOW_TOTAL       QuotaWindow = 4 // Lifetime cap — never resets
 )
 
 // Enum value maps for QuotaWindow.
 var (
 	QuotaWindow_name = map[int32]string{
-		0: "QUOTA_WINDOW_HOURLY",
-		1: "QUOTA_WINDOW_DAILY",
-		2: "QUOTA_WINDOW_MONTHLY",
-		3: "QUOTA_WINDOW_TOTAL",
+		0: "QUOTA_WINDOW_UNSPECIFIED",
+		1: "QUOTA_WINDOW_HOURLY",
+		2: "QUOTA_WINDOW_DAILY",
+		3: "QUOTA_WINDOW_MONTHLY",
+		4: "QUOTA_WINDOW_TOTAL",
 	}
 	QuotaWindow_value = map[string]int32{
-		"QUOTA_WINDOW_HOURLY":  0,
-		"QUOTA_WINDOW_DAILY":   1,
-		"QUOTA_WINDOW_MONTHLY": 2,
-		"QUOTA_WINDOW_TOTAL":   3,
+		"QUOTA_WINDOW_UNSPECIFIED": 0,
+		"QUOTA_WINDOW_HOURLY":      1,
+		"QUOTA_WINDOW_DAILY":       2,
+		"QUOTA_WINDOW_MONTHLY":     3,
+		"QUOTA_WINDOW_TOTAL":       4,
 	}
 )
 
@@ -346,31 +355,34 @@ func (QuotaWindow) EnumDescriptor() ([]byte, []int) {
 type ObligationKind int32
 
 const (
-	ObligationKind_OBLIGATION_KIND_ATTRIBUTION      ObligationKind = 0 // Credit the author / publisher
-	ObligationKind_OBLIGATION_KIND_CONTRIBUTION     ObligationKind = 1 // Good-faith payment (amount suggested)
-	ObligationKind_OBLIGATION_KIND_SHARE_ALIKE      ObligationKind = 2 // Derivatives must use the same license (CC-BY-SA / GPL)
-	ObligationKind_OBLIGATION_KIND_NETWORK_COPYLEFT ObligationKind = 3 // Network service triggers copyleft (AGPL-style)
-	ObligationKind_OBLIGATION_KIND_NOTICE           ObligationKind = 4 // Include the specified copyright notice
-	ObligationKind_OBLIGATION_KIND_OTHER            ObligationKind = 5 // Described in Obligation.description
+	ObligationKind_OBLIGATION_KIND_UNSPECIFIED      ObligationKind = 0 // unset — rejected at ingest
+	ObligationKind_OBLIGATION_KIND_ATTRIBUTION      ObligationKind = 1 // Credit the author / publisher
+	ObligationKind_OBLIGATION_KIND_CONTRIBUTION     ObligationKind = 2 // Good-faith payment (amount suggested)
+	ObligationKind_OBLIGATION_KIND_SHARE_ALIKE      ObligationKind = 3 // Derivatives must use the same license (CC-BY-SA / GPL)
+	ObligationKind_OBLIGATION_KIND_NETWORK_COPYLEFT ObligationKind = 4 // Network service triggers copyleft (AGPL-style)
+	ObligationKind_OBLIGATION_KIND_NOTICE           ObligationKind = 5 // Include the specified copyright notice
+	ObligationKind_OBLIGATION_KIND_OTHER            ObligationKind = 6 // Described in Obligation.detail
 )
 
 // Enum value maps for ObligationKind.
 var (
 	ObligationKind_name = map[int32]string{
-		0: "OBLIGATION_KIND_ATTRIBUTION",
-		1: "OBLIGATION_KIND_CONTRIBUTION",
-		2: "OBLIGATION_KIND_SHARE_ALIKE",
-		3: "OBLIGATION_KIND_NETWORK_COPYLEFT",
-		4: "OBLIGATION_KIND_NOTICE",
-		5: "OBLIGATION_KIND_OTHER",
+		0: "OBLIGATION_KIND_UNSPECIFIED",
+		1: "OBLIGATION_KIND_ATTRIBUTION",
+		2: "OBLIGATION_KIND_CONTRIBUTION",
+		3: "OBLIGATION_KIND_SHARE_ALIKE",
+		4: "OBLIGATION_KIND_NETWORK_COPYLEFT",
+		5: "OBLIGATION_KIND_NOTICE",
+		6: "OBLIGATION_KIND_OTHER",
 	}
 	ObligationKind_value = map[string]int32{
-		"OBLIGATION_KIND_ATTRIBUTION":      0,
-		"OBLIGATION_KIND_CONTRIBUTION":     1,
-		"OBLIGATION_KIND_SHARE_ALIKE":      2,
-		"OBLIGATION_KIND_NETWORK_COPYLEFT": 3,
-		"OBLIGATION_KIND_NOTICE":           4,
-		"OBLIGATION_KIND_OTHER":            5,
+		"OBLIGATION_KIND_UNSPECIFIED":      0,
+		"OBLIGATION_KIND_ATTRIBUTION":      1,
+		"OBLIGATION_KIND_CONTRIBUTION":     2,
+		"OBLIGATION_KIND_SHARE_ALIKE":      3,
+		"OBLIGATION_KIND_NETWORK_COPYLEFT": 4,
+		"OBLIGATION_KIND_NOTICE":           5,
+		"OBLIGATION_KIND_OTHER":            6,
 	}
 )
 
@@ -405,25 +417,28 @@ func (ObligationKind) EnumDescriptor() ([]byte, []int) {
 type ObligationTrigger int32
 
 const (
-	ObligationTrigger_OBLIGATION_TRIGGER_ON_USE             ObligationTrigger = 0 // Triggered on any use
-	ObligationTrigger_OBLIGATION_TRIGGER_ON_DISTRIBUTION    ObligationTrigger = 1 // Triggered when copies are distributed
-	ObligationTrigger_OBLIGATION_TRIGGER_ON_NETWORK_SERVICE ObligationTrigger = 2 // Triggered when served over a network (AGPL)
-	ObligationTrigger_OBLIGATION_TRIGGER_ON_DERIVATIVE      ObligationTrigger = 3 // Triggered when a derivative work is produced
+	ObligationTrigger_OBLIGATION_TRIGGER_UNSPECIFIED        ObligationTrigger = 0 // unset — rejected at ingest
+	ObligationTrigger_OBLIGATION_TRIGGER_ON_USE             ObligationTrigger = 1 // Triggered on any use
+	ObligationTrigger_OBLIGATION_TRIGGER_ON_DISTRIBUTION    ObligationTrigger = 2 // Triggered when copies are distributed
+	ObligationTrigger_OBLIGATION_TRIGGER_ON_NETWORK_SERVICE ObligationTrigger = 3 // Triggered when served over a network (AGPL)
+	ObligationTrigger_OBLIGATION_TRIGGER_ON_DERIVATIVE      ObligationTrigger = 4 // Triggered when a derivative work is produced
 )
 
 // Enum value maps for ObligationTrigger.
 var (
 	ObligationTrigger_name = map[int32]string{
-		0: "OBLIGATION_TRIGGER_ON_USE",
-		1: "OBLIGATION_TRIGGER_ON_DISTRIBUTION",
-		2: "OBLIGATION_TRIGGER_ON_NETWORK_SERVICE",
-		3: "OBLIGATION_TRIGGER_ON_DERIVATIVE",
+		0: "OBLIGATION_TRIGGER_UNSPECIFIED",
+		1: "OBLIGATION_TRIGGER_ON_USE",
+		2: "OBLIGATION_TRIGGER_ON_DISTRIBUTION",
+		3: "OBLIGATION_TRIGGER_ON_NETWORK_SERVICE",
+		4: "OBLIGATION_TRIGGER_ON_DERIVATIVE",
 	}
 	ObligationTrigger_value = map[string]int32{
-		"OBLIGATION_TRIGGER_ON_USE":             0,
-		"OBLIGATION_TRIGGER_ON_DISTRIBUTION":    1,
-		"OBLIGATION_TRIGGER_ON_NETWORK_SERVICE": 2,
-		"OBLIGATION_TRIGGER_ON_DERIVATIVE":      3,
+		"OBLIGATION_TRIGGER_UNSPECIFIED":        0,
+		"OBLIGATION_TRIGGER_ON_USE":             1,
+		"OBLIGATION_TRIGGER_ON_DISTRIBUTION":    2,
+		"OBLIGATION_TRIGGER_ON_NETWORK_SERVICE": 3,
+		"OBLIGATION_TRIGGER_ON_DERIVATIVE":      4,
 	}
 )
 
@@ -454,51 +469,37 @@ func (ObligationTrigger) EnumDescriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{6}
 }
 
+// PricingModel — the metering basis. Pre-v1: renumbered cleanly, nothing
+// reserved. Subscription is expressed as model=FREE + scopes (see LicenseTerm);
+// attribution/contribution are obligations, not pricing models (see ObligationKind).
 type PricingModel int32
 
 const (
-	PricingModel_PRICING_MODEL_UNSPECIFIED  PricingModel = 0
-	PricingModel_PRICING_MODEL_PER_ACCESS   PricingModel = 1 // One-time access fee per resource (RSL: purchase)
-	PricingModel_PRICING_MODEL_PER_TOKEN    PricingModel = 2 // Rate per LLM token consumed (RSL: use/inference)
-	PricingModel_PRICING_MODEL_PER_FETCH    PricingModel = 3 // Rate per fetch request (RSL: crawl)
-	PricingModel_PRICING_MODEL_SUBSCRIPTION PricingModel = 4 // Recurring access (RSL: subscription)
-	PricingModel_PRICING_MODEL_FREE         PricingModel = 5 // No charge (RSL: free)
-	// Field numbers 6 and 7 are retired (ATTRIBUTION and CONTRIBUTION were
-	// behavioral obligations, not payment models — see ObligationKind).
-	PricingModel_PRICING_MODEL_TRAINING      PricingModel = 8  // Per training instance fee (RSL: training)
-	PricingModel_PRICING_MODEL_REVENUE_SHARE PricingModel = 9  // Revenue share model (percentage of agent revenue)
-	PricingModel_PRICING_MODEL_PER_PAGE      PricingModel = 10 // Per document page (legal filings, PDFs)
-	PricingModel_PRICING_MODEL_PER_MINUTE    PricingModel = 11 // Per minute of audio/video
-	PricingModel_PRICING_MODEL_PER_RECORD    PricingModel = 12 // Per structured data record
+	PricingModel_PRICING_MODEL_UNSPECIFIED PricingModel = 0 // unset — rejected at ingest (omission cannot default to FREE)
+	PricingModel_PRICING_MODEL_FREE        PricingModel = 1 // No charge (RSL: free)
+	PricingModel_PRICING_MODEL_PER_FETCH   PricingModel = 2 // Per HTTP fetch (RSL: crawl)
+	PricingModel_PRICING_MODEL_PER_ACCESS  PricingModel = 3 // Per use / read (RSL: purchase; per-unit manufacturing)
+	PricingModel_PRICING_MODEL_PER_TOKEN   PricingModel = 4 // Per output token generated using this content
+	PricingModel_PRICING_MODEL_PER_CALL    PricingModel = 5 // Per API / RPC call
 )
 
 // Enum value maps for PricingModel.
 var (
 	PricingModel_name = map[int32]string{
-		0:  "PRICING_MODEL_UNSPECIFIED",
-		1:  "PRICING_MODEL_PER_ACCESS",
-		2:  "PRICING_MODEL_PER_TOKEN",
-		3:  "PRICING_MODEL_PER_FETCH",
-		4:  "PRICING_MODEL_SUBSCRIPTION",
-		5:  "PRICING_MODEL_FREE",
-		8:  "PRICING_MODEL_TRAINING",
-		9:  "PRICING_MODEL_REVENUE_SHARE",
-		10: "PRICING_MODEL_PER_PAGE",
-		11: "PRICING_MODEL_PER_MINUTE",
-		12: "PRICING_MODEL_PER_RECORD",
+		0: "PRICING_MODEL_UNSPECIFIED",
+		1: "PRICING_MODEL_FREE",
+		2: "PRICING_MODEL_PER_FETCH",
+		3: "PRICING_MODEL_PER_ACCESS",
+		4: "PRICING_MODEL_PER_TOKEN",
+		5: "PRICING_MODEL_PER_CALL",
 	}
 	PricingModel_value = map[string]int32{
-		"PRICING_MODEL_UNSPECIFIED":   0,
-		"PRICING_MODEL_PER_ACCESS":    1,
-		"PRICING_MODEL_PER_TOKEN":     2,
-		"PRICING_MODEL_PER_FETCH":     3,
-		"PRICING_MODEL_SUBSCRIPTION":  4,
-		"PRICING_MODEL_FREE":          5,
-		"PRICING_MODEL_TRAINING":      8,
-		"PRICING_MODEL_REVENUE_SHARE": 9,
-		"PRICING_MODEL_PER_PAGE":      10,
-		"PRICING_MODEL_PER_MINUTE":    11,
-		"PRICING_MODEL_PER_RECORD":    12,
+		"PRICING_MODEL_UNSPECIFIED": 0,
+		"PRICING_MODEL_FREE":        1,
+		"PRICING_MODEL_PER_FETCH":   2,
+		"PRICING_MODEL_PER_ACCESS":  3,
+		"PRICING_MODEL_PER_TOKEN":   4,
+		"PRICING_MODEL_PER_CALL":    5,
 	}
 )
 
@@ -2695,23 +2696,24 @@ func (x *ResourceAttestation) GetSignature() string {
 // License — Identifies the governing license document for a LicenseTerm.
 type License struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Authoritative license URI.
-	// For REFERENCE_ONLY terms this is the complete machine-readable specification.
-	// For ENUMERATED terms this is a human-readable reference.
-	//
+	// Canonical identity of the license document (RFC 3986). MUST NOT be
+	// URL-validated — data-labels TDL identifiers use non-URL schemes.
+	// For REFERENCE_ONLY terms this is the authoritative specification.
 	// Examples:
 	//
 	//	"https://creativecommons.org/licenses/by/4.0/"
 	//	"https://techcrunch.com/licensing/ai-terms-2026"
-	//	"https://spdx.org/licenses/MIT.html"
 	Uri *string `protobuf:"bytes,1,opt,name=uri,proto3,oneof" json:"uri,omitempty"`
-	// Human-readable license name (e.g. "CC BY 4.0", "RAMP Commercial License v2").
-	Title *string `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	// SPDX license expression when the license maps to a standard SPDX identifier.
-	// Examples: "CC-BY-4.0", "MIT", "CC-BY-SA-4.0 OR MIT"
-	SpdxExpression *string `protobuf:"bytes,3,opt,name=spdx_expression,json=spdxExpression,proto3,oneof" json:"spdx_expression,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Stable short identifier: SPDX short-id ("GPL-3.0-only"), TollBit cuid,
+	// or catalog doc-id. Used by agents and the vocab linter for known-license
+	// lookup; SHARE_ALIKE derivatives default their scope_license to this.
+	Id *string `protobuf:"bytes,2,opt,name=id,proto3,oneof" json:"id,omitempty"`
+	// Human-readable name (licenseType, schema.org node name).
+	Name *string `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	// Data-labels TDL: the document at uri is versioned and will not change.
+	Immutable     *bool `protobuf:"varint,4,opt,name=immutable,proto3,oneof" json:"immutable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *License) Reset() {
@@ -2751,18 +2753,25 @@ func (x *License) GetUri() string {
 	return ""
 }
 
-func (x *License) GetTitle() string {
-	if x != nil && x.Title != nil {
-		return *x.Title
+func (x *License) GetId() string {
+	if x != nil && x.Id != nil {
+		return *x.Id
 	}
 	return ""
 }
 
-func (x *License) GetSpdxExpression() string {
-	if x != nil && x.SpdxExpression != nil {
-		return *x.SpdxExpression
+func (x *License) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
 	}
 	return ""
+}
+
+func (x *License) GetImmutable() bool {
+	if x != nil && x.Immutable != nil {
+		return *x.Immutable
+	}
+	return false
 }
 
 // Restriction — A single constraint on one licensing dimension.
@@ -2835,7 +2844,7 @@ func (x *Restriction) GetKind() RestrictionKind {
 	if x != nil {
 		return x.Kind
 	}
-	return RestrictionKind_RESTRICTION_KIND_FUNCTION
+	return RestrictionKind_RESTRICTION_KIND_UNSPECIFIED
 }
 
 func (x *Restriction) GetPermitted() []string {
@@ -2928,7 +2937,7 @@ func (x *Quota) GetWindow() QuotaWindow {
 	if x != nil {
 		return x.Window
 	}
-	return QuotaWindow_QUOTA_WINDOW_HOURLY
+	return QuotaWindow_QUOTA_WINDOW_UNSPECIFIED
 }
 
 // Obligation — A post-use behavioral requirement attached to a LicenseTerm.
@@ -2949,9 +2958,13 @@ type Obligation struct {
 	Kind ObligationKind `protobuf:"varint,1,opt,name=kind,proto3,enum=ramp.v1.ObligationKind" json:"kind,omitempty"`
 	// When the obligation activates.
 	Trigger ObligationTrigger `protobuf:"varint,2,opt,name=trigger,proto3,enum=ramp.v1.ObligationTrigger" json:"trigger,omitempty"`
-	// Human-readable description. Required for OBLIGATION_KIND_OTHER;
-	// recommended for all kinds (e.g., exact attribution text, notice wording).
-	Description   *string `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	// The license that derivatives must be released under. REQUIRED for
+	// SHARE_ALIKE (rejected if absent). SPDX short-id or license URI; for most
+	// copyleft this equals the term's own License.id.
+	ScopeLicense *string `protobuf:"bytes,3,opt,name=scope_license,json=scopeLicense,proto3,oneof" json:"scope_license,omitempty"`
+	// Free-form detail: attribution string, notice file URI, etc.
+	// OBLIGATION_KIND_OTHER without it → lint warning.
+	Detail        *string `protobuf:"bytes,4,opt,name=detail,proto3,oneof" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2990,19 +3003,26 @@ func (x *Obligation) GetKind() ObligationKind {
 	if x != nil {
 		return x.Kind
 	}
-	return ObligationKind_OBLIGATION_KIND_ATTRIBUTION
+	return ObligationKind_OBLIGATION_KIND_UNSPECIFIED
 }
 
 func (x *Obligation) GetTrigger() ObligationTrigger {
 	if x != nil {
 		return x.Trigger
 	}
-	return ObligationTrigger_OBLIGATION_TRIGGER_ON_USE
+	return ObligationTrigger_OBLIGATION_TRIGGER_UNSPECIFIED
 }
 
-func (x *Obligation) GetDescription() string {
-	if x != nil && x.Description != nil {
-		return *x.Description
+func (x *Obligation) GetScopeLicense() string {
+	if x != nil && x.ScopeLicense != nil {
+		return *x.ScopeLicense
+	}
+	return ""
+}
+
+func (x *Obligation) GetDetail() string {
+	if x != nil && x.Detail != nil {
+		return *x.Detail
 	}
 	return ""
 }
@@ -3035,12 +3055,12 @@ func (x *Obligation) GetDescription() string {
 //     but do NOT cause rejection (forward-compatible).
 type LicenseTerm struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// How to interpret the machine fields.
-	Semantics TermSemantics `protobuf:"varint,1,opt,name=semantics,proto3,enum=ramp.v1.TermSemantics" json:"semantics,omitempty"`
 	// Governing license document. Authoritative for REFERENCE_ONLY terms, which
 	// MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that
 	// references nothing is rejected at ingest.
-	License *License `protobuf:"bytes,2,opt,name=license,proto3,oneof" json:"license,omitempty"`
+	License *License `protobuf:"bytes,1,opt,name=license,proto3,oneof" json:"license,omitempty"`
+	// How to interpret the machine fields.
+	Semantics TermSemantics `protobuf:"varint,2,opt,name=semantics,proto3,enum=ramp.v1.TermSemantics" json:"semantics,omitempty"`
 	// Usage restrictions (function, geography, user-type).
 	// Multiple restrictions are AND-combined — the agent must satisfy all of them.
 	Restrictions []*Restriction `protobuf:"bytes,3,rep,name=restrictions,proto3" json:"restrictions,omitempty"`
@@ -3054,7 +3074,14 @@ type LicenseTerm struct {
 	// not free). A REFERENCE_ONLY term states its price here too; its License
 	// governs the human-readable terms but does not replace the machine-readable
 	// price.
-	Pricing       *Pricing `protobuf:"bytes,6,opt,name=pricing,proto3,oneof" json:"pricing,omitempty"`
+	Pricing *Pricing `protobuf:"bytes,6,opt,name=pricing,proto3,oneof" json:"pricing,omitempty"`
+	// Biscuit scope-gating: the Exchange returns this term to an agent iff the
+	// agent's Biscuit authority covers ALL of these scopes (AND-semantics).
+	// Empty = public. Hierarchical: "dist:*" covers "dist:US". A subscription
+	// term is Pricing{model:FREE} + scopes:["subscription:..."].
+	Scopes []string `protobuf:"bytes,7,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// Informational human-readable name for this sub-part (sub-part terms).
+	PartLabel     *string `protobuf:"bytes,8,opt,name=part_label,json=partLabel,proto3,oneof" json:"part_label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3089,18 +3116,18 @@ func (*LicenseTerm) Descriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *LicenseTerm) GetSemantics() TermSemantics {
-	if x != nil {
-		return x.Semantics
-	}
-	return TermSemantics_TERM_SEMANTICS_ENUMERATED
-}
-
 func (x *LicenseTerm) GetLicense() *License {
 	if x != nil {
 		return x.License
 	}
 	return nil
+}
+
+func (x *LicenseTerm) GetSemantics() TermSemantics {
+	if x != nil {
+		return x.Semantics
+	}
+	return TermSemantics_TERM_SEMANTICS_UNSPECIFIED
 }
 
 func (x *LicenseTerm) GetRestrictions() []*Restriction {
@@ -3129,6 +3156,20 @@ func (x *LicenseTerm) GetPricing() *Pricing {
 		return x.Pricing
 	}
 	return nil
+}
+
+func (x *LicenseTerm) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *LicenseTerm) GetPartLabel() string {
+	if x != nil && x.PartLabel != nil {
+		return *x.PartLabel
+	}
+	return ""
 }
 
 // Preview — Lightweight resource preview for offer evaluation.
@@ -3253,7 +3294,8 @@ func (x *Preview) GetSize() string {
 // Unit cost is denominated in the Exchange's base currency.
 //
 // Fields: model, rate, currency, unit_cost, estimated_quantity,
-// revshare, license_duration_months, unit, metering.
+// license_duration_months, unit, metering. (Field 6, formerly revshare, is
+// retired — Pricing has no revenue-share concept. Pre-v1: not reserved.)
 type Pricing struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Provider's pricing model.
@@ -3271,8 +3313,6 @@ type Pricing struct {
 	// For text: token count. For video: duration in seconds.
 	// For documents: page count. For data: record count.
 	EstimatedQuantity *int32 `protobuf:"varint,5,opt,name=estimated_quantity,json=estimatedQuantity,proto3,oneof" json:"estimated_quantity,omitempty"`
-	// Revenue share percentage (0.0–1.0). Used with PRICING_MODEL_REVENUE_SHARE.
-	Revshare *float64 `protobuf:"fixed64,6,opt,name=revshare,proto3,oneof" json:"revshare,omitempty"`
 	// License duration in months. How long the granted access remains valid.
 	LicenseDurationMonths *int32 `protobuf:"varint,7,opt,name=license_duration_months,json=licenseDurationMonths,proto3,oneof" json:"license_duration_months,omitempty"`
 	// Metering unit for unit_cost and estimated_quantity.
@@ -3355,13 +3395,6 @@ func (x *Pricing) GetUnitCost() float64 {
 func (x *Pricing) GetEstimatedQuantity() int32 {
 	if x != nil && x.EstimatedQuantity != nil {
 		return *x.EstimatedQuantity
-	}
-	return 0
-}
-
-func (x *Pricing) GetRevshare() float64 {
-	if x != nil && x.Revshare != nil {
-		return *x.Revshare
 	}
 	return 0
 }
@@ -7397,14 +7430,17 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"attestedAt\x12\x10\n" +
 	"\x03uri\x18\x04 \x01(\tR\x03uri\x12/\n" +
 	"\x06claims\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06claims\x12\x1c\n" +
-	"\tsignature\x18\x06 \x01(\tR\tsignature\"\x8f\x01\n" +
+	"\tsignature\x18\x06 \x01(\tR\tsignature\"\x97\x01\n" +
 	"\aLicense\x12\x15\n" +
-	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x19\n" +
-	"\x05title\x18\x02 \x01(\tH\x01R\x05title\x88\x01\x01\x12,\n" +
-	"\x0fspdx_expression\x18\x03 \x01(\tH\x02R\x0espdxExpression\x88\x01\x01B\x06\n" +
-	"\x04_uriB\b\n" +
-	"\x06_titleB\x12\n" +
-	"\x10_spdx_expression\"\x95\x01\n" +
+	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x13\n" +
+	"\x02id\x18\x02 \x01(\tH\x01R\x02id\x88\x01\x01\x12\x17\n" +
+	"\x04name\x18\x03 \x01(\tH\x02R\x04name\x88\x01\x01\x12!\n" +
+	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01B\x06\n" +
+	"\x04_uriB\x05\n" +
+	"\x03_idB\a\n" +
+	"\x05_nameB\f\n" +
+	"\n" +
+	"_immutable\"\x95\x01\n" +
 	"\vRestriction\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\x1c\n" +
 	"\tpermitted\x18\x02 \x03(\tR\tpermitted\x12\x1e\n" +
@@ -7415,24 +7451,30 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05Quota\x12\x16\n" +
 	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x03R\x05limit\x12,\n" +
-	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\xa6\x01\n" +
+	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\xd3\x01\n" +
 	"\n" +
 	"Obligation\x12+\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x17.ramp.v1.ObligationKindR\x04kind\x124\n" +
-	"\atrigger\x18\x02 \x01(\x0e2\x1a.ramp.v1.ObligationTriggerR\atrigger\x12%\n" +
-	"\vdescription\x18\x03 \x01(\tH\x00R\vdescription\x88\x01\x01B\x0e\n" +
-	"\f_description\"\xd6\x02\n" +
-	"\vLicenseTerm\x124\n" +
-	"\tsemantics\x18\x01 \x01(\x0e2\x16.ramp.v1.TermSemanticsR\tsemantics\x12/\n" +
-	"\alicense\x18\x02 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x128\n" +
+	"\atrigger\x18\x02 \x01(\x0e2\x1a.ramp.v1.ObligationTriggerR\atrigger\x12(\n" +
+	"\rscope_license\x18\x03 \x01(\tH\x00R\fscopeLicense\x88\x01\x01\x12\x1b\n" +
+	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01B\x10\n" +
+	"\x0e_scope_licenseB\t\n" +
+	"\a_detail\"\xa1\x03\n" +
+	"\vLicenseTerm\x12/\n" +
+	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x124\n" +
+	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsR\tsemantics\x128\n" +
 	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionR\frestrictions\x12&\n" +
 	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaR\x06quotas\x125\n" +
 	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationR\vobligations\x12/\n" +
-	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingH\x01R\apricing\x88\x01\x01B\n" +
+	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingH\x01R\apricing\x88\x01\x01\x12\x16\n" +
+	"\x06scopes\x18\a \x03(\tR\x06scopes\x12\"\n" +
+	"\n" +
+	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01B\n" +
 	"\n" +
 	"\b_licenseB\n" +
 	"\n" +
-	"\b_pricing\"\xd7\x01\n" +
+	"\b_pricingB\r\n" +
+	"\v_part_label\"\xd7\x01\n" +
 	"\aPreview\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1d\n" +
 	"\n" +
@@ -7444,23 +7486,21 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\xa0\x04\n" +
+	"\x05_size\"\xf2\x03\n" +
 	"\aPricing\x12+\n" +
 	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelR\x05model\x12\x12\n" +
 	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12 \n" +
 	"\tunit_cost\x18\x04 \x01(\x01H\x00R\bunitCost\x88\x01\x01\x122\n" +
-	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12\x1f\n" +
-	"\brevshare\x18\x06 \x01(\x01H\x02R\brevshare\x88\x01\x01\x12;\n" +
-	"\x17license_duration_months\x18\a \x01(\x05H\x03R\x15licenseDurationMonths\x88\x01\x01\x12\x17\n" +
-	"\x04unit\x18\b \x01(\tH\x04R\x04unit\x88\x01\x01\x129\n" +
-	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x05R\bmetering\x88\x01\x01\x12)\n" +
+	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12;\n" +
+	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\x17\n" +
+	"\x04unit\x18\b \x01(\tH\x03R\x04unit\x88\x01\x01\x129\n" +
+	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\f\n" +
 	"\n" +
 	"_unit_costB\x15\n" +
-	"\x13_estimated_quantityB\v\n" +
-	"\t_revshareB\x1a\n" +
+	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
 	"\x05_unitB\v\n" +
 	"\t_metering\"\x9a\x03\n" +
@@ -7917,45 +7957,44 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	",OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE\x10\x06\x12'\n" +
 	"#OFFER_ABSENCE_REASON_NOT_AUTHORIZED\x10\a\x12+\n" +
 	"'OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT\x10\b\x123\n" +
-	"/OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION\x10\t*Q\n" +
-	"\rTermSemantics\x12\x1d\n" +
-	"\x19TERM_SEMANTICS_ENUMERATED\x10\x00\x12!\n" +
-	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x01*\x8c\x01\n" +
-	"\x0fRestrictionKind\x12\x1d\n" +
-	"\x19RESTRICTION_KIND_FUNCTION\x10\x00\x12\x1e\n" +
-	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x01\x12\x1e\n" +
-	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x02\x12\x1a\n" +
-	"\x16RESTRICTION_KIND_OTHER\x10\x03*p\n" +
-	"\vQuotaWindow\x12\x17\n" +
-	"\x13QUOTA_WINDOW_HOURLY\x10\x00\x12\x16\n" +
-	"\x12QUOTA_WINDOW_DAILY\x10\x01\x12\x18\n" +
-	"\x14QUOTA_WINDOW_MONTHLY\x10\x02\x12\x16\n" +
-	"\x12QUOTA_WINDOW_TOTAL\x10\x03*\xd1\x01\n" +
+	"/OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION\x10\t*q\n" +
+	"\rTermSemantics\x12\x1e\n" +
+	"\x1aTERM_SEMANTICS_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19TERM_SEMANTICS_ENUMERATED\x10\x01\x12!\n" +
+	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x02*\xae\x01\n" +
+	"\x0fRestrictionKind\x12 \n" +
+	"\x1cRESTRICTION_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19RESTRICTION_KIND_FUNCTION\x10\x01\x12\x1e\n" +
+	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x02\x12\x1e\n" +
+	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x03\x12\x1a\n" +
+	"\x16RESTRICTION_KIND_OTHER\x10\x04*\x8e\x01\n" +
+	"\vQuotaWindow\x12\x1c\n" +
+	"\x18QUOTA_WINDOW_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13QUOTA_WINDOW_HOURLY\x10\x01\x12\x16\n" +
+	"\x12QUOTA_WINDOW_DAILY\x10\x02\x12\x18\n" +
+	"\x14QUOTA_WINDOW_MONTHLY\x10\x03\x12\x16\n" +
+	"\x12QUOTA_WINDOW_TOTAL\x10\x04*\xf2\x01\n" +
 	"\x0eObligationKind\x12\x1f\n" +
-	"\x1bOBLIGATION_KIND_ATTRIBUTION\x10\x00\x12 \n" +
-	"\x1cOBLIGATION_KIND_CONTRIBUTION\x10\x01\x12\x1f\n" +
-	"\x1bOBLIGATION_KIND_SHARE_ALIKE\x10\x02\x12$\n" +
-	" OBLIGATION_KIND_NETWORK_COPYLEFT\x10\x03\x12\x1a\n" +
-	"\x16OBLIGATION_KIND_NOTICE\x10\x04\x12\x19\n" +
-	"\x15OBLIGATION_KIND_OTHER\x10\x05*\xab\x01\n" +
-	"\x11ObligationTrigger\x12\x1d\n" +
-	"\x19OBLIGATION_TRIGGER_ON_USE\x10\x00\x12&\n" +
-	"\"OBLIGATION_TRIGGER_ON_DISTRIBUTION\x10\x01\x12)\n" +
-	"%OBLIGATION_TRIGGER_ON_NETWORK_SERVICE\x10\x02\x12$\n" +
-	" OBLIGATION_TRIGGER_ON_DERIVATIVE\x10\x03*\xd2\x02\n" +
+	"\x1bOBLIGATION_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bOBLIGATION_KIND_ATTRIBUTION\x10\x01\x12 \n" +
+	"\x1cOBLIGATION_KIND_CONTRIBUTION\x10\x02\x12\x1f\n" +
+	"\x1bOBLIGATION_KIND_SHARE_ALIKE\x10\x03\x12$\n" +
+	" OBLIGATION_KIND_NETWORK_COPYLEFT\x10\x04\x12\x1a\n" +
+	"\x16OBLIGATION_KIND_NOTICE\x10\x05\x12\x19\n" +
+	"\x15OBLIGATION_KIND_OTHER\x10\x06*\xcf\x01\n" +
+	"\x11ObligationTrigger\x12\"\n" +
+	"\x1eOBLIGATION_TRIGGER_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19OBLIGATION_TRIGGER_ON_USE\x10\x01\x12&\n" +
+	"\"OBLIGATION_TRIGGER_ON_DISTRIBUTION\x10\x02\x12)\n" +
+	"%OBLIGATION_TRIGGER_ON_NETWORK_SERVICE\x10\x03\x12$\n" +
+	" OBLIGATION_TRIGGER_ON_DERIVATIVE\x10\x04*\xb9\x01\n" +
 	"\fPricingModel\x12\x1d\n" +
-	"\x19PRICING_MODEL_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18PRICING_MODEL_PER_ACCESS\x10\x01\x12\x1b\n" +
-	"\x17PRICING_MODEL_PER_TOKEN\x10\x02\x12\x1b\n" +
-	"\x17PRICING_MODEL_PER_FETCH\x10\x03\x12\x1e\n" +
-	"\x1aPRICING_MODEL_SUBSCRIPTION\x10\x04\x12\x16\n" +
-	"\x12PRICING_MODEL_FREE\x10\x05\x12\x1a\n" +
-	"\x16PRICING_MODEL_TRAINING\x10\b\x12\x1f\n" +
-	"\x1bPRICING_MODEL_REVENUE_SHARE\x10\t\x12\x1a\n" +
-	"\x16PRICING_MODEL_PER_PAGE\x10\n" +
-	"\x12\x1c\n" +
-	"\x18PRICING_MODEL_PER_MINUTE\x10\v\x12\x1c\n" +
-	"\x18PRICING_MODEL_PER_RECORD\x10\f*u\n" +
+	"\x19PRICING_MODEL_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12PRICING_MODEL_FREE\x10\x01\x12\x1b\n" +
+	"\x17PRICING_MODEL_PER_FETCH\x10\x02\x12\x1c\n" +
+	"\x18PRICING_MODEL_PER_ACCESS\x10\x03\x12\x1b\n" +
+	"\x17PRICING_MODEL_PER_TOKEN\x10\x04\x12\x1a\n" +
+	"\x16PRICING_MODEL_PER_CALL\x10\x05*u\n" +
 	"\x0fPricingMetering\x12\x1b\n" +
 	"\x17PRICING_METERING_ONLINE\x10\x00\x12\x19\n" +
 	"\x15PRICING_METERING_NONE\x10\x01\x12*\n" +
@@ -8202,8 +8241,8 @@ var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	4,   // 31: ramp.v1.Quota.window:type_name -> ramp.v1.QuotaWindow
 	5,   // 32: ramp.v1.Obligation.kind:type_name -> ramp.v1.ObligationKind
 	6,   // 33: ramp.v1.Obligation.trigger:type_name -> ramp.v1.ObligationTrigger
-	2,   // 34: ramp.v1.LicenseTerm.semantics:type_name -> ramp.v1.TermSemantics
-	31,  // 35: ramp.v1.LicenseTerm.license:type_name -> ramp.v1.License
+	31,  // 34: ramp.v1.LicenseTerm.license:type_name -> ramp.v1.License
+	2,   // 35: ramp.v1.LicenseTerm.semantics:type_name -> ramp.v1.TermSemantics
 	32,  // 36: ramp.v1.LicenseTerm.restrictions:type_name -> ramp.v1.Restriction
 	33,  // 37: ramp.v1.LicenseTerm.quotas:type_name -> ramp.v1.Quota
 	34,  // 38: ramp.v1.LicenseTerm.obligations:type_name -> ramp.v1.Obligation

@@ -708,24 +708,27 @@ message ResourceAttestation {
 
 // TermSemantics — How the Exchange interprets a LicenseTerm's machine fields.
 enum TermSemantics {
-  TERM_SEMANTICS_ENUMERATED     = 0;
-  TERM_SEMANTICS_REFERENCE_ONLY = 1;
+  TERM_SEMANTICS_UNSPECIFIED    = 0;  // unset — rejected at ingest
+  TERM_SEMANTICS_ENUMERATED     = 1;
+  TERM_SEMANTICS_REFERENCE_ONLY = 2;
 }
 
 // RestrictionKind — Which dimension a Restriction constrains.
 enum RestrictionKind {
-  RESTRICTION_KIND_FUNCTION  = 0;  // What: vocab/restriction-values/function.json
-  RESTRICTION_KIND_GEOGRAPHY = 1;  // Where: ISO 3166-1 alpha-2 + EU, EEA, *
-  RESTRICTION_KIND_USER_TYPE = 2;  // Who: vocab/restriction-values/user-type.json
-  RESTRICTION_KIND_OTHER     = 3;  // Custom; description in Restriction fields
+  RESTRICTION_KIND_UNSPECIFIED = 0;  // unset — rejected at ingest
+  RESTRICTION_KIND_FUNCTION    = 1;  // What: vocab/restriction-values/function.json
+  RESTRICTION_KIND_GEOGRAPHY   = 2;  // Where: ISO 3166-1 alpha-2 + EU, EEA, *
+  RESTRICTION_KIND_USER_TYPE   = 3;  // Who: vocab/restriction-values/user-type.json
+  RESTRICTION_KIND_OTHER       = 4;  // Custom; description in Restriction fields
 }
 
 // QuotaWindow — Time window over which a Quota.limit accumulates.
 enum QuotaWindow {
-  QUOTA_WINDOW_HOURLY  = 0;
-  QUOTA_WINDOW_DAILY   = 1;
-  QUOTA_WINDOW_MONTHLY = 2;
-  QUOTA_WINDOW_TOTAL   = 3;  // Lifetime cap — never resets
+  QUOTA_WINDOW_UNSPECIFIED = 0;  // unset — rejected at ingest
+  QUOTA_WINDOW_HOURLY      = 1;
+  QUOTA_WINDOW_DAILY       = 2;
+  QUOTA_WINDOW_MONTHLY     = 3;
+  QUOTA_WINDOW_TOTAL       = 4;  // Lifetime cap — never resets
 }
 
 // ObligationKind — What the agent must do after use.
@@ -734,40 +737,44 @@ enum QuotaWindow {
 // and PRICING_MODEL_CONTRIBUTION: these are behavioral requirements, not
 // payment models, and belong here rather than in PricingModel.
 enum ObligationKind {
-  OBLIGATION_KIND_ATTRIBUTION      = 0;  // Credit the author / publisher
-  OBLIGATION_KIND_CONTRIBUTION     = 1;  // Good-faith payment (amount suggested)
-  OBLIGATION_KIND_SHARE_ALIKE      = 2;  // Derivatives must use the same license (CC-BY-SA / GPL)
-  OBLIGATION_KIND_NETWORK_COPYLEFT = 3;  // Network service triggers copyleft (AGPL-style)
-  OBLIGATION_KIND_NOTICE           = 4;  // Include the specified copyright notice
-  OBLIGATION_KIND_OTHER            = 5;  // Described in Obligation.description
+  OBLIGATION_KIND_UNSPECIFIED      = 0;  // unset — rejected at ingest
+  OBLIGATION_KIND_ATTRIBUTION      = 1;  // Credit the author / publisher
+  OBLIGATION_KIND_CONTRIBUTION     = 2;  // Good-faith payment (amount suggested)
+  OBLIGATION_KIND_SHARE_ALIKE      = 3;  // Derivatives must use the same license (CC-BY-SA / GPL)
+  OBLIGATION_KIND_NETWORK_COPYLEFT = 4;  // Network service triggers copyleft (AGPL-style)
+  OBLIGATION_KIND_NOTICE           = 5;  // Include the specified copyright notice
+  OBLIGATION_KIND_OTHER            = 6;  // Described in Obligation.detail
 }
 
 // ObligationTrigger — When the obligation activates.
 enum ObligationTrigger {
-  OBLIGATION_TRIGGER_ON_USE             = 0;  // Triggered on any use
-  OBLIGATION_TRIGGER_ON_DISTRIBUTION    = 1;  // Triggered when copies are distributed
-  OBLIGATION_TRIGGER_ON_NETWORK_SERVICE = 2;  // Triggered when served over a network (AGPL)
-  OBLIGATION_TRIGGER_ON_DERIVATIVE      = 3;  // Triggered when a derivative work is produced
+  OBLIGATION_TRIGGER_UNSPECIFIED        = 0;  // unset — rejected at ingest
+  OBLIGATION_TRIGGER_ON_USE             = 1;  // Triggered on any use
+  OBLIGATION_TRIGGER_ON_DISTRIBUTION    = 2;  // Triggered when copies are distributed
+  OBLIGATION_TRIGGER_ON_NETWORK_SERVICE = 3;  // Triggered when served over a network (AGPL)
+  OBLIGATION_TRIGGER_ON_DERIVATIVE      = 4;  // Triggered when a derivative work is produced
 }
 
 // License — Identifies the governing license document for a LicenseTerm.
 message License {
-  // Authoritative license URI.
-  // For REFERENCE_ONLY terms this is the complete machine-readable specification.
-  // For ENUMERATED terms this is a human-readable reference.
-  //
+  // Canonical identity of the license document (RFC 3986). MUST NOT be
+  // URL-validated — data-labels TDL identifiers use non-URL schemes.
+  // For REFERENCE_ONLY terms this is the authoritative specification.
   // Examples:
   //   "https://creativecommons.org/licenses/by/4.0/"
   //   "https://techcrunch.com/licensing/ai-terms-2026"
-  //   "https://spdx.org/licenses/MIT.html"
   optional string uri = 1;
 
-  // Human-readable license name (e.g. "CC BY 4.0", "RAMP Commercial License v2").
-  optional string title = 2;
+  // Stable short identifier: SPDX short-id ("GPL-3.0-only"), TollBit cuid,
+  // or catalog doc-id. Used by agents and the vocab linter for known-license
+  // lookup; SHARE_ALIKE derivatives default their scope_license to this.
+  optional string id = 2;
 
-  // SPDX license expression when the license maps to a standard SPDX identifier.
-  // Examples: "CC-BY-4.0", "MIT", "CC-BY-SA-4.0 OR MIT"
-  optional string spdx_expression = 3;
+  // Human-readable name (licenseType, schema.org node name).
+  optional string name = 3;
+
+  // Data-labels TDL: the document at uri is versioned and will not change.
+  optional bool immutable = 4;
 }
 
 // Restriction — A single constraint on one licensing dimension.
@@ -841,9 +848,14 @@ message Obligation {
   // When the obligation activates.
   ObligationTrigger trigger = 2;
 
-  // Human-readable description. Required for OBLIGATION_KIND_OTHER;
-  // recommended for all kinds (e.g., exact attribution text, notice wording).
-  optional string description = 3;
+  // The license that derivatives must be released under. REQUIRED for
+  // SHARE_ALIKE (rejected if absent). SPDX short-id or license URI; for most
+  // copyleft this equals the term's own License.id.
+  optional string scope_license = 3;
+
+  // Free-form detail: attribution string, notice file URI, etc.
+  // OBLIGATION_KIND_OTHER without it → lint warning.
+  optional string detail = 4;
 }
 
 // LicenseTerm — Universal licensing unit.
@@ -873,13 +885,13 @@ message Obligation {
 //     Unknown tokens produce a PushResourcesResponse.warnings[] entry
 //     but do NOT cause rejection (forward-compatible).
 message LicenseTerm {
-  // How to interpret the machine fields.
-  TermSemantics semantics = 1;
-
   // Governing license document. Authoritative for REFERENCE_ONLY terms, which
   // MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that
   // references nothing is rejected at ingest.
-  optional License license = 2;
+  optional License license = 1;
+
+  // How to interpret the machine fields.
+  TermSemantics semantics = 2;
 
   // Usage restrictions (function, geography, user-type).
   // Multiple restrictions are AND-combined — the agent must satisfy all of them.
@@ -898,6 +910,15 @@ message LicenseTerm {
   // governs the human-readable terms but does not replace the machine-readable
   // price.
   optional Pricing pricing = 6;
+
+  // Biscuit scope-gating: the Exchange returns this term to an agent iff the
+  // agent's Biscuit authority covers ALL of these scopes (AND-semantics).
+  // Empty = public. Hierarchical: "dist:*" covers "dist:US". A subscription
+  // term is Pricing{model:FREE} + scopes:["subscription:..."].
+  repeated string scopes = 7;
+
+  // Informational human-readable name for this sub-part (sub-part terms).
+  optional string part_label = 8;
 }
 
 // Preview — Lightweight resource preview for offer evaluation.
@@ -949,7 +970,8 @@ message Preview {
 // Unit cost is denominated in the Exchange's base currency.
 //
 // Fields: model, rate, currency, unit_cost, estimated_quantity,
-// revshare, license_duration_months, unit, metering.
+// license_duration_months, unit, metering. (Field 6, formerly revshare, is
+// retired — Pricing has no revenue-share concept. Pre-v1: not reserved.)
 message Pricing {
   // Provider's pricing model.
   PricingModel model = 1;
@@ -970,9 +992,6 @@ message Pricing {
   // For text: token count. For video: duration in seconds.
   // For documents: page count. For data: record count.
   optional int32 estimated_quantity = 5;
-
-  // Revenue share percentage (0.0–1.0). Used with PRICING_MODEL_REVENUE_SHARE.
-  optional double revshare = 6;
 
   // License duration in months. How long the granted access remains valid.
   optional int32 license_duration_months = 7;
@@ -997,20 +1016,16 @@ message Pricing {
   repeated string ext_critical = 90;
 }
 
+// PricingModel — the metering basis. Pre-v1: renumbered cleanly, nothing
+// reserved. Subscription is expressed as model=FREE + scopes (see LicenseTerm);
+// attribution/contribution are obligations, not pricing models (see ObligationKind).
 enum PricingModel {
-  PRICING_MODEL_UNSPECIFIED = 0;
-  PRICING_MODEL_PER_ACCESS = 1;   // One-time access fee per resource (RSL: purchase)
-  PRICING_MODEL_PER_TOKEN = 2;     // Rate per LLM token consumed (RSL: use/inference)
-  PRICING_MODEL_PER_FETCH = 3;     // Rate per fetch request (RSL: crawl)
-  PRICING_MODEL_SUBSCRIPTION = 4;  // Recurring access (RSL: subscription)
-  PRICING_MODEL_FREE = 5;          // No charge (RSL: free)
-  // Field numbers 6 and 7 are retired (ATTRIBUTION and CONTRIBUTION were
-  // behavioral obligations, not payment models — see ObligationKind).
-  PRICING_MODEL_TRAINING = 8;       // Per training instance fee (RSL: training)
-  PRICING_MODEL_REVENUE_SHARE = 9;  // Revenue share model (percentage of agent revenue)
-  PRICING_MODEL_PER_PAGE = 10;      // Per document page (legal filings, PDFs)
-  PRICING_MODEL_PER_MINUTE = 11;    // Per minute of audio/video
-  PRICING_MODEL_PER_RECORD = 12;    // Per structured data record
+  PRICING_MODEL_UNSPECIFIED = 0;  // unset — rejected at ingest (omission cannot default to FREE)
+  PRICING_MODEL_FREE        = 1;  // No charge (RSL: free)
+  PRICING_MODEL_PER_FETCH   = 2;  // Per HTTP fetch (RSL: crawl)
+  PRICING_MODEL_PER_ACCESS  = 3;  // Per use / read (RSL: purchase; per-unit manufacturing)
+  PRICING_MODEL_PER_TOKEN   = 4;  // Per output token generated using this content
+  PRICING_MODEL_PER_CALL    = 5;  // Per API / RPC call
 }
 
 // PricingMetering — How usage is tracked for billing reconciliation.
