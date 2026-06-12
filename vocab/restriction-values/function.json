@@ -1,0 +1,169 @@
+{
+  "version": "1.0.0",
+  "kind": "restriction-values",
+  "axis": "function",
+  "description": "What the agent may do with the content. Seeded from RSL 1.0 AI-use vocabulary (canonical source for ai-* and search tokens) and extended with established IP/copyright terms for non-AI domains (music, 3D, CAD, stock media, datasets).",
+  "tokens": [
+    {
+      "token": "all",
+      "description": "All uses — shorthand for permitting or prohibiting the entire set of defined functions.",
+      "source": "RSL-1.0",
+      "aliases": [],
+      "notes": "Mutually exclusive with any other token in the same permitted[] or prohibited[] list. When in prohibited[], no use is allowed without an explicit scoped offer."
+    },
+    {
+      "token": "ai-all",
+      "description": "All AI uses — shorthand covering ai-train, ai-input, ai-index, and tts.",
+      "source": "RSL-1.0",
+      "aliases": [],
+      "notes": "Subset of all. When a publisher permits ai-all, ai-train, ai-input, ai-index, and tts are each individually permitted. Individual tokens in the same list take precedence for specificity."
+    },
+    {
+      "token": "ai-train",
+      "description": "Use as machine learning or AI model training data: pre-training, fine-tuning, RLHF, distillation.",
+      "source": "RSL-1.0",
+      "aliases": ["train-ai"],
+      "notes": "Alias train-ai is from IETF AIPREF draft. Does not cover inference-time use (see ai-input). Covered by ai-all."
+    },
+    {
+      "token": "ai-input",
+      "description": "Use as input to an AI inference call: retrieval-augmented generation (RAG), grounding, agent context, summarization, and completion.",
+      "source": "RSL-1.0",
+      "aliases": ["generative-ai"],
+      "notes": "Alias generative-ai is widely used in industry; ai-input is the RSL 1.0 canonical term. Covers any use where the content is provided as context to a live AI inference call, including agentic workflows and multi-turn conversations. Does not cover training (see ai-train). Covered by ai-all."
+    },
+    {
+      "token": "ai-index",
+      "description": "Build a retrieval index for AI-powered search: vector embedding, semantic search index construction, nearest-neighbour retrieval.",
+      "source": "RSL-1.0",
+      "aliases": [],
+      "notes": "Distinct from search (traditional keyword search engine) and ai-input (live inference). Covers the pre-processing step of converting content into embeddings or other representations for AI retrieval systems. Covered by ai-all."
+    },
+    {
+      "token": "search",
+      "description": "Traditional search engine indexing: crawling and displaying content in keyword search results.",
+      "source": "RSL-1.0",
+      "aliases": [],
+      "notes": "Covers web crawling for inclusion in non-AI search indexes (Google, Bing, DuckDuckGo, etc.). Distinct from ai-index (AI retrieval) and crawl (generic fetch without implicit downstream use)."
+    },
+    {
+      "token": "crawl",
+      "description": "Fetch and download content to create a local copy for any processing purpose.",
+      "source": "RSL-1.0",
+      "aliases": ["scrape"],
+      "notes": "The most basic access function — does not imply any specific downstream use. Alias scrape is used in the IETF AIPREF context. RSL also uses crawl as a payment type (per-fetch billing); when used as a function token, it describes the access act, not the billing model."
+    },
+    {
+      "token": "text-and-data-mining",
+      "description": "Automated computational analysis of text and data: statistical analysis, pattern extraction, corpus research.",
+      "source": "RSL-1.0",
+      "aliases": ["tdm"],
+      "notes": "Defined by EU Directive on Copyright (DSM Directive) Art. 4 as a permitted research exception unless opted out. Alias tdm is the common abbreviation. Broader than ai-train — TDM covers any automated analysis, not just ML training."
+    },
+    {
+      "token": "tts",
+      "description": "Text-to-speech synthesis: use content as the basis for audio rendering.",
+      "source": "IETF-AIPREF",
+      "aliases": [],
+      "notes": "Covers voice assistant reading, audiobook generation, and similar spoken-audio outputs from text content. Distinct from ai-input (inference) and stream (distribution of audio). Covered by ai-all."
+    },
+    {
+      "token": "commercial",
+      "description": "Any use in a commercial context or for commercial gain.",
+      "source": "CC",
+      "aliases": [],
+      "notes": "Creative Commons NC licenses restrict this. prohibited:[commercial] expresses CC-BY-NC semantics. Distinct from advertising (a specific commercial subtype). Does not automatically subsume advertising — publishers who want to prohibit both must list both."
+    },
+    {
+      "token": "advertising",
+      "description": "Use in advertising, promotional, or marketing materials.",
+      "source": "IP-standard",
+      "aliases": [],
+      "notes": "A subtype of commercial. Editorial/news organizations may permit commercial use while prohibiting advertising. critical=true strongly recommended because misclassification creates direct infringement liability for the publisher."
+    },
+    {
+      "token": "editorial",
+      "description": "Editorial, journalistic, or news reporting use.",
+      "source": "IP-standard",
+      "aliases": [],
+      "notes": "Distinct from commercial. Many stock media licenses permit editorial use (illustrating news stories) while prohibiting commercial/advertising use. critical=true strongly recommended."
+    },
+    {
+      "token": "research",
+      "description": "Academic, scientific, or non-commercial research.",
+      "source": "RSL-1.0",
+      "aliases": [],
+      "notes": "Implies non-commercial and non-redistributive use. For commercial research entities that need explicit commercial permission, combine with commercial in permitted[]."
+    },
+    {
+      "token": "reproduce",
+      "description": "Make copies of the work, digital or physical.",
+      "source": "copyright-law",
+      "aliases": ["copy"],
+      "notes": "The fundamental reproduction right under copyright law. Covers format conversion, digital copies, and print reproduction. Required for any use that involves stored copies of the content."
+    },
+    {
+      "token": "distribute",
+      "description": "Distribute copies of the work to third parties.",
+      "source": "copyright-law",
+      "aliases": [],
+      "notes": "The distribution right under copyright law. Triggers copyleft SHARE_ALIKE obligations in GPL and CC-BY-SA when derivatives are distributed. Does not cover public performance or broadcasting."
+    },
+    {
+      "token": "modify",
+      "description": "Create derivative works, adaptations, or translations.",
+      "source": "copyright-law",
+      "aliases": ["adapt", "derivative"],
+      "notes": "The adaptation right under copyright law. Triggers SHARE_ALIKE obligations under CC-BY-SA and GPL when the derivative is also distributed. Covers translations, abridgements, musical arrangements, and transformations."
+    },
+    {
+      "token": "display",
+      "description": "Publicly display the work on screen.",
+      "source": "IP-standard",
+      "aliases": [],
+      "notes": "Used in stock media (images, video stills) for on-screen display rights. Distinct from reproduce (making copies), broadcast (over-the-air/cable), and stream (on-demand internet delivery)."
+    },
+    {
+      "token": "sync",
+      "description": "Synchronize the work with audio-visual media (synchronization license).",
+      "source": "music-licensing",
+      "aliases": [],
+      "notes": "Music industry standard term for pairing music with video (film, TV, YouTube, ads). A separate sync license is required in addition to any mechanical or master use license. critical=true strongly recommended."
+    },
+    {
+      "token": "broadcast",
+      "description": "Broadcast the work over radio, television, or similar over-the-air or cable transmission.",
+      "source": "broadcasting-law",
+      "aliases": [],
+      "notes": "Distinct from stream (on-demand internet delivery) and display (static screen display). Requires a performing rights license in most jurisdictions (ASCAP, BMI, SESAC for music; similar bodies for other works)."
+    },
+    {
+      "token": "stream",
+      "description": "Deliver the work via on-demand internet streaming.",
+      "source": "IP-standard",
+      "aliases": [],
+      "notes": "Covers music streaming services (Spotify, Apple Music), video-on-demand (Netflix, YouTube), and podcast distribution. Distinct from broadcast (over-the-air/cable) and display (static rendering)."
+    },
+    {
+      "token": "print",
+      "description": "Reproduce the work in print media: newspapers, books, magazines, posters.",
+      "source": "IP-standard",
+      "aliases": [],
+      "notes": "Distinct from display (screen rendering) and reproduce (general copying). Covers physical print production and print-on-demand."
+    },
+    {
+      "token": "manufacture",
+      "description": "Manufacture physical goods from or incorporating the licensed design, invention, or pattern.",
+      "source": "patent-law",
+      "aliases": [],
+      "notes": "Core patent right: making physical embodiments of a patented invention or protected design. Use with Quota metric units-manufactured to cap total production. OFFLINE_SELF_REPORTED metering typically required since the Exchange cannot observe manufacturing events."
+    },
+    {
+      "token": "sell",
+      "description": "Sell goods or services incorporating or based on the licensed work.",
+      "source": "patent-law",
+      "aliases": [],
+      "notes": "The sale right in patent law, distinct from the distribution right in copyright (which covers copies of expressive works, not goods embodying a patented invention). Typically paired with manufacture. First-sale doctrine applies differently across jurisdictions."
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "kind": "restriction-values",
+  "axis": "geography",
+  "description": "Where the agent may use the content. ISO-3166-1 alpha-2 country codes are implicitly valid without a registry entry. This file defines only the special non-ISO values used in licensing.",
+  "conformance": "ISO 3166-1:2020 (https://www.iso.org/iso-3166-country-codes.html) is the authority for alpha-2 codes. All ISO-3166-1 alpha-2 codes (US, DE, GB, FR, CN, JP, etc.) are valid geography tokens without needing a registry entry here. The linter does not warn on well-formed two-letter uppercase codes.",
+  "tokens": [
+    {
+      "token": "*",
+      "description": "Worldwide — all jurisdictions without restriction.",
+      "source": "RAMP",
+      "aliases": [],
+      "notes": "A term with permitted:[\"*\"] is available globally. A Biscuit carrying dist:* covers all dist: scopes. When prohibited contains *, no use is permitted anywhere (use REFERENCE_ONLY instead for terms with no geographic availability)."
+    },
+    {
+      "token": "EU",
+      "description": "The European Union — all current EU member states.",
+      "source": "RAMP",
+      "aliases": [],
+      "notes": "Not an ISO-3166-1 code. Covers the current 27 EU member states as a group. EU membership changes over time; prefer explicit country codes when precise control over included states is required. Relevant for GDPR-scoped licensing and EU DSM copyright."
+    },
+    {
+      "token": "EEA",
+      "description": "The European Economic Area — EU member states plus Norway (NO), Iceland (IS), and Liechtenstein (LI).",
+      "source": "RAMP",
+      "aliases": [],
+      "notes": "Not an ISO-3166-1 code. Relevant for EEA-scoped GDPR compliance and licensing agreements that extend EU terms to EEA members."
+    }
+  ]
+}
