@@ -1087,6 +1087,9 @@ export const ObligationSchema: GenMessage<Obligation> = /*@__PURE__*/
  *   - model=FREE must be explicit. Absent Pricing ≠ free. A term may be FREE
  *     under an arbitrary license; the agent still needs the price stated so it
  *     knows the access is free rather than unpriced.
+ *   - REFERENCE_ONLY terms MUST carry a License with a non-empty uri. A
+ *     REFERENCE_ONLY term that references no document is meaningless → reject
+ *     at ingest.
  *   - Restriction tokens are validated against the vocab registry.
  *     Unknown tokens produce a PushResourcesResponse.warnings[] entry
  *     but do NOT cause rejection (forward-compatible).
@@ -1102,7 +1105,9 @@ export type LicenseTerm = Message<"ramp.v1.LicenseTerm"> & {
   semantics: TermSemantics;
 
   /**
-   * Governing license document. Authoritative for REFERENCE_ONLY terms.
+   * Governing license document. Authoritative for REFERENCE_ONLY terms, which
+   * MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that
+   * references nothing is rejected at ingest.
    *
    * @generated from field: optional ramp.v1.License license = 2;
    */

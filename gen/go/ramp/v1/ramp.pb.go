@@ -3027,6 +3027,9 @@ func (x *Obligation) GetDescription() string {
 //   - model=FREE must be explicit. Absent Pricing ≠ free. A term may be FREE
 //     under an arbitrary license; the agent still needs the price stated so it
 //     knows the access is free rather than unpriced.
+//   - REFERENCE_ONLY terms MUST carry a License with a non-empty uri. A
+//     REFERENCE_ONLY term that references no document is meaningless → reject
+//     at ingest.
 //   - Restriction tokens are validated against the vocab registry.
 //     Unknown tokens produce a PushResourcesResponse.warnings[] entry
 //     but do NOT cause rejection (forward-compatible).
@@ -3034,7 +3037,9 @@ type LicenseTerm struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// How to interpret the machine fields.
 	Semantics TermSemantics `protobuf:"varint,1,opt,name=semantics,proto3,enum=ramp.v1.TermSemantics" json:"semantics,omitempty"`
-	// Governing license document. Authoritative for REFERENCE_ONLY terms.
+	// Governing license document. Authoritative for REFERENCE_ONLY terms, which
+	// MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that
+	// references nothing is rejected at ingest.
 	License *License `protobuf:"bytes,2,opt,name=license,proto3,oneof" json:"license,omitempty"`
 	// Usage restrictions (function, geography, user-type).
 	// Multiple restrictions are AND-combined — the agent must satisfy all of them.
