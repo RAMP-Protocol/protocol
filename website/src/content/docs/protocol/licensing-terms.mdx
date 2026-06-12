@@ -26,9 +26,11 @@ One resource entry, multiple terms — each covering a complete, distinct access
 
 Every `LicenseTerm` has a `TermSemantics` value:
 
-**`ENUMERATED`** — the machine fields (`restrictions`, `quotas`, `obligations`, `pricing`) are authoritative. The Exchange reads and enforces them automatically. If you declare `ai-train` as prohibited and a commercial entity requests `ai-train` use, the Exchange excludes or rejects that term for that agent. `Pricing` is required on ENUMERATED terms — absent Pricing is a validation error. `model = FREE` must be stated explicitly.
+`Pricing` is required on **every** term regardless of semantics — absent Pricing is a validation error, and `model = FREE` must be stated explicitly (absent Pricing is not free). An agent cannot act on a priceless term, so the machine-readable price is always present even when the rest of the terms are deferred to a document.
 
-**`REFERENCE_ONLY`** — only `License.uri` is authoritative. The machine fields carry informational hints but the Exchange does not auto-enforce them. The agent must fetch and read the license document at the URI before using the resource. This mode is designed for complex license arrangements (music rights, patent portfolios, MCPS/PRS collective management agreements) that cannot be enumerated in a machine-readable form.
+**`ENUMERATED`** — the enforceable machine fields (`restrictions`, `quotas`, `obligations`) are authoritative. The Exchange reads and enforces them automatically. If you declare `ai-train` as prohibited and a commercial entity requests `ai-train` use, the Exchange excludes or rejects that term for that agent.
+
+**`REFERENCE_ONLY`** — `License.uri` (which must be present) is authoritative for `restrictions`, `quotas`, and `obligations`; those carry informational hints but the Exchange does not auto-enforce them, and the agent must fetch and read the license document before using the resource. `Pricing` is still stated machine-readably. This mode is designed for complex license arrangements (music rights, patent portfolios, MCPS/PRS collective management agreements) whose terms cannot be enumerated in a machine-readable form.
 
 ## Restrictions
 

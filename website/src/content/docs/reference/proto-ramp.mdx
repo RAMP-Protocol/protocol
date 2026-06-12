@@ -702,7 +702,7 @@ Validation rules when `semantics = ENUMERATED`:
 | `restrictions` | repeated Restriction | 3 | Usage restrictions (function, geography, user-type). AND-combined. |
 | `quotas` | repeated Quota | 4 | Usage caps. The agent must not exceed any individual Quota. |
 | `obligations` | repeated Obligation | 5 | Post-use behavioral requirements. |
-| `pricing` | optional Pricing | 6 | Commercial terms. REQUIRED for ENUMERATED; absent for REFERENCE_ONLY. |
+| `pricing` | optional Pricing | 6 | Commercial terms. REQUIRED on every term regardless of semantics (absent Pricing is rejected; `model = FREE` must be explicit). |
 
 ### License
 

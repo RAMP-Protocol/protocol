@@ -690,13 +690,16 @@ message ResourceAttestation {
 //               metering=NONE, NOTICE obligation
 //     Term 2 — REFERENCE_ONLY — full MCPS/PRS terms at License.uri
 //
-// Semantics:
-//   ENUMERATED  — machine fields are authoritative and enforced by the Exchange.
-//                 Absent Pricing on an ENUMERATED term is a validation error.
-//                 model=FREE must be stated explicitly; absent Pricing ≠ free.
-//   REFERENCE_ONLY — License.uri is the only authoritative source. Machine
-//                 fields are informational; the Exchange MUST NOT auto-enforce
-//                 them. The agent must read the license URI before using.
+// Pricing is REQUIRED on every term regardless of semantics — absent Pricing
+// is a validation error, and model=FREE must be stated explicitly (absent
+// Pricing ≠ free). The rest of the rules depend on semantics:
+//   ENUMERATED  — restrictions/quotas/obligations are authoritative and
+//                 enforced by the Exchange.
+//   REFERENCE_ONLY — License.uri (which MUST be present) is the only
+//                 authoritative source for restrictions/quotas/obligations;
+//                 those machine fields are informational and the Exchange MUST
+//                 NOT auto-enforce them. The agent must read the license URI
+//                 before using. Pricing is still stated machine-readably here.
 //
 // LicenseTerm lives in ResourceEntry (ingestion) and Offer (emission) — the
 // same shape at both ends. The Exchange stores terms from PushResources and
