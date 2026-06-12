@@ -157,6 +157,8 @@ One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop 
 | `attestations` | repeated ResourceAttestation | 14 | Signed content attestations (replaces ContentQuality) |
 | `data_as_of` | optional Timestamp | 16 | When the offered data was current (for DYNAMIC resources) |
 | `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Pre-commit quota snapshot for subscription offers |
+| `previews` | repeated Preview | 18 | Lightweight previews for offer evaluation (thumbnails, clips, snippets) |
+| `terms` | repeated LicenseTerm | 19 | Licensing terms for this offer (supersedes `restrictions` when present). See [Universal Licensing Core](#universal-licensing-core). |
 | `ext` | Struct | 15 | Extension point |
 
 :::note[Breaking change in v1.0]
@@ -196,6 +198,7 @@ Three verification levels:
 | `revshare` | optional double | 6 | Revenue share percentage (0.0--1.0) |
 | `license_duration_months` | optional int32 | 7 | License duration in months |
 | `unit` | optional string | 8 | Metering unit for unit_cost and estimated_quantity (e.g. "tokens", "pages", "seconds", "records") |
+| `metering` | optional PricingMetering | 9 | How usage is tracked for billing reconciliation. Absent = ONLINE (default). |
 | `ext` | Struct | 15 | Extension point |
 
 ### ResourceIdentity
@@ -655,6 +658,7 @@ A single resource catalog entry.
 | `provenance_source` | optional string | 10 | Who provided this metadata (e.g. "gumgum.com") |
 | `provenance_timestamp` | optional Timestamp | 11 | When metadata was collected |
 | `attestations` | repeated ResourceAttestation | 12 | Signed attestations about this content |
+| `terms` | repeated LicenseTerm | 13 | Publisher-declared licensing terms. For ENUMERATED terms, Pricing MUST be present. For REFERENCE_ONLY terms, License.uri is authoritative. |
 | `ext` | Struct | 15 | Extension point |
 
 ### PushResourcesResponse
@@ -663,6 +667,7 @@ A single resource catalog entry.
 |---|---|---|---|
 | `accepted` | int32 | 1 | Number of entries accepted |
 | `rejected` | int32 | 2 | Number of entries rejected |
+| `warnings` | repeated string | 3 | Non-fatal ingestion warnings (e.g., unrecognized vocab token in a Restriction). Warnings do not cause rejection. |
 
 ### RemoveResourcesRequest
 
@@ -689,6 +694,77 @@ A single resource catalog entry.
 |---|---|---|---|
 | `started` | bool | 1 | Whether the refresh was started |
 
+## Universal Licensing Core
+
+The Universal Licensing Core replaces the flat `AccessRestrictions` structure with a structured, cross-domain-portable licensing model. A resource carries zero or more `LicenseTerm` entries — each term is a complete commercial arrangement. Multiple terms are the normal case: a news article may be free for academic use and paid for commercial use; a stock photo may be perpetually licensed with an impressions cap.
+
+See [`/protocol/licensing-terms`](/protocol/licensing-terms/) for a full conceptual walkthrough with examples.
+
+### LicenseTerm
+
+One complete access arrangement for a resource. Lives at both ingestion (`ResourceEntry.terms`) and emission (`Offer.terms`).
+
+Validation rules when `semantics = ENUMERATED`:
+- `pricing` MUST be present — absent Pricing is a validation error.
+- `model = FREE` must be stated explicitly — absent Pricing is not free.
+- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause rejection (forward-compatible).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `semantics` | TermSemantics | 1 | How the Exchange interprets the machine fields |
+| `license` | optional License | 2 | Governing license document. Authoritative for REFERENCE_ONLY terms. |
+| `restrictions` | repeated Restriction | 3 | Usage restrictions (function, geography, user-type). AND-combined. |
+| `quotas` | repeated Quota | 4 | Usage caps. The agent must not exceed any individual Quota. |
+| `obligations` | repeated Obligation | 5 | Post-use behavioral requirements. |
+| `pricing` | optional Pricing | 6 | Commercial terms. REQUIRED for ENUMERATED; absent for REFERENCE_ONLY. |
+
+### License
+
+Identifies the governing license document for a `LicenseTerm`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `uri` | optional string | 1 | Authoritative license URI (e.g. `"https://creativecommons.org/licenses/by/4.0/"`) |
+| `title` | optional string | 2 | Human-readable license name (e.g. `"CC BY 4.0"`) |
+| `spdx_expression` | optional string | 3 | SPDX expression (e.g. `"CC-BY-4.0"`, `"MIT"`) |
+
+### Restriction
+
+A single constraint on one licensing dimension: function (what), geography (where), or user-type (who).
+
+**Evaluation rule**: an agent is in-scope when it matches at least one `permitted[]` token AND none of the `prohibited[]` tokens. Empty `permitted[]` = any value permitted on this axis.
+
+**Vocabulary sources**: `vocab/restriction-values/function.json`, `vocab/restriction-values/geography.json`, `vocab/restriction-values/user-type.json`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `kind` | RestrictionKind | 1 | Which dimension this restriction constrains |
+| `permitted` | repeated string | 2 | Tokens allowed on this axis. Empty = all permitted. |
+| `prohibited` | repeated string | 3 | Tokens blocked on this axis. Takes precedence over permitted[]. |
+| `critical` | bool | 4 | When true, an agent that cannot verify compliance MUST decline this term. |
+
+### Quota
+
+A usage cap that gates whether a `LicenseTerm` remains valid. Quotas limit consumption before a term expires or must be renegotiated — they are NOT billing quantities.
+
+**Metric vocabulary**: `vocab/quota-metrics.json`. Standard metrics: `accesses`, `tokens`, `input-tokens`, `display-words`, `impressions`, `copies`, `seats`, `units-manufactured`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `metric` | string | 1 | Unit being capped. Must match a metric in `vocab/quota-metrics.json`. |
+| `limit` | int64 | 2 | Maximum allowed value in the given window. |
+| `window` | QuotaWindow | 3 | Time window over which the limit accumulates. |
+
+### Obligation
+
+A post-use behavioral requirement attached to a `LicenseTerm`. Replaces the retired `PRICING_MODEL_ATTRIBUTION` and `PRICING_MODEL_CONTRIBUTION` pricing model values.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `kind` | ObligationKind | 1 | What the agent must do. |
+| `trigger` | ObligationTrigger | 2 | When the obligation activates. |
+| `description` | optional string | 3 | Human-readable description. Required for `OBLIGATION_KIND_OTHER`. |
+
 ## Enums
 
 ### PricingModel
@@ -701,13 +777,78 @@ A single resource catalog entry.
 | 3 | PER_FETCH | Rate per fetch request |
 | 4 | SUBSCRIPTION | Recurring access |
 | 5 | FREE | No charge |
-| 6 | ATTRIBUTION | Free with required attribution |
-| 7 | CONTRIBUTION | Good-faith payment |
+| ~~6~~ | ~~ATTRIBUTION~~ | **Retired in v1.1.** Use `Obligation.kind = ATTRIBUTION` in a `LicenseTerm` instead. |
+| ~~7~~ | ~~CONTRIBUTION~~ | **Retired in v1.1.** Use `Obligation.kind = CONTRIBUTION` in a `LicenseTerm` instead. |
 | 8 | TRAINING | Per training instance fee |
 | 9 | REVENUE_SHARE | Revenue share model (percentage of agent revenue) |
 | 10 | PER_PAGE | Per document page (legal filings, PDFs) |
 | 11 | PER_MINUTE | Per minute of audio/video |
 | 12 | PER_RECORD | Per structured data record |
+
+### PricingMetering
+
+How usage is tracked for billing reconciliation. Used in `Pricing.metering` (field 9). Absent = `ONLINE`.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | ONLINE | Default. Exchange tracks usage events in real time. ReportUsage is required. |
+| 1 | NONE | One-time perpetual sale. No ongoing metering; `billing_id` is issued at `ExecuteTransaction` and the ledger entry is closed. No `ReportUsage` required. |
+| 2 | OFFLINE_SELF_REPORTED | Agent self-reports physical-world consumption (e.g. units manufactured from a licensed design). Exchange audits. |
+
+### TermSemantics
+
+How the Exchange interprets a `LicenseTerm`'s machine fields.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | ENUMERATED | Machine fields are authoritative and enforced by the Exchange. Pricing MUST be present. |
+| 1 | REFERENCE_ONLY | Only `License.uri` is authoritative. Machine fields are informational; the Exchange MUST NOT auto-enforce them. Agent must read the license URI before using. |
+
+### RestrictionKind
+
+Which dimension a `Restriction` constrains.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | FUNCTION | What the agent may do. Tokens from `vocab/restriction-values/function.json`. |
+| 1 | GEOGRAPHY | Where the agent operates. ISO 3166-1 alpha-2 + `EU`, `EEA`, `*`. |
+| 2 | USER_TYPE | Who the agent is. Tokens from `vocab/restriction-values/user-type.json`. |
+| 3 | OTHER | Custom dimension; description in `Restriction.description`. |
+
+### QuotaWindow
+
+Time window over which a `Quota.limit` accumulates.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | HOURLY | Resets each hour |
+| 1 | DAILY | Resets each day |
+| 2 | MONTHLY | Resets each month |
+| 3 | TOTAL | Lifetime cap — never resets |
+
+### ObligationKind
+
+What the agent must do after use. `ATTRIBUTION` and `CONTRIBUTION` replace the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION`.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | ATTRIBUTION | Credit the author or publisher |
+| 1 | CONTRIBUTION | Good-faith payment (amount suggested, not contractually fixed) |
+| 2 | SHARE_ALIKE | Derivatives must use the same license (CC-BY-SA / GPL style) |
+| 3 | NETWORK_COPYLEFT | Network service triggers copyleft (AGPL style) |
+| 4 | NOTICE | Include the specified copyright notice |
+| 5 | OTHER | Described in `Obligation.description` |
+
+### ObligationTrigger
+
+When an `Obligation` activates.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | ON_USE | Triggered on any use of the resource |
+| 1 | ON_DISTRIBUTION | Triggered when copies are distributed |
+| 2 | ON_NETWORK_SERVICE | Triggered when served over a network (AGPL style) |
+| 3 | ON_DERIVATIVE | Triggered when a derivative work is produced |
 
 ### DenialReason
 

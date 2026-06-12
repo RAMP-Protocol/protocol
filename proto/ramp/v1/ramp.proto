@@ -448,6 +448,12 @@ message Offer {
   // and OpenRTB native (img.url + dimensions).
   repeated Preview previews = 18;
 
+  // Licensing terms for this offer, sourced from the publisher's ResourceEntry.
+  // Multiple terms when the resource has different arrangements by use case.
+  // Agents SHOULD prefer this over the legacy `restrictions` field when present.
+  // See: Universal Licensing Core section.
+  repeated LicenseTerm terms = 19;
+
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -706,6 +712,231 @@ message AccessRestrictions {
   repeated string ext_critical = 90;
 }
 
+// ============================================================================
+// Universal Licensing Core
+//
+// A resource carries zero or more LicenseTerm entries. Each term describes one
+// distinct commercial or access arrangement for that resource. Having multiple
+// terms is the normal case:
+//
+//   Article with two terms:
+//     Term 1 — ENUMERATED, ai-input permitted, academic only, FREE
+//     Term 2 — ENUMERATED, ai-input permitted, commercial_entity, PER_ACCESS $0.05
+//
+//   Stock photo with one term:
+//     Term 1 — ENUMERATED, display permitted, worldwide, PER_ACCESS $1.20,
+//               metering=NONE (perpetual), impressions quota 500k,
+//               ATTRIBUTION obligation
+//
+//   Patent design file:
+//     Term 1 — ENUMERATED, manufacture permitted, worldwide,
+//               PER_ACCESS $200, metering=OFFLINE_SELF_REPORTED,
+//               quota metric=units-manufactured limit=1000 window=TOTAL,
+//               CONTRIBUTION obligation
+//
+//   Licensed music track:
+//     Term 1 — ENUMERATED, sync permitted, worldwide, PER_ACCESS $500,
+//               metering=NONE, NOTICE obligation
+//     Term 2 — REFERENCE_ONLY — full MCPS/PRS terms at License.uri
+//
+// Semantics:
+//   ENUMERATED  — machine fields are authoritative and enforced by the Exchange.
+//                 Absent Pricing on an ENUMERATED term is a validation error.
+//                 model=FREE must be stated explicitly; absent Pricing ≠ free.
+//   REFERENCE_ONLY — License.uri is the only authoritative source. Machine
+//                 fields are informational; the Exchange MUST NOT auto-enforce
+//                 them. The agent must read the license URI before using.
+//
+// LicenseTerm lives in ResourceEntry (ingestion) and Offer (emission) — the
+// same shape at both ends. The Exchange stores terms from PushResources and
+// surfaces them on DiscoverResources/ExecuteTransaction.
+//
+// The LicenseTerm model replaces the earlier ad-hoc AccessRestrictions flat
+// structure. AccessRestrictions remains for backward compatibility but
+// Exchange implementations SHOULD prefer LicenseTerm when present.
+// ============================================================================
+
+// TermSemantics — How the Exchange interprets a LicenseTerm's machine fields.
+enum TermSemantics {
+  TERM_SEMANTICS_ENUMERATED     = 0;
+  TERM_SEMANTICS_REFERENCE_ONLY = 1;
+}
+
+// RestrictionKind — Which dimension a Restriction constrains.
+enum RestrictionKind {
+  RESTRICTION_KIND_FUNCTION  = 0;  // What: vocab/restriction-values/function.json
+  RESTRICTION_KIND_GEOGRAPHY = 1;  // Where: ISO 3166-1 alpha-2 + EU, EEA, *
+  RESTRICTION_KIND_USER_TYPE = 2;  // Who: vocab/restriction-values/user-type.json
+  RESTRICTION_KIND_OTHER     = 3;  // Custom; description in Restriction fields
+}
+
+// QuotaWindow — Time window over which a Quota.limit accumulates.
+enum QuotaWindow {
+  QUOTA_WINDOW_HOURLY  = 0;
+  QUOTA_WINDOW_DAILY   = 1;
+  QUOTA_WINDOW_MONTHLY = 2;
+  QUOTA_WINDOW_TOTAL   = 3;  // Lifetime cap — never resets
+}
+
+// ObligationKind — What the agent must do after use.
+//
+// ATTRIBUTION and CONTRIBUTION replace the retired PRICING_MODEL_ATTRIBUTION
+// and PRICING_MODEL_CONTRIBUTION: these are behavioral requirements, not
+// payment models, and belong here rather than in PricingModel.
+enum ObligationKind {
+  OBLIGATION_KIND_ATTRIBUTION      = 0;  // Credit the author / publisher
+  OBLIGATION_KIND_CONTRIBUTION     = 1;  // Good-faith payment (amount suggested)
+  OBLIGATION_KIND_SHARE_ALIKE      = 2;  // Derivatives must use the same license (CC-BY-SA / GPL)
+  OBLIGATION_KIND_NETWORK_COPYLEFT = 3;  // Network service triggers copyleft (AGPL-style)
+  OBLIGATION_KIND_NOTICE           = 4;  // Include the specified copyright notice
+  OBLIGATION_KIND_OTHER            = 5;  // Described in Obligation.description
+}
+
+// ObligationTrigger — When the obligation activates.
+enum ObligationTrigger {
+  OBLIGATION_TRIGGER_ON_USE             = 0;  // Triggered on any use
+  OBLIGATION_TRIGGER_ON_DISTRIBUTION    = 1;  // Triggered when copies are distributed
+  OBLIGATION_TRIGGER_ON_NETWORK_SERVICE = 2;  // Triggered when served over a network (AGPL)
+  OBLIGATION_TRIGGER_ON_DERIVATIVE      = 3;  // Triggered when a derivative work is produced
+}
+
+// License — Identifies the governing license document for a LicenseTerm.
+message License {
+  // Authoritative license URI.
+  // For REFERENCE_ONLY terms this is the complete machine-readable specification.
+  // For ENUMERATED terms this is a human-readable reference.
+  //
+  // Examples:
+  //   "https://creativecommons.org/licenses/by/4.0/"
+  //   "https://techcrunch.com/licensing/ai-terms-2026"
+  //   "https://spdx.org/licenses/MIT.html"
+  optional string uri = 1;
+
+  // Human-readable license name (e.g. "CC BY 4.0", "RAMP Commercial License v2").
+  optional string title = 2;
+
+  // SPDX license expression when the license maps to a standard SPDX identifier.
+  // Examples: "CC-BY-4.0", "MIT", "CC-BY-SA-4.0 OR MIT"
+  optional string spdx_expression = 3;
+}
+
+// Restriction — A single constraint on one licensing dimension.
+//
+// Restrictions model allowed and prohibited values on one axis (function,
+// geography, or user-type). The Exchange evaluates restrictions against
+// the requesting agent's Requester fields before returning an Offer.
+//
+// Evaluation rule:
+//   An agent is in-scope when it matches at least one permitted[] token
+//   AND matches none of the prohibited[] tokens.
+//   Empty permitted[] = any value is permitted on this axis.
+//   Empty prohibited[] = nothing is explicitly prohibited.
+//
+// Vocabulary sources:
+//   FUNCTION  — vocab/restriction-values/function.json (RSL 1.0 + IP terms)
+//   GEOGRAPHY — vocab/restriction-values/geography.json (ISO 3166-1 alpha-2 + EU, EEA, *)
+//   USER_TYPE — vocab/restriction-values/user-type.json
+message Restriction {
+  // Which dimension this restriction applies to.
+  RestrictionKind kind = 1;
+
+  // Tokens allowed on this axis. Empty = all permitted.
+  // For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
+  // For GEOGRAPHY: "US", "DE", "EU", "EEA", "*", …
+  // For USER_TYPE: "individual", "academic", "commercial_entity", …
+  repeated string permitted = 2;
+
+  // Tokens blocked on this axis. Takes precedence over permitted[].
+  repeated string prohibited = 3;
+
+  // When true, an agent that cannot verify its compliance MUST decline this term.
+  // When false (default), unverifiable restrictions are advisory.
+  bool critical = 4;
+}
+
+// Quota — A usage cap that gates whether this LicenseTerm remains valid.
+//
+// Quotas limit how much a licensee may consume before the term expires or
+// must be renegotiated. They are NOT billing quantities — billing is in Pricing.
+//
+// Metric values correspond to entries in vocab/quota-metrics.json.
+// Standard metrics: "accesses", "tokens", "input-tokens", "display-words",
+//   "impressions", "copies", "seats", "units-manufactured".
+message Quota {
+  // The unit being capped. Must match a metric in vocab/quota-metrics.json.
+  string metric = 1;
+
+  // Maximum allowed value in the given window.
+  int64 limit = 2;
+
+  // Time window over which the limit accumulates.
+  QuotaWindow window = 3;
+}
+
+// Obligation — A post-use behavioral requirement attached to a LicenseTerm.
+//
+// Replaces PRICING_MODEL_ATTRIBUTION and PRICING_MODEL_CONTRIBUTION, which were
+// incorrectly modeled as payment models. Attribution and contribution are
+// behavioral requirements that exist regardless of whether a fee is charged.
+//
+// Examples:
+//   Attribution on display: cite the author whenever content is shown to a user.
+//   Share-alike on derivative: AI-generated content that incorporates this work
+//     must be released under the same license.
+//   Notice on distribution: include the copyright notice when distributing copies.
+message Obligation {
+  // What the agent must do.
+  ObligationKind kind = 1;
+
+  // When the obligation activates.
+  ObligationTrigger trigger = 2;
+
+  // Human-readable description. Required for OBLIGATION_KIND_OTHER;
+  // recommended for all kinds (e.g., exact attribution text, notice wording).
+  optional string description = 3;
+}
+
+// LicenseTerm — Universal licensing unit.
+//
+// One LicenseTerm describes one complete access arrangement for a resource.
+// A resource carries zero or more terms; having multiple terms is the normal
+// case (one per use category, user type, or commercial arrangement).
+//
+// The same LicenseTerm shape appears at ingestion (ResourceEntry.terms) and
+// at emission (Offer.terms). The Exchange stores what the publisher pushed
+// and surfaces it on discovery, so agents see the same terms the publisher
+// declared — no translation or reformulation.
+//
+// Validation rules for ENUMERATED semantics:
+//   - Pricing MUST be present. Absent Pricing → reject at ingest.
+//   - model=FREE must be explicit. Absent Pricing ≠ free.
+//   - Restriction tokens are validated against the vocab registry.
+//     Unknown tokens produce a PushResourcesResponse.warnings[] entry
+//     but do NOT cause rejection (forward-compatible).
+message LicenseTerm {
+  // How to interpret the machine fields.
+  TermSemantics semantics = 1;
+
+  // Governing license document. Authoritative for REFERENCE_ONLY terms.
+  optional License license = 2;
+
+  // Usage restrictions (function, geography, user-type).
+  // Multiple restrictions are AND-combined — the agent must satisfy all of them.
+  repeated Restriction restrictions = 3;
+
+  // Usage caps. The agent must not exceed any individual Quota.
+  repeated Quota quotas = 4;
+
+  // Post-use behavioral requirements.
+  repeated Obligation obligations = 5;
+
+  // Pricing for this term.
+  // REQUIRED when semantics = ENUMERATED; validation error if absent.
+  // model = FREE must be stated explicitly — absent Pricing is not free.
+  // Absent when semantics = REFERENCE_ONLY (pricing is in the license document).
+  optional Pricing pricing = 6;
+}
+
 // Preview — Lightweight resource preview for offer evaluation.
 //
 // The Exchange holds URLs (50–200 bytes per preview); the provider's
@@ -753,6 +984,9 @@ message Preview {
 // normalizes to unit cost (effective cost per unit) for cross-exchange
 // comparison — analogous to eCPM in programmatic advertising.
 // Unit cost is denominated in the Exchange's base currency.
+//
+// Fields: model, rate, currency, unit_cost, estimated_quantity,
+// revshare, license_duration_months, unit, metering.
 message Pricing {
   // Provider's pricing model.
   PricingModel model = 1;
@@ -785,6 +1019,12 @@ message Pricing {
   // Domain-specific units allowed (e.g., "sq_km", "characters", "images").
   optional string unit = 8;
 
+  // How usage is tracked for billing reconciliation.
+  // Absent = PRICING_METERING_ONLINE (default real-time tracking).
+  // NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.
+  // OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.
+  optional PricingMetering metering = 9;
+
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -801,13 +1041,28 @@ enum PricingModel {
   PRICING_MODEL_PER_FETCH = 3;     // Rate per fetch request (RSL: crawl)
   PRICING_MODEL_SUBSCRIPTION = 4;  // Recurring access (RSL: subscription)
   PRICING_MODEL_FREE = 5;          // No charge (RSL: free)
-  PRICING_MODEL_ATTRIBUTION = 6;   // Free with required attribution (RSL: attribution)
-  PRICING_MODEL_CONTRIBUTION = 7;  // Good-faith payment, amount suggested (RSL: contribution)
+  // Field numbers 6 and 7 are retired (ATTRIBUTION and CONTRIBUTION were
+  // behavioral obligations, not payment models — see ObligationKind).
   PRICING_MODEL_TRAINING = 8;       // Per training instance fee (RSL: training)
   PRICING_MODEL_REVENUE_SHARE = 9;  // Revenue share model (percentage of agent revenue)
   PRICING_MODEL_PER_PAGE = 10;      // Per document page (legal filings, PDFs)
   PRICING_MODEL_PER_MINUTE = 11;    // Per minute of audio/video
   PRICING_MODEL_PER_RECORD = 12;    // Per structured data record
+}
+
+// PricingMetering — How usage is tracked for billing reconciliation.
+//
+// ONLINE (default, field absent or = 0): Exchange tracks usage events in real time.
+// NONE: one-time transaction; no ongoing metering required (stock image perpetual
+//   license, CAD file one-time download). Billing_id is issued at ExecuteTransaction
+//   and the ledger entry is closed — no ReportUsage required.
+// OFFLINE_SELF_REPORTED: agent self-reports consumption (e.g., units-manufactured
+//   for 3D-printed items from a licensed design). Exchange audits; metering is not
+//   possible online because the event occurs in the physical world.
+enum PricingMetering {
+  PRICING_METERING_ONLINE                = 0;
+  PRICING_METERING_NONE                  = 1;
+  PRICING_METERING_OFFLINE_SELF_REPORTED = 2;
 }
 
 enum DeliveryMethod {
@@ -1349,6 +1604,13 @@ message ResourceEntry {
   // by the verifier's operator).
   repeated ResourceAttestation attestations = 12;
 
+  // Publisher-declared licensing terms for this resource.
+  // See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
+  // be present. For REFERENCE_ONLY terms, License.uri is authoritative.
+  // The Exchange validates ENUMERATED terms at push time and surfaces them
+  // in Offer.terms on discovery.
+  repeated LicenseTerm terms = 13;
+
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1361,6 +1623,13 @@ message ResourceEntry {
 message PushResourcesResponse {
   int32 accepted = 1;
   int32 rejected = 2;
+
+  // Non-fatal issues encountered during ingestion.
+  // Examples: unrecognized vocab token in a Restriction (term accepted but flagged),
+  //           REFERENCE_ONLY term missing License.uri (informational).
+  // Warnings do not cause rejection — they are surfaced so publishers can fix
+  // their feeds without a hard failure.
+  repeated string warnings = 3;
 }
 
 message RemoveResourcesRequest {
