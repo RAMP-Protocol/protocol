@@ -3,29 +3,6 @@ title: "Changelog"
 description: "RAMP protocol changelog"
 ---
 
-## v1.1.0 — Universal Licensing Core
-
-### Licensing model
-
-- **`LicenseTerm`** — new universal licensing unit that replaces the ad-hoc `AccessRestrictions` flat structure. A resource carries zero or more terms; each term covers one complete access arrangement (restrictions + quotas + obligations + pricing).
-- **`License`** — identifies the governing license document (`uri`, `title`, `spdx_expression`).
-- **`Restriction`** — constrains one axis: `FUNCTION` (what), `GEOGRAPHY` (where), `USER_TYPE` (who). Tokens sourced from `vocab/restriction-values/`. `critical=true` requires the agent to verify compliance before using.
-- **`Quota`** — a usage cap that gates term validity (not billing). Metrics from `vocab/quota-metrics.json`. Standard metrics: `accesses`, `tokens`, `display-words`, `impressions`, `units-manufactured`.
-- **`Obligation`** — post-use behavioral requirement. Kinds: `ATTRIBUTION`, `CONTRIBUTION`, `SHARE_ALIKE`, `NETWORK_COPYLEFT`, `NOTICE`, `OTHER`. Replaces the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION`.
-- **`TermSemantics`** — `ENUMERATED` (machine fields authoritative; Exchange enforces) vs `REFERENCE_ONLY` (only `License.uri` is authoritative; Exchange passes through).
-- **`PricingMetering`** — `ONLINE` (default real-time metering), `NONE` (one-time sale, no ongoing tracking), `OFFLINE_SELF_REPORTED` (agent self-reports; Exchange audits).
-
-### Wire changes
-
-- `Offer.terms` (field 19) — repeated LicenseTerm sourced from the publisher's catalog entry. Agents SHOULD prefer this over the legacy `Offer.restrictions` when present.
-- `ResourceEntry.terms` (field 13) — publisher-declared terms pushed via `CatalogService.PushResources`.
-- `Pricing.metering` (field 9) — optional PricingMetering; default ONLINE.
-- `PushResourcesResponse.warnings` (field 3) — non-fatal ingestion warnings (e.g., unknown vocab token in a Restriction).
-
-### Breaking changes
-
-- `PRICING_MODEL_ATTRIBUTION` (6) and `PRICING_MODEL_CONTRIBUTION` (7) removed from `PricingModel`. These were behavioral obligations, not payment models. Publishers using these values should migrate to `LicenseTerm` with `Obligation.kind = ATTRIBUTION / CONTRIBUTION`.
-
 ## v1.0.0 — Initial release
 
 First public release of the RAMP Protocol (Resource Access Metering Protocol):
@@ -95,6 +72,20 @@ Domain-specific metadata carried in `ext` fields:
 - **ramp-academic-v1** — scholarly articles, preprints (CrossRef, OpenAlex, COUNTER 5.1)
 - **ramp-legal-v1** — legislation, case law, patents (ELI, ECLI, Akoma Ntoso)
 - **ramp-comp-v1** — IAB CoMP metadata (Package, Function, Scope) as optional ext fields
+
+### Licensing terms
+
+- **`LicenseTerm`** — universal licensing unit. A resource carries zero or more terms; each term is a complete, self-contained access arrangement (restrictions + quotas + obligations + pricing). Same shape at ingestion (`ResourceEntry.terms`) and emission (`Offer.terms`).
+- **`License`** — identifies the governing license document (`uri`, `title`, `spdx_expression`).
+- **`Restriction`** — constrains one axis: `FUNCTION` (what), `GEOGRAPHY` (where), `USER_TYPE` (who). Tokens sourced from `vocab/restriction-values/`. `critical=true` requires the agent to verify compliance before using.
+- **`Quota`** — usage cap that gates term validity, not billing. Metrics from `vocab/quota-metrics.json`: `accesses`, `tokens`, `display-words`, `impressions`, `units-manufactured`, and more.
+- **`Obligation`** — post-use behavioral requirement. Replaces the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION` (attribution and contribution are obligations, not payment models). Kinds: `ATTRIBUTION`, `CONTRIBUTION`, `SHARE_ALIKE`, `NETWORK_COPYLEFT`, `NOTICE`, `OTHER`.
+- **`TermSemantics`** — `ENUMERATED` (machine fields authoritative; Exchange enforces; Pricing required) vs `REFERENCE_ONLY` (only `License.uri` is authoritative; Exchange passes through unchanged).
+- **`PricingMetering`** — `ONLINE` (default), `NONE` (one-time sale, no ongoing tracking), `OFFLINE_SELF_REPORTED` (agent self-reports; Exchange audits). Added as `Pricing.metering` (field 9).
+- `Offer.terms` (field 19) — repeated LicenseTerm from the publisher catalog. Agents SHOULD prefer this over the legacy `Offer.restrictions` when present.
+- `ResourceEntry.terms` (field 13) — publisher-declared terms pushed via `CatalogService.PushResources`.
+- `PushResourcesResponse.warnings` (field 3) — non-fatal ingestion warnings (e.g., unrecognized vocab token).
+- `PRICING_MODEL_ATTRIBUTION` (6) and `PRICING_MODEL_CONTRIBUTION` (7) **removed** from `PricingModel`. Migrate to `Obligation.kind = ATTRIBUTION / CONTRIBUTION` in a `LicenseTerm`.
 
 ### Wire format
 

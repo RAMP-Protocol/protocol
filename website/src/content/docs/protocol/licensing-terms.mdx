@@ -5,7 +5,7 @@ description: "How RAMP models resource licensing: terms, restrictions, quotas, a
 
 ## Overview
 
-RAMP v1.1 introduces the **Universal Licensing Core**: a structured, cross-domain-portable model for expressing commercial licensing terms on any digital resource. A resource carries zero or more `LicenseTerm` entries — each term is a complete, self-contained access arrangement. Having multiple terms for a single resource is the normal case, not the exception.
+RAMP introduces the **Universal Licensing Core**: a structured, cross-domain-portable model for expressing commercial licensing terms on any digital resource. A resource carries zero or more `LicenseTerm` entries — each term is a complete, self-contained access arrangement. Having multiple terms for a single resource is the normal case, not the exception.
 
 The model was designed to cover a wide range of content types and legal arrangements: news articles, stock photos, academic papers, music recordings, patent design files, datasets, and software. The same proto shapes appear at both ends of the pipeline:
 
@@ -20,7 +20,7 @@ A single resource often has different access arrangements for different use case
 - A stock photo can be licensed for editorial use (free with attribution) or commercial use (paid, with a 500,000-impression cap).
 - A patent design file can be licensed for viewing ($0) or for manufacturing (per-unit fee with self-reported metering).
 
-Before v1.1, the only way to model this was to create separate Exchange catalog entries for each arrangement, or to use the flat `AccessRestrictions` structure and lose the pricing-per-use-case dimension entirely. `LicenseTerm` solves this cleanly: one resource entry, multiple terms.
+Without `LicenseTerm`, the only way to model this was to create separate Exchange catalog entries for each arrangement, or to use the flat `AccessRestrictions` structure and lose the pricing-per-use-case dimension entirely. `LicenseTerm` solves this cleanly: one resource entry, multiple terms.
 
 ## Term semantics
 
