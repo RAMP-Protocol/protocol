@@ -82,7 +82,7 @@ Domain-specific metadata carried in `ext` fields:
 - **`Obligation`** — post-use behavioral requirement. Replaces the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION` (attribution and contribution are obligations, not payment models). Kinds: `ATTRIBUTION`, `CONTRIBUTION`, `SHARE_ALIKE`, `NETWORK_COPYLEFT`, `NOTICE`, `OTHER`.
 - **`TermSemantics`** — `ENUMERATED` (machine fields authoritative; Exchange enforces; Pricing required) vs `REFERENCE_ONLY` (only `License.uri` is authoritative; Exchange passes through unchanged).
 - **`PricingMetering`** — `ONLINE` (default), `NONE` (one-time sale, no ongoing tracking), `OFFLINE_SELF_REPORTED` (agent self-reports; Exchange audits). Added as `Pricing.metering` (field 9).
-- `Offer.terms` (field 19) — repeated LicenseTerm from the publisher catalog. Agents SHOULD prefer this over the legacy `Offer.restrictions` when present.
+- `Offer.terms` (field 19) — repeated LicenseTerm from the publisher catalog. `Offer.restrictions` (the flat `AccessRestrictions` field) removed.
 - `ResourceEntry.terms` (field 13) — publisher-declared terms pushed via `CatalogService.PushResources`.
 - `PushResourcesResponse.warnings` (field 3) — non-fatal ingestion warnings (e.g., unrecognized vocab token).
 - `PRICING_MODEL_ATTRIBUTION` (6) and `PRICING_MODEL_CONTRIBUTION` (7) **removed** from `PricingModel`. Migrate to `Obligation.kind = ATTRIBUTION / CONTRIBUTION` in a `LicenseTerm`.

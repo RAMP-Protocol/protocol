@@ -361,11 +361,6 @@ message Offer {
   // different Exchanges and compare pricing.
   optional ResourceIdentity identity = 7;
 
-  // Access restrictions derived from provider terms (e.g. RSL permits/prohibits).
-  // Specifies which usage types, user categories, and geographies are
-  // allowed or blocked for this offer.
-  optional AccessRestrictions restrictions = 8;
-
   // REQUIRED. JWS Compact Serialization (alg=EdDSA) over offer fields
   // (offer_id, package.id, pricing, identity).
   // Prevents intermediaries (Brokers) from tampering with price
@@ -450,7 +445,6 @@ message Offer {
 
   // Licensing terms for this offer, sourced from the publisher's ResourceEntry.
   // Multiple terms when the resource has different arrangements by use case.
-  // Agents SHOULD prefer this over the legacy `restrictions` field when present.
   // See: Universal Licensing Core section.
   repeated LicenseTerm terms = 19;
 
@@ -669,49 +663,6 @@ message ResourceAttestation {
   string signature = 6;
 }
 
-// AccessRestrictions — Provider-defined access rules.
-//
-// Maps to RSL <permits>/<prohibits> elements. Expressed as allow/deny
-// lists so agents and Brokers can filter offers before transacting.
-message AccessRestrictions {
-  // Permitted usage functions. Empty = all permitted.
-  // Wire format: dashed-lowercase per RSL XML standard.
-  // Standard RSL values: "ai-train", "ai-input", "ai-index", "search", "display".
-  // CoMP-specific values available via ramp-comp-v1 extension profile (same
-  // dashed-lowercase format). Intentionally `repeated string` rather than enum
-  // so RSL and CoMP can extend the vocabulary without proto changes.
-  repeated string permitted_functions = 1;
-
-  // Prohibited usage functions. Same vocabulary as `permitted_functions`.
-  repeated string prohibited_functions = 2;
-
-  // Permitted user categories (RSL: permits type="user").
-  // E.g. "commercial", "non-commercial", "education", "government".
-  repeated string permitted_users = 3;
-
-  // Prohibited user categories.
-  repeated string prohibited_users = 4;
-
-  // Permitted geographies — ISO 3166-1 alpha-2 (RSL: permits type="geo").
-  // Empty = all geographies permitted.
-  repeated string permitted_geo = 5;
-
-  // Prohibited geographies.
-  repeated string prohibited_geo = 6;
-
-  // Maximum number of words from the resource that may be displayed to users.
-  // Enforces word display limits at the access restriction level.
-  optional int32 max_display_words = 7;
-
-  google.protobuf.Struct ext = 15;
-
-  // Critical extension keys (COSE crit pattern, RFC 9052).
-  // Lists keys within ext that the consumer MUST understand.
-  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
-  // Empty (default) → all ext keys are safe to ignore.
-  repeated string ext_critical = 90;
-}
-
 // ============================================================================
 // Universal Licensing Core
 //
@@ -750,10 +701,6 @@ message AccessRestrictions {
 // LicenseTerm lives in ResourceEntry (ingestion) and Offer (emission) — the
 // same shape at both ends. The Exchange stores terms from PushResources and
 // surfaces them on DiscoverResources/ExecuteTransaction.
-//
-// The LicenseTerm model replaces the earlier ad-hoc AccessRestrictions flat
-// structure. AccessRestrictions remains for backward compatibility but
-// Exchange implementations SHOULD prefer LicenseTerm when present.
 // ============================================================================
 
 // TermSemantics — How the Exchange interprets a LicenseTerm's machine fields.
@@ -1761,7 +1708,7 @@ message Usage {
   repeated AttributionDetail attribution = 6;
 
   // Metering unit for consumed_quantity. Must match the Offer's Pricing.unit.
-  // If omitted, defaults to "tokens" for backward compatibility.
+  // If omitted, defaults to "tokens".
   optional string consumed_unit = 8;
 }
 

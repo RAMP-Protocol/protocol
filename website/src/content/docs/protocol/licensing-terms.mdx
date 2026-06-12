@@ -20,7 +20,7 @@ A single resource often has different access arrangements for different use case
 - A stock photo can be licensed for editorial use (free with attribution) or commercial use (paid, with a 500,000-impression cap).
 - A patent design file can be licensed for viewing ($0) or for manufacturing (per-unit fee with self-reported metering).
 
-Without `LicenseTerm`, the only way to model this was to create separate Exchange catalog entries for each arrangement, or to use the flat `AccessRestrictions` structure and lose the pricing-per-use-case dimension entirely. `LicenseTerm` solves this cleanly: one resource entry, multiple terms.
+One resource entry, multiple terms — each covering a complete, distinct access arrangement.
 
 ## Term semantics
 
@@ -228,12 +228,6 @@ obligations:
 ```
 
 Up to 10 researchers in the subscribing institution can use the dataset. Any model trained on this dataset that is released publicly must carry the same license.
-
-## Backward compatibility
-
-`AccessRestrictions` (field 8 on `Offer`, the flat permit/prohibit structure) is retained for backward compatibility. Exchange implementations SHOULD prefer `LicenseTerm` when `Offer.terms` is present. Agents SHOULD prefer `Offer.terms` when present.
-
-The retirement of `PRICING_MODEL_ATTRIBUTION` (6) and `PRICING_MODEL_CONTRIBUTION` (7) from `PricingModel` is a breaking change at the enum level: callers that set these values in a `Pricing.model` field will no longer match the named constants. The wire integers 6 and 7 remain parseable (protobuf ignores unknown enum values). Publishers using these values should migrate to a `LicenseTerm` with an appropriate `Obligation`.
 
 ## Vocabulary registry
 

@@ -200,7 +200,7 @@ func (h *ExchangeHandler) DiscoverResources(
     // 8. Build response — flat offers or OfferGroups depending on URI count.
     //    When the ResourceQuery contains multiple URIs, return OfferGroups
     //    (one per URI) so the caller knows which offers map to which resource.
-    //    When a single URI is queried, use the flat offers field for backwards compat.
+    //    When a single URI is queried, use the flat offers field.
     uris := requester.Uris
     if len(uris) > 1 {
         // Batch mode: group offers by requested URI.

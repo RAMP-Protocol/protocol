@@ -149,7 +149,6 @@ One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop 
 | `reporting` | optional ReportingObligation | 5 | Post-usage reporting requirements |
 | `expires_at` | optional Timestamp | 6 | Offer expiry |
 | `identity` | optional ResourceIdentity | 7 | Content identity for dedup |
-| `restrictions` | optional AccessRestrictions | 8 | Access restrictions from RSL |
 | `exchange_signature` | string | 9 | **REQUIRED.** Ed25519 signature |
 | `signature_algorithm` | string | 10 | Signature algorithm (default: "ed25519") |
 | `subscription_id` | optional string | 11 | Subscription/deal identifier |
@@ -158,7 +157,7 @@ One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop 
 | `data_as_of` | optional Timestamp | 16 | When the offered data was current (for DYNAMIC resources) |
 | `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Pre-commit quota snapshot for subscription offers |
 | `previews` | repeated Preview | 18 | Lightweight previews for offer evaluation (thumbnails, clips, snippets) |
-| `terms` | repeated LicenseTerm | 19 | Licensing terms for this offer (supersedes `restrictions` when present). See [Universal Licensing Core](#universal-licensing-core). |
+| `terms` | repeated LicenseTerm | 19 | Licensing terms for this offer. See [Universal Licensing Core](#universal-licensing-core). |
 | `ext` | Struct | 15 | Extension point |
 
 :::note[Breaking change in v1.0]
@@ -215,19 +214,6 @@ Layered content identification for cross-exchange dedup and integrity verificati
 | `hash_method` | optional string | 6 | Hash algorithm ("simhash-v1", "sha256") |
 | `c2pa_manifest` | optional string | 7 | C2PA credentials manifest URI |
 | `resource_mutability` | ResourceMutability | 8 | Whether resource content is static, dynamic, or live |
-| `ext` | Struct | 15 | Extension point |
-
-### AccessRestrictions
-
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `permitted_functions` | repeated Function | 1 | Permitted CoMP usage functions |
-| `prohibited_functions` | repeated Function | 2 | Prohibited CoMP usage functions |
-| `permitted_users` | repeated string | 3 | Permitted user categories |
-| `prohibited_users` | repeated string | 4 | Prohibited user categories |
-| `permitted_geo` | repeated string | 5 | Permitted geographies (ISO 3166-1 alpha-2) |
-| `prohibited_geo` | repeated string | 6 | Prohibited geographies |
-| `max_display_words` | optional int32 | 7 | Maximum words displayed to users (from CoMP License.maxword) |
 | `ext` | Struct | 15 | Extension point |
 
 ### SubscriptionQuotaInfo
@@ -696,7 +682,7 @@ A single resource catalog entry.
 
 ## Universal Licensing Core
 
-The Universal Licensing Core replaces the flat `AccessRestrictions` structure with a structured, cross-domain-portable licensing model. A resource carries zero or more `LicenseTerm` entries — each term is a complete commercial arrangement. Multiple terms are the normal case: a news article may be free for academic use and paid for commercial use; a stock photo may be perpetually licensed with an impressions cap.
+A resource carries zero or more `LicenseTerm` entries — each term is a complete commercial arrangement. Multiple terms are the normal case: a news article may be free for academic use and paid for commercial use; a stock photo may be perpetually licensed with an impressions cap.
 
 See [`/protocol/licensing-terms`](/protocol/licensing-terms/) for a full conceptual walkthrough with examples.
 
@@ -707,7 +693,7 @@ One complete access arrangement for a resource. Lives at both ingestion (`Resour
 Validation rules when `semantics = ENUMERATED`:
 - `pricing` MUST be present — absent Pricing is a validation error.
 - `model = FREE` must be stated explicitly — absent Pricing is not free.
-- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause rejection (forward-compatible).
+- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
