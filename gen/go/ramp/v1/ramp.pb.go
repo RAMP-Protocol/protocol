@@ -16,6 +16,7 @@
 package rampv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -481,7 +482,7 @@ type PricingModel int32
 const (
 	PricingModel_PRICING_MODEL_UNSPECIFIED PricingModel = 0 // unset — rejected at ingest (omission cannot default to FREE)
 	PricingModel_PRICING_MODEL_FREE        PricingModel = 1 // no charge; rate must be 0
-	PricingModel_PRICING_MODEL_PER_UNIT    PricingModel = 2 // rate per Pricing.unit; unit REQUIRED (from vocab/pricing-units.json)
+	PricingModel_PRICING_MODEL_PER_UNIT    PricingModel = 2 // rate per Pricing.unit; unit REQUIRED (registered token or vendor:custom)
 	PricingModel_PRICING_MODEL_FLAT        PricingModel = 3 // one-time flat fee; rate is the total, no unit
 )
 
@@ -3314,11 +3315,14 @@ type Pricing struct {
 	// License duration in months. How long the granted access remains valid.
 	LicenseDurationMonths *int32 `protobuf:"varint,7,opt,name=license_duration_months,json=licenseDurationMonths,proto3,oneof" json:"license_duration_months,omitempty"`
 	// Metering basis — the "per what" of PER_UNIT pricing. REQUIRED when
-	// model = PER_UNIT. Registry-governed vocabulary (vocab/pricing-units.json),
-	// linted like quota-metrics: "fetches", "accesses", "tokens", "calls",
-	// "pages", "minutes", "records", "streams", "images", "seats", "sq-km",
-	// "characters", "bytes", "items", "impressions". Custom units namespace as
-	// "vendor:unit" (lint warning until registered). Ignored for FREE / FLAT.
+	// model = PER_UNIT. Custom units namespace as "vendor:unit". Ignored for
+	// FREE / FLAT.
+	//
+	// The (ramp.v1.vocab) entries below are the SOLE authored source of the
+	// registered bare tokens. A buf plugin reads them structurally and emits the
+	// pricingunits constants + IsRegistered; ingest enforces membership from
+	// those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —
+	// it never lists the tokens, so it cannot drift from the registry.
 	Unit *string `protobuf:"bytes,8,opt,name=unit,proto3,oneof" json:"unit,omitempty"`
 	// How usage is tracked for billing reconciliation.
 	// Absent = PRICING_METERING_ONLINE (default real-time tracking).
@@ -7316,7 +7320,7 @@ var File_ramp_v1_ramp_proto protoreflect.FileDescriptor
 
 const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\n" +
-	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\x9e\x03\n" +
+	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bbuf/validate/validate.proto\x1a\x13ramp/v1/vocab.proto\"\x9e\x03\n" +
 	"\rResourceQuery\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
@@ -7487,18 +7491,22 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\xf2\x03\n" +
+	"\x05_size\"\xf8\b\n" +
 	"\aPricing\x12+\n" +
 	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelR\x05model\x12\x12\n" +
 	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12 \n" +
 	"\tunit_cost\x18\x04 \x01(\x01H\x00R\bunitCost\x88\x01\x01\x122\n" +
 	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12;\n" +
-	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\x17\n" +
-	"\x04unit\x18\b \x01(\tH\x03R\x04unit\x88\x01\x01\x129\n" +
+	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\xf2\x02\n" +
+	"\x04unit\x18\b \x01(\tB\xd8\x02\xbaH\xae\x01\xba\x01\xaa\x01\n" +
+	"\x13pricing.unit.format\x12Bunit must be empty, a lowercase-dashed token, or vendor:namespaced\x1aOthis == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[a-z0-9._-]+:.+$')\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
+	"characters\x8a\xb5\x18\x05bytes\x8a\xb5\x18\x05items\x8a\xb5\x18\x05sq-kmH\x03R\x04unit\x88\x01\x01\x129\n" +
 	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCriticalB\f\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical:\xa7\x02\xbaH\xa3\x02\x1a\x97\x01\n" +
+	"\x1epricing.per_unit.requires_unit\x12'unit is required when model is PER_UNIT\x1aLthis.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''\x1a\x86\x01\n" +
+	"\x16pricing.free.zero_rate\x12!rate must be 0 when model is FREE\x1aIthis.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0B\f\n" +
 	"\n" +
 	"_unit_costB\x15\n" +
 	"\x13_estimated_quantityB\x1a\n" +
@@ -8357,6 +8365,7 @@ func file_ramp_v1_ramp_proto_init() {
 	if File_ramp_v1_ramp_proto != nil {
 		return
 	}
+	file_ramp_v1_vocab_proto_init()
 	file_ramp_v1_ramp_proto_msgTypes[0].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[1].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[2].OneofWrappers = []any{}

@@ -1,0 +1,30 @@
+// RAMP v1.0 — Vocabulary field option.
+//
+// Defines the custom field option that carries registry-governed vocabularies
+// directly on the fields that use them. The token list for an open axis (the
+// metering basis on Pricing.unit, and sibling axes that follow) is authored in
+// exactly one place: the (ramp.v1.vocab) entries on the field itself.
+//
+// A small buf plugin (protoc-gen-rampvocab) reads these entries structurally
+// off the field descriptor and emits typed string constants, an All slice, and
+// an IsRegistered membership check per axis. Structural validation (format) and
+// cross-field rules live in protovalidate CEL — never re-listing the tokens —
+// so the constants, the membership check, and the registry cannot drift.
+
+syntax = "proto3";
+
+package ramp.v1;
+
+option go_package = "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+  // vocab carries the registered bare tokens for an open vocabulary axis,
+  // authored directly on the field that uses it. The direct `repeated string`
+  // form is intentional — modern protoc supports repeated custom options, so
+  // there is no need to wrap the tokens in a message. Number 50001 sits in the
+  // internal extension range (50000–99999); sibling axes (Quota.metric,
+  // geography, function) reserve their own numbers in the same block.
+  repeated string vocab = 50001;
+}

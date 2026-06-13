@@ -16,6 +16,8 @@ option go_package = "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "buf/validate/validate.proto";
+import "ramp/v1/vocab.proto";
 
 // ============================================================================
 // RAMP Authentication Architecture
@@ -973,6 +975,22 @@ message Preview {
 // license_duration_months, unit, metering. (Field 6, formerly revshare, is
 // retired — Pricing has no revenue-share concept. Pre-v1: not reserved.)
 message Pricing {
+  // Cross-field structural rules (protovalidate, OR form — CEL has no implies):
+  //   PER_UNIT ⇒ unit must be set; FREE ⇒ rate must be 0.
+  // Registry membership (a bare unit must be one of the registered tokens) is
+  // NOT here — it is checked at ingest via the generated IsRegistered, so the
+  // CEL never re-lists the vocabulary and cannot drift from it.
+  option (buf.validate.message).cel = {
+    id: "pricing.per_unit.requires_unit"
+    message: "unit is required when model is PER_UNIT"
+    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''"
+  };
+  option (buf.validate.message).cel = {
+    id: "pricing.free.zero_rate"
+    message: "rate must be 0 when model is FREE"
+    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0"
+  };
+
   // Provider's pricing model.
   PricingModel model = 1;
 
@@ -997,12 +1015,27 @@ message Pricing {
   optional int32 license_duration_months = 7;
 
   // Metering basis — the "per what" of PER_UNIT pricing. REQUIRED when
-  // model = PER_UNIT. Registry-governed vocabulary (vocab/pricing-units.json),
-  // linted like quota-metrics: "fetches", "accesses", "tokens", "calls",
-  // "pages", "minutes", "records", "streams", "images", "seats", "sq-km",
-  // "characters", "bytes", "items", "impressions". Custom units namespace as
-  // "vendor:unit" (lint warning until registered). Ignored for FREE / FLAT.
-  optional string unit = 8;
+  // model = PER_UNIT. Custom units namespace as "vendor:unit". Ignored for
+  // FREE / FLAT.
+  //
+  // The (ramp.v1.vocab) entries below are the SOLE authored source of the
+  // registered bare tokens. A buf plugin reads them structurally and emits the
+  // pricingunits constants + IsRegistered; ingest enforces membership from
+  // those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —
+  // it never lists the tokens, so it cannot drift from the registry.
+  optional string unit = 8 [
+    (ramp.v1.vocab) = "fetches",  (ramp.v1.vocab) = "accesses", (ramp.v1.vocab) = "tokens",
+    (ramp.v1.vocab) = "calls",    (ramp.v1.vocab) = "pages",    (ramp.v1.vocab) = "minutes",
+    (ramp.v1.vocab) = "records",  (ramp.v1.vocab) = "streams",  (ramp.v1.vocab) = "images",
+    (ramp.v1.vocab) = "seats",    (ramp.v1.vocab) = "units-manufactured",
+    (ramp.v1.vocab) = "characters", (ramp.v1.vocab) = "bytes",  (ramp.v1.vocab) = "items",
+    (ramp.v1.vocab) = "sq-km",
+    (buf.validate.field).cel = {
+      id: "pricing.unit.format"
+      message: "unit must be empty, a lowercase-dashed token, or vendor:namespaced"
+      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[a-z0-9._-]+:.+$')"
+    }
+  ];
 
   // How usage is tracked for billing reconciliation.
   // Absent = PRICING_METERING_ONLINE (default real-time tracking).
@@ -1022,14 +1055,15 @@ message Pricing {
 // PricingModel — the charging STRUCTURE only (a genuinely closed, small set;
 // changes far less than yearly, so an enum is correct per Google AIP-126). The
 // open-ended metering basis ("per what") is NOT enumerated here — it lives in
-// Pricing.unit as a registry-governed vocabulary (vocab/pricing-units.json).
+// Pricing.unit as a registry-governed vocabulary (the (ramp.v1.vocab) field
+// options on Pricing.unit; see vocab.proto).
 // Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
 // are obligations (see ObligationKind); revenue-share settlement is off-protocol.
 // Pre-v1: renumbered cleanly, nothing reserved.
 enum PricingModel {
   PRICING_MODEL_UNSPECIFIED = 0;  // unset — rejected at ingest (omission cannot default to FREE)
   PRICING_MODEL_FREE        = 1;  // no charge; rate must be 0
-  PRICING_MODEL_PER_UNIT    = 2;  // rate per Pricing.unit; unit REQUIRED (from vocab/pricing-units.json)
+  PRICING_MODEL_PER_UNIT    = 2;  // rate per Pricing.unit; unit REQUIRED (registered token or vendor:custom)
   PRICING_MODEL_FLAT        = 3;  // one-time flat fee; rate is the total, no unit
 }
 

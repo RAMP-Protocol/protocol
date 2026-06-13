@@ -1,5 +1,18 @@
 # RAMP Protocol Changelog
 
+## Unreleased
+
+Additive, non-breaking (1.0.x). Introduces the buf-native vocabulary mechanism
+for open metering-basis tokens: a `(ramp.v1.vocab)` custom field option
+(`FieldOptions` extension 50001, defined in `ramp/v1/vocab.proto`) carries the
+registered bare tokens directly on `Pricing.unit`, and the `protoc-gen-rampvocab`
+buf plugin emits typed Go constants (`gen/go/vocab/pricingunits`), `All`, and
+`IsRegistered`. Adopts `protovalidate`: a structural field CEL on `Pricing.unit`
+(empty / lowercase-dashed / `vendor:namespaced`) and message-level CEL on
+`Pricing` (`PER_UNIT ⇒ unit`, `FREE ⇒ rate 0`). Adding a unit edits the option
+list only — no message-shape change. Replaces the side-car
+`vocab/pricing-units.json` registry.
+
 ## v1.0.0 — Initial release
 
 First public release of the RAMP Protocol (Resource Access Metering Protocol):
