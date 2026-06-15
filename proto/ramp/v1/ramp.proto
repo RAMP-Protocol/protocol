@@ -933,7 +933,7 @@ message Quota {
     (buf.validate.field).cel = {
       id: "quota.metric.format"
       message: "metric must be a lowercase-dashed token or vendor:namespaced"
-      expression: "this != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[a-z0-9._-]+:.+$'))"
+      expression: "this != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:.+$'))"
     }
   ];
 
@@ -1145,7 +1145,7 @@ message Pricing {
     (buf.validate.field).cel = {
       id: "pricing.unit.format"
       message: "unit must be empty, a lowercase-dashed token, or vendor:namespaced"
-      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[a-z0-9._-]+:.+$')"
+      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:.+$')"
     }
   ];
 
