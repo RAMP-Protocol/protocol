@@ -17,6 +17,9 @@ lint:
     # CoMP enums map proto3 value 0 to a real CoMP value (not a sentinel).
     # RAMP-native enums keep _UNSPECIFIED = 0, but CoMP-aligned enums
     # intentionally break this convention for 1:1 integer alignment.
+    # One RAMP-native exception: PricingMetering.PRICING_METERING_ONLINE = 0
+    # is a real default (absent = ONLINE), not a sentinel, so it carries no
+    # _UNSPECIFIED zero value either.
     - ENUM_ZERO_VALUE_SUFFIX
 breaking:
   use:
