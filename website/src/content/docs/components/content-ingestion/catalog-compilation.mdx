@@ -56,8 +56,8 @@ Each `CatalogEntry` maps to a protocol `OfferTemplate`. The content identity is 
 | `EstimatedTokens` | `ramp.Pricing` | `estimated_quantity` | `WordCount * 1.32` |
 | `Rate / EstimatedTokens` | `ramp.Pricing` | `unit_cost` | Computed at compilation |
 | `Domain + Path` | `ramp.ResourceIdentity` | `canonical_url` | Full URL |
-| `Permissions` | `ramp.AccessRestrictions` | `permitted_functions` | From RSL permits |
-| `Prohibitions` | `ramp.AccessRestrictions` | `prohibited_functions` | From RSL prohibits |
+| `Permissions` | `ramp.Restriction` (kind `RESTRICTION_KIND_FUNCTION`, on `LicenseTerm.restrictions`) | `permitted` | From RSL permits (hyphenated tokens, e.g. `ai-input`) |
+| `Prohibitions` | `ramp.Restriction` (kind `RESTRICTION_KIND_FUNCTION`, on `LicenseTerm.restrictions`) | `prohibited` | From RSL prohibits (hyphenated tokens, e.g. `ai-train`) |
 
 ## Pricing Attachment
 

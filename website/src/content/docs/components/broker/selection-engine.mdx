@@ -151,7 +151,7 @@ For single-URI queries, five stages are executed sequentially on the combined of
 
 ```mermaid
 graph LR
-    A[Collect all Offers<br/>from N Exchanges] --> B[Filter by<br/>AccessRestrictions]
+    A[Collect all Offers<br/>from N Exchanges] --> B[Surface term restrictions<br/>agent self-selects honourable term]
     B --> C[Filter by<br/>RequestConstraints]
     C --> D[Deduplicate by<br/>ResourceIdentity]
     D --> E[Rank by unit_cost<br/>lowest wins]
@@ -220,7 +220,7 @@ type BatchSelection struct {
 
 type SelectionRationale struct {
     TotalOffers       int
-    AfterRestrictions int
+    WithHonourableTerm int // offers exposing a term whose restrictions the agent can honour
     AfterConstraints  int
     AfterDedup        int
     WinningUnitCost   float64
@@ -230,49 +230,41 @@ type SelectionRationale struct {
 }
 ```
 
-## Stage 1: Filter by AccessRestrictions
+## Stage 1: Surface Term Restrictions (Agent Self-Selects)
 
-Each Offer carries optional `AccessRestrictions` from the provider's RSL. The Broker filters offers that don't match the agent's declared usage.
+Restrictions ride on the offer, not on a broker-side filter. Each `Offer.terms[]` entry is a `LicenseTerm` carrying `repeated Restriction` (with kinds like `RESTRICTION_KIND_FUNCTION`, `RESTRICTION_KIND_GEOGRAPHY`, `RESTRICTION_KIND_USER_TYPE`). The Broker does **not** match a requester's self-declared attributes (function, geography, user type) against these restrictions to drop offers. Instead it surfaces the restrictions on each offer's terms; the agent self-selects the term whose restrictions it can honour. Real enforcement happens downstream at accept -> report -> reconcile.
+
+The Broker may help the agent by annotating which term it can honour, but it does not silently remove offers whose terms carry restrictions. The function-token vocabulary is the hyphenated string form (`ai-train`, `ai-index`, `ai-input`, `crawl`, `search`, ...).
 
 ```go
-func filterByRestrictions(offers []rankedOffer, aisystem *compv1.AISystem) []rankedOffer {
-    var passed []rankedOffer
-    for _, o := range offers {
-        r := o.Offer.Restrictions
-        if r == nil {
-            passed = append(passed, o) // no restrictions = all permitted
-            continue
+// honourableTerm returns the first LicenseTerm whose restrictions the agent
+// can honour, given its declared function. It does NOT drop the offer when no
+// term matches -- the offer is still surfaced; the agent decides.
+func honourableTerm(offer *rampv1.Offer, declaredFunction string) *rampv1.LicenseTerm {
+    for _, term := range offer.Terms {
+        if restrictionsHonoured(term.Restrictions, declaredFunction) {
+            return term
         }
-
-        // Check function compatibility
-        if !functionsPermitted(r, aisystem.Aisysuse.Function) {
-            continue
-        }
-
-        // Check geo restrictions (if agent declares geo)
-        // Check user type restrictions
-        // ...
-
-        passed = append(passed, o)
     }
-    return passed
+    return nil
 }
 
-func functionsPermitted(r *rampv1.AccessRestrictions, requested []compv1.Function) bool {
-    // If prohibited_functions contains any requested function, reject
-    for _, req := range requested {
-        for _, prohibited := range r.ProhibitedFunctions {
-            if req == prohibited {
+func restrictionsHonoured(restrictions []*rampv1.Restriction, declaredFunction string) bool {
+    for _, r := range restrictions {
+        if r.Kind != rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION {
+            continue // geography / user-type evaluated by the agent against its own context
+        }
+        // If prohibited contains the declared function, this term cannot be honoured.
+        for _, prohibited := range r.Prohibited {
+            if prohibited == declaredFunction {
                 return false
             }
         }
-    }
-    // If permitted_functions is non-empty, requested must be a subset
-    if len(r.PermittedFunctions) > 0 {
-        for _, req := range requested {
+        // If permitted is non-empty, the declared function must be in it.
+        if len(r.Permitted) > 0 {
             found := false
-            for _, perm := range r.PermittedFunctions {
-                if req == perm || perm == compv1.Function_FUNCTION_ALL {
+            for _, perm := range r.Permitted {
+                if perm == declaredFunction {
                     found = true
                     break
                 }

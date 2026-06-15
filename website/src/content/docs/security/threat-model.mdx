@@ -244,6 +244,28 @@ Line 3: Legal/contractual enforcement
 **Attack**: Agent obtains multiple delegation tokens for the same subscription (e.g., by requesting new delegations from different intermediaries) to exceed per-subscription quotas.
 **Countermeasure (protocol)**: **Exchange tracks quotas by `subscription_id`, not by delegation token.** All tokens referencing the same subscription share one counter. Multiple tokens for the same subscription do not multiply the quota. Rate limiting is applied at the subscription level regardless of how many delegation tokens reference it.
 
+## 9. Licensing-Layer Threats
+
+### T-LIC-1: SSRF / phishing via `License.uri`
+
+**Attack**: A malicious publisher pushes a term whose `License.uri` points at an internal address — `http://169.254.169.254/latest/meta-data/…` (cloud metadata), `http://localhost:6379/`, or `file:///etc/passwd`. An agent platform that auto-fetches the document to "read the license before use" (REFERENCE_ONLY requires this) issues a server-side request into its own infrastructure — leaking cloud credentials, reaching internal services, or reading local files. A variant points `uri` at attacker-controlled HTTPS to harvest the fetcher's identity/IP or serve misleading terms.
+**Countermeasure (protocol)**: `License.uri` is deliberately never *rejected* at ingest (data-labels TDL identifiers use non-URL schemes) — but "do not reject" is not "blindly fetch." A consumer that resolves `uri` MUST: (a) allowlist schemes (`https` + known TDL schemes); (b) block loopback, link-local, private, and cloud-metadata IP ranges, resolving-then-checking to defeat DNS rebinding; (c) fetch client-side through an egress proxy, never from the Exchange's privileged network; (d) treat the fetched bytes as untrusted content. The Exchange applies the same rules when it fetches to pin `uri_digest` (T-LIC-4).
+
+### T-LIC-2: Silent restriction downgrade
+
+**Attack**: A publisher forbids training (`Restriction{kind: FUNCTION, prohibited: ["ai-train"]}`) but the consumer does not recognize a token, or the publisher forgot to mark the restriction binding. The consumer treats it as advisory and proceeds — silent infringement with plausible deniability.
+**Countermeasure (protocol)**: `Restriction.advisory` is **fail-closed by default** (it inverts the COSE-`crit` opt-in). A restriction is binding unless `advisory = true`; a consumer that cannot evaluate every token in a binding restriction MUST decline the term. A forgotten flag therefore fails *safe* — publishers opt into leniency explicitly and never lose protection by omission.
+
+### T-LIC-3: Scope-gating escalation
+
+**Attack**: Term visibility is gated by Biscuit scope coverage (`LicenseTerm.scopes`, AND-semantics, empty = public). Two failure modes: (a) a publisher forgets `scopes` on a premium term → it defaults to public and leaks for free; (b) two implementations match scopes differently — naive prefix matching lets `sub:` cover `subscription:premium`, or `dist:*` is read as covering `dist:US:internal` on one Exchange but not another → an agent's Biscuit is read as covering a term it should not.
+**Countermeasure (protocol)**: Scope matching is **exact and segment-wise**, never substring/prefix — scopes are `:`-delimited segments and a `*` segment matches exactly one level (or, where explicitly defined, all deeper levels; define which, once). Coverage is decided by **Biscuit authorization (Datalog)**, the same primitive used for delegation, so every Exchange evaluates it identically instead of re-implementing string matching. `empty = public` stays the explicit, documented default; backfilling a sentinel scope (e.g. `r:all`) is **not** required — it only relocates the "forgot to set it" failure and forces every publisher to issue an extra Biscuit fact, without adding enforcement. (cf. OAuth 2.0 and AWS IAM: exact-match with explicitly-defined wildcard expansion, no implicit hierarchy.)
+
+### T-LIC-4: Referenced-document swap
+
+**Attack**: A term carries a `License.uri`; the agent fetches and trusts the document. The publisher (or a MitM on the fetch) later changes the bytes at `uri` — which is just a URL — so the agent's understanding of the terms silently diverges from what was offered. `immutable: true` makes this worse (the agent caches and stops re-checking), but a mutable `uri` is swappable too.
+**Countermeasure (protocol)**: `License.uri_digest` pins the document as `method:hexdigest` and is **required whenever `uri` is present** — any semantics, mutable or not. The Exchange pins it at ingestion (computing it over the safely-fetched document per T-LIC-1, or accepting a publisher-supplied value for non-HTTP schemes). Because the entire Offer is signed, the digest is tamper-evident; the agent verifies the bytes it fetches against it and refuses on mismatch.
+
 ## Comparison to Ad-Tech Fixes
 
 | Ad-Tech Fix | Year | RAMP Equivalent | Status |

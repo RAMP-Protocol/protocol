@@ -336,7 +336,7 @@ RampClient
   +-- SelectionEngine
   |     Ranks offers: subscription > preferred MP > lowest unit_cost.
   |     Deduplicates by ResourceIdentity across Exchanges.
-  |     Enforces AccessRestrictions filtering.
+  |     Self-selects the Offer.terms[] term whose restrictions the agent can honour.
   |
   +-- BudgetTracker
   |     Per-request: reject if offer > MaxPerRequest.

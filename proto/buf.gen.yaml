@@ -18,7 +18,9 @@ plugins:
   - remote: buf.build/connectrpc/es
     out: ../gen/ts
     opt: target=ts
-  # RAMP vocabulary constants — reads (ramp.v1.vocab) field options and emits
-  # typed token constants + IsRegistered per axis (pilot: Pricing.unit).
+  # RAMP vocabulary constants — reads (ramp.v1.vocab) field options and
+  # (ramp.v1.vocab_enum) enum-value options and emits typed token constants +
+  # IsRegistered per axis (Pricing.unit, Quota.metric, function, geography,
+  # user-type).
   - local: ["go", "run", "github.com/RAMP-Protocol/protocol/cmd/protoc-gen-rampvocab"]
     out: ../gen/go/vocab

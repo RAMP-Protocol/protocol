@@ -116,13 +116,13 @@ Provider drops rsl.txt + ramp.json on their domain
   -> Exchange returns Offers derived from RSL terms
 ```
 
-RSL permits and prohibits map directly to RAMP `AccessRestrictions`:
+RSL permits and prohibits map directly to RAMP `Restriction` entries carried on each `LicenseTerm.restrictions` (on `Offer.terms[]`):
 
 | RSL Term | RAMP Field |
 |---|---|
-| `<permits type="usage">ai-input</permits>` | `restrictions.permitted_functions: [FUNCTION_AI_INPUT]` |
-| `<prohibits type="usage">ai-train</prohibits>` | `restrictions.prohibited_functions: [FUNCTION_AI_TRAIN]` |
-| `<payment type="crawl" amount="0.05"/>` | `pricing.model: PRICING_MODEL_PER_FETCH, pricing.rate: 0.05` |
+| `<permits type="usage">ai-input</permits>` | `terms[].restrictions: [{ kind: RESTRICTION_KIND_FUNCTION, permitted: ["ai-input"] }]` |
+| `<prohibits type="usage">ai-train</prohibits>` | `terms[].restrictions: [{ kind: RESTRICTION_KIND_FUNCTION, prohibited: ["ai-train"] }]` |
+| `<payment type="crawl" amount="0.05"/>` | `pricing.model: PRICING_MODEL_PER_UNIT, pricing.unit: "fetches", pricing.rate: 0.05` |
 
 ## CoMP Integration
 
@@ -143,10 +143,10 @@ RAMP adds its own objects on top of CoMP:
 | RAMP Object | Purpose |
 |---|---|
 | `Pricing` | Rate, currency, pricing model, unit_cost normalization |
-| `Offer` | Wraps a CoMP Package with pricing, restrictions, identity, attestations, and exchange signature |
+| `Offer` | Wraps a CoMP Package with pricing, license terms (`terms[]`), identity, attestations, and exchange signature |
 | `ResourceIdentity` | Cross-exchange content deduplication (canonical URL, IPTC GUID, SimHash) |
 | `ResourceAttestation` | Signed claim envelope for content integrity verification (v1.0, replaces ContentQuality) |
-| `AccessRestrictions` | Permitted/prohibited functions mapped from RSL |
+| `LicenseTerm` / `Restriction` | Permitted/prohibited functions (and geography/user-type) mapped from RSL, carried on `Offer.terms[].restrictions` |
 | `ReportingObligation` | Usage reporting requirements and deadlines |
 | `ResourceMutability` | Signals whether resource is static, dynamic, or live -- drives hash verification behavior (v1.0) |
 | `OfferAbsenceReason` | Per-URI diagnostic when no offers available (v1.0) |
@@ -182,7 +182,7 @@ RAMP adds its own objects on top of CoMP:
 |  |  DisputeTransaction - Content dispute signaling (v1.0)||
 |  |  ResourceIdentity - Cross-exchange dedup            ||
 |  |  ResourceAttestation - Cryptographic verification(v1.0)||
-|  |  AccessRestrictions - RSL permits/prohibits as proto  ||
+|  |  LicenseTerm.restrictions - RSL permits/prohibits    ||
 |  |  DomainVerification - Provider onboarding (v1.0)     ||
 |  |  Signed URLs --- CDN-native delivery (implementation) ||
 |  |  ramp.json (ROLE_PUBLISHER) - Verifier keys (v1.0)  ||
@@ -229,7 +229,7 @@ Three proto fields create a complete declaration chain: `RAMPRequest.supported_p
 
 RAMP v1.0 supports unit-agnostic pricing via `unit_cost` + `estimated_quantity` + `unit`, replacing the text-specific per-token pricing fields from earlier versions.
 
-**Pricing models** include per-article, per-crawl, per-page, per-minute, per-record, flat rate, subscription, and revenue share. New v1.0 models (`PER_PAGE`, `PER_MINUTE`, `PER_RECORD`) enable legal documents, video/audio, and database records respectively.
+**Pricing models** are `PRICING_MODEL_FREE`, `PRICING_MODEL_PER_UNIT`, and `PRICING_MODEL_FLAT`. `PER_UNIT` is unit-agnostic — `Pricing.unit` names what is metered (`articles`, `fetches`, `pages`, `minutes`, `records`, `tokens`, …), so legal documents (pages), video/audio (minutes), and database records (records) are all priced through one model. Subscriptions are modeled as `FREE` + a `subscription:` scope on the `LicenseTerm` (settled off-protocol, access scope-gated); revenue settlement is off-protocol and not a pricing model.
 
 **Delivery methods**: `DELIVERY_METHOD_INSTRUCTIONS` (signed URL for static fetch), `DELIVERY_METHOD_INLINE` (content in response), and `DELIVERY_METHOD_STREAMING` (signed URL to a streaming endpoint -- WebSocket, SSE, HLS, Icecast). Streaming is used for live broadcasts, quote feeds, and monitoring feeds.
 

@@ -72,7 +72,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "uris": [
       "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:a4c9f2e8b7d1...",
     "signature_algorithm": "ed25519"
@@ -90,7 +90,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 ### Step 3 — ResourceResponse
 
-The Exchange looks up the article in its catalog, checks that the agent's `intended_use` (`FUNCTION_AI_INPUT`) is permitted, and returns an offer:
+The Exchange looks up the article in its catalog and returns an offer. It does not filter the offer against the agent's `intended_use` — the restrictions ride on the offer's terms, and the agent self-selects the term whose `RESTRICTION_KIND_FUNCTION` permitted list covers its intended use (`ai-input`); enforcement happens downstream at accept → report → reconcile:
 
 ```json
 {
@@ -113,12 +113,12 @@ The Exchange looks up the article in its catalog, checks that the agent's `inten
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_ACCESS",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 0.05,
             "currency": "USD",
             "unit_cost": 0.0000156,
             "estimated_quantity": 3200,
-            "unit": "tokens"
+            "unit": "accesses"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -146,10 +146,17 @@ The Exchange looks up the article in its catalog, checks that the agent's `inten
               "signature": "base64-ed25519-tc-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "ai-index", "search"],
+                  "prohibited": ["ai-train"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-offer-sig...",
           "signature_algorithm": "ed25519"
         }
@@ -161,10 +168,10 @@ The Exchange looks up the article in its catalog, checks that the agent's `inten
 
 **What the agent learns from this response:**
 
-- **Pricing**: `PRICING_MODEL_PER_ACCESS` at $0.05, with an estimated 3,200 tokens. The `unit_cost` ($0.0000156/token) enables cross-exchange comparison when a Broker aggregates offers.
+- **Pricing**: `PRICING_MODEL_PER_UNIT` (`unit: "accesses"`) at $0.05, with an estimated 3,200 tokens. The `unit_cost` ($0.0000156/token) enables cross-exchange comparison when a Broker aggregates offers.
 - **Content mutability**: `RESOURCE_MUTABILITY_STATIC` — this article will not change. The agent SHOULD verify the SHA-256 hash on delivery. A mismatch is disputable.
 - **Attestation**: Level 1 (self-attested by `techcrunch.com`). The provider signed its own claims about word count and token estimate. A third-party attestation (Level 2, e.g., from `gumgum.com`) would carry higher trust.
-- **Restrictions**: AI input, indexing, and search are permitted. Training is prohibited.
+- **Restrictions**: AI input (`ai-input`), indexing (`ai-index`), and search (`search`) are permitted. Training (`ai-train`) is prohibited.
 - **`exchange_signature`**: Ed25519 signature over the offer. The Exchange will verify this same signature when the agent commits to the offer — no server-side offer storage needed (stateless verification).
 
 ### Step 4 — ExecuteTransaction
@@ -187,7 +194,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "uris": [
       "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:b5d0e3f9c8a2...",
     "signature_algorithm": "ed25519"
@@ -259,7 +266,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
   "transaction_id": "txn-tc-001",
   "billing_id": "bill-tc-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
+    "function": ["ai-input"],
     "consumed_quantity": 3150,
     "consumed_unit": "tokens",
     "displayed_to_user": true,
@@ -334,7 +341,7 @@ POST https://exchange.bloomberg-data.com/ramp/v1/ramp.v1.ExchangeService/Discove
     "uris": [
       "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["quote:*", "earnings:*", "news:read"],
     "signature": "ed25519:c6d1e4f7a8b2...",
     "signature_algorithm": "ed25519",
@@ -402,7 +409,7 @@ The Exchange verifies the Biscuit, confirms `earnings:*` covers the requested UR
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_SUBSCRIPTION",
+            "model": "PRICING_MODEL_FREE",
             "rate": 0,
             "currency": "USD",
             "unit_cost": 0,
@@ -436,10 +443,18 @@ The Exchange verifies the Biscuit, confirms `earnings:*` covers the requested UR
               "signature": "base64-ed25519-bb-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train", "ai-index"]
+                }
+              ],
+              "scopes": ["subscription:enterprise-sub-HF-001"]
+            }
+          ],
           "subscription_quota": [
             {
               "subscription_id": "enterprise-sub-HF-001",

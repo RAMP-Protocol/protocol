@@ -22,11 +22,11 @@ The agent does not know individual document URIs — it knows a company name and
 
 | # | Resource | Exchange | Pricing Model | Mutability | Est. Cost |
 |---|----------|-------------|---------------|------------|-----------|
-| 1 | D&B credit report | `exchange.creditdata.com` | PER_RECORD ($61.99) | DYNAMIC | $61.99 |
-| 2 | PACER court filings (3 found) | `exchange.legaldata.com` | PER_PAGE ($0.10/page, ~105 pages) | STATIC | $10.50 |
-| 3 | CoreLogic property records (5 properties) | `exchange.propertydata.com` | PER_RECORD ($2.50/record) | STATIC | $12.50 |
+| 1 | D&B credit report | `exchange.creditdata.com` | PER_UNIT ($61.99/record) | DYNAMIC | $61.99 |
+| 2 | PACER court filings (3 found) | `exchange.legaldata.com` | PER_UNIT ($0.10/page, ~105 pages) | STATIC | $10.50 |
+| 3 | CoreLogic property records (5 properties) | `exchange.propertydata.com` | PER_UNIT ($2.50/record) | STATIC | $12.50 |
 | 4 | EDGAR SEC filings (4 10-K/10-Q) | `exchange.secdata.com` | FREE | STATIC | $0.00 |
-| 5 | News articles (8 recent) | `exchange.newsagg.com` | PER_ACCESS ($0.05/article) | STATIC | $0.40 |
+| 5 | News articles (8 recent) | `exchange.newsagg.com` | PER_UNIT ($0.05/access) | STATIC | $0.40 |
 | 6 | Patents citing Acme tech (2 patents) | `exchange.secdata.com` | FREE | STATIC | $0.00 |
 
 **Total estimated: $85.39 out of $1,500 budget**
@@ -48,7 +48,7 @@ POST https://broker.lawfirm.com/ramp/v1
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
     "uris": [],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["credit:read", "legal:read", "property:read", "sec:read", "news:read"],
     "signature": "ed25519:f1a2b3c4d5e6...",
     "signature_algorithm": "ed25519"
@@ -122,7 +122,7 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverRes
     "uris": [
       "https://creditdata.com/reports/duns/123456789"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["credit:read"],
     "signature": "ed25519:a1b2c3d4...",
     "signature_algorithm": "ed25519"
@@ -157,7 +157,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
       "https://pacer.uscourts.gov/case/3:25-cv-05678",
       "https://pacer.uscourts.gov/case/1:23-cv-09012"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["legal:read"],
     "signature": "ed25519:c3d4e5f6...",
     "signature_algorithm": "ed25519"
@@ -191,7 +191,7 @@ POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResour
       "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-K&dateb=&owner=include&count=2",
       "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-Q&dateb=&owner=include&count=2"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["sec:read"],
     "signature": "ed25519:k1l2m3n4...",
     "signature_algorithm": "ed25519"
@@ -217,7 +217,7 @@ POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResour
 
 Each Exchange returns offers in its domain-specific pricing model. The Broker aggregates them. Here are three representative responses:
 
-### Response 1: Credit Report — DYNAMIC, PER_RECORD
+### Response 1: Credit Report — DYNAMIC, PER_UNIT (records)
 
 ```json
 {
@@ -240,7 +240,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_RECORD",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 61.99,
             "currency": "USD",
             "unit_cost": 61.99,
@@ -273,10 +273,17 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
               "signature": "base64-ed25519-dnb-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-credit-offer-sig...",
           "signature_algorithm": "ed25519"
         }
@@ -288,7 +295,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
 
 **Key: DYNAMIC mutability.** The credit report reflects data as of 06:00 UTC today. The `resource_mutability: DYNAMIC` signals that the content may change between offer and fetch. There is no `content_hash` — hash mismatch is expected and is not disputable. The `data_as_of` timestamp lets the Broker verify freshness against `max_data_age` (7 days).
 
-### Response 2: Court Filings — STATIC, PER_PAGE, Batch
+### Response 2: Court Filings — STATIC, PER_UNIT (pages), Batch
 
 ```json
 {
@@ -311,7 +318,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_PAGE",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 0.10,
             "currency": "USD",
             "unit_cost": 0.10,
@@ -340,10 +347,17 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
               "signature": "base64-ed25519-pacer-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-legal-offer-sig-001...",
           "signature_algorithm": "ed25519"
         }
@@ -362,7 +376,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             "retrieval": { "type": ["RETRIEVAL_TYPE_PDF"] }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_PAGE",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 0.10,
             "currency": "USD",
             "estimated_quantity": 32,
@@ -389,7 +403,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             "retrieval": { "type": ["RETRIEVAL_TYPE_PDF"] }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_PAGE",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 0.10,
             "currency": "USD",
             "estimated_quantity": 28,
@@ -442,9 +456,16 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             "hash_method": "sha256",
             "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
           },
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "ai-index", "search"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-sec-offer-sig-10k-2025...",
           "signature_algorithm": "ed25519"
         }
@@ -484,11 +505,11 @@ The Broker collects all 6 `ResourceResponse` results and builds an aggregate cos
 ├────────────────────┬────────────┬───────────┬───────────┬──────────┤
 │ Resource           │ Exchange│ Model     │ Items     │ Est Cost │
 ├────────────────────┼────────────┼───────────┼───────────┼──────────┤
-│ D&B Credit Report  │ creditdata │ PER_RECORD│ 1 report  │  $61.99  │
-│ PACER Filings      │ legaldata  │ PER_PAGE  │ 105 pages │  $10.50  │
-│ Property Records   │ propertydata│PER_RECORD│ 5 records │  $12.50  │
+│ D&B Credit Report  │ creditdata │ PER_UNIT  │ 1 report  │  $61.99  │
+│ PACER Filings      │ legaldata  │ PER_UNIT  │ 105 pages │  $10.50  │
+│ Property Records   │ propertydata│PER_UNIT  │ 5 records │  $12.50  │
 │ SEC EDGAR Filings  │ secdata    │ FREE      │ 4 filings │   $0.00  │
-│ News Articles      │ newsagg    │ PER_ACCESS│8 articles│   $0.40  │
+│ News Articles      │ newsagg    │ PER_UNIT  │8 articles│   $0.40  │
 │ USPTO Patents      │ secdata    │ FREE      │ 2 patents │   $0.00  │
 ├────────────────────┴────────────┴───────────┴───────────┼──────────┤
 │ TOTAL ESTIMATED                                         │  $85.39  │
@@ -500,7 +521,7 @@ The Broker collects all 6 `ResourceResponse` results and builds an aggregate cos
 
 **What the Broker verified before proceeding:**
 1. **Freshness**: Credit report `data_as_of` (today 06:00) is within `max_data_age` (7 days)
-2. **Restrictions**: All offers permit `FUNCTION_AI_INPUT`
+2. **Restrictions**: All offers permit `ai-input`
 3. **Budget**: Total estimated cost ($85.39) is within the deal budget ($1,500)
 4. **Dedup**: No duplicate resources across Exchanges (each URI is unique)
 5. **Mutability**: Tagged each resource — agent will verify SHA-256 on STATIC resources, skip hash check on DYNAMIC (credit report)
@@ -524,7 +545,7 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTran
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
     "uris": ["https://creditdata.com/reports/duns/123456789"],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["credit:read"],
     "signature": "ed25519:a1b2c3d4...",
     "signature_algorithm": "ed25519"
@@ -560,7 +581,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
       "https://pacer.uscourts.gov/case/3:25-cv-05678",
       "https://pacer.uscourts.gov/case/1:23-cv-09012"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["legal:read"],
     "signature": "ed25519:c3d4e5f6...",
     "signature_algorithm": "ed25519"
@@ -667,7 +688,7 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
   "transaction_id": "txn-credit-001",
   "billing_id": "bill-credit-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
+    "function": ["ai-input"],
     "consumed_quantity": 1,
     "consumed_unit": "records",
     "displayed_to_user": true,
@@ -698,7 +719,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
   "transaction_id": "txn-legal-001",
   "billing_id": "bill-legal-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
+    "function": ["ai-input"],
     "consumed_quantity": 45,
     "consumed_unit": "pages",
     "displayed_to_user": true,
@@ -755,18 +776,18 @@ The agent sends one high-level request. The Broker handles:
 - **Freshness validation**: `max_data_age` checked against `data_as_of` for DYNAMIC resources
 - **Dedup**: `ResourceIdentity` prevents paying for the same resource twice across Exchanges
 
-### 2. Six Pricing Models in One Workflow
+### 2. Six Metering Bases in One Workflow
 
-| Model | Resource | How It Works |
+| Model (unit) | Resource | How It Works |
 |-------|----------|-------------|
-| `PER_RECORD` | Credit report | $61.99 per report — high-value, dynamic data |
-| `PER_PAGE` | Court filings | $0.10 per page — granular, document-level metering |
-| `PER_RECORD` | Property records | $2.50 per record — structured data access |
+| `PER_UNIT` (records) | Credit report | $61.99 per report — high-value, dynamic data |
+| `PER_UNIT` (pages) | Court filings | $0.10 per page — granular, document-level metering |
+| `PER_UNIT` (records) | Property records | $2.50 per record — structured data access |
 | `FREE` | SEC filings | $0.00 — public government data, metered for reporting |
-| `PER_ACCESS` | News articles | $0.05 per article — low-value, high-volume |
+| `PER_UNIT` (accesses) | News articles | $0.05 per article — low-value, high-volume |
 | `FREE` | Patents | $0.00 — public data, usage tracked but not billed |
 
-All pricing models use the same `Pricing` message. The `unit_cost` field enables cross-exchange comparison regardless of the underlying model.
+Two charging structures (`PER_UNIT` and `FREE`) cover all six resources — the variety lives in the `Pricing.unit` metering basis (records, pages, accesses), not in the model. All pricing uses the same `Pricing` message, and the `unit_cost` field enables cross-exchange comparison regardless of the underlying unit.
 
 ### 3. Mixed Mutability
 

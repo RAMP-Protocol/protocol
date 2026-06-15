@@ -43,6 +43,14 @@ var file_ramp_v1_vocab_proto_extTypes = []protoimpl.ExtensionInfo{
 		Tag:           "bytes,50001,rep,name=vocab",
 		Filename:      "ramp/v1/vocab.proto",
 	},
+	{
+		ExtendedType:  (*descriptorpb.EnumValueOptions)(nil),
+		ExtensionType: ([]string)(nil),
+		Field:         50002,
+		Name:          "ramp.v1.vocab_enum",
+		Tag:           "bytes,50002,rep,name=vocab_enum",
+		Filename:      "ramp/v1/vocab.proto",
+	},
 }
 
 // Extension fields to descriptorpb.FieldOptions.
@@ -51,11 +59,30 @@ var (
 	// authored directly on the field that uses it. The direct `repeated string`
 	// form is intentional — modern protoc supports repeated custom options, so
 	// there is no need to wrap the tokens in a message. Number 50001 sits in the
-	// internal extension range (50000–99999); sibling axes (Quota.metric,
-	// geography, function) reserve their own numbers in the same block.
+	// internal extension range (50000–99999). Field axes (Pricing.unit,
+	// Quota.metric) carry their tokens here; axes selected by an enum value
+	// (function, geography, user-type, selected by RestrictionKind) carry their
+	// tokens on the enum-value extension below.
 	//
 	// repeated string vocab = 50001;
 	E_Vocab = &file_ramp_v1_vocab_proto_extTypes[0]
+)
+
+// Extension fields to descriptorpb.EnumValueOptions.
+var (
+	// vocab_enum is the enum-value-scoped twin of (ramp.v1.vocab) above. Axes
+	// whose token list is selected by an enum value — the function / geography /
+	// user-type tokens carried in Restriction.permitted/prohibited and selected
+	// by Restriction.kind — author their tokens directly on the corresponding
+	// RestrictionKind enum value. Same registry mechanism: protoc-gen-rampvocab
+	// reads these entries structurally off the enum-value descriptor and emits
+	// the per-axis constants + IsRegistered. A separate extension is required
+	// because an extend block targets exactly one options message; FieldOptions
+	// extension 50001 cannot also extend EnumValueOptions. Number 50002 reserves
+	// the next slot in the same internal block.
+	//
+	// repeated string vocab_enum = 50002;
+	E_VocabEnum = &file_ramp_v1_vocab_proto_extTypes[1]
 )
 
 var File_ramp_v1_vocab_proto protoreflect.FileDescriptor
@@ -63,19 +90,23 @@ var File_ramp_v1_vocab_proto protoreflect.FileDescriptor
 const file_ramp_v1_vocab_proto_rawDesc = "" +
 	"\n" +
 	"\x13ramp/v1/vocab.proto\x12\aramp.v1\x1a google/protobuf/descriptor.proto:5\n" +
-	"\x05vocab\x12\x1d.google.protobuf.FieldOptions\x18ц\x03 \x03(\tR\x05vocabB\x8f\x01\n" +
+	"\x05vocab\x12\x1d.google.protobuf.FieldOptions\x18ц\x03 \x03(\tR\x05vocab:B\n" +
+	"\n" +
+	"vocab_enum\x12!.google.protobuf.EnumValueOptions\x18҆\x03 \x03(\tR\tvocabEnumB\x8f\x01\n" +
 	"\vcom.ramp.v1B\n" +
 	"VocabProtoP\x01Z7github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1\xa2\x02\x03RXX\xaa\x02\aRamp.V1\xca\x02\aRamp\\V1\xe2\x02\x13Ramp\\V1\\GPBMetadata\xea\x02\bRamp::V1b\x06proto3"
 
 var file_ramp_v1_vocab_proto_goTypes = []any{
-	(*descriptorpb.FieldOptions)(nil), // 0: google.protobuf.FieldOptions
+	(*descriptorpb.FieldOptions)(nil),     // 0: google.protobuf.FieldOptions
+	(*descriptorpb.EnumValueOptions)(nil), // 1: google.protobuf.EnumValueOptions
 }
 var file_ramp_v1_vocab_proto_depIdxs = []int32{
 	0, // 0: ramp.v1.vocab:extendee -> google.protobuf.FieldOptions
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	0, // [0:1] is the sub-list for extension extendee
+	1, // 1: ramp.v1.vocab_enum:extendee -> google.protobuf.EnumValueOptions
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	0, // [0:2] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
 }
 
@@ -91,7 +122,7 @@ func file_ramp_v1_vocab_proto_init() {
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ramp_v1_vocab_proto_rawDesc), len(file_ramp_v1_vocab_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   0,
-			NumExtensions: 1,
+			NumExtensions: 2,
 			NumServices:   0,
 		},
 		GoTypes:           file_ramp_v1_vocab_proto_goTypes,

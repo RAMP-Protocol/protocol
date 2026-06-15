@@ -52,7 +52,7 @@ these ext fields in Offers and expect them in UsageReports.
 | `comp.license[].duration_months` | integer | No | License duration |
 | `comp.license[].maxword` | integer | No | Max display words |
 
-### Usage Functions (on AccessRestrictions.ext and Usage.ext)
+### Usage Functions (on LicenseTerm.restrictions[].ext and Usage.ext)
 
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
@@ -69,7 +69,7 @@ these ext fields in Offers and expect them in UsageReports.
 
 An Exchange declaring `ramp-comp-v1` support MUST:
 - Include `comp.package_id` on every Offer
-- Forward `comp.function` from AccessRestrictions to UsageReport processing
+- Forward `comp.function` from the Function `Restriction` to UsageReport processing
 - Validate `comp.*` ext fields against this profile's schema
 
 An Agent using `ramp-comp-v1` MUST:
@@ -79,7 +79,7 @@ An Agent using `ramp-comp-v1` MUST:
 
 The core RAMP protocol carries universal fields:
 - `Offer.title` — human-readable resource title
-- `AccessRestrictions.permitted_functions` / `prohibited_functions` — string-based (not CoMP enums)
+- `LicenseTerm.restrictions[]` with `kind: RESTRICTION_KIND_FUNCTION` carrying `permitted` / `prohibited` — string-based (not CoMP enums)
 - `Usage.function` / `Usage.subfn` — string-based
 
 The `ramp-comp-v1` profile adds CoMP-specific semantics:

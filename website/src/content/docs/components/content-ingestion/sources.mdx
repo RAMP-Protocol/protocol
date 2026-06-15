@@ -142,17 +142,17 @@ Parses RSL 1.0 XML to extract permits, prohibits, and payment hints per content 
 
 ### RSL Payment Type to RAMP PricingModel
 
-| RSL Payment Type | RAMP PricingModel | Notes |
+| RSL Payment Type | RAMP `Pricing` | Notes |
 |---|---|---|
-| `crawl` | `PRICING_MODEL_PER_FETCH` | Per-fetch pricing |
-| `purchase` | `PRICING_MODEL_PER_ACCESS` | One-time access fee |
-| `subscription` | `PRICING_MODEL_SUBSCRIPTION` | Recurring access |
-| `free` | `PRICING_MODEL_FREE` | No charge |
-| `attribution` | `PRICING_MODEL_ATTRIBUTION` | Free with required citation |
-| `contribution` | `PRICING_MODEL_CONTRIBUTION` | Good-faith payment |
-| `training` | `PRICING_MODEL_TRAINING` | Per training instance |
-| `use` / `inference` | `PRICING_MODEL_PER_TOKEN` | Per-token consumption |
-| *(omitted)* | `PRICING_MODEL_UNSPECIFIED` | No `<payment>` in RSL = "contact Exchange for pricing" |
+| `crawl` | `PER_UNIT` (`unit: "fetches"`) | implies a `FUNCTION` restriction `crawl` |
+| `purchase` | `FLAT` (one-time) or `PER_UNIT` (metered) | per the RSL `unit` attribute |
+| `subscription` | `FREE` + `scopes: ["subscription:…"]` | settled off-protocol; access scope-gated |
+| `free` | `FREE` | no charge (stated explicitly) |
+| `attribution` | `FREE` + `Obligation{ATTRIBUTION, ON_USE}` | attribution is an obligation, not a model |
+| `contribution` | `FREE` + `Obligation{CONTRIBUTION, ON_USE}` | contribution is an obligation, not a model |
+| `training` | `PER_UNIT` (`unit` per RSL — `tokens`, `pages`, `fetches`) | implies a `FUNCTION` restriction `ai-train` |
+| `use` / `inference` | `PER_UNIT` (`unit: "tokens"`) | implies a `FUNCTION` restriction `ai-input` |
+| *(omitted)* | `PRICING_MODEL_UNSPECIFIED` | No `<payment>` in RSL = "contact Exchange for pricing" (rejected at ingest) |
 
 ### RSL Usage Type to CoMP Function
 

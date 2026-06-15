@@ -161,7 +161,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverR
       "doi:10.1016/j.media.2023.103078",
       "doi:10.1038/s41592-024-02467-x"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["academic:*"],
     "signature": "ed25519:d7e8f9a0b1c2...",
     "signature_algorithm": "ed25519",
@@ -262,10 +262,17 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
               "signature": "base64-ed25519-arxiv-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH", "FUNCTION_AI_TRAIN"],
-            "prohibited_functions": []
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "ai-index", "search", "ai-train"],
+                  "prohibited": []
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-arxiv-offer-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
@@ -292,7 +299,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_SUBSCRIPTION",
+            "model": "PRICING_MODEL_FREE",
             "rate": 0,
             "currency": "USD",
             "unit_cost": 0,
@@ -331,10 +338,18 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
               "signature": "base64-ed25519-elsevier-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train"]
+                }
+              ],
+              "scopes": ["subscription:inst-sub-stanford-2026"]
+            }
+          ],
           "subscription_quota": [
             {
               "subscription_id": "inst-sub-stanford-2026",
@@ -372,12 +387,12 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_ACCESS",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 1.50,
             "currency": "USD",
             "unit_cost": 0.0001136,
             "estimated_quantity": 13200,
-            "unit": "tokens"
+            "unit": "accesses"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -410,10 +425,17 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
               "signature": "base64-ed25519-springer-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-springer-paid-offer-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
@@ -441,12 +463,12 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_ACCESS",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 1.50,
             "currency": "USD",
             "unit_cost": 0.0001071,
             "estimated_quantity": 14000,
-            "unit": "tokens"
+            "unit": "accesses"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -481,10 +503,17 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
               "signature": "base64-ed25519-springer-retraction-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-springer-retracted-offer-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
@@ -520,9 +549,9 @@ The Exchange classified each of the 50 DOIs into one of four categories based on
 | Category | Count | Pricing Model | Rate | Key Signal |
 |---|---|---|---|---|
 | **Free OA (arXiv)** | 12 | `PRICING_MODEL_FREE` | $0.00 | `academic.oa_status: "gold"`, `academic.version: "preprint"` |
-| **Subscription (Elsevier)** | 20 | `PRICING_MODEL_SUBSCRIPTION` | $0.00 | `subscription_id: "inst-sub-stanford-2026"` |
-| **Paid (Springer + Elsevier)** | 17 | `PRICING_MODEL_PER_ACCESS` | $1.50 | No subscription match, `academic.oa_status: "closed"` |
-| **Retracted (Springer)** | 1 | `PRICING_MODEL_PER_ACCESS` | $1.50 | `academic.retraction_status: "retracted"` in `ext_critical` |
+| **Subscription (Elsevier)** | 20 | subscription (FREE + subscription scope) | $0.00 | `subscription_id: "inst-sub-stanford-2026"` |
+| **Paid (Springer + Elsevier)** | 17 | `PRICING_MODEL_PER_UNIT` | $1.50 | No subscription match, `academic.oa_status: "closed"` |
+| **Retracted (Springer)** | 1 | `PRICING_MODEL_PER_UNIT` | $1.50 | `academic.retraction_status: "retracted"` in `ext_critical` |
 
 ### Extension Profile Fields (`ramp-academic-v1`)
 
@@ -552,7 +581,7 @@ Every offer carries a `ResourceIdentity` with:
 ### Subscription Detection
 
 For the 20 Elsevier papers covered by Stanford's institutional subscription:
-- `pricing.model` is `PRICING_MODEL_SUBSCRIPTION` with `rate: 0`
+- subscription (FREE + subscription scope): `pricing.model` is `PRICING_MODEL_FREE` with `rate: 0`, and the term carries `scopes: ["subscription:inst-sub-stanford-2026"]`
 - `subscription_id` matches the Biscuit token's `principal_id` (`inst-sub-stanford-2026`)
 - `subscription_quota` shows remaining capacity (76,520 of 100,000 accesses this period)
 - The Exchange verified the Biscuit offline — no call to Stanford's identity provider was needed
@@ -653,7 +682,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
       "doi:10.1016/j.media.2023.103145",
       "doi:10.1016/j.media.2023.103078"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["academic:*"],
     "signature": "ed25519:e8f9a0b1c2d3...",
     "signature_algorithm": "ed25519",
@@ -1036,7 +1065,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ReportUsa
   "transaction_id": "txn-litrev-batch-001",
   "billing_id": "bill-litrev-batch-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
+    "function": ["ai-input"],
     "consumed_quantity": 614200,
     "consumed_unit": "tokens",
     "displayed_to_user": true,
@@ -1106,7 +1135,7 @@ Response:
 
 **Key academic-specific capabilities demonstrated:**
 - **DOI as universal dedup key** -- cross-exchange resource identification
-- **Mixed pricing in single batch** -- FREE + SUBSCRIPTION + PER_ACCESS in one transaction
+- **Mixed pricing in single batch** -- FREE + subscription (FREE + subscription scope) + PER_UNIT in one transaction
 - **Institutional subscription via Biscuit** -- offline-verifiable delegation, no call to Stanford
 - **Retraction flagging via `ext_critical`** -- consumers MUST understand retraction semantics or reject
 - **`ramp-academic-v1` profile** -- OA status, version lifecycle, peer review status, retraction metadata

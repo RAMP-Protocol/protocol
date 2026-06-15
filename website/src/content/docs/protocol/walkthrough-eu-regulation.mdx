@@ -87,7 +87,7 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/DiscoverR
     "uris": [
       "http://data.europa.eu/eli/reg/2024/1689/oj"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:a4c9f2e8b7d1...",
     "signature_algorithm": "ed25519"
@@ -172,15 +172,22 @@ The Broker receives one response from each Exchange. Here are both offers side b
               "signature": "base64-ed25519-opoce-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": [
-              "FUNCTION_AI_INPUT",
-              "FUNCTION_AI_INDEX",
-              "FUNCTION_SEARCH",
-              "FUNCTION_AI_TRAIN"
-            ],
-            "prohibited_functions": []
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": [
+                    "ai-input",
+                    "ai-index",
+                    "search",
+                    "ai-train"
+                  ],
+                  "prohibited": []
+                }
+              ]
+            }
+          ],
           "ext": {
             "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
             "legal.legislation.celex": "32024R1689",
@@ -225,12 +232,12 @@ The Broker receives one response from each Exchange. Here are both offers side b
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_ACCESS",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 85.00,
             "currency": "EUR",
             "unit_cost": 0.000764,
             "estimated_quantity": 111200,
-            "unit": "tokens"
+            "unit": "accesses"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -267,14 +274,21 @@ The Broker receives one response from each Exchange. Here are both offers side b
               "signature": "base64-ed25519-wk-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": [
-              "FUNCTION_AI_INPUT",
-              "FUNCTION_AI_INDEX",
-              "FUNCTION_SEARCH"
-            ],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": [
+                    "ai-input",
+                    "ai-index",
+                    "search"
+                  ],
+                  "prohibited": ["ai-train"]
+                }
+              ]
+            }
+          ],
           "ext": {
             "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
             "legal.legislation.celex": "32024R1689",
@@ -303,13 +317,13 @@ The Broker receives one response from each Exchange. Here are both offers side b
 | Dimension | EUR-Lex | Wolters Kluwer |
 |---|---|---|
 | **Price** | FREE | $85.00 |
-| **Pricing model** | `PRICING_MODEL_FREE` | `PRICING_MODEL_PER_ACCESS` |
+| **Pricing model** | `PRICING_MODEL_FREE` | `PRICING_MODEL_PER_UNIT` |
 | **Tokens (est.)** | 89,000 | 111,200 (more due to annotations) |
 | **Mutability** | `STATIC` (original OJ text) | `DYNAMIC` (consolidated, updates with amendments) |
 | **Attestation** | Level 2 -- `publications.europa.eu` (Publications Office) | Level 1 -- self-attested by `wolterskluwer.com` |
 | **Consolidation** | `original` (as published July 2024) | `consolidated_to_2026-01-15` (includes all amendments) |
 | **Annotations** | None | 47 cross-references, expert commentary |
-| **Training permitted** | Yes (public domain, Decision 2011/833/EU) | No (`FUNCTION_AI_TRAIN` prohibited) |
+| **Training permitted** | Yes (public domain, Decision 2011/833/EU) | No (`ai-train` prohibited) |
 | **Format** | Akoma Ntoso XML | HTML |
 | **Languages** | 24 (all EU official) | 4 (en, de, fr, nl) |
 
@@ -342,7 +356,7 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
     "uris": [
       "http://data.europa.eu/eli/reg/2024/1689/oj"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:b5d0e3f9c8a2...",
     "signature_algorithm": "ed25519"
@@ -409,7 +423,7 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ReportUsa
   "transaction_id": "txn-eurlex-001",
   "billing_id": "bill-eurlex-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
+    "function": ["ai-input"],
     "consumed_quantity": 87200,
     "consumed_unit": "tokens",
     "displayed_to_user": true,

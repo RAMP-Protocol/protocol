@@ -97,11 +97,12 @@ Key fields:
         }
       },
       "pricing": {
-        "model": "PRICING_MODEL_PER_ACCESS",
+        "model": "PRICING_MODEL_PER_UNIT",
         "rate": 0.05,
         "currency": "USD",
         "unit_cost": 0.00001515,
-        "estimated_quantity": 3300
+        "estimated_quantity": 3300,
+        "unit": "accesses"
       },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "reporting": {
@@ -113,11 +114,21 @@ Key fields:
         "canonical_url": "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
         "iptc_guid": "urn:newsml:ap.org:20260310:ai-infra-001"
       },
-      "restrictions": {
-        "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"],
-        "prohibited_functions": ["FUNCTION_AI_TRAIN"],
-        "permitted_users": ["commercial", "education"]
-      },
+      "terms": [
+        {
+          "restrictions": [
+            {
+              "kind": "RESTRICTION_KIND_FUNCTION",
+              "permitted": ["ai-input", "ai-index", "search"],
+              "prohibited": ["ai-train"]
+            },
+            {
+              "kind": "RESTRICTION_KIND_USER_TYPE",
+              "permitted": ["commercial", "education"]
+            }
+          ]
+        }
+      ],
       "previews": [
         {
           "url": "https://cdn.ramp-protocol.org/preview/ai-infrastructure-snippet.txt",
@@ -136,7 +147,7 @@ Each `Offer` includes:
 - A CoMP `Package` with content metadata (title, author, word count, publication date)
 - RAMP `Pricing` with the rate, currency, and normalized unit_cost
 - `ResourceIdentity` for cross-exchange deduplication
-- `AccessRestrictions` derived from the provider's RSL terms
+- `LicenseTerm` entries on `terms[]`, each carrying `restrictions` (`repeated Restriction`) derived from the provider's RSL terms
 - `ReportingObligation` defining post-usage reporting requirements
 - `Preview` URLs for pre-transaction evaluation (see [Resource Previews](#resource-previews))
 - An Ed25519 `exchange_signature` that proves the Exchange issued this offer
@@ -156,7 +167,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
       "offers": [
         {
           "offer_id": "offer-tc-4921",
-          "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
+          "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515, "unit": "accesses" },
           "exchange_signature": "a1b2c3...",
           "signature_algorithm": "ed25519"
         }
@@ -167,7 +178,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
       "offers": [
         {
           "offer_id": "offer-tc-4922",
-          "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001200 },
+          "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001200, "unit": "accesses" },
           "exchange_signature": "d4e5f6...",
           "signature_algorithm": "ed25519"
         }
@@ -192,14 +203,15 @@ When the buyer has a subscription, the Exchange includes both per-request and su
   "offers": [
     {
       "offer_id": "offer-tc-4921",
-      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
+      "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515, "unit": "accesses" },
       "exchange_signature": "a1b2c3...",
       "signature_algorithm": "ed25519"
     },
     {
       "offer_id": "sub-offer-tc-4921",
-      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0, "currency": "USD", "unit_cost": 0 },
+      "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD", "unit_cost": 0 },
       "subscription_id": "SUB-12345",
+      "terms": [ { "scopes": ["subscription:SUB-12345"] } ],
       "reporting": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] },
       "exchange_signature": "g7h8i9...",
       "signature_algorithm": "ed25519"
@@ -235,8 +247,9 @@ When the buyer holds a subscription, the Exchange attaches `SubscriptionQuotaInf
   "offers": [
     {
       "offer_id": "sub-offer-tc-4921",
-      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0, "currency": "USD" },
+      "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" },
       "subscription_id": "SUB-12345",
+      "terms": [ { "scopes": ["subscription:SUB-12345"] } ],
       "subscription_quota": [
         {
           "subscription_id": "SUB-12345",
@@ -614,7 +627,7 @@ message Preview {
 {
   "offer_id": "offer-reuters-001",
   "title": "Climate Summit Photo - Reuters",
-  "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.50, "currency": "USD" },
+  "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.50, "currency": "USD", "unit": "accesses" },
   "previews": [
     {
       "url": "https://cdn.reuters.com/preview/150/climate-summit.jpg",

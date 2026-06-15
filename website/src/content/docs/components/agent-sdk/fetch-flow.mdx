@@ -38,7 +38,8 @@ client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
   |
   |  5. Select best offer
   |     SelectionEngine.Select(candidates, constraints)
-  |       - Filter by AccessRestrictions (function, geo)
+  |       - Self-select the Offer.terms[] term whose restrictions
+  |         (function, geo, user-type) the agent can honour
   |       - Group by ResourceIdentity (deduplication)
   |       - Rank: subscription offers first (rate=0)
   |              -> preferred Exchange offers second

@@ -237,14 +237,26 @@ func (TermSemantics) EnumDescriptor() ([]byte, []int) {
 }
 
 // RestrictionKind — Which dimension a Restriction constrains.
+//
+// The token vocabulary for each open axis is authored ONLY in the
+// (ramp.v1.vocab_enum) entries on the corresponding enum value below; the
+// functiontokens / geographytokens / usertypes constants + IsRegistered derive
+// from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
+// 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
+// not enumerated.
 type RestrictionKind int32
 
 const (
 	RestrictionKind_RESTRICTION_KIND_UNSPECIFIED RestrictionKind = 0 // unset — rejected at ingest
-	RestrictionKind_RESTRICTION_KIND_FUNCTION    RestrictionKind = 1 // What: vocab/restriction-values/function.json
-	RestrictionKind_RESTRICTION_KIND_GEOGRAPHY   RestrictionKind = 2 // Where: ISO 3166-1 alpha-2 + EU, EEA, *
-	RestrictionKind_RESTRICTION_KIND_USER_TYPE   RestrictionKind = 3 // Who: vocab/restriction-values/user-type.json
-	RestrictionKind_RESTRICTION_KIND_OTHER       RestrictionKind = 4 // Custom; description in Restriction fields
+	// What the agent may do with the content. Seeded from RSL 1.0 AI-use
+	// vocabulary and extended with established IP/copyright terms.
+	RestrictionKind_RESTRICTION_KIND_FUNCTION RestrictionKind = 1
+	// Where the agent may use the content. ISO 3166-1 alpha-2 codes (US, DE, GB)
+	// are valid structurally; only the non-ISO specials are registered here.
+	RestrictionKind_RESTRICTION_KIND_GEOGRAPHY RestrictionKind = 2
+	// Who may access and use the content.
+	RestrictionKind_RESTRICTION_KIND_USER_TYPE RestrictionKind = 3
+	RestrictionKind_RESTRICTION_KIND_OTHER     RestrictionKind = 4 // Custom; description in Restriction fields
 )
 
 // Enum value maps for RestrictionKind.
@@ -473,7 +485,8 @@ func (ObligationTrigger) EnumDescriptor() ([]byte, []int) {
 // PricingModel — the charging STRUCTURE only (a genuinely closed, small set;
 // changes far less than yearly, so an enum is correct per Google AIP-126). The
 // open-ended metering basis ("per what") is NOT enumerated here — it lives in
-// Pricing.unit as a registry-governed vocabulary (vocab/pricing-units.json).
+// Pricing.unit as a registry-governed vocabulary (the (ramp.v1.vocab) field
+// options on Pricing.unit; see vocab.proto).
 // Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
 // are obligations (see ObligationKind); revenue-share settlement is off-protocol.
 // Pre-v1: renumbered cleanly, nothing reserved.
@@ -2043,7 +2056,12 @@ type Offer struct {
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
 	// Resource title (human-readable, for display/logging).
 	Title *string `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	// Pricing terms including unit cost for cross-exchange comparison.
+	// Pricing for this offer. An offer represents a single licensing
+	// arrangement: each projected LicenseTerm yields its own offer, so this is
+	// that term's pricing (the authoritative copy lives in `terms[].pricing`).
+	// Used for cross-exchange comparison and Broker ranking. A resource with
+	// multiple alternative terms (e.g. dual-licensed) produces multiple separate
+	// offers, one per term — never one offer with a "headline" picked among them.
 	Pricing *Pricing `protobuf:"bytes,3,opt,name=pricing,proto3" json:"pricing,omitempty"`
 	// How resource will be delivered.
 	DeliveryMethod DeliveryMethod `protobuf:"varint,4,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
@@ -2055,14 +2073,19 @@ type Offer struct {
 	// Enables Brokers to recognize the same resource offered by
 	// different Exchanges and compare pricing.
 	Identity *ResourceIdentity `protobuf:"bytes,7,opt,name=identity,proto3,oneof" json:"identity,omitempty"`
-	// REQUIRED. JWS Compact Serialization (alg=EdDSA) over offer fields
-	// (offer_id, package.id, pricing, identity).
-	// Prevents intermediaries (Brokers) from tampering with price
-	// or resource description. Agent SHOULD verify signature (RFC 2119)
-	// against Exchange's public key.
+	// REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
+	// Offer — every field, including `pricing` and `terms` (the full licensing
+	// payload). Canonicalization is deterministic protobuf marshaling
+	// (lexicographic field order); only `signature`, `signature_algorithm`, and
+	// `expires_at` are excluded from the signed bytes. `expires_at` is excluded
+	// because it is bound to issuance time, not resource/pricing identity, so a
+	// verifier can rebuild the signed payload from the catalog alone (stateless
+	// verification on ExecuteTransaction — the Exchange need not store offers).
 	//
-	// Also enables stateless offer verification on ExecuteTransaction —
-	// Exchange does not need to store offers, just verify the signature.
+	// Because the signature covers `terms` and `pricing`, an intermediary
+	// (Broker) cannot tamper with price, restrictions, quotas, obligations, or
+	// any licensing term without invalidating it. Agent SHOULD verify the
+	// signature (RFC 2119) against the Exchange's public key.
 	Signature string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
 	// JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
 	SignatureAlgorithm string `protobuf:"bytes,10,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
@@ -2710,7 +2733,17 @@ type License struct {
 	// Human-readable name (licenseType, schema.org node name).
 	Name *string `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	// Data-labels TDL: the document at uri is versioned and will not change.
-	Immutable     *bool `protobuf:"varint,4,opt,name=immutable,proto3,oneof" json:"immutable,omitempty"`
+	Immutable *bool `protobuf:"varint,4,opt,name=immutable,proto3,oneof" json:"immutable,omitempty"`
+	// Cryptographic digest of the document at `uri`, in "method:hexdigest" form
+	// (e.g. "sha256:9f86d081..."). Pins the referenced document so a consumer can
+	// verify the bytes it fetches match what was offered; covered by the offer
+	// signature, so it is tamper-evident end to end. REQUIRED whenever `uri` is
+	// non-empty — any semantics, mutable or not: without a pinned digest a MitM
+	// (or the publisher) can swap the document the agent reads. The Exchange pins
+	// it at ingestion (computing it over the safely-fetched document, or
+	// accepting a publisher-supplied value when uri is not HTTP-fetchable, e.g. a
+	// non-URL TDL scheme).
+	UriDigest     *string `protobuf:"bytes,5,opt,name=uri_digest,json=uriDigest,proto3,oneof" json:"uri_digest,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2773,24 +2806,38 @@ func (x *License) GetImmutable() bool {
 	return false
 }
 
+func (x *License) GetUriDigest() string {
+	if x != nil && x.UriDigest != nil {
+		return *x.UriDigest
+	}
+	return ""
+}
+
 // Restriction — A single constraint on one licensing dimension.
 //
 // Restrictions model allowed and prohibited values on one axis (function,
-// geography, or user-type). The Exchange evaluates restrictions against
-// the requesting agent's Requester fields before returning an Offer.
+// geography, or user-type). They are validated and normalized at ingest and
+// RIDE ON THE OFFER — the Exchange does NOT filter terms by matching the
+// requester's self-declared attributes (user_type / geography / intended_use)
+// against them. Discovery returns every scope-covered term; the AGENT
+// self-selects the term whose restrictions it can honour, and enforcement
+// happens downstream at accept → report → reconcile. (Term visibility is gated
+// only by resource_id/URI and Biscuit scope coverage — see LicenseTerm.scopes.)
 //
-// Evaluation rule:
+// Reading a restriction:
 //
-//	An agent is in-scope when it matches at least one permitted[] token
+//	A value is in-scope when it matches at least one permitted[] token
 //	AND matches none of the prohibited[] tokens.
 //	Empty permitted[] = any value is permitted on this axis.
 //	Empty prohibited[] = nothing is explicitly prohibited.
 //
-// Vocabulary sources:
+// Vocabulary sources (authored on the RestrictionKind enum values via
+// (ramp.v1.vocab_enum); the functiontokens / geographytokens / usertypes
+// constants + IsRegistered derive from them):
 //
-//	FUNCTION  — vocab/restriction-values/function.json (RSL 1.0 + IP terms)
-//	GEOGRAPHY — vocab/restriction-values/geography.json (ISO 3166-1 alpha-2 + EU, EEA, *)
-//	USER_TYPE — vocab/restriction-values/user-type.json
+//	FUNCTION  — RSL 1.0 AI-use vocabulary + established IP/copyright terms
+//	GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA
+//	USER_TYPE — RAMP user/organization categories
 type Restriction struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Which dimension this restriction applies to.
@@ -2802,9 +2849,13 @@ type Restriction struct {
 	Permitted []string `protobuf:"bytes,2,rep,name=permitted,proto3" json:"permitted,omitempty"`
 	// Tokens blocked on this axis. Takes precedence over permitted[].
 	Prohibited []string `protobuf:"bytes,3,rep,name=prohibited,proto3" json:"prohibited,omitempty"`
-	// When true, an agent that cannot verify its compliance MUST decline this term.
-	// When false (default), unverifiable restrictions are advisory.
-	Critical      bool `protobuf:"varint,4,opt,name=critical,proto3" json:"critical,omitempty"`
+	// Fail-closed by default. When false (the default), this restriction is
+	// BINDING: an agent that cannot evaluate every token in it — including an
+	// unknown vendor token — MUST decline the term. Set advisory = true to
+	// downgrade an unverifiable restriction to non-blocking. This deliberately
+	// inverts the COSE-`crit` opt-in default: a license restriction a consumer
+	// does not understand should stop it, not be silently ignored.
+	Advisory      bool `protobuf:"varint,4,opt,name=advisory,proto3" json:"advisory,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2860,9 +2911,9 @@ func (x *Restriction) GetProhibited() []string {
 	return nil
 }
 
-func (x *Restriction) GetCritical() bool {
+func (x *Restriction) GetAdvisory() bool {
 	if x != nil {
-		return x.Critical
+		return x.Advisory
 	}
 	return false
 }
@@ -2872,13 +2923,28 @@ func (x *Restriction) GetCritical() bool {
 // Quotas limit how much a licensee may consume before the term expires or
 // must be renegotiated. They are NOT billing quantities — billing is in Pricing.
 //
-// Metric values correspond to entries in vocab/quota-metrics.json.
-// Standard metrics: "accesses", "tokens", "input-tokens", "display-words",
-//
-//	"impressions", "copies", "seats", "units-manufactured".
+// The metric vocabulary is authored ONLY in the (ramp.v1.vocab) entries on
+// Quota.metric below; the quotametrics constants + IsRegistered derive from it.
 type Quota struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The unit being capped. Must match a metric in vocab/quota-metrics.json.
+	// The unit being capped — an open vocabulary axis.
+	//
+	// The (ramp.v1.vocab) entries below are the SOLE authored source of the
+	// registered bare metric tokens. A buf plugin reads them structurally and
+	// emits the quotametrics constants + IsRegistered; ingest enforces membership
+	// from those. The CEL is STRUCTURE ONLY (non-empty bare token or
+	// vendor:namespaced) — it never lists the tokens, so it cannot drift.
+	//
+	// Token meanings:
+	//
+	//	display-words      Words of content text rendered to an end user.
+	//	impressions        Times the content is displayed to an end user.
+	//	tokens             LLM output tokens generated using this content.
+	//	input-tokens       LLM input tokens consumed from this content.
+	//	units-manufactured Physical units manufactured from this design/pattern.
+	//	accesses           Distinct content access / retrieval events.
+	//	copies             Digital or physical copies produced.
+	//	seats              Distinct named users licensed to access the content.
 	Metric string `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
 	// Maximum allowed value in the given window.
 	Limit int64 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
@@ -7435,26 +7501,30 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"attestedAt\x12\x10\n" +
 	"\x03uri\x18\x04 \x01(\tR\x03uri\x12/\n" +
 	"\x06claims\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06claims\x12\x1c\n" +
-	"\tsignature\x18\x06 \x01(\tR\tsignature\"\x97\x01\n" +
+	"\tsignature\x18\x06 \x01(\tR\tsignature\"\xca\x01\n" +
 	"\aLicense\x12\x15\n" +
 	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x13\n" +
 	"\x02id\x18\x02 \x01(\tH\x01R\x02id\x88\x01\x01\x12\x17\n" +
 	"\x04name\x18\x03 \x01(\tH\x02R\x04name\x88\x01\x01\x12!\n" +
-	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01B\x06\n" +
+	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"uri_digest\x18\x05 \x01(\tH\x04R\turiDigest\x88\x01\x01B\x06\n" +
 	"\x04_uriB\x05\n" +
 	"\x03_idB\a\n" +
 	"\x05_nameB\f\n" +
 	"\n" +
-	"_immutable\"\x95\x01\n" +
+	"_immutableB\r\n" +
+	"\v_uri_digest\"\x95\x01\n" +
 	"\vRestriction\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\x1c\n" +
 	"\tpermitted\x18\x02 \x03(\tR\tpermitted\x12\x1e\n" +
 	"\n" +
 	"prohibited\x18\x03 \x03(\tR\n" +
 	"prohibited\x12\x1a\n" +
-	"\bcritical\x18\x04 \x01(\bR\bcritical\"c\n" +
-	"\x05Quota\x12\x16\n" +
-	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x14\n" +
+	"\badvisory\x18\x04 \x01(\bR\badvisory\"\x84\x03\n" +
+	"\x05Quota\x12\xb6\x02\n" +
+	"\x06metric\x18\x01 \x01(\tB\x9d\x02\xbaH\xaa\x01\xba\x01\xa6\x01\n" +
+	"\x13quota.metric.format\x12<metric must be a lowercase-dashed token or vendor:namespaced\x1aQthis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[a-z0-9._-]+:.+$'))\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seatsR\x06metric\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x03R\x05limit\x12,\n" +
 	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\xd3\x01\n" +
 	"\n" +
@@ -7970,12 +8040,16 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\rTermSemantics\x12\x1e\n" +
 	"\x1aTERM_SEMANTICS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19TERM_SEMANTICS_ENUMERATED\x10\x01\x12!\n" +
-	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x02*\xae\x01\n" +
+	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x02*\xb2\x04\n" +
 	"\x0fRestrictionKind\x12 \n" +
-	"\x1cRESTRICTION_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
-	"\x19RESTRICTION_KIND_FUNCTION\x10\x01\x12\x1e\n" +
-	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x02\x12\x1e\n" +
-	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x03\x12\x1a\n" +
+	"\x1cRESTRICTION_KIND_UNSPECIFIED\x10\x00\x12\xac\x02\n" +
+	"\x19RESTRICTION_KIND_FUNCTION\x10\x01\x1a\x8c\x02\x92\xb5\x18\x03all\x92\xb5\x18\x06ai-all\x92\xb5\x18\bai-train\x92\xb5\x18\bai-input\x92\xb5\x18\bai-index\x92\xb5\x18\x06search\x92\xb5\x18\x05crawl\x92\xb5\x18\x14text-and-data-mining\x92\xb5\x18\x03tts\x92\xb5\x18\n" +
+	"commercial\x92\xb5\x18\vadvertising\x92\xb5\x18\teditorial\x92\xb5\x18\bresearch\x92\xb5\x18\treproduce\x92\xb5\x18\n" +
+	"distribute\x92\xb5\x18\x06modify\x92\xb5\x18\adisplay\x92\xb5\x18\x04sync\x92\xb5\x18\tbroadcast\x92\xb5\x18\x06stream\x92\xb5\x18\x05print\x92\xb5\x18\vmanufacture\x92\xb5\x18\x04sell\x122\n" +
+	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x02\x1a\x12\x92\xb5\x18\x01*\x92\xb5\x18\x02EU\x92\xb5\x18\x03EEA\x12~\n" +
+	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x03\x1a^\x92\xb5\x18\n" +
+	"individual\x92\xb5\x18\bacademic\x92\xb5\x18\n" +
+	"non_profit\x92\xb5\x18\x0enews_publisher\x92\xb5\x18\vbroadcaster\x92\xb5\x18\x11commercial_entity\x12\x1a\n" +
 	"\x16RESTRICTION_KIND_OTHER\x10\x04*\x8e\x01\n" +
 	"\vQuotaWindow\x12\x1c\n" +
 	"\x18QUOTA_WINDOW_UNSPECIFIED\x10\x00\x12\x17\n" +

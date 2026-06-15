@@ -98,7 +98,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
     "uris": [
       "duns:123456789"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["credit:read"],
     "signature": "ed25519:d7e8f9a0b1c2...",
     "signature_algorithm": "ed25519"
@@ -143,7 +143,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_RECORD",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 2.00,
             "currency": "USD",
             "unit_cost": 2.00,
@@ -183,10 +183,17 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
               "signature": "base64-ed25519-dnb-self-attestation-basic..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train", "ai-index"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-dnb-offer-basic-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
@@ -207,7 +214,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_RECORD",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 61.99,
             "currency": "USD",
             "unit_cost": 61.99,
@@ -249,10 +256,17 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
               "signature": "base64-ed25519-dnb-self-attestation-std..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train", "ai-index"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-dnb-offer-std-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
@@ -273,7 +287,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             }
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_RECORD",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 150.00,
             "currency": "USD",
             "unit_cost": 150.00,
@@ -317,10 +331,17 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
               "signature": "base64-ed25519-dnb-self-attestation-comp..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"]
-          },
+          "terms": [
+            {
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input"],
+                  "prohibited": ["ai-train", "ai-index", "search"]
+                }
+              ]
+            }
+          ],
           "exchange_signature": "base64-ed25519-dnb-offer-comp-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
@@ -370,7 +391,7 @@ The `ramp-credit-v1` profile defines attestation claims specific to business cre
 
 ### Redistribution Restrictions
 
-All tiers carry `prohibited_functions` that block AI training and indexing. The comprehensive tier is even more restrictive — `FUNCTION_SEARCH` is also prohibited, limiting usage to direct AI input only. D&B's terms prohibit caching, compilation, and resale of credit data. The signed URL with agent identity binding (enforced at delivery) is the protocol-level mechanism for preventing URL sharing.
+All tiers carry a Function `Restriction` (`kind: RESTRICTION_KIND_FUNCTION`) whose `prohibited` list blocks AI training (`ai-train`) and indexing (`ai-index`). The comprehensive tier is even more restrictive — `search` is also prohibited, limiting usage to direct AI input only. D&B's terms prohibit caching, compilation, and resale of credit data. The signed URL with agent identity binding (enforced at delivery) is the protocol-level mechanism for preventing URL sharing.
 
 ### Rate Limiting
 
@@ -398,7 +419,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
     "uris": [
       "duns:123456789"
     ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
+    "intended_use": ["ai-input"],
     "scopes": ["credit:read"],
     "signature": "ed25519:e8f9a0b1c2d3...",
     "signature_algorithm": "ed25519"
@@ -500,7 +521,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
   "transaction_id": "txn-dnb-acme-001",
   "billing_id": "bill-dnb-acme-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
+    "function": ["ai-input"],
     "consumed_quantity": 1,
     "consumed_unit": "reports",
     "displayed_to_user": true,
@@ -557,7 +578,7 @@ RAMP is URI-centric — it accesses resources by known identifier. Converting "A
 
 D&B's terms prohibit caching, compilation, and resale of credit data. RAMP enforces this at multiple levels:
 
-1. **`prohibited_functions`** in `AccessRestrictions` — blocks training, indexing (and search for the comprehensive tier)
+1. **Function `Restriction`** in `LicenseTerm.restrictions` (`kind: RESTRICTION_KIND_FUNCTION`) — its `prohibited` list blocks training, indexing (and search for the comprehensive tier)
 2. **Agent identity binding** — the `agent_identity_hash` is embedded in the signed URL, preventing URL sharing between agents
 3. **Signed URL TTL** — 5-minute expiry prevents URL reuse
 4. **Usage reporting** — creates an audit trail of who accessed what, enabling post-hoc enforcement
@@ -581,7 +602,7 @@ All credit-specific fields live in `ext` — the core protocol does not need cre
 | Content mutability | `STATIC` | `DYNAMIC` |
 | Hash verification | SHOULD verify; mismatch is disputable | Informational; mismatch is expected |
 | `data_as_of` | Not set (content does not change) | `2026-03-18T23:59:59Z` |
-| Pricing model | `PER_ACCESS` ($0.05) | `PER_RECORD` ($2 / $61.99 / $150) |
+| Pricing model | `PER_UNIT` ($0.05) | `PER_UNIT` ($2 / $61.99 / $150) |
 | Metering unit | `tokens` (3,200 estimated) | `reports` (1) |
 | Multi-tier offers | No (single offer per article) | Yes (3 tiers, same D-U-N-S) |
 | Entity resolution | Not needed (URL is the identifier) | Required (company name to D-U-N-S) |

@@ -1,18 +1,5 @@
 # RAMP Protocol Changelog
 
-## Unreleased
-
-Additive, non-breaking (1.0.x). Introduces the buf-native vocabulary mechanism
-for open metering-basis tokens: a `(ramp.v1.vocab)` custom field option
-(`FieldOptions` extension 50001, defined in `ramp/v1/vocab.proto`) carries the
-registered bare tokens directly on `Pricing.unit`, and the `protoc-gen-rampvocab`
-buf plugin emits typed Go constants (`gen/go/vocab/pricingunits`), `All`, and
-`IsRegistered`. Adopts `protovalidate`: a structural field CEL on `Pricing.unit`
-(empty / lowercase-dashed / `vendor:namespaced`) and message-level CEL on
-`Pricing` (`PER_UNIT ⇒ unit`, `FREE ⇒ rate 0`). Adding a unit edits the option
-list only — no message-shape change. Replaces the side-car
-`vocab/pricing-units.json` registry.
-
 ## v1.0.0 — Initial release
 
 First public release of the RAMP Protocol (Resource Access Metering Protocol):
@@ -35,6 +22,38 @@ cryptographic content attestations with a structured dispute chain; multi-hop
 intermediary chains with agent- and exchange-published depth caps; and extension
 profiles for domain-specific behavior (news, academic, legal, C2PA, CoMP, pharma,
 medical imaging).
+
+**Universal Licensing Core.** A resource carries `repeated LicenseTerm terms`
+— the same shape at ingestion (`ResourceEntry.terms`) and emission
+(`Offer.terms`) — replacing the hard-coded default pricing and the removed
+`AccessRestrictions` / `Offer.restrictions`. A `LicenseTerm` bundles `License`
+(`uri`, `id`, `name`, `immutable`), `TermSemantics` (`ENUMERATED` vs
+`REFERENCE_ONLY`), `Restriction`s (function / geography / user-type axes),
+`Quota`s, `Obligation`s (`scope_license`, `detail`), `Pricing` (required on
+every term), Biscuit `scopes`, and `part_label`. `PricingModel` is the closed
+charging structure (`FREE`, `PER_UNIT`, `FLAT`); the metering basis moved to
+the open `Pricing.unit` vocabulary; `Pricing.metering` was added and
+`revshare` / `REVENUE_SHARE` removed (settlement is off-protocol). Every
+required enum carries `_UNSPECIFIED = 0` and is rejected if unset
+(`PricingMetering` is the deliberate exception — `ONLINE = 0` is its real
+default). The Offer JWS signs the entire canonical Offer, so `terms` and
+`pricing` are tamper-evident.
+
+**Proto-native vocabulary.** Every open vocabulary axis is defined in the proto
+and tooled by buf — no side-car JSON registry. The `(ramp.v1.vocab)` field
+option (`FieldOptions` extension 50001) carries the registered bare tokens on
+`Pricing.unit` and `Quota.metric`; the `(ramp.v1.vocab_enum)` enum-value option
+(`EnumValueOptions` extension 50002, both in `ramp/v1/vocab.proto`) carries the
+function / geography / user-type tokens on the `RESTRICTION_KIND_FUNCTION` /
+`RESTRICTION_KIND_GEOGRAPHY` / `RESTRICTION_KIND_USER_TYPE` enum values. The
+`protoc-gen-rampvocab` buf plugin reads both options structurally and emits
+typed Go constants, `All`, and `IsRegistered` per axis under `gen/go/vocab/`
+(`pricingunits`, `quotametrics`, `functiontokens`, `geographytokens`,
+`usertypes`). Geography registers only the non-ISO specials (`*`, `EU`, `EEA`);
+ISO 3166-1 alpha-2 codes are structural. `protovalidate` carries the structural
+field CELs (`Pricing.unit`, `Quota.metric`) and message-level CEL on `Pricing`
+(`PER_UNIT ⇒ unit`, `FREE ⇒ rate 0`). Adding a token edits the option list only
+— no message-shape change.
 
 The reasoning behind the major design decisions is recorded in
 [`docs/design-history.md`](../docs/design-history.md).

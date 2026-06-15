@@ -17,25 +17,44 @@
 
 import type { GenExtension, GenFile } from "@bufbuild/protobuf/codegenv2";
 import { extDesc, fileDesc } from "@bufbuild/protobuf/codegenv2";
-import type { FieldOptions } from "@bufbuild/protobuf/wkt";
+import type { EnumValueOptions, FieldOptions } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_descriptor } from "@bufbuild/protobuf/wkt";
 
 /**
  * Describes the file ramp/v1/vocab.proto.
  */
 export const file_ramp_v1_vocab: GenFile = /*@__PURE__*/
-  fileDesc("ChNyYW1wL3YxL3ZvY2FiLnByb3RvEgdyYW1wLnYxOjUKBXZvY2FiEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxjRhgMgAygJUgV2b2NhYkKPAQoLY29tLnJhbXAudjFCClZvY2FiUHJvdG9QAVo3Z2l0aHViLmNvbS9SQU1QLVByb3RvY29sL3Byb3RvY29sL2dlbi9nby9yYW1wL3YxO3JhbXB2MaICA1JYWKoCB1JhbXAuVjHKAgdSYW1wXFYx4gITUmFtcFxWMVxHUEJNZXRhZGF0YeoCCFJhbXA6OlYxYgZwcm90bzM", [file_google_protobuf_descriptor]);
+  fileDesc("ChNyYW1wL3YxL3ZvY2FiLnByb3RvEgdyYW1wLnYxOjUKBXZvY2FiEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxjRhgMgAygJUgV2b2NhYjpCCgp2b2NhYl9lbnVtEiEuZ29vZ2xlLnByb3RvYnVmLkVudW1WYWx1ZU9wdGlvbnMY0oYDIAMoCVIJdm9jYWJFbnVtQo8BCgtjb20ucmFtcC52MUIKVm9jYWJQcm90b1ABWjdnaXRodWIuY29tL1JBTVAtUHJvdG9jb2wvcHJvdG9jb2wvZ2VuL2dvL3JhbXAvdjE7cmFtcHYxogIDUlhYqgIHUmFtcC5WMcoCB1JhbXBcVjHiAhNSYW1wXFYxXEdQQk1ldGFkYXRh6gIIUmFtcDo6VjFiBnByb3RvMw", [file_google_protobuf_descriptor]);
 
 /**
  * vocab carries the registered bare tokens for an open vocabulary axis,
  * authored directly on the field that uses it. The direct `repeated string`
  * form is intentional — modern protoc supports repeated custom options, so
  * there is no need to wrap the tokens in a message. Number 50001 sits in the
- * internal extension range (50000–99999); sibling axes (Quota.metric,
- * geography, function) reserve their own numbers in the same block.
+ * internal extension range (50000–99999). Field axes (Pricing.unit,
+ * Quota.metric) carry their tokens here; axes selected by an enum value
+ * (function, geography, user-type, selected by RestrictionKind) carry their
+ * tokens on the enum-value extension below.
  *
  * @generated from extension: repeated string vocab = 50001;
  */
 export const vocab: GenExtension<FieldOptions, string[]> = /*@__PURE__*/
   extDesc(file_ramp_v1_vocab, 0);
+
+/**
+ * vocab_enum is the enum-value-scoped twin of (ramp.v1.vocab) above. Axes
+ * whose token list is selected by an enum value — the function / geography /
+ * user-type tokens carried in Restriction.permitted/prohibited and selected
+ * by Restriction.kind — author their tokens directly on the corresponding
+ * RestrictionKind enum value. Same registry mechanism: protoc-gen-rampvocab
+ * reads these entries structurally off the enum-value descriptor and emits
+ * the per-axis constants + IsRegistered. A separate extension is required
+ * because an extend block targets exactly one options message; FieldOptions
+ * extension 50001 cannot also extend EnumValueOptions. Number 50002 reserves
+ * the next slot in the same internal block.
+ *
+ * @generated from extension: repeated string vocab_enum = 50002;
+ */
+export const vocab_enum: GenExtension<EnumValueOptions, string[]> = /*@__PURE__*/
+  extDesc(file_ramp_v1_vocab, 1);
 

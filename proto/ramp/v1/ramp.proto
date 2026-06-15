@@ -346,7 +346,12 @@ message Offer {
   // Resource title (human-readable, for display/logging).
   optional string title = 2;
 
-  // Pricing terms including unit cost for cross-exchange comparison.
+  // Pricing for this offer. An offer represents a single licensing
+  // arrangement: each projected LicenseTerm yields its own offer, so this is
+  // that term's pricing (the authoritative copy lives in `terms[].pricing`).
+  // Used for cross-exchange comparison and Broker ranking. A resource with
+  // multiple alternative terms (e.g. dual-licensed) produces multiple separate
+  // offers, one per term — never one offer with a "headline" picked among them.
   Pricing pricing = 3;
 
   // How resource will be delivered.
@@ -363,14 +368,19 @@ message Offer {
   // different Exchanges and compare pricing.
   optional ResourceIdentity identity = 7;
 
-  // REQUIRED. JWS Compact Serialization (alg=EdDSA) over offer fields
-  // (offer_id, package.id, pricing, identity).
-  // Prevents intermediaries (Brokers) from tampering with price
-  // or resource description. Agent SHOULD verify signature (RFC 2119)
-  // against Exchange's public key.
+  // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
+  // Offer — every field, including `pricing` and `terms` (the full licensing
+  // payload). Canonicalization is deterministic protobuf marshaling
+  // (lexicographic field order); only `signature`, `signature_algorithm`, and
+  // `expires_at` are excluded from the signed bytes. `expires_at` is excluded
+  // because it is bound to issuance time, not resource/pricing identity, so a
+  // verifier can rebuild the signed payload from the catalog alone (stateless
+  // verification on ExecuteTransaction — the Exchange need not store offers).
   //
-  // Also enables stateless offer verification on ExecuteTransaction —
-  // Exchange does not need to store offers, just verify the signature.
+  // Because the signature covers `terms` and `pricing`, an intermediary
+  // (Broker) cannot tamper with price, restrictions, quotas, obligations, or
+  // any licensing term without invalidating it. Agent SHOULD verify the
+  // signature (RFC 2119) against the Exchange's public key.
   string signature = 9;
 
   // JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
@@ -716,12 +726,63 @@ enum TermSemantics {
 }
 
 // RestrictionKind — Which dimension a Restriction constrains.
+//
+// The token vocabulary for each open axis is authored ONLY in the
+// (ramp.v1.vocab_enum) entries on the corresponding enum value below; the
+// functiontokens / geographytokens / usertypes constants + IsRegistered derive
+// from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
+// 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
+// not enumerated.
 enum RestrictionKind {
   RESTRICTION_KIND_UNSPECIFIED = 0;  // unset — rejected at ingest
-  RESTRICTION_KIND_FUNCTION    = 1;  // What: vocab/restriction-values/function.json
-  RESTRICTION_KIND_GEOGRAPHY   = 2;  // Where: ISO 3166-1 alpha-2 + EU, EEA, *
-  RESTRICTION_KIND_USER_TYPE   = 3;  // Who: vocab/restriction-values/user-type.json
-  RESTRICTION_KIND_OTHER       = 4;  // Custom; description in Restriction fields
+
+  // What the agent may do with the content. Seeded from RSL 1.0 AI-use
+  // vocabulary and extended with established IP/copyright terms.
+  RESTRICTION_KIND_FUNCTION = 1 [
+    (ramp.v1.vocab_enum) = "all",
+    (ramp.v1.vocab_enum) = "ai-all",
+    (ramp.v1.vocab_enum) = "ai-train",
+    (ramp.v1.vocab_enum) = "ai-input",
+    (ramp.v1.vocab_enum) = "ai-index",
+    (ramp.v1.vocab_enum) = "search",
+    (ramp.v1.vocab_enum) = "crawl",
+    (ramp.v1.vocab_enum) = "text-and-data-mining",
+    (ramp.v1.vocab_enum) = "tts",
+    (ramp.v1.vocab_enum) = "commercial",
+    (ramp.v1.vocab_enum) = "advertising",
+    (ramp.v1.vocab_enum) = "editorial",
+    (ramp.v1.vocab_enum) = "research",
+    (ramp.v1.vocab_enum) = "reproduce",
+    (ramp.v1.vocab_enum) = "distribute",
+    (ramp.v1.vocab_enum) = "modify",
+    (ramp.v1.vocab_enum) = "display",
+    (ramp.v1.vocab_enum) = "sync",
+    (ramp.v1.vocab_enum) = "broadcast",
+    (ramp.v1.vocab_enum) = "stream",
+    (ramp.v1.vocab_enum) = "print",
+    (ramp.v1.vocab_enum) = "manufacture",
+    (ramp.v1.vocab_enum) = "sell"
+  ];
+
+  // Where the agent may use the content. ISO 3166-1 alpha-2 codes (US, DE, GB)
+  // are valid structurally; only the non-ISO specials are registered here.
+  RESTRICTION_KIND_GEOGRAPHY = 2 [
+    (ramp.v1.vocab_enum) = "*",
+    (ramp.v1.vocab_enum) = "EU",
+    (ramp.v1.vocab_enum) = "EEA"
+  ];
+
+  // Who may access and use the content.
+  RESTRICTION_KIND_USER_TYPE = 3 [
+    (ramp.v1.vocab_enum) = "individual",
+    (ramp.v1.vocab_enum) = "academic",
+    (ramp.v1.vocab_enum) = "non_profit",
+    (ramp.v1.vocab_enum) = "news_publisher",
+    (ramp.v1.vocab_enum) = "broadcaster",
+    (ramp.v1.vocab_enum) = "commercial_entity"
+  ];
+
+  RESTRICTION_KIND_OTHER = 4;  // Custom; description in Restriction fields
 }
 
 // QuotaWindow — Time window over which a Quota.limit accumulates.
@@ -777,24 +838,42 @@ message License {
 
   // Data-labels TDL: the document at uri is versioned and will not change.
   optional bool immutable = 4;
+
+  // Cryptographic digest of the document at `uri`, in "method:hexdigest" form
+  // (e.g. "sha256:9f86d081..."). Pins the referenced document so a consumer can
+  // verify the bytes it fetches match what was offered; covered by the offer
+  // signature, so it is tamper-evident end to end. REQUIRED whenever `uri` is
+  // non-empty — any semantics, mutable or not: without a pinned digest a MitM
+  // (or the publisher) can swap the document the agent reads. The Exchange pins
+  // it at ingestion (computing it over the safely-fetched document, or
+  // accepting a publisher-supplied value when uri is not HTTP-fetchable, e.g. a
+  // non-URL TDL scheme).
+  optional string uri_digest = 5;
 }
 
 // Restriction — A single constraint on one licensing dimension.
 //
 // Restrictions model allowed and prohibited values on one axis (function,
-// geography, or user-type). The Exchange evaluates restrictions against
-// the requesting agent's Requester fields before returning an Offer.
+// geography, or user-type). They are validated and normalized at ingest and
+// RIDE ON THE OFFER — the Exchange does NOT filter terms by matching the
+// requester's self-declared attributes (user_type / geography / intended_use)
+// against them. Discovery returns every scope-covered term; the AGENT
+// self-selects the term whose restrictions it can honour, and enforcement
+// happens downstream at accept → report → reconcile. (Term visibility is gated
+// only by resource_id/URI and Biscuit scope coverage — see LicenseTerm.scopes.)
 //
-// Evaluation rule:
-//   An agent is in-scope when it matches at least one permitted[] token
+// Reading a restriction:
+//   A value is in-scope when it matches at least one permitted[] token
 //   AND matches none of the prohibited[] tokens.
 //   Empty permitted[] = any value is permitted on this axis.
 //   Empty prohibited[] = nothing is explicitly prohibited.
 //
-// Vocabulary sources:
-//   FUNCTION  — vocab/restriction-values/function.json (RSL 1.0 + IP terms)
-//   GEOGRAPHY — vocab/restriction-values/geography.json (ISO 3166-1 alpha-2 + EU, EEA, *)
-//   USER_TYPE — vocab/restriction-values/user-type.json
+// Vocabulary sources (authored on the RestrictionKind enum values via
+// (ramp.v1.vocab_enum); the functiontokens / geographytokens / usertypes
+// constants + IsRegistered derive from them):
+//   FUNCTION  — RSL 1.0 AI-use vocabulary + established IP/copyright terms
+//   GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA
+//   USER_TYPE — RAMP user/organization categories
 message Restriction {
   // Which dimension this restriction applies to.
   RestrictionKind kind = 1;
@@ -808,9 +887,13 @@ message Restriction {
   // Tokens blocked on this axis. Takes precedence over permitted[].
   repeated string prohibited = 3;
 
-  // When true, an agent that cannot verify its compliance MUST decline this term.
-  // When false (default), unverifiable restrictions are advisory.
-  bool critical = 4;
+  // Fail-closed by default. When false (the default), this restriction is
+  // BINDING: an agent that cannot evaluate every token in it — including an
+  // unknown vendor token — MUST decline the term. Set advisory = true to
+  // downgrade an unverifiable restriction to non-blocking. This deliberately
+  // inverts the COSE-`crit` opt-in default: a license restriction a consumer
+  // does not understand should stop it, not be silently ignored.
+  bool advisory = 4;
 }
 
 // Quota — A usage cap that gates whether this LicenseTerm remains valid.
@@ -818,12 +901,41 @@ message Restriction {
 // Quotas limit how much a licensee may consume before the term expires or
 // must be renegotiated. They are NOT billing quantities — billing is in Pricing.
 //
-// Metric values correspond to entries in vocab/quota-metrics.json.
-// Standard metrics: "accesses", "tokens", "input-tokens", "display-words",
-//   "impressions", "copies", "seats", "units-manufactured".
+// The metric vocabulary is authored ONLY in the (ramp.v1.vocab) entries on
+// Quota.metric below; the quotametrics constants + IsRegistered derive from it.
 message Quota {
-  // The unit being capped. Must match a metric in vocab/quota-metrics.json.
-  string metric = 1;
+  // The unit being capped — an open vocabulary axis.
+  //
+  // The (ramp.v1.vocab) entries below are the SOLE authored source of the
+  // registered bare metric tokens. A buf plugin reads them structurally and
+  // emits the quotametrics constants + IsRegistered; ingest enforces membership
+  // from those. The CEL is STRUCTURE ONLY (non-empty bare token or
+  // vendor:namespaced) — it never lists the tokens, so it cannot drift.
+  //
+  // Token meanings:
+  //   display-words      Words of content text rendered to an end user.
+  //   impressions        Times the content is displayed to an end user.
+  //   tokens             LLM output tokens generated using this content.
+  //   input-tokens       LLM input tokens consumed from this content.
+  //   units-manufactured Physical units manufactured from this design/pattern.
+  //   accesses           Distinct content access / retrieval events.
+  //   copies             Digital or physical copies produced.
+  //   seats              Distinct named users licensed to access the content.
+  string metric = 1 [
+    (ramp.v1.vocab) = "display-words",
+    (ramp.v1.vocab) = "impressions",
+    (ramp.v1.vocab) = "tokens",
+    (ramp.v1.vocab) = "input-tokens",
+    (ramp.v1.vocab) = "units-manufactured",
+    (ramp.v1.vocab) = "accesses",
+    (ramp.v1.vocab) = "copies",
+    (ramp.v1.vocab) = "seats",
+    (buf.validate.field).cel = {
+      id: "quota.metric.format"
+      message: "metric must be a lowercase-dashed token or vendor:namespaced"
+      expression: "this != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[a-z0-9._-]+:.+$'))"
+    }
+  ];
 
   // Maximum allowed value in the given window.
   int64 limit = 2;

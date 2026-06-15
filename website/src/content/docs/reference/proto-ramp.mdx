@@ -194,9 +194,8 @@ Three verification levels:
 | `currency` | string | 3 | ISO 4217 currency code |
 | `unit_cost` | optional double | 4 | Normalized cost per unit (universal comparison metric) |
 | `estimated_quantity` | optional int32 | 5 | Estimated consumption in the metering unit |
-| `revshare` | optional double | 6 | Revenue share percentage (0.0--1.0) |
-| `license_duration_months` | optional int32 | 7 | License duration in months |
-| `unit` | optional string | 8 | Metering unit for unit_cost and estimated_quantity (e.g. "tokens", "pages", "seconds", "records") |
+| `license_duration_months` | optional int32 | 7 | License duration in months (field 6 retired — was `revshare`; settlement is off-protocol) |
+| `unit` | optional string | 8 | Metering basis (the "per what" of `PER_UNIT`). REQUIRED when `model = PER_UNIT`. Registered token (e.g. `accesses`, `tokens`, `pages`) or `vendor:custom`. Authored as `(ramp.v1.vocab)` on this field. |
 | `metering` | optional PricingMetering | 9 | How usage is tracked for billing reconciliation. Absent = ONLINE (default). |
 | `ext` | Struct | 15 | Extension point |
 
@@ -697,12 +696,14 @@ Validation rules when `semantics = ENUMERATED`:
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `semantics` | TermSemantics | 1 | How the Exchange interprets the machine fields |
-| `license` | optional License | 2 | Governing license document. Authoritative for REFERENCE_ONLY terms. |
+| `license` | optional License | 1 | Governing license document. Authoritative for REFERENCE_ONLY terms (which MUST carry a non-empty `uri`). |
+| `semantics` | TermSemantics | 2 | How the Exchange interprets the machine fields |
 | `restrictions` | repeated Restriction | 3 | Usage restrictions (function, geography, user-type). AND-combined. |
 | `quotas` | repeated Quota | 4 | Usage caps. The agent must not exceed any individual Quota. |
 | `obligations` | repeated Obligation | 5 | Post-use behavioral requirements. |
 | `pricing` | optional Pricing | 6 | Commercial terms. REQUIRED on every term regardless of semantics (absent Pricing is rejected; `model = FREE` must be explicit). |
+| `scopes` | repeated string | 7 | Biscuit scope-gating (AND-semantics). Empty = public; hierarchical (`dist:*` covers `dist:US`). |
+| `part_label` | optional string | 8 | Informational human-readable name for a sub-part term. |
 
 ### License
 
@@ -710,34 +711,36 @@ Identifies the governing license document for a `LicenseTerm`.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `uri` | optional string | 1 | Authoritative license URI (e.g. `"https://creativecommons.org/licenses/by/4.0/"`) |
-| `title` | optional string | 2 | Human-readable license name (e.g. `"CC BY 4.0"`) |
-| `spdx_expression` | optional string | 3 | SPDX expression (e.g. `"CC-BY-4.0"`, `"MIT"`) |
+| `uri` | optional string | 1 | Canonical license identity (RFC 3986; e.g. `"https://creativecommons.org/licenses/by/4.0/"`). MUST NOT be URL-validated — data-labels TDL identifiers use non-URL schemes. |
+| `id` | optional string | 2 | Stable short id: SPDX short-id (`"GPL-3.0-only"`), TollBit cuid, or catalog doc-id |
+| `name` | optional string | 3 | Human-readable name (e.g. `"CC BY 4.0"`) |
+| `immutable` | optional bool | 4 | The document at `uri` is versioned and will not change (data-labels TDL) |
+| `uri_digest` | optional string | 5 | `method:hexdigest` pin of the document at `uri` (e.g. `"sha256:…"`). REQUIRED whenever `uri` is present (any semantics, mutable or not — MitM/swap protection); covered by the offer signature. |
 
 ### Restriction
 
 A single constraint on one licensing dimension: function (what), geography (where), or user-type (who).
 
-**Evaluation rule**: an agent is in-scope when it matches at least one `permitted[]` token AND none of the `prohibited[]` tokens. Empty `permitted[]` = any value permitted on this axis.
+**Reading a restriction**: a value is in-scope when it matches at least one `permitted[]` token AND none of the `prohibited[]` tokens. Empty `permitted[]` = any value permitted on this axis. Restrictions ride on the offer; the agent self-selects the term it can honour (the Exchange does not pre-filter terms against requester attributes).
 
-**Vocabulary sources**: `vocab/restriction-values/function.json`, `vocab/restriction-values/geography.json`, `vocab/restriction-values/user-type.json`.
+**Vocabulary sources**: proto-native — `(ramp.v1.vocab_enum)` on the `RESTRICTION_KIND_FUNCTION` / `RESTRICTION_KIND_GEOGRAPHY` / `RESTRICTION_KIND_USER_TYPE` enum values (no side-car JSON registry).
 
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `kind` | RestrictionKind | 1 | Which dimension this restriction constrains |
 | `permitted` | repeated string | 2 | Tokens allowed on this axis. Empty = all permitted. |
 | `prohibited` | repeated string | 3 | Tokens blocked on this axis. Takes precedence over permitted[]. |
-| `critical` | bool | 4 | When true, an agent that cannot verify compliance MUST decline this term. |
+| `advisory` | bool | 4 | Default false = **binding** (a consumer that cannot evaluate a token MUST decline the term). true = non-blocking. Inverts the COSE-`crit` opt-in default — fail-closed by default. |
 
 ### Quota
 
 A usage cap that gates whether a `LicenseTerm` remains valid. Quotas limit consumption before a term expires or must be renegotiated — they are NOT billing quantities.
 
-**Metric vocabulary**: `vocab/quota-metrics.json`. Standard metrics: `accesses`, `tokens`, `input-tokens`, `display-words`, `impressions`, `copies`, `seats`, `units-manufactured`.
+**Metric vocabulary**: proto-native — `(ramp.v1.vocab)` on `Quota.metric`. Standard metrics: `accesses`, `tokens`, `input-tokens`, `display-words`, `impressions`, `copies`, `seats`, `units-manufactured`.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `metric` | string | 1 | Unit being capped. Must match a metric in `vocab/quota-metrics.json`. |
+| `metric` | string | 1 | Unit being capped. A registered token from `(ramp.v1.vocab)` on this field, or a `vendor:` namespaced custom. |
 | `limit` | int64 | 2 | Maximum allowed value in the given window. |
 | `window` | QuotaWindow | 3 | Time window over which the limit accumulates. |
 
@@ -749,27 +752,23 @@ A post-use behavioral requirement attached to a `LicenseTerm`. Replaces the reti
 |---|---|---|---|
 | `kind` | ObligationKind | 1 | What the agent must do. |
 | `trigger` | ObligationTrigger | 2 | When the obligation activates. |
-| `description` | optional string | 3 | Human-readable description. Required for `OBLIGATION_KIND_OTHER`. |
+| `scope_license` | optional string | 3 | License derivatives must be released under. REQUIRED for `SHARE_ALIKE`. SPDX short-id or license URI. |
+| `detail` | optional string | 4 | Free-form detail (attribution string, notice file URI). `OBLIGATION_KIND_OTHER` without it → lint warning. |
 
 ## Enums
 
 ### PricingModel
 
+The charging **structure** only (a closed set). The open-ended metering basis ("per what") is NOT enumerated here — it lives in `Pricing.unit` as a registry-governed vocabulary. `UNSPECIFIED` is rejected at ingest (omission cannot default to FREE).
+
 | Value | Name | Description |
 |---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | PER_ACCESS | One-time access fee |
-| 2 | PER_TOKEN | Rate per LLM token consumed |
-| 3 | PER_FETCH | Rate per fetch request |
-| 4 | SUBSCRIPTION | Recurring access |
-| 5 | FREE | No charge |
-| ~~6~~ | ~~ATTRIBUTION~~ | **Retired.** Use `Obligation.kind = ATTRIBUTION` in a `LicenseTerm` instead. |
-| ~~7~~ | ~~CONTRIBUTION~~ | **Retired.** Use `Obligation.kind = CONTRIBUTION` in a `LicenseTerm` instead. |
-| 8 | TRAINING | Per training instance fee |
-| 9 | REVENUE_SHARE | Revenue share model (percentage of agent revenue) |
-| 10 | PER_PAGE | Per document page (legal filings, PDFs) |
-| 11 | PER_MINUTE | Per minute of audio/video |
-| 12 | PER_RECORD | Per structured data record |
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | FREE | No charge; `rate` must be 0 (state FREE explicitly — absent Pricing is not free) |
+| 2 | PER_UNIT | Rate per `Pricing.unit`; `unit` REQUIRED (registered token or `vendor:custom`) |
+| 3 | FLAT | One-time flat fee; `rate` is the total, no unit |
+
+Retired (pre-v1, renumbered cleanly): the old per-unit variants (`PER_ACCESS` / `PER_TOKEN` / `PER_FETCH` / `PER_PAGE` / `PER_MINUTE` / `PER_RECORD` / `TRAINING`) collapse into `PER_UNIT` + `unit`; `SUBSCRIPTION` is `FREE` + `scopes`; `ATTRIBUTION` / `CONTRIBUTION` are `Obligation.kind`s; `REVENUE_SHARE` is removed (settlement is off-protocol).
 
 ### PricingMetering
 
@@ -787,8 +786,9 @@ How the Exchange interprets a `LicenseTerm`'s machine fields.
 
 | Value | Name | Description |
 |---|---|---|
-| 0 | ENUMERATED | Machine fields are authoritative and enforced by the Exchange. Pricing MUST be present. |
-| 1 | REFERENCE_ONLY | Only `License.uri` is authoritative. Machine fields are informational; the Exchange MUST NOT auto-enforce them. Agent must read the license URI before using. |
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | ENUMERATED | Machine fields are authoritative. Pricing MUST be present. |
+| 2 | REFERENCE_ONLY | Only `License.uri` is authoritative (MUST be non-empty). Machine `restrictions`/`quotas`/`obligations` MUST be absent — the agent reads the document. Pricing is still required. |
 
 ### RestrictionKind
 
@@ -796,10 +796,11 @@ Which dimension a `Restriction` constrains.
 
 | Value | Name | Description |
 |---|---|---|
-| 0 | FUNCTION | What the agent may do. Tokens from `vocab/restriction-values/function.json`. |
-| 1 | GEOGRAPHY | Where the agent operates. ISO 3166-1 alpha-2 + `EU`, `EEA`, `*`. |
-| 2 | USER_TYPE | Who the agent is. Tokens from `vocab/restriction-values/user-type.json`. |
-| 3 | OTHER | Custom dimension; description in `Restriction.description`. |
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | FUNCTION | What the agent may do. Tokens authored as `(ramp.v1.vocab_enum)` on this value. |
+| 2 | GEOGRAPHY | Where the agent operates. ISO 3166-1 alpha-2 (structural) + the specials `EU`, `EEA`, `*`. |
+| 3 | USER_TYPE | Who the agent is. Tokens authored as `(ramp.v1.vocab_enum)` on this value. |
+| 4 | OTHER | Custom dimension; escape hatch, linted and discouraged. |
 
 ### QuotaWindow
 
@@ -807,10 +808,11 @@ Time window over which a `Quota.limit` accumulates.
 
 | Value | Name | Description |
 |---|---|---|
-| 0 | HOURLY | Resets each hour |
-| 1 | DAILY | Resets each day |
-| 2 | MONTHLY | Resets each month |
-| 3 | TOTAL | Lifetime cap — never resets |
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | HOURLY | Resets each hour |
+| 2 | DAILY | Resets each day |
+| 3 | MONTHLY | Resets each month |
+| 4 | TOTAL | Lifetime cap — never resets |
 
 ### ObligationKind
 
@@ -818,12 +820,13 @@ What the agent must do after use. `ATTRIBUTION` and `CONTRIBUTION` replace the r
 
 | Value | Name | Description |
 |---|---|---|
-| 0 | ATTRIBUTION | Credit the author or publisher |
-| 1 | CONTRIBUTION | Good-faith payment (amount suggested, not contractually fixed) |
-| 2 | SHARE_ALIKE | Derivatives must use the same license (CC-BY-SA / GPL style) |
-| 3 | NETWORK_COPYLEFT | Network service triggers copyleft (AGPL style) |
-| 4 | NOTICE | Include the specified copyright notice |
-| 5 | OTHER | Described in `Obligation.description` |
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | ATTRIBUTION | Credit the author or publisher |
+| 2 | CONTRIBUTION | Good-faith payment (amount suggested, not contractually fixed) |
+| 3 | SHARE_ALIKE | Derivatives must use the same / compatible license (`scope_license` required) |
+| 4 | NETWORK_COPYLEFT | Network service triggers copyleft (AGPL style) |
+| 5 | NOTICE | Include the specified copyright notice |
+| 6 | OTHER | Described in `Obligation.detail` |
 
 ### ObligationTrigger
 
@@ -831,10 +834,11 @@ When an `Obligation` activates.
 
 | Value | Name | Description |
 |---|---|---|
-| 0 | ON_USE | Triggered on any use of the resource |
-| 1 | ON_DISTRIBUTION | Triggered when copies are distributed |
-| 2 | ON_NETWORK_SERVICE | Triggered when served over a network (AGPL style) |
-| 3 | ON_DERIVATIVE | Triggered when a derivative work is produced |
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | ON_USE | Triggered on any use of the resource |
+| 2 | ON_DISTRIBUTION | Triggered when copies are distributed |
+| 3 | ON_NETWORK_SERVICE | Triggered when served over a network (AGPL style) |
+| 4 | ON_DERIVATIVE | Triggered when a derivative work is produced |
 
 ### DenialReason
 

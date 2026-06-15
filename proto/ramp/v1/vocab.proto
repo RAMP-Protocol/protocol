@@ -24,7 +24,23 @@ extend google.protobuf.FieldOptions {
   // authored directly on the field that uses it. The direct `repeated string`
   // form is intentional — modern protoc supports repeated custom options, so
   // there is no need to wrap the tokens in a message. Number 50001 sits in the
-  // internal extension range (50000–99999); sibling axes (Quota.metric,
-  // geography, function) reserve their own numbers in the same block.
+  // internal extension range (50000–99999). Field axes (Pricing.unit,
+  // Quota.metric) carry their tokens here; axes selected by an enum value
+  // (function, geography, user-type, selected by RestrictionKind) carry their
+  // tokens on the enum-value extension below.
   repeated string vocab = 50001;
+}
+
+extend google.protobuf.EnumValueOptions {
+  // vocab_enum is the enum-value-scoped twin of (ramp.v1.vocab) above. Axes
+  // whose token list is selected by an enum value — the function / geography /
+  // user-type tokens carried in Restriction.permitted/prohibited and selected
+  // by Restriction.kind — author their tokens directly on the corresponding
+  // RestrictionKind enum value. Same registry mechanism: protoc-gen-rampvocab
+  // reads these entries structurally off the enum-value descriptor and emits
+  // the per-axis constants + IsRegistered. A separate extension is required
+  // because an extend block targets exactly one options message; FieldOptions
+  // extension 50001 cannot also extend EnumValueOptions. Number 50002 reserves
+  // the next slot in the same internal block.
+  repeated string vocab_enum = 50002;
 }

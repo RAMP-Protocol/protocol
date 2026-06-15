@@ -28,9 +28,9 @@ Every `LicenseTerm` has a `TermSemantics` value:
 
 `Pricing` is required on **every** term regardless of semantics — absent Pricing is a validation error, and `model = FREE` must be stated explicitly (absent Pricing is not free). An agent cannot act on a priceless term, so the machine-readable price is always present even when the rest of the terms are deferred to a document.
 
-**`ENUMERATED`** — the enforceable machine fields (`restrictions`, `quotas`, `obligations`) are authoritative. The Exchange reads and enforces them automatically. If you declare `ai-train` as prohibited and a commercial entity requests `ai-train` use, the Exchange excludes or rejects that term for that agent.
+**`ENUMERATED`** — the enforceable machine fields (`restrictions`, `quotas`, `obligations`) are authoritative. They are validated and normalized at ingest and surfaced on every offer. The Exchange does **not** filter terms by matching the requester's self-declared attributes against them — discovery returns every scope-covered term and the agent self-selects the one whose restrictions it can honour; enforcement happens downstream at usage reconciliation. So if a term declares `ai-train` prohibited, that prohibition rides on the offer and binds the transaction the agent accepts.
 
-**`REFERENCE_ONLY`** — `License.uri` (which must be present) is authoritative for `restrictions`, `quotas`, and `obligations`; those carry informational hints but the Exchange does not auto-enforce them, and the agent must fetch and read the license document before using the resource. `Pricing` is still stated machine-readably. This mode is designed for complex license arrangements (music rights, patent portfolios, MCPS/PRS collective management agreements) whose terms cannot be enumerated in a machine-readable form.
+**`REFERENCE_ONLY`** — `License.uri` (which must be present) is authoritative for `restrictions`, `quotas`, and `obligations`; those carry informational hints but the Exchange does not auto-enforce them, and the agent must fetch and read the license document before using the resource. Because `License.uri` is always present for REFERENCE_ONLY, `License.uri_digest` (a `method:hexdigest` pin of the document) MUST be present so the agent can verify the fetched bytes match what was offered. The same requirement applies to any ENUMERATED term that carries a `uri` (mutable or not) — a pinned digest is what makes the referenced document tamper-evident. `Pricing` is still stated machine-readably. This mode is designed for complex license arrangements (music rights, patent portfolios, MCPS/PRS collective management agreements) whose terms cannot be enumerated in a machine-readable form.
 
 ## Restrictions
 
@@ -38,23 +38,25 @@ A `Restriction` constrains one licensing dimension:
 
 | Kind | What it constrains | Vocabulary source |
 |---|---|---|
-| `FUNCTION` | What the agent may do with the resource | `vocab/restriction-values/function.json` |
-| `GEOGRAPHY` | Where the agent is operating | `vocab/restriction-values/geography.json` |
-| `USER_TYPE` | What kind of entity the agent represents | `vocab/restriction-values/user-type.json` |
+| `FUNCTION` | What the agent may do with the resource | `(ramp.v1.vocab_enum)` on `RESTRICTION_KIND_FUNCTION` |
+| `GEOGRAPHY` | Where the agent is operating | `(ramp.v1.vocab_enum)` on `RESTRICTION_KIND_GEOGRAPHY` |
+| `USER_TYPE` | What kind of entity the agent represents | `(ramp.v1.vocab_enum)` on `RESTRICTION_KIND_USER_TYPE` |
+
+The token lists are authored as proto-native buf options on the `RestrictionKind` enum values (no side-car JSON registry); the `functiontokens` / `geographytokens` / `usertypes` constant packages and their `IsRegistered` checks are generated from them.
 
 Each restriction carries:
 
 - `permitted[]` — tokens allowed on this axis. Empty = any value permitted.
 - `prohibited[]` — tokens blocked on this axis. Takes precedence over `permitted[]`.
-- `critical` — when `true`, an agent that **cannot verify** its compliance must decline this term. When `false` (default), an unverifiable restriction is advisory.
+- `advisory` — when `false` (the **default**), the restriction is **binding**: an agent that cannot evaluate every token in it (including an unknown vendor token) MUST decline the term. Set `advisory: true` to downgrade an unverifiable restriction to non-blocking. (Fail-closed by default — a forgotten flag fails safe.)
 
-**Evaluation rule**: an agent is in-scope for a restriction when it matches at least one `permitted[]` token AND matches none of the `prohibited[]` tokens. Multiple restrictions on the same term are AND-combined — the agent must satisfy all of them.
+**Reading a restriction**: a value is in-scope when it matches at least one `permitted[]` token AND matches none of the `prohibited[]` tokens. Multiple restrictions on the same term are AND-combined — the agent must satisfy all of them. The agent applies this itself when self-selecting a term; the Exchange does not pre-filter terms against requester attributes.
 
 **Standard function tokens**: `ai-input`, `ai-train`, `ai-index`, `search`, `display`, `editorial`, `commercial`, `manufacture`, `sync`.
 
 **Standard geography tokens**: ISO 3166-1 alpha-2 codes (`US`, `DE`, `GB`, …) plus regional aliases `EU`, `EEA`, and the wildcard `*` (worldwide).
 
-**Standard user-type tokens**: `individual`, `academic`, `non-commercial`, `commercial_entity`, `government`.
+**Standard user-type tokens**: `individual`, `academic`, `non_profit`, `news_publisher`, `broadcaster`, `commercial_entity`.
 
 Unknown tokens during ingest produce a `PushResourcesResponse.warnings[]` entry — the term is accepted but flagged. This is forward-compatible: new vocab tokens can be added to the registry and used immediately without breaking existing Exchange deployments.
 
@@ -63,7 +65,7 @@ Unknown tokens during ingest produce a `PushResourcesResponse.warnings[]` entry 
 A `Quota` caps how much a licensee may consume before a term expires or must be renegotiated. Quotas gate term validity — they are not billing quantities. Billing is handled by `Pricing`.
 
 Each quota has:
-- `metric` — the unit being capped (must match an entry in `vocab/quota-metrics.json`).
+- `metric` — the unit being capped (a registered token from the `(ramp.v1.vocab)` option on `Quota.metric`, or a `vendor:` namespaced custom).
 - `limit` — the maximum value in the given window.
 - `window` — `HOURLY`, `DAILY`, `MONTHLY`, or `TOTAL` (lifetime cap, never resets).
 
@@ -81,7 +83,8 @@ An `Obligation` is a post-use behavioral requirement. Obligations replace the re
 Each obligation has:
 - `kind` — what the agent must do (see table below).
 - `trigger` — when the obligation activates.
-- `description` — human-readable text (required for `OTHER`; recommended for all kinds, e.g., exact attribution wording or notice text).
+- `scope_license` — the license derivatives must be released under (required for `SHARE_ALIKE`; SPDX short-id or license URI).
+- `detail` — human-readable text (recommended for all kinds, e.g., exact attribution wording or notice text; an `OTHER` obligation without it produces a lint warning).
 
 | Kind | Description |
 |---|---|
@@ -90,7 +93,7 @@ Each obligation has:
 | `SHARE_ALIKE` | Derivatives must be released under the same license (CC-BY-SA / GPL style) |
 | `NETWORK_COPYLEFT` | Network service triggers copyleft (AGPL style) |
 | `NOTICE` | Include the specified copyright notice |
-| `OTHER` | Custom requirement, described in `description` |
+| `OTHER` | Custom requirement, described in `detail` |
 
 | Trigger | When it fires |
 |---|---|
@@ -129,7 +132,7 @@ restrictions:
   - kind: USER_TYPE, permitted: ["academic"]
 obligations:
   - kind: ATTRIBUTION, trigger: ON_USE,
-    description: "Cite TechCrunch at the original URL"
+    detail: "Cite TechCrunch at the original URL"
 pricing: { model: FREE }
 ```
 
@@ -139,10 +142,10 @@ semantics: ENUMERATED
 restrictions:
   - kind: FUNCTION, permitted: ["ai-input", "ai-index"]
   - kind: USER_TYPE, permitted: ["commercial_entity"]
-pricing: { model: PER_ACCESS, rate: 0.05, currency: "USD" }
+pricing: { model: PER_UNIT, unit: "accesses", rate: 0.05, currency: "USD" }
 obligations:
   - kind: ATTRIBUTION, trigger: ON_USE,
-    description: "Cite TechCrunch at the original URL"
+    detail: "Cite TechCrunch at the original URL"
 ```
 
 An academic RAG agent matches Term 1. A commercial legal research platform matches Term 2. The Exchange surfaces both terms in `Offer.terms`; the agent picks the applicable one and transacts.
@@ -156,12 +159,12 @@ semantics: ENUMERATED
 restrictions:
   - kind: FUNCTION, permitted: ["display"]
   - kind: GEOGRAPHY, permitted: ["*"]
-pricing: { model: PER_ACCESS, rate: 1.20, currency: "USD", metering: NONE }
+pricing: { model: FLAT, rate: 1.20, currency: "USD", metering: NONE }
 quotas:
   - { metric: "impressions", limit: 500000, window: TOTAL }
 obligations:
   - kind: ATTRIBUTION, trigger: ON_USE,
-    description: "© GettyImages. All rights reserved."
+    detail: "© GettyImages. All rights reserved."
 ```
 
 `metering: NONE` means the buyer pays once and the ledger closes immediately — no `ReportUsage` required. The impressions quota is a contractual cap, not an online-enforced limit.
@@ -175,13 +178,13 @@ semantics: ENUMERATED
 restrictions:
   - kind: FUNCTION, permitted: ["manufacture"]
   - kind: GEOGRAPHY, permitted: ["*"]
-pricing: { model: PER_ACCESS, rate: 200.00, currency: "USD",
+pricing: { model: FLAT, rate: 200.00, currency: "USD",
            metering: OFFLINE_SELF_REPORTED }
 quotas:
   - { metric: "units-manufactured", limit: 1000, window: TOTAL }
 obligations:
   - kind: CONTRIBUTION, trigger: ON_USE,
-    description: "Suggested royalty: $0.50 per unit above 1,000"
+    detail: "Suggested royalty: $0.50 per unit above 1,000"
 ```
 
 The $200 fee covers a license to manufacture up to 1,000 units. The agent self-reports manufacturing runs. The Exchange audits. Above 1,000 units, the agent is expected to negotiate a new term or pay the suggested contribution.
@@ -196,10 +199,10 @@ semantics: ENUMERATED
 restrictions:
   - kind: FUNCTION, permitted: ["sync"]
   - kind: GEOGRAPHY, permitted: ["*"]
-pricing: { model: PER_ACCESS, rate: 500.00, currency: "USD", metering: NONE }
+pricing: { model: FLAT, rate: 500.00, currency: "USD", metering: NONE }
 obligations:
   - kind: NOTICE, trigger: ON_DISTRIBUTION,
-    description: "℗ 2024 Example Records. Licensed under MCPS license MR-7741."
+    detail: "℗ 2024 Example Records. Licensed under MCPS license MR-7741."
 ```
 
 **Term 2** — full MCPS/PRS terms by reference:
@@ -207,8 +210,12 @@ obligations:
 semantics: REFERENCE_ONLY
 license:
   uri: "https://www.mcps-prs-alliance.co.uk/license/MR-7741"
-  title: "MCPS/PRS Blanket Sync License MR-7741"
+  name: "MCPS/PRS Blanket Sync License MR-7741"
+  uri_digest: "sha256:3b1f8e0c…"
+pricing: { model: FLAT, rate: 500.00, currency: "USD" }
 ```
+
+`Pricing` is required even on a `REFERENCE_ONLY` term — the human-readable terms live in the referenced document, but the machine-readable price is always stated.
 
 The Exchange surfaces both terms. A sophisticated agent checks the REFERENCE_ONLY term to verify the machine-enumerable Term 1 matches the authoritative document before committing.
 
@@ -218,26 +225,29 @@ A data provider licenses a research dataset:
 
 ```
 semantics: ENUMERATED
+scopes: ["subscription:institution"]
 restrictions:
   - kind: FUNCTION, permitted: ["ai-train", "ai-input"]
-  - kind: USER_TYPE, permitted: ["academic", "non-commercial"]
-pricing: { model: SUBSCRIPTION, rate: 2000.00, currency: "USD" }
+  - kind: USER_TYPE, permitted: ["academic", "non_profit"]
+pricing: { model: FREE }
 quotas:
   - { metric: "seats", limit: 10, window: MONTHLY }
 obligations:
   - kind: SHARE_ALIKE, trigger: ON_DISTRIBUTION,
-    description: "Trained models using this dataset must be released under CC-BY-NC-SA 4.0"
+    scope_license: "CC-BY-NC-SA-4.0",
+    detail: "Trained models using this dataset must be released under CC-BY-NC-SA 4.0"
 ```
 
-Up to 10 researchers in the subscribing institution can use the dataset. Any model trained on this dataset that is released publicly must carry the same license.
+The institutional subscription is settled off-protocol; access is gated on-protocol by the `subscription:institution` scope (the term is `model: FREE` because there is no per-access charge — the subscribing institution's Biscuit carries the matching scope). Up to 10 researchers in the subscribing institution can use the dataset. Any model trained on this dataset that is released publicly must carry the same license.
 
 ## Vocabulary registry
 
-Restriction tokens, quota metrics, and license identifiers are governed by vocabularies in the `vocab/` directory:
+The open vocabulary axes are **proto-native** — each registered token list is authored once, as buf custom options directly on the field or enum value that uses it (no side-car JSON registry):
 
-- `vocab/restriction-values/function.json` — function restriction tokens
-- `vocab/restriction-values/geography.json` — geography tokens
-- `vocab/restriction-values/user-type.json` — user-type tokens
-- `vocab/quota-metrics.json` — quota metric tokens
+- function / geography / user-type tokens — `(ramp.v1.vocab_enum)` on the `RESTRICTION_KIND_FUNCTION` / `RESTRICTION_KIND_GEOGRAPHY` / `RESTRICTION_KIND_USER_TYPE` enum values
+- quota metrics — `(ramp.v1.vocab)` on `Quota.metric`
+- pricing units — `(ramp.v1.vocab)` on `Pricing.unit`
 
-Unknown tokens at ingestion produce `PushResourcesResponse.warnings[]` entries — they do not cause rejection. This allows publishers to use new vocabulary tokens before the registry is updated, at the cost of a non-enforced restriction on older Exchange deployments.
+The `protoc-gen-rampvocab` buf plugin reads these options structurally and generates a typed constant package per axis (`functiontokens`, `geographytokens`, `usertypes`, `quotametrics`, `pricingunits`) with an `IsRegistered` membership check; the constants, the membership check, and the validation all derive from the single authored list and cannot drift. Geography registers only the non-ISO specials (`*`, `EU`, `EEA`); ISO 3166-1 alpha-2 codes are validated structurally.
+
+Unknown bare tokens at ingestion produce `PushResourcesResponse.warnings[]` entries — they do not cause rejection. This allows publishers to use new vocabulary tokens (or `vendor:` namespaced customs) before the registry is updated, at the cost of a non-enforced restriction on older Exchange deployments.

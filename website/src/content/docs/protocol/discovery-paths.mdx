@@ -56,7 +56,7 @@ sequenceDiagram
 | Discover supply | `ResourceQuery` / `ResourceResponse` | **RAMP** wrapping **RAMP Requester** |
 | Offers returned | `Offer` with `Package` + `Pricing` | **RAMP** Pricing + **CoMP** Package |
 | Content attestations | `Offer.attestations` | **RAMP** `ResourceAttestation` (replaces ResourceAttestation) |
-| Access restrictions | `Offer.restrictions` | **RAMP** mapping of **RSL** permits/prohibits |
+| Access restrictions | `Offer.terms[].restrictions` (`repeated Restriction`) | **RAMP** mapping of **RSL** permits/prohibits |
 | Execute transaction | `TransactionRequest` / `TransactionResponse` | **RAMP** (billing_id, signed URL) |
 | Fetch content | Signed URL on CDN | **RAMP** extension (signed URL delivery) |
 | Report usage | `UsageReport` | **RAMP** (mandatory) |
@@ -184,7 +184,7 @@ sequenceDiagram
 | Read rsl.txt | **RSL 1.0** -- terms declaration |
 | Read ramp.json | **RAMP** -- exchange routing |
 | DiscoverResources | Exchange returns Offers with pricing derived from RSL |
-| Offer.restrictions | Maps RSL permits/prohibits to RAMP AccessRestrictions |
+| Offer.terms[].restrictions | Maps RSL permits/prohibits to RAMP `Restriction` (kind `RESTRICTION_KIND_FUNCTION`) on each `LicenseTerm` |
 
 ## Path E: Batch Multi-URL Acquisition
 

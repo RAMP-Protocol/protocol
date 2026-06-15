@@ -58,7 +58,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 
 ### Pricing models
 
-PER_ACCESS, PER_TOKEN, PER_FETCH, SUBSCRIPTION, FREE, PER_PAGE, PER_MINUTE, PER_RECORD, REVENUE_SHARE.
+`PRICING_MODEL` is the charging structure only: FREE, PER_UNIT, FLAT (plus UNSPECIFIED=0, rejected at ingest). The metering basis ("per what") moved to the `Pricing.unit` vocabulary; revenue-share was removed (settlement is off-protocol); attribution/contribution are `Obligation`s.
 
 ### Denial reasons
 
@@ -76,11 +76,11 @@ Domain-specific metadata carried in `ext` fields:
 ### Licensing terms
 
 - **`LicenseTerm`** — universal licensing unit. A resource carries zero or more terms; each term is a complete, self-contained access arrangement (restrictions + quotas + obligations + pricing). Same shape at ingestion (`ResourceEntry.terms`) and emission (`Offer.terms`).
-- **`License`** — identifies the governing license document (`uri`, `title`, `spdx_expression`).
-- **`Restriction`** — constrains one axis: `FUNCTION` (what), `GEOGRAPHY` (where), `USER_TYPE` (who). Tokens sourced from `vocab/restriction-values/`. `critical=true` requires the agent to verify compliance before using.
-- **`Quota`** — usage cap that gates term validity, not billing. Metrics from `vocab/quota-metrics.json`: `accesses`, `tokens`, `display-words`, `impressions`, `units-manufactured`, and more.
+- **`License`** — identifies the governing license document (`uri`, `id`, `name`, `immutable`, `uri_digest`). `uri_digest` pins the document hash and is required whenever a `License` carries a `uri` (any semantics, mutable or not).
+- **`Restriction`** — constrains one axis: `FUNCTION` (what), `GEOGRAPHY` (where), `USER_TYPE` (who). Tokens are proto-native (`(ramp.v1.vocab_enum)` on the `RestrictionKind` values). restrictions are **binding by default** (`advisory=true` downgrades an unverifiable restriction to non-blocking).
+- **`Quota`** — usage cap that gates term validity, not billing. Metrics are proto-native (`(ramp.v1.vocab)` on `Quota.metric`): `accesses`, `tokens`, `display-words`, `impressions`, `units-manufactured`, and more.
 - **`Obligation`** — post-use behavioral requirement. Replaces the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION` (attribution and contribution are obligations, not payment models). Kinds: `ATTRIBUTION`, `CONTRIBUTION`, `SHARE_ALIKE`, `NETWORK_COPYLEFT`, `NOTICE`, `OTHER`.
-- **`TermSemantics`** — `ENUMERATED` (machine fields authoritative; Exchange enforces; Pricing required) vs `REFERENCE_ONLY` (only `License.uri` is authoritative; Exchange passes through unchanged).
+- **`TermSemantics`** — `ENUMERATED` (machine fields authoritative; enforced downstream at reconciliation; Pricing required) vs `REFERENCE_ONLY` (only `License.uri` is authoritative; machine restrictions/quotas/obligations absent; Pricing still required).
 - **`PricingMetering`** — `ONLINE` (default), `NONE` (one-time sale, no ongoing tracking), `OFFLINE_SELF_REPORTED` (agent self-reports; Exchange audits). Added as `Pricing.metering` (field 9).
 - `Offer.terms` (field 19) — repeated LicenseTerm from the publisher catalog. `Offer.restrictions` (the flat `AccessRestrictions` field) removed.
 - `ResourceEntry.terms` (field 13) — publisher-declared terms pushed via `CatalogService.PushResources`.

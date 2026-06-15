@@ -5,7 +5,7 @@ description: "Data structures and storage systems for catalog entries, transacti
 
 ## Content Catalog (In-Memory)
 
-The catalog is the hot data structure. It must support fast lookup by URI (exact match and prefix/glob), filtered by access restrictions and AI system function.
+The catalog is the hot data structure. It must support fast lookup by URI (exact match and prefix/glob), with each entry carrying its license terms and per-term restrictions.
 
 **Data structure**: Radix trie (compressed trie) keyed by URI path, per tenant.
 
@@ -65,12 +65,12 @@ type OfferTemplate struct {
     Package       *compv1.Package
     Pricing       *rampv1.Pricing
     Identity      *rampv1.ResourceIdentity
-    Restrictions  *rampv1.AccessRestrictions
+    // License terms carried on the offer. Each LicenseTerm carries
+    // repeated Restriction (kinds: FUNCTION, GEOGRAPHY, USER_TYPE, ...).
+    // Surfaced on Offer.terms[] for the agent to self-select; not a
+    // server-side filter.
+    Terms         []*rampv1.LicenseTerm
     DeliveryMethod rampv1.DeliveryMethod
-
-    // For fast filtering during DiscoverResources.
-    PermittedFunctions map[compv1.Function]bool
-    ProhibitedFunctions map[compv1.Function]bool
 }
 ```
 

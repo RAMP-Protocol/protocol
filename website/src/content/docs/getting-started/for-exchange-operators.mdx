@@ -282,17 +282,17 @@ type BillingAdapter interface {
 
 Implement these three methods against your existing billing system. The reference implementation uses DynamoDB; production deployments wire it to their real ledger.
 
-## New Pricing Models
+## Unit-Agnostic Pricing for Non-Text Resources
 
-RAMP defines three pricing models for non-text resources:
+RAMP uses a single unit-agnostic pricing model, `PRICING_MODEL_PER_UNIT`, for all metered resources. `Pricing.unit` names what is metered, so non-text resources are priced through the same model:
 
 | Model | Unit | Use Case |
 |---|---|---|
-| `PRICING_MODEL_PER_PAGE` | pages | Court filings, legal documents, PDFs |
-| `PRICING_MODEL_PER_MINUTE` | minutes | Video, audio, streaming sessions |
-| `PRICING_MODEL_PER_RECORD` | records | Database records, credit reports, medical studies |
+| `PRICING_MODEL_PER_UNIT` | `pages` | Court filings, legal documents, PDFs |
+| `PRICING_MODEL_PER_UNIT` | `minutes` | Video, audio, streaming sessions |
+| `PRICING_MODEL_PER_UNIT` | `records` | Database records, credit reports, medical studies |
 
-Pricing is now unit-agnostic: `unit_cost` replaces eCPT, `estimated_quantity` replaces `estimated_tokens`, and `Pricing.unit` specifies the metering unit. Your Exchange MUST support these fields on all offers.
+Pricing is unit-agnostic: `unit_cost` replaces eCPT, `estimated_quantity` replaces `estimated_tokens`, and `Pricing.unit` specifies the metering unit. Your Exchange MUST support these fields on all offers.
 
 ## Streaming Delivery
 

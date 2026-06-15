@@ -126,7 +126,7 @@ These fields describe news-specific properties of an offer. They help agents eva
 |-----|------|----------|-----------------|-------------|
 | `news.source_organization` | string | Recommended | Schema.org `sourceOrganization` | Originating news organization. Example: `"Reuters"`. For syndicated content, this is the original creator, not the re-publisher. |
 | `news.copyright_notice` | string | Optional | IPTC / Schema.org `copyrightNotice` | Copyright notice text. Example: `"Copyright 2026 The Associated Press. All rights reserved."` |
-| `news.tdm_reservation` | boolean | Optional | W3C TDMRep | Whether text/data mining rights are reserved under EU DSM Directive Article 4. When `true`, the Offer's `AccessRestrictions` define what mining is permitted. When absent, no TDM reservation is declared. |
+| `news.tdm_reservation` | boolean | Optional | W3C TDMRep | Whether text/data mining rights are reserved under EU DSM Directive Article 4. When `true`, the Offer's `terms[].restrictions` define what mining is permitted. When absent, no TDM reservation is declared. |
 
 ---
 
@@ -268,7 +268,7 @@ For podcast episodes, the following `Offer.ext` fields provide audio-specific me
 | `news.podcast_show_title` | string | Recommended | RSS / Apple Podcasts | Show name. Example: `"The Daily"`. |
 | `news.episode_number` | integer | Optional | `itunes:episode` | Episode number within the show or season. |
 | `news.season_number` | integer | Optional | `itunes:season` | Season number. |
-| `news.duration_seconds` | number | Recommended | `itunes:duration` | Episode duration in seconds. Used for cost estimation with `PRICING_MODEL_PER_MINUTE`. |
+| `news.duration_seconds` | number | Recommended | `itunes:duration` | Episode duration in seconds. Used for cost estimation with `PRICING_MODEL_PER_UNIT` (`unit: "minutes"`). |
 | `news.episode_type` | string | Optional | `itunes:episodeType` | Episode classification. Values: `full` (standard episode), `trailer` (show preview), `bonus` (supplemental content). |
 | `news.transcript_url` | string | Optional | Podcasting 2.0 `podcast:transcript` | URL to a transcript file. |
 | `news.transcript_type` | string | Conditional | Podcasting 2.0 `podcast:transcript@type` | MIME type of the transcript. Values: `text/plain`, `text/html`, `text/vtt`, `application/json` (Podcasting 2.0 JSON format), `application/x-subrip`. Required when `news.transcript_url` is present. |
@@ -317,7 +317,7 @@ News publishers have strong attribution requirements. The RAMP core `Usage.attri
 
 - `AttributionDetail.displayed_url` SHOULD be the article's `canonical_url`
 - `AttributionDetail.format` SHOULD be `CITATION_FORMAT_LINK` (inline link to source) or `CITATION_FORMAT_FOOTNOTE`
-- `AttributionDetail.visible_to_user` MUST be `true` when the Offer's `AccessRestrictions` require attribution
+- `AttributionDetail.visible_to_user` MUST be `true` when the Offer's `terms[].restrictions` require attribution
 
 ---
 
@@ -338,7 +338,7 @@ An Exchange returns an offer for a New York Times article. The article has been 
     }
   },
   "pricing": {
-    "model": "PRICING_MODEL_PER_ARTICLE",
+    "model": "PRICING_MODEL_PER_UNIT",
     "rate": 0.15,
     "currency": "USD",
     "unit_cost": 0.000061,
@@ -357,11 +357,18 @@ An Exchange returns an offer for a New York Times article. The article has been 
     }
   },
   "data_as_of": "2026-03-19T16:45:00Z",
-  "restrictions": {
-    "permitted_functions": ["FUNCTION_SEARCH", "FUNCTION_SUMMARIZATION"],
-    "prohibited_functions": ["FUNCTION_TRAINING"],
-    "max_display_words": 250
-  },
+  "terms": [
+    {
+      "restrictions": [
+        {
+          "kind": "RESTRICTION_KIND_FUNCTION",
+          "permitted": ["search"],
+          "prohibited": ["ai-train"]
+        }
+      ],
+      "max_display_words": 250
+    }
+  ],
   "attestations": [
     {
       "verifier": "nytimes.com",
@@ -417,7 +424,7 @@ An Exchange returns an offer for an NPR podcast episode with transcript and mult
     }
   },
   "pricing": {
-    "model": "PRICING_MODEL_PER_MINUTE",
+    "model": "PRICING_MODEL_PER_UNIT",
     "rate": 0.03,
     "currency": "USD",
     "unit_cost": 0.03,
@@ -434,10 +441,17 @@ An Exchange returns an offer for an NPR podcast episode with transcript and mult
       "news.podcast_guid": "917393e3-1b1e-5cef-ace4-edaa54e1f810"
     }
   },
-  "restrictions": {
-    "permitted_functions": ["FUNCTION_SEARCH", "FUNCTION_SUMMARIZATION"],
-    "prohibited_functions": ["FUNCTION_TRAINING"]
-  },
+  "terms": [
+    {
+      "restrictions": [
+        {
+          "kind": "RESTRICTION_KIND_FUNCTION",
+          "permitted": ["search"],
+          "prohibited": ["ai-train"]
+        }
+      ]
+    }
+  ],
   "ext": {
     "news.article_type": "reportage",
     "news.language": "en",

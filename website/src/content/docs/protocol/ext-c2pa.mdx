@@ -32,7 +32,7 @@ A **C2PA verification vendor** (the Exchange itself, or a third party like Truep
 Implementers must be familiar with:
 
 - RAMP protocol (`proto/ramp/v1/ramp.proto`)
-- `ResourceIdentity`, `ResourceAttestation`, and `AccessRestrictions` messages
+- `ResourceIdentity`, `ResourceAttestation`, and `LicenseTerm` / `Restriction` messages
 - The `ext` field mechanism (`google.protobuf.Struct`)
 - [C2PA Specification 2.3](https://spec.c2pa.org/specifications/specifications/2.3/specs/C2PA_Specification.html) (recommended, not required for consumers)
 
@@ -157,14 +157,14 @@ The Exchange SHOULD automatically map C2PA training/mining declarations to RAMP 
 
 | C2PA Assertion | RAMP Mapping |
 |----------------|-------------|
-| `c2pa.training_mining.training_allowed == false` | `AccessRestrictions.prohibited_functions += "ai_train"` |
-| `c2pa.training_mining.mining_allowed == false` | `AccessRestrictions.prohibited_functions += "ai_index"` |
+| `c2pa.training_mining.training_allowed == false` | a `LicenseTerm.restrictions` entry `Restriction{kind: RESTRICTION_KIND_FUNCTION, prohibited: ["ai-train"]}` |
+| `c2pa.training_mining.mining_allowed == false` | a `LicenseTerm.restrictions` entry `Restriction{kind: RESTRICTION_KIND_FUNCTION, prohibited: ["ai-index"]}` |
 | `c2pa.training_mining` absent | No restriction inferred (absence is not prohibition) |
 
 This creates a two-layer enforcement model:
 
 1. **Declaration layer** (C2PA): The content creator embeds their intent in the content itself. This travels with the content, even outside RAMP channels.
-2. **Enforcement layer** (RAMP): The Exchange reads the C2PA declaration and enforces it commercially — an agent requesting `intended_use: "ai_train"` will not receive offers for content where training is prohibited.
+2. **Enforcement layer** (RAMP): The Exchange reads the C2PA declaration and enforces it commercially — an agent requesting `intended_use: "ai-train"` will not receive offers for content where training is prohibited.
 
 ---
 
@@ -231,7 +231,7 @@ The vendor's Ed25519 key (published in `public_keys` at `/.well-known/ramp.json`
 All of Level A, plus:
 
 - Publish a C2PA-bridged `ResourceAttestation` with identity and rights claims (`c2pa.status`, `c2pa.signer`, `c2pa.training_allowed`, `c2pa.mining_allowed`)
-- Map `c2pa.training_mining` to `AccessRestrictions.prohibited_functions`
+- Map `c2pa.training_mining` to a `LicenseTerm.restrictions` entry `Restriction{kind: RESTRICTION_KIND_FUNCTION, prohibited: [...]}`
 - Extract `content_hash` from C2PA hard binding into attestation claims
 
 ### Full (Level C)
