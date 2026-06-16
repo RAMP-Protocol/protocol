@@ -91,7 +91,7 @@ Three v1 profiles exist:
 
 ### Identity and authorization
 
-Every request carries a `Requester` message — a universal actor identity with fields for `id`, `domain`, `type`, `scopes`, and an Ed25519 `signature`. The Requester is not limited to AI systems: any entity that needs metered access — autonomous agents, human-operated copilots, enterprise service accounts, research pipelines — uses the same identity model.
+Every request carries a `Requester` message — a universal actor identity with fields for `id`, `domain`, `type`, and `scopes` (request authentication is a separate RFC 9421 HTTP Message Signature in the headers, not a field on `Requester`). The Requester is not limited to AI systems: any entity that needs metered access — autonomous agents, human-operated copilots, enterprise service accounts, research pipelines — uses the same identity model.
 
 **RequesterType** classifies the caller: `AGENT` (autonomous), `HUMAN_TOOL` (copilot), `SERVICE` (enterprise pipeline), `DELEGATED` (acting on behalf of another), `RESEARCH` (batch data collection).
 

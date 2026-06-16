@@ -99,13 +99,13 @@ func (o *Broker) HandleRequest(ctx context.Context, req *rampv1.RAMPRequest) (*r
 
 ## Request Signing and the Forwarding Signature Stack
 
-RAMP uses a two-layer signing model: the **Requester signature** proves who originated the request, and the **forwarding signature stack** proves which intermediaries forwarded it.
+RAMP uses a two-layer signing model: the **agent's request signature** proves who originated the request, and the **forwarding signature stack** proves which intermediaries forwarded it.
 
-### Requester Signature
+### Request Authentication
 
-The `Requester` message carries an Ed25519 signature over `(id, domain, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp.json`.
+The `Requester` message carries identity and entitlements only (`id`, `domain`, `type`, `scopes`, optional `delegation`) — it has **no** signature field. The request is authenticated by an RFC 9421 HTTP Message Signature (alg=EdDSA) computed over the whole HTTP request and carried in the headers. The Exchange verifies it against the public key published at `{requester.domain}/.well-known/ramp.json`.
 
-The Broker passes `Requester` through unchanged -- it never modifies the requester's identity or signature.
+The Broker passes `Requester` through unchanged -- it never modifies the requester's identity, scopes, or delegation -- and adds its own forwarding signature in the headers (see below).
 
 ### Forwarding Signature Stack (RFC 9421)
 

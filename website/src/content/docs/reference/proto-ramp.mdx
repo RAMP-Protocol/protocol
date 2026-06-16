@@ -221,7 +221,11 @@ Layered content identification for cross-exchange dedup and integrity verificati
 | `hash_method` | optional string | 6 | Hash algorithm ("simhash-v1", "sha256") |
 | `c2pa_manifest` | optional string | 7 | C2PA credentials manifest URI |
 | `resource_mutability` | ResourceMutability | 8 | Whether resource content is static, dynamic, or live |
+| `c2pa_status` | optional C2PAStatus | 9 | Summary validation status of the C2PA manifest |
+| `soft_binding` | optional string | 10 | Soft binding hash surviving format transcoding |
+| `soft_binding_method` | optional string | 11 | Soft binding algorithm (e.g. "phash-v1", "c2pa-watermark") |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### SubscriptionQuotaInfo
 
@@ -875,11 +879,11 @@ When an `Obligation` activates.
 | Value | Name | Description |
 |---|---|---|
 | 0 | UNSPECIFIED | |
-| 1 | DELIVERY_FAILED | CDN returned 4xx/5xx |
-| 2 | CONTENT_MISMATCH | Content hash does not match attested hash |
-| 3 | INCOMPLETE_CONTENT | Significantly fewer tokens than promised |
-| 4 | WRONG_CONTENT | Different content than described |
-| 5 | EXPIRED_BEFORE_FETCH | Signed URL expired before agent could fetch |
+| 1 | CONTENT_MISMATCH | Content hash does not match what was promised in the Offer |
+| 2 | DELIVERY_FAILED | Resource not delivered (signed URL returned 404/403/5xx) |
+| 3 | WRONG_CONTENT | Delivered, but entirely different from what was described |
+| 4 | EXPIRED_BEFORE_FETCH | Signed URL expired before the agent could fetch |
+| 5 | INCOMPLETE_CONTENT | Resource was truncated or incomplete |
 
 ### DisputeStatus
 

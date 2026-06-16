@@ -60,8 +60,8 @@ Rebuildable from supply query + catalog state.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `offer_id` | `string` | yes | `Offer.offer_id` |
-| `package_id` | `string` | yes | `Offer.package.id` |
-| `provider_domain` | `string` | yes | `Offer.package.seller` |
+| `package_id` | `string` | no | `Offer.ext["comp.package_id"]` (ramp-comp-v1; present only if the Offer carries CoMP metadata) |
+| `provider_domain` | `string` | no | `Offer.ext["comp.seller"]` (ramp-comp-v1) or resolved from the offer's identity |
 | `content_url` | `string` | no | `ResourceIdentity.canonical_url` |
 | `pricing_model` | `string` | yes | `Pricing.model` |
 | `rate` | `float64` | yes | `Pricing.rate` |
