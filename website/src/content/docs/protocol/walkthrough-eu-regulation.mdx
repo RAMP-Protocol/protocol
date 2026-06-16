@@ -84,14 +84,16 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/DiscoverR
     "id": "legal-research-agent",
     "domain": "lawfirm.eu",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "http://data.europa.eu/eli/reg/2024/1689/oj"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:a4c9f2e8b7d1...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [
+    "http://data.europa.eu/eli/reg/2024/1689/oj"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "supported_profiles": ["ramp-legal-v1"],
   "ext": {
     "legal.legislation.language_preference": "en"
@@ -353,14 +355,16 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
     "id": "legal-research-agent",
     "domain": "lawfirm.eu",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "http://data.europa.eu/eli/reg/2024/1689/oj"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:b5d0e3f9c8a2...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [
+    "http://data.europa.eu/eli/reg/2024/1689/oj"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "agent_signature": "ed25519:b5d0e3f9c8a2...",
   "agent_signature_algorithm": "ed25519"
 }

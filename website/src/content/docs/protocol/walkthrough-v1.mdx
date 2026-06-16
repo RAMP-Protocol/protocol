@@ -65,14 +65,16 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 {
   "ver": "1.0",
   "id": "sq-001",
+  "uris": [
+    "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "requester": {
     "id": "research-bot",
     "domain": "startup.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:a4c9f2e8b7d1...",
     "signature_algorithm": "ed25519"
@@ -83,14 +85,15 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 **Key fields in `Requester`:**
 - **`id`** + **`domain`** — uniquely identifies the agent. The Exchange fetches the agent's Ed25519 public key from `startup.com/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the signature.
 - **`type`** — `REQUESTER_TYPE_AGENT` (autonomous AI agent). Other types: `HUMAN_TOOL`, `SERVICE`, `DELEGATED`, `RESEARCH`.
-- **`uris`** — the specific resources being requested.
+- **`ResourceQuery.uris`** — the specific resources being requested (a sibling of `requester`, not part of the identity envelope).
+- **`acceptable_restrictions`** — the query's restriction tolerances (here axis `FUNCTION` with `ai-input`); a sibling of `requester`.
 - **`scopes`** — `["*"]` means unrestricted public access. No subscription, no entitlement filtering.
 - **`signature`** — Ed25519 over `(id, domain, uris, scopes)`. Proves the request came from this agent.
 - **No `delegation` field** — this agent acts on its own behalf, not under a delegated credential.
 
 ### Step 3 — ResourceResponse
 
-The Exchange looks up the article in its catalog and returns an offer. It does not filter the offer against the agent's `intended_use` — the restrictions ride on the offer's terms, and the agent self-selects the term whose `RESTRICTION_KIND_FUNCTION` permitted list covers its intended use (`ai-input`); enforcement happens downstream at accept → report → reconcile:
+The Exchange looks up the article in its catalog and returns an offer. It does not filter the offer against the query's `acceptable_restrictions` — the restrictions ride on the offer's terms, and the agent self-selects the term whose `RESTRICTION_KIND_FUNCTION` permitted list covers its intended use (`ai-input`); enforcement happens downstream at accept → report → reconcile:
 
 ```json
 {
@@ -187,14 +190,16 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
   "offer_id": "offer-tc-agents-001",
   "offer_signature": "base64-ed25519-offer-sig...",
   "offer_signature_algorithm": "ed25519",
+  "uris": [
+    "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "requester": {
     "id": "research-bot",
     "domain": "startup.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:b5d0e3f9c8a2...",
     "signature_algorithm": "ed25519"
@@ -334,14 +339,16 @@ POST https://exchange.bloomberg-data.com/ramp/v1/ramp.v1.ExchangeService/Discove
 {
   "ver": "1.0",
   "id": "sq-bb-001",
+  "uris": [
+    "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "requester": {
     "id": "hedge-bot",
     "domain": "hedgefund.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["quote:*", "earnings:*", "news:read"],
     "signature": "ed25519:c6d1e4f7a8b2...",
     "signature_algorithm": "ed25519",

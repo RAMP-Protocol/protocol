@@ -19,10 +19,10 @@ sequenceDiagram
     Note over Handler: Validate request (proto validation)
     Note over Handler: Verify Requester.signature (Ed25519 via domain key lookup)
     Note over Handler: Verify IntermediaryHop chain (if present)
-    Note over Handler: Extract tenant from requester.uris[0] domain
+    Note over Handler: Extract tenant from ResourceQuery.uris[0] domain
     Note over Handler: (Volumetric rate limiting handled by infra layer — HAProxy/Envoy)
 
-    Handler->>SD: FindOffers(ctx, tenantID, uris, requester.scopes)
+    Handler->>SD: FindOffers(ctx, tenantID, query.uris, requester.scopes)
 
     Note over SD: Lookup URI(s) in radix trie
     Note over SD: Filter catalog by requester.scopes
@@ -112,7 +112,7 @@ func (h *ExchangeHandler) DiscoverResources(
     }
 
     // 3. Resolve tenant
-    tenantCfg, err := h.tenants.ResolveFromURIs(requester.Uris)
+    tenantCfg, err := h.tenants.ResolveFromURIs(req.Msg.Uris)
     if err != nil {
         return nil, connect.NewError(connect.CodeNotFound, err)
     }
@@ -131,7 +131,7 @@ func (h *ExchangeHandler) DiscoverResources(
     if requester.Delegation != nil {
         effectiveScopes = intersectScopes(requester.Scopes, requester.Delegation.Scopes)
     }
-    offers, err := h.catalog.FindOffers(ctx, tenantCfg.ID, requester.Uris, effectiveScopes)
+    offers, err := h.catalog.FindOffers(ctx, tenantCfg.ID, req.Msg.Uris, effectiveScopes)
     if err != nil {
         return nil, connect.NewError(connect.CodeInternal, err)
     }
@@ -201,7 +201,7 @@ func (h *ExchangeHandler) DiscoverResources(
     //    When the ResourceQuery contains multiple URIs, return OfferGroups
     //    (one per URI) so the caller knows which offers map to which resource.
     //    When a single URI is queried, use the flat offers field.
-    uris := requester.Uris
+    uris := req.Msg.Uris
     if len(uris) > 1 {
         // Batch mode: group offers by requested URI.
         groups := make([]*rampv1.OfferGroup, 0, len(uris))
@@ -264,7 +264,7 @@ type RequesterRecord struct {
 
 When the `intermediaries` field is populated on a `ResourceQuery` or `TransactionRequest`, the Exchange MUST verify the full `IntermediaryHop` chain:
 
-1. **Verify `Requester.signature`** — proves the original requester authorized the request. The Exchange looks up the requester's public key via `{requester.domain}/.well-known/ramp.json` and verifies the Ed25519 signature over `(id, domain, uris, scopes)`.
+1. **Verify `Requester.signature`** — proves the original requester authorized the request. The Exchange looks up the requester's public key via `{requester.domain}/.well-known/ramp.json` and verifies the Ed25519 signature over `(id, domain, scopes)`.
 
 2. **Verify each `IntermediaryHop.signature`** — proves each intermediary in the chain (e.g., Broker) handled the request. For each hop, the Exchange fetches the public key from `{hop.domain}/.well-known/ramp.json` and verifies the Ed25519 signature. Timestamps (`forwarded_at`) are checked for temporal consistency.
 

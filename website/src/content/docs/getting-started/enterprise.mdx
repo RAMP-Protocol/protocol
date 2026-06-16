@@ -83,7 +83,7 @@ Her AI agent requests 5 internal resources:
 | 4 | `internal://hr/employee/jane` | `hr:read` | `tax:customer:read`, `legal:read` | **Denied** |
 | 5 | `internal://reports/financial/q4` | `reports:financial:read` | `tax:customer:read`, `legal:read` | **Denied** |
 
-The 3 denied URIs come back with `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` — the agent knows *why* access was denied, not just that it failed. This is the internal Exchange behavior; a public Exchange would silently omit the resources to avoid revealing their existence.
+The 3 denied URIs come back with `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` — the agent knows *why* access was denied, not just that it failed. An Exchange returns this wherever access is subscription- or scope-gated (enterprise RBAC and public marketplace subscriptions alike) and the resource's existence isn't secret, so the agent learns a subscription/scope would unlock it. Where existence itself must stay hidden, the Exchange omits the resource silently instead.
 
 ## Token Minting Flow
 

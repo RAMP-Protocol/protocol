@@ -76,22 +76,24 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Discov
     "id": "neuro-bot",
     "domain": "brainlab.edu",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:f7a2b8c3d4e5...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [
+    "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "supported_profiles": ["ramp-medimg-v1"]
 }
 ```
 
 **Key observations:**
 
-- **`uris`** — `dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42` is a Study Instance UID, the globally unique identifier for a DICOM imaging study. The Broker resolved "brain MRI from TCIA TCGA-GBM collection, patient TCGA-06-0152" into this UID before querying the Exchange.
-- **`intended_use`** — `ai-input` (inference), not `ai-train`. This distinction matters: training use requires a different DUA class and often carries different pricing.
+- **`ResourceQuery.uris`** — `dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42` is a Study Instance UID, the globally unique identifier for a DICOM imaging study. The Broker resolved "brain MRI from TCIA TCGA-GBM collection, patient TCGA-06-0152" into this UID before querying the Exchange.
+- **`acceptable_restrictions`** — axis `FUNCTION` with value `ai-input` (inference), not `ai-train`. This distinction matters: training use requires a different DUA class and often carries different pricing.
 - **`supported_profiles`** — declares that the agent understands `ramp-medimg-v1` extension fields. The Exchange will include imaging-specific metadata in the response.
 
 ---
@@ -226,14 +228,16 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
     "id": "neuro-bot",
     "domain": "brainlab.edu",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["*"],
     "signature": "ed25519:a8b9c0d1e2f3...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [
+    "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "agent_signature": "ed25519:a8b9c0d1e2f3...",
   "agent_signature_algorithm": "ed25519",
   "ext": {

@@ -103,7 +103,7 @@ RAMP uses a two-layer signing model: the **Requester signature** proves who orig
 
 ### Requester Signature
 
-The `Requester` message carries an Ed25519 signature over `(id, domain, uris, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp.json`.
+The `Requester` message carries an Ed25519 signature over `(id, domain, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp.json`.
 
 The Broker passes `Requester` through unchanged -- it never modifies the requester's identity or signature.
 
@@ -196,13 +196,11 @@ Agents can discover content through the Broker in three ways, depending on how m
 
 ### 1. Specific URIs
 
-The agent already knows which resources it wants. It sends `Requester.uris` with one or more specific content identifiers (DOIs, URLs, etc.). The Broker forwards these as a `ResourceQuery` to each Exchange and collects offers.
+The agent already knows which resources it wants. It sends `RAMPRequest.uris` with one or more specific content identifiers (DOIs, URLs, etc.). The Broker forwards these as a `ResourceQuery` to each Exchange and collects offers.
 
 ```json
 {
-  "requester": {
-    "uris": ["doi:10.1038/s41586-024-07386-0", "doi:10.1126/science.adq3854"]
-  }
+  "uris": ["doi:10.1038/s41586-024-07386-0", "doi:10.1126/science.adq3854"]
 }
 ```
 
@@ -242,9 +240,7 @@ All three modes can be combined in a single request. For example, an agent can s
 
 ```json
 {
-  "requester": {
-    "uris": ["doi:10.1038/s41586-024-07386-0"]
-  },
+  "uris": ["doi:10.1038/s41586-024-07386-0"],
   "query": "Related studies on CRISPR delivery mechanisms",
   "search_filters": {
     "academic.year_min": 2022
@@ -334,7 +330,7 @@ sequenceDiagram
 | **Same protocol, transparent proxy** | The Exchange cannot distinguish Broker-mediated requests from direct agent requests. No special Exchange support needed. |
 | **Signed offer pass-through** | Exchange signatures cover pricing fields. The Broker cannot inflate prices without invalidating the signature. |
 | **Advisory budget enforcement** | The Broker pre-filters transactions by budget, but the Exchange is the authoritative enforcement point. No overspend occurs because the Exchange is the gatekeeper. |
-| **Ed25519 + intermediary chain** | Requester signs (id, domain, uris, scopes); Broker appends a signed `IntermediaryHop`. Exchange verifies both layers. Public keys discoverable via `public_keys` in `.well-known/ramp.json`. |
+| **Ed25519 + intermediary chain** | Requester signs (id, domain, scopes); Broker appends a signed `IntermediaryHop`. Exchange verifies both layers. Public keys discoverable via `public_keys` in `.well-known/ramp.json`. |
 | **Partial results are normal** | If 3 of 5 Exchanges respond within the deadline, the Broker proceeds with 3 responses. Availability of any individual Exchange does not block the system. |
 
 ## Go Module Structure

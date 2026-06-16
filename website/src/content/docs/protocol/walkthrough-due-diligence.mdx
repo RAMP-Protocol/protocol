@@ -47,12 +47,14 @@ POST https://broker.lawfirm.com/ramp/v1
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [],
-    "intended_use": ["ai-input"],
     "scopes": ["credit:read", "legal:read", "property:read", "sec:read", "news:read"],
     "signature": "ed25519:f1a2b3c4d5e6...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "constraints": {
     "budget_scope": "deal:acme-acquisition",
     "period_budget": {
@@ -77,7 +79,7 @@ POST https://broker.lawfirm.com/ramp/v1
 }
 ```
 
-**Key design point**: The `uris` field is empty. The agent knows a company, not document URIs. The Broker's job is to decompose this entity-based intent into specific resource queries. This is the two-phase model: **discover** (Broker's domain-specific logic) then **access** (RAMP protocol).
+**Key design point**: The `RAMPRequest.uris` field is empty. The agent knows a company, not document URIs. The Broker's job is to decompose this entity-based intent into specific resource queries. This is the two-phase model: **discover** (Broker's domain-specific logic) then **access** (RAMP protocol).
 
 The `ext` field carries domain-specific metadata (entity identifiers, requested resource types). The core protocol doesn't need to understand these — the Broker does.
 
@@ -119,14 +121,16 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverRes
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "https://creditdata.com/reports/duns/123456789"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["credit:read"],
     "signature": "ed25519:a1b2c3d4...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [
+    "https://creditdata.com/reports/duns/123456789"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "intermediaries": [
     {
       "domain": "broker.lawfirm.com",
@@ -152,16 +156,18 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "https://pacer.uscourts.gov/case/2:24-cv-01234",
-      "https://pacer.uscourts.gov/case/3:25-cv-05678",
-      "https://pacer.uscourts.gov/case/1:23-cv-09012"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["legal:read"],
     "signature": "ed25519:c3d4e5f6...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [
+    "https://pacer.uscourts.gov/case/2:24-cv-01234",
+    "https://pacer.uscourts.gov/case/3:25-cv-05678",
+    "https://pacer.uscourts.gov/case/1:23-cv-09012"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "intermediaries": [
     {
       "domain": "broker.lawfirm.com",
@@ -187,15 +193,17 @@ POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResour
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-K&dateb=&owner=include&count=2",
-      "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-Q&dateb=&owner=include&count=2"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["sec:read"],
     "signature": "ed25519:k1l2m3n4...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [
+    "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-K&dateb=&owner=include&count=2",
+    "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-Q&dateb=&owner=include&count=2"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "intermediaries": [
     {
       "domain": "broker.lawfirm.com",
@@ -544,12 +552,14 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTran
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": ["https://creditdata.com/reports/duns/123456789"],
-    "intended_use": ["ai-input"],
     "scopes": ["credit:read"],
     "signature": "ed25519:a1b2c3d4...",
     "signature_algorithm": "ed25519"
   },
+  "uris": ["https://creditdata.com/reports/duns/123456789"],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "items": [
     {
       "offer_id": "offer-credit-acme-001",
@@ -576,16 +586,18 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "https://pacer.uscourts.gov/case/2:24-cv-01234",
-      "https://pacer.uscourts.gov/case/3:25-cv-05678",
-      "https://pacer.uscourts.gov/case/1:23-cv-09012"
-    ],
-    "intended_use": ["ai-input"],
     "scopes": ["legal:read"],
     "signature": "ed25519:c3d4e5f6...",
     "signature_algorithm": "ed25519"
   },
+  "uris": [
+    "https://pacer.uscourts.gov/case/2:24-cv-01234",
+    "https://pacer.uscourts.gov/case/3:25-cv-05678",
+    "https://pacer.uscourts.gov/case/1:23-cv-09012"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "items": [
     {
       "offer_id": "offer-legal-001",

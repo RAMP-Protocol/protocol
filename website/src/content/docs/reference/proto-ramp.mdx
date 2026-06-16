@@ -39,11 +39,22 @@ Optional RPC for providers/CMS/third-party intelligence providers to push conten
 | `ver` | string | 1 | RAMP protocol version |
 | `id` | string | 2 | Unique query identifier |
 | `requester` | Requester | 3 | Requester identity, scopes, and optional delegation chain |
+| `uris` | repeated string | 8 | Resource URIs being queried |
+| `acceptable_restrictions` | repeated AcceptableRestriction | 9 | Limits the query operates within, per restriction axis. Advisory; the Exchange MAY pre-select offers against them, not enforced. |
 | `request_id` | optional string | 4 | Original RAMP request ID (traceability) |
 | `intermediaries` | repeated IntermediaryHop | 5 | Intermediary forwarding chain (Agent -> Broker -> Exchange). Empty for direct queries. |
 | `deadline` | optional Duration | 6 | Max wait time (default 500ms) |
 | `supported_profiles` | repeated string | 7 | Domain extension profiles the caller understands (e.g. "ramp-academic-v1") |
 | `ext` | Struct | 15 | Extension point |
+
+### AcceptableRestriction
+
+The limits a query operates within on one restriction axis, in the same `RestrictionKind` vocabulary the terms use. The Exchange/Broker MAY pre-select offers whose term restrictions fall within these (convenience, not enforcement). Used in `ResourceQuery` and `RAMPRequest`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `axis` | RestrictionKind | 1 | Which axis (same enum as `Restriction.kind`): FUNCTION / GEOGRAPHY / USER_TYPE / OTHER |
+| `values` | repeated string | 2 | Values the query operates within on this axis — same token vocabulary as the terms (e.g. FUNCTION `["ai-train"]`, GEOGRAPHY `["US","EU"]`) |
 
 ### ResourceResponse
 
@@ -65,6 +76,7 @@ Optional RPC for providers/CMS/third-party intelligence providers to push conten
 | `offers` | repeated Offer | 2 | Offers for this URI |
 | `discovery_method` | optional DiscoveryMethod | 3 | How the URI was discovered (v2 extension) |
 | `absence_reason` | optional OfferAbsenceReason | 4 | Why no offers are available for this URI |
+| `restriction_filters` | repeated RestrictionKind | 5 | When `absence_reason = RESTRICTION_FILTERED`, the axes that drove the convenience pre-filter (same `RestrictionKind` vocabulary as the terms) |
 
 ### RateLimitInfo
 
@@ -81,7 +93,7 @@ Rate limit status modeled after IETF RateLimit header fields.
 
 ### Requester
 
-Identifies who is making a request, what scopes they have, and an optional delegation chain. Used in `ResourceQuery` and `RAMPRequest`.
+Identity and entitlements only — who is asking and what they're entitled to. What they're asking for (`uris`) and the limits they'll accept (`acceptable_restrictions`) live on the ask (`ResourceQuery` / `RAMPRequest`), not here. Used in `ResourceQuery` and `RAMPRequest`.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -89,11 +101,9 @@ Identifies who is making a request, what scopes they have, and an optional deleg
 | `domain` | string | 2 | Requester's domain -- used for public key lookup at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) |
 | `type` | RequesterType | 3 | What kind of entity is making this request |
 | `name` | optional string | 4 | Human-readable name (e.g. "Acme Research Assistant") |
-| `uris` | repeated string | 5 | Resource URIs being requested (same role as CoMP `aisysuse.uri`) |
-| `intended_use` | repeated string | 6 | What the requester intends to do with the resources (CoMP Function values) |
-| `license_id` | optional string | 7 | Commercial license or subscription identifier (same role as CoMP `aisysuse.lid`) |
-| `scopes` | repeated string | 8 | Entitlement scopes declaring what the requester can access. Format: `"{domain}:{permission}"`. Empty = default access policy. |
-| `delegation` | optional Delegation | 9 | Present when requester acts on behalf of another entity |
+| `license_id` | optional string | 5 | Commercial license or subscription identifier (same role as CoMP `aisysuse.lid`) |
+| `scopes` | repeated string | 6 | Entitlement scopes declaring what the requester can access. Format: `"{domain}:{permission}"`. Empty = default access policy. |
+| `delegation` | optional Delegation | 7 | Present when requester acts on behalf of another entity |
 | `ext` | Struct | 15 | Extension point |
 
 ### Delegation
@@ -260,6 +270,7 @@ Quota status for a subscription within the current billing period. Appears on `O
 | `agent_identity_hash` | string | 10 | RFC 7638 JWK Thumbprint of the agent's Ed25519 request-signing key, bound into the signed `retrieval_endpoint`. Empty string when absent; non-empty iff a signed `retrieval_endpoint` is present |
 | `retrieval_endpoint` | optional string | 18 | Signed URL the agent uses to fetch the resource. Bound to `agent_identity_hash`; expires at `expires_at`. Absent on denial and when `delivery_method` is not signed-URL-based |
 | `denial_reason` | optional DenialReason | 11 | Set when denied |
+| `restriction_mismatches` | repeated RestrictionKind | 19 | When `denial_reason = RESTRICTION_NOT_SATISFIED`, the restriction axes the request failed (same `RestrictionKind` vocabulary as the terms) |
 | `subscription_id` | optional string | 12 | Subscription/deal identifier |
 | `subscription_unit_value` | optional Cost | 16 | Per-unit cost for subscription accounting |
 | `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Post-transaction remaining quota snapshot |
@@ -290,6 +301,7 @@ Result for a single offer in a batch transaction.
 | `subscription_id` | optional string | 6 | Subscription identifier (no per-request charge) |
 | `subscription_unit_value` | optional Cost | 11 | Per-unit cost for subscription accounting (ASC 606) |
 | `denial_reason` | optional DenialReason | 7 | Set if this item was denied |
+| `restriction_mismatches` | repeated RestrictionKind | 13 | When `denial_reason = RESTRICTION_NOT_SATISFIED`, the restriction axes the request failed (same `RestrictionKind` vocabulary as the terms) |
 | `expires_at` | optional Timestamp | 8 | When `retrieval_endpoint` expires |
 | `delivery_method` | DeliveryMethod | 9 | How content is delivered for this item |
 | `reporting_obligation` | optional ReportingObligation | 10 | Reporting requirements for this item |
@@ -566,9 +578,11 @@ Agent sends to Broker (Step 1).
 | `ver` | string | 1 | RAMP protocol version |
 | `id` | string | 2 | Unique request identifier |
 | `requester` | Requester | 3 | Requester identity, scopes, and optional delegation. Broker forwards this in `ResourceQuery.requester`. |
+| `uris` | repeated string | 8 | Resource URIs the agent wants. Broker forwards these in `ResourceQuery.uris`. Optional when `query`/`search_filters` drive discovery. |
+| `acceptable_restrictions` | repeated AcceptableRestriction | 9 | Limits the agent will operate within, per restriction axis. Broker forwards these in `ResourceQuery.acceptable_restrictions`. Advisory, not enforced. |
 | `constraints` | optional RequestConstraints | 4 | Budget and preference constraints |
 | `supported_profiles` | repeated string | 5 | Domain extension profiles the agent understands (e.g. "ramp-academic-v1") |
-| `query` | optional string | 6 | Search query for Broker-side resource discovery. When present, the Broker interprets the query and discovers resources across Exchanges on the agent's behalf. Can be used alongside `Requester.uris`. |
+| `query` | optional string | 6 | Search query for Broker-side resource discovery. When present, the Broker interprets the query and discovers resources across Exchanges on the agent's behalf. Can be used alongside `uris`. |
 | `search_filters` | optional Struct | 7 | Structured search filters (alongside or instead of `query`). Keys are profile-specific: `"academic.topic"`, `"news.category"`, `"legal.jurisdiction"`, etc. The Broker maps these to Exchange-specific query parameters. |
 | `ext` | Struct | 15 | Extension point |
 
@@ -851,14 +865,13 @@ When an `Obligation` activates.
 | 3 | INSUFFICIENT_BALANCE | Buyer's balance too low |
 | 4 | RATE_LIMITED | Too many requests |
 | 5 | CONTENT_UNAVAILABLE | Content no longer available |
-| 6 | FUNCTION_PROHIBITED | Requested function not permitted |
-| 7 | GEO_RESTRICTED | Buyer's geography not permitted |
-| 8 | REPORTING_OVERDUE | Buyer has overdue reports |
-| 9 | OFFER_EXPIRED | Offer TTL exceeded |
-| 10 | SIGNATURE_INVALID | Signature verification failed |
-| 11 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
-| 12 | DELEGATION_EXPIRED | Biscuit delegation token expired |
-| 13 | SCOPE_INSUFFICIENT | Requester's scopes do not cover this resource |
+| 6 | RESTRICTION_NOT_SATISFIED | Accepted term's restriction not satisfied by the request (axes in `restriction_mismatches`, same `RestrictionKind` vocabulary as the terms) |
+| 7 | REPORTING_OVERDUE | Buyer has overdue reports |
+| 8 | OFFER_EXPIRED | Offer TTL exceeded |
+| 9 | SIGNATURE_INVALID | Signature verification failed |
+| 10 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
+| 11 | DELEGATION_EXPIRED | Biscuit delegation token expired |
+| 12 | SCOPE_INSUFFICIENT | Requester scopes don't cover this resource |
 
 ### DisputeReason
 
@@ -919,13 +932,11 @@ Why no offers are available for a requested URI.
 | 0 | UNSPECIFIED | |
 | 1 | NOT_IN_CATALOG | URI is not in this Exchange's catalog |
 | 2 | CONTENT_BLOCKED | Provider opted out of AI access |
-| 3 | FUNCTION_PROHIBITED | Requested function prohibited by provider terms |
-| 4 | GEO_RESTRICTED | Requester's geography is restricted |
-| 5 | USER_CATEGORY_PROHIBITED | Requester's user category not permitted |
-| 6 | TEMPORARILY_UNAVAILABLE | Content temporarily unavailable (e.g. feed refresh) |
-| 7 | NOT_AUTHORIZED | Exchange not authorized by provider |
-| 8 | SCOPE_INSUFFICIENT | Requester's scopes do not cover this resource. Used in enterprise deployments; public Exchanges SHOULD silently omit. |
-| 9 | UNKNOWN_CRITICAL_EXTENSION | Consumer encountered `ext_critical` keys it does not recognize |
+| 3 | RESTRICTION_FILTERED | Offers exist but were pre-filtered for one or more restriction axes the requester stated (axes in `restriction_filters`, same `RestrictionKind` vocabulary as the terms); convenience filter, not enforcement |
+| 4 | TEMPORARILY_UNAVAILABLE | Content temporarily unavailable (e.g. feed refresh) |
+| 5 | NOT_AUTHORIZED | Exchange not authorized by provider |
+| 6 | SCOPE_INSUFFICIENT | Requester's scopes/subscription do not cover this resource. Applies wherever access is subscription- or scope-gated; the resource exists but the requester's token/subscription doesn't grant it. (Exchange MAY omit silently where existence must stay hidden.) |
+| 7 | UNKNOWN_CRITICAL_EXTENSION | Consumer encountered `ext_critical` keys it does not recognize |
 
 ### RequesterType
 

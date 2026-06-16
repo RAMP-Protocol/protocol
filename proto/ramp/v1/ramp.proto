@@ -110,6 +110,27 @@ service ExchangeService {
 // Resource Discovery (Steps 2-3)
 // ============================================================================
 
+// AcceptableRestriction — the limits a query operates within on one restriction
+// axis, expressed in the same RestrictionKind vocabulary that terms use. The
+// Exchange/Broker MAY pre-select offers whose term restrictions fall within
+// these as a convenience (see Restriction); it is NOT enforcement — the agent
+// self-selects and bears compliance.
+message AcceptableRestriction {
+  // Which axis (same enum as Restriction.kind): FUNCTION / GEOGRAPHY /
+  // USER_TYPE / OTHER.
+  RestrictionKind axis = 1;
+
+  // The values the query operates within on this axis — same token vocabulary
+  // as the terms (e.g. FUNCTION ["ai-train"], GEOGRAPHY ["US", "EU"]).
+  repeated string values = 2 [
+    (buf.validate.field).cel = {
+      id: "acceptable_restriction.values.format"
+      message: "each value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
+      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
+    }
+  ];
+}
+
 // ResourceQuery — Query an Exchange for available resource offers.
 //
 // Sent by a Broker or directly by an AI agent.
@@ -125,6 +146,15 @@ message ResourceQuery {
   // Requester identity — who is making this request, what scopes they have,
   // and optional delegation chain.
   Requester requester = 3;
+
+  // Resource URIs being queried.
+  repeated string uris = 8;
+
+  // The limits this query operates within, per restriction axis (function,
+  // geography, user-type, …) — see AcceptableRestriction. Advisory selection
+  // inputs the Exchange/Broker MAY pre-select offers against (convenience, not
+  // enforcement); the agent self-selects and bears compliance.
+  repeated AcceptableRestriction acceptable_restrictions = 9;
 
   // Original RAMP request ID from Step 1, for traceability.
   optional string request_id = 4;
@@ -205,7 +235,7 @@ message ResourceResponse {
 // Enables multi-URI batch queries where the caller needs to know
 // which offers correspond to which requested resource.
 message OfferGroup {
-  // The URI this group of offers is for (echoed from ResourceQuery.requester.uris).
+  // The URI this group of offers is for (echoed from ResourceQuery.uris).
   string uri = 1;
 
   // Zero or more offers for this URI. Empty = resource not available.
@@ -226,6 +256,12 @@ message OfferGroup {
   // trial-and-error transactions. Analogous to OpenRTB nbr codes and
   // Shutterstock per-item error metadata in batch responses.
   optional OfferAbsenceReason absence_reason = 4;
+
+  // When absence_reason = RESTRICTION_FILTERED, the restriction axes that drove
+  // the convenience pre-filter, in the same RestrictionKind vocabulary the terms
+  // use (e.g. [GEOGRAPHY] when the requester's stated geography matched no term).
+  // Advisory diagnostics, not an enforcement verdict.
+  repeated RestrictionKind restriction_filters = 5;
 }
 
 // DiscoveryMethod — How the Broker discovered this resource URI.
@@ -252,32 +288,28 @@ enum OfferAbsenceReason {
   OFFER_ABSENCE_REASON_NOT_IN_CATALOG = 1;
   // Resource exists but has a BLOCKED access policy (provider opted out of AI access).
   OFFER_ABSENCE_REASON_CONTENT_BLOCKED = 2;
-  // Resource exists but its offers were pre-filtered out for the requester's
-  // stated function (a convenience filter matched to the query, not an
-  // enforcement verdict — see Restriction). The agent MAY still be eligible.
-  OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED = 3;
-  // Resource exists but its offers were pre-filtered out for the requester's
-  // stated geography (convenience filter; see Restriction).
-  OFFER_ABSENCE_REASON_GEO_RESTRICTED = 4;
-  // Resource exists but its offers were pre-filtered out for the requester's
-  // stated user category (convenience filter; see Restriction).
-  OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED = 5;
+  // Resource exists but its offers were pre-filtered out for one or more
+  // restriction axes the requester stated (a convenience filter matched to the
+  // query, not an enforcement verdict — see Restriction). The filtered axes are
+  // listed in OfferGroup.restriction_filters, in the same RestrictionKind
+  // vocabulary the terms use. The agent MAY still be eligible.
+  OFFER_ABSENCE_REASON_RESTRICTION_FILTERED = 3;
   // Resource is temporarily unavailable (e.g., provider feed refresh in progress).
-  OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE = 6;
+  OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE = 4;
   // Exchange is not authorized by the provider to sell this resource.
-  OFFER_ABSENCE_REASON_NOT_AUTHORIZED = 7;
-  // Requester's scopes do not cover this resource.
-  // Used in enterprise deployments where the requester knows resources exist
-  // but their delegation token doesn't grant access. The Exchange MAY
-  // use this instead of silent omission when the deployment context makes
-  // it appropriate (e.g., internal Exchange where resources are known).
-  // Public Exchanges SHOULD silently omit (not reveal existence).
-  OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT = 8;
+  OFFER_ABSENCE_REASON_NOT_AUTHORIZED = 5;
+  // Requester's scopes/subscription do not cover this resource. Applies wherever
+  // access is gated by subscription or scope entitlements (not only enterprise
+  // deployments): the resource exists but the requester's delegation token or
+  // subscription does not grant it. The Exchange returns this so the requester
+  // learns the resource is reachable under the right subscription/scope. (Where
+  // existence itself must stay hidden, the Exchange MAY omit it silently instead.)
+  OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT = 6;
 
   // Consumer encountered ext_critical keys it does not recognize.
   // The unrecognized keys SHOULD be listed in the OfferGroup's ext field
   // under "unrecognized_critical_extensions" for diagnostic purposes.
-  OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION = 9;
+  OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION = 7;
 }
 
 // RateLimitInfo — Caller's rate limit status on this Exchange.
@@ -885,14 +917,14 @@ message License {
 // Exchange-side gate the requester must pass to see a term.
 //
 // An Exchange or Broker MAY, purely as a CONVENIENCE, pre-filter the offers it
-// returns using attributes the requester volunteers in its query
-// (Requester.user_type / geography / intended_use) — e.g. an agent that only
-// wants US-eligible content can ask the Exchange to skip the rest so it doesn't
-// pay to discover offers it would never accept. That filter is advisory and
+// returns against the limits the query states in ResourceQuery.acceptable_restrictions
+// (the same RestrictionKind axes/vocabulary the terms use) — e.g. an agent that
+// only wants US-eligible content can ask the Exchange to skip the rest so it
+// doesn't pay to discover offers it would never accept. That filter is advisory and
 // optional: a different Broker may not apply it, and it is a recommendation
 // matched to the request, never an enforcement verdict. When an Exchange does
-// drop offers this way it MAY signal it via OfferAbsenceReason.{GEO_RESTRICTED,
-// FUNCTION_PROHIBITED, USER_CATEGORY_PROHIBITED}. Term visibility is otherwise
+// drop offers this way it MAY signal it via OfferAbsenceReason.RESTRICTION_FILTERED
+// (with the axes in OfferGroup.restriction_filters). Term visibility is otherwise
 // gated only by resource_id/URI and Biscuit scope coverage — see
 // LicenseTerm.scopes.
 //
@@ -1266,9 +1298,12 @@ enum DeliveryMethod {
 
 // Requester — Universal identity for any RAMP client.
 //
-// Carries identity, intended use, resource URIs, and entitlement scopes.
-// The Exchange verifies identity via Ed25519 signature, then filters
-// its catalog by the requester's scopes.
+// Carries identity and entitlements ONLY — who is asking and what they are
+// entitled to (license_id, scopes, delegation). What they are asking for (uris)
+// and the limits they will operate within (acceptable_restrictions) belong to
+// the ask, not the identity, and live on ResourceQuery / RAMPRequest. The
+// Exchange verifies identity via Ed25519 signature, then filters its catalog by
+// the requester's scopes.
 message Requester {
   // Unique requester identifier (e.g., "agent-research-bot-001").
   string id = 1;
@@ -1283,20 +1318,10 @@ message Requester {
   // Human-readable name (e.g., "Acme Research Assistant").
   optional string name = 4;
 
-  // Resource URIs being requested.
-  repeated string uris = 5;
-
-  // What the requester intends to do with the resources. Advisory: a hint the
-  // Exchange/Broker MAY use to pre-filter offers as a convenience (see
-  // Restriction) — it is not an entitlement, is not enforced against the
-  // returned terms, and the agent self-selects and bears compliance.
-  // Standard values: "ai_train", "ai_input", "ai_index", "search", "display".
-  repeated string intended_use = 6;
-
   // Commercial license or subscription identifier.
   // Exchange uses this to look up entitlements, pricing tiers, and
   // existing subscription deals.
-  optional string license_id = 7;
+  optional string license_id = 5;
 
   // Entitlement scopes. Declare what the requester can access.
   //
@@ -1315,7 +1340,7 @@ message Requester {
   //
   // When empty, Exchange applies its default access policy (typically
   // returns all publicly available resources).
-  repeated string scopes = 8;
+  repeated string scopes = 6;
 
   // Request authentication is handled at the HTTP layer via RFC 9421
   // HTTP Message Signatures (alg=EdDSA). The Requester's public key
@@ -1324,7 +1349,7 @@ message Requester {
 
   // Optional delegation — present when the requester acts on behalf of
   // another entity (user, organization, upstream agent).
-  optional Delegation delegation = 9;
+  optional Delegation delegation = 7;
 
   google.protobuf.Struct ext = 15;
 
@@ -1607,6 +1632,10 @@ message TransactionResponse {
   // Set when the transaction is denied. Absent on success.
   optional DenialReason denial_reason = 11;
 
+  // When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the
+  // request failed, in the same RestrictionKind vocabulary the terms use.
+  repeated RestrictionKind restriction_mismatches = 19;
+
   // If set, this transaction was fulfilled under a subscription/deal.
   // No per-request charge — usage tracked against subscription quota.
   optional string subscription_id = 12;
@@ -1664,6 +1693,10 @@ message TransactionResultItem {
   // Set if this specific item was denied (others may succeed).
   optional DenialReason denial_reason = 7;
 
+  // When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the
+  // request failed, in the same RestrictionKind vocabulary the terms use.
+  repeated RestrictionKind restriction_mismatches = 13;
+
   // When retrieval_endpoint expires.
   optional google.protobuf.Timestamp expires_at = 8;
 
@@ -1697,14 +1730,13 @@ enum DenialReason {
   DENIAL_REASON_INSUFFICIENT_BALANCE = 3; // Requester's balance too low
   DENIAL_REASON_RATE_LIMITED = 4;         // Too many requests
   DENIAL_REASON_CONTENT_UNAVAILABLE = 5;  // Resource no longer available
-  DENIAL_REASON_FUNCTION_PROHIBITED = 6;  // Accepted term's function restriction not satisfied by the request
-  DENIAL_REASON_GEO_RESTRICTED = 7;       // Accepted term's geography restriction not satisfied by the request
-  DENIAL_REASON_REPORTING_OVERDUE = 8;    // Requester has >20% overdue reports (MAY threshold)
-  DENIAL_REASON_OFFER_EXPIRED = 9;        // Offer TTL exceeded
-  DENIAL_REASON_SIGNATURE_INVALID = 10;   // Offer signature verification failed
-  DENIAL_REASON_QUOTA_EXCEEDED = 11;      // Subscription access count exhausted for this period
-  DENIAL_REASON_DELEGATION_EXPIRED = 12;  // Biscuit delegation token expired
-  DENIAL_REASON_SCOPE_INSUFFICIENT = 13;  // Requester scopes don't cover this resource
+  DENIAL_REASON_RESTRICTION_NOT_SATISFIED = 6;  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResult.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+  DENIAL_REASON_REPORTING_OVERDUE = 7;    // Requester has >20% overdue reports (MAY threshold)
+  DENIAL_REASON_OFFER_EXPIRED = 8;        // Offer TTL exceeded
+  DENIAL_REASON_SIGNATURE_INVALID = 9;    // Offer signature verification failed
+  DENIAL_REASON_QUOTA_EXCEEDED = 10;      // Subscription access count exhausted for this period
+  DENIAL_REASON_DELEGATION_EXPIRED = 11;  // Biscuit delegation token expired
+  DENIAL_REASON_SCOPE_INSUFFICIENT = 12;  // Requester scopes don't cover this resource
 }
 
 // IngestionSource — How the catalog entry was discovered.
@@ -1981,6 +2013,17 @@ message RAMPRequest {
   // The Broker forwards this to Exchanges in ResourceQuery.requester.
   Requester requester = 3;
 
+  // Resource URIs the agent wants. The Broker forwards these to Exchanges in
+  // ResourceQuery.uris. Optional when `query` / `search_filters` drive
+  // Broker-side discovery instead.
+  repeated string uris = 8;
+
+  // The limits the agent will operate within, per restriction axis — see
+  // AcceptableRestriction. The Broker forwards these to Exchanges in
+  // ResourceQuery.acceptable_restrictions. Advisory selection inputs, not
+  // enforcement.
+  repeated AcceptableRestriction acceptable_restrictions = 9;
+
   // Constraints for exchange filtering and offer selection.
   optional RequestConstraints constraints = 4;
 
@@ -2000,7 +2043,7 @@ message RAMPRequest {
   // When present, the Broker interprets the query and discovers resources
   // across Exchanges on the agent's behalf. Results returned as Offers
   // in RAMPResponse, same as for specific URI requests.
-  // Can be used alongside Requester.uris (specific URIs + search in one request).
+  // Can be used alongside uris (specific URIs + search in one request).
   optional string query = 6;
 
   // Structured search filters (optional, alongside or instead of query).

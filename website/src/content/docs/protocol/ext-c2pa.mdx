@@ -164,7 +164,7 @@ The Exchange SHOULD automatically map C2PA training/mining declarations to RAMP 
 This creates a two-layer model:
 
 1. **Declaration layer** (C2PA): The content creator embeds their intent in the content itself. This travels with the content, even outside RAMP channels.
-2. **Term layer** (RAMP): The Exchange maps the C2PA declaration onto `LicenseTerm.restrictions` that ride on the offer. The agent self-selects the term it can honour and bears compliance (enforced downstream at accept → report → reconcile). As a convenience, an Exchange MAY pre-filter — an agent that volunteers `intended_use: "ai-train"` can ask to skip offers for content where training is prohibited so it doesn't pay to discover them — but that filter is advisory, not an enforcement guarantee.
+2. **Term layer** (RAMP): The Exchange maps the C2PA declaration onto `LicenseTerm.restrictions` that ride on the offer. The agent self-selects the term it can honour and bears compliance (enforced downstream at accept → report → reconcile). As a convenience, an Exchange MAY pre-filter — an agent that volunteers `acceptable_restrictions: [{ axis: "FUNCTION", values: ["ai-train"] }]` on the query can ask to skip offers for content where training is prohibited so it doesn't pay to discover them — but that filter is advisory, not an enforcement guarantee.
 
 ---
 

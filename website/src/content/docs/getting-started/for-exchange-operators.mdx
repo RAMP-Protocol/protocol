@@ -173,8 +173,8 @@ After verifying identity and delegation, filter your catalog by the requester's 
 
 For resources that exist but fall outside the requester's scopes:
 
-- **Public Exchange:** Silently omit the resource. Do not reveal its existence.
-- **Enterprise Exchange:** Return `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` in the `OfferGroup.absence_reason` field so the requester gets an actionable diagnostic.
+- **Existence is sensitive:** Silently omit the resource. Do not reveal it exists.
+- **Subscription/scope-gated (the usual case):** Return `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` in the `OfferGroup.absence_reason` field so the requester gets an actionable diagnostic — the resource exists but their scopes/subscription don't cover it. Applies to enterprise RBAC and public marketplace subscriptions alike.
 
 ### Subscription Quota Signaling
 

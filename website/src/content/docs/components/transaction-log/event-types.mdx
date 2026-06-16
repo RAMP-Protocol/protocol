@@ -121,8 +121,7 @@ Authorization denials use a closed enum:
 | `DENIAL_REASON_INSUFFICIENT_BALANCE` | Buyer's prepaid balance or credit limit exhausted |
 | `DENIAL_REASON_RATE_LIMITED` | Buyer exceeded per-period transaction rate limit |
 | `DENIAL_REASON_CONTENT_UNAVAILABLE` | Provider has withdrawn or paused the content |
-| `DENIAL_REASON_FUNCTION_PROHIBITED` | Requested function not permitted under license |
-| `DENIAL_REASON_GEO_RESTRICTED` | Buyer's jurisdiction disallowed for this content |
+| `DENIAL_REASON_RESTRICTION_NOT_SATISFIED` | Accepted term's restriction (function / geography / user-type axis) not satisfied by the request |
 | `DENIAL_REASON_REPORTING_OVERDUE` | Buyer blocked due to overdue usage reports |
 | `DENIAL_REASON_OFFER_EXPIRED` | The referenced offer has expired since presentation |
 | `DENIAL_REASON_SIGNATURE_INVALID` | Request signature verification failed |

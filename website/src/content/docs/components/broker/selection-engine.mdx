@@ -9,7 +9,7 @@ The Selection Engine compares offers across Exchanges, deduplicates by content i
 
 ### Discovery-Mode Agnostic
 
-The Selection Engine operates on offers, not on how those offers were discovered. Whether the agent sent specific URIs (`Requester.uris`), structured search filters (`RAMPRequest.search_filters`), or a natural-language query (`RAMPRequest.query`), the Broker resolves all three into a set of offers from Exchanges. The Selection Engine then applies the same pipeline -- filter, deduplicate, rank, verify -- to every offer identically.
+The Selection Engine operates on offers, not on how those offers were discovered. Whether the agent sent specific URIs (`RAMPRequest.uris`), structured search filters (`RAMPRequest.search_filters`), or a natural-language query (`RAMPRequest.query`), the Broker resolves all three into a set of offers from Exchanges. The Selection Engine then applies the same pipeline -- filter, deduplicate, rank, verify -- to every offer identically.
 
 This means the selection logic does not need to know or care about discovery mode. An offer discovered via structured search competes on equal footing with an offer from a specific URI request. The `OfferGroup.discovery_method` field records how each offer was found (for transparency and logging), but it does not influence ranking.
 
