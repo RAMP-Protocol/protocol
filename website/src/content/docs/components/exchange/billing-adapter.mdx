@@ -244,19 +244,13 @@ The Exchange operator sets tenant-level defaults (e.g., "$0.05 per article for a
 
 ### Pricing Models
 
+`PricingModel` is the charging structure only. The metering basis ("per what") is the open `Pricing.unit` vocabulary (tokens, pages, accesses, records, ...), not a pricing model. Attribution and contribution are `Obligation`s, not pricing models. Subscriptions are expressed via delegation/scopes (offers come back FREE), not a pricing model.
+
 | Pricing Model | Billing Basis | Quantity Estimate Used For |
 |---|---|---|
-| `per_article` | Fixed price per article | unit_cost comparison |
-| `per_crawl` | Fixed price per crawl session | unit_cost comparison |
-| `per_token` | Actual tokens consumed (reported) | unit_cost comparison + initial estimate |
-| `per_page` | Fixed price per page | unit_cost comparison (legal, court filings) |
-| `per_minute` | Price per minute of content | unit_cost comparison (video, audio, streaming) |
-| `per_record` | Price per record accessed | unit_cost comparison (database records, credit reports) |
-| `subscription` | Flat rate per period | Not applicable |
+| `per_unit` | Price per metering unit; the unit (tokens, pages, accesses, records, minutes, ...) comes from `Pricing.unit` | unit_cost comparison + initial estimate |
+| `flat` | Fixed price per transaction, independent of quantity | unit_cost comparison |
 | `free` | No charge | Not applicable |
-| `attribution` | Free with mandatory citation | Not applicable |
-| `contribution` | Revenue share on downstream output | unit_cost comparison |
-| `training` | Bulk licensing for model training | Not applicable |
 
 ---
 
@@ -274,7 +268,7 @@ The 1.32 multiplier is derived from empirical analysis of English-language conte
 
 ### Data Source
 
-`word_count` comes from RSL content metadata or sitemap `<content:wordcount>` extensions. If unavailable, the Exchange estimates from content length: `word_count ~ content_length_bytes / 5.5`. For non-token pricing models (per_page, per_minute, per_record), the `estimated_quantity` is derived from content metadata specific to the unit type.
+`word_count` comes from RSL content metadata or sitemap `<content:wordcount>` extensions. If unavailable, the Exchange estimates from content length: `word_count ~ content_length_bytes / 5.5`. For non-token metering units (`unit: "pages"`, `"minutes"`, `"records"`), the `estimated_quantity` is derived from content metadata specific to that unit type.
 
 ### Subscription Content and Unit Cost
 

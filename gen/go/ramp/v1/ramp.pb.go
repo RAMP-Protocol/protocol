@@ -3730,7 +3730,7 @@ func (x *Requester) GetExtCritical() []string {
 //
 // JWT (token_format="jwt"):
 //
-//	Standard JWT with RAMP claims (sub, scope, exp, ramp_max_spend,
+//	Standard JWT with RAMP claims (sub, scope, exp, ramp_max_spend_cents,
 //	ramp_max_accesses, ramp_quota_period). Issued by any OAuth/GNAP
 //	authorization server. Sub-delegation requires IdP round-trip
 //	(Token Exchange RFC 8693).
@@ -7406,11 +7406,11 @@ var File_ramp_v1_ramp_proto protoreflect.FileDescriptor
 
 const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\n" +
-	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bbuf/validate/validate.proto\x1a\x13ramp/v1/vocab.proto\"\xb0\x02\n" +
+	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bbuf/validate/validate.proto\x1a\x13ramp/v1/vocab.proto\"\xb5\x02\n" +
 	"\x15AcceptableRestriction\x12,\n" +
-	"\x04axis\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04axis\x12\xe8\x01\n" +
-	"\x06values\x18\x02 \x03(\tB\xcf\x01\xbaH\xcb\x01\xba\x01\xc7\x01\n" +
-	"$acceptable_restriction.values.format\x12Meach value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))R\x06values\"\xc9\x03\n" +
+	"\x04axis\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04axis\x12\xed\x01\n" +
+	"\x06values\x18\x02 \x03(\tB\xd4\x01\xbaH\xd0\x01\xba\x01\xc7\x01\n" +
+	"$acceptable_restriction.values.format\x12Meach value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\x06values\"\xc9\x03\n" +
 	"\rResourceQuery\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
@@ -7541,14 +7541,14 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_immutableB\r\n" +
-	"\v_uri_digest\"\xac\x04\n" +
+	"\v_uri_digest\"\xb6\x04\n" +
 	"\vRestriction\x12,\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\xe6\x01\n" +
-	"\tpermitted\x18\x02 \x03(\tB\xc7\x01\xbaH\xc3\x01\xba\x01\xbf\x01\n" +
-	"\x1crestriction.permitted.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))R\tpermitted\x12\xe9\x01\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\xeb\x01\n" +
+	"\tpermitted\x18\x02 \x03(\tB\xcc\x01\xbaH\xc8\x01\xba\x01\xbf\x01\n" +
+	"\x1crestriction.permitted.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\tpermitted\x12\xee\x01\n" +
 	"\n" +
-	"prohibited\x18\x03 \x03(\tB\xc8\x01\xbaH\xc4\x01\xba\x01\xc0\x01\n" +
-	"\x1drestriction.prohibited.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))R\n" +
+	"prohibited\x18\x03 \x03(\tB\xcd\x01\xbaH\xc9\x01\xba\x01\xc0\x01\n" +
+	"\x1drestriction.prohibited.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\n" +
 	"prohibited\x12\x1a\n" +
 	"\badvisory\x18\x04 \x01(\bR\badvisory\"\xbf\x03\n" +
 	"\x05Quota\x12\xf1\x02\n" +

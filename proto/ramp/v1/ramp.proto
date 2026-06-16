@@ -123,6 +123,7 @@ message AcceptableRestriction {
   // The values the query operates within on this axis — same token vocabulary
   // as the terms (e.g. FUNCTION ["ai-train"], GEOGRAPHY ["US", "EU"]).
   repeated string values = 2 [
+    (buf.validate.field).repeated.max_items = 64,
     (buf.validate.field).cel = {
       id: "acceptable_restriction.values.format"
       message: "each value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
@@ -953,6 +954,7 @@ message Restriction {
   // For GEOGRAPHY: "US", "DE", "EU", "EEA", "*", …
   // For USER_TYPE: "individual", "academic", "commercial_entity", …
   repeated string permitted = 2 [
+    (buf.validate.field).repeated.max_items = 64,
     (buf.validate.field).cel = {
       id: "restriction.permitted.format"
       message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
@@ -962,6 +964,7 @@ message Restriction {
 
   // Tokens blocked on this axis. Takes precedence over permitted[].
   repeated string prohibited = 3 [
+    (buf.validate.field).repeated.max_items = 64,
     (buf.validate.field).cel = {
       id: "restriction.prohibited.format"
       message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
@@ -1390,7 +1393,7 @@ enum RequesterType {
 // indicates which format the token field contains.
 //
 // JWT (token_format="jwt"):
-//   Standard JWT with RAMP claims (sub, scope, exp, ramp_max_spend,
+//   Standard JWT with RAMP claims (sub, scope, exp, ramp_max_spend_cents,
 //   ramp_max_accesses, ramp_quota_period). Issued by any OAuth/GNAP
 //   authorization server. Sub-delegation requires IdP round-trip
 //   (Token Exchange RFC 8693).
@@ -1461,20 +1464,6 @@ message Delegation {
   // Empty (default) → all ext keys are safe to ignore.
   repeated string ext_critical = 90;
 }
-
-// ============================================================================
-// Intermediary Chain (schain-inspired)
-//
-// Tracks the forwarding path of a request: Agent → Broker → Exchange.
-// Each hop signs the request, proving it passed through legitimately.
-// Modeled after OpenRTB schain (Supply Chain Object).
-//
-// Forward path only. The chain records request forwarding; responses do NOT
-// retrace it. The terminal Exchange (or the Exchange-facing Broker holding the
-// agent binding) returns the response directly to the originating agent — the
-// signed retrieval_endpoint is bound to agent_identity_hash, so delivery needs
-// no return-path relay. Intermediaries observe requests, not responses.
-// ============================================================================
 
 // C2PAStatus — Summary validation status of a C2PA content credentials manifest.
 //

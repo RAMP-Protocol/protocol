@@ -217,7 +217,7 @@ Line 3: Legal/contractual enforcement
 ### T-DEL-1: Biscuit token theft
 
 **Attack**: Attacker steals a delegation token (e.g., via log exfiltration, memory dump, or network interception) and uses it to access resources within the token's scope, time, and spend limits.
-**Countermeasure (protocol)**: Short TTLs (hours, not days). Spend caps via `max_spend` and access caps via `max_accesses` bound the blast radius. Optional `revocation_uri` checking for high-value transactions. Even with a stolen token, damage is bounded by the token's scope + time window + spend cap.
+**Countermeasure (protocol)**: Short TTLs (hours, not days). Spend caps via `max_spend_cents` and access caps via `max_accesses` bound the blast radius. Optional `revocation_uri` checking for high-value transactions. Even with a stolen token, damage is bounded by the token's scope + time window + spend cap.
 
 ### T-DEL-2: Delegation scope escalation
 

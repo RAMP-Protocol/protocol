@@ -273,23 +273,11 @@ When only the agent's signature is present, the agent is querying the Exchange d
 
 This header multi-sig model replaces an earlier approach that carried an in-message `IntermediaryHop` list (with per-hop `broker_signature` / `broker_signature_algorithm` fields) on the request. See [Multi-Hop Example (Broker)](#multi-hop-example-broker) below for the concrete header layout.
 
-## Signature Migration to RFC 9421
+## Request Signatures (RFC 9421)
 
-### Background
+### Why headers, not message fields
 
-Request signatures use [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421) rather than proto-level signature fields. This separates **identity semantics** (carried in the protobuf body) from **cryptographic proof** (carried in HTTP headers).
-
-### What Changed
-
-The following proto fields are now **reserved** and MUST NOT be populated in new implementations:
-
-| Deprecated Field | Message | Replacement |
-|---|---|---|
-| `agent_signature` | `RAMPRequest` | RFC 9421 `Signature` / `Signature-Input` headers |
-| `orchestrator_signature` | `RAMPRequest` | RFC 9421 `Signature` / `Signature-Input` headers |
-| `caller_signature` | `RAMPRequest` | RFC 9421 `Signature` / `Signature-Input` headers |
-
-The protobuf body continues to carry identity semantics — `Requester` (who is making the request), scopes, and delegation tokens. What moves to HTTP is the **cryptographic proof** that these identities are authentic, including the forwarding chain, which is now a stack of labeled RFC 9421 signatures rather than an in-message hop list (see [Multi-hop forwarding](#multi-hop-forwarding)).
+Request signatures are [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421), carried in HTTP headers — **not** fields on any protobuf message. This separates **identity semantics** (the `Requester` message: who is making the request, scopes, delegation) from **cryptographic proof** (the HTTP signature attesting the request is authentic). No RAMP message has ever carried a request-signature field; the protobuf body carries identity only, and the forwarding chain is likewise a stack of labeled RFC 9421 signatures rather than an in-message hop list (see [Multi-hop forwarding](#multi-hop-forwarding)).
 
 ### How RFC 9421 Signatures Work
 
@@ -335,15 +323,9 @@ Signature: agent=:dGVzdC1zaWduYXR1cmUtYWdlbnQ=:, broker=:dGVzdC1zaWduYXR1cmUtYnJ
 
 Each labeled signature (`agent`, `broker`) is independently verifiable. The Exchange checks every signature in the `Signature` header against the corresponding `keyid` in `Signature-Input`.
 
-### Migration Path
+### No fallback
 
-Exchanges SHOULD accept both legacy proto-field signatures and RFC 9421 signatures during the migration period. The recommended approach:
-
-1. **Check for RFC 9421 headers first** — if `Signature` and `Signature-Input` headers are present, verify using RFC 9421
-2. **Fall back to proto fields** — if no HTTP signature headers are present, verify legacy proto-level signature fields
-3. **Reject if neither** — requests with no verifiable signature are rejected
-
-After the migration period, Exchanges MAY drop support for legacy proto-field signatures.
+RFC 9421 is the **only** request-authentication mechanism. A request without a valid RFC 9421 signature (`Signature` + `Signature-Input`, with a `Content-Digest` over the body) is rejected — there is no proto-field fallback and no degraded mode. There were never any in-message signature fields to fall back to.
 
 ## Retrieval-URL Identity Binding
 
@@ -408,10 +390,7 @@ A financial analysis agent carries a Bloomberg-issued Biscuit that grants access
       "principal_id": "bloomberg.com",
       "scopes": ["quote:*", "earnings:*"],
       "expires_at": "2026-03-20T18:00:00Z",
-      "max_spend": {
-        "amount": 500.00,
-        "currency": "USD"
-      },
+      "max_spend_cents": 50000,
       "token": "EoEBCgRiaXNjdWl0...base64-biscuit-token...",
       "token_format": "biscuit-v3"
     }
@@ -455,10 +434,7 @@ An internal agent at a law firm carries a Biscuit issued by the firm's IAM syste
       "principal_id": "user@kirkland.com",
       "scopes": ["legal:case-law", "legal:statutes", "credit:read"],
       "expires_at": "2026-03-20T20:00:00Z",
-      "max_spend": {
-        "amount": 1000.00,
-        "currency": "USD"
-      },
+      "max_spend_cents": 100000,
       "token": "EoEBCgRiaXNjdWl0...base64-biscuit-token...",
       "token_format": "biscuit-v3"
     }
@@ -497,10 +473,7 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
       "principal_id": "user@kirkland.com",
       "scopes": ["credit:read"],
       "expires_at": "2026-03-20T19:00:00Z",
-      "max_spend": {
-        "amount": 200.00,
-        "currency": "USD"
-      },
+      "max_spend_cents": 20000,
       "token": "EoEBCgRiaXNjdWl0...attenuated-biscuit-token...",
       "token_format": "biscuit-v3"
     }
@@ -517,7 +490,7 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
 Key differences from the parent agent's request:
 - `type` is `REQUESTER_TYPE_DELEGATED` — signals this agent acts on behalf of another
 - `delegation.scopes` is narrowed to `["credit:read"]` (legal scopes removed)
-- `delegation.max_spend` is reduced from $1,000 to $200
+- `delegation.max_spend_cents` is reduced from `100000` ($1,000) to `20000` ($200)
 - `delegation.expires_at` is shortened (1 hour earlier)
 - The parent agent's forwarding is recorded **in the HTTP headers**, not the message: the parent adds a labeled RFC 9421 signature, and the sub-agent adds its own signature over the request plus the parent's (see [Multi-hop forwarding](#multi-hop-forwarding))
 - The Biscuit `token` contains the original authority block (signed by IAM) plus an attenuation block (signed by the parent agent) that enforces the narrower permissions

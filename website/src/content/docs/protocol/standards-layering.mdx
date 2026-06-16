@@ -126,17 +126,19 @@ RSL permits and prohibits map directly to RAMP `Restriction` entries carried on 
 
 ## CoMP Integration
 
-RAMP messages wrap CoMP objects at all API boundaries:
+IAB CoMP is **not** nested in RAMP's core messages. It is an **extension profile** (`ramp-comp-v1`) whose objects are carried as flat `comp.*` keys in `Offer.ext`. The RAMP core does not embed CoMP types: the core carries `Offer.title` plus `LicenseTerm` (on `Offer.terms[]`) for licensing, and the requester states `acceptable_restrictions` rather than a CoMP intended-use object.
 
-| CoMP Object | Used In RAMP |
+The `ramp-comp-v1` profile maps CoMP objects to `comp.*` extension keys:
+
+| CoMP Object | Carried as (extension) |
 |---|---|
-| `Requester` | Every `ResourceQuery` and `TransactionRequest` -- identifies the requesting AI system. Replaces CoMP `AISystem` in RAMP v1.0. |
-| `RequesterUse` | Nested in `Requester` -- declares intended function (RAG, training, search). Replaces CoMP `AISystemUse`. |
-| `Package` | Every `Offer` and `TransactionResponse` -- describes the content unit |
-| `Scope` | Nested in `Package` -- content type and filtering metadata |
-| `Text`, `Video`, `Image`, `Audio` | Nested in `Scope` -- asset-specific metadata (CoMP v2.0 adds `Text.authority`/`originality`, `Image.alt`/`caption`, C2PA on media types) |
-| `Retrieval` | Nested in `Package` -- access method and endpoint (including signed URLs, CoMP v2.0 adds `ratelmt`) |
-| `License` | Nested in `Package` -- licensing terms with `LicenseUse` enum (CoMP v2.0, from CoMP section license.json) |
+| `Package` | `comp.package.*` keys in `Offer.ext` -- describes the content unit |
+| `Scope` | `comp.scope.*` keys in `Offer.ext` -- content type and filtering metadata |
+| `Text`, `Video`, `Image`, `Audio` | `comp.scope.<type>.*` keys (CoMP v2.0 adds `Text.authority`/`originality`, `Image.alt`/`caption`, C2PA on media types) |
+| `Retrieval` | `comp.retrieval.*` keys -- access method and endpoint (including signed URLs, CoMP v2.0 adds `ratelmt`) |
+| `License` | `comp.license.*` keys with `LicenseUse` enum (CoMP v2.0, from CoMP section license.json) |
+
+The requesting AI system is identified by the core `Requester` message (which replaces CoMP `AISystem` in RAMP v1.0). The core `Requester` does **not** nest a CoMP `RequesterUse`/`AISystemUse` or an `intended_use` field; intended use was removed. Instead, the request states `acceptable_restrictions` -- the restriction axes (e.g. `FUNCTION`) the requester is willing to accept.
 
 RAMP adds its own objects on top of CoMP:
 

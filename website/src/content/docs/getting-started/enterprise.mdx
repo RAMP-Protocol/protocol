@@ -138,7 +138,7 @@ Delegation {
   principal_id: "jane@acme.com"
   scopes: ["tax:customer:read", "legal:read"]
   expires_at: "2026-03-20T18:00:00Z"
-  max_spend: { amount: 1000.00, currency: "USD" }
+  max_spend_cents: 100000  // $1,000 in currency minor units
   token: "<base64-encoded Biscuit>"
   token_format: "biscuit-v3"
 }
@@ -149,7 +149,7 @@ Key properties of this flow:
 - **No RAMP-specific password.** Users authenticate through existing SSO. The token service is the only component that needs RAMP awareness.
 - **Scopes derived from roles.** A single mapping table (`AD group → RAMP scopes`) governs all access. Update the mapping, and every future token reflects the change.
 - **Time-bounded.** Tokens expire with the SSO session. A leaked token is useless after expiry.
-- **Spend-capped.** `max_spend` prevents runaway costs. The Exchange tracks cumulative spend against this cap.
+- **Spend-capped.** `max_spend_cents` prevents runaway costs. The Exchange tracks cumulative spend against this cap.
 
 ## Agent Delegation Within the Enterprise
 
@@ -163,7 +163,7 @@ Biscuit tokens support offline attenuation — an agent can narrow a token's per
 │  Token: full scopes      │
 │  • tax:customer:read     │
 │  • legal:read            │
-│  • max_spend: $1,000     │
+│  • max_spend_cents: 100000│
 └──────────┬──────────────┘
            │ Attenuate
            ▼
@@ -171,7 +171,7 @@ Biscuit tokens support offline attenuation — an agent can narrow a token's per
 │  Tax Lookup Sub-Agent    │
 │  Token: narrowed scopes  │
 │  • tax:customer:read     │  ← legal:read removed
-│  • max_spend: $200       │  ← spend cap reduced
+│  • max_spend_cents: 20000 │  ← spend cap reduced
 │  • uris: internal://tax/ │  ← URI prefix restricted
 └─────────────────────────┘
 ```

@@ -552,9 +552,10 @@ func (h *ExchangeHandler) ExecuteTransaction(
     resp := &rampv1.TransactionResponse{
         Ver:           "1.0",
         Id:            req.Msg.Id,
-        TransactionId: txnID,
-        BillingId:     authResp.BillingID,
-        Package:       buildDeliveryPackage(offer, signedURL),
+        TransactionId:     txnID,
+        BillingId:         authResp.BillingID,
+        ResourceTitle:     offer.Title, // human-readable title echoed from the Offer
+        RetrievalEndpoint: proto.String(signedURL),
         Cost: &rampv1.Cost{
             Amount:   offer.Pricing.Rate,
             Currency: offer.Pricing.Currency,
@@ -689,7 +690,8 @@ func (h *ExchangeHandler) executeBatchTransaction(
 
         resultItem.TransactionId = txnID
         resultItem.BillingId = billingID
-        resultItem.Package = buildDeliveryPackage(offer, signedURL)
+        resultItem.ResourceTitle = offer.Title // human-readable title echoed from the Offer
+        resultItem.RetrievalEndpoint = proto.String(signedURL)
         resultItem.Cost = &rampv1.Cost{Amount: amount, Currency: offer.Pricing.Currency}
         resultItem.ExpiresAt = timestamppb.New(time.Now().Add(tenantCfg.URLTTLOrDefault(5 * time.Minute)))
         resultItems = append(resultItems, resultItem)
@@ -814,7 +816,7 @@ sequenceDiagram
 
     Caller->>Handler: PushResources(PushResourcesRequest)
 
-    Note over Handler: 1. Verify caller_signature
+    Note over Handler: 1. Verify caller's RFC 9421 HTTP Message Signature (headers)
 
     loop For each ResourceEntry with attestations
         Handler->>Handler: Is caller_id == attestation.verifier?

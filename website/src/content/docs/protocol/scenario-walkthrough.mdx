@@ -292,7 +292,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
          ] }
      ]
      delivery_method: DELIVERY_METHOD_INSTRUCTIONS
-     exchange_signature: "<Ed25519 signature over (offer_id, title, pricing, identity)>"
+     signature: "<JWS (EdDSA) over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
      signature_algorithm: "ed25519"
 
    Offer B (subscription):

@@ -162,7 +162,7 @@ Token estimation drives the unit_cost (cost per unit of consumption) metric used
 
 - **Exchange uses unit_cost** to construct and rank offers for a given agent request.
 - **Agents/Brokers use unit_cost** to compare offers across providers and Exchanges.
-- **The charged amount** uses the provider's pricing model (e.g., per_article=$0.05), not unit_cost directly.
+- **The charged amount** uses the provider's pricing model (e.g., `PER_UNIT` with `unit: "tokens"`, or `FLAT`=$0.05), not unit_cost directly.
 - **unit_cost appears on offers and invoices** as a reference metric, analogous to eCPM on programmatic ad invoices.
 
 ### Estimation Methods (Priority Order)
@@ -200,8 +200,8 @@ Tenant config can override the multiplier per domain.
 The NFR allows +/-20% between estimated and actual consumption. This is acceptable because:
 
 1. unit_cost is a reference metric for offer construction and comparison, not a billing metric.
-2. Billing uses the provider's pricing model (per_article=$0.05, per_crawl=$0.01, etc.), not the unit_cost value directly.
-3. For `per_token` pricing, the actual token count from the UsageReport is used for billing, not the estimate.
+2. Billing uses the provider's pricing model (`FLAT`=$0.05, or `PER_UNIT` with a per-unit rate), not the unit_cost value directly.
+3. For `PER_UNIT` pricing with `unit: "tokens"`, the actual token count from the UsageReport is used for billing, not the estimate.
 
 ## Deduplication
 

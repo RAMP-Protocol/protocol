@@ -135,8 +135,8 @@ expires({RFC3339_timestamp});    // expiration time
 ```
 
 **Attenuation example**: An agent can further restrict (but never widen) a delegation:
-- Original: `scope: credit:*, max_spend: $1000`
-- Attenuated: `scope: credit:read, max_spend: $200, uris: duns:123*`
+- Original: `scope: credit:*, max_spend_cents: 100000`
+- Attenuated: `scope: credit:read, max_spend_cents: 20000, uris: duns:123*`
 
 ### Multi-hop forwarding (no message — HTTP layer)
 

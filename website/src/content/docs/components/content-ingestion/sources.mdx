@@ -252,12 +252,9 @@ CatalogService is NOT how Exchange operators push their own inventory. Exchange 
 
 ### Authentication and Authorization
 
-`PushResources` requests must be signed. Every request carries:
-- `caller_id` -- identifies the registered CatalogService client
-- `caller_signature` -- Ed25519 signature proving the caller is authorized
-- `caller_signature_algorithm` -- signature algorithm (default: "ed25519")
+`PushResources` requests must be signed. The `caller_id` field (field 3) identifies the registered CatalogService client, and the request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) carried in the HTTP headers (`Signature` / `Signature-Input`, with a `Content-Digest` over the body) — there is no in-message caller signature field.
 
-The Exchange verifies `caller_signature` against the registered public key for `caller_id`, and confirms that `caller_id` is authorized to push content for the specified `tenant_id`.
+The Exchange verifies the RFC 9421 signature against the caller's published Ed25519 key at `{caller domain}/.well-known/ramp.json` (selected by `kid`), and confirms that `caller_id` is authorized to push content for the specified `tenant_id`.
 
 ### Third-Party Content Intelligence and Verification Vendors (v1.0)
 
@@ -277,9 +274,7 @@ service CatalogService {
 message PushResourcesRequest {
   string tenant_id = 1;
   repeated ResourceEntry entries = 2;
-  string caller_signature = 3;
-  string caller_signature_algorithm = 4;
-  string caller_id = 5;
+  string caller_id = 3;
 }
 
 message ResourceEntry {

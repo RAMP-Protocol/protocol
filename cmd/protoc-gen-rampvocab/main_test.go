@@ -42,6 +42,24 @@ func TestConstName(t *testing.T) {
 	}
 }
 
+func TestConstNameSpecialValidation(t *testing.T) {
+	// A constNameSpecial mapping must itself resolve to a valid, non-reserved
+	// exported identifier; a bad entry must error rather than emit broken Go.
+	cases := map[string]string{
+		"bad-empty":    "",             // not exported
+		"bad-lower":    "worldwide",    // not exported (lowercase)
+		"bad-reserved": "All",          // collides with the emitted All slice
+	}
+	for token, badValue := range cases {
+		constNameSpecial[token] = badValue
+		_, err := constName(token)
+		delete(constNameSpecial, token)
+		if err == nil {
+			t.Errorf("constNameSpecial[%q]=%q: expected error, got nil", token, badValue)
+		}
+	}
+}
+
 func TestConstEntriesCollision(t *testing.T) {
 	// "ai-train" and "ai_train" both PascalCase to "AiTrain".
 	if _, err := constEntries([]string{"ai-train", "ai_train"}); err == nil {

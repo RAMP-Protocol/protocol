@@ -180,8 +180,8 @@ The Broker forwards `Requester.scopes` to every Exchange it queries. Scopes cont
 
 When the `Requester.delegation` carries a Biscuit authorization token, the Broker MAY attenuate it before forwarding. Biscuit tokens support append-only attenuation -- the holder can add restrictions (narrower scope, lower spend cap, fewer URIs) without going back to the issuer. This lets the Broker narrow a broad delegation for a specific Exchange:
 
-- Original delegation: `scope: academic:*, max_spend: $500`
-- Attenuated for Exchange A: `scope: academic:read, max_spend: $100, uris: doi:10.*`
+- Original delegation: `scope: academic:*, max_spend_cents: 50000`
+- Attenuated for Exchange A: `scope: academic:read, max_spend_cents: 10000, uris: doi:10.*`
 
 The attenuated token is a new signed block appended to the Biscuit chain. The Exchange verifies the full chain back to the original principal.
 

@@ -135,7 +135,7 @@ Content published in WordPress
   -> Plugin hook fires (publish_post)
   -> Extract: title, word count, URL path, categories
   -> Compute: estimated_quantity = word_count * 1.32
-  -> Build PushContentRequest with caller_signature
+  -> Build PushContentRequest (caller_id), signed with an RFC 9421 HTTP Message Signature
   -> POST to Exchange CatalogService.PushContent
   -> Exchange adds/updates catalog entry
 ```

@@ -227,13 +227,13 @@ Since the default offer signature algorithm is Ed25519, these are **public keys*
 
 The Exchange exposes `CatalogService` (PushResources, RemoveResources, RefreshCatalog) for external parties to push resource metadata. Every CatalogService request is authenticated:
 
-1. **Verify `caller_signature`**: The Exchange looks up the registered Ed25519 public key for `caller_id` and verifies the signature over the request payload. Invalid signatures are rejected with `CodeUnauthenticated`.
+1. **Verify the RFC 9421 HTTP Message Signature**: The `caller_id` field identifies the pusher, and the request is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) carried in the HTTP headers (`Signature` / `Signature-Input`, with a `Content-Digest` over the body) — there is no in-message caller signature field. The Exchange verifies it against the caller's published Ed25519 key at `{caller domain}/.well-known/ramp.json` (selected by `kid`). Invalid signatures are rejected with `CodeUnauthenticated`.
 
 2. **Check `caller_id` authorization**: The Exchange verifies that `caller_id` is registered and authorized to push resources for the specified `tenant_id`. Unauthorized tenant access is rejected with `CodePermissionDenied`.
 
 3. **Caller registration**: CatalogService callers are registered out-of-band (admin API or configuration). Registration includes:
    - `caller_id` — unique identifier for the caller
-   - Ed25519 public key — for signature verification
+   - Caller domain — where the Ed25519 signing key is published (`{domain}/.well-known/ramp.json`)
    - Authorized `tenant_id` set — which providers this caller can push for
    - Caller type — "cms_plugin", "intelligence_provider", "syndicator"
 
