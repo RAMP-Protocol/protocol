@@ -117,7 +117,7 @@ Scoped, time-limited, spend-capped credential using [Biscuit authorization token
 | `expires_at` | Timestamp | 4 | When this delegation expires. Exchange MUST reject expired tokens. |
 | `max_spend_cents` | optional int64 | 5 | Maximum spend in currency minor units (e.g. cents for USD) |
 | `token` | bytes | 6 | Token bytes — JWT (base64url) or Biscuit (binary, base64) |
-| `token_format` | string | 7 | Token format: "jwt" (default) or "biscuit-v2" |
+| `token_format` | string | 7 | Token format: "biscuit-v3" (default) or "jwt" |
 | `revocation_uri` | optional string | 8 | URI for real-time revocation checking (MAY be checked for high-value transactions) |
 | `max_accesses` | optional int32 | 9 | Maximum access count under this delegation |
 | `quota_period` | optional Duration | 10 | How often access/spend counters reset (e.g. 720h = 30 days); absent = lifetime |

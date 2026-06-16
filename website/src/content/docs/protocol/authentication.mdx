@@ -140,7 +140,7 @@ The Biscuit token is carried in the `Delegation` message, nested inside `Request
 | `expires_at` | `Timestamp` | When this delegation expires. Exchange MUST reject expired tokens |
 | `max_spend_cents` | `int64` (optional) | Maximum spend in currency minor units (e.g. cents for USD) |
 | `token` | `bytes` | Token bytes — JWT (base64url) or Biscuit (binary, base64) |
-| `token_format` | `string` | Token format: `"jwt"` (default) or `"biscuit-v2"` |
+| `token_format` | `string` | Token format: `"biscuit-v3"` (default) or `"jwt"` |
 | `revocation_uri` | `string` (optional) | URI for real-time revocation checking (high-value transactions) |
 | `max_accesses` | `int32` (optional) | Maximum number of accesses allowed under this delegation. Exchange tracks count and denies with `DENIAL_REASON_QUOTA_EXCEEDED` when count >= limit. |
 | `quota_period` | `Duration` (optional) | How often access/spend counters reset. E.g., `"720h"` for monthly subscriptions. When absent, quota is lifetime (bounded only by `expires_at`). |
@@ -413,7 +413,7 @@ A financial analysis agent carries a Bloomberg-issued Biscuit that grants access
         "currency": "USD"
       },
       "token": "EoEBCgRiaXNjdWl0...base64-biscuit-token...",
-      "token_format": "biscuit-v2"
+      "token_format": "biscuit-v3"
     }
   },
   "uris": [
@@ -460,7 +460,7 @@ An internal agent at a law firm carries a Biscuit issued by the firm's IAM syste
         "currency": "USD"
       },
       "token": "EoEBCgRiaXNjdWl0...base64-biscuit-token...",
-      "token_format": "biscuit-v2"
+      "token_format": "biscuit-v3"
     }
   },
   "uris": [
@@ -502,7 +502,7 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
         "currency": "USD"
       },
       "token": "EoEBCgRiaXNjdWl0...attenuated-biscuit-token...",
-      "token_format": "biscuit-v2"
+      "token_format": "biscuit-v3"
     }
   },
   "uris": [

@@ -3734,7 +3734,7 @@ func (x *Requester) GetExtCritical() []string {
 //	authorization server. Sub-delegation requires IdP round-trip
 //	(Token Exchange RFC 8693).
 //
-// Biscuit (token_format="biscuit-v2"):
+// Biscuit (token_format="biscuit-v3"):
 //
 //	Ed25519-signed block chains with offline attenuation. Each block
 //	narrows permissions — never widens. Sub-delegation is local (no
@@ -3773,7 +3773,7 @@ type Delegation struct {
 	QuotaPeriod *durationpb.Duration `protobuf:"bytes,10,opt,name=quota_period,json=quotaPeriod,proto3,oneof" json:"quota_period,omitempty"`
 	// Token bytes. JWT (base64url-encoded) or Biscuit (binary, base64-encoded).
 	Token []byte `protobuf:"bytes,6,opt,name=token,proto3" json:"token,omitempty"`
-	// Token format: "jwt" (default) or "biscuit-v2".
+	// Token format: "biscuit-v3" (default) or "jwt".
 	TokenFormat string `protobuf:"bytes,7,opt,name=token_format,json=tokenFormat,proto3" json:"token_format,omitempty"`
 	// Optional: URI for real-time revocation checking.
 	// Exchange MAY check this for high-value transactions.

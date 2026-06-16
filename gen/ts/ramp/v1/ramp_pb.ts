@@ -1599,7 +1599,7 @@ export const RequesterSchema: GenMessage<Requester> = /*@__PURE__*/
  *   authorization server. Sub-delegation requires IdP round-trip
  *   (Token Exchange RFC 8693).
  *
- * Biscuit (token_format="biscuit-v2"):
+ * Biscuit (token_format="biscuit-v3"):
  *   Ed25519-signed block chains with offline attenuation. Each block
  *   narrows permissions — never widens. Sub-delegation is local (no
  *   server contact). Libraries: biscuit-go, @biscuit-auth/biscuit-wasm,
@@ -1680,7 +1680,7 @@ export type Delegation = Message<"ramp.v1.Delegation"> & {
   token: Uint8Array;
 
   /**
-   * Token format: "jwt" (default) or "biscuit-v2".
+   * Token format: "biscuit-v3" (default) or "jwt".
    *
    * @generated from field: string token_format = 7;
    */

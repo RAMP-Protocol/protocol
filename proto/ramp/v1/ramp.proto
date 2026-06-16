@@ -1391,7 +1391,7 @@ enum RequesterType {
 //   authorization server. Sub-delegation requires IdP round-trip
 //   (Token Exchange RFC 8693).
 //
-// Biscuit (token_format="biscuit-v2"):
+// Biscuit (token_format="biscuit-v3"):
 //   Ed25519-signed block chains with offline attenuation. Each block
 //   narrows permissions — never widens. Sub-delegation is local (no
 //   server contact). Libraries: biscuit-go, @biscuit-auth/biscuit-wasm,
@@ -1436,7 +1436,7 @@ message Delegation {
   // Token bytes. JWT (base64url-encoded) or Biscuit (binary, base64-encoded).
   bytes token = 6;
 
-  // Token format: "jwt" (default) or "biscuit-v2".
+  // Token format: "biscuit-v3" (default) or "jwt".
   string token_format = 7;
 
   // Optional: URI for real-time revocation checking.

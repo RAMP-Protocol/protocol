@@ -340,8 +340,8 @@ POST https://exchange.bloomberg-data.com/ramp/v1/ramp.v1.ExchangeService/Discove
       "principal_id": "enterprise-sub-HF-001",
       "scopes": ["quote:*", "earnings:*", "news:read"],
       "expires_at": "2026-12-31T23:59:59Z",
-      "token": "biscuit-v2:EoMBCj...(base64 Biscuit token)",
-      "token_format": "biscuit-v2"
+      "token": "biscuit-v3:EoMBCj...(base64 Biscuit token)",
+      "token_format": "biscuit-v3"
     }
   },
   "supported_profiles": ["ramp-finance-v1"]
@@ -350,7 +350,7 @@ POST https://exchange.bloomberg-data.com/ramp/v1/ramp.v1.ExchangeService/Discove
 
 **What happens with the Biscuit token:**
 
-The `delegation.token` is a Biscuit v2 authorization token, signed by Bloomberg's Ed25519 key. The authority block (block 0) contains these facts:
+The `delegation.token` is a Biscuit v3 authorization token, signed by Bloomberg's Ed25519 key. The authority block (block 0) contains these facts:
 
 ```
 user("enterprise-sub-HF-001");
