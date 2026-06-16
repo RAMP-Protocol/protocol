@@ -99,7 +99,7 @@ If verification fails, the Exchange rejects the request. No fallback, no degrade
 
 JWT is the default choice for bearer tokens, but it has a fundamental limitation in agentic workflows: **claims are immutable after issuance**.
 
-Consider an enterprise where Bloomberg issues a JWT granting access to quotes and earnings data. An agent receives this JWT. When the agent delegates to a sub-agent that only needs earnings data, it cannot narrow the JWT — the sub-agent gets full quote access too. The only alternative is going back to Bloomberg for a new, narrower JWT.
+Consider an enterprise where MarketData issues a JWT granting access to quotes and earnings data. An agent receives this JWT. When the agent delegates to a sub-agent that only needs earnings data, it cannot narrow the JWT — the sub-agent gets full quote access too. The only alternative is going back to MarketData for a new, narrower JWT.
 
 In the real world, agents delegate to sub-agents, which delegate to further sub-agents. With JWT, each delegation requires a round trip to the original issuer. **N delegation levels = N round trips.**
 
@@ -119,7 +119,7 @@ The critical property: **attenuation is append-only**. You can narrow a token ar
 The authority block (block 0) of a RAMP Biscuit contains these facts:
 
 ```
-user("bloomberg.com");               // Who issued the delegation
+user("marketdata.example.com");               // Who issued the delegation
 scope("quote:*");                     // One fact per granted scope
 scope("earnings:*");
 max_spend_cents(50000);               // Spending cap in currency minor units
@@ -135,7 +135,7 @@ The Biscuit token is carried in the `Delegation` message, nested inside `Request
 | Field | Type | Description |
 |---|---|---|
 | `principal_domain` | `string` | Who granted this delegation (domain for public key lookup) |
-| `principal_id` | `string` | Principal's identifier (e.g., `"user@acme.com"`, `"bloomberg.com"`) |
+| `principal_id` | `string` | Principal's identifier (e.g., `"user@acme.com"`, `"marketdata.example.com"`) |
 | `scopes` | `repeated string` | Scopes granted — convenience extraction of Biscuit authority block |
 | `expires_at` | `Timestamp` | When this delegation expires. Exchange MUST reject expired tokens |
 | `max_spend_cents` | `int64` (optional) | Maximum spend in currency minor units (e.g. cents for USD) |
@@ -172,11 +172,11 @@ Rules:
 
 ### Attenuation Example
 
-Bloomberg issues a Biscuit for an agent with broad access:
+MarketData issues a Biscuit for an agent with broad access:
 
 ```
-// Authority block (signed by bloomberg.com)
-user("bloomberg.com");
+// Authority block (signed by marketdata.example.com)
+user("marketdata.example.com");
 scope("quote:*");
 scope("earnings:*");
 max_spend_cents(50000);
@@ -198,7 +198,7 @@ The sub-agent further delegates to a narrow research task:
 check if scope("earnings:NVDA");    // Only NVIDIA earnings
 ```
 
-**Zero round trips to Bloomberg.** Each level of delegation is local. The token encodes the full permission chain.
+**Zero round trips to MarketData.** Each level of delegation is local. The token encodes the full permission chain.
 
 ### Verification
 
@@ -247,7 +247,7 @@ Scopes follow the pattern `{domain}:{permission}` or `{profile}:{permission}`:
 | Scope | Meaning |
 |---|---|
 | `"credit:read"` | Can access credit reports (read-only) |
-| `"subscription:bloomberg-2026"` | Has active Bloomberg subscription |
+| `"subscription:marketdata-2026"` | Has active MarketData subscription |
 | `"academic:*"` | Full access to academic resources |
 | `"internal:reports"` | Can access internal reports |
 | `"dist:US:CA"` | Hierarchical scope (colon-separated segments) |
@@ -283,7 +283,7 @@ This distinction prevents information leakage on public Exchanges while allowing
 
 ## Multi-hop forwarding
 
-When a request passes through forwarding parties (e.g., Agent to Broker to Exchange), the forwarding chain is **not** carried as an in-message field. There is no `IntermediaryHop` message and no `ResourceQuery.intermediaries` array. Instead, the chain lives entirely in the HTTP headers as a stack of [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421).
+When a request passes through forwarding parties (e.g., Agent to Broker to Exchange), the forwarding chain is **not** carried in the message body at all. It lives entirely in the HTTP headers as a stack of [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421).
 
 ### How It Works
 
@@ -303,7 +303,7 @@ The Exchange verifies the full chain by:
 
 When only the agent's signature is present, the agent is querying the Exchange directly — no broker was involved.
 
-This header multi-sig model replaces an earlier approach that carried an in-message `IntermediaryHop` list (with per-hop `broker_signature` / `broker_signature_algorithm` fields) on the request. See [Multi-Hop Example (Broker)](#multi-hop-example-broker) below for the concrete header layout.
+See [Multi-Hop Example (Broker)](#multi-hop-example-broker) below for the concrete header layout.
 
 ## Request Signatures (RFC 9421)
 
@@ -398,9 +398,9 @@ A research bot queries a public Exchange. No delegation token, no special scopes
 
 The Exchange verifies the signature by fetching the public key from `research.acme.com/.well-known/ramp.json`, then returns all publicly available offers for the requested URI.
 
-### Subscription Agent (Bloomberg Biscuit)
+### Subscription Agent (MarketData Biscuit)
 
-A financial analysis agent carries a Bloomberg-issued Biscuit that grants access to subscription-tier data.
+A financial analysis agent carries a MarketData-issued Biscuit that grants access to subscription-tier data.
 
 ```json
 {
@@ -411,15 +411,15 @@ A financial analysis agent carries a Bloomberg-issued Biscuit that grants access
     "domain": "fintech.example.com",
     "type": "REQUESTER_TYPE_AGENT",
     "name": "FinBot Alpha",
-    "billing_ref": "lic-bloomberg-fintech-2026",
+    "billing_ref": "lic-marketdata-fintech-2026",
     "scopes": [
-      "subscription:bloomberg-2026",
+      "subscription:marketdata-2026",
       "quote:*",
       "earnings:*"
     ],
     "delegation": {
-      "principal_domain": "bloomberg.com",
-      "principal_id": "bloomberg.com",
+      "principal_domain": "marketdata.example.com",
+      "principal_id": "marketdata.example.com",
       "scopes": ["quote:*", "earnings:*"],
       "expires_at": "2026-03-20T18:00:00Z",
       "max_spend_cents": 50000,
@@ -428,8 +428,8 @@ A financial analysis agent carries a Bloomberg-issued Biscuit that grants access
     }
   },
   "uris": [
-    "bloomberg://quote/NVDA",
-    "bloomberg://earnings/NVDA/2025-Q4"
+    "marketdata://quote/NVDA",
+    "marketdata://earnings/NVDA/2025-Q4"
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["RETRIEVE"] }
@@ -439,7 +439,7 @@ A financial analysis agent carries a Bloomberg-issued Biscuit that grants access
 
 The Exchange:
 1. Verifies the request's RFC 9421 HTTP Message Signature against `fintech.example.com`'s published key
-2. Deserializes the Biscuit `token`, verifies the authority block is signed by `bloomberg.com`'s key
+2. Deserializes the Biscuit `token`, verifies the authority block is signed by `marketdata.example.com`'s key
 3. Extracts scopes from the Biscuit (`quote:*`, `earnings:*`)
 4. Returns subscription-tier pricing (zero marginal cost) for matching resources
 

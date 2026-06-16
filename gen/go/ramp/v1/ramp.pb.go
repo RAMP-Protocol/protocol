@@ -797,7 +797,7 @@ func (C2PAStatus) EnumDescriptor() ([]byte, []int) {
 //
 //	STATIC:  NYT article, academic paper, patent, EU regulation, podcast episode
 //	DYNAMIC: D&B credit report, DrugBank interactions, satellite catalog, news article (corrections)
-//	LIVE:    Bloomberg quote stream, NPR live broadcast, news monitoring feed
+//	LIVE:    MarketData quote stream, NPR live broadcast, news monitoring feed
 type ResourceMutability int32
 
 const (
@@ -2461,7 +2461,7 @@ type ResourceIdentity struct {
 	//
 	// Validated across 18 use cases: static content (articles, patents, legislation),
 	// dynamic data (credit reports, drug interactions, stock snapshots), and live
-	// streams (Bloomberg quotes, NPR broadcast, news monitoring feeds).
+	// streams (MarketData quotes, NPR broadcast, news monitoring feeds).
 	ResourceMutability ResourceMutability `protobuf:"varint,8,opt,name=resource_mutability,json=resourceMutability,proto3,enum=ramp.v1.ResourceMutability" json:"resource_mutability,omitempty"`
 	// C2PA content credentials manifest URI.
 	// Points to a sidecar or embedded C2PA manifest for this resource.
@@ -3609,7 +3609,7 @@ type Requester struct {
 	// Examples:
 	//
 	//	"credit:read"                — can access credit reports
-	//	"subscription:bloomberg-2026" — has active Bloomberg subscription
+	//	"subscription:marketdata-2026" — has active MarketData subscription
 	//	"academic:*"                 — full access to academic resources
 	//	"internal:reports"           — can access internal reports
 	//	"*"                         — unrestricted (public Exchange default)
@@ -3751,7 +3751,7 @@ type Delegation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Who granted this delegation (domain for public key lookup).
 	PrincipalDomain string `protobuf:"bytes,1,opt,name=principal_domain,json=principalDomain,proto3" json:"principal_domain,omitempty"`
-	// Principal's identifier (e.g., "user@acme.com", "bloomberg.com").
+	// Principal's identifier (e.g., "user@acme.com", "marketdata.example.com").
 	PrincipalId string `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
 	// Scopes granted by this delegation. MUST be a subset of the
 	// principal's own scopes (attenuation — can only narrow, not widen).

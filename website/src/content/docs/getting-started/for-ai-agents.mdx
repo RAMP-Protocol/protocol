@@ -145,7 +145,7 @@ Scopes declare what your agent is entitled to access. The Exchange filters its c
 
 | Scope Pattern | Meaning |
 |---|---|
-| `"subscription:bloomberg-2026"` | Active Bloomberg subscription |
+| `"subscription:marketdata-2026"` | Active MarketData subscription |
 | `"credit:read"` | Can access credit reports (read-only) |
 | `"academic:*"` | Full access to academic resources |
 | `"*"` | Unrestricted (public Exchange default) |
@@ -219,7 +219,7 @@ Not all resources are static files. RAMP classifies resources by mutability, whi
 |---|---|---|---|
 | **STATIC** | Journal article, patent filing, archived news story | Hash is stable -- verify it | Compare SHA-256 of received bytes to attested `content_hash`. Mismatch is disputable. |
 | **DYNAMIC** | D&B credit report, DrugBank interaction database, satellite catalog | Hash changes between offer and fetch | Do NOT auto-dispute hash mismatch. Check `data_as_of` for freshness instead. |
-| **LIVE** | Bloomberg quote feed, NPR live broadcast, news monitoring stream | No content exists at offer time | No hash verification. Metering is time-based (minutes, hours). |
+| **LIVE** | MarketData quote feed, NPR live broadcast, news monitoring stream | No content exists at offer time | No hash verification. Metering is time-based (minutes, hours). |
 
 For dynamic resources, the `data_as_of` field on the Offer tells you when the data was current. Your agent can set `max_data_age` to filter out stale offers:
 
@@ -268,8 +268,8 @@ The SDK groups identifiers by domain, sends one query per Exchange, and executes
 RAMP supports streaming resources (WebSocket, SSE, HLS, Icecast) via `DELIVERY_METHOD_STREAMING`. The flow is the same -- `ExecuteTransaction` returns a signed URL, but that URL points to a streaming endpoint.
 
 ```go
-// Connect to a live Bloomberg quote feed
-stream, _ := client.Fetch(ctx, "bloomberg://stream/equities/AAPL,MSFT,GOOGL",
+// Connect to a live MarketData quote feed
+stream, _ := client.Fetch(ctx, "marketdata://stream/equities/AAPL,MSFT,GOOGL",
     ramp.WithDeliveryMethod(ramp.Streaming),
 )
 

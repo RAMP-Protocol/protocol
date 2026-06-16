@@ -57,6 +57,11 @@ jobs:
           go build ./...
           go vet ./...
 
+      # Doc-conformance: fail if a removed/renamed wire identifier reappears in
+      # the docs. The prose counterpart to the gen-drift gate above.
+      - name: doc conformance
+        run: ./scripts/check-doc-conformance.sh
+
       # buf breaking is intentionally NOT a hard gate pre-v1: the licensing
       # rollout includes accepted breaking changes (no shipped consumers yet).
       # Enable this once the wire format is frozen and tagged at v1.

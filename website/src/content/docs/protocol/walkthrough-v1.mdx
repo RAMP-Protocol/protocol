@@ -12,9 +12,9 @@ This walkthrough covers two real-world scenarios that exercise different parts o
 | | Scenario A | Scenario B |
 |---|---|---|
 | **Agent** | `research-bot` at `startup.com` | `hedge-bot` at `hedgefund.com` |
-| **Content** | TechCrunch article (news) | Bloomberg earnings transcript (financial) |
-| **Subscription** | None | Bloomberg enterprise subscription |
-| **Delegation** | None | Biscuit token from `bloomberg.com` |
+| **Content** | TechCrunch article (news) | MarketData earnings transcript (financial) |
+| **Subscription** | None | MarketData enterprise subscription |
+| **Delegation** | None | Biscuit token from `marketdata.example.com` |
 | **Cost** | $0.05 per article | $0.00 (subscription) |
 
 Both scenarios follow the same six-step flow:
@@ -286,27 +286,27 @@ The `report_id` enables the dispute chain: if the agent needs to dispute this tr
 
 ---
 
-## Scenario B: Subscription Access (Bloomberg Earnings Transcript)
+## Scenario B: Subscription Access (MarketData Earnings Transcript)
 
-A hedge fund's AI agent wants an NVIDIA earnings call transcript from Bloomberg. The hedge fund has an enterprise Bloomberg subscription. The agent carries a Biscuit delegation token that proves its entitlement — without Bloomberg needing to be online at request time.
+A hedge fund's AI agent wants an NVIDIA earnings call transcript from MarketData. The hedge fund has an enterprise MarketData subscription. The agent carries a Biscuit delegation token that proves its entitlement — without MarketData needing to be online at request time.
 
 ### Step 1 — Discovery
 
-Same pattern as Scenario A. The agent resolves Bloomberg's RAMP manifest:
+Same pattern as Scenario A. The agent resolves MarketData's RAMP manifest:
 
 ```bash
-curl -s https://bloomberg.com/.well-known/ramp.json | jq
+curl -s https://marketdata.example.com/.well-known/ramp.json | jq
 ```
 
 ```json
 {
   "ver": "1.0",
-  "provider": "bloomberg.com",
-  "contact": "data-licensing@bloomberg.com",
+  "provider": "marketdata.example.com",
+  "contact": "data-licensing@marketdata.example.com",
   "exchanges": [
     {
-      "domain": "exchange.bloomberg-data.com",
-      "endpoint": "https://exchange.bloomberg-data.com/ramp/v1",
+      "domain": "exchange.marketdata-data.com",
+      "endpoint": "https://exchange.marketdata-data.com/ramp/v1",
       "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
     }
   ],
@@ -319,13 +319,13 @@ curl -s https://bloomberg.com/.well-known/ramp.json | jq
 Here is where v1.0's `Requester` + `Delegation` model shows its power. The agent includes a Biscuit token that carries its subscription entitlement:
 
 ```json
-POST https://exchange.bloomberg-data.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+POST https://exchange.marketdata-data.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
 
 {
   "ver": "1.0",
   "id": "sq-bb-001",
   "uris": [
-    "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript"
+    "https://marketdata.example.com/earnings/NVDA/2026-Q1-transcript"
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["ai-input"] }
@@ -336,7 +336,7 @@ POST https://exchange.bloomberg-data.com/ramp/v1/ramp.v1.ExchangeService/Discove
     "type": "REQUESTER_TYPE_AGENT",
     "scopes": ["quote:*", "earnings:*", "news:read"],
     "delegation": {
-      "principal_domain": "bloomberg.com",
+      "principal_domain": "marketdata.example.com",
       "principal_id": "enterprise-sub-HF-001",
       "scopes": ["quote:*", "earnings:*", "news:read"],
       "expires_at": "2026-12-31T23:59:59Z",
@@ -350,7 +350,7 @@ POST https://exchange.bloomberg-data.com/ramp/v1/ramp.v1.ExchangeService/Discove
 
 **What happens with the Biscuit token:**
 
-The `delegation.token` is a Biscuit v3 authorization token, signed by Bloomberg's Ed25519 key. The authority block (block 0) contains these facts:
+The `delegation.token` is a Biscuit v3 authorization token, signed by MarketData's Ed25519 key. The authority block (block 0) contains these facts:
 
 ```
 user("enterprise-sub-HF-001");
@@ -361,16 +361,16 @@ expires(2026-12-31T23:59:59Z);
 ```
 
 The Exchange verifies the Biscuit:
-1. **Signature check** — Biscuit's authority block is signed by `bloomberg.com`'s Ed25519 key (fetched from `bloomberg.com/.well-known/ramp.json`, `role=ROLE_AGENT`). This proves Bloomberg actually issued this delegation.
+1. **Signature check** — Biscuit's authority block is signed by `marketdata.example.com`'s Ed25519 key (fetched from `marketdata.example.com/.well-known/ramp.json`, `role=ROLE_AGENT`). This proves MarketData actually issued this delegation.
 2. **Scope matching** — the requested URI (`/earnings/NVDA/...`) matches the `earnings:*` scope in the Biscuit.
 3. **Expiry check** — `2026-12-31` is in the future.
-4. **No network call to Bloomberg** — Biscuit tokens are offline-verifiable. Bloomberg does not need to be online or queried. This is the key property that makes delegation scale.
+4. **No network call to MarketData** — Biscuit tokens are offline-verifiable. MarketData does not need to be online or queried. This is the key property that makes delegation scale.
 
-**Biscuit attenuation**: If the hedge fund wanted to restrict its agent further (e.g., limit to NVDA only, cap spend at $100), it could append an attenuation block to the Biscuit without going back to Bloomberg:
+**Biscuit attenuation**: If the hedge fund wanted to restrict its agent further (e.g., limit to NVDA only, cap spend at $100), it could append an attenuation block to the Biscuit without going back to MarketData:
 
 ```
 // Attenuation block (appended by hedge fund)
-check if resource($uri), $uri.starts_with("bloomberg.com/earnings/NVDA");
+check if resource($uri), $uri.starts_with("marketdata.example.com/earnings/NVDA");
 check if spend($amount), $amount < 10000; // cents
 ```
 
@@ -382,17 +382,17 @@ The Exchange verifies the Biscuit, confirms `earnings:*` covers the requested UR
 {
   "ver": "1.0",
   "id": "sq-bb-001",
-  "exchange": "exchange.bloomberg-data.com",
+  "exchange": "exchange.marketdata-data.com",
   "offer_groups": [
     {
-      "uri": "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript",
+      "uri": "https://marketdata.example.com/earnings/NVDA/2026-Q1-transcript",
       "offers": [
         {
           "offer_id": "offer-bb-nvda-q1-001",
           "title": "NVIDIA Corp Q1 2026 Earnings Call Transcript",
           "ext": {
             "comp.package_id": "PKG-BB-NVDA-Q1-TRANSCRIPT",
-            "comp.seller": "bloomberg.com",
+            "comp.seller": "marketdata.example.com",
             "comp.citation_required": true,
             "comp.retrieval_type": ["RETRIEVAL_TYPE_HTML"]
           },
@@ -412,17 +412,17 @@ The Exchange verifies the Biscuit, confirms `earnings:*` covers the requested UR
             "required_fields": ["transaction_id", "function", "consumed_quantity"]
           },
           "identity": {
-            "canonical_url": "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript",
+            "canonical_url": "https://marketdata.example.com/earnings/NVDA/2026-Q1-transcript",
             "content_hash": "sha256:3c7d8a2b1e9f4c6d5a0b7e8f2d1c3a4b5e6f7890abcdef1234567890abcdef12",
             "hash_method": "sha256",
             "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
           },
           "attestations": [
             {
-              "verifier": "bloomberg.com",
+              "verifier": "marketdata.example.com",
               "kid": "bb-key-2026-q1",
               "attested_at": "2026-03-18T08:00:00Z",
-              "uri": "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript",
+              "uri": "https://marketdata.example.com/earnings/NVDA/2026-Q1-transcript",
               "claims": {
                 "estimated_quantity": 18500,
                 "word_count": 14200,
@@ -461,7 +461,7 @@ The Exchange verifies the Biscuit, confirms `earnings:*` covers the requested UR
 }
 ```
 
-**Note the zero-cost offer and quota signaling**: `rate: 0`, `unit_cost: 0`. The `subscription_id` confirms access is covered by the enterprise subscription. The hedge fund pays nothing per request — Bloomberg already collected the annual subscription fee.
+**Note the zero-cost offer and quota signaling**: `rate: 0`, `unit_cost: 0`. The `subscription_id` confirms access is covered by the enterprise subscription. The hedge fund pays nothing per request — MarketData already collected the annual subscription fee.
 
 ### Steps 4-6 — Transaction, Fetch, Report
 
@@ -475,7 +475,7 @@ The remaining steps follow the same pattern as Scenario A, with one key differen
   "id": "tx-bb-001",
   "transaction_id": "txn-bb-001",
   "billing_id": "bill-bb-sub-001",
-  "retrieval_endpoint": "https://cdn.bloomberg.com/earnings/NVDA/2026-Q1-transcript.html?expires=1742404200&agent_id=8b4f9d2e...&txn_id=txn-bb-001&sig=hmac-sha256-a7b8c9...",
+  "retrieval_endpoint": "https://cdn.marketdata.example.com/earnings/NVDA/2026-Q1-transcript.html?expires=1742404200&agent_id=8b4f9d2e...&txn_id=txn-bb-001&sig=hmac-sha256-a7b8c9...",
   "cost": {
     "amount": 0,
     "currency": "USD"
@@ -508,7 +508,7 @@ The `subscription_unit_value` ($0.15) is the imputed value of this access for ac
 
 | Aspect | Without Subscription (Scenario A) | With Subscription (Scenario B) |
 |--------|-----------------------------------|-------------------------------|
-| Delegation | None | Biscuit from `bloomberg.com` |
+| Delegation | None | Biscuit from `marketdata.example.com` |
 | Requester scopes | `["*"]` (public) | `["earnings:*"]` (from Biscuit) |
 | Offer pricing | $0.05 per article | $0.00 (subscription) |
 | How Exchange knows | No delegation, no subscription scope — per-article | Biscuit carries subscription scope — zero cost |
@@ -529,7 +529,7 @@ result, err := ramp.Fetch(ctx, "https://techcrunch.com/2026/03/19/ai-agents-comm
 // result.SubscriptionID = ""
 
 // Scenario B: delegation present — SDK includes Biscuit in Requester.delegation
-result, err := ramp.Fetch(ctx, "https://bloomberg.com/earnings/NVDA/2026-Q1-transcript")
+result, err := ramp.Fetch(ctx, "https://marketdata.example.com/earnings/NVDA/2026-Q1-transcript")
 // result.Cost = 0.00
 // result.SubscriptionID = "enterprise-sub-HF-001"
 ```

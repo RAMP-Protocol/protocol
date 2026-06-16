@@ -112,7 +112,7 @@ Scoped, time-limited, spend-capped credential using [Biscuit authorization token
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `principal_domain` | string | 1 | Who granted this delegation (domain for public key lookup) |
-| `principal_id` | string | 2 | Principal's identifier (e.g. "user@acme.com", "bloomberg.com") |
+| `principal_id` | string | 2 | Principal's identifier (e.g. "user@acme.com", "marketdata.example.com") |
 | `scopes` | repeated string | 3 | Scopes granted by this delegation (MUST be a subset of the principal's own scopes) |
 | `expires_at` | Timestamp | 4 | When this delegation expires. Exchange MUST reject expired tokens. |
 | `max_spend_cents` | optional int64 | 5 | Maximum spend in currency minor units (e.g. cents for USD) |
@@ -201,7 +201,7 @@ Three verification levels:
 | `currency` | string | 3 | ISO 4217 currency code |
 | `unit_cost` | optional double | 4 | Normalized cost per unit (universal comparison metric) |
 | `estimated_quantity` | optional int32 | 5 | Estimated consumption in the metering unit |
-| `license_duration_months` | optional int32 | 7 | License duration in months (field 6 retired — was `revshare`; settlement is off-protocol) |
+| `license_duration_months` | optional int32 | 7 | License duration in months |
 | `unit` | optional string | 8 | Metering basis (the "per what" of `PER_UNIT`). REQUIRED when `model = PER_UNIT`. Registered token (e.g. `accesses`, `tokens`, `pages`) or `vendor:custom`. Authored as `(ramp.v1.vocab)` on this field. |
 | `metering` | optional PricingMetering | 9 | How usage is tracked for billing reconciliation. Absent = ONLINE (default). |
 
@@ -762,7 +762,7 @@ A usage cap that gates whether a `LicenseTerm` remains valid. Quotas limit consu
 
 ### Obligation
 
-A post-use behavioral requirement attached to a `LicenseTerm`. Replaces the retired `PRICING_MODEL_ATTRIBUTION` and `PRICING_MODEL_CONTRIBUTION` pricing model values.
+A post-use behavioral requirement attached to a `LicenseTerm`. Attribution and contribution are behavioral requirements here, not pricing models.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -784,7 +784,7 @@ The charging **structure** only (a closed set). The open-ended metering basis ("
 | 2 | PER_UNIT | Rate per `Pricing.unit`; `unit` REQUIRED (registered token or `vendor:custom`) |
 | 3 | FLAT | One-time flat fee; `rate` is the total, no unit |
 
-Retired (pre-v1, renumbered cleanly): the old per-unit variants (`PER_ACCESS` / `PER_TOKEN` / `PER_FETCH` / `PER_PAGE` / `PER_MINUTE` / `PER_RECORD` / `TRAINING`) collapse into `PER_UNIT` + `unit`; `SUBSCRIPTION` is `FREE` + `scopes`; `ATTRIBUTION` / `CONTRIBUTION` are `Obligation.kind`s; `REVENUE_SHARE` is removed (settlement is off-protocol).
+The metering basis ("per what") is the `Pricing.unit` vocabulary, not a model; a subscription is `FREE` + `scopes`; attribution and contribution are `Obligation.kind`s; revenue-share settlement is off-protocol.
 
 ### PricingMetering
 
@@ -832,7 +832,7 @@ Time window over which a `Quota.limit` accumulates.
 
 ### ObligationKind
 
-What the agent must do after use. `ATTRIBUTION` and `CONTRIBUTION` replace the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION`.
+What the agent must do after use. `ATTRIBUTION` and `CONTRIBUTION` are behavioral requirements, not pricing models.
 
 | Value | Name | Description |
 |---|---|---|

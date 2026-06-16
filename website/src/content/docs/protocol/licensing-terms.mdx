@@ -82,7 +82,7 @@ quotas: [{ metric: "impressions", limit: 500000, window: TOTAL }]
 
 ## Obligations
 
-An `Obligation` is a post-use behavioral requirement. Obligations replace the retired `PRICING_MODEL_ATTRIBUTION` and `PRICING_MODEL_CONTRIBUTION` pricing model values, which were modeling behavioral requirements in the wrong place.
+An `Obligation` is a post-use behavioral requirement. Attribution and contribution are obligations, not pricing models — they belong here, not in `PricingModel`.
 
 Each obligation has:
 - `kind` — what the agent must do (see table below).

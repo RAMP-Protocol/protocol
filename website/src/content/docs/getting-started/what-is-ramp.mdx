@@ -95,7 +95,7 @@ Every request carries a `Requester` message — a universal actor identity with 
 
 **RequesterType** classifies the caller: `AGENT` (autonomous), `HUMAN_TOOL` (copilot), `SERVICE` (enterprise pipeline), `DELEGATED` (acting on behalf of another), `RESEARCH` (batch data collection).
 
-**Scopes** filter what the Requester can access. Examples: `subscription:bloomberg-2026`, `credit:read`, `academic:*`, `*` (unrestricted). The Exchange returns only resources matching the declared scopes.
+**Scopes** filter what the Requester can access. Examples: `subscription:marketdata-2026`, `credit:read`, `academic:*`, `*` (unrestricted). The Exchange returns only resources matching the declared scopes.
 
 **Delegation with Biscuit tokens** enables offline-verifiable, attenuable authorization. A principal (organization, IAM, upstream agent) issues a Biscuit token. Each holder in the chain can narrow permissions — restrict scopes, lower spend caps, shorten expiry — but can never widen them. Zero round trips to the original issuer, regardless of how many delegation levels deep.
 

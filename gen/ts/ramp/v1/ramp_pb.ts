@@ -743,7 +743,7 @@ export type ResourceIdentity = Message<"ramp.v1.ResourceIdentity"> & {
    *
    * Validated across 18 use cases: static content (articles, patents, legislation),
    * dynamic data (credit reports, drug interactions, stock snapshots), and live
-   * streams (Bloomberg quotes, NPR broadcast, news monitoring feeds).
+   * streams (MarketData quotes, NPR broadcast, news monitoring feeds).
    *
    * @generated from field: ramp.v1.ResourceMutability resource_mutability = 8;
    */
@@ -1548,7 +1548,7 @@ export type Requester = Message<"ramp.v1.Requester"> & {
    * "{profile}:{permission}", optionally hierarchical ("dist:US:CA").
    * Examples:
    *   "credit:read"                — can access credit reports
-   *   "subscription:bloomberg-2026" — has active Bloomberg subscription
+   *   "subscription:marketdata-2026" — has active MarketData subscription
    *   "academic:*"                 — full access to academic resources
    *   "internal:reports"           — can access internal reports
    *   "*"                         — unrestricted (public Exchange default)
@@ -1628,7 +1628,7 @@ export type Delegation = Message<"ramp.v1.Delegation"> & {
   principalDomain: string;
 
   /**
-   * Principal's identifier (e.g., "user@acme.com", "bloomberg.com").
+   * Principal's identifier (e.g., "user@acme.com", "marketdata.example.com").
    *
    * @generated from field: string principal_id = 2;
    */
@@ -4533,7 +4533,7 @@ export const C2PAStatusSchema: GenEnum<C2PAStatus> = /*@__PURE__*/
  * Examples by level:
  *   STATIC:  NYT article, academic paper, patent, EU regulation, podcast episode
  *   DYNAMIC: D&B credit report, DrugBank interactions, satellite catalog, news article (corrections)
- *   LIVE:    Bloomberg quote stream, NPR live broadcast, news monitoring feed
+ *   LIVE:    MarketData quote stream, NPR live broadcast, news monitoring feed
  *
  * @generated from enum ramp.v1.ResourceMutability
  */

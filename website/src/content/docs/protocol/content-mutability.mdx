@@ -56,7 +56,7 @@ Content does not exist at offer time. The resource is a stream endpoint or real-
 **Agent behavior:** Metering is time-based (`consumed_quantity` in minutes or hours). No hash verification is possible. The agent transacts for access to the stream, not for specific content bytes.
 
 **Examples:**
-- Bloomberg stock quote feed (WebSocket stream)
+- MarketData stock quote feed (WebSocket stream)
 - NPR live broadcast (HLS/Icecast stream)
 - Real-time news monitoring feed (SSE stream)
 
@@ -176,14 +176,14 @@ A credit report that is updated as new trade data arrives.
 
 The agent knows the hash reflects the report as of March 18. If the agent set `max_data_age = 604800s` (7 days) and it is March 19, this offer is fresh enough. The agent does not dispute a hash mismatch -- the report may have been updated since the offer was generated.
 
-### Example 3: Live Stream (Bloomberg)
+### Example 3: Live Stream (MarketData)
 
 A real-time stock quote feed.
 
 ```json
 {
   "identity": {
-    "canonical_url": "wss://stream.bloomberg.com/quotes/v1",
+    "canonical_url": "wss://stream.marketdata.example.com/quotes/v1",
     "resource_mutability": "RESOURCE_MUTABILITY_LIVE"
   },
   "pricing": {
