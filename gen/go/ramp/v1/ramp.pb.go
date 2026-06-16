@@ -3604,7 +3604,8 @@ type Requester struct {
 	// learns they exist. This is the enforcement mechanism for both enterprise
 	// RBAC and open-market subscription entitlements.
 	//
-	// Scope format: "{domain}:{permission}" or "{profile}:{permission}"
+	// Scope format: colon-separated segments, "{domain}:{permission}" or
+	// "{profile}:{permission}", optionally hierarchical ("dist:US:CA").
 	// Examples:
 	//
 	//	"credit:read"                — can access credit reports
@@ -3612,6 +3613,13 @@ type Requester struct {
 	//	"academic:*"                 — full access to academic resources
 	//	"internal:reports"           — can access internal reports
 	//	"*"                         — unrestricted (public Exchange default)
+	//
+	// Matching is SEGMENT-WISE (":" separated). A granted scope G covers a
+	// required scope R iff, segment by segment, each G segment equals the
+	// corresponding R segment or is "*"; a terminal "*" matches all remaining
+	// segments. There is NO implicit prefix match. Examples: "dist:*" covers
+	// "dist:US" and "dist:US:CA"; "dist:US:*" covers "dist:US:CA" but not
+	// "dist:EU"; bare "dist" covers only "dist"; "*" covers everything.
 	//
 	// When empty, Exchange applies its default access policy (typically
 	// returns all publicly available resources).

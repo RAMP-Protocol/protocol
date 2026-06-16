@@ -230,7 +230,19 @@ Scopes follow the pattern `{domain}:{permission}` or `{profile}:{permission}`:
 | `"subscription:bloomberg-2026"` | Has active Bloomberg subscription |
 | `"academic:*"` | Full access to academic resources |
 | `"internal:reports"` | Can access internal reports |
+| `"dist:US:CA"` | Hierarchical scope (colon-separated segments) |
 | `"*"` | Unrestricted (public Exchange default) |
+
+### Scope Matching
+
+Matching is **segment-wise** (`:`-separated). A granted scope **G** covers a required scope **R** iff, comparing segment by segment, each G segment equals the corresponding R segment **or** is `*`; a **terminal `*` matches all remaining segments**. There is **no implicit prefix match**.
+
+| Granted | Covers | Does **not** cover |
+|---|---|---|
+| `dist:*` | `dist:US`, `dist:US:CA` | — |
+| `dist:US:*` | `dist:US:CA` | `dist:EU` |
+| `dist` | `dist` | `dist:US` |
+| `*` | everything | — |
 
 ### Access Tiers
 
