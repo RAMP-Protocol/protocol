@@ -41,8 +41,14 @@ jobs:
 
       - name: assert no generated drift
         run: |
-          if ! git diff --exit-code; then
-            echo "::error::Generated code is out of sync with the proto/plugin. Run 'cd proto && buf generate' and commit the result."
+          # Stage everything first so NEW (untracked) generated files — e.g. a
+          # newly added vocab axis whose gen/.../<axis>/ was generated but never
+          # committed — are caught too. A plain `git diff` only sees tracked
+          # files and would let that pass green (the exact C1 class this gate
+          # exists to seal).
+          git add -A
+          if ! git diff --cached --exit-code; then
+            echo "::error::Generated code is out of sync with the proto/plugin (including new untracked files). Run 'cd proto && buf generate' and commit the result."
             exit 1
           fi
 

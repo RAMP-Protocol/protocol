@@ -1404,9 +1404,9 @@ ${b('{')}
   ${k('offer_id')}: ${s('offer-4921')},
   ${k('title')}: ${s('Solar Panel Efficiency 2026')},
   ${k('pricing')}: ${b('{')}
-    ${k('model')}: ${s('PER_ACCESS')},
+    ${k('model')}: ${s('PER_UNIT')},
     ${k('rate')}: ${n('0.05')},
-    ${k('unit_cost')}: ${n('0.000015')}
+    ${k('unit')}: ${s('access')}
   ${b('}')},
   ${k('signature')}: <span style="${SIG}">"ed25519:a4c9f2e8..."</span>
 ${b('}')}`
@@ -1704,7 +1704,7 @@ ${c('// → RESOLUTION_TYPE_CREDIT applied')}`
         { from: 'Broker', to: 'Exchanges', exFrom: false, exTo: true, desc: 'Fan-out: label catalog + publishing catalog', link: '/protocol/transaction-flow/', linkText: 'Transaction Flow →',
           json: `${c('// Broker queries two Exchanges:')}\n${c('// Exchange A = label/distributor (masters)')}\n${c('// Exchange B = publisher (compositions)')}\n\n${c('// → Exchange A (DistroKid catalog)')}\n${b('{')}\n  ${k('uris')}: [${s('isrc:USRC11700001')}],\n  ${k('intended_use')}: [${s('ai_input')}]\n${b('}')}\n\n${c('// → Exchange B (Songtrust catalog)')}\n${b('{')}\n  ${k('uris')}: [${s('iswc:T-070.237.108-8')}],\n  ${k('intended_use')}: [${s('ai_input')}]\n${b('}')}`},
         { from: 'Exchanges', to: 'Broker', exFrom: true, exTo: false, desc: 'Two offers: master recording + composition', link: '/protocol/transaction-flow/', linkText: 'Multi-Exchange Offers →',
-          json: `${c('// Exchange A: master recording')}\n${b('{')}\n  ${k('offer_id')}: ${s('offer-master-4401')},\n  ${k('title')}: ${s('Funk Brothers - Get Up Loop')},\n  ${k('pricing')}: ${b('{')}\n    ${k('model')}: ${s('PER_ACCESS')},\n    ${k('rate')}: ${n('0.02')}\n  ${b('}')},\n  ${k('identity')}: ${b('{')}\n    ${k('isrc')}: ${s('USRC11700001')}\n  ${b('}')}\n${b('}')}\n\n${c('// Exchange B: composition')}\n${b('{')}\n  ${k('offer_id')}: ${s('offer-comp-8820')},\n  ${k('title')}: ${s('Get Up (Composition)')},\n  ${k('pricing')}: ${b('{')}\n    ${k('model')}: ${s('PER_ACCESS')},\n    ${k('rate')}: ${n('0.01')}\n  ${b('}')},\n  ${k('identity')}: ${b('{')}\n    ${k('iswc')}: ${s('T-070.237.108-8')}\n  ${b('}')}\n${b('}')}`},
+          json: `${c('// Exchange A: master recording')}\n${b('{')}\n  ${k('offer_id')}: ${s('offer-master-4401')},\n  ${k('title')}: ${s('Funk Brothers - Get Up Loop')},\n  ${k('pricing')}: ${b('{')}\n    ${k('model')}: ${s('PER_UNIT')},\n    ${k('rate')}: ${n('0.02')},\n    ${k('unit')}: ${s('access')}\n  ${b('}')},\n  ${k('identity')}: ${b('{')}\n    ${k('isrc')}: ${s('USRC11700001')}\n  ${b('}')}\n${b('}')}\n\n${c('// Exchange B: composition')}\n${b('{')}\n  ${k('offer_id')}: ${s('offer-comp-8820')},\n  ${k('title')}: ${s('Get Up (Composition)')},\n  ${k('pricing')}: ${b('{')}\n    ${k('model')}: ${s('PER_UNIT')},\n    ${k('rate')}: ${n('0.01')},\n    ${k('unit')}: ${s('access')}\n  ${b('}')},\n  ${k('identity')}: ${b('{')}\n    ${k('iswc')}: ${s('T-070.237.108-8')}\n  ${b('}')}\n${b('}')}`},
         { from: 'Broker', to: 'Agent', exFrom: false, exTo: false, desc: 'Linked offers: $0.02 master + $0.01 composition', link: '/protocol/transaction-flow/', linkText: 'Offer Selection →',
           json: `${c('// Broker presents both as a bundle')}\n${c('// Agent sees total cost: $0.03')}\n\n${b('{')}\n  ${k('offers')}: [\n    ${b('{')}\n      ${k('title')}: ${s('Master: Funk Brothers Loop')},\n      ${k('rate')}: ${n('0.02')},\n      ${k('exchange')}: ${s('distrokid-exchange.com')}\n    ${b('}')},\n    ${b('{')}\n      ${k('title')}: ${s('Composition: Get Up')},\n      ${k('rate')}: ${n('0.01')},\n      ${k('exchange')}: ${s('songtrust-exchange.com')}\n    ${b('}')}\n  ],\n  ${k('total')}: ${n('0.03')}\n${b('}')}`},
         { from: 'Agent', to: 'Exchange A', exFrom: false, exTo: true, desc: 'ExecuteTransaction for master recording', link: '/protocol/transaction-flow/#rpc-2-executetransaction', linkText: 'ExecuteTransaction →',

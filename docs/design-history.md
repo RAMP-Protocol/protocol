@@ -88,3 +88,44 @@ replaced by signed `ResourceAttestation` claims. "Quality" as an unsigned number
 invited gaming and meant little across exchanges, whereas a cryptographically
 signed claim from a named verifier is verifiable, attributable, and disputable
 through the same dispute chain as the rest of the protocol.
+
+## Universal Licensing Core
+
+Licensing collapsed from several parallel, partly-overlapping shapes into one
+`LicenseTerm` that carries `License`, `Restriction`, `Quota`, `Obligation`, and
+`Pricing`, and appears with the *same shape* at both ends of the protocol —
+`ResourceEntry.terms` at ingestion and `Offer.terms` at emission. A resource
+carries zero or more terms; each term is one self-contained commercial/access
+arrangement, and discovery projects one offer per term. The earlier
+`AccessRestrictions` type, the `Offer.restrictions` projection, and `revshare`
+pricing were removed, and `PricingModel` was narrowed to the charging
+*structure* (`FREE` / `PER_UNIT` / `FLAT`) with the open-ended metering basis
+("per what") moved to the `Pricing.unit` vocabulary axis. One model at both ends
+means the bytes a publisher pushes are the bytes the agent verifies under the
+offer signature, with no lossy ingestion→emission transform to reconcile.
+
+Two shaping decisions are deliberate and worth recording because their
+alternatives are conspicuously absent:
+
+- **The licensing core is closed; only `Pricing` carries an `ext` seam.**
+  `License` / `Restriction` / `Quota` / `Obligation` / `LicenseTerm` have no
+  `ext` / `ext_critical` fields, while the nested `Pricing` keeps them. Licensing
+  semantics are the part of the contract that must mean the same thing to every
+  participant and survive disputes; an open extension seam there would let any
+  party introduce terms others cannot evaluate, which is exactly the ambiguity a
+  license is supposed to remove. New licensing semantics should therefore go
+  through a deliberate core change (and a vocabulary axis where the value set is
+  open), not through per-deployment `ext` blobs. Commercial flexibility, which
+  genuinely varies vendor to vendor, stays available through `Pricing.ext`.
+
+- **Restrictions are agent-selected, not Exchange-enforced.** Restrictions ride
+  on the offer; the agent self-selects the term it can honour and bears
+  compliance, with enforcement downstream at accept → report → reconcile. An
+  Exchange or Broker MAY pre-filter offers as a convenience using attributes the
+  requester volunteers, but that is advisory, never an enforcement gate. Putting
+  the responsibility on the agent keeps the Exchange a neutral venue and avoids
+  baking each requester's self-declared attributes into a trust boundary.
+
+The full message-level specification and the membership/validation rules live in
+ADR-014 (Universal Licensing Core) in the deployment repository; this entry
+records only the wire-shaping reasoning.

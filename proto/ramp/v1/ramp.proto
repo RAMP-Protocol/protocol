@@ -253,11 +253,15 @@ enum OfferAbsenceReason {
   OFFER_ABSENCE_REASON_NOT_IN_CATALOG = 1;
   // Resource exists but has a BLOCKED access policy (provider opted out of AI access).
   OFFER_ABSENCE_REASON_CONTENT_BLOCKED = 2;
-  // Resource exists but the requested CoMP function is prohibited by provider terms.
+  // Resource exists but its offers were pre-filtered out for the requester's
+  // stated function (a convenience filter matched to the query, not an
+  // enforcement verdict — see Restriction). The agent MAY still be eligible.
   OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED = 3;
-  // Resource exists but the requester's geography is restricted.
+  // Resource exists but its offers were pre-filtered out for the requester's
+  // stated geography (convenience filter; see Restriction).
   OFFER_ABSENCE_REASON_GEO_RESTRICTED = 4;
-  // Resource exists but the requester's user category is not permitted.
+  // Resource exists but its offers were pre-filtered out for the requester's
+  // stated user category (convenience filter; see Restriction).
   OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED = 5;
   // Resource is temporarily unavailable (e.g., provider feed refresh in progress).
   OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE = 6;
@@ -369,18 +373,19 @@ message Offer {
   optional ResourceIdentity identity = 7;
 
   // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
-  // Offer — every field, including `pricing` and `terms` (the full licensing
-  // payload). Canonicalization is deterministic protobuf marshaling
-  // (lexicographic field order); only `signature`, `signature_algorithm`, and
-  // `expires_at` are excluded from the signed bytes. `expires_at` is excluded
-  // because it is bound to issuance time, not resource/pricing identity, so a
-  // verifier can rebuild the signed payload from the catalog alone (stateless
-  // verification on ExecuteTransaction — the Exchange need not store offers).
+  // Offer — every field, including `pricing`, `terms` (the full licensing
+  // payload), and `expires_at`. Canonicalization is deterministic protobuf
+  // marshaling (lexicographic field order); only `signature` and
+  // `signature_algorithm` are excluded from the signed bytes. `expires_at` is
+  // signed so the offer's validity window is integrity-protected: a relaying
+  // Broker cannot extend (or shorten) the TTL of a signed offer to replay it
+  // outside the window the Exchange intended.
   //
-  // Because the signature covers `terms` and `pricing`, an intermediary
-  // (Broker) cannot tamper with price, restrictions, quotas, obligations, or
-  // any licensing term without invalidating it. Agent SHOULD verify the
-  // signature (RFC 2119) against the Exchange's public key.
+  // Because the signature covers `terms`, `pricing`, and `expires_at`, an
+  // intermediary (Broker) cannot tamper with price, restrictions, quotas,
+  // obligations, the expiry, or any licensing term without invalidating it.
+  // Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
+  // key, and MUST reject an offer whose `expires_at` is in the past.
   string signature = 9;
 
   // JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
@@ -684,34 +689,40 @@ message ResourceAttestation {
 //
 //   Article with two terms:
 //     Term 1 — ENUMERATED, ai-input permitted, academic only, FREE
-//     Term 2 — ENUMERATED, ai-input permitted, commercial_entity, PER_ACCESS $0.05
+//     Term 2 — ENUMERATED, ai-input permitted, commercial_entity,
+//               PER_UNIT $0.05/access
 //
 //   Stock photo with one term:
-//     Term 1 — ENUMERATED, display permitted, worldwide, PER_ACCESS $1.20,
+//     Term 1 — ENUMERATED, display permitted, worldwide, PER_UNIT $1.20/access,
 //               metering=NONE (perpetual), impressions quota 500k,
 //               ATTRIBUTION obligation
 //
 //   Patent design file:
 //     Term 1 — ENUMERATED, manufacture permitted, worldwide,
-//               PER_ACCESS $200, metering=OFFLINE_SELF_REPORTED,
+//               FLAT $200, metering=OFFLINE_SELF_REPORTED,
 //               quota metric=units-manufactured limit=1000 window=TOTAL,
 //               CONTRIBUTION obligation
 //
 //   Licensed music track:
-//     Term 1 — ENUMERATED, sync permitted, worldwide, PER_ACCESS $500,
+//     Term 1 — ENUMERATED, sync permitted, worldwide, FLAT $500,
 //               metering=NONE, NOTICE obligation
 //     Term 2 — REFERENCE_ONLY — full MCPS/PRS terms at License.uri
 //
 // Pricing is REQUIRED on every term regardless of semantics — absent Pricing
 // is a validation error, and model=FREE must be stated explicitly (absent
 // Pricing ≠ free). The rest of the rules depend on semantics:
-//   ENUMERATED  — restrictions/quotas/obligations are authoritative and
-//                 enforced by the Exchange.
-//   REFERENCE_ONLY — License.uri (which MUST be present) is the only
-//                 authoritative source for restrictions/quotas/obligations;
-//                 those machine fields are informational and the Exchange MUST
-//                 NOT auto-enforce them. The agent must read the license URI
-//                 before using. Pricing is still stated machine-readably here.
+//   ENUMERATED  — the machine restrictions/quotas/obligations are the COMPLETE,
+//                 authoritative expression of the term; they must be internally
+//                 consistent (a term may not contradict itself) and are enforced
+//                 by the Exchange.
+//   REFERENCE_ONLY — the document at License.uri (which MUST be present) is the
+//                 authoritative, complete source; the agent MUST read it before
+//                 using. The machine restrictions/quotas/obligations are
+//                 OPTIONAL here — the publisher MAY send Pricing alone — but any
+//                 that ARE sent must be accurate: they MUST NOT contradict the
+//                 referenced document, and whatever is expressed IS enforced
+//                 just like ENUMERATED. Pricing is stated machine-readably here
+//                 either way.
 //
 // LicenseTerm lives in ResourceEntry (ingestion) and Offer (emission) — the
 // same shape at both ends. The Exchange stores terms from PushResources and
@@ -782,7 +793,7 @@ enum RestrictionKind {
     (ramp.v1.vocab_enum) = "commercial_entity"
   ];
 
-  RESTRICTION_KIND_OTHER = 4;  // Custom; description in Restriction fields
+  RESTRICTION_KIND_OTHER = 4;  // Custom axis; values carried in permitted/prohibited
 }
 
 // QuotaWindow — Time window over which a Quota.limit accumulates.
@@ -826,6 +837,13 @@ message License {
   // Examples:
   //   "https://creativecommons.org/licenses/by/4.0/"
   //   "https://techcrunch.com/licensing/ai-terms-2026"
+  //
+  // "MUST NOT URL-validate" means do not REJECT non-URL schemes — it does NOT
+  // mean fetch blindly. A consumer that dereferences this URI MUST apply the
+  // SSRF countermeasures in the security threat model (T-LIC-1): scheme
+  // allowlist, block loopback/private/metadata addresses (resolve-then-check),
+  // fetch via an egress proxy, and treat the response as untrusted content.
+  // Verify the fetched bytes against `uri_digest` before use.
   optional string uri = 1;
 
   // Stable short identifier: SPDX short-id ("GPL-3.0-only"), TollBit cuid,
@@ -848,19 +866,41 @@ message License {
   // it at ingestion (computing it over the safely-fetched document, or
   // accepting a publisher-supplied value when uri is not HTTP-fetchable, e.g. a
   // non-URL TDL scheme).
-  optional string uri_digest = 5;
+  //
+  // The method MUST be a collision-resistant hash — sha256, sha384, or sha512.
+  // Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat
+  // the swap-protection this field exists for. The CEL is STRUCTURE ONLY
+  // (allowlisted prefix + matching hex length); presence (digest-when-uri) is
+  // enforced at ingest.
+  optional string uri_digest = 5 [
+    (buf.validate.field).cel = {
+      id: "license.uri_digest.format"
+      message: "uri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length"
+      expression: "this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')"
+    }
+  ];
 }
 
 // Restriction — A single constraint on one licensing dimension.
 //
 // Restrictions model allowed and prohibited values on one axis (function,
 // geography, or user-type). They are validated and normalized at ingest and
-// RIDE ON THE OFFER — the Exchange does NOT filter terms by matching the
-// requester's self-declared attributes (user_type / geography / intended_use)
-// against them. Discovery returns every scope-covered term; the AGENT
-// self-selects the term whose restrictions it can honour, and enforcement
-// happens downstream at accept → report → reconcile. (Term visibility is gated
-// only by resource_id/URI and Biscuit scope coverage — see LicenseTerm.scopes.)
+// RIDE ON THE OFFER: the AGENT is the responsible party — it self-selects the
+// term whose restrictions it can honour and bears compliance, and enforcement
+// happens downstream at accept → report → reconcile. Restrictions are NOT an
+// Exchange-side gate the requester must pass to see a term.
+//
+// An Exchange or Broker MAY, purely as a CONVENIENCE, pre-filter the offers it
+// returns using attributes the requester volunteers in its query
+// (Requester.user_type / geography / intended_use) — e.g. an agent that only
+// wants US-eligible content can ask the Exchange to skip the rest so it doesn't
+// pay to discover offers it would never accept. That filter is advisory and
+// optional: a different Broker may not apply it, and it is a recommendation
+// matched to the request, never an enforcement verdict. When an Exchange does
+// drop offers this way it MAY signal it via OfferAbsenceReason.{GEO_RESTRICTED,
+// FUNCTION_PROHIBITED, USER_CATEGORY_PROHIBITED}. Term visibility is otherwise
+// gated only by resource_id/URI and Biscuit scope coverage — see
+// LicenseTerm.scopes.
 //
 // Reading a restriction:
 //   A value is in-scope when it matches at least one permitted[] token
@@ -882,10 +922,22 @@ message Restriction {
   // For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
   // For GEOGRAPHY: "US", "DE", "EU", "EEA", "*", …
   // For USER_TYPE: "individual", "academic", "commercial_entity", …
-  repeated string permitted = 2;
+  repeated string permitted = 2 [
+    (buf.validate.field).cel = {
+      id: "restriction.permitted.format"
+      message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
+      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
+    }
+  ];
 
   // Tokens blocked on this axis. Takes precedence over permitted[].
-  repeated string prohibited = 3;
+  repeated string prohibited = 3 [
+    (buf.validate.field).cel = {
+      id: "restriction.prohibited.format"
+      message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
+      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
+    }
+  ];
 
   // Fail-closed by default. When false (the default), this restriction is
   // BINDING: an agent that cannot evaluate every token in it — including an
@@ -930,10 +982,11 @@ message Quota {
     (ramp.v1.vocab) = "accesses",
     (ramp.v1.vocab) = "copies",
     (ramp.v1.vocab) = "seats",
+    (buf.validate.field).string.max_len = 64,
     (buf.validate.field).cel = {
       id: "quota.metric.format"
-      message: "metric must be a lowercase-dashed token or vendor:namespaced"
-      expression: "this != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:.+$'))"
+      message: "metric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)"
+      expression: "this != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))"
     }
   ];
 
@@ -1142,10 +1195,11 @@ message Pricing {
     (ramp.v1.vocab) = "seats",    (ramp.v1.vocab) = "units-manufactured",
     (ramp.v1.vocab) = "characters", (ramp.v1.vocab) = "bytes",  (ramp.v1.vocab) = "items",
     (ramp.v1.vocab) = "sq-km",
+    (buf.validate.field).string.max_len = 64,
     (buf.validate.field).cel = {
       id: "pricing.unit.format"
-      message: "unit must be empty, a lowercase-dashed token, or vendor:namespaced"
-      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:.+$')"
+      message: "unit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)"
+      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
     }
   ];
 
@@ -1253,7 +1307,10 @@ message Requester {
   // Resource URIs being requested.
   repeated string uris = 5;
 
-  // What the requester intends to do with the resources.
+  // What the requester intends to do with the resources. Advisory: a hint the
+  // Exchange/Broker MAY use to pre-filter offers as a convenience (see
+  // Restriction) — it is not an entitlement, is not enforced against the
+  // returned terms, and the agent self-selects and bears compliance.
   // Standard values: "ai_train", "ai_input", "ai_index", "search", "display".
   repeated string intended_use = 6;
 
@@ -1661,8 +1718,8 @@ enum DenialReason {
   DENIAL_REASON_INSUFFICIENT_BALANCE = 3; // Requester's balance too low
   DENIAL_REASON_RATE_LIMITED = 4;         // Too many requests
   DENIAL_REASON_CONTENT_UNAVAILABLE = 5;  // Resource no longer available
-  DENIAL_REASON_FUNCTION_PROHIBITED = 6;  // Requested function not permitted
-  DENIAL_REASON_GEO_RESTRICTED = 7;       // Requester's geography not permitted
+  DENIAL_REASON_FUNCTION_PROHIBITED = 6;  // Accepted term's function restriction not satisfied by the request
+  DENIAL_REASON_GEO_RESTRICTED = 7;       // Accepted term's geography restriction not satisfied by the request
   DENIAL_REASON_REPORTING_OVERDUE = 8;    // Requester has >20% overdue reports (MAY threshold)
   DENIAL_REASON_OFFER_EXPIRED = 9;        // Offer TTL exceeded
   DENIAL_REASON_SIGNATURE_INVALID = 10;   // Offer signature verification failed

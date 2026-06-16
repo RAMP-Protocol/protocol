@@ -787,8 +787,8 @@ How the Exchange interprets a `LicenseTerm`'s machine fields.
 | Value | Name | Description |
 |---|---|---|
 | 0 | UNSPECIFIED | Unset — rejected at ingest |
-| 1 | ENUMERATED | Machine fields are authoritative. Pricing MUST be present. |
-| 2 | REFERENCE_ONLY | Only `License.uri` is authoritative (MUST be non-empty). Machine `restrictions`/`quotas`/`obligations` MUST be absent — the agent reads the document. Pricing is still required. |
+| 1 | ENUMERATED | Machine `restrictions`/`quotas`/`obligations` are the complete, authoritative expression of the term (internally consistent, no self-contradiction) and are enforced. Pricing MUST be present. |
+| 2 | REFERENCE_ONLY | The document at `License.uri` (MUST be non-empty) is the authoritative, complete source; the agent reads it before using. Machine `restrictions`/`quotas`/`obligations` are **optional** here — the publisher MAY send Pricing alone — but any that **are** sent must be accurate (MUST NOT contradict the referenced document) and **are** enforced just like ENUMERATED. Pricing is still required. |
 
 ### RestrictionKind
 

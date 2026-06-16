@@ -47,15 +47,9 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
   "catalog_endpoint": "https://exchange.example.com/catalog/v1",
   "protocol_versions_supported": ["1.0"],
   "pricing_models_supported": [
-    "per_article",
-    "per_token",
-    "per_page",
-    "per_minute",
-    "per_record",
-    "subscription",
     "free",
-    "attribution",
-    "revenue_share"
+    "per_unit",
+    "flat"
   ],
   "delivery_methods_supported": [
     "direct",
@@ -148,7 +142,7 @@ The Broker uses the manifest to filter Exchanges **before** sending any RPCs. Th
 
 | Question | Manifest Field |
 |---|---|
-| Does this Exchange support per-token pricing? | `pricing_models_supported` |
+| Does this Exchange support per-unit (metered) pricing? | `pricing_models_supported` |
 | Can this Exchange deliver via signed URL? | `delivery_methods_supported` |
 | Does this Exchange trust DoubleVerify? | `accepted_verifiers` |
 | Does this Exchange speak protocol v1.0? | `protocol_versions_supported` |

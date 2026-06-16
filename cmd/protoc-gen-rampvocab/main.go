@@ -379,6 +379,14 @@ var constNameSpecial = map[string]string{
 // with one the package reserves; the fix is to add a constNameSpecial mapping.
 func constName(token string) (string, error) {
 	if s, ok := constNameSpecial[token]; ok {
+		// A special-case mapping must itself be a valid, non-reserved identifier;
+		// otherwise a bad entry would emit broken Go silently.
+		if !isExportedIdent(s) {
+			return "", fmt.Errorf("constNameSpecial[%q] = %q is not a valid exported Go identifier", token, s)
+		}
+		if reservedIdents[s] {
+			return "", fmt.Errorf("constNameSpecial[%q] = %q collides with a reserved identifier", token, s)
+		}
 		return s, nil
 	}
 	parts := strings.FieldsFunc(token, func(r rune) bool {

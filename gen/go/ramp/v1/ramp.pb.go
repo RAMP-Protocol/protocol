@@ -108,11 +108,15 @@ const (
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_IN_CATALOG OfferAbsenceReason = 1
 	// Resource exists but has a BLOCKED access policy (provider opted out of AI access).
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_CONTENT_BLOCKED OfferAbsenceReason = 2
-	// Resource exists but the requested CoMP function is prohibited by provider terms.
+	// Resource exists but its offers were pre-filtered out for the requester's
+	// stated function (a convenience filter matched to the query, not an
+	// enforcement verdict — see Restriction). The agent MAY still be eligible.
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED OfferAbsenceReason = 3
-	// Resource exists but the requester's geography is restricted.
+	// Resource exists but its offers were pre-filtered out for the requester's
+	// stated geography (convenience filter; see Restriction).
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_GEO_RESTRICTED OfferAbsenceReason = 4
-	// Resource exists but the requester's user category is not permitted.
+	// Resource exists but its offers were pre-filtered out for the requester's
+	// stated user category (convenience filter; see Restriction).
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED OfferAbsenceReason = 5
 	// Resource is temporarily unavailable (e.g., provider feed refresh in progress).
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE OfferAbsenceReason = 6
@@ -256,7 +260,7 @@ const (
 	RestrictionKind_RESTRICTION_KIND_GEOGRAPHY RestrictionKind = 2
 	// Who may access and use the content.
 	RestrictionKind_RESTRICTION_KIND_USER_TYPE RestrictionKind = 3
-	RestrictionKind_RESTRICTION_KIND_OTHER     RestrictionKind = 4 // Custom; description in Restriction fields
+	RestrictionKind_RESTRICTION_KIND_OTHER     RestrictionKind = 4 // Custom axis; values carried in permitted/prohibited
 )
 
 // Enum value maps for RestrictionKind.
@@ -880,8 +884,8 @@ const (
 	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE DenialReason = 3  // Requester's balance too low
 	DenialReason_DENIAL_REASON_RATE_LIMITED         DenialReason = 4  // Too many requests
 	DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE  DenialReason = 5  // Resource no longer available
-	DenialReason_DENIAL_REASON_FUNCTION_PROHIBITED  DenialReason = 6  // Requested function not permitted
-	DenialReason_DENIAL_REASON_GEO_RESTRICTED       DenialReason = 7  // Requester's geography not permitted
+	DenialReason_DENIAL_REASON_FUNCTION_PROHIBITED  DenialReason = 6  // Accepted term's function restriction not satisfied by the request
+	DenialReason_DENIAL_REASON_GEO_RESTRICTED       DenialReason = 7  // Accepted term's geography restriction not satisfied by the request
 	DenialReason_DENIAL_REASON_REPORTING_OVERDUE    DenialReason = 8  // Requester has >20% overdue reports (MAY threshold)
 	DenialReason_DENIAL_REASON_OFFER_EXPIRED        DenialReason = 9  // Offer TTL exceeded
 	DenialReason_DENIAL_REASON_SIGNATURE_INVALID    DenialReason = 10 // Offer signature verification failed
@@ -2074,18 +2078,19 @@ type Offer struct {
 	// different Exchanges and compare pricing.
 	Identity *ResourceIdentity `protobuf:"bytes,7,opt,name=identity,proto3,oneof" json:"identity,omitempty"`
 	// REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
-	// Offer — every field, including `pricing` and `terms` (the full licensing
-	// payload). Canonicalization is deterministic protobuf marshaling
-	// (lexicographic field order); only `signature`, `signature_algorithm`, and
-	// `expires_at` are excluded from the signed bytes. `expires_at` is excluded
-	// because it is bound to issuance time, not resource/pricing identity, so a
-	// verifier can rebuild the signed payload from the catalog alone (stateless
-	// verification on ExecuteTransaction — the Exchange need not store offers).
+	// Offer — every field, including `pricing`, `terms` (the full licensing
+	// payload), and `expires_at`. Canonicalization is deterministic protobuf
+	// marshaling (lexicographic field order); only `signature` and
+	// `signature_algorithm` are excluded from the signed bytes. `expires_at` is
+	// signed so the offer's validity window is integrity-protected: a relaying
+	// Broker cannot extend (or shorten) the TTL of a signed offer to replay it
+	// outside the window the Exchange intended.
 	//
-	// Because the signature covers `terms` and `pricing`, an intermediary
-	// (Broker) cannot tamper with price, restrictions, quotas, obligations, or
-	// any licensing term without invalidating it. Agent SHOULD verify the
-	// signature (RFC 2119) against the Exchange's public key.
+	// Because the signature covers `terms`, `pricing`, and `expires_at`, an
+	// intermediary (Broker) cannot tamper with price, restrictions, quotas,
+	// obligations, the expiry, or any licensing term without invalidating it.
+	// Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
+	// key, and MUST reject an offer whose `expires_at` is in the past.
 	Signature string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
 	// JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
 	SignatureAlgorithm string `protobuf:"bytes,10,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
@@ -2725,6 +2730,13 @@ type License struct {
 	//
 	//	"https://creativecommons.org/licenses/by/4.0/"
 	//	"https://techcrunch.com/licensing/ai-terms-2026"
+	//
+	// "MUST NOT URL-validate" means do not REJECT non-URL schemes — it does NOT
+	// mean fetch blindly. A consumer that dereferences this URI MUST apply the
+	// SSRF countermeasures in the security threat model (T-LIC-1): scheme
+	// allowlist, block loopback/private/metadata addresses (resolve-then-check),
+	// fetch via an egress proxy, and treat the response as untrusted content.
+	// Verify the fetched bytes against `uri_digest` before use.
 	Uri *string `protobuf:"bytes,1,opt,name=uri,proto3,oneof" json:"uri,omitempty"`
 	// Stable short identifier: SPDX short-id ("GPL-3.0-only"), TollBit cuid,
 	// or catalog doc-id. Used by agents and the vocab linter for known-license
@@ -2743,6 +2755,12 @@ type License struct {
 	// it at ingestion (computing it over the safely-fetched document, or
 	// accepting a publisher-supplied value when uri is not HTTP-fetchable, e.g. a
 	// non-URL TDL scheme).
+	//
+	// The method MUST be a collision-resistant hash — sha256, sha384, or sha512.
+	// Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat
+	// the swap-protection this field exists for. The CEL is STRUCTURE ONLY
+	// (allowlisted prefix + matching hex length); presence (digest-when-uri) is
+	// enforced at ingest.
 	UriDigest     *string `protobuf:"bytes,5,opt,name=uri_digest,json=uriDigest,proto3,oneof" json:"uri_digest,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2817,12 +2835,22 @@ func (x *License) GetUriDigest() string {
 //
 // Restrictions model allowed and prohibited values on one axis (function,
 // geography, or user-type). They are validated and normalized at ingest and
-// RIDE ON THE OFFER — the Exchange does NOT filter terms by matching the
-// requester's self-declared attributes (user_type / geography / intended_use)
-// against them. Discovery returns every scope-covered term; the AGENT
-// self-selects the term whose restrictions it can honour, and enforcement
-// happens downstream at accept → report → reconcile. (Term visibility is gated
-// only by resource_id/URI and Biscuit scope coverage — see LicenseTerm.scopes.)
+// RIDE ON THE OFFER: the AGENT is the responsible party — it self-selects the
+// term whose restrictions it can honour and bears compliance, and enforcement
+// happens downstream at accept → report → reconcile. Restrictions are NOT an
+// Exchange-side gate the requester must pass to see a term.
+//
+// An Exchange or Broker MAY, purely as a CONVENIENCE, pre-filter the offers it
+// returns using attributes the requester volunteers in its query
+// (Requester.user_type / geography / intended_use) — e.g. an agent that only
+// wants US-eligible content can ask the Exchange to skip the rest so it doesn't
+// pay to discover offers it would never accept. That filter is advisory and
+// optional: a different Broker may not apply it, and it is a recommendation
+// matched to the request, never an enforcement verdict. When an Exchange does
+// drop offers this way it MAY signal it via OfferAbsenceReason.{GEO_RESTRICTED,
+// FUNCTION_PROHIBITED, USER_CATEGORY_PROHIBITED}. Term visibility is otherwise
+// gated only by resource_id/URI and Biscuit scope coverage — see
+// LicenseTerm.scopes.
 //
 // Reading a restriction:
 //
@@ -3523,7 +3551,10 @@ type Requester struct {
 	Name *string `protobuf:"bytes,4,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	// Resource URIs being requested.
 	Uris []string `protobuf:"bytes,5,rep,name=uris,proto3" json:"uris,omitempty"`
-	// What the requester intends to do with the resources.
+	// What the requester intends to do with the resources. Advisory: a hint the
+	// Exchange/Broker MAY use to pre-filter offers as a convenience (see
+	// Restriction) — it is not an entitlement, is not enforced against the
+	// returned terms, and the agent self-selects and bears compliance.
 	// Standard values: "ai_train", "ai_input", "ai_index", "search", "display".
 	IntendedUse []string `protobuf:"bytes,6,rep,name=intended_use,json=intendedUse,proto3" json:"intended_use,omitempty"`
 	// Commercial license or subscription identifier.
@@ -7501,30 +7532,33 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"attestedAt\x12\x10\n" +
 	"\x03uri\x18\x04 \x01(\tR\x03uri\x12/\n" +
 	"\x06claims\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06claims\x12\x1c\n" +
-	"\tsignature\x18\x06 \x01(\tR\tsignature\"\xca\x01\n" +
+	"\tsignature\x18\x06 \x01(\tR\tsignature\"\xd6\x03\n" +
 	"\aLicense\x12\x15\n" +
 	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x13\n" +
 	"\x02id\x18\x02 \x01(\tH\x01R\x02id\x88\x01\x01\x12\x17\n" +
 	"\x04name\x18\x03 \x01(\tH\x02R\x04name\x88\x01\x01\x12!\n" +
-	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01\x12\"\n" +
+	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01\x12\xad\x02\n" +
 	"\n" +
-	"uri_digest\x18\x05 \x01(\tH\x04R\turiDigest\x88\x01\x01B\x06\n" +
+	"uri_digest\x18\x05 \x01(\tB\x88\x02\xbaH\x84\x02\xba\x01\x80\x02\n" +
+	"\x19license.uri_digest.format\x12Zuri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length\x1a\x86\x01this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')H\x04R\turiDigest\x88\x01\x01B\x06\n" +
 	"\x04_uriB\x05\n" +
 	"\x03_idB\a\n" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_immutableB\r\n" +
-	"\v_uri_digest\"\x95\x01\n" +
+	"\v_uri_digest\"\xac\x04\n" +
 	"\vRestriction\x12,\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\x1c\n" +
-	"\tpermitted\x18\x02 \x03(\tR\tpermitted\x12\x1e\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\xe6\x01\n" +
+	"\tpermitted\x18\x02 \x03(\tB\xc7\x01\xbaH\xc3\x01\xba\x01\xbf\x01\n" +
+	"\x1crestriction.permitted.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))R\tpermitted\x12\xe9\x01\n" +
 	"\n" +
-	"prohibited\x18\x03 \x03(\tR\n" +
+	"prohibited\x18\x03 \x03(\tB\xc8\x01\xbaH\xc4\x01\xba\x01\xc0\x01\n" +
+	"\x1drestriction.prohibited.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))R\n" +
 	"prohibited\x12\x1a\n" +
-	"\badvisory\x18\x04 \x01(\bR\badvisory\"\x87\x03\n" +
-	"\x05Quota\x12\xb9\x02\n" +
-	"\x06metric\x18\x01 \x01(\tB\xa0\x02\xbaH\xad\x01\xba\x01\xa9\x01\n" +
-	"\x13quota.metric.format\x12<metric must be a lowercase-dashed token or vendor:namespaced\x1aTthis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:.+$'))\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seatsR\x06metric\x12\x14\n" +
+	"\badvisory\x18\x04 \x01(\bR\badvisory\"\xbf\x03\n" +
+	"\x05Quota\x12\xf1\x02\n" +
+	"\x06metric\x18\x01 \x01(\tB\xd8\x02\xbaH\xe5\x01\xba\x01\xdd\x01\n" +
+	"\x13quota.metric.format\x12cmetric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1aathis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))r\x02\x18@\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seatsR\x06metric\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x03R\x05limit\x12,\n" +
 	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\xd3\x01\n" +
 	"\n" +
@@ -7561,16 +7595,16 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\xfb\b\n" +
+	"\x05_size\"\xb3\t\n" +
 	"\aPricing\x12+\n" +
 	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelR\x05model\x12\x12\n" +
 	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12 \n" +
 	"\tunit_cost\x18\x04 \x01(\x01H\x00R\bunitCost\x88\x01\x01\x122\n" +
 	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12;\n" +
-	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\xf5\x02\n" +
-	"\x04unit\x18\b \x01(\tB\xdb\x02\xbaH\xb1\x01\xba\x01\xad\x01\n" +
-	"\x13pricing.unit.format\x12Bunit must be empty, a lowercase-dashed token, or vendor:namespaced\x1aRthis == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:.+$')\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
+	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\xad\x03\n" +
+	"\x04unit\x18\b \x01(\tB\x93\x03\xbaH\xe9\x01\xba\x01\xe1\x01\n" +
+	"\x13pricing.unit.format\x12iunit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
 	"characters\x8a\xb5\x18\x05bytes\x8a\xb5\x18\x05items\x8a\xb5\x18\x05sq-kmH\x03R\x04unit\x88\x01\x01\x129\n" +
 	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
