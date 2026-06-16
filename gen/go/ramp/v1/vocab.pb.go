@@ -56,13 +56,11 @@ var file_ramp_v1_vocab_proto_extTypes = []protoimpl.ExtensionInfo{
 // Extension fields to descriptorpb.FieldOptions.
 var (
 	// vocab carries the registered bare tokens for an open vocabulary axis,
-	// authored directly on the field that uses it. The direct `repeated string`
-	// form is intentional — modern protoc supports repeated custom options, so
-	// there is no need to wrap the tokens in a message. Number 50001 sits in the
-	// internal extension range (50000–99999). Field axes (Pricing.unit,
-	// Quota.metric) carry their tokens here; axes selected by an enum value
-	// (function, geography, user-type, selected by RestrictionKind) carry their
-	// tokens on the enum-value extension below.
+	// authored directly on the field that uses it as a repeated custom option.
+	// Number 50001 sits in the internal extension range (50000–99999). Field
+	// axes (Pricing.unit, Quota.metric) carry their tokens here; axes selected
+	// by an enum value (function, geography, user-type, selected by
+	// RestrictionKind) carry their tokens on the enum-value extension below.
 	//
 	// repeated string vocab = 50001;
 	E_Vocab = &file_ramp_v1_vocab_proto_extTypes[0]
@@ -76,10 +74,9 @@ var (
 	// by Restriction.kind — author their tokens directly on the corresponding
 	// RestrictionKind enum value. Same registry mechanism: protoc-gen-rampvocab
 	// reads these entries structurally off the enum-value descriptor and emits
-	// the per-axis constants + IsRegistered. A separate extension is required
-	// because an extend block targets exactly one options message; FieldOptions
-	// extension 50001 cannot also extend EnumValueOptions. Number 50002 reserves
-	// the next slot in the same internal block.
+	// the per-axis constants + IsRegistered. This is a separate extension because
+	// an extend block targets one options message — 50001 cannot also extend
+	// EnumValueOptions; 50002 is the next slot in the same internal block.
 	//
 	// repeated string vocab_enum = 50002;
 	E_VocabEnum = &file_ramp_v1_vocab_proto_extTypes[1]

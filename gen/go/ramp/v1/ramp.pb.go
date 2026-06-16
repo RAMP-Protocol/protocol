@@ -35,8 +35,7 @@ const (
 )
 
 // DiscoveryMethod — How the Broker discovered this resource URI.
-// v1 extension point for future discovery integration (search engines,
-// resource recommendation, etc.). Does not affect transaction flow.
+// Metadata for the agent; does not affect transaction flow.
 type DiscoveryMethod int32
 
 const (
@@ -365,10 +364,6 @@ func (QuotaWindow) EnumDescriptor() ([]byte, []int) {
 }
 
 // ObligationKind — What the agent must do after use.
-//
-// ATTRIBUTION and CONTRIBUTION replace the retired PRICING_MODEL_ATTRIBUTION
-// and PRICING_MODEL_CONTRIBUTION: these are behavioral requirements, not
-// payment models, and belong here rather than in PricingModel.
 type ObligationKind int32
 
 const (
@@ -493,7 +488,6 @@ func (ObligationTrigger) EnumDescriptor() ([]byte, []int) {
 // options on Pricing.unit; see vocab.proto).
 // Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
 // are obligations (see ObligationKind); revenue-share settlement is off-protocol.
-// Pre-v1: renumbered cleanly, nothing reserved.
 type PricingModel int32
 
 const (
@@ -1533,7 +1527,7 @@ type ResourceQuery struct {
 	// Unique query identifier.
 	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	// Requester identity — who is making this request, what scopes they have,
-	// and optional delegation chain. Replaces CoMP AISystem.
+	// and optional delegation chain.
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
 	// Original RAMP request ID from Step 1, for traceability.
 	RequestId *string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3,oneof" json:"request_id,omitempty"`
@@ -2104,7 +2098,7 @@ type Offer struct {
 	// Uses IAB Content Taxonomy 3.1 codes.
 	IabCategories []string `protobuf:"bytes,13,rep,name=iab_categories,json=iabCategories,proto3" json:"iab_categories,omitempty"`
 	// Signed attestations about the resource at this URI.
-	// Replaces ContentQuality. Attestations provide cryptographic proof of
+	// Attestations provide cryptographic proof of
 	// resource properties from trusted parties (providers or verification vendors).
 	//
 	// Three verification levels determine what is independently verifiable:
@@ -2597,9 +2591,8 @@ func (x *ResourceIdentity) GetExtCritical() []string {
 //	https://{verifier-domain}/.well-known/ramp.json
 //
 // Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or
-// ROLE_PUBLISHER depending on operator). Claims-schema location migrated to
-// `ext` under key "ramp.attestation.claims_schema" (see Verifier transition
-// in CHANGELOG).
+// ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema
+// structure at WellKnownManifest.ext["ramp.attestation.claims_schema"].
 type ResourceAttestation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Canonical domain of the attesting party (e.g., "nytimes.com" for
@@ -3035,10 +3028,6 @@ func (x *Quota) GetWindow() QuotaWindow {
 
 // Obligation — A post-use behavioral requirement attached to a LicenseTerm.
 //
-// Replaces PRICING_MODEL_ATTRIBUTION and PRICING_MODEL_CONTRIBUTION, which were
-// incorrectly modeled as payment models. Attribution and contribution are
-// behavioral requirements that exist regardless of whether a fee is charged.
-//
 // Examples:
 //
 //	Attribution on display: cite the author whenever content is shown to a user.
@@ -3387,8 +3376,7 @@ func (x *Preview) GetSize() string {
 // Unit cost is denominated in the Exchange's base currency.
 //
 // Fields: model, rate, currency, unit_cost, estimated_quantity,
-// license_duration_months, unit, metering. (Field 6, formerly revshare, is
-// retired — Pricing has no revenue-share concept. Pre-v1: not reserved.)
+// license_duration_months, unit, metering.
 type Pricing struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Provider's pricing model.
@@ -3398,7 +3386,7 @@ type Pricing struct {
 	// ISO 4217 currency code (e.g. "USD", "EUR").
 	Currency string `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
 	// Normalized cost per unit — the universal comparison metric.
-	// For text: cost per token (replaces eCPT). For video: cost per second.
+	// For text: cost per token. For video: cost per second.
 	// For data: cost per record. For APIs: cost per call.
 	// Denominated in the Exchange's base_currency (from its WellKnownManifest).
 	UnitCost *float64 `protobuf:"fixed64,4,opt,name=unit_cost,json=unitCost,proto3,oneof" json:"unit_cost,omitempty"`

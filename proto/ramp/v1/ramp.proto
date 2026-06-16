@@ -123,7 +123,7 @@ message ResourceQuery {
   string id = 2;
 
   // Requester identity — who is making this request, what scopes they have,
-  // and optional delegation chain. Replaces CoMP AISystem.
+  // and optional delegation chain.
   Requester requester = 3;
 
   // Original RAMP request ID from Step 1, for traceability.
@@ -229,8 +229,7 @@ message OfferGroup {
 }
 
 // DiscoveryMethod — How the Broker discovered this resource URI.
-// v1 extension point for future discovery integration (search engines,
-// resource recommendation, etc.). Does not affect transaction flow.
+// Metadata for the agent; does not affect transaction flow.
 enum DiscoveryMethod {
   DISCOVERY_METHOD_UNSPECIFIED = 0;
   // URI was requested by the agent directly or found via Exchange query.
@@ -403,7 +402,7 @@ message Offer {
   repeated string iab_categories = 13;
 
   // Signed attestations about the resource at this URI.
-  // Replaces ContentQuality. Attestations provide cryptographic proof of
+  // Attestations provide cryptographic proof of
   // resource properties from trusted parties (providers or verification vendors).
   //
   // Three verification levels determine what is independently verifiable:
@@ -630,9 +629,8 @@ message ResourceIdentity {
 // Verifiers MUST publish their keys at:
 //   https://{verifier-domain}/.well-known/ramp.json
 // Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or
-// ROLE_PUBLISHER depending on operator). Claims-schema location migrated to
-// `ext` under key "ramp.attestation.claims_schema" (see Verifier transition
-// in CHANGELOG).
+// ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema
+// structure at WellKnownManifest.ext["ramp.attestation.claims_schema"].
 message ResourceAttestation {
   // Canonical domain of the attesting party (e.g., "nytimes.com" for
   // self-attestation, "doubleverify.com" for third-party attestation).
@@ -806,10 +804,6 @@ enum QuotaWindow {
 }
 
 // ObligationKind — What the agent must do after use.
-//
-// ATTRIBUTION and CONTRIBUTION replace the retired PRICING_MODEL_ATTRIBUTION
-// and PRICING_MODEL_CONTRIBUTION: these are behavioral requirements, not
-// payment models, and belong here rather than in PricingModel.
 enum ObligationKind {
   OBLIGATION_KIND_UNSPECIFIED      = 0;  // unset — rejected at ingest
   OBLIGATION_KIND_ATTRIBUTION      = 1;  // Credit the author / publisher
@@ -999,10 +993,6 @@ message Quota {
 
 // Obligation — A post-use behavioral requirement attached to a LicenseTerm.
 //
-// Replaces PRICING_MODEL_ATTRIBUTION and PRICING_MODEL_CONTRIBUTION, which were
-// incorrectly modeled as payment models. Attribution and contribution are
-// behavioral requirements that exist regardless of whether a fee is charged.
-//
 // Examples:
 //   Attribution on display: cite the author whenever content is shown to a user.
 //   Share-alike on derivative: AI-generated content that incorporates this work
@@ -1137,8 +1127,7 @@ message Preview {
 // Unit cost is denominated in the Exchange's base currency.
 //
 // Fields: model, rate, currency, unit_cost, estimated_quantity,
-// license_duration_months, unit, metering. (Field 6, formerly revshare, is
-// retired — Pricing has no revenue-share concept. Pre-v1: not reserved.)
+// license_duration_months, unit, metering.
 message Pricing {
   // Cross-field structural rules (protovalidate, OR form — CEL has no implies):
   //   PER_UNIT ⇒ unit must be set; FREE ⇒ rate must be 0.
@@ -1166,7 +1155,7 @@ message Pricing {
   string currency = 3;
 
   // Normalized cost per unit — the universal comparison metric.
-  // For text: cost per token (replaces eCPT). For video: cost per second.
+  // For text: cost per token. For video: cost per second.
   // For data: cost per record. For APIs: cost per call.
   // Denominated in the Exchange's base_currency (from its WellKnownManifest).
   optional double unit_cost = 4;
@@ -1217,7 +1206,6 @@ message Pricing {
 // options on Pricing.unit; see vocab.proto).
 // Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
 // are obligations (see ObligationKind); revenue-share settlement is off-protocol.
-// Pre-v1: renumbered cleanly, nothing reserved.
 enum PricingModel {
   PRICING_MODEL_UNSPECIFIED = 0;  // unset — rejected at ingest (omission cannot default to FREE)
   PRICING_MODEL_FREE        = 1;  // no charge; rate must be 0
@@ -1256,10 +1244,9 @@ enum DeliveryMethod {
 // ============================================================================
 // Requester Identity
 //
-// Replaces CoMP AISystem with a universal actor model. The requester is not
-// assumed to be "an AI system consuming publisher content" — it can be any
-// entity that needs metered resource access: AI agent, human using a tool,
-// enterprise service account, research pipeline, compliance monitor.
+// Universal actor model. The requester can be any entity that needs metered
+// resource access: AI agent, human using a tool, enterprise service account,
+// research pipeline, compliance monitor.
 //
 // Identity is layered:
 //   1. Ed25519 signature proves possession of a registered key
@@ -2115,10 +2102,6 @@ message RequestConstraints {
 // (e.g. "agent-7.registry.example"). The agent generates its own keypair; the
 // registry publishes the public half at {registry}/.well-known/ramp.json. The
 // domain + well-known paradigm is preserved end to end.
-//
-// Relaxing the discovery anchor (e.g. an explicit per-requester keys URL) is
-// intentionally deferred: revisit at the protocol level only if self-hosting
-// or registry-hosting proves too rigid in practice.
 // ============================================================================
 
 // Role — Identifies which kind of RAMP participant a WellKnownManifest

@@ -51,7 +51,7 @@ export type ResourceQuery = Message<"ramp.v1.ResourceQuery"> & {
 
   /**
    * Requester identity — who is making this request, what scopes they have,
-   * and optional delegation chain. Replaces CoMP AISystem.
+   * and optional delegation chain.
    *
    * @generated from field: ramp.v1.Requester requester = 3;
    */
@@ -486,7 +486,7 @@ export type Offer = Message<"ramp.v1.Offer"> & {
 
   /**
    * Signed attestations about the resource at this URI.
-   * Replaces ContentQuality. Attestations provide cryptographic proof of
+   * Attestations provide cryptographic proof of
    * resource properties from trusted parties (providers or verification vendors).
    *
    * Three verification levels determine what is independently verifiable:
@@ -803,9 +803,8 @@ export const ResourceIdentitySchema: GenMessage<ResourceIdentity> = /*@__PURE__*
  * Verifiers MUST publish their keys at:
  *   https://{verifier-domain}/.well-known/ramp.json
  * Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or
- * ROLE_PUBLISHER depending on operator). Claims-schema location migrated to
- * `ext` under key "ramp.attestation.claims_schema" (see Verifier transition
- * in CHANGELOG).
+ * ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema
+ * structure at WellKnownManifest.ext["ramp.attestation.claims_schema"].
  *
  * @generated from message ramp.v1.ResourceAttestation
  */
@@ -1106,10 +1105,6 @@ export const QuotaSchema: GenMessage<Quota> = /*@__PURE__*/
 /**
  * Obligation — A post-use behavioral requirement attached to a LicenseTerm.
  *
- * Replaces PRICING_MODEL_ATTRIBUTION and PRICING_MODEL_CONTRIBUTION, which were
- * incorrectly modeled as payment models. Attribution and contribution are
- * behavioral requirements that exist regardless of whether a fee is charged.
- *
  * Examples:
  *   Attribution on display: cite the author whenever content is shown to a user.
  *   Share-alike on derivative: AI-generated content that incorporates this work
@@ -1349,8 +1344,7 @@ export const PreviewSchema: GenMessage<Preview> = /*@__PURE__*/
  * Unit cost is denominated in the Exchange's base currency.
  *
  * Fields: model, rate, currency, unit_cost, estimated_quantity,
- * license_duration_months, unit, metering. (Field 6, formerly revshare, is
- * retired — Pricing has no revenue-share concept. Pre-v1: not reserved.)
+ * license_duration_months, unit, metering.
  *
  * @generated from message ramp.v1.Pricing
  */
@@ -1378,7 +1372,7 @@ export type Pricing = Message<"ramp.v1.Pricing"> & {
 
   /**
    * Normalized cost per unit — the universal comparison metric.
-   * For text: cost per token (replaces eCPT). For video: cost per second.
+   * For text: cost per token. For video: cost per second.
    * For data: cost per record. For APIs: cost per call.
    * Denominated in the Exchange's base_currency (from its WellKnownManifest).
    *
@@ -3899,8 +3893,7 @@ export const DomainVerificationResultSchema: GenMessage<DomainVerificationResult
 
 /**
  * DiscoveryMethod — How the Broker discovered this resource URI.
- * v1 extension point for future discovery integration (search engines,
- * resource recommendation, etc.). Does not affect transaction flow.
+ * Metadata for the agent; does not affect transaction flow.
  *
  * @generated from enum ramp.v1.DiscoveryMethod
  */
@@ -4172,10 +4165,6 @@ export const QuotaWindowSchema: GenEnum<QuotaWindow> = /*@__PURE__*/
 /**
  * ObligationKind — What the agent must do after use.
  *
- * ATTRIBUTION and CONTRIBUTION replace the retired PRICING_MODEL_ATTRIBUTION
- * and PRICING_MODEL_CONTRIBUTION: these are behavioral requirements, not
- * payment models, and belong here rather than in PricingModel.
- *
  * @generated from enum ramp.v1.ObligationKind
  */
 export enum ObligationKind {
@@ -4291,7 +4280,6 @@ export const ObligationTriggerSchema: GenEnum<ObligationTrigger> = /*@__PURE__*/
  * options on Pricing.unit; see vocab.proto).
  * Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
  * are obligations (see ObligationKind); revenue-share settlement is off-protocol.
- * Pre-v1: renumbered cleanly, nothing reserved.
  *
  * @generated from enum ramp.v1.PricingModel
  */
