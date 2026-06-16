@@ -150,6 +150,26 @@ The Biscuit token is carried in the `Delegation` message, nested inside `Request
 
 The `scopes` field is a convenience extraction — the Exchange MAY use it for fast catalog filtering before performing full Biscuit cryptographic verification.
 
+### Delegation-Claims Profile
+
+The `token` is opaque bytes, but its contents are the **authoritative** source of the grant (the plaintext `Delegation` fields are only the convenience mirror). For the caps and scopes to be verifiable and portable across Exchanges, RAMP defines a small **registered claim vocabulary** — the same registered-tokens + optional-fields + vendor-namespace pattern used elsewhere in the protocol. It applies to both formats (JWT claims / Biscuit facts):
+
+| Claim | JWT | Biscuit fact | Required? | Meaning |
+|---|---|---|---|---|
+| subject / holder | `sub` (+ proof-of-possession) | key the token is sealed/attenuated to | **Yes** | Binds the grant to the key that signs the request. Without it the token is bearer-usable. |
+| issuer | `iss` | root key (`principal_domain`) | Yes | Who granted it. |
+| `scope` | `scope` | `scope("…")` | No | Granted scopes (segment-wise; see [Scope Matching](#scope-matching)). |
+| `exp` | `exp` | `expires("…")` | No (recommended) | Expiry. |
+| `max_spend_cents` | `ramp_max_spend_cents` | `max_spend_cents(…)` | No | Spend cap (currency minor units). |
+| `max_accesses` | `ramp_max_accesses` | `max_accesses(…)` | No | Access-count cap. |
+| `quota_period` | `ramp_quota_period` | `quota_period_hours(…)` | No | Counter reset period. |
+
+Rules:
+
+- **Everything except the subject/holder binding is optional.** An issuer that only wants scope + expiry sets just those; absent caps mean "no cap from the delegation" (the Exchange's own limits still apply).
+- **Vendors MAY add namespaced claims** (`vendor:claim` / a vendor-prefixed fact).
+- **Constraints fail closed.** A claim a verifier cannot evaluate is **binding by default** — it MUST reject rather than ignore (a dropped constraint would fail *open*, granting more than intended). This mirrors [`Restriction.advisory`](/protocol/licensing-terms/): the issuer may mark a custom claim *advisory* to downgrade it to ignorable. (Biscuit gets this for free — an unsatisfiable check fails verification; for JWT the issuer lists the mandatory-to-understand claims.)
+
 ### Attenuation Example
 
 Bloomberg issues a Biscuit for an agent with broad access:

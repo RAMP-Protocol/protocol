@@ -1396,29 +1396,21 @@ enum RequesterType {
 
 // Delegation — Scoped, time-limited, spend-capped credential.
 //
-// Token-format agnostic. Supports JWT (universal default) and Biscuit
-// (advanced multi-hop offline attenuation). The token_format field
-// indicates which format the token field contains.
+// Token-format agnostic: the token is opaque bytes (Biscuit "biscuit-v3" by
+// default, or JWT). Its claims/facts are the AUTHORITATIVE source of the grant;
+// the plaintext fields below (scopes, expires_at, max_spend_cents, …) are a
+// convenience mirror the Exchange MAY use for fast pre-filtering before it
+// verifies the token.
 //
-// JWT (token_format="jwt"):
-//   Standard JWT with RAMP claims (sub, scope, exp, ramp_max_spend_cents,
-//   ramp_max_accesses, ramp_quota_period). Issued by any OAuth/GNAP
-//   authorization server. Sub-delegation requires IdP round-trip
-//   (Token Exchange RFC 8693).
+// The claim/fact schema is a small registered vocabulary — see the RAMP
+// delegation-claims profile in the auth spec. All claims are OPTIONAL except the
+// subject/holder binding, which ties the grant to the key that signs the request
+// (so a leaked token is not bearer-usable). Vendors MAY add namespaced claims;
+// any constraint a verifier cannot evaluate is binding by default (fail closed)
+// unless the issuer marks it advisory — mirroring Restriction.advisory.
 //
-// Biscuit (token_format="biscuit-v3"):
-//   Ed25519-signed block chains with offline attenuation. Each block
-//   narrows permissions — never widens. Sub-delegation is local (no
-//   server contact). Libraries: biscuit-go, @biscuit-auth/biscuit-wasm,
-//   biscuit-python.
-//
-// Both formats carry the same semantic claims. The Exchange verifies
-// the token using the appropriate library based on token_format.
-// The convenience fields (scopes, expires_at, max_spend_cents, etc.)
-// are extracted from the token for fast pre-filtering.
-//
-// Zero breach risk: if the token leaks, damage is bounded by
-// scope + time + spend cap. The token is useless after expiry.
+// If the token leaks, damage is bounded by scope + time + spend cap, and it is
+// useless after expiry.
 message Delegation {
   // Who granted this delegation (domain for public key lookup).
   string principal_domain = 1;
