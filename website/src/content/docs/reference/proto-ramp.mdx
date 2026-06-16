@@ -197,7 +197,8 @@ Three verification levels:
 | `license_duration_months` | optional int32 | 7 | License duration in months (field 6 retired — was `revshare`; settlement is off-protocol) |
 | `unit` | optional string | 8 | Metering basis (the "per what" of `PER_UNIT`). REQUIRED when `model = PER_UNIT`. Registered token (e.g. `accesses`, `tokens`, `pages`) or `vendor:custom`. Authored as `(ramp.v1.vocab)` on this field. |
 | `metering` | optional PricingMetering | 9 | How usage is tracked for billing reconciliation. Absent = ONLINE (default). |
-| `ext` | Struct | 15 | Extension point |
+
+`Pricing` has no `ext` / `ext_critical` fields — the licensing core is closed.
 
 ### ResourceIdentity
 

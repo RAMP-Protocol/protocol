@@ -1208,14 +1208,6 @@ message Pricing {
   // NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.
   // OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.
   optional PricingMetering metering = 9;
-
-  google.protobuf.Struct ext = 15;
-
-  // Critical extension keys (COSE crit pattern, RFC 9052).
-  // Lists keys within ext that the consumer MUST understand.
-  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
-  // Empty (default) → all ext keys are safe to ignore.
-  repeated string ext_critical = 90;
 }
 
 // PricingModel — the charging STRUCTURE only (a genuinely closed, small set;

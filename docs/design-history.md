@@ -107,16 +107,23 @@ offer signature, with no lossy ingestion→emission transform to reconcile.
 Two shaping decisions are deliberate and worth recording because their
 alternatives are conspicuously absent:
 
-- **The licensing core is closed; only `Pricing` carries an `ext` seam.**
-  `License` / `Restriction` / `Quota` / `Obligation` / `LicenseTerm` have no
-  `ext` / `ext_critical` fields, while the nested `Pricing` keeps them. Licensing
+- **The licensing core is uniformly closed — no `ext` seam anywhere, including
+  `Pricing`.** `License` / `Restriction` / `Quota` / `Obligation` /
+  `LicenseTerm` / `Pricing` have no `ext` / `ext_critical` fields. Licensing
   semantics are the part of the contract that must mean the same thing to every
   participant and survive disputes; an open extension seam there would let any
   party introduce terms others cannot evaluate, which is exactly the ambiguity a
-  license is supposed to remove. New licensing semantics should therefore go
-  through a deliberate core change (and a vocabulary axis where the value set is
-  open), not through per-deployment `ext` blobs. Commercial flexibility, which
-  genuinely varies vendor to vendor, stays available through `Pricing.ext`.
+  license is supposed to remove. `Pricing` briefly carried an `ext` Struct
+  (inherited from the CoMP/COSE lineage) and it was removed: an untyped blob in a
+  signed, cross-exchange-comparable object quietly defeats the comparability that
+  `unit_cost` exists to provide, and re-opens the unbounded-payload surface the
+  vocabulary axes were closed to avoid. New dimensions — commercial or
+  licensing — therefore arrive as typed fields or a vocabulary axis (where the
+  value set is genuinely open), through a deliberate core change, not as
+  per-deployment `ext` blobs. The general protocol `ext` / `ext_critical`
+  mechanism still exists on transport/discovery messages (`Offer`, queries,
+  disputes) where contextual, ignorable metadata is appropriate; it just has no
+  place inside the license itself.
 
 - **Restrictions are agent-selected, not Exchange-enforced.** Restrictions ride
   on the offer; the agent self-selects the term it can honour and bears
