@@ -116,11 +116,15 @@ Scoped, time-limited, spend-capped credential using [Biscuit authorization token
 | `principal_id` | string | 2 | Principal's identifier (e.g. "user@acme.com", "bloomberg.com") |
 | `scopes` | repeated string | 3 | Scopes granted by this delegation (MUST be a subset of the principal's own scopes) |
 | `expires_at` | Timestamp | 4 | When this delegation expires. Exchange MUST reject expired tokens. |
-| `max_spend` | optional Cost | 5 | Maximum spend allowed under this delegation |
-| `token` | string | 6 | Biscuit authorization token, base64-encoded |
-| `token_format` | string | 7 | Token format (default: "biscuit-v2") |
+| `max_spend_cents` | optional int64 | 5 | Maximum spend in currency minor units (e.g. cents for USD) |
+| `token` | bytes | 6 | Token bytes — JWT (base64url) or Biscuit (binary, base64) |
+| `token_format` | string | 7 | Token format: "jwt" (default) or "biscuit-v2" |
 | `revocation_uri` | optional string | 8 | URI for real-time revocation checking (MAY be checked for high-value transactions) |
+| `max_accesses` | optional int32 | 9 | Maximum access count under this delegation |
+| `quota_period` | optional Duration | 10 | How often access/spend counters reset (e.g. 720h = 30 days); absent = lifetime |
+| `issuer` | optional string | 11 | Token issuer — OIDC issuer URL or GNAP grant server (for JWT/GNAP validation) |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 **Biscuit authority block facts** (RAMP-specific):
 
@@ -153,14 +157,14 @@ One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop 
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `offer_id` | string | 1 | Unique offer identifier |
-| `package` | comp.v1.Package | 2 | CoMP content metadata |
+| `title` | optional string | 2 | Resource title (human-readable, for display/logging) |
 | `pricing` | Pricing | 3 | Pricing terms with unit_cost |
 | `delivery_method` | DeliveryMethod | 4 | How content is delivered |
 | `reporting` | optional ReportingObligation | 5 | Post-usage reporting requirements |
 | `expires_at` | optional Timestamp | 6 | Offer expiry |
 | `identity` | optional ResourceIdentity | 7 | Content identity for dedup |
-| `exchange_signature` | string | 9 | **REQUIRED.** Ed25519 signature |
-| `signature_algorithm` | string | 10 | Signature algorithm (default: "ed25519") |
+| `signature` | string | 9 | **REQUIRED.** JWS (EdDSA) over the canonical Offer (incl. `terms`, `pricing`, `expires_at`) |
+| `signature_algorithm` | string | 10 | Signature algorithm (always "EdDSA") |
 | `subscription_id` | optional string | 11 | Subscription/deal identifier |
 | `iab_categories` | repeated string | 13 | IAB Content Taxonomy codes |
 | `attestations` | repeated ResourceAttestation | 14 | Signed content attestations (replaces ContentQuality) |
@@ -169,6 +173,7 @@ One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop 
 | `previews` | repeated Preview | 18 | Lightweight previews for offer evaluation (thumbnails, clips, snippets) |
 | `terms` | repeated LicenseTerm | 19 | Licensing terms for this offer. See [Universal Licensing Core](#universal-licensing-core). |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 :::note[Breaking change in v1.0]
 `Offer.quality` (field 12, `ContentQuality`) has been removed. Use `Offer.attestations` with `ResourceAttestation` claims instead. See [Content Attestation](/protocol/content-attestation/).
@@ -350,8 +355,8 @@ Requirements attached to a delivery.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `function` | repeated Function | 1 | CoMP functions used |
-| `subfn` | repeated SubFunction | 2 | CoMP sub-functions used |
+| `function` | repeated string | 1 | Functions used (standard: "ai_train", "ai_input", "ai_index", "search", "display") |
+| `subfn` | repeated string | 2 | Sub-functions used (standard: "training", "rag", "grounding", "agent_view", "agent_actions") |
 | `consumed_quantity` | int32 | 3 | **REQUIRED.** Actual quantity consumed in the metering unit |
 | `displayed_to_user` | optional bool | 4 | Was output shown to a human? |
 | `citation_included` | optional bool | 5 | Was citation included? |

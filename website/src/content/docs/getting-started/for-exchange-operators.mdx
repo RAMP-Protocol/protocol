@@ -141,7 +141,7 @@ Every incoming request carries a `Requester` message with an Ed25519 signature. 
 
 1. Extract the `domain` from the `Requester` message
 2. Fetch the requester's public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`), selected by `kid` from `public_keys`
-3. Verify the Ed25519 signature over the tuple `(id, domain, uris, scopes)`
+3. Verify the Ed25519 signature over the tuple `(id, domain, scopes)`
 4. Reject the request if verification fails — no fallback, no degraded mode
 
 Key caching is recommended. Fetch keys with a TTL and re-fetch periodically to handle key rotation without per-request overhead.

@@ -88,7 +88,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 - **`ResourceQuery.uris`** — the specific resources being requested (a sibling of `requester`, not part of the identity envelope).
 - **`acceptable_restrictions`** — the query's restriction tolerances (here axis `FUNCTION` with `ai-input`); a sibling of `requester`.
 - **`scopes`** — `["*"]` means unrestricted public access. No subscription, no entitlement filtering.
-- **`signature`** — Ed25519 over `(id, domain, uris, scopes)`. Proves the request came from this agent.
+- **`signature`** — Ed25519 over `(id, domain, scopes)`. Proves the request came from this agent.
 - **No `delegation` field** — this agent acts on its own behalf, not under a delegated credential.
 
 ### Step 3 — ResourceResponse
@@ -190,12 +190,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
   "offer_id": "offer-tc-agents-001",
   "offer_signature": "base64-ed25519-offer-sig...",
   "offer_signature_algorithm": "ed25519",
-  "uris": [
-    "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
-  ],
-  "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
-  ],
   "requester": {
     "id": "research-bot",
     "domain": "startup.com",

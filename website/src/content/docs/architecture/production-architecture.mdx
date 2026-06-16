@@ -52,7 +52,7 @@ Every party in the protocol authenticates via Ed25519 key pairs. Each party anno
 
 | Party | Key Announcement | Signs | Verifier |
 |---|---|---|---|
-| **Requester** (Agent or other client) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) | `Requester.signature` (Ed25519) over `(id, domain, uris, scopes)` | Exchange |
+| **Requester** (Agent or other client) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) | RFC 9421 HTTP Message Signature (Ed25519) over the request, covering `(id, domain, scopes)` | Exchange |
 | **Intermediary** (e.g. Broker) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, same format) | `IntermediaryHop.signature` — each intermediary appends a signed hop to the forwarding chain | Exchange |
 | **Exchange** | `{domain}/.well-known/ramp.json` (`role=ROLE_EXCHANGE`, offer-signing keys inline in `public_keys`) | `exchange_signature` on every Offer | Agent, Broker |
 | **Provider** | `{domain}/.well-known/ramp.json` (`role=ROLE_PUBLISHER`) | Authorization declaration (not signatures) | Agent, Exchange |

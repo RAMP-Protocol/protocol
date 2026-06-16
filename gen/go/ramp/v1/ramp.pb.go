@@ -870,7 +870,7 @@ const (
 	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE      DenialReason = 3  // Requester's balance too low
 	DenialReason_DENIAL_REASON_RATE_LIMITED              DenialReason = 4  // Too many requests
 	DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE       DenialReason = 5  // Resource no longer available
-	DenialReason_DENIAL_REASON_RESTRICTION_NOT_SATISFIED DenialReason = 6  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResult.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+	DenialReason_DENIAL_REASON_RESTRICTION_NOT_SATISFIED DenialReason = 6  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
 	DenialReason_DENIAL_REASON_REPORTING_OVERDUE         DenialReason = 7  // Requester has >20% overdue reports (MAY threshold)
 	DenialReason_DENIAL_REASON_OFFER_EXPIRED             DenialReason = 8  // Offer TTL exceeded
 	DenialReason_DENIAL_REASON_SIGNATURE_INVALID         DenialReason = 9  // Offer signature verification failed

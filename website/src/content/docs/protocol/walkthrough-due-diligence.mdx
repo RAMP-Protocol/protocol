@@ -556,10 +556,6 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTran
     "signature": "ed25519:a1b2c3d4...",
     "signature_algorithm": "ed25519"
   },
-  "uris": ["https://creditdata.com/reports/duns/123456789"],
-  "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
-  ],
   "items": [
     {
       "offer_id": "offer-credit-acme-001",
@@ -590,14 +586,6 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "signature": "ed25519:c3d4e5f6...",
     "signature_algorithm": "ed25519"
   },
-  "uris": [
-    "https://pacer.uscourts.gov/case/2:24-cv-01234",
-    "https://pacer.uscourts.gov/case/3:25-cv-05678",
-    "https://pacer.uscourts.gov/case/1:23-cv-09012"
-  ],
-  "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
-  ],
   "items": [
     {
       "offer_id": "offer-legal-001",

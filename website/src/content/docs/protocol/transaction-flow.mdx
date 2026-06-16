@@ -51,7 +51,7 @@ Content-Type: application/json
     "signature_algorithm": "ed25519"
   },
   "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["FUNCTION_AI_INPUT"] }],
+  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
   "intermediaries": []
 }
 ```
@@ -302,11 +302,8 @@ Content-Type: application/json
     "signature": "ed25519:a4c9f2e8b7d1...",
     "signature_algorithm": "ed25519"
   },
-  "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["FUNCTION_AI_INPUT"] }],
   "request_id": "sq-8f3a2b",
-  "offer_signature": "a1b2c3d4e5f6...",
-  "offer_signature_algorithm": "ed25519"
+  "offer_signature": "a1b2c3d4e5f6..."
 }
 ```
 
@@ -368,11 +365,6 @@ For batch transactions, use the `items` array:
     "signature": "ed25519:b5d0e3f9c8a2...",
     "signature_algorithm": "ed25519"
   },
-  "uris": [
-    "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
-    "https://cdn.ramp-protocol.org/premium/gpu-shortage-2026.html"
-  ],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["FUNCTION_AI_INPUT"] }],
   "request_id": "sq-batch-01",
   "items": [
     {
@@ -455,8 +447,8 @@ Content-Type: application/json
   "transaction_id": "txn-mp-93a7f2",
   "billing_id": "bill-93a7f2-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
-    "subfn": ["SUB_FUNCTION_RAG"],
+    "function": ["ai_input"],
+    "subfn": ["rag"],
     "consumed_quantity": 3150,
     "displayed_to_user": true,
     "citation_included": true

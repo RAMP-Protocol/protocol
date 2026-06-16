@@ -4675,7 +4675,7 @@ export enum DenialReason {
   CONTENT_UNAVAILABLE = 5,
 
   /**
-   * Accepted term's restriction not satisfied by the request; the axes are in TransactionResult.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+   * Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
    *
    * @generated from enum value: DENIAL_REASON_RESTRICTION_NOT_SATISFIED = 6;
    */

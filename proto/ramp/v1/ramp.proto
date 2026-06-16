@@ -1730,7 +1730,7 @@ enum DenialReason {
   DENIAL_REASON_INSUFFICIENT_BALANCE = 3; // Requester's balance too low
   DENIAL_REASON_RATE_LIMITED = 4;         // Too many requests
   DENIAL_REASON_CONTENT_UNAVAILABLE = 5;  // Resource no longer available
-  DENIAL_REASON_RESTRICTION_NOT_SATISFIED = 6;  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResult.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+  DENIAL_REASON_RESTRICTION_NOT_SATISFIED = 6;  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
   DENIAL_REASON_REPORTING_OVERDUE = 7;    // Requester has >20% overdue reports (MAY threshold)
   DENIAL_REASON_OFFER_EXPIRED = 8;        // Offer TTL exceeded
   DENIAL_REASON_SIGNATURE_INVALID = 9;    // Offer signature verification failed
