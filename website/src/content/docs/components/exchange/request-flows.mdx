@@ -139,13 +139,11 @@ func (h *ExchangeHandler) DiscoverResources(
     //     subscription offer variant (rate=0) for each catalog offer with
     //     SubscriptionQuotaInfo attached. Quota enforcement is deferred to
     //     ExecuteTransaction time — DiscoverResources checks subscription status
-    //     and populates quota visibility.
-    requesterID := requester.Id
-    if requester.LicenseId != nil {
-        requesterID = *requester.LicenseId
-    }
+    //     and populates quota visibility. Subscription/entitlement is resolved
+    //     from the verified requester identity (requester.id + domain, and any
+    //     delegation) — NOT from billing_ref, which only attributes cost.
     var subStatus *SubscriptionStatus
-    if sub, err := h.billing.CheckSubscription(ctx, requesterID, tenantCfg.ID); err == nil && sub.Active {
+    if sub, err := h.billing.CheckSubscription(ctx, requester.Id, tenantCfg.ID); err == nil && sub.Active {
         subStatus = sub
     }
 
@@ -342,7 +340,7 @@ sequenceDiagram
     Note over Handler: Reconstruct offer data from signed token<br/>(no offer storage, no re-resolution)
 
     Handler->>BA: Authorize(ctx, AuthorizeRequest)
-    Note over BA: Check buyer balance/credit<br/>Validate license ID<br/>Reserve funds
+    Note over BA: Check buyer balance/credit<br/>Resolve billing reference<br/>Reserve funds
 
     alt Authorization failed
         BA-->>Handler: AuthorizeResponse{Approved: false}
@@ -449,12 +447,12 @@ func (h *ExchangeHandler) ExecuteTransaction(
         return h.completeTransaction(ctx, req, offer, tenantCfg, authResp, 0)
     }
 
-    requesterLicenseID := requester.Id
-    if requester.LicenseId != nil {
-        requesterLicenseID = *requester.LicenseId
+    billingRef := requester.Id
+    if requester.BillingRef != nil {
+        billingRef = *requester.BillingRef
     }
     authResp, err := h.billing.Authorize(ctx, &BillingAuthorizeRequest{
-        BuyerLicenseID: requesterLicenseID,
+        BillingRef:     billingRef,
         Amount:         offer.Pricing.Rate,
         Currency:       offer.Pricing.Currency,
         OfferID:        req.Msg.OfferId,
@@ -489,7 +487,7 @@ func (h *ExchangeHandler) ExecuteTransaction(
         BillingID:         authResp.BillingID,
         OfferID:           req.Msg.OfferId,
         TenantID:          tenantCfg.ID,
-        BuyerLicense:      requesterLicenseID,
+        BillingRef:        billingRef,
         AgentIdentityHash: agentHash,
         Amount:            offer.Pricing.Rate,
         Currency:          offer.Pricing.Currency,
@@ -598,9 +596,9 @@ func (h *ExchangeHandler) executeBatchTransaction(
 ) (*connect.Response[rampv1.TransactionResponse], error) {
     requester := req.Msg.Requester
     agentHash := sha256Hex(requester.Id + ":" + requester.Domain)
-    requesterLicenseID := requester.Id
-    if requester.LicenseId != nil {
-        requesterLicenseID = *requester.LicenseId
+    billingRef := requester.Id
+    if requester.BillingRef != nil {
+        billingRef = *requester.BillingRef
     }
     var resultItems []*rampv1.TransactionResultItem
     var totalAmount float64
@@ -640,7 +638,7 @@ func (h *ExchangeHandler) executeBatchTransaction(
             }
         } else {
             authResp, err := h.billing.Authorize(ctx, &BillingAuthorizeRequest{
-                BuyerLicenseID: requesterLicenseID,
+                BillingRef:     billingRef,
                 Amount:         offer.Pricing.Rate,
                 Currency:       offer.Pricing.Currency,
                 OfferID:        item.OfferId,
@@ -661,7 +659,7 @@ func (h *ExchangeHandler) executeBatchTransaction(
         record := &TransactionRecord{
             TransactionID: txnID, BillingID: billingID,
             OfferID: item.OfferId, TenantID: tenantCfg.ID,
-            BuyerLicense: requesterLicenseID,
+            BillingRef: billingRef,
             Amount: amount, Currency: offer.Pricing.Currency,
         }
         if err := h.txLog.Write(ctx, record); err != nil {

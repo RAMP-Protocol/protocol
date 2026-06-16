@@ -61,7 +61,7 @@ func (c *Client) Close(ctx context.Context) error
 
 ```go
 client, err := ramp.NewClient(ramp.Config{
-    LicenseID:  "LIC-BUYER-001",
+    BillingRef: "ACCT-BUYER-001",
     SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
     Budget:     ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
 })
@@ -110,7 +110,7 @@ The TypeScript SDK is not yet published to npm. Use the working implementation a
 import { RampClient } from "./poc/agent-sdk/client";
 
 const client = new RampClient({
-    licenseId: "LIC-BUYER-001",
+    billingRef: "ACCT-BUYER-001",
     signingKey: process.env.RAMP_SIGNING_KEY!,
     budget: { maxPerRequest: 0.10, currency: "USD" },
 });
@@ -140,7 +140,7 @@ The Python SDK is not yet published to PyPI. See [`poc/mcp-tool/server.py`](http
 from ramp_sdk import RampClient, Budget
 
 client = RampClient(
-    license_id="LIC-BUYER-001",
+    billing_ref="ACCT-BUYER-001",
     signing_key=os.environ["RAMP_SIGNING_KEY"],
     budget=Budget(max_per_request=0.10, currency="USD"),
 )
@@ -218,8 +218,9 @@ type Cost struct {
 
 ```go
 type Config struct {
-    // REQUIRED. License ID issued by the Exchange operator.
-    LicenseID string
+    // Billing reference issued by the Exchange operator (cost-attribution
+    // handle; not an entitlement — access is via scopes/delegation).
+    BillingRef string
 
     // REQUIRED. Ed25519 private key for agent request signatures.
     SigningKey string
@@ -252,7 +253,7 @@ type Config struct {
 
 ```go
 client, _ := ramp.NewClient(ramp.Config{
-    LicenseID: "LIC-BUYER-001",
+    BillingRef: "ACCT-BUYER-001",
     SigningKey: os.Getenv("RAMP_SIGNING_KEY"),
     Budget:    ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
 })

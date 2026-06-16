@@ -100,7 +100,7 @@ Identity and entitlements only — who is asking and what they're entitled to. W
 | `domain` | string | 2 | Requester's domain -- used for public key lookup at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) |
 | `type` | RequesterType | 3 | What kind of entity is making this request |
 | `name` | optional string | 4 | Human-readable name (e.g. "Acme Research Assistant") |
-| `license_id` | optional string | 5 | Commercial license or subscription identifier (same role as CoMP `aisysuse.lid`) |
+| `billing_ref` | optional string | 5 | Opaque billing reference linking the requester to the Exchange's/publisher's billing systems (account, PO, cost center). NOT an entitlement — access is via scopes/delegation. (Maps from CoMP `aisysuse.lid`.) |
 | `scopes` | repeated string | 6 | Entitlement scopes declaring what the requester can access. Format: `"{domain}:{permission}"`. Empty = default access policy. |
 | `delegation` | optional Delegation | 7 | Present when requester acts on behalf of another entity |
 | `ext` | Struct | 15 | Extension point |

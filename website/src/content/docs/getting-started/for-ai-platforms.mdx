@@ -100,7 +100,7 @@ RAMP doesn't replace your enterprise IAM — the Broker integrates with it. This
 
 | Layer | Who Handles It | How |
 |-------|---------------|-----|
-| **Authentication** | Broker | Integrates with Azure AD, Okta, SAML. Maps user identity → RAMP license ID |
+| **Authentication** | Broker | Integrates with Azure AD, Okta, SAML. Maps user identity → RAMP identity and scopes (entitlement); attaches a `billing_ref` as the cost-attribution handle |
 | **Authorization (RBAC)** | Broker | "Analysts can query credit and legal. Only compliance team can access medical." Enforced before forwarding to Exchange |
 | **Data classification** | Broker + Exchange | Internal Exchange tags resources with classification levels. Broker enforces "Confidential resources only to authorized roles" |
 | **Cost allocation** | Broker | `budget_scope: "dept:engineering"` or `"deal:acme-acquisition"`. Maps to cost centers in your ERP |

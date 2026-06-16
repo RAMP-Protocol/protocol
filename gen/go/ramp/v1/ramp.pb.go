@@ -3575,12 +3575,13 @@ func (x *Pricing) GetMetering() PricingMetering {
 
 // Requester — Universal identity for any RAMP client.
 //
-// Carries identity and entitlements ONLY — who is asking and what they are
-// entitled to (license_id, scopes, delegation). What they are asking for (uris)
-// and the limits they will operate within (acceptable_restrictions) belong to
-// the ask, not the identity, and live on ResourceQuery / RAMPRequest. The
-// Exchange verifies identity via Ed25519 signature, then filters its catalog by
-// the requester's scopes.
+// Carries identity, entitlements, and a billing handle ONLY — who is asking,
+// what they are entitled to (scopes, delegation), and how to bill them
+// (billing_ref). What they are asking for (uris) and the limits they will
+// operate within (acceptable_restrictions) belong to the ask, not the identity,
+// and live on ResourceQuery / RAMPRequest. The Exchange verifies identity via
+// the RFC 9421 request signature, then filters its catalog by the requester's
+// scopes.
 type Requester struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique requester identifier (e.g., "agent-research-bot-001").
@@ -3592,10 +3593,13 @@ type Requester struct {
 	Type RequesterType `protobuf:"varint,3,opt,name=type,proto3,enum=ramp.v1.RequesterType" json:"type,omitempty"`
 	// Human-readable name (e.g., "Acme Research Assistant").
 	Name *string `protobuf:"bytes,4,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	// Commercial license or subscription identifier.
-	// Exchange uses this to look up entitlements, pricing tiers, and
-	// existing subscription deals.
-	LicenseId *string `protobuf:"bytes,5,opt,name=license_id,json=licenseId,proto3,oneof" json:"license_id,omitempty"`
+	// Opaque billing reference linking this requester to the Exchange's (and,
+	// through the Exchange, the publisher's) billing/accounting systems — e.g. a
+	// billing account, PO number, or cost center. NOT an entitlement or
+	// subscription credential: access is governed by scopes and delegation, and
+	// identity by the request signature. The Exchange uses it only for invoicing
+	// and cost attribution.
+	BillingRef *string `protobuf:"bytes,5,opt,name=billing_ref,json=billingRef,proto3,oneof" json:"billing_ref,omitempty"`
 	// Entitlement scopes. Declare what the requester can access.
 	//
 	// The Exchange filters its catalog to resources matching these scopes.
@@ -3686,9 +3690,9 @@ func (x *Requester) GetName() string {
 	return ""
 }
 
-func (x *Requester) GetLicenseId() string {
-	if x != nil && x.LicenseId != nil {
-		return *x.LicenseId
+func (x *Requester) GetBillingRef() string {
+	if x != nil && x.BillingRef != nil {
+		return *x.BillingRef
 	}
 	return ""
 }
@@ -7608,22 +7612,22 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
 	"\x05_unitB\v\n" +
-	"\t_metering\"\xe3\x02\n" +
+	"\t_metering\"\xe6\x02\n" +
 	"\tRequester\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12*\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x16.ramp.v1.RequesterTypeR\x04type\x12\x17\n" +
-	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12\"\n" +
-	"\n" +
-	"license_id\x18\x05 \x01(\tH\x01R\tlicenseId\x88\x01\x01\x12\x16\n" +
+	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12$\n" +
+	"\vbilling_ref\x18\x05 \x01(\tH\x01R\n" +
+	"billingRef\x88\x01\x01\x12\x16\n" +
 	"\x06scopes\x18\x06 \x03(\tR\x06scopes\x128\n" +
 	"\n" +
 	"delegation\x18\a \x01(\v2\x13.ramp.v1.DelegationH\x02R\n" +
 	"delegation\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\a\n" +
-	"\x05_nameB\r\n" +
-	"\v_license_idB\r\n" +
+	"\x05_nameB\x0e\n" +
+	"\f_billing_refB\r\n" +
 	"\v_delegation\"\xe9\x04\n" +
 	"\n" +
 	"Delegation\x12)\n" +

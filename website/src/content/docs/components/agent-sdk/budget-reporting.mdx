@@ -309,7 +309,7 @@ The SDK exposes Prometheus-compatible metrics via an optional `metrics.Handler`:
 
 - The `SigningKey` (Ed25519 private key) is stored in the `Config` struct and never serialized, logged, or included in error messages.
 - Ed25519 signatures are computed per-request. The private key produces an RFC 9421 HTTP Message Signature in the HTTP headers of each `DiscoverResources` and `ExecuteTransaction` request.
-- The Exchange verifies signatures using the agent's registered public key (looked up by `LicenseID`). The private key never leaves the agent.
+- The Exchange verifies signatures using the agent's registered public key (looked up by the agent's `domain` + signature `keyid` from its WellKnownManifest, not by any billing handle). The private key never leaves the agent.
 
 ### Transport Security
 

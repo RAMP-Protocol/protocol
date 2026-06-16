@@ -183,7 +183,7 @@ client.FetchBatch(ctx, [url1, url2, url3])
 
 ```go
 client, err := ramp.NewClient(ramp.Config{
-    LicenseID:  "LIC-BUYER-001",
+    BillingRef: "ACCT-BUYER-001",
     SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
     Budget:     ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
 })
@@ -337,7 +337,7 @@ func TestAgentLogic(t *testing.T) {
     defer mock.Close()
 
     client, _ := ramp.NewClient(ramp.Config{
-        LicenseID: "test-license",
+        BillingRef: "test-billing-ref",
         SigningKey: "test-key",
         Budget:    ramp.Budget{MaxPerRequest: 1.00, Currency: "USD"},
         Exchanges: []ramp.ExchangeConfig{{

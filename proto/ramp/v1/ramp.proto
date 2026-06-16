@@ -1302,12 +1302,13 @@ enum DeliveryMethod {
 
 // Requester — Universal identity for any RAMP client.
 //
-// Carries identity and entitlements ONLY — who is asking and what they are
-// entitled to (license_id, scopes, delegation). What they are asking for (uris)
-// and the limits they will operate within (acceptable_restrictions) belong to
-// the ask, not the identity, and live on ResourceQuery / RAMPRequest. The
-// Exchange verifies identity via Ed25519 signature, then filters its catalog by
-// the requester's scopes.
+// Carries identity, entitlements, and a billing handle ONLY — who is asking,
+// what they are entitled to (scopes, delegation), and how to bill them
+// (billing_ref). What they are asking for (uris) and the limits they will
+// operate within (acceptable_restrictions) belong to the ask, not the identity,
+// and live on ResourceQuery / RAMPRequest. The Exchange verifies identity via
+// the RFC 9421 request signature, then filters its catalog by the requester's
+// scopes.
 message Requester {
   // Unique requester identifier (e.g., "agent-research-bot-001").
   string id = 1;
@@ -1322,10 +1323,13 @@ message Requester {
   // Human-readable name (e.g., "Acme Research Assistant").
   optional string name = 4;
 
-  // Commercial license or subscription identifier.
-  // Exchange uses this to look up entitlements, pricing tiers, and
-  // existing subscription deals.
-  optional string license_id = 5;
+  // Opaque billing reference linking this requester to the Exchange's (and,
+  // through the Exchange, the publisher's) billing/accounting systems — e.g. a
+  // billing account, PO number, or cost center. NOT an entitlement or
+  // subscription credential: access is governed by scopes and delegation, and
+  // identity by the request signature. The Exchange uses it only for invoicing
+  // and cost attribution.
+  optional string billing_ref = 5;
 
   // Entitlement scopes. Declare what the requester can access.
   //

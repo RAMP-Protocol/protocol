@@ -67,11 +67,11 @@ The SDK is not yet published to package registries. Use the working implementati
 - **Python**: See [`poc/mcp-tool/server.py`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/mcp-tool/server.py) for the Python reference implementation (FastMCP-based).
 </Aside>
 
-Configure it with your license ID, signing key, and budget:
+Configure it with your billing reference, signing key, and budget:
 
 ```go
 client, _ := ramp.NewClient(ramp.Config{
-    LicenseID:  "LIC-YOUR-COMPANY-001",
+    BillingRef:  "ACME-COST-CENTER-001",
     SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
     SupportedProfiles: []string{
         "ramp-news-v1",       // articles, podcasts, broadcasting
@@ -364,7 +364,7 @@ The core protocol is domain-agnostic. Extension profiles add domain-specific met
 
 ## Next Steps
 
-1. Get a license ID from a participating Exchange operator
+1. Get a billing reference from a participating Exchange operator (the handle that links your requests to the Exchange's billing/accounting system)
 2. Install the SDK, declare your `supported_profiles`, and configure your budget
 3. Replace your per-provider integrations with `client.Fetch()`
 

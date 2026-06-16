@@ -155,7 +155,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
 SSP-Alpha also knows about Anthropic's subscription:
 
 ```
-BillingAdapter.CheckSubscription("LIC-ANTHROPIC-001", "hearst-media")
+BillingAdapter.CheckSubscription("claude-agent-001@claude.ai", "hearst-media")
   -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026", active: true, quota_remaining: 850000 }
 ```
 
@@ -243,7 +243,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "license_id": "LIC-ANTHROPIC-001",
+    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": ["https://techcrunch.com/premium/ai-regulation-2026.html"],
@@ -262,8 +262,10 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
    c. Verify the signature against public key -> pass
 3. Resolve tenant: techcrunch.com -> Hearst Media tenant
 4. Find offers: lookup "/premium/ai-regulation-2026.html" in radix trie -> match
-5. Check subscription with quota (via requester.license_id):
-   BillingAdapter.CheckSubscription("LIC-ANTHROPIC-001", "hearst-media")
+5. Check subscription with quota (keyed on the requester's VERIFIED IDENTITY
+   from step 2 — requester.id + domain, via the RFC 9421 signature; entitlement
+   is NOT derived from billing_ref, which only attributes cost):
+   BillingAdapter.CheckSubscription("claude-agent-001@claude.ai", "hearst-media")
      -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026",
           active: true,
           quota_remaining: 850000 }
@@ -428,7 +430,7 @@ If Anthropic uses its hosted Broker instead of the SDK directly, the Broker prov
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "license_id": "LIC-ANTHROPIC-001",
+    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": [
@@ -465,7 +467,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "license_id": "LIC-ANTHROPIC-001",
+    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": [
@@ -612,7 +614,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "license_id": "LIC-ANTHROPIC-001",
+    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "offer_signature": "base64-ed25519-sig-B..."
@@ -632,7 +634,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "license_id": "LIC-ANTHROPIC-001",
+    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "request_id": "pr-claude-001",
@@ -658,7 +660,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
    - Reconstruct offer data from signed token (stateless, no offer storage)
 5. subscription_id present on offer -> SKIP billing.Authorize (already paid under subscription)
 6. Quota check:
-   - BillingAdapter.CheckSubscription("LIC-ANTHROPIC-001", "hearst-media")
+   - BillingAdapter.CheckSubscription("claude-agent-001@claude.ai", "hearst-media")
      -> quota_remaining: 850000 tokens
    - Estimated consumption: 3300 tokens
    - 850000 > 3300 -> sufficient quota, proceed

@@ -65,7 +65,7 @@ func main() {
 
 ### Hosted SaaS (Multi-Tenancy)
 
-The hosted Broker serves multiple AI companies. Tenant isolation is by API key or `license_id` prefix. Each tenant gets isolated: Exchange registry (different trust levels per tenant), budget tracking (per-tenant Redis keyspace), selection policy (per-tenant configuration), and selection logs.
+The hosted Broker serves multiple AI companies. Tenant isolation is by API key or `billing_ref` prefix. Each tenant gets isolated: Exchange registry (different trust levels per tenant), budget tracking (per-tenant Redis keyspace), selection policy (per-tenant configuration), and selection logs.
 
 ```go
 func main() {

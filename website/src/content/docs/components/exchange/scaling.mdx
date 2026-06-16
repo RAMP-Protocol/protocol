@@ -272,7 +272,7 @@ For the Scale tier (10K RPS) and beyond, shard by **provider tenant**:
 - Load balancer can route based on the URI domain in the ResourceQuery.
 
 **Why not shard by buyer or content path?**
-- Buyer sharding requires the load balancer to inspect the request body (license ID), which is slower and more complex.
+- Buyer sharding requires the load balancer to inspect the request body (billing reference), which is slower and more complex.
 - Content path sharding fragments a tenant's catalog across shards, complicating RSL ingestion and offer resolution.
 
 **Load balancing**: Layer 7 (HTTP) load balancer. Use consistent hashing on the target domain extracted from the request URI for sticky routing. Fallback to round-robin for requests without a resolvable domain.
@@ -476,7 +476,7 @@ All metrics are exposed via Prometheus (OpenMetrics format) on `/metrics`.
 | `reporting_obligations_total` | Gauge | `tenant_id`, `state` | Obligations by state |
 | `reporting_compliance_rate` | Gauge | `tenant_id` | % of obligations fulfilled on time |
 | `reporting_token_deviation` | Histogram | `tenant_id` | Deviation between reported and estimated tokens |
-| `reporting_token_deviation_cumulative` | Gauge | `tenant_id`, `buyer_license` | Cumulative token deviation per buyer |
+| `reporting_token_deviation_cumulative` | Gauge | `tenant_id`, `billing_ref` | Cumulative token deviation per buyer |
 
 ### Health Check Endpoint
 
@@ -506,7 +506,7 @@ type ReadinessCheck struct {
 All logs use `log/slog` with structured key-value pairs. No `log.Printf` or custom loggers. Every error path MUST log before returning.
 
 **Redaction rules** (per threat model):
-- `buyer_license`: last 4 characters only (e.g., `****a1b2`)
+- `billing_ref`: last 4 characters only (e.g., `****a1b2`)
 - Signing keys: never logged
 - Signed URLs: hash only, never full URL
 - Request/response bodies: logged at DEBUG level only

@@ -92,7 +92,7 @@ graph LR
 
 | Role | Description | Standard |
 |---|---|---|
-| **AI Agent** | The LLM, RAG system, or agentic application that needs content. Authenticates via Ed25519 signatures. The license ID (`lid`) is a public identifier, not a credential. | CoMP: "Requesting Party". RAMP v1.0 uses the `Requester` message (not CoMP `AISystem`); `lid` is `Requester.license_id`. |
+| **AI Agent** | The LLM, RAG system, or agentic application that needs content. Authenticates via Ed25519 signatures. Identity is the RFC 9421 request signature and access is scopes + delegation — not the billing reference. | CoMP: "Requesting Party". RAMP v1.0 uses the `Requester` message (not CoMP `AISystem`); CoMP's `lid` maps to `Requester.billing_ref`, an opaque billing reference (account/PO/cost center), not a credential. |
 | **RAMP Broker** | Optional demand-side router. Queries multiple Exchanges, compares offers by unit_cost, deduplicates by ResourceIdentity, enforces budget constraints. | RAMP v1.0: "RAMP Broker" |
 | **Exchange** | Exposes resource catalog with pricing. Authorizes transactions. Issues delivery instructions (signed URLs). | RAMP v1.0: "Exchange"; implementation of CoMP endpoints |
 | **Resource Provider** | The provider. Owns the resources, sets terms via RSL. | CoMP: "Content Owner"; RSL: "Licensor" |

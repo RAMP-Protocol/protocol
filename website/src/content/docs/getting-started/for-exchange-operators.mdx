@@ -178,7 +178,7 @@ For resources that exist but fall outside the requester's scopes:
 
 ### Subscription Quota Signaling
 
-When the requester holds a subscription (identifiable via `license_id` or subscription scopes), populate `SubscriptionQuotaInfo` entries on offers and transaction responses. This proactive quota signaling lets agents track remaining allowance and avoid committing to transactions they cannot complete. Track `max_accesses` and `quota_period` from the `Delegation` message when present.
+When the requester holds a subscription (identifiable via the requester's `delegation` and/or subscription scopes — not via `billing_ref`, which only attributes cost), populate `SubscriptionQuotaInfo` entries on offers and transaction responses. This proactive quota signaling lets agents track remaining allowance and avoid committing to transactions they cannot complete. Track `max_accesses` and `quota_period` from the `Delegation` message when present.
 
 ### New Denial Reasons to Implement
 

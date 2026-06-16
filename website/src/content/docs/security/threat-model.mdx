@@ -77,8 +77,8 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 **Countermeasure (protocol)**: Rate limiting on DiscoverResources. Exchange tracks query-to-transaction ratio per agent.
 
 ### T13: Credential sharing / proxy laundering
-**Attack**: One license ID shared across organizations.
-**Countermeasure (protocol)**: Exchange monitors usage patterns (IP diversity, volume spikes). Ed25519 agent signatures bind requests to specific key pairs.
+**Attack**: One billing reference shared across organizations.
+**Countermeasure (protocol)**: Anti-abuse is anchored on the **verified requester identity** (domain/key), not on the self-supplied `billing_ref` (an opaque billing handle that proves no entitlement). Exchange monitors usage patterns (IP diversity, volume spikes). Ed25519 agent signatures bind requests to specific key pairs; `billing_ref` only attributes cost.
 
 ## 3. Provider-Side Threats (Dishonest Provider)
 
@@ -136,7 +136,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T26: DiscoverResources flooding (DoS)
 **Attack**: Flood DiscoverResources to exhaust Exchange resources.
-**Countermeasure (protocol)**: Per-partner rate limiting via license ID validation. Anonymous queries rejected.
+**Countermeasure (protocol)**: Per-partner rate limiting keyed on the **verified requester identity** (RFC 9421 request signature — domain/key), not on the self-supplied `billing_ref`. Anonymous queries rejected.
 
 ## 6. Systemic / Arbitrage Threats
 
