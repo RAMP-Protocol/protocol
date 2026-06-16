@@ -116,8 +116,7 @@ Authorization denials use a closed enum:
 
 | Enum Value | Description |
 |---|---|
-| `DENIAL_REASON_INVALID_LICENSE` | License ID not recognized by the billing adapter |
-| `DENIAL_REASON_EXPIRED_LICENSE` | License exists but has expired |
+| `DENIAL_REASON_BILLING_REF_INACTIVE` | `billing_ref` not active / not recognized by the billing adapter |
 | `DENIAL_REASON_INSUFFICIENT_BALANCE` | Buyer's prepaid balance or credit limit exhausted |
 | `DENIAL_REASON_RATE_LIMITED` | Buyer exceeded per-period transaction rate limit |
 | `DENIAL_REASON_CONTENT_UNAVAILABLE` | Provider has withdrawn or paused the content |

@@ -865,51 +865,48 @@ type DenialReason int32
 
 const (
 	DenialReason_DENIAL_REASON_UNSPECIFIED               DenialReason = 0
-	DenialReason_DENIAL_REASON_INVALID_LICENSE           DenialReason = 1  // License ID not recognized
-	DenialReason_DENIAL_REASON_EXPIRED_LICENSE           DenialReason = 2  // License ID expired
-	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE      DenialReason = 3  // Requester's balance too low
-	DenialReason_DENIAL_REASON_RATE_LIMITED              DenialReason = 4  // Too many requests
-	DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE       DenialReason = 5  // Resource no longer available
-	DenialReason_DENIAL_REASON_RESTRICTION_NOT_SATISFIED DenialReason = 6  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
-	DenialReason_DENIAL_REASON_REPORTING_OVERDUE         DenialReason = 7  // Requester has >20% overdue reports (MAY threshold)
-	DenialReason_DENIAL_REASON_OFFER_EXPIRED             DenialReason = 8  // Offer TTL exceeded
-	DenialReason_DENIAL_REASON_SIGNATURE_INVALID         DenialReason = 9  // Offer signature verification failed
-	DenialReason_DENIAL_REASON_QUOTA_EXCEEDED            DenialReason = 10 // Subscription access count exhausted for this period
-	DenialReason_DENIAL_REASON_DELEGATION_EXPIRED        DenialReason = 11 // Biscuit delegation token expired
-	DenialReason_DENIAL_REASON_SCOPE_INSUFFICIENT        DenialReason = 12 // Requester scopes don't cover this resource
+	DenialReason_DENIAL_REASON_BILLING_REF_INACTIVE      DenialReason = 1  // billing_ref is not active / not recognized by the billing system
+	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE      DenialReason = 2  // Requester's balance too low
+	DenialReason_DENIAL_REASON_RATE_LIMITED              DenialReason = 3  // Too many requests
+	DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE       DenialReason = 4  // Resource no longer available
+	DenialReason_DENIAL_REASON_RESTRICTION_NOT_SATISFIED DenialReason = 5  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+	DenialReason_DENIAL_REASON_REPORTING_OVERDUE         DenialReason = 6  // Requester has >20% overdue reports (MAY threshold)
+	DenialReason_DENIAL_REASON_OFFER_EXPIRED             DenialReason = 7  // Offer TTL exceeded
+	DenialReason_DENIAL_REASON_SIGNATURE_INVALID         DenialReason = 8  // Offer signature verification failed
+	DenialReason_DENIAL_REASON_QUOTA_EXCEEDED            DenialReason = 9  // Subscription access count exhausted for this period
+	DenialReason_DENIAL_REASON_DELEGATION_INVALID        DenialReason = 10 // Delegation missing, unverifiable, expired, or its attenuation does not check out
+	DenialReason_DENIAL_REASON_SCOPE_INSUFFICIENT        DenialReason = 11 // Requester scopes don't cover this resource
 )
 
 // Enum value maps for DenialReason.
 var (
 	DenialReason_name = map[int32]string{
 		0:  "DENIAL_REASON_UNSPECIFIED",
-		1:  "DENIAL_REASON_INVALID_LICENSE",
-		2:  "DENIAL_REASON_EXPIRED_LICENSE",
-		3:  "DENIAL_REASON_INSUFFICIENT_BALANCE",
-		4:  "DENIAL_REASON_RATE_LIMITED",
-		5:  "DENIAL_REASON_CONTENT_UNAVAILABLE",
-		6:  "DENIAL_REASON_RESTRICTION_NOT_SATISFIED",
-		7:  "DENIAL_REASON_REPORTING_OVERDUE",
-		8:  "DENIAL_REASON_OFFER_EXPIRED",
-		9:  "DENIAL_REASON_SIGNATURE_INVALID",
-		10: "DENIAL_REASON_QUOTA_EXCEEDED",
-		11: "DENIAL_REASON_DELEGATION_EXPIRED",
-		12: "DENIAL_REASON_SCOPE_INSUFFICIENT",
+		1:  "DENIAL_REASON_BILLING_REF_INACTIVE",
+		2:  "DENIAL_REASON_INSUFFICIENT_BALANCE",
+		3:  "DENIAL_REASON_RATE_LIMITED",
+		4:  "DENIAL_REASON_CONTENT_UNAVAILABLE",
+		5:  "DENIAL_REASON_RESTRICTION_NOT_SATISFIED",
+		6:  "DENIAL_REASON_REPORTING_OVERDUE",
+		7:  "DENIAL_REASON_OFFER_EXPIRED",
+		8:  "DENIAL_REASON_SIGNATURE_INVALID",
+		9:  "DENIAL_REASON_QUOTA_EXCEEDED",
+		10: "DENIAL_REASON_DELEGATION_INVALID",
+		11: "DENIAL_REASON_SCOPE_INSUFFICIENT",
 	}
 	DenialReason_value = map[string]int32{
 		"DENIAL_REASON_UNSPECIFIED":               0,
-		"DENIAL_REASON_INVALID_LICENSE":           1,
-		"DENIAL_REASON_EXPIRED_LICENSE":           2,
-		"DENIAL_REASON_INSUFFICIENT_BALANCE":      3,
-		"DENIAL_REASON_RATE_LIMITED":              4,
-		"DENIAL_REASON_CONTENT_UNAVAILABLE":       5,
-		"DENIAL_REASON_RESTRICTION_NOT_SATISFIED": 6,
-		"DENIAL_REASON_REPORTING_OVERDUE":         7,
-		"DENIAL_REASON_OFFER_EXPIRED":             8,
-		"DENIAL_REASON_SIGNATURE_INVALID":         9,
-		"DENIAL_REASON_QUOTA_EXCEEDED":            10,
-		"DENIAL_REASON_DELEGATION_EXPIRED":        11,
-		"DENIAL_REASON_SCOPE_INSUFFICIENT":        12,
+		"DENIAL_REASON_BILLING_REF_INACTIVE":      1,
+		"DENIAL_REASON_INSUFFICIENT_BALANCE":      2,
+		"DENIAL_REASON_RATE_LIMITED":              3,
+		"DENIAL_REASON_CONTENT_UNAVAILABLE":       4,
+		"DENIAL_REASON_RESTRICTION_NOT_SATISFIED": 5,
+		"DENIAL_REASON_REPORTING_OVERDUE":         6,
+		"DENIAL_REASON_OFFER_EXPIRED":             7,
+		"DENIAL_REASON_SIGNATURE_INVALID":         8,
+		"DENIAL_REASON_QUOTA_EXCEEDED":            9,
+		"DENIAL_REASON_DELEGATION_INVALID":        10,
+		"DENIAL_REASON_SCOPE_INSUFFICIENT":        11,
 	}
 )
 
@@ -8127,22 +8124,21 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x1fRESOURCE_MUTABILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aRESOURCE_MUTABILITY_STATIC\x10\x01\x12\x1f\n" +
 	"\x1bRESOURCE_MUTABILITY_DYNAMIC\x10\x02\x12\x1c\n" +
-	"\x18RESOURCE_MUTABILITY_LIVE\x10\x03*\xe8\x03\n" +
+	"\x18RESOURCE_MUTABILITY_LIVE\x10\x03*\xca\x03\n" +
 	"\fDenialReason\x12\x1d\n" +
-	"\x19DENIAL_REASON_UNSPECIFIED\x10\x00\x12!\n" +
-	"\x1dDENIAL_REASON_INVALID_LICENSE\x10\x01\x12!\n" +
-	"\x1dDENIAL_REASON_EXPIRED_LICENSE\x10\x02\x12&\n" +
-	"\"DENIAL_REASON_INSUFFICIENT_BALANCE\x10\x03\x12\x1e\n" +
-	"\x1aDENIAL_REASON_RATE_LIMITED\x10\x04\x12%\n" +
-	"!DENIAL_REASON_CONTENT_UNAVAILABLE\x10\x05\x12+\n" +
-	"'DENIAL_REASON_RESTRICTION_NOT_SATISFIED\x10\x06\x12#\n" +
-	"\x1fDENIAL_REASON_REPORTING_OVERDUE\x10\a\x12\x1f\n" +
-	"\x1bDENIAL_REASON_OFFER_EXPIRED\x10\b\x12#\n" +
-	"\x1fDENIAL_REASON_SIGNATURE_INVALID\x10\t\x12 \n" +
-	"\x1cDENIAL_REASON_QUOTA_EXCEEDED\x10\n" +
+	"\x19DENIAL_REASON_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"DENIAL_REASON_BILLING_REF_INACTIVE\x10\x01\x12&\n" +
+	"\"DENIAL_REASON_INSUFFICIENT_BALANCE\x10\x02\x12\x1e\n" +
+	"\x1aDENIAL_REASON_RATE_LIMITED\x10\x03\x12%\n" +
+	"!DENIAL_REASON_CONTENT_UNAVAILABLE\x10\x04\x12+\n" +
+	"'DENIAL_REASON_RESTRICTION_NOT_SATISFIED\x10\x05\x12#\n" +
+	"\x1fDENIAL_REASON_REPORTING_OVERDUE\x10\x06\x12\x1f\n" +
+	"\x1bDENIAL_REASON_OFFER_EXPIRED\x10\a\x12#\n" +
+	"\x1fDENIAL_REASON_SIGNATURE_INVALID\x10\b\x12 \n" +
+	"\x1cDENIAL_REASON_QUOTA_EXCEEDED\x10\t\x12$\n" +
+	" DENIAL_REASON_DELEGATION_INVALID\x10\n" +
 	"\x12$\n" +
-	" DENIAL_REASON_DELEGATION_EXPIRED\x10\v\x12$\n" +
-	" DENIAL_REASON_SCOPE_INSUFFICIENT\x10\f*\x8c\x02\n" +
+	" DENIAL_REASON_SCOPE_INSUFFICIENT\x10\v*\x8c\x02\n" +
 	"\x0fIngestionSource\x12 \n" +
 	"\x1cINGESTION_SOURCE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dINGESTION_SOURCE_RAMP_SITEMAP\x10\x01\x12\x18\n" +

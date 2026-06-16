@@ -861,18 +861,17 @@ When an `Obligation` activates.
 | Value | Name | Description |
 |---|---|---|
 | 0 | UNSPECIFIED | |
-| 1 | INVALID_LICENSE | License ID not recognized |
-| 2 | EXPIRED_LICENSE | License ID expired |
-| 3 | INSUFFICIENT_BALANCE | Buyer's balance too low |
-| 4 | RATE_LIMITED | Too many requests |
-| 5 | CONTENT_UNAVAILABLE | Content no longer available |
-| 6 | RESTRICTION_NOT_SATISFIED | Accepted term's restriction not satisfied by the request (axes in `restriction_mismatches`, same `RestrictionKind` vocabulary as the terms) |
-| 7 | REPORTING_OVERDUE | Buyer has overdue reports |
-| 8 | OFFER_EXPIRED | Offer TTL exceeded |
-| 9 | SIGNATURE_INVALID | Signature verification failed |
-| 10 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
-| 11 | DELEGATION_EXPIRED | Biscuit delegation token expired |
-| 12 | SCOPE_INSUFFICIENT | Requester scopes don't cover this resource |
+| 1 | BILLING_REF_INACTIVE | `billing_ref` is not active / not recognized by the billing system |
+| 2 | INSUFFICIENT_BALANCE | Buyer's balance too low |
+| 3 | RATE_LIMITED | Too many requests |
+| 4 | CONTENT_UNAVAILABLE | Content no longer available |
+| 5 | RESTRICTION_NOT_SATISFIED | Accepted term's restriction not satisfied by the request (axes in `restriction_mismatches`, same `RestrictionKind` vocabulary as the terms) |
+| 6 | REPORTING_OVERDUE | Buyer has overdue reports |
+| 7 | OFFER_EXPIRED | Offer TTL exceeded |
+| 8 | SIGNATURE_INVALID | Signature verification failed |
+| 9 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
+| 10 | DELEGATION_INVALID | Delegation missing, unverifiable, expired, or its attenuation does not check out |
+| 11 | SCOPE_INSUFFICIENT | Requester scopes don't cover this resource |
 
 ### DisputeReason
 

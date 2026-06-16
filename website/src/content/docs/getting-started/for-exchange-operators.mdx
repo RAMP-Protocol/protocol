@@ -154,7 +154,7 @@ When a request includes a `Delegation` message (nested inside `Requester`), your
 2. Verify the authority block (block 0) is signed by the Ed25519 key published at `{principal_domain}/.well-known/ramp.json` (`role=ROLE_AGENT`)
 3. Verify each attenuation block's signature (each signed by the entity that appended it)
 4. Evaluate all check conditions across all blocks — scope restrictions, spend caps, URI constraints
-5. Check `expires_at` against current time — reject expired tokens with `DENIAL_REASON_DELEGATION_EXPIRED`
+5. Check `expires_at` against current time — reject expired tokens with `DENIAL_REASON_DELEGATION_INVALID`
 6. Optionally check `revocation_uri` for high-value transactions
 
 This verification is entirely offline — no callback to the principal is required.
@@ -187,7 +187,7 @@ RAMP defines three identity-related denial reasons your Exchange MUST return whe
 | Denial Reason | When to Return |
 |---|---|
 | `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for the current `quota_period` |
-| `DENIAL_REASON_DELEGATION_EXPIRED` | Biscuit delegation token `expires_at` is in the past |
+| `DENIAL_REASON_DELEGATION_INVALID` | Biscuit delegation token `expires_at` is in the past |
 | `DENIAL_REASON_SCOPE_INSUFFICIENT` | Requester's scopes do not cover the requested resource (transaction-time denial) |
 
 For the full identity model specification — Requester fields, Biscuit structure, scope format, and key management — see [Authentication](/protocol/authentication/).

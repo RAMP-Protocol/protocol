@@ -252,7 +252,7 @@ type NoOfferError struct {
 
 // TransactionDeniedError -- Exchange denied the transaction.
 type TransactionDeniedError struct {
-    Reason      DenialReason // INVALID_LICENSE, EXPIRED_LICENSE, etc.
+    Reason      DenialReason // BILLING_REF_INACTIVE, DELEGATION_INVALID, etc.
     Exchange string
     OfferID     string
 }

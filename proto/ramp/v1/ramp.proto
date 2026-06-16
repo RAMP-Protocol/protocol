@@ -1712,18 +1712,17 @@ message Cost {
 // of denial patterns across the ecosystem.
 enum DenialReason {
   DENIAL_REASON_UNSPECIFIED = 0;
-  DENIAL_REASON_INVALID_LICENSE = 1;      // License ID not recognized
-  DENIAL_REASON_EXPIRED_LICENSE = 2;      // License ID expired
-  DENIAL_REASON_INSUFFICIENT_BALANCE = 3; // Requester's balance too low
-  DENIAL_REASON_RATE_LIMITED = 4;         // Too many requests
-  DENIAL_REASON_CONTENT_UNAVAILABLE = 5;  // Resource no longer available
-  DENIAL_REASON_RESTRICTION_NOT_SATISFIED = 6;  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
-  DENIAL_REASON_REPORTING_OVERDUE = 7;    // Requester has >20% overdue reports (MAY threshold)
-  DENIAL_REASON_OFFER_EXPIRED = 8;        // Offer TTL exceeded
-  DENIAL_REASON_SIGNATURE_INVALID = 9;    // Offer signature verification failed
-  DENIAL_REASON_QUOTA_EXCEEDED = 10;      // Subscription access count exhausted for this period
-  DENIAL_REASON_DELEGATION_EXPIRED = 11;  // Biscuit delegation token expired
-  DENIAL_REASON_SCOPE_INSUFFICIENT = 12;  // Requester scopes don't cover this resource
+  DENIAL_REASON_BILLING_REF_INACTIVE = 1; // billing_ref is not active / not recognized by the billing system
+  DENIAL_REASON_INSUFFICIENT_BALANCE = 2; // Requester's balance too low
+  DENIAL_REASON_RATE_LIMITED = 3;         // Too many requests
+  DENIAL_REASON_CONTENT_UNAVAILABLE = 4;  // Resource no longer available
+  DENIAL_REASON_RESTRICTION_NOT_SATISFIED = 5;  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+  DENIAL_REASON_REPORTING_OVERDUE = 6;    // Requester has >20% overdue reports (MAY threshold)
+  DENIAL_REASON_OFFER_EXPIRED = 7;        // Offer TTL exceeded
+  DENIAL_REASON_SIGNATURE_INVALID = 8;    // Offer signature verification failed
+  DENIAL_REASON_QUOTA_EXCEEDED = 9;       // Subscription access count exhausted for this period
+  DENIAL_REASON_DELEGATION_INVALID = 10;  // Delegation missing, unverifiable, expired, or its attenuation does not check out
+  DENIAL_REASON_SCOPE_INSUFFICIENT = 11;  // Requester scopes don't cover this resource
 }
 
 // IngestionSource — How the catalog entry was discovered.
