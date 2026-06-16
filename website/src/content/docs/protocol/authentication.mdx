@@ -138,12 +138,13 @@ The Biscuit token is carried in the `Delegation` message, nested inside `Request
 | `principal_id` | `string` | Principal's identifier (e.g., `"user@acme.com"`, `"bloomberg.com"`) |
 | `scopes` | `repeated string` | Scopes granted — convenience extraction of Biscuit authority block |
 | `expires_at` | `Timestamp` | When this delegation expires. Exchange MUST reject expired tokens |
-| `max_spend` | `Cost` (optional) | Maximum spend allowed under this delegation |
-| `token` | `string` | Base64-encoded Biscuit token |
-| `token_format` | `string` | Token format (default: `"biscuit-v2"`) |
+| `max_spend_cents` | `int64` (optional) | Maximum spend in currency minor units (e.g. cents for USD) |
+| `token` | `bytes` | Token bytes — JWT (base64url) or Biscuit (binary, base64) |
+| `token_format` | `string` | Token format: `"jwt"` (default) or `"biscuit-v2"` |
 | `revocation_uri` | `string` (optional) | URI for real-time revocation checking (high-value transactions) |
 | `max_accesses` | `int32` (optional) | Maximum number of accesses allowed under this delegation. Exchange tracks count and denies with `DENIAL_REASON_QUOTA_EXCEEDED` when count >= limit. |
 | `quota_period` | `Duration` (optional) | How often access/spend counters reset. E.g., `"720h"` for monthly subscriptions. When absent, quota is lifetime (bounded only by `expires_at`). |
+| `issuer` | `string` (optional) | Token issuer — OIDC issuer URL or GNAP grant server (for JWT/GNAP validation) |
 | `ext` | `Struct` | Implementer-specific extensions |
 | `ext_critical` | `repeated string` | Critical extension keys (COSE crit pattern) |
 

@@ -330,13 +330,7 @@ An Exchange returns an offer for a New York Times article. The article has been 
 ```json
 {
   "offer_id": "offer-nyt-2026-0319-001",
-  "package": {
-    "id": "pkg-nyt-trade-deal",
-    "resource": {
-      "uri": "https://www.nytimes.com/2026/03/19/business/trade-deal.html",
-      "title": "U.S. and EU Reach Landmark Trade Agreement"
-    }
-  },
+  "title": "U.S. and EU Reach Landmark Trade Agreement",
   "pricing": {
     "model": "PRICING_MODEL_PER_UNIT",
     "rate": 0.15,
@@ -389,6 +383,7 @@ An Exchange returns an offer for a New York Times article. The article has been 
     }
   ],
   "ext": {
+    "comp.package_id": "pkg-nyt-trade-deal",
     "news.article_type": "reportage",
     "news.media_topic": ["mediatopic:20000139", "mediatopic:20000209"],
     "news.urgency": 3,
@@ -416,13 +411,7 @@ An Exchange returns an offer for an NPR podcast episode with transcript and mult
 ```json
 {
   "offer_id": "offer-npr-upfirst-20260319",
-  "package": {
-    "id": "pkg-npr-upfirst-ep-1247",
-    "resource": {
-      "uri": "https://www.npr.org/podcasts/510318/up-first/episodes/2026-03-19",
-      "title": "Up First: March 19, 2026"
-    }
-  },
+  "title": "Up First: March 19, 2026",
   "pricing": {
     "model": "PRICING_MODEL_PER_UNIT",
     "rate": 0.03,
@@ -453,6 +442,7 @@ An Exchange returns an offer for an NPR podcast episode with transcript and mult
     }
   ],
   "ext": {
+    "comp.package_id": "pkg-npr-upfirst-ep-1247",
     "news.article_type": "reportage",
     "news.language": "en",
     "news.pub_status": "usable",

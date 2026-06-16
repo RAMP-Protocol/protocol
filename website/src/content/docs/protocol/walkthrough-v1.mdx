@@ -104,14 +104,12 @@ The Exchange looks up the article in its catalog and returns an offer. It does n
       "offers": [
         {
           "offer_id": "offer-tc-agents-001",
-          "package": {
-            "id": "PKG-TC-AGENTS-COMMERCE",
-            "title": "AI Agents Are Rewriting Commerce",
-            "seller": "techcrunch.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_HTML"]
-            }
+          "title": "AI Agents Are Rewriting Commerce",
+          "ext": {
+            "comp.package_id": "PKG-TC-AGENTS-COMMERCE",
+            "comp.seller": "techcrunch.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_HTML"]
           },
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -391,14 +389,12 @@ The Exchange verifies the Biscuit, confirms `earnings:*` covers the requested UR
       "offers": [
         {
           "offer_id": "offer-bb-nvda-q1-001",
-          "package": {
-            "id": "PKG-BB-NVDA-Q1-TRANSCRIPT",
-            "title": "NVIDIA Corp Q1 2026 Earnings Call Transcript",
-            "seller": "bloomberg.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_HTML"]
-            }
+          "title": "NVIDIA Corp Q1 2026 Earnings Call Transcript",
+          "ext": {
+            "comp.package_id": "PKG-BB-NVDA-Q1-TRANSCRIPT",
+            "comp.seller": "bloomberg.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_HTML"]
           },
           "pricing": {
             "model": "PRICING_MODEL_FREE",

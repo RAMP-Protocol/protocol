@@ -290,7 +290,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
          ] }
      ]
      delivery_method: DELIVERY_METHOD_INSTRUCTIONS
-     exchange_signature: "<Ed25519 signature over (offer_id, package.id, pricing, identity)>"
+     exchange_signature: "<Ed25519 signature over (offer_id, title, pricing, identity)>"
      signature_algorithm: "ed25519"
 
    Offer B (subscription):
@@ -321,12 +321,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
   "offers": [
     {
       "offer_id": "offer-tc-reg-001",
-      "package": {
-        "id": "PKG-TC-AI-REG",
-        "title": "AI Regulation: What Providers Need to Know",
-        "seller": "techcrunch.com",
-        "citation": 1
-      },
+      "title": "AI Regulation: What Providers Need to Know",
       "pricing": {
         "model": "PRICING_MODEL_PER_UNIT",
         "rate": 0.05,
@@ -368,12 +363,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     },
     {
       "offer_id": "sub-offer-tc-reg-001",
-      "package": {
-        "id": "PKG-TC-AI-REG",
-        "title": "AI Regulation: What Providers Need to Know",
-        "seller": "techcrunch.com",
-        "citation": 1
-      },
+      "title": "AI Regulation: What Providers Need to Know",
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": 0,
@@ -787,8 +777,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
   "assets": [
     {
       "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
-      "title": "AI Regulation: What Providers Need to Know",
-      "package_id": "PKG-TC-AI-REG"
+      "title": "AI Regulation: What Providers Need to Know"
     }
   ]
 }
@@ -848,7 +837,7 @@ PASS: Exchange has txn-alpha-001 -> transaction was authorized
 PASS: Usage report received before deadline -> reporting obligation fulfilled
 PASS: Token count 3150 vs estimate 3300 -> within +/-20% tolerance
 PASS: Function ai-input matches the term's RESTRICTION_KIND_FUNCTION permitted list
-PASS: Citation included as required by Package.citation=1
+PASS: Citation included as required by the Offer's attribution terms
 ```
 
 ### Provider Audit Access

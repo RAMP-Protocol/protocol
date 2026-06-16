@@ -210,15 +210,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
       "offers": [
         {
           "offer_id": "offer-arxiv-2406-11838",
-          "package": {
-            "id": "PKG-ARXIV-2406-11838",
-            "title": "MedViT: A Robust Vision Transformer for Medical Image Classification",
-            "seller": "arxiv.org",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_PDF"]
-            }
-          },
+          "title": "MedViT: A Robust Vision Transformer for Medical Image Classification",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
             "rate": 0,
@@ -274,6 +266,10 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
           "exchange_signature": "base64-ed25519-arxiv-offer-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
+            "comp.package_id": "PKG-ARXIV-2406-11838",
+            "comp.seller": "arxiv.org",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_PDF"],
             "academic.oa_status": "gold",
             "academic.version": "preprint",
             "academic.license": "CC-BY-4.0",
@@ -287,15 +283,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
       "offers": [
         {
           "offer_id": "offer-elsevier-sub-103250",
-          "package": {
-            "id": "PKG-ELSEVIER-MEDIA-103250",
-            "title": "TransUNet++: Rethinking Multi-Scale Feature Fusion for Medical Image Segmentation",
-            "seller": "elsevier.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_PDF", "RETRIEVAL_TYPE_XML"]
-            }
-          },
+          "title": "TransUNet++: Rethinking Multi-Scale Feature Fusion for Medical Image Segmentation",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
             "rate": 0,
@@ -361,6 +349,10 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
           "exchange_signature": "base64-ed25519-elsevier-sub-offer-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
+            "comp.package_id": "PKG-ELSEVIER-MEDIA-103250",
+            "comp.seller": "elsevier.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_PDF", "RETRIEVAL_TYPE_XML"],
             "academic.oa_status": "closed",
             "academic.version": "vor",
             "academic.journal": "Medical Image Analysis",
@@ -375,15 +367,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
       "offers": [
         {
           "offer_id": "offer-springer-paid-02401",
-          "package": {
-            "id": "PKG-SPRINGER-NM-02401",
-            "title": "CellViT: Vision Transformers for Precise Cell Segmentation and Classification",
-            "seller": "springer.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_PDF"]
-            }
-          },
+          "title": "CellViT: Vision Transformers for Precise Cell Segmentation and Classification",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 1.50,
@@ -437,6 +421,10 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
           "exchange_signature": "base64-ed25519-springer-paid-offer-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
+            "comp.package_id": "PKG-SPRINGER-NM-02401",
+            "comp.seller": "springer.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_PDF"],
             "academic.oa_status": "closed",
             "academic.version": "vor",
             "academic.journal": "Nature Methods",
@@ -451,15 +439,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
       "offers": [
         {
           "offer_id": "offer-springer-retracted-02467",
-          "package": {
-            "id": "PKG-SPRINGER-NM-02467",
-            "title": "RETRACTED: Attention-Guided Pathology Detection via Self-Supervised Transformers",
-            "seller": "springer.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_PDF"]
-            }
-          },
+          "title": "RETRACTED: Attention-Guided Pathology Detection via Self-Supervised Transformers",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 1.50,
@@ -515,6 +495,10 @@ The Exchange resolves all 50 DOIs against its catalog, checks the Biscuit delega
           "exchange_signature": "base64-ed25519-springer-retracted-offer-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
+            "comp.package_id": "PKG-SPRINGER-NM-02467",
+            "comp.seller": "springer.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_PDF"],
             "academic.oa_status": "closed",
             "academic.version": "vor",
             "academic.retraction_status": "retracted",
@@ -567,7 +551,7 @@ The retracted paper (DOI `10.1038/s41592-024-02467-x`) is immediately identifiab
 1. **Attestation claim**: `academic.retraction_status: "retracted"` in `ResourceAttestation.claims`, signed by `springer.com`.
 2. **Ext field**: `academic.retraction_status: "retracted"` in `Offer.ext`.
 3. **Critical signaling**: `ext_critical: ["academic.retraction_status"]` — the consumer MUST understand retraction semantics. An agent that does not support `ramp-academic-v1` would reject this offer with `OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION` rather than silently consuming a retracted paper.
-4. **Package title**: Prefixed with "RETRACTED:" as a human-readable signal.
+4. **Offer.title**: Prefixed with "RETRACTED:" as a human-readable signal.
 
 ### Content Identity and Dedup
 

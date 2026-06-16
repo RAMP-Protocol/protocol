@@ -120,15 +120,7 @@ The Broker receives one response from each Exchange. Here are both offers side b
       "offers": [
         {
           "offer_id": "offer-eurlex-aiact-001",
-          "package": {
-            "id": "PKG-EURLEX-REG-2024-1689",
-            "title": "Regulation (EU) 2024/1689 — EU AI Act",
-            "seller": "eur-lex.europa.eu",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_XML"]
-            }
-          },
+          "title": "Regulation (EU) 2024/1689 — EU AI Act",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
             "rate": 0,
@@ -189,6 +181,10 @@ The Broker receives one response from each Exchange. Here are both offers side b
             }
           ],
           "ext": {
+            "comp.package_id": "PKG-EURLEX-REG-2024-1689",
+            "comp.seller": "eur-lex.europa.eu",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_XML"],
             "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
             "legal.legislation.celex": "32024R1689",
             "legal.legislation.consolidation_status": "original",
@@ -222,15 +218,7 @@ The Broker receives one response from each Exchange. Here are both offers side b
       "offers": [
         {
           "offer_id": "offer-wk-aiact-001",
-          "package": {
-            "id": "PKG-WK-AIACT-ANNOTATED",
-            "title": "EU AI Act — Annotated & Consolidated (Wolters Kluwer)",
-            "seller": "wolterskluwer.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_HTML"]
-            }
-          },
+          "title": "EU AI Act — Annotated & Consolidated (Wolters Kluwer)",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 85.00,
@@ -290,6 +278,10 @@ The Broker receives one response from each Exchange. Here are both offers side b
             }
           ],
           "ext": {
+            "comp.package_id": "PKG-WK-AIACT-ANNOTATED",
+            "comp.seller": "wolterskluwer.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_HTML"],
             "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
             "legal.legislation.celex": "32024R1689",
             "legal.legislation.consolidation_status": "consolidated_to_2026-01-15",

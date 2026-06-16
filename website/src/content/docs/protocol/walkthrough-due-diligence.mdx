@@ -203,15 +203,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-credit-acme-001",
-          "package": {
-            "id": "PKG-DNB-ACME-FULL",
-            "title": "D&B Comprehensive Business Report — Acme Corp",
-            "seller": "dnb.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_JSON"]
-            }
-          },
+          "title": "D&B Comprehensive Business Report — Acme Corp",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 61.99,
@@ -258,7 +250,13 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             }
           ],
           "exchange_signature": "base64-ed25519-credit-offer-sig...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "comp.package_id": "PKG-DNB-ACME-FULL",
+            "comp.seller": "dnb.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_JSON"]
+          }
         }
       ]
     }
@@ -281,15 +279,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-legal-001",
-          "package": {
-            "id": "PKG-PACER-24CV01234",
-            "title": "Acme Corp v. Widget Inc — Complete Docket",
-            "seller": "pacer.uscourts.gov",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_PDF"]
-            }
-          },
+          "title": "Acme Corp v. Widget Inc — Complete Docket",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 0.10,
@@ -332,7 +322,13 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             }
           ],
           "exchange_signature": "base64-ed25519-legal-offer-sig-001...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "comp.package_id": "PKG-PACER-24CV01234",
+            "comp.seller": "pacer.uscourts.gov",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_PDF"]
+          }
         }
       ]
     },
@@ -341,13 +337,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-legal-002",
-          "package": {
-            "id": "PKG-PACER-25CV05678",
-            "title": "State of CA v. Acme Corp — Environmental Complaint",
-            "seller": "pacer.uscourts.gov",
-            "citation": 1,
-            "retrieval": { "type": ["RETRIEVAL_TYPE_PDF"] }
-          },
+          "title": "State of CA v. Acme Corp — Environmental Complaint",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 0.10,
@@ -359,7 +349,13 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
           },
           "exchange_signature": "base64-ed25519-legal-offer-sig-002...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "comp.package_id": "PKG-PACER-25CV05678",
+            "comp.seller": "pacer.uscourts.gov",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_PDF"]
+          }
         }
       ]
     },
@@ -368,13 +364,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-legal-003",
-          "package": {
-            "id": "PKG-PACER-23CV09012",
-            "title": "Acme Corp v. Former CTO — IP Dispute",
-            "seller": "pacer.uscourts.gov",
-            "citation": 1,
-            "retrieval": { "type": ["RETRIEVAL_TYPE_PDF"] }
-          },
+          "title": "Acme Corp v. Former CTO — IP Dispute",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 0.10,
@@ -386,7 +376,13 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
           },
           "exchange_signature": "base64-ed25519-legal-offer-sig-003...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "comp.package_id": "PKG-PACER-23CV09012",
+            "comp.seller": "pacer.uscourts.gov",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_PDF"]
+          }
         }
       ]
     }
@@ -409,12 +405,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-sec-10k-2025",
-          "package": {
-            "id": "PKG-SEC-ACME-10K-2025",
-            "title": "Acme Corp 10-K Annual Report FY2025",
-            "seller": "sec.gov",
-            "retrieval": { "type": ["RETRIEVAL_TYPE_HTML"] }
-          },
+          "title": "Acme Corp 10-K Annual Report FY2025",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
             "rate": 0,
@@ -440,7 +431,12 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             }
           ],
           "exchange_signature": "base64-ed25519-sec-offer-sig-10k-2025...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "ed25519",
+          "ext": {
+            "comp.package_id": "PKG-SEC-ACME-10K-2025",
+            "comp.seller": "sec.gov",
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_HTML"]
+          }
         }
       ]
     },

@@ -71,26 +71,13 @@ Key fields:
   "offers": [
     {
       "offer_id": "offer-tc-4921",
-      "package": {
-        "id": "PKG-TC-AI-INFRA",
-        "title": "The Future of AI Infrastructure",
-        "seller": "cdn.ramp-protocol.org",
-        "citation": 1,
-        "scope": {
-          "scope": "SCOPE_TYPE_OTHER",
-          "ctype": ["CONTENT_TYPE_TEXT"],
-          "text": [{
-            "title": "The Future of AI Infrastructure",
-            "wordcount": [2500],
-            "pubdate": "2026-03-10T08:00:00Z",
-            "published": 1,
-            "author": ["Sarah Chen"],
-            "sourcetype": 0
-          }]
-        },
-        "retrieval": {
-          "type": ["RETRIEVAL_TYPE_HTML"]
-        }
+      "title": "The Future of AI Infrastructure",
+      "ext": {
+        "comp.package_id": "PKG-TC-AI-INFRA",
+        "comp.seller": "cdn.ramp-protocol.org",
+        "comp.citation_required": true,
+        "comp.content_types": ["CONTENT_TYPE_TEXT"],
+        "comp.retrieval_type": ["RETRIEVAL_TYPE_HTML"]
       },
       "pricing": {
         "model": "PRICING_MODEL_PER_UNIT",
@@ -140,7 +127,7 @@ Key fields:
 ```
 
 Each `Offer` includes:
-- A CoMP `Package` with content metadata (title, author, word count, publication date)
+- `Offer.title` (human-readable) plus optional `ramp-comp-v1` `comp.*` ext fields carrying CoMP package metadata (`comp.package_id`, `comp.seller`, `comp.citation_required`, `comp.content_types`, `comp.retrieval_type`)
 - RAMP `Pricing` with the rate, currency, and normalized unit_cost
 - `ResourceIdentity` for cross-exchange deduplication
 - `LicenseTerm` entries on `terms[]`, each carrying `restrictions` (`repeated Restriction`) derived from the provider's RSL terms

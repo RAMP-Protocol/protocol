@@ -134,15 +134,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
       "offers": [
         {
           "offer_id": "offer-dnb-acme-basic",
-          "package": {
-            "id": "PKG-DNB-123456789-BASIC",
-            "title": "Acme Corporation — Basic Credit Summary",
-            "seller": "dnb.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_JSON"]
-            }
-          },
+          "title": "Acme Corporation — Basic Credit Summary",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 2.00,
@@ -198,6 +190,10 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "exchange_signature": "base64-ed25519-dnb-offer-basic-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
+            "comp.package_id": "PKG-DNB-123456789-BASIC",
+            "comp.seller": "dnb.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_JSON"],
             "credit.tier": "basic",
             "credit.data_blocks": ["paydex", "summary"],
             "credit.completeness": 0.25
@@ -205,15 +201,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
         },
         {
           "offer_id": "offer-dnb-acme-standard",
-          "package": {
-            "id": "PKG-DNB-123456789-STD",
-            "title": "Acme Corporation — Standard Credit Report",
-            "seller": "dnb.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_JSON"]
-            }
-          },
+          "title": "Acme Corporation — Standard Credit Report",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 61.99,
@@ -271,6 +259,10 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "exchange_signature": "base64-ed25519-dnb-offer-std-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
+            "comp.package_id": "PKG-DNB-123456789-STD",
+            "comp.seller": "dnb.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_JSON"],
             "credit.tier": "standard",
             "credit.data_blocks": ["paydex", "summary", "trade_payments", "public_filings", "company_info", "risk_indicators"],
             "credit.completeness": 0.70
@@ -278,15 +270,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
         },
         {
           "offer_id": "offer-dnb-acme-comprehensive",
-          "package": {
-            "id": "PKG-DNB-123456789-COMP",
-            "title": "Acme Corporation — Comprehensive Credit Report with Financials",
-            "seller": "dnb.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_JSON"]
-            }
-          },
+          "title": "Acme Corporation — Comprehensive Credit Report with Financials",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": 150.00,
@@ -346,6 +330,10 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "exchange_signature": "base64-ed25519-dnb-offer-comp-sig...",
           "signature_algorithm": "ed25519",
           "ext": {
+            "comp.package_id": "PKG-DNB-123456789-COMP",
+            "comp.seller": "dnb.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_JSON"],
             "credit.tier": "comprehensive",
             "credit.data_blocks": ["paydex", "summary", "trade_payments", "public_filings", "company_info", "risk_indicators", "financial_statements", "corporate_linkage", "government_activity", "special_events"],
             "credit.completeness": 1.00
@@ -483,8 +471,8 @@ The agent receives the credit report as JSON:
   },
   "tradePayments": [ "..." ],
   "publicFilings": [ "..." ],
-  "companyInfo": { "..." },
-  "riskIndicators": { "..." }
+  "companyInfo": { "...": "..." },
+  "riskIndicators": { "...": "..." }
 }
 ```
 
