@@ -17,8 +17,8 @@ sequenceDiagram
     Agent->>Handler: DiscoverResources(ResourceQuery)
 
     Note over Handler: Validate request (proto validation)
-    Note over Handler: Verify Requester.signature (Ed25519 via domain key lookup)
-    Note over Handler: Verify IntermediaryHop chain (if present)
+    Note over Handler: Verify requester RFC 9421 HTTP Message Signature in the HTTP headers (Ed25519 via domain key lookup)
+    Note over Handler: Verify the stack of forwarding HTTP Message Signatures (RFC 9421, one per hop; if present)
     Note over Handler: Extract tenant from ResourceQuery.uris[0] domain
     Note over Handler: (Volumetric rate limiting handled by infra layer — HAProxy/Envoy)
 
@@ -66,16 +66,16 @@ func (h *ExchangeHandler) DiscoverResources(
         defer cancel()
     }
 
-    // 2. Verify Requester identity (Ed25519 signature over domain-bound key).
+    // 2. Verify Requester identity (RFC 9421 HTTP Message Signature in the HTTP headers, Ed25519, domain-bound key).
     //    Lookup the requester's public key via {domain}/.well-known/ramp.json.
-    //    The Exchange MUST verify the Requester.signature. Reject on failure.
+    //    The Exchange MUST verify the requester's HTTP Message Signature. Reject on failure.
     requester := req.Msg.Requester
     requesterPubKey, err := h.requesterKeys.LookupPublicKey(ctx, requester.Domain)
     if err != nil {
         return nil, connect.NewError(connect.CodeUnauthenticated,
             fmt.Errorf("unknown requester domain: %s", requester.Domain))
     }
-    if err := h.verifyRequesterSignature(requester, requesterPubKey); err != nil {
+    if err := h.verifyRequesterSignature(req, requesterPubKey); err != nil {
         slog.Warn("requester signature verification failed on DiscoverResources",
             slog.String("requester_id", requester.Id),
             slog.String("domain", requester.Domain),
@@ -84,23 +84,21 @@ func (h *ExchangeHandler) DiscoverResources(
         return nil, connect.NewError(connect.CodeUnauthenticated, err)
     }
 
-    // 2b. Verify IntermediaryHop chain (if present).
-    //     Each hop's signature is verified against {hop.domain}/.well-known/ramp.json.
-    //     Timestamps are checked for temporal consistency.
-    for i, hop := range req.Msg.Intermediaries {
-        hopPubKey, err := h.requesterKeys.LookupPublicKey(ctx, hop.Domain)
-        if err != nil {
-            return nil, connect.NewError(connect.CodeUnauthenticated,
-                fmt.Errorf("unknown intermediary domain at hop %d: %s", i, hop.Domain))
-        }
-        if err := h.verifyIntermediarySignature(req.Msg, hop, hopPubKey); err != nil {
-            slog.Warn("intermediary signature verification failed",
-                slog.Int("hop", i),
-                slog.String("domain", hop.Domain),
-                slog.Any("error", err),
-            )
-            return nil, connect.NewError(connect.CodeUnauthenticated, err)
-        }
+    // 2b. Verify the forwarding chain: the stack of RFC 9421 HTTP Message
+    //     Signatures carried in the request headers (Signature / Signature-Input).
+    //     There is no in-message hop list — each forwarding party (e.g. a Broker)
+    //     adds ONE labeled signature (keyid names the signer) that covers the
+    //     request essentials plus the previous hop's signature, so the ordered
+    //     set of header signatures IS the chain and is tamper-evident.
+    //     verifyForwardingChain resolves each keyid via {domain}/.well-known/ramp.json,
+    //     verifies every signature, and confirms the chain is contiguous.
+    if err := h.verifyForwardingChain(ctx, req); err != nil {
+        slog.Warn("forwarding signature chain verification failed",
+            slog.String("requester_id", requester.Id),
+            slog.String("domain", requester.Domain),
+            slog.Any("error", err),
+        )
+        return nil, connect.NewError(connect.CodeUnauthenticated, err)
     }
 
     // 2c. Verify Biscuit delegation (if present).
@@ -240,7 +238,7 @@ func (h *ExchangeHandler) DiscoverResources(
 
 ### Requester Authentication
 
-Requester authentication uses Ed25519 signatures over a domain-bound key. The `Requester.domain` field determines where the public key is published (`{domain}/.well-known/ramp.json`). The `Requester.id` identifies the specific entity within that domain. The requester's private key never leaves the requester.
+Requester authentication uses an RFC 9421 HTTP Message Signature in the HTTP headers, signed with a domain-bound Ed25519 key. The `Requester.domain` field determines where the public key is published (`{domain}/.well-known/ramp.json`). The `Requester.id` identifies the specific entity within that domain. The requester's private key never leaves the requester.
 
 **Two onboarding paths:**
 
@@ -260,34 +258,33 @@ type RequesterRecord struct {
 }
 ```
 
-### Intermediary Chain Verification
+### Forwarding Chain Verification
 
-When the `intermediaries` field is populated on a `ResourceQuery` or `TransactionRequest`, the Exchange MUST verify the full `IntermediaryHop` chain:
+The forwarding chain lives entirely in the HTTP layer as a **stack of RFC 9421 HTTP Message Signatures** — there is no `intermediaries` field on the message. Each party that originates or forwards a `ResourceQuery` or `TransactionRequest` adds **one** labeled signature (`Signature` / `Signature-Input`, e.g. `ramp-agent`, `ramp-broker-1`) to the request headers. Each forwarder's signature covers the request essentials (`@method`, `@authority`, `@path`, `Content-Digest`) **plus the previous hop's signature**, so the ordered set of header signatures *is* the chain and cannot be reordered, dropped, or extended undetectably. The Exchange MUST:
 
-1. **Verify `Requester.signature`** — proves the original requester authorized the request. The Exchange looks up the requester's public key via `{requester.domain}/.well-known/ramp.json` and verifies the Ed25519 signature over `(id, domain, scopes)`.
+1. **Verify the requester's (originating) RFC 9421 HTTP Message Signature** — proves the original requester authorized the request. The `keyid` names the signer; the Exchange resolves the public key via `{requester.domain}/.well-known/ramp.json` and verifies the Ed25519 signature.
 
-2. **Verify each `IntermediaryHop.signature`** — proves each intermediary in the chain (e.g., Broker) handled the request. For each hop, the Exchange fetches the public key from `{hop.domain}/.well-known/ramp.json` and verifies the Ed25519 signature. Timestamps (`forwarded_at`) are checked for temporal consistency.
+2. **Verify every forwarding signature in the stack** — proves each intermediary (e.g., Broker) handled the request. For each labeled signature, the Exchange resolves its `keyid` via `{domain}/.well-known/ramp.json`, verifies the Ed25519 signature, and confirms it covers the prior hop's signature so the chain is contiguous and ordered.
 
-All signatures must pass for the request to proceed. If any verification fails, the Exchange rejects the request with `CodeUnauthenticated`.
+All signatures must pass for the request to proceed. If any verification fails — or the chain is not contiguous — the Exchange rejects the request with `CodeUnauthenticated`.
 
-When `intermediaries` is empty, the requester is querying the Exchange directly — no intermediary was involved.
+When only the originating signature is present, the requester is calling the Exchange directly — no intermediary was involved. Chain depth is bounded by `RequestConstraints.max_hops` (agent-set) and `WellKnownManifest.max_intermediary_hops` (Exchange-published); the Exchange counts the signatures in the stack against these caps.
 
 ```go
-// IntermediaryHop chain verification
-for i, hop := range req.Msg.Intermediaries {
-    hopPubKey, err := h.requesterKeys.LookupPublicKey(ctx, hop.Domain)
-    if err != nil {
-        return nil, connect.NewError(connect.CodeUnauthenticated,
-            fmt.Errorf("unknown intermediary at hop %d: %s", i, hop.Domain))
-    }
-    if err := h.verifyIntermediarySignature(req.Msg, hop, hopPubKey); err != nil {
-        slog.Warn("intermediary signature verification failed",
-            slog.Int("hop", i),
-            slog.String("domain", hop.Domain),
-            slog.Any("error", err),
-        )
-        return nil, connect.NewError(connect.CodeUnauthenticated, err)
-    }
+// Forwarding chain verification — the ordered stack of RFC 9421 HTTP
+// Message Signatures in the request headers IS the chain.
+//
+// verifyForwardingChain:
+//   1. Parses the Signature / Signature-Input headers into ordered, labeled hops.
+//   2. Verifies the originating (requester) signature against
+//      {requester.domain}/.well-known/ramp.json.
+//   3. For each subsequent labeled signature, resolves its keyid via
+//      {domain}/.well-known/ramp.json, verifies the Ed25519 signature, and
+//      confirms it covers the prior hop's signature (contiguous + ordered).
+//   4. Counts the hops against max_hops / max_intermediary_hops.
+// Any failure returns CodeUnauthenticated.
+if err := h.verifyForwardingChain(ctx, req); err != nil {
+    return nil, connect.NewError(connect.CodeUnauthenticated, err)
 }
 ```
 
@@ -386,14 +383,14 @@ func (h *ExchangeHandler) ExecuteTransaction(
         return nil, connect.NewError(connect.CodeInvalidArgument, err)
     }
 
-    // 2. Verify Requester identity (Ed25519 signature over domain-bound key).
+    // 2. Verify Requester identity (RFC 9421 HTTP Message Signature in the HTTP headers, Ed25519, domain-bound key).
     requester := req.Msg.Requester
     requesterPubKey, err := h.requesterKeys.LookupPublicKey(ctx, requester.Domain)
     if err != nil {
         return nil, connect.NewError(connect.CodeUnauthenticated,
             fmt.Errorf("unknown requester domain: %s", requester.Domain))
     }
-    if err := h.verifyRequesterSignature(requester, requesterPubKey); err != nil {
+    if err := h.verifyRequesterSignature(req, requesterPubKey); err != nil {
         slog.Warn("requester signature verification failed on ExecuteTransaction",
             slog.String("requester_id", requester.Id),
             slog.String("domain", requester.Domain),

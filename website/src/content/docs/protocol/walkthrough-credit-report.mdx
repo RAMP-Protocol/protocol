@@ -95,9 +95,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
     "id": "due-diligence-bot",
     "domain": "legalcorp.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["credit:read"],
-    "signature": "ed25519:d7e8f9a0b1c2...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["credit:read"]
   },
   "uris": [
     "duns:123456789"
@@ -414,23 +412,18 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
   "id": "tx-dnb-001",
   "offer_id": "offer-dnb-acme-standard",
   "offer_signature": "base64-ed25519-dnb-offer-std-sig...",
-  "offer_signature_algorithm": "ed25519",
   "requester": {
     "id": "due-diligence-bot",
     "domain": "legalcorp.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["credit:read"],
-    "signature": "ed25519:e8f9a0b1c2d3...",
-    "signature_algorithm": "ed25519"
-  },
-  "agent_signature": "ed25519:e8f9a0b1c2d3...",
-  "agent_signature_algorithm": "ed25519"
+    "scopes": ["credit:read"]
+  }
 }
 ```
 
 The Exchange performs:
 1. **Signature verification** — verifies the `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
-2. **Agent authentication** — verifies `agent_signature` against the agent's published public key at `legalcorp.com/.well-known/ramp.json` (`role=ROLE_AGENT`).
+2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in HTTP headers) against the agent's published public key at `legalcorp.com/.well-known/ramp.json` (`role=ROLE_AGENT`).
 3. **Balance check** — confirms `due-diligence-bot@legalcorp.com` has sufficient balance ($61.99).
 4. **WAL write** — records the transaction in the write-ahead log before generating the signed URL (write-before-sign invariant).
 5. **Signed URL generation** — HMAC-SHA256 over `(base_url, expires, agent_id, txn_id)` using the Exchange-CDN shared secret.

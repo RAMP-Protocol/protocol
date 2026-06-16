@@ -47,9 +47,7 @@ POST https://broker.lawfirm.com/ramp/v1
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["credit:read", "legal:read", "property:read", "sec:read", "news:read"],
-    "signature": "ed25519:f1a2b3c4d5e6...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["credit:read", "legal:read", "property:read", "sec:read", "news:read"]
   },
   "uris": [],
   "acceptable_restrictions": [
@@ -121,24 +119,13 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverRes
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["credit:read"],
-    "signature": "ed25519:a1b2c3d4...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["credit:read"]
   },
   "uris": [
     "https://creditdata.com/reports/duns/123456789"
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["ai-input"] }
-  ],
-  "intermediaries": [
-    {
-      "domain": "broker.lawfirm.com",
-      "id": "orch-lawfirm-001",
-      "forwarded_at": "2026-03-20T14:00:01Z",
-      "signature": "ed25519:e5f6a7b8...",
-      "signature_algorithm": "ed25519"
-    }
   ],
   "deadline": "5s"
 }
@@ -156,9 +143,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["legal:read"],
-    "signature": "ed25519:c3d4e5f6...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["legal:read"]
   },
   "uris": [
     "https://pacer.uscourts.gov/case/2:24-cv-01234",
@@ -167,15 +152,6 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["ai-input"] }
-  ],
-  "intermediaries": [
-    {
-      "domain": "broker.lawfirm.com",
-      "id": "orch-lawfirm-001",
-      "forwarded_at": "2026-03-20T14:00:01Z",
-      "signature": "ed25519:g7h8i9j0...",
-      "signature_algorithm": "ed25519"
-    }
   ],
   "deadline": "5s"
 }
@@ -193,9 +169,7 @@ POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResour
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["sec:read"],
-    "signature": "ed25519:k1l2m3n4...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["sec:read"]
   },
   "uris": [
     "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-K&dateb=&owner=include&count=2",
@@ -203,15 +177,6 @@ POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResour
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["ai-input"] }
-  ],
-  "intermediaries": [
-    {
-      "domain": "broker.lawfirm.com",
-      "id": "orch-lawfirm-001",
-      "forwarded_at": "2026-03-20T14:00:01Z",
-      "signature": "ed25519:o5p6q7r8...",
-      "signature_algorithm": "ed25519"
-    }
   ],
   "deadline": "5s"
 }
@@ -552,21 +517,14 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTran
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["credit:read"],
-    "signature": "ed25519:a1b2c3d4...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["credit:read"]
   },
   "items": [
     {
       "offer_id": "offer-credit-acme-001",
-      "offer_signature": "base64-ed25519-credit-offer-sig...",
-      "offer_signature_algorithm": "ed25519"
+      "offer_signature": "base64-ed25519-credit-offer-sig..."
     }
-  ],
-  "agent_signature": "ed25519:a1b2c3d4...",
-  "agent_signature_algorithm": "ed25519",
-  "broker_signature": "ed25519:h8i9j0k1...",
-  "broker_signature_algorithm": "ed25519"
+  ]
 }
 ```
 
@@ -582,31 +540,22 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "id": "dd-analyst",
     "domain": "lawfirm.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["legal:read"],
-    "signature": "ed25519:c3d4e5f6...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["legal:read"]
   },
   "items": [
     {
       "offer_id": "offer-legal-001",
-      "offer_signature": "base64-ed25519-legal-offer-sig-001...",
-      "offer_signature_algorithm": "ed25519"
+      "offer_signature": "base64-ed25519-legal-offer-sig-001..."
     },
     {
       "offer_id": "offer-legal-002",
-      "offer_signature": "base64-ed25519-legal-offer-sig-002...",
-      "offer_signature_algorithm": "ed25519"
+      "offer_signature": "base64-ed25519-legal-offer-sig-002..."
     },
     {
       "offer_id": "offer-legal-003",
-      "offer_signature": "base64-ed25519-legal-offer-sig-003...",
-      "offer_signature_algorithm": "ed25519"
+      "offer_signature": "base64-ed25519-legal-offer-sig-003..."
     }
-  ],
-  "agent_signature": "ed25519:c3d4e5f6...",
-  "agent_signature_algorithm": "ed25519",
-  "broker_signature": "ed25519:l2m3n4o5...",
-  "broker_signature_algorithm": "ed25519"
+  ]
 }
 ```
 
@@ -831,8 +780,8 @@ RAMP replaces the **data acquisition** layer of due diligence, not the analysis.
 | 7 | `ReportUsage` (x6+) | Per-transaction usage reports, all linked via budget_scope |
 
 **Authentication at every step:**
-- **Agent to Broker**: `Requester.signature` (Ed25519)
-- **Broker to Exchange**: `IntermediaryHop.signature` + forwarded `Requester.signature`
+- **Agent to Broker**: RFC 9421 HTTP Message Signature (alg=ed25519) in HTTP headers
+- **Broker to Exchange**: the Broker adds its own labeled RFC 9421 HTTP Message Signature (alg=ed25519) in the HTTP headers, covering the forwarded request plus the agent's prior signature; the ordered set of labeled header signatures is the forwarding chain
 - **Exchange to Agent**: `exchange_signature` on every Offer (Ed25519, stateless verification)
 - **Signed URLs**: HMAC-SHA256 (Exchange-CDN shared secret, agent identity bound)
 

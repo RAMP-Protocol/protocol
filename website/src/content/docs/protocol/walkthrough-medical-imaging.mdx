@@ -76,9 +76,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Discov
     "id": "neuro-bot",
     "domain": "brainlab.edu",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["*"],
-    "signature": "ed25519:f7a2b8c3d4e5...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
   "uris": [
     "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
@@ -223,17 +221,12 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
   "id": "tx-mri-001",
   "offer_id": "offer-tcia-gbm-0152-001",
   "offer_signature": "base64-ed25519-medimg-offer-sig...",
-  "offer_signature_algorithm": "ed25519",
   "requester": {
     "id": "neuro-bot",
     "domain": "brainlab.edu",
     "type": "REQUESTER_TYPE_AGENT",
-    "scopes": ["*"],
-    "signature": "ed25519:a8b9c0d1e2f3...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
-  "agent_signature": "ed25519:a8b9c0d1e2f3...",
-  "agent_signature_algorithm": "ed25519",
   "ext": {
     "compliance.dua_id": "DUA-TCIA-2026-042",
     "compliance.dua_signatory": "Dr. Sarah Chen, PI",
@@ -248,7 +241,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
 **The Exchange performs these checks, in order:**
 
 1. **Signature verification** — verifies `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
-2. **Agent authentication** — verifies `agent_signature` against `brainlab.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
+2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in HTTP headers) against `brainlab.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
 3. **DUA verification** — looks up `DUA-TCIA-2026-042` in its compliance registry. Verifies the DUA is (a) signed, (b) covers `brainlab.edu`, (c) covers `ai-input` use, (d) has not expired. **If the DUA is invalid, missing, or does not cover the requested use, the transaction is denied.**
 4. **Balance check** — confirms `neuro-bot@brainlab.edu` has sufficient balance ($25.00).
 5. **WAL write** — records the transaction before generating delivery credentials (write-before-sign invariant).
@@ -496,7 +489,6 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Disput
   "description": "PHI discovered in delivered data. Private DICOM tag (0009,0010) in DWI series instance 47 contains unredacted patient name. De-identification attestation claimed Safe Harbor compliance. Requesting regulatory incident escalation — this is not a billing dispute.",
   "received_content_hash": "sha256:d4e5f6a7...",
   "received_hash_method": "sha256",
-  "agent_signature": "ed25519:b9c0d1e2f3a4...",
   "report_id": "rpt-mri-001",
   "ext": {
     "medimg.dispute_type": "REGULATORY_INCIDENT",

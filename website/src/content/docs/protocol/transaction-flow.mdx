@@ -17,12 +17,12 @@ Without Broker (direct, single exchange):
 
 ## Multi-Hop Routing
 
-Multi-hop is the common case, not the exception. A request typically travels `Agent -> Broker -> ... -> Exchange`, and the broker layer may itself be more than one hop. Each forwarding party appends an `IntermediaryHop` to the `intermediaries` array and authenticates its hop with its own [RFC 9421](https://datatracker.ietf.org/doc/html/rfc9421) HTTP Message Signature (one `Signature` / `Signature-Input` entry per hop). The Exchange verifies every hop by fetching each intermediary's key from `{hop.domain}/.well-known/ramp.json`. `IntermediaryHop.signature_label` optionally names the exact signature entry a hop added, so a verifier matches a hop to its signature without inferring by ordinal position or domain.
+Multi-hop is the common case, not the exception. A request typically travels `Agent -> Broker -> ... -> Exchange`, and the broker layer may itself be more than one hop. The forwarding chain lives entirely in the HTTP layer as a **stack of [RFC 9421](https://datatracker.ietf.org/doc/html/rfc9421) HTTP Message Signatures** — there is no in-message hop list. Each party that originates or forwards the request adds **one** labeled signature (`Signature` / `Signature-Input`, e.g. `ramp-agent`, `ramp-broker-1`). Each forwarder's signature covers the request essentials (`@method`, `@authority`, `@path`, `Content-Digest`) **plus the previous hop's signature**, so the chain is ordered and tamper-evident: no hop can be reordered, dropped, or inserted without invalidating a downstream signature. The `keyid` on each signature names the signer; the Exchange resolves it at `{domain}/.well-known/ramp.json`, verifies **every** signature, and confirms the chain is contiguous. The ordered set of signatures *is* the forwarding chain.
 
 **Chain-depth caps.** Two fields bound how deep a chain may go:
 
-- `RequestConstraints.max_hops` -- the agent caps its own chain depth. A Broker MUST NOT forward a request whose chain would exceed it.
-- `WellKnownManifest.max_intermediary_hops` -- the Exchange publishes the longest inbound chain it tolerates; longer chains SHOULD be rejected, and a Broker can prune before forwarding.
+- `RequestConstraints.max_hops` -- the agent caps its own chain depth. A Broker MUST NOT forward a request whose signature count would exceed it.
+- `WellKnownManifest.max_intermediary_hops` -- the Exchange publishes the longest inbound chain (signature count) it tolerates; longer chains SHOULD be rejected, and a Broker can prune before forwarding.
 
 **Response path: direct.** Responses do **not** retrace the hop chain. The terminal Exchange returns its `TransactionResponse` (or `ResourceResponse`) directly to the originating agent; the Exchange-facing Broker that holds the agent binding relays it back without re-fanning through every hop. This works because the signed `retrieval_endpoint` is bound to the agent's identity (`agent_identity_hash`), so delivery needs no return-path relay. Intermediaries observe requests, not responses.
 
@@ -46,24 +46,20 @@ Content-Type: application/json
     "domain": "buyer.example.com",
     "type": "REQUESTER_TYPE_AGENT",
     "license_id": "LIC-BUYER-001",
-    "scopes": ["*"],
-    "signature": "ed25519:a4c9f2e8b7d1...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
   "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
-  "intermediaries": []
+  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }]
 }
 ```
 
 Key fields:
-- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the signature
+- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the request's RFC 9421 HTTP Message Signature
 - `ResourceQuery.uris` -- the content URI(s) being requested
 - `acceptable_restrictions` -- the restrictions the agent is willing to accept, grouped by axis; axis `FUNCTION` carries the intended use (RAG, training, search, etc.)
 - `requester.license_id` -- the buyer's license ID (public identifier, not a credential)
 - `requester.scopes` -- entitlement scopes; `["*"]` means unrestricted public access
-- request authentication -- an RFC 9421 HTTP Message Signature over the request (the agent's key is published at its `ramp.json`)
-- `intermediaries` -- forwarding chain; empty when the agent queries the Exchange directly
+- request authentication -- an RFC 9421 HTTP Message Signature over the request (the agent's key is published at its `ramp.json`); when the request is forwarded, each hop adds its own labeled HTTP Message Signature, and the ordered stack of these header signatures is the forwarding chain (no in-message hop list)
 
 ### Response (`ResourceResponse`)
 
@@ -298,9 +294,7 @@ Content-Type: application/json
     "domain": "buyer.example.com",
     "type": "REQUESTER_TYPE_AGENT",
     "license_id": "LIC-BUYER-001",
-    "scopes": ["*"],
-    "signature": "ed25519:a4c9f2e8b7d1...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
   "request_id": "sq-8f3a2b",
   "offer_signature": "a1b2c3d4e5f6..."
@@ -340,7 +334,7 @@ The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A b
 ### What Happens Inside the Exchange
 
 1. Validate request (proto validation)
-2. Verify Ed25519 agent signature (and broker signature if present)
+2. Verify the agent's RFC 9421 HTTP Message Signature (alg=ed25519) in the request headers (and each broker hop signature if present)
 3. Check idempotency key (prevent double-charge on retry)
 4. Verify offer signature (reconstruct offer from signed token)
 5. Authorize billing (`BillingAdapter.Authorize`) -- or skip for subscription offers
@@ -361,21 +355,17 @@ For batch transactions, use the `items` array:
     "domain": "buyer.example.com",
     "type": "REQUESTER_TYPE_AGENT",
     "license_id": "LIC-BUYER-001",
-    "scopes": ["*"],
-    "signature": "ed25519:b5d0e3f9c8a2...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
   "request_id": "sq-batch-01",
   "items": [
     {
       "offer_id": "offer-tc-4921",
-      "offer_signature": "a1b2c3...",
-      "offer_signature_algorithm": "ed25519"
+      "offer_signature": "a1b2c3..."
     },
     {
       "offer_id": "offer-tc-4922",
-      "offer_signature": "d4e5f6...",
-      "offer_signature_algorithm": "ed25519"
+      "offer_signature": "d4e5f6..."
     }
   ]
 }

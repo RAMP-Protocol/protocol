@@ -159,10 +159,14 @@ message ResourceQuery {
   // Original RAMP request ID from Step 1, for traceability.
   optional string request_id = 4;
 
-  // Intermediary forwarding chain (Agent → Broker → Exchange).
-  // Each hop is signed, proving the request path is legitimate.
-  // Empty when agent queries Exchange directly.
-  repeated IntermediaryHop intermediaries = 5;
+  // Multi-hop forwarding (Agent → Broker → … → Exchange) is carried in the HTTP
+  // layer, not in this message: each forwarding party adds its own labeled
+  // RFC 9421 HTTP Message Signature (Signature / Signature-Input), and each
+  // signature covers the request plus the prior hop's signature — so the ordered
+  // set of signatures IS the forwarding chain, tamper-evident and order-bound.
+  // The Exchange resolves each hop's key (keyid → domain → /.well-known/ramp.json),
+  // verifies every signature, and enforces RequestConstraints.max_hops /
+  // WellKnownManifest.max_intermediary_hops by counting them. (Field 5 unused.)
 
   // Maximum time the caller will wait for a response.
   // Exchange SHOULD prioritize speed over completeness when tight.
@@ -1468,27 +1472,6 @@ message Delegation {
 // no return-path relay. Intermediaries observe requests, not responses.
 // ============================================================================
 
-// IntermediaryHop — One hop in the request forwarding chain.
-message IntermediaryHop {
-  // Domain of the intermediary (for public key lookup).
-  string domain = 1;
-
-  // Intermediary's identifier.
-  string id = 2;
-
-  // When this intermediary forwarded the request.
-  google.protobuf.Timestamp forwarded_at = 3;
-
-  // Hop authentication is handled at the HTTP layer via RFC 9421
-  // HTTP Message Signatures. Each Broker adds its own Signature header.
-
-  // Binds this hop to its RFC 9421 Signature header: carries the label of the
-  // Signature / Signature-Input entry this intermediary added, so a verifier
-  // matches a hop to its signature directly instead of inferring by ordinal
-  // position or domain. Optional; omit on single-signature paths.
-  optional string signature_label = 4;
-}
-
 // C2PAStatus — Summary validation status of a C2PA content credentials manifest.
 //
 // Populated by the Exchange or a C2PA verification vendor after validating
@@ -2107,12 +2090,12 @@ message RequestConstraints {
   //   30 days  — "drug interaction database updated this month"
   optional google.protobuf.Duration max_data_age = 10;
 
-  // Maximum intermediary hops the agent will allow in its request chain
-  // (Agent → Broker → … → Exchange). Caps chain depth so a request is not
-  // relayed through more brokers than the agent is willing to trust or pay.
-  // The Broker MUST NOT forward a request whose chain would exceed this.
-  // Absent = agent imposes no cap (the Exchange's max_intermediary_hops
-  // still applies).
+  // Maximum forwarding hops the agent will allow (Agent → Broker → … →
+  // Exchange), counted as the number of RFC 9421 HTTP Message Signatures on the
+  // request. Caps chain depth so a request is not relayed through more brokers
+  // than the agent is willing to trust or pay. A Broker MUST NOT forward a
+  // request whose signature count would exceed this. Absent = agent imposes no
+  // cap (the Exchange's max_intermediary_hops still applies).
   optional int32 max_hops = 11;
 }
 
@@ -2297,10 +2280,10 @@ message WellKnownManifest {
   // values from this Exchange are denominated in this currency.
   optional string base_currency = 27;
 
-  // Exchange-only. Maximum intermediary hops this Exchange tolerates in an
-  // inbound request chain (Agent → Broker → … → Exchange). A request whose
-  // intermediaries chain is longer SHOULD be rejected. Lets Exchanges publish
-  // their chain-depth tolerance so Brokers prune before forwarding.
+  // Exchange-only. Maximum forwarding hops this Exchange tolerates on an inbound
+  // request (Agent → Broker → … → Exchange), counted as RFC 9421 HTTP Message
+  // Signatures. A request carrying more SHOULD be rejected. Lets Exchanges
+  // publish their chain-depth tolerance so Brokers prune before forwarding.
   // Absent = no published limit (Exchange applies its own default policy).
   optional int32 max_intermediary_hops = 28;
 

@@ -31,7 +31,8 @@ client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
   |
   |  4. Discover supply
   |     SupplyDiscoverer.Discover(ctx, exchanges, url)
-  |       - Build ResourceQuery with AISystem, agent_signature
+  |       - Build ResourceQuery with AISystem
+  |       - Authenticate via RFC 9421 HTTP Message Signature in the HTTP headers
   |       - Fan out DiscoverResources RPC to all resolved Exchanges (parallel)
   |       - Collect ResourceResponses (respect deadline, drop slow responders)
   |       - Flatten all Offers into candidate list
@@ -54,7 +55,8 @@ client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
   |
   |  7. Execute transaction
   |     TransactionExecutor.Execute(ctx, exchange, offer)
-  |       - Build TransactionRequest with offer_id, offer_signature, agent_signature
+  |       - Build TransactionRequest with offer_id, offer_signature
+  |       - Authenticate via RFC 9421 HTTP Message Signature in the HTTP headers
   |       - Send ExecuteTransaction RPC to winning Exchange
   |       - On DenialReason: return typed error (see Error Handling below)
   |       - On success: extract signed URL from retrieval_endpoint

@@ -110,7 +110,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T20: Kickback-driven offer selection
 **Attack**: Broker always routes to a specific Exchange regardless of pricing.
-**Countermeasure (protocol)**: Agent can bypass Broker and query Exchanges directly. `broker_signature` provides non-repudiation.
+**Countermeasure (protocol)**: Agent can bypass Broker and query Exchanges directly. Each forwarding party adds its own RFC 9421 HTTP Message Signature to the request — covering the request plus the prior hop's signature — so the ordered stack of signatures in the HTTP headers is a tamper-evident forwarding chain that provides non-repudiation. Reordering, dropping, or inserting a hop breaks a downstream signature, and the Exchange verifies the whole stack.
 
 ### T21: Query intelligence harvesting
 **Attack**: Broker logs every DiscoverResources query, sells the data.
@@ -169,8 +169,8 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 ```
 Line 1: Protocol-level prevention
   Signed offers, content hashes, agent-bound URLs, idempotency keys,
-  Biscuit append-only attenuation, Ed25519 intermediary chain verification,
-  subscription-level quota tracking
+  Biscuit append-only attenuation, RFC 9421 forwarding-chain verification
+  (stack of per-hop HTTP Message Signatures), subscription-level quota tracking
   Makes attacks structurally impossible
 
 Line 2: Three-sided reconciliation
@@ -229,10 +229,10 @@ Line 3: Legal/contractual enforcement
 **Attack**: Principal revokes a delegation but cached or stored tokens continue to work until their `expires_at` timestamp.
 **Countermeasure (protocol)**: Short `expires_at` (2-4 hours for standard access) limits the window of continued access. For high-value transactions, Exchange checks `revocation_uri` in real time before fulfillment. **Trade-off**: revocation checking adds latency (~50ms) so is only used for transactions above a configurable value threshold.
 
-### T-DEL-4: Intermediary chain forgery
+### T-DEL-4: Forwarding chain forgery
 
-**Attack**: Attacker inserts a fake `IntermediaryHop` into the delegation chain, claiming to be a trusted Broker to gain access or inject misleading provenance.
-**Countermeasure (protocol)**: **Each IntermediaryHop is Ed25519 signed.** Exchange verifies every hop's signature against the intermediary's published public key at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`). A forged hop fails signature verification, causing the entire request to be rejected.
+**Attack**: Attacker inserts a fake hop into the forwarding chain, claiming to be a trusted Broker to gain access or inject misleading provenance — or reorders or drops an existing hop.
+**Countermeasure (protocol)**: **The forwarding chain is a stack of RFC 9421 HTTP Message Signatures (Ed25519).** Each forwarding party adds one labeled signature covering the request plus the prior hop's signature, so the chain is tamper-evident. Exchange verifies every signature on the request against the signer's published public key at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, selected by `keyid`) and verifies the whole stack. A forged, reordered, dropped, or inserted hop breaks a downstream signature, causing the entire request to be rejected.
 
 ### T-DEL-5: Scope pollution
 

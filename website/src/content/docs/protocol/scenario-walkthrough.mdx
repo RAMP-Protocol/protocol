@@ -214,10 +214,11 @@ Step 2: ExchangeRegistry lookup
   - Discovers: exchange.ssp-alpha.com is authorized (PROVIDER_RELATIONSHIP_DIRECT)
   - Caches: techcrunch.com -> [ssp-alpha]
 
-Step 3: Prepare Ed25519 signature
+Step 3: Prepare RFC 9421 HTTP Message Signature (alg=ed25519)
   - requester.id = "claude-agent-001"
   - requester.domain = "claude.ai"
-  - Sign canonical payload: Ed25519(private_key, "claude-agent-001\nclaude.ai\n[uris]\n[scopes]")
+  - Sign the HTTP request per RFC 9421: the SDK adds Signature and
+    Signature-Input headers covering the request method, path, and body digest
   - Authentication is asymmetric:
     the agent signs with its Ed25519 private key (never leaves the agent),
     the Exchange verifies with the public key fetched from
@@ -243,9 +244,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
     "license_id": "LIC-ANTHROPIC-001",
-    "scopes": ["*"],
-    "signature": "ed25519:MEUCIQC7xK3p9Tz...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
   "uris": ["https://techcrunch.com/premium/ai-regulation-2026.html"],
   "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
@@ -257,10 +256,10 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 ```
 1. Validate request (proto validation) -> pass
-2. Verify requester.signature:
+2. Verify the RFC 9421 HTTP Message Signature (alg=ed25519) on the request:
    a. Extract requester.domain = "claude.ai"
    b. Fetch public key from claude.ai/.well-known/ramp.json
-   c. Verify Ed25519 signature against public key -> pass
+   c. Verify the signature against public key -> pass
 3. Resolve tenant: techcrunch.com -> Hearst Media tenant
 4. Find offers: lookup "/premium/ai-regulation-2026.html" in radix trie -> match
 5. Check subscription with quota (via requester.license_id):
@@ -426,7 +425,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 ---
 
-## Phase 2b: Cross-Provider via Broker (Intermediary Chain, OfferGroups, SimHash)
+## Phase 2b: Cross-Provider via Broker (Header Signature Chain, OfferGroups, SimHash)
 
 If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `RAMPRequest` to the Broker with multiple URIs:
 
@@ -440,9 +439,7 @@ If Anthropic uses its hosted Broker instead of the SDK directly, the Broker prov
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
     "license_id": "LIC-ANTHROPIC-001",
-    "scopes": ["*"],
-    "signature": "ed25519:a4c9f2e8b7d1...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
   "uris": [
     "https://techcrunch.com/premium/ai-regulation-2026.html",
@@ -460,12 +457,12 @@ If Anthropic uses its hosted Broker instead of the SDK directly, the Broker prov
 }
 ```
 
-### Broker Fans Out with Intermediary Chain
+### Broker Fans Out with a Header Signature Chain
 
-The Broker queries both Exchanges. For each `ResourceQuery`, the Broker:
-1. Preserves the agent's original `requester` message (including the agent's signature)
-2. Appends an `IntermediaryHop` to the `intermediaries` array (proves the Broker forwarded it)
-3. Signs the forwarded payload with its own Ed25519 key
+The Broker queries both Exchanges. For each forwarded request, the Broker:
+1. Preserves the agent's original `requester` message
+2. Preserves the agent's RFC 9421 HTTP Message Signature (its labeled signature stays in the `Signature`/`Signature-Input` headers)
+3. Adds its own labeled RFC 9421 HTTP Message Signature, covering the request plus the agent's prior signature (the ordered set of header signatures is the chain that proves the Broker forwarded it)
 
 ```json
 // Broker -> SSP-Alpha (multi-URI batch query)
@@ -479,9 +476,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
     "license_id": "LIC-ANTHROPIC-001",
-    "scopes": ["*"],
-    "signature": "ed25519:a4c9f2e8b7d1...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
   "uris": [
     "https://techcrunch.com/premium/ai-regulation-2026.html",
@@ -489,22 +484,13 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
   ],
   "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
   "request_id": "pr-claude-001",
-  "intermediaries": [
-    {
-      "domain": "broker.anthropic.com",
-      "id": "broker-001",
-      "forwarded_at": "2026-03-15T15:20:01Z",
-      "signature": "ed25519:MEQCIGnR5sW2aH...base64-ed25519-sig...",
-      "signature_algorithm": "ed25519"
-    }
-  ],
   "deadline": "0.4s"
 }
 ```
 
-SSP-Alpha's Exchange verifies the full chain:
-1. `requester.signature` -- fetch public key from `claude.ai/.well-known/ramp.json`, Ed25519 verify
-2. `intermediaries` chain -- for each hop, fetch public key from `{hop.domain}/.well-known/ramp.json`, Ed25519 verify
+The forwarding chain travels in the HTTP headers, not the request body: the agent's labeled RFC 9421 signature and the Broker's labeled RFC 9421 signature both sit in the `Signature`/`Signature-Input` headers. SSP-Alpha's Exchange verifies the full stack:
+1. The agent's RFC 9421 HTTP Message Signature (alg=ed25519) -- fetch public key from `claude.ai/.well-known/ramp.json`, Ed25519 verify
+2. Each forwarding hop's labeled RFC 9421 HTTP Message Signature -- for each one, fetch public key from `{hop.domain}/.well-known/ramp.json`, Ed25519 verify (each hop signs the request plus the prior hop's signature)
 
 SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
 
@@ -619,11 +605,11 @@ Step 4: Budget check
 
 ---
 
-## Phase 3: Transaction (Requester + Intermediary Signatures, Subscription Skip, Quota Check)
+## Phase 3: Transaction (Requester + Header Signature Chain, Subscription Skip, Quota Check)
 
 SDK or Broker commits to the subscription offer.
 
-### Direct (SDK) request -- `requester` with no intermediaries:
+### Direct (SDK) request -- single signature in the headers:
 
 ```json
 POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
@@ -637,16 +623,13 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
     "license_id": "LIC-ANTHROPIC-001",
-    "scopes": ["*"],
-    "signature": "ed25519:MEUCIQDr8nW4tK...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
-  "offer_signature": "base64-ed25519-sig-B...",
-  "offer_signature_algorithm": "ed25519"
+  "offer_signature": "base64-ed25519-sig-B..."
 }
 ```
 
-### Orchestrated request -- `requester` with `intermediaries` chain:
+### Orchestrated request -- forwarding chain in the headers:
 
 ```json
 POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
@@ -660,36 +643,24 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
     "license_id": "LIC-ANTHROPIC-001",
-    "scopes": ["*"],
-    "signature": "ed25519:MEUCIQDr8nW4tK...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
   "request_id": "pr-claude-001",
-  "intermediaries": [
-    {
-      "domain": "broker.anthropic.com",
-      "id": "broker-001",
-      "forwarded_at": "2026-03-15T15:20:01Z",
-      "signature": "ed25519:MEQCIHvL6mR3pJ...base64-ed25519-sig...",
-      "signature_algorithm": "ed25519"
-    }
-  ],
-  "offer_signature": "base64-ed25519-sig-B...",
-  "offer_signature_algorithm": "ed25519"
+  "offer_signature": "base64-ed25519-sig-B..."
 }
 ```
 
-The Broker preserves the agent's original `requester` message (including the agent's signature) and appends an `IntermediaryHop` to the `intermediaries` array. The Exchange verifies both: the agent's identity (via `requester.signature` + public key fetched from `requester.domain/.well-known/ramp.json`) and each intermediary in the chain (via each hop's `signature` + public key fetched from `{hop.domain}/.well-known/ramp.json`).
+The request body is identical to the direct case; the forwarding chain lives in the HTTP headers. The Broker preserves the agent's labeled RFC 9421 signature and adds its own labeled RFC 9421 signature (covering the request plus the agent's signature) to the `Signature`/`Signature-Input` headers. The Exchange verifies both: the agent's identity (via the agent's RFC 9421 HTTP Message Signature, alg=ed25519, + public key fetched from `requester.domain/.well-known/ramp.json`) and each forwarding hop (via that hop's labeled RFC 9421 signature + public key fetched from `{hop.domain}/.well-known/ramp.json`).
 
 ### Inside SSP-Alpha's Exchange
 
 ```
 1. Validate request (proto validation) -> pass
-2. Verify requester.signature:
+2. Verify the RFC 9421 HTTP Message Signature (alg=ed25519) on the request:
    - Fetch public key from claude.ai/.well-known/ramp.json (requester.domain key lookup)
    - Ed25519 verify -> pass
-2b. Verify intermediaries chain (if intermediaries array is non-empty):
-   - For each IntermediaryHop: fetch public key from {hop.domain}/.well-known/ramp.json
+2b. Verify forwarding signature chain (if any forwarding hops added labeled signatures):
+   - For each hop's labeled RFC 9421 signature: fetch public key from {hop.domain}/.well-known/ramp.json
    - Ed25519 verify each hop's signature -> pass
 3. Check idempotency: tx-claude-001 not seen before -> proceed
 4. Verify offer signature:

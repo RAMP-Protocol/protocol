@@ -32,7 +32,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 
 ### Multi-hop
 
-- **IntermediaryHop** — schain-inspired forwarding chain for the Agent → Broker → … → Exchange path, with per-hop RFC 9421 signatures and an optional `signature_label` binding a hop to its signature.
+- **Signature-stack forwarding chain** — schain-inspired forwarding for the Agent → Broker → … → Exchange path carried as a stack of RFC 9421 HTTP Message Signatures in HTTP headers. Each forwarding party adds one labeled signature covering the request plus the prior hop's signature; the ordered set of signatures is the chain. (Replaces the in-message `IntermediaryHop` / `ResourceQuery.intermediaries` and the removed `broker_signature`.)
 - **Chain-depth caps** — `RequestConstraints.max_hops` (agent-side) and `WellKnownManifest.max_intermediary_hops` (Exchange-published).
 - **Direct response path** — the terminal Exchange returns directly to the originating agent; intermediaries are forward-path only.
 
@@ -80,7 +80,7 @@ Domain-specific metadata carried in `ext` fields:
 - **`Restriction`** — constrains one axis: `FUNCTION` (what), `GEOGRAPHY` (where), `USER_TYPE` (who). Tokens are proto-native (`(ramp.v1.vocab_enum)` on the `RestrictionKind` values). restrictions are **binding by default** (`advisory=true` downgrades an unverifiable restriction to non-blocking).
 - **`Quota`** — usage cap that gates term validity, not billing. Metrics are proto-native (`(ramp.v1.vocab)` on `Quota.metric`): `accesses`, `tokens`, `display-words`, `impressions`, `units-manufactured`, and more.
 - **`Obligation`** — post-use behavioral requirement. Replaces the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION` (attribution and contribution are obligations, not payment models). Kinds: `ATTRIBUTION`, `CONTRIBUTION`, `SHARE_ALIKE`, `NETWORK_COPYLEFT`, `NOTICE`, `OTHER`.
-- **`TermSemantics`** — `ENUMERATED` (machine fields authoritative; enforced downstream at reconciliation; Pricing required) vs `REFERENCE_ONLY` (only `License.uri` is authoritative; machine restrictions/quotas/obligations absent; Pricing still required).
+- **`TermSemantics`** — `ENUMERATED` (machine fields are the complete, authoritative term; enforced downstream at reconciliation; Pricing required) vs `REFERENCE_ONLY` (the document at `License.uri` is the authoritative, complete source; machine restrictions/quotas/obligations are optional but, when present, must be accurate and are enforced; Pricing still required).
 - **`PricingMetering`** — `ONLINE` (default), `NONE` (one-time sale, no ongoing tracking), `OFFLINE_SELF_REPORTED` (agent self-reports; Exchange audits). Added as `Pricing.metering` (field 9).
 - `Offer.terms` (field 19) — repeated LicenseTerm from the publisher catalog. `Offer.restrictions` (the flat `AccessRestrictions` field) removed.
 - `ResourceEntry.terms` (field 13) — publisher-declared terms pushed via `CatalogService.PushResources`.

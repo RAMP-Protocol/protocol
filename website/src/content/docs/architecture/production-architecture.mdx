@@ -53,14 +53,14 @@ Every party in the protocol authenticates via Ed25519 key pairs. Each party anno
 | Party | Key Announcement | Signs | Verifier |
 |---|---|---|---|
 | **Requester** (Agent or other client) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) | RFC 9421 HTTP Message Signature (Ed25519) over the request, covering `(id, domain, scopes)` | Exchange |
-| **Intermediary** (e.g. Broker) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, same format) | `IntermediaryHop.signature` — each intermediary appends a signed hop to the forwarding chain | Exchange |
+| **Intermediary** (e.g. Broker) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, same format) | each intermediary adds its own RFC 9421 HTTP Message Signature (Ed25519) to the request — the forwarding chain is the stack of signatures, each covering the request plus the prior hop's signature | Exchange |
 | **Exchange** | `{domain}/.well-known/ramp.json` (`role=ROLE_EXCHANGE`, offer-signing keys inline in `public_keys`) | `exchange_signature` on every Offer | Agent, Broker |
 | **Provider** | `{domain}/.well-known/ramp.json` (`role=ROLE_PUBLISHER`) | Authorization declaration (not signatures) | Agent, Exchange |
 | **Verification Vendor** | `{domain}/.well-known/ramp.json` (`public_keys`) | `ResourceAttestation.signature` on catalog content (v1.0) | Exchange, Agent |
 
 **Verification at Exchange:**
-- **Requester signature** — Exchange verifies `Requester.signature` against the requester's published Ed25519 key at `/.well-known/ramp.json` (`role=ROLE_AGENT`, selected by `kid` from `public_keys`)
-- **Intermediary chain** — when present, Exchange verifies each `IntermediaryHop.signature` in the `intermediaries[]` chain, proving the forwarding path is legitimate
+- **Requester signature** — Exchange verifies the RFC 9421 HTTP Message Signature on the request (carried in HTTP headers, not a message field) against the requester's published Ed25519 key at `/.well-known/ramp.json` (`role=ROLE_AGENT`, selected by `keyid` from `public_keys`)
+- **Forwarding chain** — when the request passed through intermediaries, Exchange verifies every RFC 9421 HTTP Message Signature on the request (carried as a stack of labeled signatures in HTTP headers, each covering the request plus the prior hop's signature), proving the forwarding path is legitimate and tamper-evident
 - **Biscuit delegation** — when a `Delegation` token is attached, Exchange verifies the Biscuit authority block signature against the principal's published Ed25519 key (`principal_domain`)
 - **Scope-based access control** — Exchange filters its catalog by the requester's `scopes`. Resources outside the requester's scopes are not returned (the requester never learns they exist)
 

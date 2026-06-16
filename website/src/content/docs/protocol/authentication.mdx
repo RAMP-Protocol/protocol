@@ -1,6 +1,6 @@
 ---
 title: "Authentication"
-description: "Three-layer identity model: Requester identity with Ed25519 signatures, Biscuit delegation tokens for scoped authorization, and intermediary chain for request provenance."
+description: "Three-layer identity model: Requester identity with Ed25519 signatures, Biscuit delegation tokens for scoped authorization, and a stack of RFC 9421 HTTP Message Signatures for multi-hop request provenance."
 ---
 
 ## Overview
@@ -27,8 +27,6 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 | `name` | `string` (optional) | Human-readable name (e.g., `"Acme Research Assistant"`) |
 | `license_id` | `string` (optional) | Commercial license or subscription identifier |
 | `scopes` | `repeated string` | Entitlement scopes — what the requester can access |
-| `signature` | `string` | Ed25519 signature over `(id, domain, scopes)` |
-| `signature_algorithm` | `string` | Signature algorithm (always `"ed25519"`) |
 | `delegation` | `Delegation` (optional) | Biscuit delegation token from a principal |
 | `ext` | `Struct` | Implementer-specific extensions |
 | `ext_critical` | `repeated string` | Critical extension keys (COSE crit pattern) |
@@ -86,14 +84,14 @@ WebBotAuth solves identity ("this bot is who it claims to be"). RAMP adds the tr
 
 ### Signature Verification
 
-The `Requester.signature` is an Ed25519 signature over the tuple `(id, domain, scopes)`. The Exchange verifies it by:
+The `Requester` message carries identity semantics only — it has **no** signature field. Request authentication is an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) over the HTTP request itself (covering `@method`, `@target-uri`, and a `Content-Digest` of the body), carried in the `Signature` / `Signature-Input` HTTP headers rather than in the protobuf body. This separates identity semantics (the `Requester` message) from cryptographic proof (the HTTP signature). The Exchange verifies it by:
 
-1. Extracting `domain` from the `Requester` message
-2. Fetching `{domain}/.well-known/ramp.json` and selecting the `JsonWebKey` in `public_keys` whose `kid` matches the signature (and whose `[not_before, not_after)` window covers now)
-3. Verifying the Ed25519 signature against that key
-4. Confirming the manifest `domain` matches the requester's `domain` and `role=ROLE_AGENT`
+1. Reading the `keyid` and covered components from the request's `Signature-Input` header
+2. Extracting `domain` from the `Requester` message and fetching `{domain}/.well-known/ramp.json`, selecting the `JsonWebKey` in `public_keys` whose `kid` matches the `keyid` (and whose `[not_before, not_after)` window covers now)
+3. Reconstructing the signed content from the declared components and verifying the Ed25519 signature in the `Signature` header against that key
+4. Confirming the `Content-Digest` matches the request body, and that the manifest `domain` matches the requester's `domain` with `role=ROLE_AGENT`
 
-If verification fails, the Exchange rejects the request. No fallback, no degraded mode.
+If verification fails, the Exchange rejects the request. No fallback, no degraded mode. See [How RFC 9421 Signatures Work](#how-rfc-9421-signatures-work) below for the header details.
 
 ## Biscuit Delegation
 
@@ -250,38 +248,29 @@ When a resource exists but the requester's scopes are insufficient, the Exchange
 
 This distinction prevents information leakage on public Exchanges while allowing enterprise environments to provide actionable diagnostics.
 
-## Intermediary Chain
+## Multi-hop forwarding
 
-When a request passes through intermediaries (e.g., Agent to Broker to Exchange), each hop is recorded in the `intermediaries` field of `ResourceQuery`. This is modeled after the OpenRTB Supply Chain Object (schain).
-
-### IntermediaryHop Message
-
-| Field | Type | Description |
-|---|---|---|
-| `domain` | `string` | Domain of the intermediary (for public key lookup) |
-| `id` | `string` | Intermediary's identifier |
-| `forwarded_at` | `Timestamp` | When this intermediary forwarded the request |
-| `signature` | `string` | Ed25519 signature over the request payload at this hop |
-| `signature_algorithm` | `string` | Signature algorithm (always `"ed25519"`) |
+When a request passes through forwarding parties (e.g., Agent to Broker to Exchange), the forwarding chain is **not** carried as an in-message field. There is no `IntermediaryHop` message and no `ResourceQuery.intermediaries` array. Instead, the chain lives entirely in the HTTP headers as a stack of [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421).
 
 ### How It Works
 
-Each intermediary in the chain:
+Each forwarding party adds **one** labeled signature to the `Signature` / `Signature-Input` headers:
 
-1. Receives the request from the previous hop
-2. Signs the request payload with its own Ed25519 key
-3. Appends an `IntermediaryHop` to the `intermediaries` list
-4. Forwards the request to the next hop
+1. The agent signs the request first.
+2. Each subsequent broker adds its own labeled signature, covering the request **plus the prior hop's signature**.
+
+Because every signature commits to the signature before it, the ordered set of signatures **is** the forwarding chain: it is tamper-evident and order-bound. You cannot reorder, remove, or insert a hop without breaking the chain. There is no separate per-hop timestamp or payload-signature field — the RFC 9421 signature itself carries that proof.
 
 The Exchange verifies the full chain by:
 
-1. For each `IntermediaryHop`, fetching the public key from `{domain}/.well-known/ramp.json` (by `kid`)
-2. Verifying the Ed25519 signature proves the intermediary handled the request
-3. Checking the `forwarded_at` timestamps for temporal consistency
+1. Reading each labeled signature and its `keyid` from `Signature` / `Signature-Input`
+2. Resolving each `keyid` at `{domain}/.well-known/ramp.json` (by `kid`)
+3. Verifying every signature, confirming each later hop covers the prior hop's signature
+4. Enforcing depth caps — `RequestConstraints.max_hops` and `WellKnownManifest.max_intermediary_hops` — by **counting the signatures** in the stack
 
-When `intermediaries` is empty, the agent is querying the Exchange directly — no intermediary was involved.
+When only the agent's signature is present, the agent is querying the Exchange directly — no broker was involved.
 
-This replaces the previous `broker_signature` / `broker_signature_algorithm` fields with a generalized chain that supports any number of intermediaries.
+This header multi-sig model replaces an earlier approach that carried an in-message `IntermediaryHop` list (with per-hop `broker_signature` / `broker_signature_algorithm` fields) on the request. See [Multi-Hop Example (Broker)](#multi-hop-example-broker) below for the concrete header layout.
 
 ## Signature Migration to RFC 9421
 
@@ -299,7 +288,7 @@ The following proto fields are now **reserved** and MUST NOT be populated in new
 | `orchestrator_signature` | `RAMPRequest` | RFC 9421 `Signature` / `Signature-Input` headers |
 | `caller_signature` | `RAMPRequest` | RFC 9421 `Signature` / `Signature-Input` headers |
 
-The protobuf body continues to carry identity semantics — `Requester` (who is making the request), `IntermediaryHop` metadata (who forwarded it), scopes, and delegation tokens. What moves to HTTP is the **cryptographic proof** that these identities are authentic.
+The protobuf body continues to carry identity semantics — `Requester` (who is making the request), scopes, and delegation tokens. What moves to HTTP is the **cryptographic proof** that these identities are authentic, including the forwarding chain, which is now a stack of labeled RFC 9421 signatures rather than an in-message hop list (see [Multi-hop forwarding](#multi-hop-forwarding)).
 
 ### How RFC 9421 Signatures Work
 
@@ -381,17 +370,14 @@ A research bot queries a public Exchange. No delegation token, no special scopes
     "domain": "research.acme.com",
     "type": "REQUESTER_TYPE_AGENT",
     "name": "Acme Research Assistant",
-    "scopes": [],
-    "signature": "MEUCIQC7xK3p9Tz...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519"
+    "scopes": []
   },
   "uris": [
     "https://cdn.ramp-protocol.org/premium/ai-funding-roundup"
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["SUMMARIZE"] }
-  ],
-  "intermediaries": []
+  ]
 }
 ```
 
@@ -416,8 +402,6 @@ A financial analysis agent carries a Bloomberg-issued Biscuit that grants access
       "quote:*",
       "earnings:*"
     ],
-    "signature": "MEQCIGnR5sW2aH...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519",
     "delegation": {
       "principal_domain": "bloomberg.com",
       "principal_id": "bloomberg.com",
@@ -437,13 +421,12 @@ A financial analysis agent carries a Bloomberg-issued Biscuit that grants access
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["RETRIEVE"] }
-  ],
-  "intermediaries": []
+  ]
 }
 ```
 
 The Exchange:
-1. Verifies `requester.signature` against `fintech.example.com`'s published key
+1. Verifies the request's RFC 9421 HTTP Message Signature against `fintech.example.com`'s published key
 2. Deserializes the Biscuit `token`, verifies the authority block is signed by `bloomberg.com`'s key
 3. Extracts scopes from the Biscuit (`quote:*`, `earnings:*`)
 4. Returns subscription-tier pricing (zero marginal cost) for matching resources
@@ -466,8 +449,6 @@ An internal agent at a law firm carries a Biscuit issued by the firm's IAM syste
       "legal:case-law",
       "credit:read"
     ],
-    "signature": "MEUCIQDW8mNxVzP...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519",
     "delegation": {
       "principal_domain": "iam.kirkland.com",
       "principal_id": "user@kirkland.com",
@@ -487,8 +468,7 @@ An internal agent at a law firm carries a Biscuit issued by the firm's IAM syste
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["RETRIEVE", "SUMMARIZE"] }
-  ],
-  "intermediaries": []
+  ]
 }
 ```
 
@@ -511,8 +491,6 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
     "scopes": [
       "credit:read"
     ],
-    "signature": "MEUCIQCqW3rT8m...base64-ed25519-sig...",
-    "signature_algorithm": "ed25519",
     "delegation": {
       "principal_domain": "iam.kirkland.com",
       "principal_id": "user@kirkland.com",
@@ -531,15 +509,6 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
   ],
   "acceptable_restrictions": [
     { "axis": "FUNCTION", "values": ["RETRIEVE"] }
-  ],
-  "intermediaries": [
-    {
-      "domain": "agents.kirkland.com",
-      "id": "legal-research-agent",
-      "forwarded_at": "2026-03-20T16:30:00Z",
-      "signature": "MEQCIGnR5sW2aH...base64-ed25519-sig...",
-      "signature_algorithm": "ed25519"
-    }
   ]
 }
 ```
@@ -549,7 +518,7 @@ Key differences from the parent agent's request:
 - `delegation.scopes` is narrowed to `["credit:read"]` (legal scopes removed)
 - `delegation.max_spend` is reduced from $1,000 to $200
 - `delegation.expires_at` is shortened (1 hour earlier)
-- `intermediaries` records the parent agent as a forwarding hop
+- The parent agent's forwarding is recorded **in the HTTP headers**, not the message: the parent adds a labeled RFC 9421 signature, and the sub-agent adds its own signature over the request plus the parent's (see [Multi-hop forwarding](#multi-hop-forwarding))
 - The Biscuit `token` contains the original authority block (signed by IAM) plus an attenuation block (signed by the parent agent) that enforces the narrower permissions
 
 The Exchange verifies the full Biscuit chain: IAM signed the authority block, the parent agent signed the attenuation block. No call to IAM was required for the delegation.

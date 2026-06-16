@@ -25,15 +25,17 @@ outlive a single HTTP exchange — offers, attestations — keeps its signature 
 JWS (RFC 7515, `alg=EdDSA`), because those objects are stored, forwarded, and
 re-verified out of band.
 
-Three small v1.0 fields finish this story. `IntermediaryHop.signature_label`
-binds a hop to the specific RFC 9421 signature label it added, so a verifier
-matches a hop to its signature directly instead of inferring by ordinal position
-or domain. `RequestConstraints.max_hops` and
+Multi-hop forwarding rides on the same primitive rather than an in-message hop
+list. A forwarded request carries a stack of RFC 9421 signatures — one per party
+(the agent, then each broker), each covering the request and the previous hop's
+signature — so the ordered set of signatures is the forwarding chain,
+tamper-evident and order-bound, with no nested co-signing scheme or hop array to
+define and version. `RequestConstraints.max_hops` and
 `WellKnownManifest.max_intermediary_hops` let the agent and the Exchange,
-respectively, publish a chain-depth tolerance. Responses do not retrace the
-chain: the terminal Exchange returns directly to the originating agent, because
-the signed `retrieval_endpoint` is already bound to the agent's identity
-(`agent_identity_hash`) and needs no return-path relay.
+respectively, publish a chain-depth tolerance, enforced by counting signatures.
+Responses do not retrace the chain: the terminal Exchange returns directly to the
+originating agent, because the signed `retrieval_endpoint` is already bound to the
+agent's identity (`agent_identity_hash`) and needs no return-path relay.
 
 ## "Marketplace" → "Exchange"
 

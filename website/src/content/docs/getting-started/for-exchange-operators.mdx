@@ -159,13 +159,13 @@ When a request includes a `Delegation` message (nested inside `Requester`), your
 
 This verification is entirely offline — no callback to the principal is required.
 
-### IntermediaryHop Chain Verification
+### Forwarding Chain Verification
 
-When the `intermediaries` list is non-empty, the request has passed through one or more intermediaries (e.g., agent to broker to your Exchange). For each `IntermediaryHop`:
+When the request carries more than one RFC 9421 HTTP Message Signature, it has passed through one or more intermediaries (e.g., agent to broker to your Exchange). Each forwarding party adds its own labeled signature to the request, covering the request plus the prior hop's signature; the ordered stack of signatures in the HTTP headers is the forwarding chain. Verify every signature on the request:
 
-1. Fetch the intermediary's public key from `{hop.domain}/.well-known/ramp.json` (`role=ROLE_AGENT`)
-2. Verify the Ed25519 signature proves the intermediary handled the request
-3. Check the `forwarded_at` timestamps for temporal consistency
+1. For each signature, fetch the signer's public key from `{signer-domain}/.well-known/ramp.json` (`role=ROLE_AGENT`), selected by `keyid`
+2. Verify each RFC 9421 signature, proving the intermediary handled the request and the chain was not reordered, dropped from, or inserted into (any such tampering breaks a downstream signature)
+3. Enforce `max_intermediary_hops` by signature count — reject requests whose forwarding-signature count exceeds your published limit
 
 ### Scope-Based Catalog Filtering
 

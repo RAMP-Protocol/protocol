@@ -22,7 +22,7 @@ The MCP server is a **thin proxy**, not a performance layer. It translates simpl
 | `check_health` | (synthetic) | `ramp:discover` | Check Exchange connectivity |
 | `get_rate_limit_status` | (synthetic) | `ramp:discover` | Return cached rate limit info |
 
-The MCP server auto-populates protocol fields that agents should not need to know about: `ver`, `id` (ULID), `aisystem` (from OAuth context), `agent_signature` (proxy Ed25519 key), and `agent_signature_algorithm`.
+The MCP server auto-populates protocol fields that agents should not need to know about: `ver`, `id` (ULID), and `aisystem` (from OAuth context). It also signs each outbound request with its proxy Ed25519 key as an RFC 9421 HTTP Message Signature in the HTTP headers.
 
 ## Input Simplification
 

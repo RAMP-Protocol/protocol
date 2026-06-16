@@ -42,7 +42,6 @@ Optional RPC for providers/CMS/third-party intelligence providers to push conten
 | `uris` | repeated string | 8 | Resource URIs being queried |
 | `acceptable_restrictions` | repeated AcceptableRestriction | 9 | Limits the query operates within, per restriction axis. Advisory; the Exchange MAY pre-select offers against them, not enforced. |
 | `request_id` | optional string | 4 | Original RAMP request ID (traceability) |
-| `intermediaries` | repeated IntermediaryHop | 5 | Intermediary forwarding chain (Agent -> Broker -> Exchange). Empty for direct queries. |
 | `deadline` | optional Duration | 6 | Max wait time (default 500ms) |
 | `supported_profiles` | repeated string | 7 | Domain extension profiles the caller understands (e.g. "ramp-academic-v1") |
 | `ext` | Struct | 15 | Extension point |
@@ -139,16 +138,9 @@ expires({RFC3339_timestamp});    // expiration time
 - Original: `scope: credit:*, max_spend: $1000`
 - Attenuated: `scope: credit:read, max_spend: $200, uris: duns:123*`
 
-### IntermediaryHop
+### Multi-hop forwarding (no message — HTTP layer)
 
-One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop authenticates by adding its own RFC 9421 HTTP Message Signature, proving the request passed through legitimately. Modeled after OpenRTB schain (Supply Chain Object). Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent.
-
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `domain` | string | 1 | Domain of the intermediary (for public key lookup) |
-| `id` | string | 2 | Intermediary's identifier |
-| `forwarded_at` | Timestamp | 3 | When this intermediary forwarded the request |
-| `signature_label` | optional string | 4 | Binds this hop to its RFC 9421 `Signature` header label, so a verifier matches a hop to its signature without inferring by ordinal position or domain |
+There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → … → Exchange) is a **stack of RFC 9421 HTTP Message Signatures**: each forwarding party adds one labeled signature, and each signature covers the request plus the prior hop's signature, so the ordered set of signatures is the chain (tamper-evident, order-bound). The Exchange resolves each `keyid` at `{domain}/.well-known/ramp.json`, verifies every signature, and enforces `RequestConstraints.max_hops` / `WellKnownManifest.max_intermediary_hops` by counting them. Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent (bound by `agent_identity_hash`).
 
 ## Messages -- Offers and Pricing
 
