@@ -116,7 +116,7 @@ Instead, a revenue-share arrangement is expressed with primitives already in the
 
 - A `Pricing{model: FREE}` term — there is no per-access charge.
 - Gated by an agreement scope, e.g. `scopes: ["revshare:publisher-x"]`. The agent that has signed the deal holds a delegation JWT carrying the matching scope; everyone else never sees the term.
-- A reporting `Obligation` so usage is reported. Revenue is then settled off-protocol from those reports.
+- A `ReportingObligation` (the offer-level reporting requirement) so usage is reported. Revenue is then settled off-protocol from those reports.
 
 So "pay per crawl **or** enter the revenue-share deal" is just two `LicenseTerm`s on the same resource: a public `PER_UNIT` term and a scope-gated `FREE` term. The agent self-selects. This is the same shape as the [academic dataset subscription example](#academic-dataset--seat-quota--share-alike) below.
 

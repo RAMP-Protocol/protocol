@@ -32,6 +32,9 @@ patterns=(
   'INVALID_LICENSE' 'EXPIRED_LICENSE' 'DELEGATION_EXPIRED'
   # CoMP Package is an ext profile, not a core Offer field
   '"package":'
+  # Removed CoMP Go path (req.Aisystem.Aisysuse.…). Narrow Go-path patterns only,
+  # so legitimate CoMP JSON keys elsewhere don't false-positive. (R5-9)
+  'req\.Aisystem' '\.Aisysuse\.'
   # real-company example names that must stay generic
   '[Bb]loomberg'
 )
@@ -78,16 +81,22 @@ while read -r dr; do
   fi
 done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
 
-# The delegation-claim registry (authentication.mdx) is a prose single-source
-# for claim/fact names that live inside opaque tokens (no proto field to
-# annotate). Guard the registered claim names against silent drift. (R4-7)
+# Delegation-claim registry guard (R4-7 / R5-8). The registered JWT claims are
+# named `ramp_<field>` where <field> is a Delegation proto field. Self-extending:
+# derive the registered claim names straight from the auth registry (the only
+# place `ramp_` underscored identifiers appear) and assert each maps to a real
+# field on the Delegation proto message — so a typo'd or orphaned registry claim
+# fails the build, and a newly-registered claim is checked automatically with no
+# hardcoded list to drift.
 auth='website/src/content/docs/protocol/authentication.mdx'
-for claim in 'ramp_max_spend_cents' 'ramp_max_accesses' 'ramp_quota_period'; do
-  if ! grep -q -- "$claim" "$auth"; then
-    echo "::error::registered delegation claim '${claim}' missing from ${auth}"
+while read -r claim; do
+  [ -z "$claim" ] && continue
+  field=${claim#ramp_}
+  if ! grep -qE "[[:space:]]${field}[[:space:]]*=" "$proto_ramp"; then
+    echo "::error::registered delegation claim '${claim}' has no matching '${field}' field on the Delegation proto message"
     status=1
   fi
-done
+done < <(grep -oE 'ramp_[a-z][a-z_]*' "$auth" | sort -u)
 
 if [ "$status" -eq 0 ]; then
   echo "doc-conformance: clean"

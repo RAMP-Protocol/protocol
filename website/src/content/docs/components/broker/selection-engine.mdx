@@ -39,7 +39,7 @@ func (d *Discovery) FanOut(
     for i, mp := range exchanges {
         i, mp := i, mp
         g.Go(func() error {
-            query := toResourceQuery(req, mp) // includes all req.Aisystem.Aisysuse.Uri
+            query := toResourceQuery(req, mp) // includes all req.Uris
             start := time.Now()
 
             resp, err := d.clients[mp.Domain].DiscoverResources(gctx, connect.NewRequest(query))

@@ -210,6 +210,8 @@ This is entirely offline — no callback to the issuer. The verifier needs only 
 
 **Binding across hops.** Each delegation re-binds to the next holder's key (`cnf.jkt` of the child = the next agent), so at every hop the bound key is whoever now signs the request. The chain of JWT signatures carries the binding forward — there is no point at which the token reverts to bearer form.
 
+**Which signature binds in a brokered request.** A forwarded request carries more than one RFC 9421 signature (the agent's, plus a hop signature from each intermediary). The holder-binding check always matches the **terminal holder** — the key named in the *final* delegation's `cnf.jkt`. In the **default broker pass-through** case the broker is a pure relay: it forwards the agent's delegation unchanged, the agent remains the terminal holder, and the **agent's** request signature is the one that must match `cnf.jkt` (the broker's hop signature is provenance only). Only if the agent explicitly **delegated to the broker** (the broker issues a child JWT bound to its own key and signs the request) does the broker become the terminal holder and its signature bind. Intermediaries never silently become the holder.
+
 ### Delegation Denial Reasons
 
 When delegation verification fails, the Exchange returns a specific denial reason in the response:
@@ -245,6 +247,7 @@ Scopes follow the pattern `{domain}:{permission}` or `{profile}:{permission}`:
 |---|---|
 | `"credit:read"` | Can access credit reports (read-only) |
 | `"subscription:marketdata-2026"` | Has active MarketData subscription |
+| `"revshare:publisher-x"` | Party to an off-protocol revenue-share agreement (gates the `FREE` revshare term — see [Licensing Terms](/protocol/licensing-terms/#revenue-share-arrangements)) |
 | `"academic:*"` | Full access to academic resources |
 | `"internal:reports"` | Can access internal reports |
 | `"dist:US:CA"` | Hierarchical scope (colon-separated segments) |

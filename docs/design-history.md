@@ -241,7 +241,7 @@ comparability and asks the protocol to carry terms it never enforces.
 
 The arrangement is already expressible with existing primitives, and identically
 to a subscription: a `Pricing{model: FREE}` term gated by an agreement scope
-(e.g. `revshare:publisher-x`) plus a reporting `Obligation`. The agent that
+(e.g. `revshare:publisher-x`) plus a `ReportingObligation`. The agent that
 signed the deal holds a delegation carrying the matching scope, accesses at zero
 marginal cost, and reports usage; revenue is settled off-protocol from those
 reports. "Pay per crawl or take the revenue-share deal" is then just two

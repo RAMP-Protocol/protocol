@@ -72,7 +72,7 @@ func (o *Broker) HandleRequest(ctx context.Context, req *rampv1.RAMPRequest) (*r
     // 3. Select best offer(s).
     //    Single-URI: select one winning offer.
     //    Multi-URI (batch): select best offer per URI, check total against budget.
-    uris := req.Aisystem.Aisysuse.Uri
+    uris := req.Uris
     if len(uris) > 1 {
         return o.handleBatchRequest(ctx, req, responses)
     }
@@ -176,14 +176,16 @@ The Broker queries only **academic-mp.example.com** (profile match) and **genera
 
 The Broker forwards `Requester.scopes` to every Exchange it queries. Scopes control what the requester can access -- the Exchange filters its catalog to resources matching these scopes. The Broker does not modify scopes; it passes them through as-is.
 
-### Delegation Narrowing
+### Delegation Narrowing (only when the Broker is a delegated holder)
 
-When the `Requester.delegation` carries a delegation token (JWT), the Broker MAY narrow it before forwarding. Delegation is a chain of `cnf`-linked JWTs -- the holder can issue a child JWT that adds restrictions (narrower scope, lower spend cap, fewer URIs) without going back to the issuer. This lets the Broker narrow a broad delegation for a specific Exchange:
+By **default the Broker is a pure relay**: it passes `Requester.delegation` through unchanged and the **agent remains the holder** — the agent's RFC 9421 request signature is what the Exchange matches against the delegation's `cnf` (the Broker's hop signature is provenance only). A relay cannot narrow a delegation it does not hold: only a key named in the chain's `cnf` can issue a valid child JWT.
 
-- Original delegation: `scope: academic:*, max_spend_cents: 50000`
-- Narrowed for Exchange A: `scope: academic:read, max_spend_cents: 10000, uris: doi:10.*`
+Narrowing is therefore possible **only when the agent has explicitly delegated to the Broker's key** (the Broker is the terminal holder in the chain). In that case the Broker issues a child JWT — `scope ⊆ parent`, bound (`cnf.jkt`) to the Broker's key — and **signs the request itself**, so the binding now matches the Broker's signature:
 
-The narrowed token is a new child delegation JWT appended to the chain (signed by the key the parent named in `cnf`, `scope ⊆ parent`). The Exchange verifies the full JWT chain back to the original principal.
+- Original delegation (agent → Broker): `scope: academic:*, max_spend_cents: 50000`
+- Narrowed for Exchange A: `scope: academic:read, max_spend_cents: 10000`
+
+The child JWT is signed by the key its parent named in `cnf` (`scope ⊆ parent`); the Exchange verifies the full JWT chain back to the original principal. This is an opt-in delegation step, not the default forwarding behavior.
 
 ### SubscriptionQuotaInfo Aggregation
 

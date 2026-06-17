@@ -711,7 +711,7 @@ Validation rules when `semantics = ENUMERATED`:
 | `quotas` | repeated Quota | 4 | Usage caps. The agent must not exceed any individual Quota. |
 | `obligations` | repeated Obligation | 5 | Post-use behavioral requirements. |
 | `pricing` | optional Pricing | 6 | Commercial terms. REQUIRED on every term regardless of semantics (absent Pricing is rejected; `model = FREE` must be explicit). |
-| `scopes` | repeated string | 7 | Delegation scope-gating (AND-semantics). Empty = public; hierarchical (`dist:*` covers `dist:US`). |
+| `scopes` | repeated string | 7 | Delegation scope-gating (AND-semantics). Empty = public. Segment-wise matching — see [Scope Matching](/protocol/authentication/#scope-matching) (`dist:*` covers `dist:US`; `dist` covers only `dist`). |
 | `part_label` | optional string | 8 | Informational human-readable name for a sub-part term. |
 
 ### License

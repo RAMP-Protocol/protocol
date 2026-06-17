@@ -194,7 +194,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverR
     "cnf": { "jkt": "<thumbprint of the agent's key>" }
   }
   ```
-  The Exchange verifies the JWT chain offline (no call to Stanford needed), confirms the subscription covers Elsevier content, and returns zero-cost offers for covered papers.
+  The Exchange verifies the JWT chain offline (no call to Stanford needed) — including the holder-binding step, that the request-signing key hashes to the delegation's `cnf.jkt` — confirms the subscription covers Elsevier content, and returns zero-cost offers for covered papers.
 - **`supported_profiles`** — `["ramp-academic-v1"]` tells the Exchange to include academic-specific `ext` fields (OA status, version, retraction status) and attestation claims. Without this declaration, the Exchange MAY skip expensive metadata computation like retraction checking.
 
 ---
