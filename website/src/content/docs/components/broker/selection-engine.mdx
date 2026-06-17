@@ -427,8 +427,8 @@ The Broker SHOULD verify `exchange_signature` on the winning Offer before procee
 
 ```go
 func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[string]crypto.PublicKey) error {
-    if offer.ExchangeSignature == "" {
-        return fmt.Errorf("exchange_signature is required but empty")
+    if offer.Signature == "" {
+        return fmt.Errorf("offer signature is required but empty")
     }
 
     payload := canonicalizeOffer(offer)
@@ -443,7 +443,7 @@ func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[stri
         return fmt.Errorf("no public key for exchange %q", exchange)
     }
 
-    return verifySignature(alg, key, payload, []byte(offer.ExchangeSignature))
+    return verifySignature(alg, key, payload, []byte(offer.Signature))
 }
 ```
 

@@ -55,5 +55,40 @@ field CELs (`Pricing.unit`, `Quota.metric`) and message-level CEL on `Pricing`
 (`PER_UNIT ⇒ unit`, `FREE ⇒ rate 0`). Adding a token edits the option list only
 — no message-shape change.
 
+**Billing reference, not entitlement.** `Requester.license_id` was renamed
+`billing_ref` and recast as an opaque handle into the operator's billing system.
+It is not an authorization token: identity is the RFC 9421 request signature and
+entitlement is scopes plus `Delegation`, so access is never gated on
+`billing_ref`.
+
+**DenialReason consolidation.** `INVALID_LICENSE` and `EXPIRED_LICENSE` collapse
+into a single `DENIAL_REASON_BILLING_REF_INACTIVE`, and `DELEGATION_EXPIRED`
+broadens to `DENIAL_REASON_DELEGATION_INVALID` (expiry is one of several ways a
+token fails to authorize). The enum is contiguous 0–11.
+
+**Delegation-claims profile.** The delegation token stays opaque on the wire;
+`token_format` only selects the verifier. RAMP defines a small registered
+claim/fact vocabulary mapping the same named concepts across JWT registered
+claims and Biscuit facts, so scope / expiry / spend caps mean the same thing to
+every verifier regardless of format. All vocabulary entries are optional except
+the mandatory subject/holder binding: the key that signs the RFC 9421 request
+MUST equal the token's holder key, which is what makes a leaked token not
+bearer-usable. Issuer-specific facts use a `vendor:` namespace; `ramp_`-prefixed
+names are reserved. Binding constraints are fail-closed (binding by default)
+unless explicitly marked advisory.
+
+**Biscuit v3.** The Biscuit profile moves v2 → v3 and `token_format` now defaults
+to `"biscuit-v3"`. JWT stays wire-permitted, but its full verification path
+(`cnf`/DPoP proof-of-possession, OIDC issuer → JWKS) is deferred past v1; Biscuit
+v3 is the v1 conformance format.
+
+**Scope matching.** One normative algorithm applies protocol-wide: scopes are
+`":"`-separated segments; a grant covers a requirement only if each granted
+segment equals the required segment or is `"*"`, with a terminal `"*"` matching
+all remaining segments. There is no implicit prefix match and a grant narrower
+than the requirement does not cover it. The same rule applies to
+requester/`Delegation` scopes and to `LicenseTerm.scopes`; the Biscuit Datalog
+authorizer is a conformant implementation that MUST produce identical results.
+
 The reasoning behind the major design decisions is recorded in
 [`docs/design-history.md`](../docs/design-history.md).

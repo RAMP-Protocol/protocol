@@ -6,3 +6,6 @@ dist/
 *.local
 review-*.md
 research-*.md
+
+# Local agent/review scratch — never ship AI-review artifacts in the protocol repo
+.claude/

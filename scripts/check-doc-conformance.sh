@@ -36,12 +36,52 @@ patterns=(
 # Files where naming a removed identifier is legitimate (they record history).
 exclude_re='(reference/changelog\.mdx|docs/design-history\.md|proto/CHANGELOG\.md)'
 
+# Search roots. `proto/ramp` is included so the gate also catches stale wire
+# identifiers / orphan comments in the source of truth itself (the R3-6 class:
+# a banner that survived the message it described). Only `proto/ramp` — NOT
+# `proto/comp` — because comp.proto mirrors the external CoMP standard, which
+# has its own vocabulary (e.g. a legitimate `revshare` field) that the RAMP
+# removal denylist must not police.
+roots=(website/src docs proto/ramp)
+
 status=0
+
+# --- 1. Denylist: removed/renamed identifiers must not reappear -------------
 for p in "${patterns[@]}"; do
-  hits=$(grep -rEn -- "$p" website/src docs 2>/dev/null | grep -Ev "$exclude_re" || true)
+  hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
   if [ -n "$hits" ]; then
-    echo "::error::removed/renamed identifier still present in docs: ${p}"
+    echo "::error::removed/renamed identifier still present: ${p}"
     echo "$hits"
+    status=1
+  fi
+done
+
+# --- 2. Positive facts: required identifiers MUST be documented -------------
+# A denylist is necessary but not sufficient: it cannot catch a value that was
+# silently dropped from a "closed enum" table or a registry that drifted. These
+# assertions fail the build when a live wire value is missing from the doc that
+# claims to enumerate it.
+
+proto_ramp='proto/ramp/v1/ramp.proto'
+event_types='website/src/content/docs/components/transaction-log/event-types.mdx'
+
+# Every DenialReason value (except UNSPECIFIED) must appear in the event-types
+# "closed enum" table. (R4-9: the table silently lost values across renames.)
+while read -r dr; do
+  [ "$dr" = "DENIAL_REASON_UNSPECIFIED" ] && continue
+  if ! grep -q -- "$dr" "$event_types"; then
+    echo "::error::DenialReason '${dr}' is defined in the proto but missing from ${event_types}"
+    status=1
+  fi
+done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
+
+# The delegation-claim registry (authentication.mdx) is a prose single-source
+# for claim/fact names that live inside opaque tokens (no proto field to
+# annotate). Guard the registered claim names against silent drift. (R4-7)
+auth='website/src/content/docs/protocol/authentication.mdx'
+for claim in 'ramp_max_spend_cents' 'ramp_max_accesses' 'ramp_quota_period'; do
+  if ! grep -q -- "$claim" "$auth"; then
+    echo "::error::registered delegation claim '${claim}' missing from ${auth}"
     status=1
   fi
 done

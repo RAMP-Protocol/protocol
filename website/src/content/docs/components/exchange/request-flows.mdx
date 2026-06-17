@@ -189,7 +189,7 @@ func (h *ExchangeHandler) DiscoverResources(
         if err != nil {
             return nil, connect.NewError(connect.CodeInternal, err)
         }
-        offer.ExchangeSignature = sig
+        offer.Signature = sig
         offer.SignatureAlgorithm = "ed25519"
     }
 

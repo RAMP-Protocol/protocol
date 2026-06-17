@@ -125,7 +125,7 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
             "window": "86400s",
             "required_fields": ["consumed_quantity"]
           },
-          "exchange_signature": "ae77b181...32607e08",
+          "signature": "ae77b181...32607e08",
           "signature_algorithm": "ed25519"
         }
       ]
@@ -152,7 +152,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
     "ver": "1.0",
     "id": "demo-txn-001",
     "offer_id": "<offer_id from Step 3>",
-    "offer_signature": "<exchange_signature from Step 3>",
+    "offer_signature": "<signature from Step 3>",
     "aisystem": {
       "name": "DemoAgent",
       "aisysuse": { "lid": "LIC-DEMO-001" }

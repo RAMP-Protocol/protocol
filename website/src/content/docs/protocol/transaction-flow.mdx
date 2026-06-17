@@ -119,7 +119,7 @@ Key fields:
           "size": "sample"
         }
       ],
-      "exchange_signature": "a1b2c3d4e5f6...",
+      "signature": "a1b2c3d4e5f6...",
       "signature_algorithm": "ed25519"
     }
   ]
@@ -151,7 +151,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
         {
           "offer_id": "offer-tc-4921",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515, "unit": "accesses" },
-          "exchange_signature": "a1b2c3...",
+          "signature": "a1b2c3...",
           "signature_algorithm": "ed25519"
         }
       ]
@@ -162,7 +162,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
         {
           "offer_id": "offer-tc-4922",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001200, "unit": "accesses" },
-          "exchange_signature": "d4e5f6...",
+          "signature": "d4e5f6...",
           "signature_algorithm": "ed25519"
         }
       ]
@@ -187,7 +187,7 @@ When the buyer has a subscription, the Exchange includes both per-request and su
     {
       "offer_id": "offer-tc-4921",
       "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515, "unit": "accesses" },
-      "exchange_signature": "a1b2c3...",
+      "signature": "a1b2c3...",
       "signature_algorithm": "ed25519"
     },
     {
@@ -196,7 +196,7 @@ When the buyer has a subscription, the Exchange includes both per-request and su
       "subscription_id": "SUB-12345",
       "terms": [ { "scopes": ["subscription:SUB-12345"] } ],
       "reporting": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] },
-      "exchange_signature": "g7h8i9...",
+      "signature": "g7h8i9...",
       "signature_algorithm": "ed25519"
     }
   ]
@@ -251,7 +251,7 @@ When the buyer holds a subscription, the Exchange attaches `SubscriptionQuotaInf
           "unit": "spend_cents"
         }
       ],
-      "exchange_signature": "g7h8i9...",
+      "signature": "g7h8i9...",
       "signature_algorithm": "ed25519"
     }
   ]

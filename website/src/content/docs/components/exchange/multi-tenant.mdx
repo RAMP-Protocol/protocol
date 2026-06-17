@@ -100,8 +100,8 @@ type TenantConfig struct {
 **Tenant resolution**: The Exchange resolves tenant from the requested URI(s) in the ResourceQuery. The URI's domain is matched against a domain-to-tenant lookup map. A tenant (e.g., "Hearst Media") maps to many domains (cosmopolitan.com, esquire.com, etc.). For ExecuteTransaction, the tenant is resolved from the domain embedded in the signed offer token — no offer_id prefix parsing.
 
 ```go
-// Resolve tenant from ResourceQuery URIs
-tenantCfg, err := h.tenants.ResolveFromURIs(req.Msg.Aisystem.Aisysuse.Uri)
+// Resolve tenant from the request's URIs (repeated string uris)
+tenantCfg, err := h.tenants.ResolveFromURIs(req.Msg.Uris)
 
 // Resolve tenant from offer domain (ExecuteTransaction path)
 tenantCfg, err := h.tenants.ResolveFromDomain(offer.Domain)

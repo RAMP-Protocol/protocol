@@ -3228,8 +3228,16 @@ type LicenseTerm struct {
 	Pricing *Pricing `protobuf:"bytes,6,opt,name=pricing,proto3,oneof" json:"pricing,omitempty"`
 	// Biscuit scope-gating: the Exchange returns this term to an agent iff the
 	// agent's Biscuit authority covers ALL of these scopes (AND-semantics).
-	// Empty = public. Hierarchical: "dist:*" covers "dist:US". A subscription
-	// term is Pricing{model:FREE} + scopes:["subscription:..."].
+	// Empty = public. A subscription term is Pricing{model:FREE} +
+	// scopes:["subscription:..."].
+	//
+	// Coverage uses the SAME matching rule as Requester/delegation scopes:
+	// segment-wise (":" separated), each granted segment must equal the
+	// corresponding required segment or be "*", a terminal "*" matches all
+	// remaining segments, and there is NO implicit prefix match (a grant
+	// narrower than the requirement does not cover it). "dist:*" covers
+	// "dist:US" and "dist:US:CA"; "dist" covers only "dist". There is exactly
+	// one scope-matching algorithm across the protocol.
 	Scopes []string `protobuf:"bytes,7,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	// Informational human-readable name for this sub-part (sub-part terms).
 	PartLabel     *string `protobuf:"bytes,8,opt,name=part_label,json=partLabel,proto3,oneof" json:"part_label,omitempty"`
@@ -3617,9 +3625,12 @@ type Requester struct {
 	// Matching is SEGMENT-WISE (":" separated). A granted scope G covers a
 	// required scope R iff, segment by segment, each G segment equals the
 	// corresponding R segment or is "*"; a terminal "*" matches all remaining
-	// segments. There is NO implicit prefix match. Examples: "dist:*" covers
-	// "dist:US" and "dist:US:CA"; "dist:US:*" covers "dist:US:CA" but not
-	// "dist:EU"; bare "dist" covers only "dist"; "*" covers everything.
+	// segments. There is NO implicit prefix match, and a grant NARROWER than
+	// the requirement does not cover it (G must be equal-to-or-broader than R).
+	// Examples: "dist:*" covers "dist:US" and "dist:US:CA"; "dist:US:*" covers
+	// "dist:US:CA" but not "dist:EU"; bare "dist" covers only "dist"; granted
+	// "dist:US:CA" does NOT cover required "dist:US"; "*" covers everything.
+	// This same rule governs LicenseTerm.scopes — one algorithm protocol-wide.
 	//
 	// When empty, Exchange applies its default access policy (typically
 	// returns all publicly available resources).
@@ -3740,13 +3751,18 @@ func (x *Requester) GetExtCritical() []string {
 //
 // The claim/fact schema is a small registered vocabulary — see the RAMP
 // delegation-claims profile in the auth spec. All claims are OPTIONAL except the
-// subject/holder binding, which ties the grant to the key that signs the request
-// (so a leaked token is not bearer-usable). Vendors MAY add namespaced claims;
-// any constraint a verifier cannot evaluate is binding by default (fail closed)
+// subject/holder binding, which ties the grant to the key that signs the request.
+// Verification MUST check that the request-signing key (RFC 9421) equals the key
+// the token is sealed/attenuated to; a token possessed without that key is
+// rejected. This is what makes a leaked token NOT bearer-usable. Vendors MAY add
+// namespaced claims (their own "vendor:" namespace; "ramp_"-prefixed names are
+// reserved for the registered vocabulary and MUST NOT be redefined); any
+// constraint a verifier cannot evaluate is binding by default (fail closed)
 // unless the issuer marks it advisory — mirroring Restriction.advisory.
 //
-// If the token leaks, damage is bounded by scope + time + spend cap, and it is
-// useless after expiry.
+// Scope/time/spend caps are defense-in-depth that bound the blast radius only in
+// the residual case where the holder's signing key is also compromised; the
+// primary protection against theft is the holder binding above.
 type Delegation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Who granted this delegation (domain for public key lookup).
@@ -4044,7 +4060,7 @@ type TransactionItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The offer_id from the selected Offer.
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
-	// The exchange_signature from the selected Offer.
+	// The selected Offer's `signature` (informally, the exchange signature).
 	OfferSignature string `protobuf:"bytes,2,opt,name=offer_signature,json=offerSignature,proto3" json:"offer_signature,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -7408,12 +7424,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x15AcceptableRestriction\x12,\n" +
 	"\x04axis\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04axis\x12\xed\x01\n" +
 	"\x06values\x18\x02 \x03(\tB\xd4\x01\xbaH\xd0\x01\xba\x01\xc7\x01\n" +
-	"$acceptable_restriction.values.format\x12Meach value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\x06values\"\xc9\x03\n" +
+	"$acceptable_restriction.values.format\x12Meach value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\x06values\"\xd4\x03\n" +
 	"\rResourceQuery\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
-	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x12\n" +
-	"\x04uris\x18\b \x03(\tR\x04uris\x12W\n" +
+	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
+	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
 	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12\"\n" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tH\x00R\trequestId\x88\x01\x01\x12:\n" +
@@ -7561,15 +7577,15 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\rscope_license\x18\x03 \x01(\tH\x00R\fscopeLicense\x88\x01\x01\x12\x1b\n" +
 	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01B\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
-	"\a_detail\"\xa1\x03\n" +
+	"\a_detail\"\xab\x03\n" +
 	"\vLicenseTerm\x12/\n" +
 	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x124\n" +
 	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsR\tsemantics\x128\n" +
 	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionR\frestrictions\x12&\n" +
 	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaR\x06quotas\x125\n" +
 	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationR\vobligations\x12/\n" +
-	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingH\x01R\apricing\x88\x01\x01\x12\x16\n" +
-	"\x06scopes\x18\a \x03(\tR\x06scopes\x12\"\n" +
+	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingH\x01R\apricing\x88\x01\x01\x12 \n" +
+	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
 	"\n" +
 	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01B\n" +
 	"\n" +
@@ -7607,15 +7623,15 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
 	"\x05_unitB\v\n" +
-	"\t_metering\"\xe6\x02\n" +
+	"\t_metering\"\xf0\x02\n" +
 	"\tRequester\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12*\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x16.ramp.v1.RequesterTypeR\x04type\x12\x17\n" +
 	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12$\n" +
 	"\vbilling_ref\x18\x05 \x01(\tH\x01R\n" +
-	"billingRef\x88\x01\x01\x12\x16\n" +
-	"\x06scopes\x18\x06 \x03(\tR\x06scopes\x128\n" +
+	"billingRef\x88\x01\x01\x12 \n" +
+	"\x06scopes\x18\x06 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x128\n" +
 	"\n" +
 	"delegation\x18\a \x01(\v2\x13.ramp.v1.DelegationH\x02R\n" +
 	"delegation\x88\x01\x01\x12)\n" +
@@ -7833,12 +7849,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\treport_id\x18\x03 \x01(\tR\breportId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x13\n" +
-	"\x11_rejection_reason\"\x9c\x04\n" +
+	"\x11_rejection_reason\"\xa7\x04\n" +
 	"\vRAMPRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
-	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x12\n" +
-	"\x04uris\x18\b \x03(\tR\x04uris\x12W\n" +
+	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
+	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
 	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12B\n" +
 	"\vconstraints\x18\x04 \x01(\v2\x1b.ramp.v1.RequestConstraintsH\x00R\vconstraints\x88\x01\x01\x12-\n" +
 	"\x12supported_profiles\x18\x05 \x03(\tR\x11supportedProfiles\x12\x19\n" +

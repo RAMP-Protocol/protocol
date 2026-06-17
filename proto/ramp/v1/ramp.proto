@@ -149,7 +149,7 @@ message ResourceQuery {
   Requester requester = 3;
 
   // Resource URIs being queried.
-  repeated string uris = 8;
+  repeated string uris = 8 [(buf.validate.field).repeated.max_items = 256];
 
   // The limits this query operates within, per restriction axis (function,
   // geography, user-type, …) — see AcceptableRestriction. Advisory selection
@@ -1109,9 +1109,17 @@ message LicenseTerm {
 
   // Biscuit scope-gating: the Exchange returns this term to an agent iff the
   // agent's Biscuit authority covers ALL of these scopes (AND-semantics).
-  // Empty = public. Hierarchical: "dist:*" covers "dist:US". A subscription
-  // term is Pricing{model:FREE} + scopes:["subscription:..."].
-  repeated string scopes = 7;
+  // Empty = public. A subscription term is Pricing{model:FREE} +
+  // scopes:["subscription:..."].
+  //
+  // Coverage uses the SAME matching rule as Requester/delegation scopes:
+  // segment-wise (":" separated), each granted segment must equal the
+  // corresponding required segment or be "*", a terminal "*" matches all
+  // remaining segments, and there is NO implicit prefix match (a grant
+  // narrower than the requirement does not cover it). "dist:*" covers
+  // "dist:US" and "dist:US:CA"; "dist" covers only "dist". There is exactly
+  // one scope-matching algorithm across the protocol.
+  repeated string scopes = 7 [(buf.validate.field).repeated.max_items = 64];
 
   // Informational human-readable name for this sub-part (sub-part terms).
   optional string part_label = 8;
@@ -1353,13 +1361,16 @@ message Requester {
   // Matching is SEGMENT-WISE (":" separated). A granted scope G covers a
   // required scope R iff, segment by segment, each G segment equals the
   // corresponding R segment or is "*"; a terminal "*" matches all remaining
-  // segments. There is NO implicit prefix match. Examples: "dist:*" covers
-  // "dist:US" and "dist:US:CA"; "dist:US:*" covers "dist:US:CA" but not
-  // "dist:EU"; bare "dist" covers only "dist"; "*" covers everything.
+  // segments. There is NO implicit prefix match, and a grant NARROWER than
+  // the requirement does not cover it (G must be equal-to-or-broader than R).
+  // Examples: "dist:*" covers "dist:US" and "dist:US:CA"; "dist:US:*" covers
+  // "dist:US:CA" but not "dist:EU"; bare "dist" covers only "dist"; granted
+  // "dist:US:CA" does NOT cover required "dist:US"; "*" covers everything.
+  // This same rule governs LicenseTerm.scopes — one algorithm protocol-wide.
   //
   // When empty, Exchange applies its default access policy (typically
   // returns all publicly available resources).
-  repeated string scopes = 6;
+  repeated string scopes = 6 [(buf.validate.field).repeated.max_items = 64];
 
   // Request authentication is handled at the HTTP layer via RFC 9421
   // HTTP Message Signatures (alg=EdDSA). The Requester's public key
@@ -1404,13 +1415,18 @@ enum RequesterType {
 //
 // The claim/fact schema is a small registered vocabulary — see the RAMP
 // delegation-claims profile in the auth spec. All claims are OPTIONAL except the
-// subject/holder binding, which ties the grant to the key that signs the request
-// (so a leaked token is not bearer-usable). Vendors MAY add namespaced claims;
-// any constraint a verifier cannot evaluate is binding by default (fail closed)
+// subject/holder binding, which ties the grant to the key that signs the request.
+// Verification MUST check that the request-signing key (RFC 9421) equals the key
+// the token is sealed/attenuated to; a token possessed without that key is
+// rejected. This is what makes a leaked token NOT bearer-usable. Vendors MAY add
+// namespaced claims (their own "vendor:" namespace; "ramp_"-prefixed names are
+// reserved for the registered vocabulary and MUST NOT be redefined); any
+// constraint a verifier cannot evaluate is binding by default (fail closed)
 // unless the issuer marks it advisory — mirroring Restriction.advisory.
 //
-// If the token leaks, damage is bounded by scope + time + spend cap, and it is
-// useless after expiry.
+// Scope/time/spend caps are defense-in-depth that bound the blast radius only in
+// the residual case where the holder's signing key is also compromised; the
+// primary protection against theft is the holder binding above.
 message Delegation {
   // Who granted this delegation (domain for public key lookup).
   string principal_domain = 1;
@@ -1562,7 +1578,7 @@ message TransactionItem {
   // The offer_id from the selected Offer.
   string offer_id = 1;
 
-  // The exchange_signature from the selected Offer.
+  // The selected Offer's `signature` (informally, the exchange signature).
   string offer_signature = 2;
 }
 
@@ -1991,7 +2007,7 @@ message RAMPRequest {
   // Resource URIs the agent wants. The Broker forwards these to Exchanges in
   // ResourceQuery.uris. Optional when `query` / `search_filters` drive
   // Broker-side discovery instead.
-  repeated string uris = 8;
+  repeated string uris = 8 [(buf.validate.field).repeated.max_items = 256];
 
   // The limits the agent will operate within, per restriction axis — see
   // AcceptableRestriction. The Broker forwards these to Exchanges in

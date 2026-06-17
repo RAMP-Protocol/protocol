@@ -138,3 +138,87 @@ alternatives are conspicuously absent:
 The full message-level specification and the membership/validation rules live in
 ADR-014 (Universal Licensing Core) in the deployment repository; this entry
 records only the wire-shaping reasoning.
+
+## `license_id` → `billing_ref`: identity is the signature, not a field
+
+`Requester` once carried a `license_id`, and the name implied that the value was
+what entitled the requester to access — that holding the right `license_id`
+granted the right resources. We renamed it `billing_ref` and recast it as an
+opaque handle into the operator's billing system, nothing more. The rename
+follows from a clean separation that the rest of the protocol already assumes:
+*identity* is the RFC 9421 request signature (a verifier knows who is calling
+because the request is signed by their key), and *entitlement* is scopes plus
+delegation (what that identity is allowed to reach). A billing reference is
+neither — it is a bookkeeping pointer the Exchange uses to attribute charges, and
+treating it as an entitlement would have created a second, weaker authorization
+path that a leaked or guessed string could ride. Calling the field `billing_ref`
+makes its role unmistakable and removes the temptation to gate access on it.
+
+## DenialReason consolidation
+
+The denial enum carried separate `INVALID_LICENSE` and `EXPIRED_LICENSE`
+reasons, and a `DELEGATION_EXPIRED` reason. Once `license_id` became
+`billing_ref`, a denial that turns on the billing handle is not about a license
+being malformed or expired — it is about the billing reference not being live.
+Both former reasons collapse into a single `DENIAL_REASON_BILLING_REF_INACTIVE`:
+from the requester's side the remedy is the same (their billing relationship is
+not currently usable), and splitting the cause leaked the Exchange's internal
+billing state without giving the caller a different action to take. Separately,
+`DELEGATION_EXPIRED` was broadened to `DENIAL_REASON_DELEGATION_INVALID`, because
+expiry is only one of several ways a delegation token can fail to authorize
+(revoked, malformed, holder-binding mismatch, scope too narrow), and a single
+reason avoids implying that re-issuing for time alone will fix it. The enum is a
+contiguous 0–11 with no gaps left by the removals.
+
+## Delegation-claims profile: opaque token, bound holder
+
+Delegation tokens stay opaque on the wire — RAMP does not parse or re-encode the
+token, and `token_format` only names which verifier to run. But leaving the
+*meaning* of a token entirely to each issuer made delegations non-portable: an
+Exchange could verify a signature without agreeing on what the contained claims
+asserted. We added a small registered claim/fact vocabulary that maps the same
+named concepts across both supported formats (JWT registered claims ↔ Biscuit
+facts), so a delegation expresses scope, expiry, and spend caps in terms every
+RAMP verifier understands regardless of token format. Everything in the
+vocabulary is optional with one exception: the subject/holder binding is
+mandatory. The key that signs the RFC 9421 request MUST equal the holder key
+named in the token. That single requirement is what stops a leaked token from
+being bearer-usable — possession alone proves nothing, because the thief cannot
+produce a request signature under the bound key. The vocabulary is
+vendor-extensible through a `vendor:` namespace for issuer-specific facts, while
+`ramp_`-prefixed names are reserved for future registered claims so a vendor
+extension can never collide with one. Constraints are fail-closed by default: an
+unrecognized or unverifiable binding constraint denies the request rather than
+being skipped, unless the constraint is explicitly marked advisory — the same
+binding-by-default posture the licensing restrictions take.
+
+## Biscuit v3; JWT verification deferred
+
+The default delegation `token_format` moved from `biscuit-v2` to `"biscuit-v3"`,
+tracking the Biscuit specification's own v3 revision, and Biscuit v3 is the
+format RAMP implementations are expected to verify at v1. JWT remains
+wire-permitted — `token_format` accepts it and the claim vocabulary maps onto JWT
+registered claims — but its full verification path (proof-of-possession via
+`cnf`/DPoP, and OIDC issuer discovery through to JWKS fetch) is deferred past v1.
+Permitting the format now without mandating the heavier verification machinery
+lets deployments that already speak JWT carry tokens on the wire, while keeping
+the v1 conformance surface to the one format (Biscuit v3) whose offline,
+self-contained verification matches RAMP's no-extra-fetch posture.
+
+## One normative scope-matching algorithm
+
+Scopes appear in two places — on the requester/delegation side (what an actor may
+reach) and on `LicenseTerm.scopes` (what a term covers) — and earlier drafts left
+the matching semantics implicit, which invited each implementation to choose its
+own prefix or glob rules. v1 fixes one normative algorithm used identically
+everywhere. A scope is segment-wise, `":"`-separated. A grant covers a
+requirement only if, segment by segment, each granted segment either equals the
+required segment or is `"*"`; a terminal `"*"` matches all remaining required
+segments. There is no implicit prefix match — `a:b` does not cover `a:b:c` unless
+it ends in `*` — and a grant narrower than the requirement never covers it.
+Pinning the algorithm protocol-wide means a requester's scopes and a term's
+scopes are compared by the same rule, so an actor either provably covers a term
+or provably does not, with no venue-specific interpretation in between. The
+Biscuit Datalog authorizer is treated as one conformant implementation of this
+algorithm, not a separate semantics: it MUST produce identical results to the
+normative rule.

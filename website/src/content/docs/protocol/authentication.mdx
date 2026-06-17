@@ -156,7 +156,7 @@ The `token` is opaque bytes, but its contents are the **authoritative** source o
 
 | Claim | JWT | Biscuit fact | Required? | Meaning |
 |---|---|---|---|---|
-| subject / holder | `sub` (+ proof-of-possession) | key the token is sealed/attenuated to | **Yes** | Binds the grant to the key that signs the request. Without it the token is bearer-usable. |
+| subject / holder | `sub` + `cnf` (proof-of-possession key) | key the token is sealed/attenuated to | **Yes** | Binds the grant to the key that signs the request — verified per [Verification](#verification) step 3 (request-signing key MUST equal the bound key). Without it the token is bearer-usable. |
 | issuer | `iss` | root key (`principal_domain`) | Yes | Who granted it. |
 | `scope` | `scope` | `scope("…")` | No | Granted scopes (segment-wise; see [Scope Matching](#scope-matching)). |
 | `exp` | `exp` | `expires("…")` | No (recommended) | Expiry. |
@@ -169,6 +169,9 @@ Rules:
 - **Everything except the subject/holder binding is optional.** An issuer that only wants scope + expiry sets just those; absent caps mean "no cap from the delegation" (the Exchange's own limits still apply).
 - **Vendors MAY add namespaced claims** (`vendor:claim` / a vendor-prefixed fact).
 - **Constraints fail closed.** A claim a verifier cannot evaluate is **binding by default** — it MUST reject rather than ignore (a dropped constraint would fail *open*, granting more than intended). This mirrors [`Restriction.advisory`](/protocol/licensing-terms/): the issuer may mark a custom claim *advisory* to downgrade it to ignorable. (Biscuit gets this for free — an unsatisfiable check fails verification; for JWT the issuer lists the mandatory-to-understand claims.)
+- **`ramp_`-prefixed claim/fact names are reserved** for this registry. Vendors MUST use their own `vendor:` namespace and MUST NOT define `ramp_*` names, so registered claims can never be shadowed.
+
+> **JWT in v1.** `token_format: "jwt"` is permitted on the wire, but **Biscuit v3 is the default and the only token format with a fully specified verification path in v1.** A complete JWT path — proof-of-possession via `cnf` ([RFC 7800](https://datatracker.ietf.org/doc/html/rfc7800)) bound with DPoP or mTLS, and issuer discovery via OIDC→JWKS — is **deferred past v1**. Until then, an Exchange MAY accept JWT delegations only if it can enforce the **same mandatory holder binding** (step 3) and fail-closed constraint rules; otherwise it MUST reject `token_format: "jwt"` rather than fall back to bearer semantics. There is no degraded mode.
 
 ### Attenuation Example
 
@@ -206,21 +209,24 @@ The Exchange verifies a Biscuit delegation by:
 
 1. Deserializing the base64-encoded `token` from the `Delegation` message
 2. Verifying the Ed25519 signature chain — authority block signed by `principal_domain`'s published key, each attenuation block signed by the entity that appended it
-3. Evaluating all check conditions across all blocks
-4. Extracting effective scopes (intersection of all blocks)
-5. Checking `expires_at` against current time
-6. Optionally checking `revocation_uri` for high-value transactions
+3. **Verifying holder binding** — the key that signed the HTTP request ([RFC 9421](#request-signatures)) MUST equal the key the token is sealed/attenuated to (the holder key in the final block). If they differ, **reject** (`DENIAL_REASON_DELEGATION_INVALID`). This step is what makes a leaked token useless to a thief: possessing the token bytes is not enough — you must also control the request-signing key the token is bound to. It is **not optional** and **not skippable**; an Exchange that omits it reduces the token to a bearer credential and breaks the anti-theft guarantee.
+4. Evaluating all check conditions across all blocks
+5. Extracting effective scopes (intersection of all blocks)
+6. Checking `expires_at` against current time
+7. Optionally checking `revocation_uri` for high-value transactions
 
 This is entirely offline — no callback to the principal. The Exchange only needs the principal's published public key, which it can cache.
 
+**Holder binding across hops.** When a holder attenuates and re-delegates (appends a block), the new block re-seals the token to the *sub-agent's* key, so at every hop the bound key is the key of whoever now signs the request. The chain of Ed25519 block signatures is what carries the binding forward — there is no point at which the token reverts to bearer form.
+
 ### Delegation Denial Reasons
 
-When delegation verification fails for quota or expiration reasons, the Exchange returns a specific denial reason in the response:
+When delegation verification fails, the Exchange returns a specific denial reason in the response:
 
 | Denial Reason | Meaning |
 |---|---|
 | `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for this period |
-| `DENIAL_REASON_DELEGATION_INVALID` | Biscuit delegation token expired |
+| `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (bad signature chain or holder-binding mismatch), expired, or its attenuation does not check out |
 
 ### Libraries
 
@@ -255,13 +261,14 @@ Scopes follow the pattern `{domain}:{permission}` or `{profile}:{permission}`:
 
 ### Scope Matching
 
-Matching is **segment-wise** (`:`-separated). A granted scope **G** covers a required scope **R** iff, comparing segment by segment, each G segment equals the corresponding R segment **or** is `*`; a **terminal `*` matches all remaining segments**. There is **no implicit prefix match**.
+Matching is **segment-wise** (`:`-separated). A granted scope **G** covers a required scope **R** iff, comparing segment by segment, each G segment equals the corresponding R segment **or** is `*`; a **terminal `*` matches all remaining segments**. There is **no implicit prefix match**. A grant that is **more specific than what is required does not cover it** — coverage requires G to be equal-to-or-broader-than R, never narrower (e.g. granted `dist:US:CA` does not cover required `dist:US`).
 
 | Granted | Covers | Does **not** cover |
 |---|---|---|
 | `dist:*` | `dist:US`, `dist:US:CA` | — |
 | `dist:US:*` | `dist:US:CA` | `dist:EU` |
 | `dist` | `dist` | `dist:US` |
+| `dist:US:CA` | `dist:US:CA` | `dist:US` (grant narrower than required) |
 | `*` | everything | — |
 
 ### Access Tiers

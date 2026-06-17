@@ -107,7 +107,7 @@ Identity and entitlements only — who is asking and what they're entitled to. W
 
 ### Delegation
 
-Scoped, time-limited, spend-capped credential using [Biscuit authorization tokens](https://biscuitsec.org). Biscuit tokens are Ed25519-signed block chains that can be attenuated (holder adds restrictions) without going back to the issuer. Each block in the chain narrows permissions -- never widens them.
+Scoped, time-limited, spend-capped credential. The credential itself is opaque bytes carried in `token`, and `token_format` selects how to interpret them: `"biscuit-v3"` (default) or `"jwt"`. The format is never encoded as a prefix inside the token bytes. Biscuit v3 is the default and the only format with a fully specified verification path in v1; [Biscuit authorization tokens](https://biscuitsec.org) are Ed25519-signed block chains that can be attenuated (holder adds restrictions) without going back to the issuer, each block narrowing permissions -- never widening them.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -125,14 +125,7 @@ Scoped, time-limited, spend-capped credential using [Biscuit authorization token
 | `ext` | Struct | 15 | Extension point |
 | `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
-**Biscuit authority block facts** (RAMP-specific):
-
-```
-user({principal_id});
-scope({scope_string});           // one fact per granted scope
-max_spend_cents({amount});       // spending cap in currency minor units
-expires({RFC3339_timestamp});    // expiration time
-```
+**Delegation claims.** The claim/fact vocabulary carried inside the token is **not re-listed here** — the authoritative registry is the [Delegation-Claims Profile](/protocol/authentication/#delegation-claims-profile) table in `authentication.mdx`. The one claim worth restating: every delegation **MUST** carry a **subject/holder binding** (Biscuit: the holder key the token is sealed/attenuated to; JWT: `sub` + `cnf` proof-of-possession key) — the request-signing key MUST equal the bound key, or the token is rejected. Without it the token is bearer-usable. Everything else (scope, spend cap, expiry, etc.) is optional and defined in that single source of truth.
 
 **Attenuation example**: An agent can further restrict (but never widen) a delegation:
 - Original: `scope: credit:*, max_spend_cents: 100000`
@@ -155,7 +148,7 @@ There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → …
 | `reporting` | optional ReportingObligation | 5 | Post-usage reporting requirements |
 | `expires_at` | optional Timestamp | 6 | Offer expiry |
 | `identity` | optional ResourceIdentity | 7 | Content identity for dedup |
-| `signature` | string | 9 | **REQUIRED.** JWS (EdDSA) over the canonical Offer (incl. `terms`, `pricing`, `expires_at`) |
+| `signature` | string | 9 | **REQUIRED.** JWS (EdDSA) over the canonical Offer (incl. `terms`, `pricing`, `expires_at`) (informally called the *exchange signature*) |
 | `signature_algorithm` | string | 10 | Signature algorithm (always "EdDSA") |
 | `subscription_id` | optional string | 11 | Subscription/deal identifier |
 | `iab_categories` | repeated string | 13 | IAB Content Taxonomy codes |
@@ -286,7 +279,7 @@ A single offer commitment within a batch transaction.
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `offer_id` | string | 1 | The offer_id from the selected Offer |
-| `offer_signature` | string | 2 | The exchange_signature from the selected Offer |
+| `offer_signature` | string | 2 | The `signature` from the selected Offer (informally called the *exchange signature*) |
 
 ### TransactionResultItem
 

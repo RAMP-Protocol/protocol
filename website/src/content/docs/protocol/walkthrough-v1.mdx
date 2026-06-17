@@ -156,7 +156,7 @@ The Exchange looks up the article in its catalog and returns an offer. It does n
               ]
             }
           ],
-          "exchange_signature": "base64-ed25519-offer-sig...",
+          "signature": "base64-ed25519-offer-sig...",
           "signature_algorithm": "ed25519"
         }
       ]
@@ -171,11 +171,11 @@ The Exchange looks up the article in its catalog and returns an offer. It does n
 - **Content mutability**: `RESOURCE_MUTABILITY_STATIC` — this article will not change. The agent SHOULD verify the SHA-256 hash on delivery. A mismatch is disputable.
 - **Attestation**: Level 1 (self-attested by `techcrunch.com`). The provider signed its own claims about word count and token estimate. A third-party attestation (Level 2, e.g., from `gumgum.com`) would carry higher trust.
 - **Restrictions**: AI input (`ai-input`), indexing (`ai-index`), and search (`search`) are permitted. Training (`ai-train`) is prohibited.
-- **`exchange_signature`**: Ed25519 signature over the offer. The Exchange will verify this same signature when the agent commits to the offer — no server-side offer storage needed (stateless verification).
+- **`signature`** (the *exchange signature*): Ed25519 signature over the entire offer. The Exchange will verify this same signature when the agent commits to the offer — no server-side offer storage needed (stateless verification).
 
 ### Step 4 — ExecuteTransaction
 
-The agent commits to the offer by sending the `offer_id` and the Exchange's own `exchange_signature` back:
+The agent commits to the offer by sending the `offer_id` and the offer's `signature` echoed back as `offer_signature`:
 
 ```json
 POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
@@ -340,7 +340,7 @@ POST https://exchange.marketdata-data.com/ramp/v1/ramp.v1.ExchangeService/Discov
       "principal_id": "enterprise-sub-HF-001",
       "scopes": ["quote:*", "earnings:*", "news:read"],
       "expires_at": "2026-12-31T23:59:59Z",
-      "token": "biscuit-v3:EoMBCj...(base64 Biscuit token)",
+      "token": "EoMBCj...(base64 Biscuit token)",
       "token_format": "biscuit-v3"
     }
   },
@@ -452,7 +452,7 @@ The Exchange verifies the Biscuit, confirms `earnings:*` covers the requested UR
               "resets_at": "2026-04-01T00:00:00Z"
             }
           ],
-          "exchange_signature": "base64-ed25519-bb-offer-sig...",
+          "signature": "base64-ed25519-bb-offer-sig...",
           "signature_algorithm": "ed25519"
         }
       ]
