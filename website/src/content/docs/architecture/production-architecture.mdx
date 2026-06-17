@@ -61,7 +61,7 @@ Every party in the protocol authenticates via Ed25519 key pairs. Each party anno
 **Verification at Exchange:**
 - **Requester signature** — Exchange verifies the RFC 9421 HTTP Message Signature on the request (carried in HTTP headers, not a message field) against the requester's published Ed25519 key at `/.well-known/ramp.json` (`role=ROLE_AGENT`, selected by `keyid` from `public_keys`)
 - **Forwarding chain** — when the request passed through intermediaries, Exchange verifies every RFC 9421 HTTP Message Signature on the request (carried as a stack of labeled signatures in HTTP headers, each covering the request plus the prior hop's signature), proving the forwarding path is legitimate and tamper-evident
-- **Biscuit delegation** — when a `Delegation` token is attached, Exchange verifies the Biscuit authority block signature against the principal's published Ed25519 key (`principal_domain`)
+- **Delegation JWT** — when a `Delegation` token is attached, Exchange verifies the authority JWT signature against the principal's published Ed25519 key (`principal_domain`)
 - **Scope-based access control** — Exchange filters its catalog by the requester's `scopes`. Resources outside the requester's scopes are not returned (the requester never learns they exist)
 
 ### Supported Transaction Patterns

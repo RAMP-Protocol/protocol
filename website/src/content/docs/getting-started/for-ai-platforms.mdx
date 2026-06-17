@@ -112,9 +112,9 @@ Enterprise agents use RAMP's `Requester` identity model with two platform-releva
 
 - **`REQUESTER_TYPE_SERVICE`** — for enterprise service accounts: automated pipelines, cron jobs, and backend integrations that access resources without a human in the loop. The Broker maps service accounts to RAMP scopes via your IAM (Azure AD, Okta).
 
-- **`REQUESTER_TYPE_DELEGATED`** — for delegated access patterns where one agent acts on behalf of another. A copilot agent spawns a sub-agent for a narrow task and passes it an attenuated Biscuit token with reduced scopes, a lower spend cap, and a shorter expiry. The sub-agent cannot widen permissions — cryptographically enforced.
+- **`REQUESTER_TYPE_DELEGATED`** — for delegated access patterns where one agent acts on behalf of another. A copilot agent spawns a sub-agent for a narrow task and issues it a child delegation JWT (narrowing) with reduced scopes, a lower spend cap, and a shorter expiry. The sub-agent cannot widen permissions — cryptographically enforced.
 
-Biscuit delegation tokens enable safe, offline permission narrowing across any number of delegation levels without round-tripping to the original issuer. This is critical for agentic workflows where agents routinely delegate to sub-agents.
+Delegation JWTs enable safe, offline permission narrowing across any number of delegation levels without round-tripping to the original issuer. This is critical for agentic workflows where agents routinely delegate to sub-agents.
 
 For the full enterprise identity flow — IAM integration, token minting, scope mapping, attenuation examples, and audit trails — see [Enterprise Access Management](/getting-started/enterprise/).
 

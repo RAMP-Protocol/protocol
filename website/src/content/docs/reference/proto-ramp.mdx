@@ -107,7 +107,7 @@ Identity and entitlements only — who is asking and what they're entitled to. W
 
 ### Delegation
 
-Scoped, time-limited, spend-capped credential. The credential itself is opaque bytes carried in `token`, and `token_format` selects how to interpret them: `"biscuit-v3"` (default) or `"jwt"`. The format is never encoded as a prefix inside the token bytes. Biscuit v3 is the default and the only format with a fully specified verification path in v1; [Biscuit authorization tokens](https://biscuitsec.org) are Ed25519-signed block chains that can be attenuated (holder adds restrictions) without going back to the issuer, each block narrowing permissions -- never widening them.
+Scoped, time-limited, spend-capped credential. The credential itself is opaque bytes carried in `token`, and `token_format` selects how to interpret them: `"jwt"` (default) or `"biscuit-v3"` (optional). The format is never encoded as a prefix inside the token bytes. The default is a **holder-bound JWT**: a chain of `cnf`-linked JWTs (RFC 7800 `cnf.jkt` = RFC 7638 thumbprint) where each child is signed by the key its parent named and narrows scope, and the holder proves possession by signing the request (RFC 9421). `"biscuit-v3"` remains a permitted alternative for deep multi-hop offline attenuation.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -116,18 +116,18 @@ Scoped, time-limited, spend-capped credential. The credential itself is opaque b
 | `scopes` | repeated string | 3 | Scopes granted by this delegation (MUST be a subset of the principal's own scopes) |
 | `expires_at` | Timestamp | 4 | When this delegation expires. Exchange MUST reject expired tokens. |
 | `max_spend_cents` | optional int64 | 5 | Maximum spend in currency minor units (e.g. cents for USD) |
-| `token` | bytes | 6 | Token bytes — JWT (base64url) or Biscuit (binary, base64) |
-| `token_format` | string | 7 | Token format: "biscuit-v3" (default) or "jwt" |
+| `token` | bytes | 6 | Token bytes — a JWT (base64url JWS) by default |
+| `token_format` | string | 7 | Token format: "jwt" (default) or "biscuit-v3" (optional) |
 | `revocation_uri` | optional string | 8 | URI for real-time revocation checking (MAY be checked for high-value transactions) |
 | `max_accesses` | optional int32 | 9 | Maximum access count under this delegation |
 | `quota_period` | optional Duration | 10 | How often access/spend counters reset (e.g. 720h = 30 days); absent = lifetime |
-| `issuer` | optional string | 11 | Token issuer — OIDC issuer URL or GNAP grant server (for JWT/GNAP validation) |
+| `issuer` | optional string | 11 | Token issuer — OIDC issuer URL (for JWT signature validation via OIDC→JWKS) |
 | `ext` | Struct | 15 | Extension point |
 | `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
-**Delegation claims.** The claim/fact vocabulary carried inside the token is **not re-listed here** — the authoritative registry is the [Delegation-Claims Profile](/protocol/authentication/#delegation-claims-profile) table in `authentication.mdx`. The one claim worth restating: every delegation **MUST** carry a **subject/holder binding** (Biscuit: the holder key the token is sealed/attenuated to; JWT: `sub` + `cnf` proof-of-possession key) — the request-signing key MUST equal the bound key, or the token is rejected. Without it the token is bearer-usable. Everything else (scope, spend cap, expiry, etc.) is optional and defined in that single source of truth.
+**Delegation claims.** The claim vocabulary carried inside the token is **not re-listed here** — the authoritative registry is the [Delegation-Claims Profile](/protocol/authentication/#delegation-claims-profile) table in `authentication.mdx`. The one claim worth restating: every delegation **MUST** carry a **holder binding** (the `cnf` claim, `cnf.jkt` = the RFC 7638 thumbprint of the holder key) — the request-signing key MUST hash to `cnf.jkt`, or the token is rejected. Without it the token is bearer-usable. Everything else (scope, spend cap, expiry, etc.) is optional and defined in that single source of truth.
 
-**Attenuation example**: An agent can further restrict (but never widen) a delegation:
+**Narrowing example**: An agent can further restrict (but never widen) a delegation by issuing a child JWT:
 - Original: `scope: credit:*, max_spend_cents: 100000`
 - Attenuated: `scope: credit:read, max_spend_cents: 20000, uris: duns:123*`
 
@@ -711,7 +711,7 @@ Validation rules when `semantics = ENUMERATED`:
 | `quotas` | repeated Quota | 4 | Usage caps. The agent must not exceed any individual Quota. |
 | `obligations` | repeated Obligation | 5 | Post-use behavioral requirements. |
 | `pricing` | optional Pricing | 6 | Commercial terms. REQUIRED on every term regardless of semantics (absent Pricing is rejected; `model = FREE` must be explicit). |
-| `scopes` | repeated string | 7 | Biscuit scope-gating (AND-semantics). Empty = public; hierarchical (`dist:*` covers `dist:US`). |
+| `scopes` | repeated string | 7 | Delegation scope-gating (AND-semantics). Empty = public; hierarchical (`dist:*` covers `dist:US`). |
 | `part_label` | optional string | 8 | Informational human-readable name for a sub-part term. |
 
 ### License

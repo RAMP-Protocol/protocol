@@ -151,13 +151,13 @@ Scopes declare what your agent is entitled to access. The Exchange filters its c
 | `"*"` | Unrestricted (public Exchange default) |
 | `[]` (empty) | Exchange applies its default access policy |
 
-### Biscuit Delegation for Sub-Agent Scenarios
+### Delegation for Sub-Agent Scenarios
 
-If your agent delegates to sub-agents, Biscuit tokens enable safe permission narrowing without round-tripping to the original issuer. Your agent attenuates its own token — restricting scopes, lowering spend caps, shortening expiry — and hands the narrowed token to the sub-agent. The sub-agent cannot widen permissions; this is cryptographically enforced.
+If your agent delegates to sub-agents, delegation JWTs enable safe permission narrowing without round-tripping to the original issuer. Your agent issues a child delegation JWT (narrowing) from its own token — restricting scopes, lowering spend caps, shortening expiry — and hands the narrowed token to the sub-agent. The sub-agent cannot widen permissions; this is cryptographically enforced.
 
-The attenuated token is carried in the `Requester.delegation` field. Set `type` to `REQUESTER_TYPE_DELEGATED` on the sub-agent's requests.
+The child delegation JWT is carried in the `Requester.delegation` field. Set `type` to `REQUESTER_TYPE_DELEGATED` on the sub-agent's requests.
 
-For the full delegation model — Biscuit structure, attenuation examples, and enterprise IAM integration — see [Authentication](/protocol/authentication/).
+For the full delegation model — the JWT chain, child delegation JWT examples, and enterprise IAM integration — see [Authentication](/protocol/authentication/).
 
 ### Subscription Quota
 

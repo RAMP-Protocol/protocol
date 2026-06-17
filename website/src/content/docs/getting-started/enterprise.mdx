@@ -13,12 +13,12 @@ What if every AI resource access — internal and external — flowed through on
 
 ```
 Employee's AI Agent
-  + Biscuit token from enterprise IAM (Azure AD / Okta)
+  + delegation JWT from enterprise IAM (Azure AD / Okta)
   + scopes derived from user's roles: ['tax:customer:read', 'legal:read']
        │
        ▼
 Enterprise Broker
-  ├── Verifies Biscuit token (IAM's Ed25519 key)
+  ├── Verifies delegation JWT (IAM's Ed25519 key)
   ├── Routes to internal Exchange (CRM, KB, reports)
   ├── Routes to external Exchanges (D&B, PACER, news)
   └── Tracks cost by dept via budget_scope
@@ -64,9 +64,9 @@ Enterprise IAM maps user roles to RAMP scopes. The Exchange filters its catalog 
 
 1. User authenticates via SSO (SAML/OIDC to enterprise IdP)
 2. Enterprise token service maps AD groups to RAMP scopes
-3. Service mints a Biscuit token signed by `iam.acme.com`'s Ed25519 key
+3. Service mints a delegation JWT signed by `iam.acme.com`'s Ed25519 key
 4. Agent carries this token in the `Delegation.token` field for all RAMP requests
-5. Exchange verifies the token's authority block against IAM's published key
+5. Exchange verifies the authority JWT against IAM's published key
 6. Each requested URI is checked against the token's scopes
 
 ### Concrete Example
@@ -87,7 +87,7 @@ The 3 denied URIs come back with `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` — t
 
 ## Token Minting Flow
 
-The enterprise token service bridges your existing IAM into RAMP's Biscuit-based authorization.
+The enterprise token service bridges your existing IAM into RAMP's JWT-based authorization.
 
 ```
 ┌──────────────┐     SAML/OIDC     ┌──────────────┐
@@ -109,25 +109,28 @@ The enterprise token service bridges your existing IAM into RAMP's Biscuit-based
                                    │    read        │
                                    │  legal:read    │
                                    └──────┬───────┘
-                                          │ Signs Biscuit
+                                          │ Signs JWT
                                           │ with iam.acme.com
                                           │ Ed25519 key
                                           ▼
                                    ┌──────────────┐
-                                   │  Biscuit      │
-                                   │  Token        │
+                                   │  Delegation   │
+                                   │  JWT          │
                                    └──────────────┘
 ```
 
-The Biscuit authority block contains RAMP-specific facts:
+The authority JWT contains RAMP-specific claims:
 
-```
-// Authority block (signed by iam.acme.com Ed25519 key)
-user("jane@acme.com");
-scope("tax:customer:read");
-scope("legal:read");
-max_spend_cents(100000);        // $1,000 department budget
-expires("2026-03-20T18:00:00Z"); // 2-hour session
+```json
+// Authority JWT claims (signed by iam.acme.com Ed25519 key)
+{
+  "iss": "iam.acme.com",
+  "sub": "jane@acme.com",
+  "scope": "tax:customer:read legal:read",
+  "ramp_max_spend_cents": 100000,    // $1,000 department budget
+  "exp": 1774375200,                  // 2026-03-20T18:00:00Z, 2-hour session
+  "cnf": { "jkt": "<thumbprint of the agent's key>" }
+}
 ```
 
 The `Delegation` message carries this token on the wire:
@@ -139,8 +142,8 @@ Delegation {
   scopes: ["tax:customer:read", "legal:read"]
   expires_at: "2026-03-20T18:00:00Z"
   max_spend_cents: 100000  // $1,000 in currency minor units
-  token: "<base64-encoded Biscuit>"
-  token_format: "biscuit-v3"
+  token: "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>"
+  token_format: "jwt"
 }
 ```
 
@@ -153,7 +156,7 @@ Key properties of this flow:
 
 ## Agent Delegation Within the Enterprise
 
-Biscuit tokens support offline attenuation — an agent can narrow a token's permissions without calling back to IAM. This enables safe sub-agent delegation.
+Delegation JWTs support offline narrowing — an agent can narrow a token's permissions by issuing a child delegation JWT without calling back to IAM. This enables safe sub-agent delegation.
 
 ### The Pattern
 
@@ -165,7 +168,7 @@ Biscuit tokens support offline attenuation — an agent can narrow a token's per
 │  • legal:read            │
 │  • max_spend_cents: 100000│
 └──────────┬──────────────┘
-           │ Attenuate
+           │ Issue child delegation JWT (narrowing)
            ▼
 ┌─────────────────────────┐
 │  Tax Lookup Sub-Agent    │
@@ -176,7 +179,7 @@ Biscuit tokens support offline attenuation — an agent can narrow a token's per
 └─────────────────────────┘
 ```
 
-The attenuated token is a new signed block appended to the Biscuit chain. The sub-agent **cannot** widen permissions — it can only further restrict scope, spend, time, and URI patterns.
+The narrowed token is a new child delegation JWT linked into the chain via `cnf`. The sub-agent **cannot** widen permissions — it can only further restrict scope, spend, time, and URI patterns.
 
 This happens entirely offline. No call to IAM. No network round-trip. No central bottleneck.
 
@@ -218,15 +221,15 @@ The `UsageReport` records:
 | `usage` | How the resource was used (function, consumed quantity) |
 | Timestamp | When the resource was accessed |
 | Requester identity | Which user, which agent, which department |
-| Delegation token | The Biscuit token — proves what authorization was granted |
+| Delegation token | The delegation JWT — proves what authorization was granted |
 
-The Biscuit token is logged alongside the transaction. This creates a complete evidence chain:
+The delegation JWT is logged alongside the transaction. This creates a complete evidence chain:
 
 ```
 Who:   jane@acme.com (via Copilot Agent)
 What:  internal://tax/customer/ACME-001
 When:  2026-03-20T14:32:00Z
-Auth:  Biscuit token [scopes: tax:customer:read, legal:read]
+Auth:  delegation JWT [scopes: tax:customer:read, legal:read]
 How:   FUNCTION_SEARCH (consumed 1 record)
 Cost:  $0.00 (budget_scope: dept:tax)
 ```
@@ -234,13 +237,13 @@ Cost:  $0.00 (budget_scope: dept:tax)
 For compliance officers, this means:
 - **Full provenance**: every resource access traced to a user, an agent, a scope, and a time
 - **Tamper evidence**: Ed25519 signatures on every transaction — altering the log breaks the signature chain
-- **Scope proof**: the Biscuit token proves what the user was authorized to access at the time of access, not what they are authorized for now
+- **Scope proof**: the delegation JWT proves what the user was authorized to access at the time of access, not what they are authorized for now
 
 ## Deployment Phases
 
 ### Phase 1: External resources through RAMP (weeks)
 
-Deploy a Broker. Configure Biscuit token minting from your IAM. Route to external Exchanges (D&B, PACER, news). All external AI resource access flows through one protocol with unified identity and audit.
+Deploy a Broker. Configure delegation JWT minting from your IAM. Route to external Exchanges (D&B, PACER, news). All external AI resource access flows through one protocol with unified identity and audit.
 
 ### Phase 2: Internal Exchange (one deployment)
 

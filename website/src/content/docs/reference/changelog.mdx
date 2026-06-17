@@ -17,7 +17,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 - **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers.
 - **RAMPRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
 - **Requester** — universal actor identity (AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH).
-- **Delegation** — token-format-agnostic (biscuit-v3 default, JWT also supported). Scoped, time-limited, spend-capped, attenuatable.
+- **Delegation** — holder-bound JWT by default (RFC 7800 `cnf`/`jkt` + RFC 9421 proof-of-possession; chain of `cnf`-linked JWTs), with `token_format: "biscuit-v3"` as an optional alternative. Scoped, time-limited, spend-capped, narrowable offline.
 - **Scope-based access control** — the Exchange filters its catalog by the requester's scopes; subscriptions are scopes.
 - **SubscriptionQuotaInfo** — proactive, multi-dimensional quota signaling on `Offer` and `TransactionResponse`.
 - **ResourceMutability** — STATIC (hash stable), DYNAMIC (hash drifts), LIVE (streaming, no content at offer time).

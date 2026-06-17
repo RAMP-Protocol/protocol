@@ -169,7 +169,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 ```
 Line 1: Protocol-level prevention
   Signed offers, content hashes, agent-bound URLs, idempotency keys,
-  Biscuit append-only attenuation, RFC 9421 forwarding-chain verification
+  holder-bound JWT delegation chain (cnf), RFC 9421 forwarding-chain verification
   (stack of per-hop HTTP Message Signatures), subscription-level quota tracking
   Makes attacks structurally impossible
 
@@ -214,15 +214,15 @@ Line 3: Legal/contractual enforcement
 
 ## 8. Delegation and Authorization Threats
 
-### T-DEL-1: Biscuit token theft
+### T-DEL-1: Delegation token theft
 
 **Attack**: Attacker steals a delegation token (e.g., via log exfiltration, memory dump, or network interception) and attempts to use it to access resources within the token's scope.
 **Countermeasure (protocol)**: **Holder binding neutralizes theft.** A delegation token is sealed/attenuated to the holder's key, and verification requires the key that signs the HTTP request ([RFC 9421](/protocol/authentication/#request-signatures)) to equal the bound key (see [Verification](/protocol/authentication/#verification) step 3). A thief who steals the token bytes but not the private signing key cannot produce a valid request — the token is **not bearer-usable**, so theft alone grants nothing. Spend caps (`max_spend_cents`), access caps (`max_accesses`), short TTLs, and optional `revocation_uri` checking are **defense-in-depth** that bound the blast radius in the residual case where the holder's signing key is *also* compromised. This is why T-DEL-1 is listed as structurally preventable rather than merely mitigated.
 
 ### T-DEL-2: Delegation scope escalation
 
-**Attack**: Attacker attempts to widen permissions by manipulating Biscuit attenuation blocks (e.g., removing a restriction to escalate from `ai-search` to `ai-train`).
-**Countermeasure (protocol)**: **Biscuit's cryptographic guarantee -- attenuation is append-only.** Each block is Ed25519 signed. Blocks can only narrow permissions, never widen. Any attempt to remove or modify an existing block invalidates the entire token's signature chain. Exchange verifies the full block chain before granting access.
+**Attack**: Attacker attempts to widen permissions by manipulating the delegation chain (e.g., editing a child JWT to escalate from `ai-search` to `ai-train`, or splicing in a forged link).
+**Countermeasure (protocol)**: **The delegation chain narrows only, and is cryptographically linked.** Each delegation JWT is Ed25519-signed, and a child's `scope` MUST be covered by its parent's (verified) — it can narrow, never widen. The **chain-linkage invariant** requires each JWT to be signed by the key the parent named in `cnf`; editing or splicing a link breaks signature verification against the upstream `cnf`. The Exchange verifies the full chain (and the request-signing key against the final `cnf.jkt`) before granting access.
 
 ### T-DEL-3: Revocation bypass
 
@@ -236,8 +236,8 @@ Line 3: Legal/contractual enforcement
 
 ### T-DEL-5: Scope pollution
 
-**Attack**: Agent declares scopes it doesn't actually have (no Biscuit to prove entitlement), hoping the Exchange trusts the declared scopes and returns premium content.
-**Countermeasure (protocol)**: Exchange treats `Requester.scopes` as an **upper bound for catalog filtering only**. Actual entitlements are verified via Biscuit token at transaction time. Without a valid Biscuit, the Exchange applies its default access policy (typically public resources only). Declared scopes without a matching Biscuit grant no additional access.
+**Attack**: Agent declares scopes it doesn't actually have (no delegation token to prove entitlement), hoping the Exchange trusts the declared scopes and returns premium content.
+**Countermeasure (protocol)**: Exchange treats `Requester.scopes` as an **upper bound for catalog filtering only**. Actual entitlements are verified via the delegation JWT at transaction time. Without a valid delegation token, the Exchange applies its default access policy (typically public resources only). Declared scopes without a matching delegation grant no additional access.
 
 ### T-DEL-6: Quota gaming via multiple tokens
 
@@ -258,8 +258,8 @@ Line 3: Legal/contractual enforcement
 
 ### T-LIC-3: Scope-gating escalation
 
-**Attack**: Term visibility is gated by Biscuit scope coverage (`LicenseTerm.scopes`, AND-semantics, empty = public). Two failure modes: (a) a publisher forgets `scopes` on a premium term → it defaults to public and leaks for free; (b) two implementations match scopes differently — naive prefix matching lets `sub:` cover `subscription:premium`, or `dist:*` is read as covering `dist:US:internal` on one Exchange but not another → an agent's Biscuit is read as covering a term it should not.
-**Countermeasure (protocol)**: Scope matching follows the single normative rule defined in [Scope Matching](/protocol/authentication/#scope-matching) (M9), and the **same rule applies to both** `Requester`/delegation scopes **and** `LicenseTerm.scopes` — there is exactly one matching algorithm: matching is **segment-wise** (`:`-delimited), never substring/prefix; a granted `*` segment matches one level and a **terminal `*` matches all remaining segments**; there is no implicit prefix match and a grant narrower than the requirement does not cover it. This is the authoritative string-segment definition. An Exchange MAY implement coverage with **Biscuit authorization (Datalog)** instead of literal string comparison, but the Datalog rules MUST produce results **identical** to the segment-wise definition — Datalog is a conformant implementation, not a second, divergent rule. So the example failures (`sub:` covering `subscription:premium`, or one Exchange reading `dist:*` as covering `dist:US:internal` and another not) are excluded by construction. `empty = public` stays the explicit, documented default; backfilling a sentinel scope (e.g. `r:all`) is **not** required — it only relocates the "forgot to set it" failure and forces every publisher to issue an extra Biscuit fact, without adding enforcement. (cf. OAuth 2.0 and AWS IAM: exact-match with explicitly-defined wildcard expansion, no implicit hierarchy.)
+**Attack**: Term visibility is gated by delegation scope coverage (`LicenseTerm.scopes`, AND-semantics, empty = public). Two failure modes: (a) a publisher forgets `scopes` on a premium term → it defaults to public and leaks for free; (b) two implementations match scopes differently — naive prefix matching lets `sub:` cover `subscription:premium`, or `dist:*` is read as covering `dist:US:internal` on one Exchange but not another → an agent's grant is read as covering a term it should not.
+**Countermeasure (protocol)**: Scope matching follows the single normative rule defined in [Scope Matching](/protocol/authentication/#scope-matching) (M9), and the **same rule applies to both** `Requester`/delegation scopes **and** `LicenseTerm.scopes` — there is exactly one matching algorithm: matching is **segment-wise** (`:`-delimited), never substring/prefix; a granted `*` segment matches one level and a **terminal `*` matches all remaining segments**; there is no implicit prefix match and a grant narrower than the requirement does not cover it. This is the authoritative string-segment definition. An Exchange MAY implement coverage with **Biscuit authorization (Datalog)** instead of literal string comparison, but the Datalog rules MUST produce results **identical** to the segment-wise definition — Datalog is a conformant implementation, not a second, divergent rule. So the example failures (`sub:` covering `subscription:premium`, or one Exchange reading `dist:*` as covering `dist:US:internal` and another not) are excluded by construction. `empty = public` stays the explicit, documented default; backfilling a sentinel scope (e.g. `r:all`) is **not** required — it only relocates the "forgot to set it" failure and forces every publisher to issue an extra scope grant, without adding enforcement. (cf. OAuth 2.0 and AWS IAM: exact-match with explicitly-defined wildcard expansion, no implicit hierarchy.)
 
 ### T-LIC-4: Referenced-document swap
 

@@ -176,14 +176,14 @@ The Broker queries only **academic-mp.example.com** (profile match) and **genera
 
 The Broker forwards `Requester.scopes` to every Exchange it queries. Scopes control what the requester can access -- the Exchange filters its catalog to resources matching these scopes. The Broker does not modify scopes; it passes them through as-is.
 
-### Biscuit Token Attenuation
+### Delegation Narrowing
 
-When the `Requester.delegation` carries a Biscuit authorization token, the Broker MAY attenuate it before forwarding. Biscuit tokens support append-only attenuation -- the holder can add restrictions (narrower scope, lower spend cap, fewer URIs) without going back to the issuer. This lets the Broker narrow a broad delegation for a specific Exchange:
+When the `Requester.delegation` carries a delegation token (JWT), the Broker MAY narrow it before forwarding. Delegation is a chain of `cnf`-linked JWTs -- the holder can issue a child JWT that adds restrictions (narrower scope, lower spend cap, fewer URIs) without going back to the issuer. This lets the Broker narrow a broad delegation for a specific Exchange:
 
 - Original delegation: `scope: academic:*, max_spend_cents: 50000`
-- Attenuated for Exchange A: `scope: academic:read, max_spend_cents: 10000, uris: doi:10.*`
+- Narrowed for Exchange A: `scope: academic:read, max_spend_cents: 10000, uris: doi:10.*`
 
-The attenuated token is a new signed block appended to the Biscuit chain. The Exchange verifies the full chain back to the original principal.
+The narrowed token is a new child delegation JWT appended to the chain (signed by the key the parent named in `cnf`, `scope ⊆ parent`). The Exchange verifies the full JWT chain back to the original principal.
 
 ### SubscriptionQuotaInfo Aggregation
 

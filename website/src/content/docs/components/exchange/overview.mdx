@@ -29,7 +29,7 @@ The Exchange implements the RAMP v1.0 `ExchangeService` (4 RPCs: `DiscoverResour
 
 ## Component Architecture
 
-The Exchange Node has five internal modules. Each module owns a distinct responsibility. Modules communicate via Go interfaces — no internal RPC, no message queues, no shared mutable state between modules. Identity verification uses the `Requester` model (Ed25519 domain-bound keys) with optional Biscuit delegation and verification of the stacked RFC 9421 HTTP Message Signatures that record the forwarding chain.
+The Exchange Node has five internal modules. Each module owns a distinct responsibility. Modules communicate via Go interfaces — no internal RPC, no message queues, no shared mutable state between modules. Identity verification uses the `Requester` model (Ed25519 domain-bound keys) with optional delegation (JWT) and verification of the stacked RFC 9421 HTTP Message Signatures that record the forwarding chain.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -122,7 +122,7 @@ Pink nodes are external dependencies. Everything else runs in-process.
 
 The Exchange sits between AI agents/Brokers and provider CDN infrastructure:
 
-1. An AI agent discovers available resources by calling `DiscoverResources` — the Exchange verifies the `Requester` identity (Ed25519 signature over domain-bound key), filters the catalog by the requester's scopes, and returns signed offers. If a Biscuit `Delegation` is present, the Exchange verifies the delegation chain before granting scoped access. When the request was forwarded through one or more intermediaries, each adds a labeled RFC 9421 HTTP Message Signature to the header stack (each covering the request plus the prior hop's signature); the Exchange verifies the whole stack to prove the request path and counts hops against `max_hops` / `max_intermediary_hops`
+1. An AI agent discovers available resources by calling `DiscoverResources` — the Exchange verifies the `Requester` identity (Ed25519 signature over domain-bound key), filters the catalog by the requester's scopes, and returns signed offers. If a `Delegation` is present, the Exchange verifies the delegation JWT chain before granting scoped access. When the request was forwarded through one or more intermediaries, each adds a labeled RFC 9421 HTTP Message Signature to the header stack (each covering the request plus the prior hop's signature); the Exchange verifies the whole stack to prove the request path and counts hops against `max_hops` / `max_intermediary_hops`
 2. The agent executes a transaction by calling `ExecuteTransaction` with a chosen offer — the Exchange verifies the offer signature, authorizes billing, logs the transaction, and returns a signed URL
 3. The agent fetches the resource using the signed URL — the CDN edge function verifies the URL signature using the same HMAC secret shared with the Exchange
 4. The agent reports usage by calling `ReportUsage` — the Exchange validates the report and updates the obligation state

@@ -250,3 +250,27 @@ by mapping rather than duplication: a CoMP `revshare` rate rides through verbati
 in the `ramp-comp-v1` ext (`comp.license[].revshare`), full fidelity for
 CoMP-aware parties and ignored by everyone else, while RAMP core stays
 minimal and its signed offers stay price-comparable.
+
+## JWT (holder-of-key) is the default delegation token; Biscuit is optional
+
+The delegation token started as a Biscuit (`token_format` defaulted to
+`"biscuit-v3"`), chosen for offline attenuation. Modelling the holder-binding
+guarantee end to end surfaced that the property RAMP actually depends on — "a
+leaked token is not bearer-usable" — is proof-of-possession, not anything
+specific to Biscuit: it is the request-signing key matching a key named in the
+token, verified offline. A chain of `cnf`-bound JWTs delivers exactly that — the
+authority JWT (issuer-signed) names the principal's key in `cnf`; the principal
+issues a child JWT naming the agent's key and narrowing scope; the agent proves
+possession with its RFC 9421 request signature; the verifier walks the chain
+offline under the issuer's key alone (intermediate keys ride in the JOSE header
+`jwk`). The chain-linkage invariant (each token signed by the key its parent
+named) gives the same theft- and escalation-resistance as Biscuit's block chain.
+
+What Biscuit adds beyond this — in-token Datalog and deep in-place attenuation by
+mutually-distrusting intermediaries — RAMP does not use: the check set is fixed
+(scope coverage, expiry, caps, holder binding) and delegation chains are shallow.
+So `token_format` now defaults to `"jwt"`, and JWT is the one delegation
+technology a conformant implementation must support. `"biscuit-v3"` stays a
+permitted optional profile for deployments that genuinely want deep offline
+attenuation. The win is adoption: JWT is ubiquitous, so RAMP asks implementers to
+take on no genuinely new token technology by default.

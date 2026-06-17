@@ -101,10 +101,11 @@ func (h *ExchangeHandler) DiscoverResources(
         return nil, connect.NewError(connect.CodeUnauthenticated, err)
     }
 
-    // 2c. Verify Biscuit delegation (if present).
-    //     Verifies the Biscuit token chain against the principal's published key.
+    // 2c. Verify delegation (if present).
+    //     Verifies the delegation JWT chain (chain linkage + cnf holder binding)
+    //     against the principal's published key.
     if requester.Delegation != nil {
-        if err := h.verifyBiscuitDelegation(ctx, requester); err != nil {
+        if err := h.verifyDelegationJWT(ctx, requester); err != nil {
             return nil, connect.NewError(connect.CodePermissionDenied, err)
         }
     }
@@ -122,7 +123,7 @@ func (h *ExchangeHandler) DiscoverResources(
 
     // 5. Catalog lookup (lock-free read, scope-filtered)
     //    The catalog is filtered by requester.scopes — resources outside the
-    //    requester's declared scopes are not returned. If a Biscuit delegation
+    //    requester's declared scopes are not returned. If a delegation
     //    is present, effective scopes are the intersection of requester.scopes
     //    and the delegation's granted scopes.
     effectiveScopes := requester.Scopes
@@ -286,18 +287,19 @@ if err := h.verifyForwardingChain(ctx, req); err != nil {
 }
 ```
 
-### Biscuit Delegation Verification
+### Delegation Verification
 
-When `Requester.delegation` is present, the Exchange verifies the Biscuit token chain before granting scoped access:
+When `Requester.delegation` is present, the Exchange verifies the delegation JWT chain before granting scoped access:
 
-1. Deserialize the base64-encoded `token` from the `Delegation` message
-2. Verify the Ed25519 signature chain — authority block signed by `principal_domain`'s published key
-3. Evaluate all check conditions (scope restrictions, spend caps, expiration)
-4. Extract effective scopes (intersection of requester scopes and delegation scopes)
-5. Check `expires_at` against current time
-6. Optionally check `revocation_uri` for high-value transactions
+1. Decode the base64url-encoded `token` (JWS) from the `Delegation` message
+2. Verify the Ed25519 signature chain — the authority JWT signed by `principal_domain`'s published key, each child JWT signed by the key its parent named in `cnf` (chain-linkage invariant)
+3. Verify holder binding — the key that signed the RFC 9421 request MUST hash to the final JWT's `cnf.jkt`
+4. Evaluate constraints (scope coverage, spend caps, expiration) — the grant covers scopes only if each child's `scope` is contained in its parent's
+5. Extract effective scopes (intersection of requester scopes and delegation scopes)
+6. Check `expires_at` against current time
+7. Optionally check `revocation_uri` for high-value transactions
 
-See [Authentication](/protocol/authentication/) for the full Biscuit delegation model.
+See [Authentication](/protocol/authentication/) for the full delegation model.
 
 ### Provider Trust Verification
 

@@ -77,10 +77,15 @@ bearer-usable. Issuer-specific facts use a `vendor:` namespace; `ramp_`-prefixed
 names are reserved. Binding constraints are fail-closed (binding by default)
 unless explicitly marked advisory.
 
-**Biscuit v3.** The Biscuit profile moves v2 → v3 and `token_format` now defaults
-to `"biscuit-v3"`. JWT stays wire-permitted, but its full verification path
-(`cnf`/DPoP proof-of-possession, OIDC issuer → JWKS) is deferred past v1; Biscuit
-v3 is the v1 conformance format.
+**JWT-default delegation (holder-of-key).** `token_format` defaults to `"jwt"`:
+the delegation token is a holder-bound JWT, with the grant tied to a key via the
+RFC 7800 `cnf` claim (`cnf.jkt` = RFC 7638 thumbprint) and possession proven by
+the RFC 9421 request signature. Delegation is a chain of `cnf`-linked JWTs
+(each child signed by the key its parent named, scope ⊆ parent), verified offline
+under the issuer's key alone. `"biscuit-v3"` remains a permitted **optional**
+alternative for deployments wanting deep multi-hop in-place attenuation. This
+makes JWT — already ubiquitous — the one delegation technology implementers must
+support; Biscuit is opt-in.
 
 **Scope matching.** One normative algorithm applies protocol-wide: scopes are
 `":"`-separated segments; a grant covers a requirement only if each granted

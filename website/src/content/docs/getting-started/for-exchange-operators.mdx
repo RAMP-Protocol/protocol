@@ -146,14 +146,14 @@ Every incoming request carries a `Requester` message with an Ed25519 signature. 
 
 Key caching is recommended. Fetch keys with a TTL and re-fetch periodically to handle key rotation without per-request overhead.
 
-### Biscuit Delegation Verification
+### Delegation Verification
 
-When a request includes a `Delegation` message (nested inside `Requester`), your Exchange verifies the Biscuit token chain:
+When a request includes a `Delegation` message (nested inside `Requester`), your Exchange verifies the JWT chain:
 
-1. Deserialize the base64-encoded `token` from the `Delegation` message
-2. Verify the authority block (block 0) is signed by the Ed25519 key published at `{principal_domain}/.well-known/ramp.json` (`role=ROLE_AGENT`)
-3. Verify each attenuation block's signature (each signed by the entity that appended it)
-4. **Verify holder binding** — the key that signed the request (RFC 9421) MUST equal the key the token is sealed/attenuated to; reject with `DENIAL_REASON_DELEGATION_INVALID` if they differ. This is mandatory: it is what makes a stolen token unusable, so a token possessed without its signing key grants nothing.
+1. Verify the JWT chain from the base64url `token` in the `Delegation` message
+2. Verify the authority JWT is signed by the Ed25519 key published at `{principal_domain}/.well-known/ramp.json` (`role=ROLE_AGENT`)
+3. Verify each child delegation JWT's signature (each signed by the key its parent named in `cnf`)
+4. **Verify holder binding** — the key that signed the request (RFC 9421) MUST equal the key named in `cnf` (`cnf.jkt`); reject with `DENIAL_REASON_DELEGATION_INVALID` if they differ. This is mandatory: it is what makes a stolen token unusable, so a token possessed without its signing key grants nothing.
 5. Evaluate all check conditions across all blocks — scope restrictions, spend caps, URI constraints
 6. Check `expires_at` against current time — reject expired tokens with `DENIAL_REASON_DELEGATION_INVALID`
 7. Optionally check `revocation_uri` for high-value transactions
@@ -191,7 +191,7 @@ RAMP defines three identity-related denial reasons your Exchange MUST return whe
 | `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (bad signature chain or holder-binding mismatch), expired (`expires_at` in the past), or its attenuation does not check out |
 | `DENIAL_REASON_SCOPE_INSUFFICIENT` | Requester's scopes do not cover the requested resource (transaction-time denial) |
 
-For the full identity model specification — Requester fields, Biscuit structure, scope format, and key management — see [Authentication](/protocol/authentication/).
+For the full identity model specification — Requester fields, the JWT chain, scope format, and key management — see [Authentication](/protocol/authentication/).
 
 ## Attestation Verification
 

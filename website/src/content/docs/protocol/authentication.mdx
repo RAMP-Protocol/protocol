@@ -1,6 +1,6 @@
 ---
 title: "Authentication"
-description: "Three-layer identity model: Requester identity with Ed25519 signatures, Biscuit delegation tokens for scoped authorization, and a stack of RFC 9421 HTTP Message Signatures for multi-hop request provenance."
+description: "Three-layer identity model: Requester identity with Ed25519 signatures, holder-bound JWT delegation tokens for scoped authorization, and a stack of RFC 9421 HTTP Message Signatures for multi-hop request provenance."
 ---
 
 ## Overview
@@ -8,10 +8,10 @@ description: "Three-layer identity model: Requester identity with Ed25519 signat
 RAMP authentication answers three questions for every request:
 
 1. **Who are you?** — Requester identity, proven by Ed25519 signature over a domain-bound key
-2. **What can you access?** — Scopes carried in the request (and optionally in a Biscuit delegation token)
-3. **Who authorized you?** — Delegation chain from a principal (organization, user, upstream agent) via Biscuit tokens that can be attenuated without round-tripping to the issuer
+2. **What can you access?** — Scopes carried in the request (and optionally in a delegation token)
+3. **Who authorized you?** — Delegation chain from a principal (organization, user, upstream agent) via holder-bound JWTs that can be narrowed without round-tripping to the issuer
 
-These three layers are independent. A public agent with no delegation still authenticates (layer 1) and declares scopes (layer 2, defaulting to public access). An enterprise agent adds a Biscuit token (layer 3) that binds the agent to a principal's entitlements with time and spend limits.
+These three layers are independent. A public agent with no delegation still authenticates (layer 1) and declares scopes (layer 2, defaulting to public access). An enterprise agent adds a delegation token (layer 3) that binds the agent to a principal's entitlements with time and spend limits.
 
 ## Requester Identity
 
@@ -27,7 +27,7 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 | `name` | `string` (optional) | Human-readable name (e.g., `"Acme Research Assistant"`) |
 | `billing_ref` | `string` (optional) | Opaque billing reference for invoicing / cost attribution (not an entitlement; access is via scopes/delegation) |
 | `scopes` | `repeated string` | Entitlement scopes — what the requester can access |
-| `delegation` | `Delegation` (optional) | Biscuit delegation token from a principal |
+| `delegation` | `Delegation` (optional) | Holder-bound JWT delegation token from a principal |
 | `ext` | `Struct` | Implementer-specific extensions |
 | `ext_critical` | `repeated string` | Critical extension keys (COSE crit pattern) |
 
@@ -93,131 +93,122 @@ The `Requester` message carries identity semantics only — it has **no** signat
 
 If verification fails, the Exchange rejects the request. No fallback, no degraded mode. See [How RFC 9421 Signatures Work](#how-rfc-9421-signatures-work) below for the header details.
 
-## Biscuit Delegation
+## Delegation
 
-### Why Not JWT?
+The delegation token is a **JWT** (the default and fully-specified format) that is **holder-of-key bound**: the grant is tied to a specific key via the [RFC 7800](https://datatracker.ietf.org/doc/html/rfc7800) `cnf` confirmation claim, and the holder proves possession by signing the request with that key (the same RFC 9421 signature it already sends). The token is *not* a bearer credential — copying it is useless without the matching private key.
 
-JWT is the default choice for bearer tokens, but it has a fundamental limitation in agentic workflows: **claims are immutable after issuance**.
+> **Why not a plain bearer JWT?** A bearer JWT is usable by anyone who holds it, and it can't be narrowed for a sub-agent without a round trip to the issuer. RAMP fixes both with one mechanism: `cnf` holder-of-key binding (theft-resistance) plus **chained `cnf` JWTs** (offline delegation). A principal narrows a grant for an agent by issuing a child JWT — no call back to the original issuer.
 
-Consider an enterprise where MarketData issues a JWT granting access to quotes and earnings data. An agent receives this JWT. When the agent delegates to a sub-agent that only needs earnings data, it cannot narrow the JWT — the sub-agent gets full quote access too. The only alternative is going back to MarketData for a new, narrower JWT.
+### Holder-of-key, not bearer
 
-In the real world, agents delegate to sub-agents, which delegate to further sub-agents. With JWT, each delegation requires a round trip to the original issuer. **N delegation levels = N round trips.**
+Each delegation JWT carries `cnf.jkt` — the [RFC 7638](https://datatracker.ietf.org/doc/html/rfc7638) JWK thumbprint of the key the grant is bound to. At request time the verifier computes the thumbprint of the key that signed the RFC 9421 request and checks it equals `cnf.jkt`. A thief who steals the token but not the private signing key cannot produce a valid request, so the token grants nothing. This is the same proof-of-possession mechanism as DPoP.
 
-Biscuit solves this: the holder can append restriction blocks that narrow permissions without any call to the issuer. **N delegation levels = 1 original issuance + 0 round trips.**
+### How delegation works
 
-### How Biscuit Works
+Delegation is a chain of `cnf`-linked JWTs, content owner → principal → agent:
 
-A Biscuit token is a chain of signed blocks:
+- **Authority JWT** — signed by the **resource owner** (the issuer). Carries the granted `scope`, `exp`, and `cnf.jkt` = the **principal's** key. The owner's public key is the verifier's only trust anchor.
+- **Delegation JWT** — signed by the **principal**, narrowing the grant for a specific **agent**: `scope ⊆ parent`, shorter `exp`, `cnf.jkt` = the **agent's** key. It carries the principal's public key in its JOSE header (`jwk`) so the verifier can both link it to the authority's `cnf` and verify it.
+- **Request** — signed by the **agent** (RFC 9421); the verifier checks `thumbprint(request key) == delegation cnf.jkt`.
 
-- **Block 0 (authority block)** — Signed by the principal (the entity that issued the delegation). Contains facts: what permissions are granted, when the token expires, spending caps.
-- **Block 1..N (attenuation blocks)** — Appended by each holder in the delegation chain. Each block adds restrictions (checks) but **can never add new permissions**. Each block is signed with Ed25519 by the entity that added it.
+**Chain-linkage invariant:** each JWT's signer MUST be the key the parent named in `cnf`. The owner verifies the authority; `authority.cnf` pins the principal; the delegation's header key must match that pin (and verifies the delegation); `delegation.cnf` pins the agent; the request key must match that pin. A token signed by a key not named upstream is rejected.
 
-The critical property: **attenuation is append-only**. You can narrow a token arbitrarily, but you cannot widen it. The authority block sets the ceiling; every subsequent block can only lower it.
-
-### RAMP-Specific Facts
-
-The authority block (block 0) of a RAMP Biscuit contains these facts:
-
-```
-user("marketdata.example.com");               // Who issued the delegation
-scope("quote:*");                     // One fact per granted scope
-scope("earnings:*");
-max_spend_cents(50000);               // Spending cap in currency minor units
-max_accesses(10000);                  // Access count cap
-quota_period_hours(720);              // Reset period (30 days)
-expires("2026-03-20T18:00:00Z");      // Expiration time (RFC 3339)
-```
+The chain narrows only — a child's `scope` must be covered by its parent's (see [Scope Matching](#scope-matching)). The principal can delegate to a sub-agent (and that sub-agent further) by issuing another child JWT, entirely offline. Verifiers need only the **owner's** public key; the principal and agent keys ride inside the chain.
 
 ### The Delegation Message
 
-The Biscuit token is carried in the `Delegation` message, nested inside `Requester`:
+The token is carried in the `Delegation` message, nested inside `Requester`:
 
 | Field | Type | Description |
 |---|---|---|
 | `principal_domain` | `string` | Who granted this delegation (domain for public key lookup) |
 | `principal_id` | `string` | Principal's identifier (e.g., `"user@acme.com"`, `"marketdata.example.com"`) |
-| `scopes` | `repeated string` | Scopes granted — convenience extraction of Biscuit authority block |
+| `scopes` | `repeated string` | Scopes granted — convenience mirror of the token's `scope` claim |
 | `expires_at` | `Timestamp` | When this delegation expires. Exchange MUST reject expired tokens |
 | `max_spend_cents` | `int64` (optional) | Maximum spend in currency minor units (e.g. cents for USD) |
-| `token` | `bytes` | Token bytes — JWT (base64url) or Biscuit (binary, base64) |
-| `token_format` | `string` | Token format: `"biscuit-v3"` (default) or `"jwt"` |
+| `token` | `bytes` | Token bytes — a JWT (base64url JWS) by default |
+| `token_format` | `string` | Token format: `"jwt"` (default) or `"biscuit-v3"` (optional) |
 | `revocation_uri` | `string` (optional) | URI for real-time revocation checking (high-value transactions) |
 | `max_accesses` | `int32` (optional) | Maximum number of accesses allowed under this delegation. Exchange tracks count and denies with `DENIAL_REASON_QUOTA_EXCEEDED` when count >= limit. |
 | `quota_period` | `Duration` (optional) | How often access/spend counters reset. E.g., `"720h"` for monthly subscriptions. When absent, quota is lifetime (bounded only by `expires_at`). |
-| `issuer` | `string` (optional) | Token issuer — OIDC issuer URL or GNAP grant server (for JWT/GNAP validation) |
+| `issuer` | `string` (optional) | Token issuer — OIDC issuer URL (for JWT signature validation via OIDC→JWKS) |
 | `ext` | `Struct` | Implementer-specific extensions |
 | `ext_critical` | `repeated string` | Critical extension keys (COSE crit pattern) |
 
-The `scopes` field is a convenience extraction — the Exchange MAY use it for fast catalog filtering before performing full Biscuit cryptographic verification.
+The `scopes` field is a convenience mirror — the Exchange MAY use it for fast catalog filtering before performing full token verification. The token's claims are authoritative.
 
 ### Delegation-Claims Profile
 
-The `token` is opaque bytes, but its contents are the **authoritative** source of the grant (the plaintext `Delegation` fields are only the convenience mirror). For the caps and scopes to be verifiable and portable across Exchanges, RAMP defines a small **registered claim vocabulary** — the same registered-tokens + optional-fields + vendor-namespace pattern used elsewhere in the protocol. It applies to both formats (JWT claims / Biscuit facts):
+The `token`'s claims are the **authoritative** source of the grant (the plaintext `Delegation` fields are only the convenience mirror). RAMP defines a small **registered claim vocabulary** — the same registered-tokens + optional-fields + vendor-namespace pattern used elsewhere in the protocol:
 
-| Claim | JWT | Biscuit fact | Required? | Meaning |
-|---|---|---|---|---|
-| subject / holder | `sub` + `cnf` (proof-of-possession key) | key the token is sealed/attenuated to | **Yes** | Binds the grant to the key that signs the request — verified per [Verification](#verification) step 3 (request-signing key MUST equal the bound key). Without it the token is bearer-usable. |
-| issuer | `iss` | root key (`principal_domain`) | Yes | Who granted it. |
-| `scope` | `scope` | `scope("…")` | No | Granted scopes (segment-wise; see [Scope Matching](#scope-matching)). |
-| `exp` | `exp` | `expires("…")` | No (recommended) | Expiry. |
-| `max_spend_cents` | `ramp_max_spend_cents` | `max_spend_cents(…)` | No | Spend cap (currency minor units). |
-| `max_accesses` | `ramp_max_accesses` | `max_accesses(…)` | No | Access-count cap. |
-| `quota_period` | `ramp_quota_period` | `quota_period_hours(…)` | No | Counter reset period. |
+| Claim | JWT claim | Required? | Meaning |
+|---|---|---|---|
+| holder | `cnf` (with `jkt`) | **Yes** | Binds the grant to a key by RFC 7638 thumbprint — verified per [Verification](#verification) (request-signing key MUST hash to `cnf.jkt`). Without it the token is bearer-usable. |
+| issuer | `iss` | Yes | Who granted it (resource owner / principal). |
+| `scope` | `scope` | No | Granted scopes (space-delimited; segment-wise matching — see [Scope Matching](#scope-matching)). |
+| `exp` | `exp` | No (recommended) | Expiry. |
+| `max_spend_cents` | `ramp_max_spend_cents` | No | Spend cap (currency minor units). |
+| `max_accesses` | `ramp_max_accesses` | No | Access-count cap. |
+| `quota_period` | `ramp_quota_period` | No | Counter reset period. |
 
 Rules:
 
-- **Everything except the subject/holder binding is optional.** An issuer that only wants scope + expiry sets just those; absent caps mean "no cap from the delegation" (the Exchange's own limits still apply).
-- **Vendors MAY add namespaced claims** (`vendor:claim` / a vendor-prefixed fact).
-- **Constraints fail closed.** A claim a verifier cannot evaluate is **binding by default** — it MUST reject rather than ignore (a dropped constraint would fail *open*, granting more than intended). This mirrors [`Restriction.advisory`](/protocol/licensing-terms/): the issuer may mark a custom claim *advisory* to downgrade it to ignorable. (Biscuit gets this for free — an unsatisfiable check fails verification; for JWT the issuer lists the mandatory-to-understand claims.)
-- **`ramp_`-prefixed claim/fact names are reserved** for this registry. Vendors MUST use their own `vendor:` namespace and MUST NOT define `ramp_*` names, so registered claims can never be shadowed.
+- **Everything except the holder binding (`cnf`) is optional.** An issuer that only wants scope + expiry sets just those; absent caps mean "no cap from the delegation" (the Exchange's own limits still apply).
+- **Vendors MAY add namespaced claims** (`vendor:claim`).
+- **Constraints fail closed.** A claim a verifier cannot evaluate is **binding by default** — it MUST reject rather than ignore (a dropped constraint would fail *open*, granting more than intended). This mirrors [`Restriction.advisory`](/protocol/licensing-terms/): the issuer may mark a custom claim *advisory* to downgrade it to ignorable. (The issuer lists the mandatory-to-understand claims; an unrecognized non-advisory claim is rejected.)
+- **`ramp_`-prefixed claim names are reserved** for this registry. Vendors MUST use their own `vendor:` namespace and MUST NOT define `ramp_*` names, so registered claims can never be shadowed.
 
-> **JWT in v1.** `token_format: "jwt"` is permitted on the wire, but **Biscuit v3 is the default and the only token format with a fully specified verification path in v1.** A complete JWT path — proof-of-possession via `cnf` ([RFC 7800](https://datatracker.ietf.org/doc/html/rfc7800)) bound with DPoP or mTLS, and issuer discovery via OIDC→JWKS — is **deferred past v1**. Until then, an Exchange MAY accept JWT delegations only if it can enforce the **same mandatory holder binding** (step 3) and fail-closed constraint rules; otherwise it MUST reject `token_format: "jwt"` rather than fall back to bearer semantics. There is no degraded mode.
+> **Biscuit alternative.** `token_format: "biscuit-v3"` remains a permitted alternative for deployments that want deep multi-hop, in-place offline attenuation across mutually-distrusting intermediaries. The same registered claim names map onto Biscuit facts, and the same holder binding applies (the request-signing key must match the holder the token is sealed to). JWT is the default and what conformant implementations must support; Biscuit is an optional profile.
 
-### Attenuation Example
+### Delegation chain example
 
-MarketData issues a Biscuit for an agent with broad access:
+MarketData (resource owner) issues an authority JWT to the Acme principal, bound to Acme's key:
 
-```
-// Authority block (signed by marketdata.example.com)
-user("marketdata.example.com");
-scope("quote:*");
-scope("earnings:*");
-max_spend_cents(50000);
-expires("2026-03-20T18:00:00Z");
-```
-
-The agent delegates to a sub-agent that only needs earnings data. It appends an attenuation block:
-
-```
-// Attenuation block 1 (signed by agent)
-check if scope("earnings:*");       // Only earnings access
-check if max_spend_cents($v), $v <= 10000;  // Lower spend cap
+```json
+// authority JWT — signed by marketdata.example.com (the owner key)
+// header
+{ "alg": "EdDSA", "typ": "JWT" }
+// claims
+{
+  "iss": "marketdata.example.com",
+  "scope": "quote:* earnings:*",
+  "max_spend_cents": 50000,
+  "exp": 1781787345,
+  "cnf": { "jkt": "<thumbprint of Acme's principal key>" }
+}
 ```
 
-The sub-agent further delegates to a narrow research task:
+Acme delegates to a research agent that only needs earnings data, narrowing scope and shortening the TTL — no call back to MarketData:
 
-```
-// Attenuation block 2 (signed by sub-agent)
-check if scope("earnings:NVDA");    // Only NVIDIA earnings
+```json
+// delegation JWT — signed by Acme's principal key
+// header carries the principal pubkey so the verifier links it to authority.cnf
+{ "alg": "EdDSA", "typ": "JWT",
+  "jwk": { "kty": "OKP", "crv": "Ed25519", "x": "<Acme principal pubkey>" } }
+// claims
+{
+  "iss": "acme",
+  "scope": "earnings:*",
+  "exp": 1781701545,
+  "cnf": { "jkt": "<thumbprint of the agent's key>" }
+}
 ```
 
-**Zero round trips to MarketData.** Each level of delegation is local. The token encodes the full permission chain.
+The agent then signs its request (RFC 9421) with its own key. **Zero round trips to MarketData** — each delegation is a locally-issued child JWT.
 
 ### Verification
 
-The Exchange verifies a Biscuit delegation by:
+The Exchange/edge verifies a delegation by (offline, using only the owner's public key):
 
-1. Deserializing the base64-encoded `token` from the `Delegation` message
-2. Verifying the Ed25519 signature chain — authority block signed by `principal_domain`'s published key, each attenuation block signed by the entity that appended it
-3. **Verifying holder binding** — the key that signed the HTTP request ([RFC 9421](#request-signatures)) MUST equal the key the token is sealed/attenuated to (the holder key in the final block). If they differ, **reject** (`DENIAL_REASON_DELEGATION_INVALID`). This step is what makes a leaked token useless to a thief: possessing the token bytes is not enough — you must also control the request-signing key the token is bound to. It is **not optional** and **not skippable**; an Exchange that omits it reduces the token to a bearer credential and breaks the anti-theft guarantee.
-4. Evaluating all check conditions across all blocks
-5. Extracting effective scopes (intersection of all blocks)
-6. Checking `expires_at` against current time
-7. Optionally checking `revocation_uri` for high-value transactions
+1. **Verify the authority JWT** with the resource owner's published key (the trust anchor). Read its `scope`, `exp`, and `cnf.jkt`.
+2. **Verify each delegation JWT** with the key in its own JOSE header `jwk` — but only after checking `thumbprint(header key) == parent cnf.jkt` (the **chain-linkage invariant**). Reject a JWT signed by a key the parent did not name. Check each child's `scope` is covered by its parent's.
+3. **Verify holder binding** — the key that signed the HTTP request ([RFC 9421](#request-signatures)) MUST hash to the final delegation's `cnf.jkt`. If not, **reject** (`DENIAL_REASON_DELEGATION_INVALID`). This is what makes a leaked token useless to a thief: possessing the bytes is not enough — you must control the bound private key. It is **not optional** and **not skippable**; an Exchange that omits it reduces the token to a bearer credential and breaks the anti-theft guarantee.
+4. Check `exp` on every JWT in the chain against current time.
+5. Optionally check `revocation_uri` for high-value transactions.
 
-This is entirely offline — no callback to the principal. The Exchange only needs the principal's published public key, which it can cache.
+This is entirely offline — no callback to the issuer. The verifier needs only the owner's published public key (cacheable); the principal and agent keys arrive inside the chain (header `jwk` + `cnf.jkt`).
 
-**Holder binding across hops.** When a holder attenuates and re-delegates (appends a block), the new block re-seals the token to the *sub-agent's* key, so at every hop the bound key is the key of whoever now signs the request. The chain of Ed25519 block signatures is what carries the binding forward — there is no point at which the token reverts to bearer form.
+**Binding across hops.** Each delegation re-binds to the next holder's key (`cnf.jkt` of the child = the next agent), so at every hop the bound key is whoever now signs the request. The chain of JWT signatures carries the binding forward — there is no point at which the token reverts to bearer form.
 
 ### Delegation Denial Reasons
 
@@ -232,17 +223,17 @@ When delegation verification fails, the Exchange returns a specific denial reaso
 
 | Language | Library | Notes |
 |---|---|---|
-| Go | `biscuit-go` | Ed25519 native, protobuf wire format |
-| TypeScript | `@biscuit-auth/biscuit-wasm` | WASM-based, works in Node and browser |
-| Python | `biscuit-python` | Ed25519 native |
+| Go | `golang-jwt/jwt` | EdDSA (Ed25519) signing/verification, JOSE headers |
+| TypeScript | `jose` | EdDSA, runs in Node and the browser |
+| Python | `PyJWT` (+ `cryptography`) | EdDSA |
 
-All libraries use Ed25519 natively (same key type as RAMP identity signatures) and protobuf as the internal wire format (same serialization as RAMP messages).
+All use Ed25519 natively — the same key type as RAMP identity signatures — so the delegation token and the RFC 9421 request signature share one key type and one library surface.
 
 ## Scope-Based Access
 
 Scopes are the mechanism by which the Exchange decides what resources to show a requester. The flow is:
 
-1. Agent sends `ResourceQuery` with `Requester.scopes` (and optionally a Biscuit `Delegation` that also carries scopes)
+1. Agent sends `ResourceQuery` with `Requester.scopes` (and optionally a `Delegation` that also carries scopes)
 2. Exchange filters its catalog — only resources matching the declared scopes are returned
 3. Resources outside the scopes are **not returned**. The requester never learns they exist.
 
@@ -405,9 +396,9 @@ A research bot queries a public Exchange. No delegation token, no special scopes
 
 The Exchange verifies the signature by fetching the public key from `research.acme.com/.well-known/ramp.json`, then returns all publicly available offers for the requested URI.
 
-### Subscription Agent (MarketData Biscuit)
+### Subscription Agent (MarketData JWT)
 
-A financial analysis agent carries a MarketData-issued Biscuit that grants access to subscription-tier data.
+A financial analysis agent carries a MarketData-issued delegation JWT that grants access to subscription-tier data.
 
 ```json
 {
@@ -430,8 +421,8 @@ A financial analysis agent carries a MarketData-issued Biscuit that grants acces
       "scopes": ["quote:*", "earnings:*"],
       "expires_at": "2026-03-20T18:00:00Z",
       "max_spend_cents": 50000,
-      "token": "EoEBCgRiaXNjdWl0...base64-biscuit-token...",
-      "token_format": "biscuit-v3"
+      "token": "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token_format": "jwt"
     }
   },
   "uris": [
@@ -446,13 +437,13 @@ A financial analysis agent carries a MarketData-issued Biscuit that grants acces
 
 The Exchange:
 1. Verifies the request's RFC 9421 HTTP Message Signature against `fintech.example.com`'s published key
-2. Deserializes the Biscuit `token`, verifies the authority block is signed by `marketdata.example.com`'s key
-3. Extracts scopes from the Biscuit (`quote:*`, `earnings:*`)
+2. Verifies the delegation JWT — signed by `marketdata.example.com`'s key — and checks its `cnf.jkt` equals the thumbprint of the request signer (holder binding)
+3. Reads scopes from the token's `scope` claim (`quote:*`, `earnings:*`)
 4. Returns subscription-tier pricing (zero marginal cost) for matching resources
 
-### Enterprise Agent (IAM-Issued Biscuit)
+### Enterprise Agent (IAM-Issued JWT)
 
-An internal agent at a law firm carries a Biscuit issued by the firm's IAM system, granting access to legal and credit resources.
+An internal agent at a law firm carries a delegation JWT issued by the firm's IAM system, granting access to legal and credit resources.
 
 ```json
 {
@@ -474,8 +465,8 @@ An internal agent at a law firm carries a Biscuit issued by the firm's IAM syste
       "scopes": ["legal:case-law", "legal:statutes", "credit:read"],
       "expires_at": "2026-03-20T20:00:00Z",
       "max_spend_cents": 100000,
-      "token": "EoEBCgRiaXNjdWl0...base64-biscuit-token...",
-      "token_format": "biscuit-v3"
+      "token": "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token_format": "jwt"
     }
   },
   "uris": [
@@ -488,11 +479,11 @@ An internal agent at a law firm carries a Biscuit issued by the firm's IAM syste
 }
 ```
 
-The internal Exchange verifies the Biscuit against `iam.kirkland.com`'s published key. Because the resource's existence isn't secret here, if the agent requests one outside its scopes the Exchange returns `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` rather than silently omitting it.
+The internal Exchange verifies the delegation JWT against `iam.kirkland.com`'s published key. Because the resource's existence isn't secret here, if the agent requests one outside its scopes the Exchange returns `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT` rather than silently omitting it.
 
-### Delegated Sub-Agent (Attenuated Biscuit)
+### Delegated Sub-Agent (cnf-chained delegation)
 
-The Kirkland legal agent from the previous example delegates to a sub-agent that only needs credit data. It attenuates the Biscuit to remove legal access and lower the spend cap.
+The Kirkland legal agent from the previous example delegates to a sub-agent that only needs credit data. It issues a child delegation JWT (bound to the sub-agent's key) that removes legal access and lowers the spend cap.
 
 ```json
 {
@@ -513,8 +504,8 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
       "scopes": ["credit:read"],
       "expires_at": "2026-03-20T19:00:00Z",
       "max_spend_cents": 20000,
-      "token": "EoEBCgRiaXNjdWl0...attenuated-biscuit-token...",
-      "token_format": "biscuit-v3"
+      "token": "eyJhbGciOiJFZERTQSJ9.<child claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token_format": "jwt"
     }
   },
   "uris": [
@@ -532,9 +523,9 @@ Key differences from the parent agent's request:
 - `delegation.max_spend_cents` is reduced from `100000` ($1,000) to `20000` ($200)
 - `delegation.expires_at` is shortened (1 hour earlier)
 - The parent agent's forwarding is recorded **in the HTTP headers**, not the message: the parent adds a labeled RFC 9421 signature, and the sub-agent adds its own signature over the request plus the parent's (see [Multi-hop forwarding](#multi-hop-forwarding))
-- The Biscuit `token` contains the original authority block (signed by IAM) plus an attenuation block (signed by the parent agent) that enforces the narrower permissions
+- The delegation is a JWT chain: the authority JWT (signed by IAM) plus a child JWT (signed by the parent agent) whose `cnf.jkt` binds the grant to the sub-agent's key and whose `scope` is narrowed
 
-The Exchange verifies the full Biscuit chain: IAM signed the authority block, the parent agent signed the attenuation block. No call to IAM was required for the delegation.
+The Exchange verifies the full JWT chain: IAM signed the authority JWT; the parent agent signed the child JWT (its signing key matches the authority's `cnf` — chain linkage); the sub-agent's request key matches the child's `cnf.jkt`. No call to IAM was required for the delegation.
 
 ## Key Management
 
@@ -547,7 +538,7 @@ Every party publishes its keys in **one** place — `{domain}/.well-known/ramp.j
 | Agent / Requester | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` |
 | Intermediary | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` |
 | Exchange | `{domain}/.well-known/ramp.json` | `ROLE_EXCHANGE` |
-| Biscuit Principal | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` (key signing Biscuit authority blocks) |
+| Delegation Issuer (principal / resource owner) | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` (key signing delegation JWTs) |
 
 ### Key Announcement Format
 
@@ -582,7 +573,7 @@ Key rotation follows a standard overlap pattern:
 3. After a grace period (Exchange-defined, typically 24-48 hours), remove the old key
 4. Exchanges SHOULD cache keys with a TTL and re-fetch periodically
 
-For Biscuit delegation tokens, key rotation at the principal does not invalidate existing tokens — the authority block was signed with the key that was current at issuance time. Exchanges SHOULD accept tokens signed by recently-rotated keys within a configurable grace period.
+For delegation JWTs, key rotation at the issuer does not invalidate existing tokens — the authority JWT was signed with the key that was current at issuance time. Exchanges SHOULD accept tokens signed by recently-rotated keys within a configurable grace period.
 
 ### Key Validity Windows
 

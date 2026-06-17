@@ -2911,7 +2911,7 @@ func (x *License) GetUriDigest() string {
 // matched to the request, never an enforcement verdict. When an Exchange does
 // drop offers this way it MAY signal it via OfferAbsenceReason.RESTRICTION_FILTERED
 // (with the axes in OfferGroup.restriction_filters). Term visibility is otherwise
-// gated only by resource_id/URI and Biscuit scope coverage — see
+// gated only by resource_id/URI and delegation scope coverage — see
 // LicenseTerm.scopes.
 //
 // Reading a restriction:
@@ -3226,8 +3226,8 @@ type LicenseTerm struct {
 	// governs the human-readable terms but does not replace the machine-readable
 	// price.
 	Pricing *Pricing `protobuf:"bytes,6,opt,name=pricing,proto3,oneof" json:"pricing,omitempty"`
-	// Biscuit scope-gating: the Exchange returns this term to an agent iff the
-	// agent's Biscuit authority covers ALL of these scopes (AND-semantics).
+	// Delegation scope-gating: the Exchange returns this term to an agent iff the
+	// agent's delegation grant covers ALL of these scopes (AND-semantics).
 	// Empty = public. A subscription term is Pricing{model:FREE} +
 	// scopes:["subscription:..."].
 	//
@@ -3743,22 +3743,32 @@ func (x *Requester) GetExtCritical() []string {
 
 // Delegation — Scoped, time-limited, spend-capped credential.
 //
-// Token-format agnostic: the token is opaque bytes (Biscuit "biscuit-v3" by
-// default, or JWT). Its claims/facts are the AUTHORITATIVE source of the grant;
-// the plaintext fields below (scopes, expires_at, max_spend_cents, …) are a
+// The token is an opaque, signed credential. The DEFAULT and fully-specified
+// format is a JWT (token_format "jwt"); "biscuit-v3" remains a permitted
+// alternative for deployments that want deep multi-hop offline attenuation (see
+// the auth spec). Its claims are the AUTHORITATIVE source of the grant; the
+// plaintext fields below (scopes, expires_at, max_spend_cents, …) are a
 // convenience mirror the Exchange MAY use for fast pre-filtering before it
 // verifies the token.
 //
-// The claim/fact schema is a small registered vocabulary — see the RAMP
+// Holder binding (the load-bearing property). The grant is bound to a holder key
+// via the RFC 7800 `cnf` confirmation claim — `cnf.jkt`, the RFC 7638 JWK
+// thumbprint of the holder's key. Verification MUST check that the key signing
+// the request (RFC 9421) hashes to that thumbprint; a token possessed without
+// the matching private key is rejected. This is what makes a leaked token NOT
+// bearer-usable. Delegation is a chain of cnf-linked JWTs: a principal narrows a
+// grant by issuing a child JWT (cnf = the next holder, scopes ⊆ parent), signed
+// by the key the parent's cnf named — the chain-linkage invariant. Verifiers
+// need only the root issuer's public key; intermediate keys ride inside the
+// chain (JOSE header `jwk`), so verification is offline.
+//
+// The claim schema is a small registered vocabulary — see the RAMP
 // delegation-claims profile in the auth spec. All claims are OPTIONAL except the
-// subject/holder binding, which ties the grant to the key that signs the request.
-// Verification MUST check that the request-signing key (RFC 9421) equals the key
-// the token is sealed/attenuated to; a token possessed without that key is
-// rejected. This is what makes a leaked token NOT bearer-usable. Vendors MAY add
-// namespaced claims (their own "vendor:" namespace; "ramp_"-prefixed names are
-// reserved for the registered vocabulary and MUST NOT be redefined); any
-// constraint a verifier cannot evaluate is binding by default (fail closed)
-// unless the issuer marks it advisory — mirroring Restriction.advisory.
+// holder binding (cnf). Vendors MAY add namespaced claims (their own "vendor:"
+// namespace; "ramp_"-prefixed names are reserved for the registered vocabulary
+// and MUST NOT be redefined); any constraint a verifier cannot evaluate is
+// binding by default (fail closed) unless the issuer marks it advisory —
+// mirroring Restriction.advisory.
 //
 // Scope/time/spend caps are defense-in-depth that bound the blast radius only in
 // the residual case where the holder's signing key is also compromised; the
@@ -3786,9 +3796,11 @@ type Delegation struct {
 	// Example: 720h (30 days) for monthly subscriptions.
 	// When absent, the quota is lifetime (bounded only by expires_at).
 	QuotaPeriod *durationpb.Duration `protobuf:"bytes,10,opt,name=quota_period,json=quotaPeriod,proto3,oneof" json:"quota_period,omitempty"`
-	// Token bytes. JWT (base64url-encoded) or Biscuit (binary, base64-encoded).
+	// Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,
+	// base64-encoded) when token_format is "biscuit-v3".
 	Token []byte `protobuf:"bytes,6,opt,name=token,proto3" json:"token,omitempty"`
-	// Token format: "biscuit-v3" (default) or "jwt".
+	// Token format: "jwt" (default) or "biscuit-v3" (optional, for deep
+	// multi-hop offline attenuation). Empty is treated as "jwt".
 	TokenFormat string `protobuf:"bytes,7,opt,name=token_format,json=tokenFormat,proto3" json:"token_format,omitempty"`
 	// Optional: URI for real-time revocation checking.
 	// Exchange MAY check this for high-value transactions.
