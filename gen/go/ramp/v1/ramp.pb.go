@@ -7553,7 +7553,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"attestedAt\x12\x10\n" +
 	"\x03uri\x18\x04 \x01(\tR\x03uri\x12/\n" +
 	"\x06claims\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06claims\x12\x1c\n" +
-	"\tsignature\x18\x06 \x01(\tR\tsignature\"\xd6\x03\n" +
+	"\tsignature\x18\x06 \x01(\tR\tsignature\"\xd4\x04\n" +
 	"\aLicense\x12\x15\n" +
 	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x13\n" +
 	"\x02id\x18\x02 \x01(\tH\x01R\x02id\x88\x01\x01\x12\x17\n" +
@@ -7561,7 +7561,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01\x12\xad\x02\n" +
 	"\n" +
 	"uri_digest\x18\x05 \x01(\tB\x88\x02\xbaH\x84\x02\xba\x01\x80\x02\n" +
-	"\x19license.uri_digest.format\x12Zuri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length\x1a\x86\x01this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')H\x04R\turiDigest\x88\x01\x01B\x06\n" +
+	"\x19license.uri_digest.format\x12Zuri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length\x1a\x86\x01this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')H\x04R\turiDigest\x88\x01\x01:|\xbaHy\x1aw\n" +
+	" license.digest_required_with_uri\x12*uri_digest is required whenever uri is set\x1a'this.uri == '' || this.uri_digest != ''B\x06\n" +
 	"\x04_uriB\x05\n" +
 	"\x03_idB\a\n" +
 	"\x05_nameB\f\n" +
@@ -7589,17 +7590,18 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\rscope_license\x18\x03 \x01(\tH\x00R\fscopeLicense\x88\x01\x01\x12\x1b\n" +
 	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01B\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
-	"\a_detail\"\xab\x03\n" +
+	"\a_detail\"\x9f\x05\n" +
 	"\vLicenseTerm\x12/\n" +
 	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x124\n" +
 	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsR\tsemantics\x128\n" +
 	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionR\frestrictions\x12&\n" +
 	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaR\x06quotas\x125\n" +
-	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationR\vobligations\x12/\n" +
-	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingH\x01R\apricing\x88\x01\x01\x12 \n" +
+	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationR\vobligations\x127\n" +
+	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
 	"\n" +
-	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01B\n" +
+	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\xe9\x01\xbaH\xe5\x01\x1a\xe2\x01\n" +
+	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')B\n" +
 	"\n" +
 	"\b_licenseB\n" +
 	"\n" +

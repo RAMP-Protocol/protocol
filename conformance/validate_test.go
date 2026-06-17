@@ -59,6 +59,17 @@ func TestProtovalidateConstraints(t *testing.T) {
 		// Restriction.permitted/prohibited charset.
 		{"restriction permitted ok", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-input"}}, true},
 		{"restriction permitted control-char rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"bad\ttoken"}}, false},
+
+		// d8y64 — License.uri present requires uri_digest (any semantics).
+		{"license no uri ok", &rampv1.License{Id: proto.String("CC-BY-4.0")}, true},
+		{"license uri with digest ok", &rampv1.License{Uri: proto.String("https://x.example/lic"), UriDigest: proto.String("sha256:" + hex64)}, true},
+		{"license uri without digest rejected", &rampv1.License{Uri: proto.String("https://x.example/lic")}, false},
+
+		// fc65j — LicenseTerm presence invariants (pricing required; REFERENCE_ONLY needs license.uri).
+		{"term enumerated with pricing ok", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: freePricing()}, true},
+		{"term missing pricing rejected", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED}, false},
+		{"term reference_only with license uri ok", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY, Pricing: freePricing(), License: &rampv1.License{Uri: proto.String("https://x.example/lic"), UriDigest: proto.String("sha256:" + hex64)}}, true},
+		{"term reference_only without license uri rejected", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY, Pricing: freePricing()}, false},
 	}
 
 	for _, tc := range cases {
@@ -72,6 +83,10 @@ func TestProtovalidateConstraints(t *testing.T) {
 			}
 		})
 	}
+}
+
+func freePricing() *rampv1.Pricing {
+	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: 0}
 }
 
 func gen65() []string {

@@ -862,6 +862,15 @@ enum ObligationTrigger {
 
 // License — Identifies the governing license document for a LicenseTerm.
 message License {
+  // uri_digest is REQUIRED whenever uri is present — any semantics. Without a
+  // pinned digest the referenced document can be swapped after the offer is
+  // signed; the agent must be able to verify the bytes it fetches. (d8y64)
+  option (buf.validate.message).cel = {
+    id: "license.digest_required_with_uri"
+    message: "uri_digest is required whenever uri is set"
+    expression: "this.uri == '' || this.uri_digest != ''"
+  };
+
   // Canonical identity of the license document (RFC 3986). MUST NOT be
   // URL-validated — data-labels TDL identifiers use non-URL schemes.
   // For REFERENCE_ONLY terms this is the authoritative specification.
@@ -1081,6 +1090,14 @@ message Obligation {
 //     Unknown tokens produce a PushResourcesResponse.warnings[] entry
 //     but do NOT cause rejection (forward-compatible).
 message LicenseTerm {
+  // A REFERENCE_ONLY term MUST carry a License with a non-empty uri — a term
+  // that defers to a document but references nothing is rejected. (fc65j)
+  option (buf.validate.message).cel = {
+    id: "license_term.reference_only.requires_uri"
+    message: "REFERENCE_ONLY terms must carry a license with a non-empty uri"
+    expression: "this.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')"
+  };
+
   // Governing license document. Authoritative for REFERENCE_ONLY terms, which
   // MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that
   // references nothing is rejected at ingest.
@@ -1105,7 +1122,7 @@ message LicenseTerm {
   // not free). A REFERENCE_ONLY term states its price here too; its License
   // governs the human-readable terms but does not replace the machine-readable
   // price.
-  optional Pricing pricing = 6;
+  optional Pricing pricing = 6 [(buf.validate.field).required = true];
 
   // Delegation scope-gating: the Exchange returns this term to an agent iff the
   // agent's delegation grant covers ALL of these scopes (AND-semantics).
