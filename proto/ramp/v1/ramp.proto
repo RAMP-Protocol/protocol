@@ -955,6 +955,13 @@ message License {
 //   GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA
 //   USER_TYPE — RAMP user/organization categories
 message Restriction {
+  // A token cannot be both permitted and prohibited on the same axis. (6z1v3)
+  option (buf.validate.message).cel = {
+    id: "restriction.permitted_prohibited_disjoint"
+    message: "a token cannot appear in both permitted and prohibited"
+    expression: "this.permitted.all(p, !(p in this.prohibited))"
+  };
+
   // Which dimension this restriction applies to.
   RestrictionKind kind = 1;
 
@@ -1032,8 +1039,9 @@ message Quota {
     }
   ];
 
-  // Maximum allowed value in the given window.
-  int64 limit = 2;
+  // Maximum allowed value in the given window. (6z1v3) A quota of 0 grants
+  // nothing — express "no access" by omitting the term, not a zero quota.
+  int64 limit = 2 [(buf.validate.field).int64.gte = 1];
 
   // Time window over which the limit accumulates.
   QuotaWindow window = 3;
@@ -1047,6 +1055,13 @@ message Quota {
 //     must be released under the same license.
 //   Notice on distribution: include the copyright notice when distributing copies.
 message Obligation {
+  // SHARE_ALIKE derivatives must name the license they inherit. (6z1v3)
+  option (buf.validate.message).cel = {
+    id: "obligation.share_alike.requires_scope_license"
+    message: "scope_license is required when kind is SHARE_ALIKE"
+    expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && this.scope_license != '')"
+  };
+
   // What the agent must do.
   ObligationKind kind = 1;
 
@@ -1096,6 +1111,13 @@ message LicenseTerm {
     id: "license_term.reference_only.requires_uri"
     message: "REFERENCE_ONLY terms must carry a license with a non-empty uri"
     expression: "this.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')"
+  };
+  // At most one Restriction per axis — restrictions on the same kind are
+  // AND-combined, so duplicates are an authoring error. (6z1v3)
+  option (buf.validate.message).cel = {
+    id: "license_term.one_restriction_per_kind"
+    message: "at most one restriction is allowed per kind"
+    expression: "this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)"
   };
 
   // Governing license document. Authoritative for REFERENCE_ONLY terms, which

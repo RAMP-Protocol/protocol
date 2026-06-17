@@ -3036,7 +3036,8 @@ type Quota struct {
 	//	copies             Digital or physical copies produced.
 	//	seats              Distinct named users licensed to access the content.
 	Metric string `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
-	// Maximum allowed value in the given window.
+	// Maximum allowed value in the given window. (6z1v3) A quota of 0 grants
+	// nothing — express "no access" by omitting the term, not a zero quota.
 	Limit int64 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	// Time window over which the limit accumulates.
 	Window        QuotaWindow `protobuf:"varint,3,opt,name=window,proto3,enum=ramp.v1.QuotaWindow" json:"window,omitempty"`
@@ -7568,7 +7569,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_immutableB\r\n" +
-	"\v_uri_digest\"\xb6\x04\n" +
+	"\v_uri_digest\"\xd3\x05\n" +
 	"\vRestriction\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\xeb\x01\n" +
 	"\tpermitted\x18\x02 \x03(\tB\xcc\x01\xbaH\xc8\x01\xba\x01\xbf\x01\n" +
@@ -7577,20 +7578,22 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"prohibited\x18\x03 \x03(\tB\xcd\x01\xbaH\xc9\x01\xba\x01\xc0\x01\n" +
 	"\x1drestriction.prohibited.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\n" +
 	"prohibited\x12\x1a\n" +
-	"\badvisory\x18\x04 \x01(\bR\badvisory\"\xbf\x03\n" +
+	"\badvisory\x18\x04 \x01(\bR\badvisory:\x9a\x01\xbaH\x96\x01\x1a\x93\x01\n" +
+	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\"\xc8\x03\n" +
 	"\x05Quota\x12\xf1\x02\n" +
 	"\x06metric\x18\x01 \x01(\tB\xd8\x02\xbaH\xe5\x01\xba\x01\xdd\x01\n" +
-	"\x13quota.metric.format\x12cmetric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1aathis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))r\x02\x18@\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seatsR\x06metric\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x03R\x05limit\x12,\n" +
-	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\xd3\x01\n" +
+	"\x13quota.metric.format\x12cmetric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1aathis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))r\x02\x18@\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seatsR\x06metric\x12\x1d\n" +
+	"\x05limit\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\x05limit\x12,\n" +
+	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\xba\x03\n" +
 	"\n" +
 	"Obligation\x12+\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x17.ramp.v1.ObligationKindR\x04kind\x124\n" +
 	"\atrigger\x18\x02 \x01(\x0e2\x1a.ramp.v1.ObligationTriggerR\atrigger\x12(\n" +
 	"\rscope_license\x18\x03 \x01(\tH\x00R\fscopeLicense\x88\x01\x01\x12\x1b\n" +
-	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01B\x10\n" +
+	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\xe4\x01\xbaH\xe0\x01\x1a\xdd\x01\n" +
+	"-obligation.share_alike.requires_scope_license\x122scope_license is required when kind is SHARE_ALIKE\x1axthis.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && this.scope_license != '')B\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
-	"\a_detail\"\x9f\x05\n" +
+	"\a_detail\"\xcb\x06\n" +
 	"\vLicenseTerm\x12/\n" +
 	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x124\n" +
 	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsR\tsemantics\x128\n" +
@@ -7600,8 +7603,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
 	"\n" +
-	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\xe9\x01\xbaH\xe5\x01\x1a\xe2\x01\n" +
-	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')B\n" +
+	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\x95\x03\xbaH\x91\x03\x1a\xe2\x01\n" +
+	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')\x1a\xa9\x01\n" +
+	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1aSthis.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)B\n" +
 	"\n" +
 	"\b_licenseB\n" +
 	"\n" +
