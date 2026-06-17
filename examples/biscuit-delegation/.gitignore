@@ -1,0 +1,7 @@
+# Generated artifacts from the harness
+*.key
+*.pub
+*.bc
+
+# compiled binary
+biscuit-delegation
