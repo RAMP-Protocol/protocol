@@ -3,7 +3,8 @@ name: proto-ci
 # Guards the protocol wire contract and the generated SDKs:
 #   - buf lint
 #   - regenerate `gen/` and assert the committed tree matches (no drift)
-#   - go build / vet the generated packages + tooling
+#   - go build / vet / test the generated packages + tooling (incl. the
+#     conformance suite: protovalidate CEL evaluation + doc-example validation)
 # The regenerate-and-diff step is the load-bearing one: it fails the build if
 # committed `gen/` (Go + TS SDKs and the rampvocab constant packages) does not
 # match a clean `buf generate` from the proto + plugin — i.e. someone changed
@@ -52,10 +53,15 @@ jobs:
             exit 1
           fi
 
-      - name: go build & vet
+      - name: go build, vet & test
         run: |
           go build ./...
           go vet ./...
+          # Includes the conformance suite (conformance/): it evaluates the
+          # protovalidate CEL constraints and validates the doc example payloads
+          # (registered units, signature_algorithm, LicenseTerm.semantics) —
+          # value/semantic checks the denylist gate structurally cannot perform.
+          go test ./...
 
       # Doc-conformance: fail if a removed/renamed wire identifier reappears in
       # the docs. The prose counterpart to the gen-drift gate above.

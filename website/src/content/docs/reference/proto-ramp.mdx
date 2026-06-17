@@ -344,7 +344,7 @@ Requirements attached to a delivery.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `function` | repeated string | 1 | Functions used (standard: "ai_train", "ai_input", "ai_index", "search", "display") |
+| `function` | repeated string | 1 | Functions used (standard: "ai-train", "ai-input", "ai-index", "search", "display") |
 | `subfn` | repeated string | 2 | Sub-functions used (standard: "training", "rag", "grounding", "agent_view", "agent_actions") |
 | `consumed_quantity` | int32 | 3 | **REQUIRED.** Actual quantity consumed in the metering unit |
 | `displayed_to_user` | optional bool | 4 | Was output shown to a human? |
@@ -863,7 +863,7 @@ When an `Obligation` activates.
 | 7 | OFFER_EXPIRED | Offer TTL exceeded |
 | 8 | SIGNATURE_INVALID | Signature verification failed |
 | 9 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
-| 10 | DELEGATION_INVALID | Delegation missing, unverifiable, expired, or its attenuation does not check out |
+| 10 | DELEGATION_INVALID | Delegation missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent |
 | 11 | SCOPE_INSUFFICIENT | Requester scopes don't cover this resource |
 
 ### DisputeReason

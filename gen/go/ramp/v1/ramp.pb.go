@@ -5365,8 +5365,8 @@ func (x *AttributionDetail) GetVisibleToUser() bool {
 // Usage — How resource was actually used by the AI system.
 type Usage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// How the resource was used. Standard values: "ai_train", "ai_input",
-	// "ai_index", "search", "display". Multiple allowed.
+	// How the resource was used. Standard values: "ai-train", "ai-input",
+	// "ai-index", "search", "display". Multiple allowed.
 	// CoMP-specific values available via ramp-comp-v1 extension profile.
 	Function []string `protobuf:"bytes,1,rep,name=function,proto3" json:"function,omitempty"`
 	// Sub-function detail. Standard values: "training", "rag", "grounding",
@@ -7616,16 +7616,16 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\xe5\b\n" +
+	"\x05_size\"\xf0\b\n" +
 	"\aPricing\x12+\n" +
 	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelR\x05model\x12\x12\n" +
 	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12 \n" +
 	"\tunit_cost\x18\x04 \x01(\x01H\x00R\bunitCost\x88\x01\x01\x122\n" +
 	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12;\n" +
-	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\xad\x03\n" +
-	"\x04unit\x18\b \x01(\tB\x93\x03\xbaH\xe9\x01\xba\x01\xe1\x01\n" +
-	"\x13pricing.unit.format\x12iunit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
+	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\xb8\x03\n" +
+	"\x04unit\x18\b \x01(\tB\x9e\x03\xbaH\xe9\x01\xba\x01\xe1\x01\n" +
+	"\x13pricing.unit.format\x12iunit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aseconds\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
 	"characters\x8a\xb5\x18\x05bytes\x8a\xb5\x18\x05items\x8a\xb5\x18\x05sq-kmH\x03R\x04unit\x88\x01\x01\x129\n" +
 	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xa7\x02\xbaH\xa3\x02\x1a\x97\x01\n" +
 	"\x1epricing.per_unit.requires_unit\x12'unit is required when model is PER_UNIT\x1aLthis.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''\x1a\x86\x01\n" +

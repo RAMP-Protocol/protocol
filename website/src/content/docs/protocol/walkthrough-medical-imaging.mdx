@@ -156,6 +156,7 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
           ],
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -166,7 +167,7 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
             }
           ],
           "signature": "base64-ed25519-medimg-offer-sig...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-TCIA-TCGA-GBM-0152",
             "comp.seller": "imaging.tcia.org",
@@ -428,7 +429,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Report
   "usage": {
     "function": ["ai-input"],
     "consumed_quantity": 1,
-    "consumed_unit": "studies",
+    "consumed_unit": "records",
     "displayed_to_user": false,
     "citation_included": true
   },
@@ -460,7 +461,7 @@ Response:
 
 **Key differences from text usage reporting:**
 
-- **`consumed_quantity: 1`** with **`consumed_unit: "studies"`** — the pricing model is per-study, not per-token. The agent consumed one study regardless of how many of the 847 instances it actually downloaded.
+- **`consumed_quantity: 1`** with **`consumed_unit: "records"`** — the pricing model is per-study, not per-token. The agent consumed one study regardless of how many of the 847 instances it actually downloaded.
 - **`displayed_to_user: false`** — medical imaging is processed by the AI model, not displayed to a human in a chat interface.
 - **`ext` metadata** — the agent reports which series it accessed (4 of 8), how many instances it downloaded (600 of 847), and which model processed the data. This level of audit detail is important for regulated data — if a DUA violation investigation occurs, the Exchange has a complete record of what data was accessed and how it was used.
 - **7-day reporting window** — the longer window accommodates the reality that imaging analysis pipelines are batch processes, not interactive sessions.

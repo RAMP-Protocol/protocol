@@ -1226,8 +1226,9 @@ message Pricing {
   // it never lists the tokens, so it cannot drift from the registry.
   optional string unit = 8 [
     (ramp.v1.vocab) = "fetches",  (ramp.v1.vocab) = "accesses", (ramp.v1.vocab) = "tokens",
-    (ramp.v1.vocab) = "calls",    (ramp.v1.vocab) = "pages",    (ramp.v1.vocab) = "minutes",
-    (ramp.v1.vocab) = "records",  (ramp.v1.vocab) = "streams",  (ramp.v1.vocab) = "images",
+    (ramp.v1.vocab) = "calls",    (ramp.v1.vocab) = "pages",    (ramp.v1.vocab) = "seconds",
+    (ramp.v1.vocab) = "minutes",  (ramp.v1.vocab) = "records",  (ramp.v1.vocab) = "streams",
+    (ramp.v1.vocab) = "images",
     (ramp.v1.vocab) = "seats",    (ramp.v1.vocab) = "units-manufactured",
     (ramp.v1.vocab) = "characters", (ramp.v1.vocab) = "bytes",  (ramp.v1.vocab) = "items",
     (ramp.v1.vocab) = "sq-km",
@@ -1937,8 +1938,8 @@ message AttributionDetail {
 
 // Usage — How resource was actually used by the AI system.
 message Usage {
-  // How the resource was used. Standard values: "ai_train", "ai_input",
-  // "ai_index", "search", "display". Multiple allowed.
+  // How the resource was used. Standard values: "ai-train", "ai-input",
+  // "ai-index", "search", "display". Multiple allowed.
   // CoMP-specific values available via ramp-comp-v1 extension profile.
   repeated string function = 1;
 

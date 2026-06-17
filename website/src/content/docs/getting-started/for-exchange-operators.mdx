@@ -188,7 +188,7 @@ RAMP defines three identity-related denial reasons your Exchange MUST return whe
 | Denial Reason | When to Return |
 |---|---|
 | `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for the current `quota_period` |
-| `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (bad signature chain or holder-binding mismatch), expired (`expires_at` in the past), or its attenuation does not check out |
+| `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (broken chain linkage or holder-binding mismatch), expired (`expires_at` in the past), or it widens scope beyond its parent |
 | `DENIAL_REASON_SCOPE_INSUFFICIENT` | Requester's scopes do not cover the requested resource (transaction-time denial) |
 
 For the full identity model specification — Requester fields, the JWT chain, scope format, and key management — see [Authentication](/protocol/authentication/).

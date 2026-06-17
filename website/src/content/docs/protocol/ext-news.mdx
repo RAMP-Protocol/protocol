@@ -353,6 +353,7 @@ An Exchange returns an offer for a New York Times article. The article has been 
   "data_as_of": "2026-03-19T16:45:00Z",
   "terms": [
     {
+      "semantics": "TERM_SEMANTICS_ENUMERATED",
       "restrictions": [
         {
           "kind": "RESTRICTION_KIND_FUNCTION",
@@ -360,7 +361,9 @@ An Exchange returns an offer for a New York Times article. The article has been 
           "prohibited": ["ai-train"]
         }
       ],
-      "max_display_words": 250
+      "quotas": [
+        { "metric": "display-words", "limit": 250 }
+      ]
     }
   ],
   "attestations": [
@@ -400,7 +403,7 @@ An Exchange returns an offer for a New York Times article. The article has been 
     "news.tdm_reservation": true
   },
   "signature": "ZXhjaGFuZ2Utc2lnbmF0dXJl...",
-  "signature_algorithm": "ed25519"
+  "signature_algorithm": "EdDSA"
 }
 ```
 
@@ -432,6 +435,7 @@ An Exchange returns an offer for an NPR podcast episode with transcript and mult
   },
   "terms": [
     {
+      "semantics": "TERM_SEMANTICS_ENUMERATED",
       "restrictions": [
         {
           "kind": "RESTRICTION_KIND_FUNCTION",
@@ -471,7 +475,7 @@ An Exchange returns an offer for an NPR podcast episode with transcript and mult
     ]
   },
   "signature": "bnByLXBvZGNhc3Qtc2lnbmF0dXJl...",
-  "signature_algorithm": "ed25519"
+  "signature_algorithm": "EdDSA"
 }
 ```
 

@@ -219,7 +219,7 @@ When delegation verification fails, the Exchange returns a specific denial reaso
 | Denial Reason | Meaning |
 |---|---|
 | `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for this period |
-| `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (bad signature chain or holder-binding mismatch), expired, or its attenuation does not check out |
+| `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent |
 
 ### Libraries
 

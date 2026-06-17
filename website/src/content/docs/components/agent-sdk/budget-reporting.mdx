@@ -216,7 +216,7 @@ When `AutoReport` is disabled, the caller is responsible for submitting usage re
 resp, err := client.ReportUsage(ctx, ramp.UsageReport{
     TransactionID: result.TransactionID,
     BillingID:     result.BillingID,
-    Function:      "ai_input",
+    Function:      "ai-input",
     TokenCount:    1500,
 })
 // resp.ReportID is needed for any subsequent dispute
@@ -228,7 +228,7 @@ Previously `ReportUsage` returned only an error. In v1.0, it returns a `UsageRep
 err := client.ReportUsage(ctx, ramp.UsageReport{
     TransactionID: result.TransactionID,
     BillingID:     result.BillingID,
-    Function:      "ai_input",
+    Function:      "ai-input",
     TokenCount:    1500,
 })
 ```

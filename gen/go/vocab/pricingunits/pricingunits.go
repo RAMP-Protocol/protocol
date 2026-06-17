@@ -12,6 +12,7 @@ const (
 	Tokens            = "tokens"
 	Calls             = "calls"
 	Pages             = "pages"
+	Seconds           = "seconds"
 	Minutes           = "minutes"
 	Records           = "records"
 	Streams           = "streams"
@@ -31,6 +32,7 @@ var All = []string{
 	Tokens,
 	Calls,
 	Pages,
+	Seconds,
 	Minutes,
 	Records,
 	Streams,
@@ -55,6 +57,7 @@ var registered = map[string]struct{}{
 	Pages:             {},
 	Records:           {},
 	Seats:             {},
+	Seconds:           {},
 	SqKm:              {},
 	Streams:           {},
 	Tokens:            {},

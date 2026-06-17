@@ -293,7 +293,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
      ]
      delivery_method: DELIVERY_METHOD_INSTRUCTIONS
      signature: "<JWS (EdDSA) over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
-     signature_algorithm: "ed25519"
+     signature_algorithm: "EdDSA"
 
    Offer B (subscription):
      offer_id: "sub-offer-tc-reg-001"
@@ -310,7 +310,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
      reporting: { required: true, window: "86400s",
                   required_fields: ["transaction_id", "function", "consumed_quantity"] }
      signature: "<JWS (EdDSA) over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
-     signature_algorithm: "ed25519"
+     signature_algorithm: "EdDSA"
 ```
 
 ### Response
@@ -351,6 +351,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
       ],
       "terms": [
         {
+          "semantics": "TERM_SEMANTICS_ENUMERATED",
           "restrictions": [
             {
               "kind": "RESTRICTION_KIND_FUNCTION",
@@ -361,7 +362,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
         }
       ],
       "signature": "base64-ed25519-sig-A...",
-      "signature_algorithm": "ed25519"
+      "signature_algorithm": "EdDSA"
     },
     {
       "offer_id": "sub-offer-tc-reg-001",
@@ -398,6 +399,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
       ],
       "terms": [
         {
+          "semantics": "TERM_SEMANTICS_ENUMERATED",
           "restrictions": [
             {
               "kind": "RESTRICTION_KIND_FUNCTION",
@@ -409,7 +411,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
         }
       ],
       "signature": "base64-ed25519-sig-B...",
-      "signature_algorithm": "ed25519"
+      "signature_algorithm": "EdDSA"
     }
   ]
 }
@@ -501,7 +503,7 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
           "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
           "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
           "signature": "base64-ed25519-sig-A...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "EdDSA"
         },
         {
           "offer_id": "sub-offer-tc-reg-001",
@@ -511,7 +513,7 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
           "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
           "reporting": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] },
           "signature": "base64-ed25519-sig-B...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "EdDSA"
         }
       ]
     },
@@ -544,7 +546,7 @@ Note: SSP-Alpha returns an empty `offers` array for the `theverge.com` URI with 
       },
       "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3100, "word_count": 2350 }, "signature": "..." }],
       "signature": "base64-ed25519-sig-C...",
-      "signature_algorithm": "ed25519"
+      "signature_algorithm": "EdDSA"
     }
   ]
 }
@@ -865,7 +867,7 @@ Response includes signed Offer snapshots for every transaction:
         "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" },
         "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
         "signature": "base64-ed25519-sig-B...",
-        "signature_algorithm": "ed25519"
+        "signature_algorithm": "EdDSA"
       },
       "cost": { "amount": 0, "currency": "USD" },
       "subscription_unit_value": { "amount": 0.05, "currency": "USD" },

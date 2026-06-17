@@ -240,6 +240,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           ],
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -250,7 +251,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             }
           ],
           "signature": "base64-ed25519-credit-offer-sig...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-DNB-ACME-FULL",
             "comp.seller": "dnb.com",
@@ -312,6 +313,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           ],
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -322,7 +324,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             }
           ],
           "signature": "base64-ed25519-legal-offer-sig-001...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-PACER-24CV01234",
             "comp.seller": "pacer.uscourts.gov",
@@ -349,7 +351,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
           },
           "signature": "base64-ed25519-legal-offer-sig-002...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-PACER-25CV05678",
             "comp.seller": "pacer.uscourts.gov",
@@ -376,7 +378,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
           },
           "signature": "base64-ed25519-legal-offer-sig-003...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-PACER-23CV09012",
             "comp.seller": "pacer.uscourts.gov",
@@ -422,6 +424,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           },
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -431,7 +434,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
             }
           ],
           "signature": "base64-ed25519-sec-offer-sig-10k-2025...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-SEC-ACME-10K-2025",
             "comp.seller": "sec.gov",
@@ -442,15 +445,15 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-K-2024.htm",
-      "offers": [{ "offer_id": "offer-sec-10k-2024", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "ed25519" }]
+      "offers": [{ "offer_id": "offer-sec-10k-2024", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-Q-2025-Q3.htm",
-      "offers": [{ "offer_id": "offer-sec-10q-q3", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "ed25519" }]
+      "offers": [{ "offer_id": "offer-sec-10q-q3", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-Q-2025-Q2.htm",
-      "offers": [{ "offer_id": "offer-sec-10q-q2", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "ed25519" }]
+      "offers": [{ "offer_id": "offer-sec-10q-q2", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     }
   ]
 }

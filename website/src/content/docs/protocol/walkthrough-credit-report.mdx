@@ -141,7 +141,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             "currency": "USD",
             "unit_cost": 2.00,
             "estimated_quantity": 1,
-            "unit": "reports"
+            "unit": "records"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -178,6 +178,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           ],
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -188,7 +189,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             }
           ],
           "signature": "base64-ed25519-dnb-offer-basic-sig...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-DNB-123456789-BASIC",
             "comp.seller": "dnb.com",
@@ -208,7 +209,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             "currency": "USD",
             "unit_cost": 61.99,
             "estimated_quantity": 1,
-            "unit": "reports"
+            "unit": "records"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -247,6 +248,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           ],
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -257,7 +259,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             }
           ],
           "signature": "base64-ed25519-dnb-offer-std-sig...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-DNB-123456789-STD",
             "comp.seller": "dnb.com",
@@ -277,7 +279,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             "currency": "USD",
             "unit_cost": 150.00,
             "estimated_quantity": 1,
-            "unit": "reports"
+            "unit": "records"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -318,6 +320,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           ],
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -328,7 +331,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
             }
           ],
           "signature": "base64-ed25519-dnb-offer-comp-sig...",
-          "signature_algorithm": "ed25519",
+          "signature_algorithm": "EdDSA",
           "ext": {
             "comp.package_id": "PKG-DNB-123456789-COMP",
             "comp.seller": "dnb.com",
@@ -503,7 +506,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
   "usage": {
     "function": ["ai-input"],
     "consumed_quantity": 1,
-    "consumed_unit": "reports",
+    "consumed_unit": "records",
     "displayed_to_user": true,
     "citation_included": true
   },
@@ -529,7 +532,7 @@ Response:
 
 The `report_id` enables the dispute chain: if the agent needs to dispute this transaction later (e.g., the report contained data for the wrong entity), it must reference this report to prove usage was reported first.
 
-**Metering note:** Credit reports use `consumed_unit: "reports"` with `consumed_quantity: 1`. Unlike text content (metered in tokens) or audio (metered in minutes), credit data is metered per report — the atomic unit of business credit information.
+**Metering note:** Credit reports use `consumed_unit: "records"` with `consumed_quantity: 1`. Unlike text content (metered in tokens) or audio (metered in minutes), credit data is metered per report — the atomic unit of business credit information.
 
 ---
 

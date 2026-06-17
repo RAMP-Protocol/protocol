@@ -35,6 +35,12 @@ patterns=(
   # Removed CoMP Go path (req.Aisystem.Aisysuse.…). Narrow Go-path patterns only,
   # so legitimate CoMP JSON keys elsewhere don't false-positive. (R5-9)
   'req\.Aisystem' '\.Aisysuse\.'
+  # Fields from the deleted AccessRestrictions message — express as Quota now.
+  'max_display_words'
+  # Underscore function tokens — the registered RAMP vocabulary is dashed
+  # (ai-input/ai-train/ai-index). Lowercase underscore forms are wrong; CoMP's
+  # uppercase AI_INPUT enum is unaffected (case-sensitive). (CON-05)
+  'ai_input' 'ai_train' 'ai_index'
   # real-company example names that must stay generic
   '[Bb]loomberg'
 )
@@ -89,10 +95,14 @@ done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
 # fails the build, and a newly-registered claim is checked automatically with no
 # hardcoded list to drift.
 auth='website/src/content/docs/protocol/authentication.mdx'
+# Scope the field lookup to the Delegation message body only — grepping the whole
+# proto would falsely accept e.g. `ramp_offer_id` (offer_id exists on
+# TransactionItem, not Delegation).
+deleg_block=$(awk '/^message Delegation \{/,/^\}/' "$proto_ramp")
 while read -r claim; do
   [ -z "$claim" ] && continue
   field=${claim#ramp_}
-  if ! grep -qE "[[:space:]]${field}[[:space:]]*=" "$proto_ramp"; then
+  if ! grep -qE "[[:space:]]${field}[[:space:]]*=" <<<"$deleg_block"; then
     echo "::error::registered delegation claim '${claim}' has no matching '${field}' field on the Delegation proto message"
     status=1
   fi

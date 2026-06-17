@@ -147,6 +147,7 @@ The Exchange looks up the article in its catalog and returns an offer. It does n
           ],
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -157,7 +158,7 @@ The Exchange looks up the article in its catalog and returns an offer. It does n
             }
           ],
           "signature": "base64-ed25519-offer-sig...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "EdDSA"
         }
       ]
     }
@@ -441,6 +442,7 @@ The Exchange verifies the JWT chain, confirms `earnings:*` covers the requested 
           ],
           "terms": [
             {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
               "restrictions": [
                 {
                   "kind": "RESTRICTION_KIND_FUNCTION",
@@ -461,7 +463,7 @@ The Exchange verifies the JWT chain, confirms `earnings:*` covers the requested 
             }
           ],
           "signature": "base64-ed25519-bb-offer-sig...",
-          "signature_algorithm": "ed25519"
+          "signature_algorithm": "EdDSA"
         }
       ]
     }

@@ -206,7 +206,7 @@ Preprint ──peer review──> AAM ──publisher production──> VoR ─�
 - `"gold"`, `"diamond"`, `"hybrid"` articles: Exchange SHOULD offer with `PRICING_MODEL_FREE` and `unit_cost = 0`
 - `"green"` articles: the repository copy is free; the publisher VoR may have a price. Two separate offers, two separate `academic.article_version` values
 - `"bronze"` articles: free to read but AI usage may not be licensed. The Exchange SHOULD set an appropriate `LicenseTerm.restrictions` entry (`Restriction{kind: RESTRICTION_KIND_FUNCTION, prohibited: ["ai-input"]}`) if the publisher's policy prohibits AI input
-- `"closed"` articles: priced per article (`PRICING_MODEL_PER_UNIT` with `unit: "articles"`) or via subscription (FREE + subscription scope, see [Institutional Access](#institutional-access))
+- `"closed"` articles: priced per article (`PRICING_MODEL_PER_UNIT` with `unit: "items"`) or via subscription (FREE + subscription scope, see [Institutional Access](#institutional-access))
 
 ---
 
@@ -304,7 +304,7 @@ An agent queries for a Nature article. No institutional subscription is availabl
     "model": "PRICING_MODEL_PER_UNIT",
     "unit_cost": 3199,
     "currency": "USD",
-    "unit": "articles",
+    "unit": "items",
     "estimated_quantity": 1
   },
   "delivery_method": "DELIVERY_METHOD_DIRECT",
@@ -367,7 +367,7 @@ An agent queries for a PLOS ONE article. No payment required.
     "model": "PRICING_MODEL_FREE",
     "unit_cost": 0,
     "currency": "USD",
-    "unit": "article",
+    "unit": "items",
     "estimated_quantity": 1
   },
   "delivery_method": "DELIVERY_METHOD_DIRECT",
@@ -422,7 +422,7 @@ An agent at MIT queries for an Elsevier article. MIT has a subscription.
     "model": "PRICING_MODEL_FREE",
     "unit_cost": 0,
     "currency": "USD",
-    "unit": "articles",
+    "unit": "items",
     "estimated_quantity": 1
   },
   "terms": [
@@ -503,7 +503,7 @@ A Broker sends a batch query for 50 DOIs. This example shows two of the resultin
             "model": "PRICING_MODEL_FREE",
             "unit_cost": 0,
             "currency": "USD",
-            "unit": "articles",
+            "unit": "items",
             "estimated_quantity": 1
           },
           "terms": [
@@ -533,7 +533,7 @@ A Broker sends a batch query for 50 DOIs. This example shows two of the resultin
             "model": "PRICING_MODEL_PER_UNIT",
             "unit_cost": 2999,
             "currency": "USD",
-            "unit": "articles",
+            "unit": "items",
             "estimated_quantity": 1
           },
           "identity": {
