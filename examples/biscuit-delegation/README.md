@@ -10,6 +10,10 @@ v2.2.0, which emits and verifies the **Biscuit v3** wire format (`version: 3`),
 matching RAMP's default `token_format: "biscuit-v3"`. It's an isolated Go module
 — not part of the protocol module and not built by CI.
 
+It also includes a **JWT capability-chain** variant (`go run . jwt-demo`) that
+delivers the *same* holder-binding guarantee with no Biscuit at all — to compare
+the two and answer "do we actually need Biscuit?" See [JWT variant](#jwt-variant-go-run--jwt-demo).
+
 ## The model
 
 | Role | Key | Used for |
@@ -91,3 +95,49 @@ to change the narrowing block and the Exchange's verification policy.
 - `max_spend_cents` / expiry = the defense-in-depth caps, secondary to the binding.
 - `authorize`'s `request_key` = the output of the Exchange's RFC 9421 verification
   (here simulated with an Ed25519 sign/verify over a canonical request string).
+
+## JWT variant (`go run . jwt-demo`)
+
+The same delegation model, built from a chain of **`cnf` (holder-of-key) JWTs**
+instead of a Biscuit — to show that for RAMP's use cases the two are equivalent
+and Biscuit is optional. Library: [`golang-jwt/jwt/v5`](https://github.com/golang-jwt/jwt)
+(EdDSA), the standard, ubiquitous Go JWT library.
+
+The chain mirrors the Biscuit one (content owner → principal → agent):
+
+```
+authority JWT   signed by the OWNER; cnf.jkt = thumbprint(principal key)
+   │            (the owner's public key is the only trust anchor)
+   ▼
+delegation JWT  signed by the PRINCIPAL; carries the principal key in its JOSE
+   │            header `jwk` (so the verifier links it to the authority's cnf
+   │            and verifies it); cnf.jkt = thumbprint(agent key); narrowed scope
+   ▼
+request         signed by the AGENT (RFC 9421); verifier checks
+                thumbprint(request key) == delegation cnf.jkt
+```
+
+`jwt-demo` runs five outcomes: a legitimate request (**ALLOWED**) and four
+failures (**DENIED**) — thief signs with own key (holder binding), forged request
+signature (RFC 9421), thief forges a delegation (chain linkage — can't sign as the
+principal), and over-delegation (scope can't widen). It prints the real JWT
+header + claims so you can see `cnf.jkt` and the header `jwk`.
+
+**Equivalence.** Every property the Biscuit demo shows holds here: offline
+verification rooted in the owner's key alone (principal/agent keys arrive *inside*
+the chain via header `jwk` + `cnf.jkt`), holder binding at each hop, short-TTL
+delegation, scope narrowing, theft-resistance.
+
+**What Biscuit would add (and RAMP doesn't use):** in-token Datalog (arbitrary
+checks — RAMP needs only a fixed set: scope coverage, exp, cnf, optional
+op/resource) and in-place "anyone-can-attenuate" for *deep* chains (RAMP's are
+shallow: owner → principal → agent). The trade is **one technology instead of
+two** — JWT + RFC 9421 are both already ubiquitous; Biscuit is the only genuinely
+new dependency. Keeping `token_format` agnostic lets a deployment opt into Biscuit
+for deep offline attenuation; JWT is the leaner default.
+
+Chain-linkage invariant (the security keystone): each token's signer MUST be the
+key the parent named — owner verifies the authority; `authority.cnf` pins the
+principal; the delegation's header key must match that pin and verifies the
+delegation; `delegation.cnf` pins the agent; the request key must match that pin.
+Implemented in `verifyJWTChain` (`jwt.go`).

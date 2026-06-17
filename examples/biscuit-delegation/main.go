@@ -67,6 +67,8 @@ func main() {
 		err = cmdAuthorize(os.Args[2:])
 	case "demo":
 		err = cmdDemo(os.Args[2:])
+	case "jwt-demo":
+		err = cmdJWTDemo(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -84,7 +86,8 @@ func main() {
 func usage() {
 	fmt.Fprint(os.Stderr, `biscuit-delegation — RAMP Biscuit holder-binding harness
 
-  go run . demo                              run the full scenario + theft attempts
+  go run . demo                              run the full Biscuit scenario + theft attempts
+  go run . jwt-demo                          run the same scenario with a JWT (cnf) capability chain
   go run . keygen <name>                     write <name>.key (private) + <name>.pub
   go run . mint -root P.key -holder A.pub -out t.bc [-datalog auth.dl] [-exp DUR]
   go run . inspect -in t.bc
@@ -511,6 +514,25 @@ func cmdDemo(args []string) error {
 	_, okB := verifyRFC9421(canonicalReq, thiefSig, agentPub) // verify thief's sig against agent's key
 	fmt.Printf("RFC 9421 signature verifies against agent's key: %v  <- rejected before Biscuit is even consulted\n", okB)
 	report(false, fmt.Errorf("RFC 9421 verification failed: forged signature"), "no valid request signature, no authenticated key")
+
+	step(7, "Theft attempt C: thief appends holder(thief) to RE-BIND the stolen token")
+	fmt.Println("the thief can append a block (Biscuit lets anyone attenuate) adding their own holder fact,")
+	fmt.Println("then signs the request with the thief's key so request_key == the appended holder:")
+	rebindBlock, err := parser.FromStringBlockWithParams("holder({k});",
+		parser.ParametersMap{"k": biscuit.String(hex.EncodeToString(thiefPub))})
+	if err != nil {
+		return err
+	}
+	bb2 := tok.CreateBlock()
+	if err := bb2.AddBlock(rebindBlock); err != nil {
+		return err
+	}
+	rebound, err := tok.Append(rand.Reader, bb2.Build())
+	if err != nil {
+		return err
+	}
+	allowedC, _, aerrC := authorize(rebound, rootPub, hex.EncodeToString(thiefPub), "read", 2500, "")
+	report(allowedC, aerrC, "holder() in an ATTENUATION block is not trusted by the authorizer check — only the\n     authority block's holder() (signed by the publisher) is. Re-binding cannot widen.")
 
 	fmt.Print(`
 Summary
