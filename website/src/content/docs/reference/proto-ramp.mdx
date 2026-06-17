@@ -761,7 +761,7 @@ A post-use behavioral requirement attached to a `LicenseTerm`. Attribution and c
 |---|---|---|---|
 | `kind` | ObligationKind | 1 | What the agent must do. |
 | `trigger` | ObligationTrigger | 2 | When the obligation activates. |
-| `scope_license` | optional string | 3 | License derivatives must be released under. REQUIRED for `SHARE_ALIKE`. SPDX short-id or license URI. |
+| `scope_license` | optional License | 3 | License derivatives must be released under. REQUIRED for `SHARE_ALIKE` (set `id` and/or `uri`). As a `License`, a referenced `uri` requires `uri_digest`. |
 | `detail` | optional string | 4 | Free-form detail (attribution string, notice file URI). `OBLIGATION_KIND_OTHER` without it → lint warning. |
 
 ## Enums

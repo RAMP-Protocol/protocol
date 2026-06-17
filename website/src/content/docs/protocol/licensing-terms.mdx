@@ -87,7 +87,7 @@ An `Obligation` is a post-use behavioral requirement. Attribution and contributi
 Each obligation has:
 - `kind` — what the agent must do (see table below).
 - `trigger` — when the obligation activates.
-- `scope_license` — the license derivatives must be released under (required for `SHARE_ALIKE`; SPDX short-id or license URI).
+- `scope_license` — the license derivatives must be released under, as a `License` (required for `SHARE_ALIKE`; set `id` for an SPDX short-id and/or `uri`). A referenced `uri` requires a `uri_digest`, the same swap-protection as any other license reference.
 - `detail` — human-readable text (recommended for all kinds, e.g., exact attribution wording or notice text; an `OTHER` obligation without it produces a lint warning).
 
 | Kind | Description |
@@ -252,7 +252,7 @@ quotas:
   - { metric: "seats", limit: 10, window: MONTHLY }
 obligations:
   - kind: SHARE_ALIKE, trigger: ON_DISTRIBUTION,
-    scope_license: "CC-BY-NC-SA-4.0",
+    scope_license: { id: "CC-BY-NC-SA-4.0" },
     detail: "Trained models using this dataset must be released under CC-BY-NC-SA 4.0"
 ```
 

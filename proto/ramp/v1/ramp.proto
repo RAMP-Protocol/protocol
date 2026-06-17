@@ -1058,8 +1058,8 @@ message Obligation {
   // SHARE_ALIKE derivatives must name the license they inherit. (6z1v3)
   option (buf.validate.message).cel = {
     id: "obligation.share_alike.requires_scope_license"
-    message: "scope_license is required when kind is SHARE_ALIKE"
-    expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && this.scope_license != '')"
+    message: "SHARE_ALIKE requires scope_license to identify a license (id or uri)"
+    expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))"
   };
 
   // What the agent must do.
@@ -1069,9 +1069,12 @@ message Obligation {
   ObligationTrigger trigger = 2;
 
   // The license that derivatives must be released under. REQUIRED for
-  // SHARE_ALIKE (rejected if absent). SPDX short-id or license URI; for most
-  // copyleft this equals the term's own License.id.
-  optional string scope_license = 3;
+  // SHARE_ALIKE (rejected if absent), where it MUST identify a license — set
+  // `id` (SPDX short-id, the common copyleft case, often the term's own
+  // License.id) and/or `uri`. Because it is a License, a referenced `uri`
+  // inherits the uri_digest swap-protection rule: a uri without a digest is
+  // rejected, exactly as for any other license reference. (6z1v3)
+  optional License scope_license = 3;
 
   // Free-form detail: attribution string, notice file URI, etc.
   // OBLIGATION_KIND_OTHER without it → lint warning.
