@@ -21,7 +21,10 @@ patterns=(
   'offer_signature_algorithm'
   # token / vocabulary
   'biscuit-v2'
-  'PER_ACCESS' 'REVENUE_SHARE' 'revshare'
+  # 'revshare' is intentionally NOT denylisted: it is a live CoMP ext identifier
+  # (comp.license[].revshare) and scope prefix (revshare:...). The retired RAMP
+  # *pricing model* is guarded via the enum-constant patterns below instead.
+  'PER_ACCESS' 'REVENUE_SHARE'
   'PRICING_MODEL_ATTRIBUTION' 'PRICING_MODEL_CONTRIBUTION'
   'spdx_expression'
   # collapsed reason enums

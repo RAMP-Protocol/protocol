@@ -222,3 +222,31 @@ or provably does not, with no venue-specific interpretation in between. The
 Biscuit Datalog authorizer is treated as one conformant implementation of this
 algorithm, not a separate semantics: it MUST produce identical results to the
 normative rule.
+
+## Revenue share stays off-protocol
+
+CoMP's `License` carries a `revshare` rate next to `price`, and RAMP's
+`PricingModel` was reduced to three charging structures (`FREE`, `PER_UNIT`,
+`FLAT`), so the conspicuous question is whether RAMP should add a
+`REVENUE_SHARE` model for parity. It does not, and the asymmetry is intentional.
+A `PricingModel` is the structure an Exchange can quote, sign, and compare at
+transaction time, each with a concrete `unit_cost`. A revenue share has no such
+price: the rate and its reconciliation are an agreement struck off-protocol
+between agent and publisher. Modelling it as an enum value would be either a
+bare label with no rate (the agent still has to go ask "what share?") or, if a
+rate field were added, would pull the commercial terms of that off-protocol
+agreement into the signed, cross-exchange-comparable `Pricing` — the very thing
+closing `Pricing` this cycle was meant to prevent, since it destroys price
+comparability and asks the protocol to carry terms it never enforces.
+
+The arrangement is already expressible with existing primitives, and identically
+to a subscription: a `Pricing{model: FREE}` term gated by an agreement scope
+(e.g. `revshare:publisher-x`) plus a reporting `Obligation`. The agent that
+signed the deal holds a delegation carrying the matching scope, accesses at zero
+marginal cost, and reports usage; revenue is settled off-protocol from those
+reports. "Pay per crawl or take the revenue-share deal" is then just two
+`LicenseTerm`s on one resource, and the agent self-selects. CoMP parity is kept
+by mapping rather than duplication: a CoMP `revshare` rate rides through verbatim
+in the `ramp-comp-v1` ext (`comp.license[].revshare`), full fidelity for
+CoMP-aware parties and ignored by everyone else, while RAMP core stays
+minimal and its signed offers stay price-comparable.

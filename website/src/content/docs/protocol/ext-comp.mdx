@@ -51,6 +51,32 @@ these ext fields in Offers and expect them in UsageReports.
 | `comp.license[].use` | string | No | License use type |
 | `comp.license[].duration_months` | integer | No | License duration |
 | `comp.license[].maxword` | integer | No | Max display words |
+| `comp.license[].revshare` | number | No | CoMP revenue-share rate — carried verbatim, **not** mapped to a RAMP `PricingModel` (see note) |
+
+:::note[Why `comp.revshare` is not a RAMP pricing model]
+CoMP's `License` carries a `revshare` rate alongside `price`. RAMP core's
+`PricingModel` is deliberately limited to the three *charging structures* an
+Exchange can quote, sign, and compare at transaction time — `FREE`, `PER_UNIT`,
+`FLAT` — each with a concrete `unit_cost`. Revenue share has no such
+transaction-time price: the rate and its settlement are an **off-protocol
+agreement** between agent and publisher, reconciled later from reported usage.
+
+So RAMP does **not** define a revenue-share pricing model, and `comp.revshare`
+is **not** translated into one. Two consequences:
+
+- A CoMP revenue-share rate rides through unchanged as `comp.license[].revshare`
+  in the ext — full fidelity for CoMP-aware parties, ignored by everyone else.
+- The *access mechanics* of a revenue-share arrangement are expressed with core
+  primitives: a `Pricing{model: FREE}` term gated by an agreement scope (e.g.
+  `scopes: ["revshare:publisher-x"]`) plus a reporting `Obligation`. The agent
+  holding the matching delegation accesses at zero marginal cost and reports
+  usage; revenue is settled off-protocol. See
+  [Licensing Terms → Revenue-share arrangements](/protocol/licensing-terms/#revenue-share-arrangements).
+
+This keeps RAMP offers price-comparable and the signed `Pricing` free of
+commercial terms the protocol never enforces, while preserving CoMP parity by
+mapping rather than duplication.
+:::
 
 ### Usage Functions (on LicenseTerm.restrictions[].ext and Usage.ext)
 
