@@ -318,7 +318,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 ```json
 {
   "ver": "1.0",
-  "id": "sq-claude-001",
   "exchange": "exchange.ssp-alpha.com",
   "offers": [
     {
@@ -477,7 +476,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "https://theverge.com/premium/ai-regulation-republish.html"
   ],
   "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
-  "request_id": "pr-claude-001",
   "deadline": "0.4s"
 }
 ```
@@ -491,7 +489,6 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
 ```json
 {
   "ver": "1.0",
-  "id": "sq-orch-alpha-001",
   "exchange": "exchange.ssp-alpha.com",
   "offer_groups": [
     {
@@ -532,7 +529,6 @@ Note: SSP-Alpha returns an empty `offers` array for the `theverge.com` URI with 
 // SSP-Beta returns (single-URI, flat offers):
 {
   "ver": "1.0",
-  "id": "sq-orch-beta-001",
   "exchange": "exchange.ssp-beta.com",
   "offers": [
     {
@@ -610,7 +606,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 {
   "ver": "1.0",
-  "id": "tx-claude-001",
+  "idempotencyKey": "tx-claude-001",
   "offer_id": "sub-offer-tc-reg-001",
   "requester": {
     "id": "claude-agent-001",
@@ -630,7 +626,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 {
   "ver": "1.0",
-  "id": "tx-claude-001",
+  "idempotencyKey": "tx-claude-001",
   "offer_id": "sub-offer-tc-reg-001",
   "requester": {
     "id": "claude-agent-001",
@@ -639,7 +635,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
-  "request_id": "pr-claude-001",
   "offer_signature": "base64-ed25519-sig-B..."
 }
 ```
@@ -701,7 +696,6 @@ The request body is identical to the direct case; the forwarding chain lives in 
 ```json
 {
   "ver": "1.0",
-  "id": "tx-claude-001",
   "transaction_id": "txn-alpha-001",
   "billing_id": "bill-sub-alpha-001",
   "resource_title": "AI Regulation: What Providers Need to Know",
@@ -765,7 +759,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 
 {
   "ver": "1.0",
-  "id": "ur-claude-001",
+  "idempotencyKey": "ur-claude-001",
   "transaction_id": "txn-alpha-001",
   "billing_id": "bill-sub-alpha-001",
   "usage": {
@@ -776,7 +770,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
     "citation_included": true
   },
   "timestamp": "2026-03-15T15:30:00Z",
-  "request_id": "pr-claude-001",
   "exchange": "exchange.ssp-alpha.com",
   "assets": [
     {
@@ -804,9 +797,12 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 
 ```json
 {
-  "accepted": true
+  "ver": "1.0",
+  "report_id": "rpt-001"
 }
 ```
+
+A successful `UsageReportResponse` carries only the Exchange-assigned `report_id` (the durable identity the agent references when filing a dispute). A rejected report is not a success body — it travels as a non-OK transport error carrying `ErrorDetail.usageReportRejection` (e.g. `{ "usageReportRejection": { "reason": "USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED" } }`).
 
 ---
 

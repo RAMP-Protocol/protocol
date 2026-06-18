@@ -131,7 +131,7 @@ func (ps *PostgresStore) WriteBatch(events []*TransactionEvent) error {
     stmt, err := tx.Prepare(pq.CopyIn(
         "transaction_events",
         "event_id", "event_type", "event_timestamp",
-        "transaction_id", "billing_id", "request_id",
+        "transaction_id", "billing_id", "idempotency_key",
         "buyer_lid", "provider_domain", "exchange_id",
         "cost_amount", "cost_currency",
         "chain_hash", "offer_signature",
@@ -145,7 +145,7 @@ func (ps *PostgresStore) WriteBatch(events []*TransactionEvent) error {
         payload, _ := json.Marshal(event)
         _, err := stmt.Exec(
             event.EventID, event.EventType, event.Timestamp,
-            event.TransactionID, event.BillingID, event.RequestID,
+            event.TransactionID, event.BillingID, event.IdempotencyKey,
             event.BuyerLID, event.ProviderDomain, event.ExchangeID,
             event.CostAmount, event.CostCurrency,
             event.ChainHash, event.OfferSignature,
@@ -187,7 +187,10 @@ type TransactionEvent struct {
 
     TransactionID  string `json:"transaction_id,omitempty"  db:"transaction_id"`
     BillingID      string `json:"billing_id,omitempty"      db:"billing_id"`
-    RequestID      string `json:"request_id,omitempty"      db:"request_id"`
+    // The request's idempotency key (TransactionRequest.idempotency_key /
+    // UsageReport.idempotency_key). Durable dedupe key, NOT the wire
+    // correlation id — correlation rides the X-Request-ID HTTP header.
+    IdempotencyKey string `json:"idempotency_key,omitempty" db:"idempotency_key"`
     OfferID        string `json:"offer_id,omitempty"        db:"offer_id"`
     SubscriptionID string `json:"subscription_id,omitempty" db:"subscription_id"`
 

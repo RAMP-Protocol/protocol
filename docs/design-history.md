@@ -274,3 +274,109 @@ technology a conformant implementation must support. `"biscuit-v3"` stays a
 permitted optional profile for deployments that genuinely want deep offline
 attenuation. The win is adoption: JWT is ubiquitous, so RAMP asks implementers to
 take on no genuinely new token technology by default.
+
+## Failure as a typed contract: `ErrorDetail`, not strings
+
+The success side of the protocol was a single validated contract — typed
+messages, protovalidate CEL at the boundary — while the failure side was not. The
+same failure was named in incompatible ways across implementations: a hand-rolled
+Go `Kind` enum in the Exchange (with a seven-mode entitlement family that all
+collapsed to `UNAUTHENTICATED` on the wire, distinguishable only by a server-side
+tag), a separate `Kind` enum in the Broker, free-text reason strings on the
+catalog path, a database denial enum whose values did not match the proto's own
+`DenialReason`, and a lowercase token union in the edge worker. A client could
+not read a failure as one validated, machine-readable value; the reason for a
+failure was expressed differently in Go, TypeScript, and Python, and the error
+shapes lived in code rather than in the contract.
+
+We made failure a single contract. The transport carries a coarse canonical code
+(gRPC / Connect `Code`) as the error *class*; a typed `ErrorDetail` message,
+attached to the transport error's details the same way protovalidate attaches its
+violations, carries the precise machine-readable *reason* (a typed enum) plus
+structured context. Clients branch on the typed reason, never on a human string.
+The per-domain reason enums (`TransactionDenial` reusing `DenialReason`,
+`CatalogRejection`, `RegistrationFailure`, `DisputeFailure`,
+`DomainVerificationFailure`, `RetrievalAuthFailure`, `UsageReportRejection`) are
+the single source of truth that the hand-rolled vocabularies collapse onto: the
+database stores the proto reason, the per-service Go error types shrink to mapping
+a domain failure to a transport code only, and the edge token union becomes a
+generated enum.
+
+We chose closed, typed enums over the open `reason` string of
+`google.rpc.ErrorInfo`. Google uses a string because its API surface is enormous
+and federated; ours is a handful of RPCs we fully control, and the entire goal is
+compile-time conformance across Go, TypeScript, and Python — which a closed enum
+delivers and a string would surrender. `ErrorDetail` still carries an
+ErrorInfo-compatible `domain` + `metadata` for generic tooling, but the
+authoritative reason is the enum. We kept the wrapper (`ErrorDetail` with a
+`oneof`) rather than attaching bare detail messages to the transport error,
+because one carrier message means uniform client code: there is exactly one type
+to look for.
+
+## A failed action is not a success body
+
+The corollary decision is where a failure lives. The rule is the gRPC / AIP-193
+one: a method that could not perform the requested *action* returns a non-OK code
+plus an `ErrorDetail`; a *query* that ran successfully returns its answer in the
+body, and "no results" is a successful answer, not an error. So discovery keeps
+its in-body `OfferGroup.absence_reason` (the query succeeded; there were simply no
+offers), and a denied *single* transaction, a rejected usage report, a refused
+dispute filing, and a failed domain verification all became transport errors
+carrying the typed reason — the in-body `bool accepted` / `verified` flags and
+`rejection_reason` / `failure_reason` strings were removed. Batch transactions are
+the deliberate exception: a batch is a successful call whose per-item
+`TransactionResultItem` may carry a denial reason in-body, exactly like discovery
+absence, because the partial results *are* the successful answer. The effect is
+that success bodies now carry only the payload-when-it-worked.
+
+## One response envelope; correlation by header
+
+With the failure fields gone, the response messages were standardized. Every RPC
+request and response now carries `ver` at field 1 — version belongs on every
+message, consistently positioned — and the external-contract messages all carry
+`ext` / `ext_critical` so any of them is forward-extensible (the trivial internal
+catalog-admin messages get `ver` only; extension slots there would be noise).
+
+Correlation, by contrast, was removed from the proto entirely. Earlier drafts
+carried a `request_id` ("originating RAMP request id, for traceability") on
+several requests and echoed it on responses — but it was dead weight: the
+implementations never read or wrote it. Correlation already flows the way
+signatures do, over the transport — an `X-Request-ID` header, minted or
+propagated by shared middleware in the broker, exchange, and edge, and bound to a
+request-scoped logger. By the same reasoning that moved signatures to RFC 9421 (a
+value the proxies, edge functions, and tracing systems read without parsing
+protobuf belongs on the transport), a correlation id has no place in the message
+body. So every `request_id` field was deleted; per-hop and cross-system
+correlation ride on `X-Request-ID` — and, when distributed tracing is added, the
+W3C Trace Context `traceparent` / `tracestate` headers, which are the ecosystem
+standard rather than anything RAMP would hand-roll. The proto keeps only the
+identifiers that are *acted on* or *persisted*: the settlement and evidence keys
+(`transaction_id`, `billing_id`, `report_id`, `dispute_id`) the Exchange assigns
+and the reconciliation chain joins on.
+
+## Idempotency is an explicit `idempotency_key`, not an overloaded `id`
+
+Idempotency is the mirror image of correlation, and the contrast is the point. A
+correlation id is ephemeral observability and lives in a header; an idempotency
+key is persisted, settlement-bound state the server *acts on* — the Exchange
+dedupes on it, stores it under a `UNIQUE` constraint, and threads it into the
+billing adapter so a replayed request cannot double-charge. By the rule that
+governs the whole wire format — what must outlive the HTTP exchange and survive a
+dispute stays a typed field — the idempotency key belongs in the message body,
+not a header. (This is where RAMP diverges from Stripe's header-based key: RAMP's
+key is part of the signed, persisted, reconciled record, not a transport hint.)
+
+The mutating requests had been carrying this as a generically-named `id` — with
+`TransactionRequest.id` the only one a server actually deduped on, and
+`UsageReport.id` an unwired intention. We renamed it to `idempotency_key` and made
+it required on the state-mutating RPCs (`ExecuteTransaction`, `ReportUsage`,
+`DisputeTransaction`), so the contract names the guarantee for what it is: the
+server MUST return the original result on replay rather than re-executing. The
+request needs no separate own-id, because the durable identity of what it creates
+is the Exchange-assigned id in the response (`transaction_id`, `report_id`,
+`dispute_id`). Queries (`DiscoverResources`) take no key, and the
+naturally-idempotent catalog upsert/delete and onboarding calls are left out
+deliberately — a key there would be ceremony, not a guarantee. The field is
+declared in the contract ahead of full enforcement: the Exchange dedupes
+`ExecuteTransaction` today, and the remaining RPCs adopt the same check as the
+implementation catches up to the contract — the proto leads, the services follow.

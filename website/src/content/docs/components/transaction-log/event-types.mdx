@@ -78,7 +78,7 @@ Logged when an `ExecuteTransaction` RPC is received, before billing authorizatio
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_TRANSACTION_REQUESTED` |
 | `timestamp` | `time.Time` | yes | Server receipt time |
-| `request_id` | `string` | yes | `TransactionRequest.id` (idempotency key) |
+| `idempotency_key` | `string` | yes | `TransactionRequest.idempotency_key` (the request's idempotency key) |
 | `offer_id` | `string` | yes | `TransactionRequest.offer_id` |
 | `buyer_lid` | `string` | yes | `aisystem.aisysuse.lid` |
 | `buyer_name` | `string` | yes | `aisystem.name` |
@@ -97,7 +97,7 @@ Logged after the Billing Adapter returns its authorization decision. Captures bo
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_BILLING_AUTHORIZATION` |
 | `timestamp` | `time.Time` | yes | Authorization decision time |
-| `request_id` | `string` | yes | Corresponding `TransactionRequest.id` |
+| `idempotency_key` | `string` | yes | Corresponding `TransactionRequest.idempotency_key` |
 | `offer_id` | `string` | yes | The offer being authorized |
 | `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
 | `authorized` | `bool` | yes | Whether billing was approved |
@@ -141,7 +141,7 @@ The Exchange MUST NOT return the `TransactionResponse` until this event is durab
 | `timestamp` | `time.Time` | yes | URL generation time |
 | `transaction_id` | `string` | yes | `TransactionResponse.transaction_id` |
 | `billing_id` | `string` | yes | `TransactionResponse.billing_id` |
-| `request_id` | `string` | yes | `TransactionRequest.id` (idempotency key) |
+| `idempotency_key` | `string` | yes | `TransactionRequest.idempotency_key` (the request's idempotency key) |
 | `offer_id` | `string` | yes | Selected offer |
 | `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
 | `buyer_name` | `string` | yes | AI system name |
@@ -190,7 +190,8 @@ Logged when a `ReportUsage` RPC is received. Completes the transaction lifecycle
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_USAGE_REPORT_RECEIVED` |
 | `timestamp` | `time.Time` | yes | Server receipt time |
-| `report_id` | `string` | yes | `UsageReport.id` |
+| `report_id` | `string` | yes | Exchange-assigned report id (`UsageReportResponse.report_id`) |
+| `idempotency_key` | `string` | yes | `UsageReport.idempotency_key` (the report's idempotency key) |
 | `transaction_id` | `string` | yes | `UsageReport.transaction_id` |
 | `billing_id` | `string` | yes | `UsageReport.billing_id` |
 | `buyer_lid` | `string` | yes | Extracted from transaction record |
@@ -200,8 +201,8 @@ Logged when a `ReportUsage` RPC is received. Completes the transaction lifecycle
 | `citation_included` | `bool` | no | `Usage.citation_included` |
 | `report_latency_sec` | `int64` | yes | Seconds between URL issuance and report receipt |
 | `within_window` | `bool` | yes | Whether report arrived within reporting_deadline |
-| `accepted` | `bool` | yes | Whether the report was accepted |
-| `rejection_reason` | `string` | no | Reason if rejected |
+| `accepted` | `bool` | yes | Whether the report was accepted. On the wire, acceptance is implied by a successful `UsageReportResponse`; a rejection is a non-OK transport error carrying `ErrorDetail.usage_report_rejection` (this log field records that outcome) |
+| `rejection_reason` | `UsageReportRejectionReason` | cond | Typed reason when `accepted=false`; mirrors `ErrorDetail.usage_report_rejection.reason` |
 | `exchange_id` | `string` | yes | This Exchange's identity |
 
 ## DisputeRequested (v1.0)

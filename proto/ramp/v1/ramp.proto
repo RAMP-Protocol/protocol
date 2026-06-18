@@ -157,9 +157,6 @@ message ResourceQuery {
   // enforcement); the agent self-selects and bears compliance.
   repeated AcceptableRestriction acceptable_restrictions = 9;
 
-  // Original RAMP request ID from Step 1, for traceability.
-  optional string request_id = 4;
-
   // Multi-hop forwarding (Agent → Broker → … → Exchange) is carried in the HTTP
   // layer, not in this message: each forwarding party adds its own labeled
   // RFC 9421 HTTP Message Signature (Signature / Signature-Input), and each
@@ -205,9 +202,6 @@ message ResourceQuery {
 // either the flat `offers` field or a single OfferGroup.
 message ResourceResponse {
   string ver = 1;
-
-  // Echoed query identifier.
-  string id = 2;
 
   // Canonical domain of the responding Exchange.
   string exchange = 3;
@@ -1599,8 +1593,10 @@ enum ResourceMutability {
 message TransactionRequest {
   string ver = 1;
 
-  // Unique transaction request identifier (used as idempotency key).
-  string id = 2;
+  // Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns
+  // the original result rather than re-executing. The transaction's durable
+  // identity is the Exchange-assigned transaction_id in the response.
+  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
 
   // Single-offer mode. Use `items` for batch mode; `offer_id` +
   // `offer_signature` for single.
@@ -1608,9 +1604,6 @@ message TransactionRequest {
 
   // Requester identity — forwarded for authorization and audit.
   Requester requester = 4;
-
-  // Original RAMP request ID for traceability.
-  optional string request_id = 5;
 
   // Single-offer signature.
   optional string offer_signature = 6;
@@ -1645,9 +1638,6 @@ message TransactionItem {
 message TransactionResponse {
   string ver = 1;
 
-  // Echoed transaction request ID.
-  string id = 2;
-
   // Single-offer result.
   // For batch mode, these may be empty — check `items` instead.
   optional string transaction_id = 3;
@@ -1676,12 +1666,10 @@ message TransactionResponse {
   // and on transactions whose delivery_method is not signed-URL-based.
   optional string retrieval_endpoint = 18;
 
-  // Set when the transaction is denied. Absent on success.
-  optional DenialReason denial_reason = 11;
-
-  // When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the
-  // request failed, in the same RestrictionKind vocabulary the terms use.
-  repeated RestrictionKind restriction_mismatches = 19;
+  // A denied single transaction is not a success body: it travels as a non-OK
+  // transport error carrying ErrorDetail.transaction_denial (DenialReason +
+  // restriction_mismatches). Batch per-item denials remain in-body on
+  // TransactionResultItem, as partial results of a successful batch.
 
   // If set, this transaction was fulfilled under a subscription/deal.
   // No per-request charge — usage tracked against subscription quota.
@@ -1783,6 +1771,19 @@ enum DenialReason {
   DENIAL_REASON_QUOTA_EXCEEDED = 9;       // Subscription access count exhausted for this period
   DENIAL_REASON_DELEGATION_INVALID = 10;  // Delegation missing, unverifiable, expired, or its attenuation does not check out
   DENIAL_REASON_SCOPE_INSUFFICIENT = 11;  // Requester scopes don't cover this resource
+
+  // Entitlement family — subscription/biscuit access failures on a
+  // subscription-gated offer. Finer-grained than DELEGATION_INVALID so callers
+  // and operator tooling can triage each mode. These single-source the
+  // Exchange's KindEntitlement* refusal taxonomy, which today is distinguishable
+  // only by a server-side tag (all collapse to UNAUTHENTICATED on the wire).
+  DENIAL_REASON_ENTITLEMENT_MISSING = 12;            // no entitlement biscuit presented for a subscription-only offer
+  DENIAL_REASON_ENTITLEMENT_MALFORMED = 13;          // entitlement biscuit failed Biscuit v2 decode
+  DENIAL_REASON_ENTITLEMENT_EXPIRED = 14;            // entitlement biscuit's validity window has passed
+  DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;        // biscuit's subscriber_org does not match the asserted buyer
+  DENIAL_REASON_SUBSCRIPTION_LAPSED = 16;            // the covering subscription contract has lapsed
+  DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 17;        // subscription exists but no buyer-side grant ties this caller to it
+  DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION = 18;  // biscuit authority sound but the per-request attenuation is missing/stale
 }
 
 // IngestionSource — How the catalog entry was discovered.
@@ -1810,12 +1811,21 @@ service CatalogService {
 }
 
 message PushResourcesRequest {
-  string tenant_id = 1;
-  repeated ResourceEntry entries = 2;
+  string ver = 1;
+  string tenant_id = 2;
+  repeated ResourceEntry entries = 3;
 
   // Identity of the caller (who is pushing this data).
   // The Exchange verifies this matches a registered CatalogService client.
-  string caller_id = 3;
+  string caller_id = 4;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
 }
 
 message ResourceEntry {
@@ -1864,32 +1874,45 @@ message ResourceEntry {
 }
 
 message PushResourcesResponse {
-  int32 accepted = 1;
-  int32 rejected = 2;
+  string ver = 1;
+  int32 accepted = 2;
+  int32 rejected = 3;
 
   // Non-fatal issues encountered during ingestion.
   // Examples: unrecognized vocab token in a Restriction (term accepted but flagged),
   //           REFERENCE_ONLY term missing License.uri (informational).
   // Warnings do not cause rejection — they are surfaced so publishers can fix
   // their feeds without a hard failure.
-  repeated string warnings = 3;
+  repeated string warnings = 4;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
 }
 
 message RemoveResourcesRequest {
-  string tenant_id = 1;
-  repeated string paths = 2;
+  string ver = 1;
+  string tenant_id = 2;
+  repeated string paths = 3;
 }
 
 message RemoveResourcesResponse {
-  int32 removed = 1;
+  string ver = 1;
+  int32 removed = 2;
 }
 
 message RefreshCatalogRequest {
-  string tenant_id = 1;
+  string ver = 1;
+  string tenant_id = 2;
 }
 
 message RefreshCatalogResponse {
-  bool started = 1;
+  string ver = 1;
+  bool started = 2;
 }
 
 // ============================================================================
@@ -1926,8 +1949,10 @@ message ReportingObligation {
 message UsageReport {
   string ver = 1;
 
-  // Unique report identifier.
-  string id = 2;
+  // Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
+  // report does not double-count usage. The report's durable identity is the
+  // Exchange-assigned report_id in UsageReportResponse.
+  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
 
   // Transaction ID from the delivery.
   string transaction_id = 3;
@@ -1940,9 +1965,6 @@ message UsageReport {
 
   // When the resource was used (ISO 8601).
   google.protobuf.Timestamp timestamp = 6;
-
-  // Original RAMP request ID.
-  optional string request_id = 7;
 
   // Exchange this report is for.
   optional string exchange = 8;
@@ -2017,11 +2039,10 @@ message UsageAsset {
 
 // UsageReportResponse — Acknowledgment of a usage report.
 message UsageReportResponse {
-  // Whether the report was accepted.
-  bool accepted = 1;
+  // A successful response means the report was accepted; a rejection travels as
+  // a non-OK transport error carrying ErrorDetail.usage_report_rejection.
 
-  // If not accepted, reason for rejection.
-  optional string rejection_reason = 2;
+  string ver = 1;
 
   // Exchange-assigned report identifier. Required for the dispute chain —
   // the agent must reference this report_id in DisputeRequest to prove that
@@ -2464,10 +2485,6 @@ enum ResourceAccessPolicy {
 // RAMPResponse — Broker returns to Agent (Step 6).
 message RAMPResponse {
   string ver = 1;
-  string id = 2;
-
-  // Echoed request ID from Step 1.
-  string request_id = 3;
 
   // Exchange-assigned identifiers.
   string transaction_id = 4;
@@ -2534,8 +2551,10 @@ message RAMPResponse {
 message DisputeRequest {
   string ver = 1;
 
-  // Unique dispute identifier.
-  string id = 2;
+  // Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
+  // filing does not open a duplicate case. The dispute's durable identity is the
+  // Exchange-assigned dispute_id in DisputeResponse.
+  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
 
   // Transaction being disputed.
   string transaction_id = 3;
@@ -2633,7 +2652,7 @@ enum ResolutionType {
   // New signed URL issued for the same resource (e.g., when content hash
   // now matches after provider correction).
   RESOLUTION_TYPE_REDELIVERY = 2;
-  // Dispute rejected with a specific reason (see DisputeResponse.rejection_reason).
+  // Dispute reviewed and rejected; no remedy applied.
   RESOLUTION_TYPE_REJECTED = 3;
   // Escalated to Tier 3 pattern analysis for further investigation.
   RESOLUTION_TYPE_INVESTIGATION = 4;
@@ -2641,14 +2660,14 @@ enum ResolutionType {
 
 // DisputeResponse — Exchange acknowledges the dispute.
 message DisputeResponse {
-  // Whether the dispute was accepted for processing.
-  bool accepted = 1;
+  // A successful response means the dispute was accepted for processing; a
+  // refusal to file travels as a non-OK transport error carrying
+  // ErrorDetail.dispute_failure.
+
+  string ver = 1;
 
   // Exchange-assigned dispute case identifier.
   optional string dispute_id = 2;
-
-  // If not accepted, why.
-  optional string rejection_reason = 3;
 
   // Expected resolution timeline.
   optional google.protobuf.Duration estimated_resolution = 4;
@@ -2704,19 +2723,37 @@ message DomainVerificationRequest {
 
   // Caller identity (registered with the Exchange).
   optional string caller_id = 3;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
 }
 
 // DomainVerificationChallenge — Exchange returns a challenge.
 message DomainVerificationChallenge {
+  string ver = 1;
+
   // Opaque challenge token. Provider must serve this at:
   // https://{domain}/.well-known/ramp-verify/{token}
-  string token = 1;
+  string token = 2;
 
   // When this challenge expires. Provider must confirm before this time.
-  google.protobuf.Timestamp expires_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
 
   // The exact URL the Exchange will fetch to verify.
-  string verification_url = 3;
+  string verification_url = 4;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
 }
 
 // DomainVerificationConfirmation — Provider confirms the challenge is placed.
@@ -2736,19 +2773,225 @@ message DomainVerificationConfirmation {
 
   // CDN type this key is for.
   optional string cdn_type = 5;  // "cloudfront", "akamai", "fastly", "hmac"
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
 }
 
 // DomainVerificationResult — Exchange confirms verification.
 message DomainVerificationResult {
-  // Whether domain verification succeeded.
-  bool verified = 1;
+  // A successful response means verification succeeded; a failure travels as a
+  // non-OK transport error carrying ErrorDetail.domain_verification_failure.
 
-  // If verified and signing_key was provided: confirmation of key registration.
+  string ver = 1;
+
+  // If signing_key was provided: confirmation of key registration.
   optional string key_id = 2;
-
-  // If not verified, why.
-  optional string failure_reason = 3;
 
   // Verification is valid until this time. Provider must re-verify periodically.
   optional google.protobuf.Timestamp valid_until = 4;
+
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ============================================================================
+// Unified Error Model
+//
+// One way to communicate failure across every RPC. The transport carries a
+// coarse canonical code (gRPC / Connect Code) as the error CLASS; an ErrorDetail
+// message — attached to the transport error's details, the same mechanism
+// protovalidate uses to attach its Violations — carries the precise,
+// machine-readable reason and structured context. Clients branch on the typed
+// reason, never on a human string.
+//
+// Error vs. body: a QUERY that ran successfully returns its answer in the
+// response body, and "no results" / per-item absence (OfferGroup.absence_reason)
+// is a success — NOT an error. Only a method that could not perform the
+// requested ACTION returns a non-OK code plus an ErrorDetail.
+//
+// The per-domain reason enums here are the single source of truth that replaces
+// the hand-rolled Go "Kind" enums (Exchange, Broker), the catalog free-text
+// strings, and the edge TypeScript token unions. Services map a domain failure
+// to a transport code only; the reason they emit comes from these enums.
+// ============================================================================
+
+// ErrorDetail — the structured detail attached to every non-OK transport error.
+message ErrorDetail {
+  // Developer-facing, NON-authoritative human message. Clients MUST branch on
+  // the typed reason below, never on this text.
+  string message = 1;
+
+  // Stable grouping for the failing surface, e.g. "ramp.v1.ExchangeService".
+  // Mirrors google.rpc.ErrorInfo.domain so generic tooling can group errors.
+  string domain = 2;
+
+  // Dynamic key/value context that also appears in `message` (ids, limits,
+  // axes). Mirrors google.rpc.ErrorInfo.metadata. Strongly-typed context rides
+  // in the per-domain reason block below instead.
+  map<string, string> metadata = 3;
+
+  // Exactly one typed reason block, selected by the failing method. Absent for
+  // generic transport-class failures (e.g. INVALID_ARGUMENT, INTERNAL) that
+  // carry no domain-specific reason.
+  oneof reason {
+    TransactionDenial transaction_denial = 10;
+    CatalogRejection catalog_rejection = 11;
+    RegistrationFailure registration_failure = 12;
+    DisputeFailure dispute_failure = 13;
+    DomainVerificationFailure domain_verification_failure = 14;
+    RetrievalAuthFailure retrieval_auth_failure = 15;
+    UsageReportRejection usage_report_rejection = 16;
+  }
+}
+
+// TransactionDenial — ExecuteTransaction could not complete. Carries the denial
+// reason the response body no longer holds (denial_reason / restriction_mismatches
+// move here in the response-shape normalization). Reuses the DenialReason vocab.
+message TransactionDenial {
+  DenialReason reason = 1 [
+    (buf.validate.field).enum = {defined_only: true, not_in: [0]}
+  ];
+
+  // When reason = RESTRICTION_NOT_SATISFIED, the failed axes (same
+  // RestrictionKind vocabulary the terms use).
+  repeated RestrictionKind restriction_mismatches = 2;
+
+  // Batch mode: the offer this denial pertains to.
+  optional string offer_id = 3;
+}
+
+// CatalogRejectionReason — why a CatalogService call was rejected. Replaces the
+// hand-rolled catalog reason strings ("caller not in catalog contributors",
+// "tenant mismatch", "signature middleware missing").
+enum CatalogRejectionReason {
+  CATALOG_REJECTION_REASON_UNSPECIFIED = 0;
+  CATALOG_REJECTION_REASON_NOT_CATALOG_CONTRIBUTOR = 1; // caller is not an authorized contributor for the domain
+  CATALOG_REJECTION_REASON_TENANT_MISMATCH = 2;         // tenant_id does not match the authenticated caller
+  CATALOG_REJECTION_REASON_DOMAIN_NOT_VERIFIED = 3;     // contributing domain is not verified
+  CATALOG_REJECTION_REASON_SIGNATURE_INVALID = 4;       // request signature missing or invalid
+  CATALOG_REJECTION_REASON_MALFORMED_ENTRY = 5;         // a resource entry failed schema/validation
+  CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN = 6;     // an unregistered vocab token in a restriction/term
+  CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 7;          // contributor push quota exceeded
+}
+
+// CatalogRejection — a CatalogService call could not be applied.
+message CatalogRejection {
+  CatalogRejectionReason reason = 1 [
+    (buf.validate.field).enum = {defined_only: true, not_in: [0]}
+  ];
+
+  // For partial-batch failures: the entry paths that were rejected.
+  repeated string rejected_paths = 2;
+}
+
+// RegistrationFailureReason — why agent/provider registration was refused.
+// Replaces the hand-rolled errors on POST /exchange/v1/agents/register.
+enum RegistrationFailureReason {
+  REGISTRATION_FAILURE_REASON_UNSPECIFIED = 0;
+  REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED = 1; // caller domain is not verified
+  REGISTRATION_FAILURE_REASON_INVALID_KEY = 2;         // signing key malformed or unsupported
+  REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID = 3;   // request signature invalid
+  REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED = 4;  // identity already registered
+  REGISTRATION_FAILURE_REASON_QUOTA_EXCEEDED = 5;      // registration quota exceeded
+}
+
+// RegistrationFailure — a registration request could not be completed.
+message RegistrationFailure {
+  RegistrationFailureReason reason = 1 [
+    (buf.validate.field).enum = {defined_only: true, not_in: [0]}
+  ];
+}
+
+// DisputeFailureReason — why a DisputeTransaction filing was refused. Distinct
+// from DisputeReason (why the agent disputes) and DisputeStatus (an accepted
+// dispute's lifecycle).
+enum DisputeFailureReason {
+  DISPUTE_FAILURE_REASON_UNSPECIFIED = 0;
+  DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND = 1; // transaction_id is unknown
+  DISPUTE_FAILURE_REASON_REPORT_NOT_FILED = 2;      // no UsageReport precedes the dispute (report_id missing/unknown)
+  DISPUTE_FAILURE_REASON_WINDOW_EXPIRED = 3;        // filed outside the allowed dispute window
+  DISPUTE_FAILURE_REASON_DUPLICATE = 4;             // a dispute already exists for this transaction
+  DISPUTE_FAILURE_REASON_INELIGIBLE = 5;            // the transaction/state is not disputable
+}
+
+// DisputeFailure — a dispute could not be filed.
+message DisputeFailure {
+  DisputeFailureReason reason = 1 [
+    (buf.validate.field).enum = {defined_only: true, not_in: [0]}
+  ];
+}
+
+// DomainVerificationFailureReason — why provider domain verification failed.
+enum DomainVerificationFailureReason {
+  DOMAIN_VERIFICATION_FAILURE_REASON_UNSPECIFIED = 0;
+  DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_NOT_FOUND = 1;     // token not served at the well-known path
+  DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH = 2;      // served token does not match the issued token
+  DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_EXPIRED = 3;       // confirmation arrived after the challenge expired
+  DOMAIN_VERIFICATION_FAILURE_REASON_FETCH_FAILED = 4;           // Exchange could not fetch the verification URL
+  DOMAIN_VERIFICATION_FAILURE_REASON_EXCHANGE_NOT_AUTHORIZED = 5; // ramp.json does not list this Exchange
+  DOMAIN_VERIFICATION_FAILURE_REASON_KEY_REGISTRATION_FAILED = 6; // signing-key registration failed during confirmation
+}
+
+// DomainVerificationFailure — RequestDomainVerification / ConfirmDomainVerification failed.
+message DomainVerificationFailure {
+  DomainVerificationFailureReason reason = 1 [
+    (buf.validate.field).enum = {defined_only: true, not_in: [0]}
+  ];
+}
+
+// RetrievalAuthFailureReason — why a signed-URL retrieval or its proof-of-
+// possession was rejected at the delivery edge. Single-sources the edge
+// TypeScript token unions in verify.ts (signed-URL) and pop.ts (RFC 9421 PoP).
+enum RetrievalAuthFailureReason {
+  RETRIEVAL_AUTH_FAILURE_REASON_UNSPECIFIED = 0;
+  // Signed-URL checks (verify.ts).
+  RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED = 1;             // 'expired'
+  RETRIEVAL_AUTH_FAILURE_REASON_URL_SIGNATURE_MISSING = 2;   // 'missing_sig'
+  RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRY_MISSING = 3;      // 'missing_exp'
+  RETRIEVAL_AUTH_FAILURE_REASON_URL_SIGNATURE_MISMATCH = 4;  // 'signature_mismatch'
+  // Proof-of-possession checks (pop.ts).
+  RETRIEVAL_AUTH_FAILURE_REASON_AGENT_KEY_MISSING = 5;       // 'missing_agent_key'
+  RETRIEVAL_AUTH_FAILURE_REASON_PROOF_SIGNATURE_MISSING = 6; // 'missing_sig'
+  RETRIEVAL_AUTH_FAILURE_REASON_KEYID_MISMATCH = 7;          // 'keyid_mismatch'
+  RETRIEVAL_AUTH_FAILURE_REASON_THUMBPRINT_MISMATCH = 8;     // 'thumbprint_mismatch'
+  RETRIEVAL_AUTH_FAILURE_REASON_PROOF_CREATED_MISSING = 9;   // 'pop_missing_created'
+  RETRIEVAL_AUTH_FAILURE_REASON_PROOF_EXPIRY_MISSING = 10;   // 'pop_missing_exp'
+  RETRIEVAL_AUTH_FAILURE_REASON_PROOF_EXPIRED = 11;          // 'pop_expired'
+  RETRIEVAL_AUTH_FAILURE_REASON_PROOF_SIGNATURE_INVALID = 12; // 'pop_sig_invalid'
+}
+
+// RetrievalAuthFailure — a signed-URL retrieval / proof-of-possession check failed.
+message RetrievalAuthFailure {
+  RetrievalAuthFailureReason reason = 1 [
+    (buf.validate.field).enum = {defined_only: true, not_in: [0]}
+  ];
+}
+
+// UsageReportRejectionReason — why a ReportUsage filing was rejected. Replaces
+// the free-text UsageReportResponse.rejection_reason string.
+enum UsageReportRejectionReason {
+  USAGE_REPORT_REJECTION_REASON_UNSPECIFIED = 0;
+  USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND = 1;     // transaction_id is unknown
+  USAGE_REPORT_REJECTION_REASON_DUPLICATE = 2;                 // a report was already filed for this transaction
+  USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED = 3;            // filed outside the reporting window
+  USAGE_REPORT_REJECTION_REASON_MISSING_REQUIRED_FIELDS = 4;   // ReportingObligation.required_fields not satisfied
+  USAGE_REPORT_REJECTION_REASON_MALFORMED = 5;                 // report payload failed validation
+}
+
+// UsageReportRejection — a usage report could not be accepted.
+message UsageReportRejection {
+  UsageReportRejectionReason reason = 1 [
+    (buf.validate.field).enum = {defined_only: true, not_in: [0]}
+  ];
 }

@@ -112,7 +112,6 @@ The Broker receives one response from each Exchange. Here are both offers side b
 ```json
 {
   "ver": "1.0",
-  "id": "sq-eli-001",
   "exchange": "exchange.eurlex.europa.eu",
   "offer_groups": [
     {
@@ -211,7 +210,6 @@ The Broker receives one response from each Exchange. Here are both offers side b
 ```json
 {
   "ver": "1.0",
-  "id": "sq-eli-002",
   "exchange": "exchange.wk-legal.com",
   "offer_groups": [
     {
@@ -339,7 +337,7 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
 
 {
   "ver": "1.0",
-  "id": "tx-eli-001",
+  "idempotencyKey": "tx-eli-001",
   "offer_id": "offer-eurlex-aiact-001",
   "offer_signature": "base64-ed25519-eurlex-offer-sig...",
   "requester": {
@@ -356,7 +354,6 @@ Response:
 ```json
 {
   "ver": "1.0",
-  "id": "tx-eli-001",
   "transaction_id": "txn-eurlex-001",
   "billing_id": "bill-eurlex-001",
   "retrieval_endpoint": "https://cdn.eurlex.europa.eu/legal-content/EN/TXT/XML/?uri=CELEX:32024R1689&expires=1742404200&agent_id=3e8f1a2b...&txn_id=txn-eurlex-001&sig=hmac-sha256-e7f8a9...",
@@ -404,7 +401,7 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ReportUsa
 
 {
   "ver": "1.0",
-  "id": "ur-eli-001",
+  "idempotencyKey": "ur-eli-001",
   "transaction_id": "txn-eurlex-001",
   "billing_id": "bill-eurlex-001",
   "usage": {
@@ -429,7 +426,6 @@ Response:
 
 ```json
 {
-  "accepted": true,
   "report_id": "rpt-eurlex-001"
 }
 ```

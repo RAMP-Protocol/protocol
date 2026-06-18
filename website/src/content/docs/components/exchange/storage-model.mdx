@@ -109,8 +109,11 @@ type TransactionRecord struct {
     Currency string  `json:"currency"`
     UnitCost float64 `json:"unit_cost,omitempty"`
 
-    // Traceability.
-    RequestID    string `json:"request_id"`
+    // Idempotency. Stores the request's idempotency key
+    // (TransactionRequest.idempotency_key) so a replay returns the original
+    // record. This is the durable dedupe key, NOT the wire correlation id —
+    // request/response correlation rides the X-Request-ID HTTP header.
+    IdempotencyKey string `json:"idempotency_key"`
     Broker string `json:"broker,omitempty"`
 
     // Offer snapshot (serialized JSON of the offer at transaction time).
@@ -349,8 +352,7 @@ type DisputeRecord struct {
     Reason          DisputeReason `json:"reason"`
     Description     string        `json:"description"`
     Status          DisputeStatus `json:"status"`
-    Resolution      ResolutionType `json:"resolution,omitempty"`
-    RejectionReason string        `json:"rejection_reason,omitempty"`
+    Resolution      ResolutionType `json:"resolution,omitempty"` // RESOLUTION_TYPE_REJECTED when reviewed and denied
     CreditAmount    float64       `json:"credit_amount,omitempty"`
     Currency        string        `json:"currency,omitempty"`
     FiledAt         time.Time     `json:"filed_at"`
@@ -359,7 +361,7 @@ type DisputeRecord struct {
 }
 ```
 
-The `report_id` linkage is critical -- it connects the dispute to the agent's prior usage report, establishing the evidence chain: `Offer -> Transaction -> UsageReport -> Dispute`. Disputes without a valid `report_id` are rejected.
+The `report_id` linkage is critical -- it connects the dispute to the agent's prior usage report, establishing the evidence chain: `Offer -> Transaction -> UsageReport -> Dispute`. A dispute filed without a valid `report_id` is refused at filing time — that refusal is a non-OK transport error carrying a typed `ErrorDetail.dispute_failure` (`DISPUTE_FAILURE_REASON_REPORT_NOT_FILED`), and no `DisputeRecord` is created. A `DisputeRecord` exists only for disputes accepted for processing; one that is later reviewed and denied carries `Resolution = RESOLUTION_TYPE_REJECTED`.
 
 **Storage**: Dispute records share the same durable store as transaction records (PostgreSQL for Growth tier, ClickHouse for Scale tier). They are indexed by `dispute_id`, `transaction_id`, and `(billing_ref, filed_at)` for compliance queries.
 

@@ -96,7 +96,6 @@ The Exchange looks up the article in its catalog and returns an offer. It does n
 ```json
 {
   "ver": "1.0",
-  "id": "sq-001",
   "exchange": "exchange.ssp-alpha.com",
   "offer_groups": [
     {
@@ -183,7 +182,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 {
   "ver": "1.0",
-  "id": "tx-001",
+  "idempotencyKey": "tx-001",
   "offer_id": "offer-tc-agents-001",
   "offer_signature": "base64-ed25519-offer-sig...",
   "requester": {
@@ -207,7 +206,6 @@ Response:
 ```json
 {
   "ver": "1.0",
-  "id": "tx-001",
   "transaction_id": "txn-tc-001",
   "billing_id": "bill-tc-001",
   "retrieval_endpoint": "https://cdn.techcrunch.com/premium/ai-agents-commerce.html?expires=1742403900&agent_id=7a3f8c1d...&txn_id=txn-tc-001&sig=hmac-sha256-d4e5f6...",
@@ -253,7 +251,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 
 {
   "ver": "1.0",
-  "id": "ur-001",
+  "idempotencyKey": "ur-001",
   "transaction_id": "txn-tc-001",
   "billing_id": "bill-tc-001",
   "usage": {
@@ -278,7 +276,7 @@ Response:
 
 ```json
 {
-  "accepted": true,
+  "ver": "1.0",
   "report_id": "rpt-tc-001"
 }
 ```
@@ -390,7 +388,6 @@ The Exchange verifies the JWT chain, confirms `earnings:*` covers the requested 
 ```json
 {
   "ver": "1.0",
-  "id": "sq-bb-001",
   "exchange": "exchange.marketdata-data.com",
   "offer_groups": [
     {
@@ -482,7 +479,6 @@ The remaining steps follow the same pattern as Scenario A, with one key differen
 ```json
 {
   "ver": "1.0",
-  "id": "tx-bb-001",
   "transaction_id": "txn-bb-001",
   "billing_id": "bill-bb-sub-001",
   "retrieval_endpoint": "https://cdn.marketdata.example.com/earnings/NVDA/2026-Q1-transcript.html?expires=1742404200&agent_id=8b4f9d2e...&txn_id=txn-bb-001&sig=hmac-sha256-a7b8c9...",

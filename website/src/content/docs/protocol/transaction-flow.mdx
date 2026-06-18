@@ -66,7 +66,6 @@ Key fields:
 ```json
 {
   "ver": "1.0",
-  "id": "sq-8f3a2b",
   "exchange": "exchange.ssp-example.com",
   "offers": [
     {
@@ -143,7 +142,6 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
 ```json
 {
   "ver": "1.0",
-  "id": "sq-batch-01",
   "exchange": "exchange.ssp-example.com",
   "offer_groups": [
     {
@@ -275,7 +273,7 @@ Content-Type: application/json
 ```json
 {
   "ver": "1.0",
-  "id": "tx-req-c7d1",
+  "idempotencyKey": "tx-req-c7d1",
   "offer_id": "offer-tc-4921",
   "requester": {
     "id": "research-bot",
@@ -284,7 +282,6 @@ Content-Type: application/json
     "billing_ref": "ACCT-BUYER-001",
     "scopes": ["*"]
   },
-  "request_id": "sq-8f3a2b",
   "offer_signature": "a1b2c3d4e5f6..."
 }
 ```
@@ -296,7 +293,6 @@ The `offer_signature` is the `exchange_signature` from the selected offer. The E
 ```json
 {
   "ver": "1.0",
-  "id": "tx-req-c7d1",
   "transaction_id": "txn-mp-93a7f2",
   "billing_id": "bill-93a7f2-001",
   "resource_title": "The Future of AI Infrastructure",
@@ -337,7 +333,7 @@ For batch transactions, use the `items` array:
 ```json
 {
   "ver": "1.0",
-  "id": "tx-batch-01",
+  "idempotencyKey": "tx-batch-01",
   "requester": {
     "id": "research-bot",
     "domain": "buyer.example.com",
@@ -345,7 +341,6 @@ For batch transactions, use the `items` array:
     "billing_ref": "ACCT-BUYER-001",
     "scopes": ["*"]
   },
-  "request_id": "sq-batch-01",
   "items": [
     {
       "offer_id": "offer-tc-4921",
@@ -364,7 +359,6 @@ For batch transactions, use the `items` array:
 ```json
 {
   "ver": "1.0",
-  "id": "tx-batch-01",
   "items": [
     {
       "offer_id": "offer-tc-4921",
@@ -395,7 +389,6 @@ Each item gets its own `transaction_id`, `billing_id`, and signed URL. Batch tra
 ```json
 {
   "ver": "1.0",
-  "id": "tx-sub-01",
   "transaction_id": "txn-sub-001",
   "billing_id": "bill-sub-001",
   "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=...",
@@ -421,7 +414,7 @@ Content-Type: application/json
 ```json
 {
   "ver": "1.0",
-  "id": "ur-e4f2a1",
+  "idempotencyKey": "ur-e4f2a1",
   "transaction_id": "txn-mp-93a7f2",
   "billing_id": "bill-93a7f2-001",
   "usage": {
@@ -445,9 +438,12 @@ Content-Type: application/json
 
 ```json
 {
-  "accepted": true
+  "ver": "1.0",
+  "report_id": "rpt-e4f2a1-001"
 }
 ```
+
+A successful response carries the Exchange-assigned `report_id` (the handle the agent later references in `DisputeRequest`). A rejected report is not a success body -- it travels as a non-OK transport error carrying `ErrorDetail.usage_report_rejection` (e.g. `USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED`, `USAGE_REPORT_REJECTION_REASON_MISSING_REQUIRED_FIELDS`).
 
 ### What the Exchange Validates
 
@@ -540,7 +536,7 @@ Content-Type: application/json
 ```json
 {
   "ver": "1.0",
-  "id": "dsp-20260318-abc123",
+  "idempotencyKey": "dsp-20260318-abc123",
   "transaction_id": "txn-mp-93a7f2",
   "billing_id": "bill-93a7f2-001",
   "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
@@ -555,7 +551,7 @@ Content-Type: application/json
 
 ```json
 {
-  "accepted": true,
+  "ver": "1.0",
   "dispute_id": "case-20260318-def456",
   "estimated_resolution": "1s",
   "status": "DISPUTE_STATUS_AUTO_RESOLVED",
@@ -563,7 +559,7 @@ Content-Type: application/json
 }
 ```
 
-The Exchange resolves most disputes automatically in under 1 second using CDN logs and cryptographic evidence. See [Dispute Resolution](/protocol/dispute-resolution/) for the three-tier resolution system, auto-credit rules, and the complete dispute lifecycle.
+A successful response means the dispute was accepted for processing (`dispute_id` + `status` + `resolution`). A refusal to file is not a success body -- it travels as a non-OK transport error carrying `ErrorDetail.dispute_failure` (e.g. `DISPUTE_FAILURE_REASON_REPORT_NOT_FILED`, `DISPUTE_FAILURE_REASON_WINDOW_EXPIRED`). The Exchange resolves most accepted disputes automatically in under 1 second using CDN logs and cryptographic evidence. See [Dispute Resolution](/protocol/dispute-resolution/) for the three-tier resolution system, auto-credit rules, and the complete dispute lifecycle.
 
 ## Resource Previews
 

@@ -97,6 +97,42 @@ func TestProtovalidateConstraints(t *testing.T) {
 	}
 }
 
+// TestIdempotencyKeyRequired asserts the state-mutating requests require a
+// non-empty idempotency_key — the dedup guarantee has no teeth without it. The
+// proto declares the contract ahead of full enforcement; this is the guard that
+// the required-key constraint actually fires across every SDK.
+func TestIdempotencyKeyRequired(t *testing.T) {
+	v, err := protovalidate.New()
+	if err != nil {
+		t.Fatalf("protovalidate.New: %v", err)
+	}
+
+	cases := []struct {
+		name      string
+		msg       proto.Message
+		wantValid bool
+	}{
+		{"transaction empty key rejected", &rampv1.TransactionRequest{IdempotencyKey: ""}, false},
+		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1"}, true},
+		{"usage report empty key rejected", &rampv1.UsageReport{IdempotencyKey: ""}, false},
+		{"usage report key ok", &rampv1.UsageReport{IdempotencyKey: "idem-ur-1"}, true},
+		{"dispute empty key rejected", &rampv1.DisputeRequest{IdempotencyKey: ""}, false},
+		{"dispute key ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-1"}, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := v.Validate(tc.msg)
+			if tc.wantValid && err != nil {
+				t.Errorf("expected VALID, got error: %v", err)
+			}
+			if !tc.wantValid && err == nil {
+				t.Errorf("expected INVALID, but validation passed")
+			}
+		})
+	}
+}
+
 func freePricing() *rampv1.Pricing {
 	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: 0}
 }
@@ -107,4 +143,60 @@ func gen65() []string {
 		s[i] = "tok"
 	}
 	return s
+}
+
+// TestErrorDetailConstraints exercises the unified error model: every per-domain
+// detail's reason enum must be a defined, non-UNSPECIFIED value (defined_only +
+// not_in:[0]), and the ErrorDetail wrapper validates the nested detail. This is
+// the regression guard that errors are read as a typed proto reason — never an
+// UNSPECIFIED placeholder or an out-of-range int — across every SDK language.
+func TestErrorDetailConstraints(t *testing.T) {
+	v, err := protovalidate.New()
+	if err != nil {
+		t.Fatalf("protovalidate.New: %v", err)
+	}
+
+	cases := []struct {
+		name      string
+		msg       proto.Message
+		wantValid bool
+	}{
+		// TransactionDenial — reuses DenialReason, including the entitlement family.
+		{"transaction_denial valid", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE}, true},
+		{"transaction_denial entitlement valid", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION}, true},
+		{"transaction_denial unspecified rejected", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_UNSPECIFIED}, false},
+		{"transaction_denial undefined int rejected", &rampv1.TransactionDenial{Reason: rampv1.DenialReason(9999)}, false},
+
+		// One representative valid + zero-rejected case per remaining detail.
+		{"catalog_rejection valid", &rampv1.CatalogRejection{Reason: rampv1.CatalogRejectionReason_CATALOG_REJECTION_REASON_TENANT_MISMATCH}, true},
+		{"catalog_rejection unspecified rejected", &rampv1.CatalogRejection{Reason: rampv1.CatalogRejectionReason_CATALOG_REJECTION_REASON_UNSPECIFIED}, false},
+		{"registration_failure valid", &rampv1.RegistrationFailure{Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_KEY}, true},
+		{"registration_failure unspecified rejected", &rampv1.RegistrationFailure{Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_UNSPECIFIED}, false},
+		{"dispute_failure valid", &rampv1.DisputeFailure{Reason: rampv1.DisputeFailureReason_DISPUTE_FAILURE_REASON_REPORT_NOT_FILED}, true},
+		{"dispute_failure unspecified rejected", &rampv1.DisputeFailure{Reason: rampv1.DisputeFailureReason_DISPUTE_FAILURE_REASON_UNSPECIFIED}, false},
+		{"domain_verification_failure valid", &rampv1.DomainVerificationFailure{Reason: rampv1.DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH}, true},
+		{"domain_verification_failure unspecified rejected", &rampv1.DomainVerificationFailure{Reason: rampv1.DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_UNSPECIFIED}, false},
+		{"retrieval_auth_failure valid", &rampv1.RetrievalAuthFailure{Reason: rampv1.RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_THUMBPRINT_MISMATCH}, true},
+		{"retrieval_auth_failure unspecified rejected", &rampv1.RetrievalAuthFailure{Reason: rampv1.RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_UNSPECIFIED}, false},
+		{"usage_report_rejection valid", &rampv1.UsageReportRejection{Reason: rampv1.UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_DUPLICATE}, true},
+		{"usage_report_rejection unspecified rejected", &rampv1.UsageReportRejection{Reason: rampv1.UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_UNSPECIFIED}, false},
+
+		// ErrorDetail wrapper: carries a generic class (no typed reason) or a valid
+		// typed detail; a nested invalid reason fails through the wrapper.
+		{"error_detail generic class only ok", &rampv1.ErrorDetail{Message: "internal", Domain: "ramp.v1.ExchangeService"}, true},
+		{"error_detail with valid detail ok", &rampv1.ErrorDetail{Reason: &rampv1.ErrorDetail_TransactionDenial{TransactionDenial: &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_RATE_LIMITED}}}, true},
+		{"error_detail with unspecified nested reason rejected", &rampv1.ErrorDetail{Reason: &rampv1.ErrorDetail_TransactionDenial{TransactionDenial: &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_UNSPECIFIED}}}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := v.Validate(tc.msg)
+			if tc.wantValid && err != nil {
+				t.Errorf("expected VALID, got error: %v", err)
+			}
+			if !tc.wantValid && err == nil {
+				t.Errorf("expected INVALID, but validation passed")
+			}
+		})
+	}
 }

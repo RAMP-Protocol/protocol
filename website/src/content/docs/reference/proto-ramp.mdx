@@ -5,6 +5,12 @@ description: "RAMP v1.0 protobuf reference -- ExchangeService, CatalogService, a
 
 Source: [`proto/ramp/v1/ramp.proto`](https://github.com/RAMP-Protocol/protocol/blob/main/proto/ramp/v1/ramp.proto)
 
+:::note[Envelope and correlation]
+Every RPC request/response carries `ver` (field 1, RAMP protocol version). The external-contract messages (domain verification, catalog push) also carry `ext` (field 15) and `ext_critical` (field 90, COSE `crit`, RFC 9052).
+
+Request correlation is **not** carried in the proto body. It rides on the `X-Request-ID` HTTP header, and cross-system tracing uses W3C Trace Context (`traceparent` / `tracestate`). The former `request_id` fields have been removed from every message.
+:::
+
 ## Services
 
 ### ExchangeService
@@ -41,10 +47,10 @@ Optional RPC for providers/CMS/third-party intelligence providers to push conten
 | `requester` | Requester | 3 | Requester identity, scopes, and optional delegation chain |
 | `uris` | repeated string | 8 | Resource URIs being queried |
 | `acceptable_restrictions` | repeated AcceptableRestriction | 9 | Limits the query operates within, per restriction axis. Advisory; the Exchange MAY pre-select offers against them, not enforced. |
-| `request_id` | optional string | 4 | Original RAMP request ID (traceability) |
 | `deadline` | optional Duration | 6 | Max wait time (default 500ms) |
 | `supported_profiles` | repeated string | 7 | Domain extension profiles the caller understands (e.g. "ramp-academic-v1") |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### AcceptableRestriction
 
@@ -60,12 +66,12 @@ The limits a query operates within on one restriction axis, in the same `Restric
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `ver` | string | 1 | Protocol version |
-| `id` | string | 2 | Echoed query identifier |
 | `exchange` | string | 3 | Responding Exchange domain |
 | `offers` | repeated Offer | 4 | Flat offer list (single-URI queries) |
 | `offer_groups` | repeated OfferGroup | 5 | Grouped offers (multi-URI batch queries) |
 | `rate_limit` | optional RateLimitInfo | 6 | Rate limit status for this caller |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### OfferGroup
 
@@ -240,20 +246,19 @@ Quota status for a subscription within the current billing period. Appears on `O
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `ver` | string | 1 | Protocol version |
-| `id` | string | 2 | Unique transaction request ID (idempotency key) |
+| `idempotency_key` | string | 2 | Idempotency key (required, min_len=1); server dedupes on it; durable identity is the Exchange-assigned `transaction_id` in the response |
 | `offer_id` | optional string | 3 | Single-offer mode |
 | `requester` | Requester | 4 | Requester identity for authorization and audit |
-| `request_id` | optional string | 5 | Original RAMP request ID |
 | `offer_signature` | optional string | 6 | Single-offer signature |
 | `items` | repeated TransactionItem | 7 | Batch mode: multiple offers |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### TransactionResponse
 
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `ver` | string | 1 | Protocol version |
-| `id` | string | 2 | Echoed transaction request ID |
 | `transaction_id` | optional string | 3 | Exchange-assigned transaction ID |
 | `billing_id` | optional string | 4 | Billing reference |
 | `resource_title` | optional string | 5 | Resource title echoed from the Offer |
@@ -263,14 +268,17 @@ Quota status for a subscription within the current billing period. Appears on `O
 | `expires_at` | optional Timestamp | 9 | When `retrieval_endpoint` expires |
 | `agent_identity_hash` | string | 10 | RFC 7638 JWK Thumbprint of the agent's Ed25519 request-signing key, bound into the signed `retrieval_endpoint`. Empty string when absent; non-empty iff a signed `retrieval_endpoint` is present |
 | `retrieval_endpoint` | optional string | 18 | Signed URL the agent uses to fetch the resource. Bound to `agent_identity_hash`; expires at `expires_at`. Absent on denial and when `delivery_method` is not signed-URL-based |
-| `denial_reason` | optional DenialReason | 11 | Set when denied |
-| `restriction_mismatches` | repeated RestrictionKind | 19 | When `denial_reason = RESTRICTION_NOT_SATISFIED`, the restriction axes the request failed (same `RestrictionKind` vocabulary as the terms) |
 | `subscription_id` | optional string | 12 | Subscription/deal identifier |
 | `subscription_unit_value` | optional Cost | 16 | Per-unit cost for subscription accounting |
 | `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Post-transaction remaining quota snapshot |
 | `items` | repeated TransactionResultItem | 13 | Batch mode results |
 | `total_cost` | optional Cost | 14 | Batch aggregate cost |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+
+:::note[Denial is not a success body]
+A denied single transaction is **not** returned in this body. It travels as a non-OK transport error carrying [`ErrorDetail.transaction_denial`](#unified-error-model) (`DenialReason` + `restriction_mismatches`). Batch per-item denials remain in-body on `TransactionResultItem` (`denial_reason` / `restriction_mismatches`), as partial results of a successful batch.
+:::
 
 ### TransactionItem
 
@@ -318,15 +326,15 @@ Actual transaction cost.
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `ver` | string | 1 | Protocol version |
-| `id` | string | 2 | Unique report identifier |
+| `idempotency_key` | string | 2 | Idempotency key (required, min_len=1); server dedupes on it; durable identity is the Exchange-assigned `report_id` in the response |
 | `transaction_id` | string | 3 | Transaction ID from delivery |
 | `billing_id` | string | 4 | Billing reference from delivery |
 | `usage` | Usage | 5 | How content was used |
 | `timestamp` | Timestamp | 6 | When content was used |
-| `request_id` | optional string | 7 | Original RAMP request ID |
 | `exchange` | optional string | 8 | Exchange this report is for |
 | `assets` | repeated UsageAsset | 9 | Assets delivered and used |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### ReportingObligation
 
@@ -339,6 +347,7 @@ Requirements attached to a delivery.
 | `endpoint` | optional string | 3 | URL to submit usage report (if different from Exchange) |
 | `required_fields` | repeated string | 4 | Field names that must be present in the report |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### Usage
 
@@ -374,14 +383,14 @@ A single asset included in the usage report.
 
 ### UsageReportResponse
 
-Acknowledgment of a usage report.
+Acknowledgment of a usage report. A successful response means the report was accepted; a rejection travels as a non-OK transport error carrying [`ErrorDetail.usage_report_rejection`](#unified-error-model).
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `accepted` | bool | 1 | Whether the report was accepted |
-| `rejection_reason` | optional string | 2 | Reason for rejection (if not accepted) |
+| `ver` | string | 1 | Protocol version |
 | `report_id` | string | 3 | Exchange-assigned report ID (required for dispute chain) |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ## Messages -- Dispute Resolution
 
@@ -392,7 +401,7 @@ Agent signals a content delivery problem for a completed transaction.
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `ver` | string | 1 | Protocol version |
-| `id` | string | 2 | Unique dispute request identifier |
+| `idempotency_key` | string | 2 | Idempotency key (required, min_len=1); server dedupes on it; durable identity is the Exchange-assigned `dispute_id` in the response |
 | `transaction_id` | string | 3 | Transaction this dispute is about |
 | `billing_id` | string | 4 | Billing reference |
 | `reason` | DisputeReason | 5 | Why the agent is disputing |
@@ -401,20 +410,21 @@ Agent signals a content delivery problem for a completed transaction.
 | `received_hash_method` | optional string | 8 | Hash algorithm the agent used |
 | `report_id` | string | 9 | **REQUIRED.** Must reference a filed UsageReport |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### DisputeResponse
 
-Exchange acknowledges and processes the dispute.
+Exchange acknowledges and processes the dispute. A successful response means the dispute was accepted for processing; a refusal to file travels as a non-OK transport error carrying [`ErrorDetail.dispute_failure`](#unified-error-model).
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `accepted` | bool | 1 | Whether the dispute was accepted for processing |
-| `dispute_id` | string | 2 | Exchange-assigned dispute identifier |
-| `rejection_reason` | optional string | 3 | If not accepted, reason for rejection |
-| `estimated_resolution` | optional string | 4 | Estimated time to resolution |
+| `ver` | string | 1 | Protocol version |
+| `dispute_id` | optional string | 2 | Exchange-assigned dispute identifier |
+| `estimated_resolution` | optional Duration | 4 | Estimated time to resolution |
 | `status` | DisputeStatus | 5 | Current lifecycle state |
 | `resolution` | optional ResolutionType | 6 | Populated at terminal states |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ## Messages -- Domain Verification
 
@@ -427,6 +437,8 @@ Request an ACME-style domain verification challenge.
 | `ver` | string | 1 | Protocol version |
 | `domain` | string | 2 | Provider domain to verify |
 | `caller_id` | optional string | 3 | Registered caller identity |
+| `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### DomainVerificationChallenge
 
@@ -434,9 +446,12 @@ Exchange returns a challenge token to be placed at the provider's domain.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `token` | string | 1 | Opaque challenge token |
-| `expires_at` | Timestamp | 2 | 10-minute expiry window |
-| `verification_url` | string | 3 | Exact URL the Exchange will fetch |
+| `ver` | string | 1 | Protocol version |
+| `token` | string | 2 | Opaque challenge token |
+| `expires_at` | Timestamp | 3 | 10-minute expiry window |
+| `verification_url` | string | 4 | Exact URL the Exchange will fetch |
+| `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### DomainVerificationConfirmation
 
@@ -449,15 +464,20 @@ Confirm domain verification and register a signing key.
 | `token` | string | 3 | Token from the challenge |
 | `signing_key` | optional string | 4 | PEM (CloudFront) or hex (HMAC) |
 | `cdn_type` | optional string | 5 | "cloudfront", "akamai", "fastly", "hmac" |
+| `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### DomainVerificationResult
 
+A successful response means verification succeeded; a failure travels as a non-OK transport error carrying [`ErrorDetail.domain_verification_failure`](#unified-error-model).
+
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `verified` | bool | 1 | Whether verification succeeded |
-| `key_id` | optional string | 2 | Assigned key ID |
-| `failure_reason` | optional string | 3 | If not verified, the reason |
+| `ver` | string | 1 | Protocol version |
+| `key_id` | optional string | 2 | Assigned key ID (on successful key registration) |
 | `valid_until` | optional Timestamp | 4 | Re-verification deadline |
+| `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ## Messages -- Discovery
 
@@ -579,6 +599,7 @@ Agent sends to Broker (Step 1).
 | `query` | optional string | 6 | Search query for Broker-side resource discovery. When present, the Broker interprets the query and discovers resources across Exchanges on the agent's behalf. Can be used alongside `uris`. |
 | `search_filters` | optional Struct | 7 | Structured search filters (alongside or instead of `query`). Keys are profile-specific: `"academic.topic"`, `"news.category"`, `"legal.jurisdiction"`, etc. The Broker maps these to Exchange-specific query parameters. |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### RequestConstraints
 
@@ -605,8 +626,6 @@ Broker returns to Agent (Step 6).
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `ver` | string | 1 | Protocol version |
-| `id` | string | 2 | Unique response identifier |
-| `request_id` | string | 3 | Echoed request ID from Step 1 |
 | `transaction_id` | string | 4 | Exchange-assigned transaction ID |
 | `billing_id` | string | 5 | Billing reference |
 | `exchange` | string | 6 | Which Exchange won the selection |
@@ -619,6 +638,7 @@ Broker returns to Agent (Step 6).
 | `agent_identity_hash` | optional string | 14 | Identity that `retrieval_endpoint` is bound to. Same value and computation as `TransactionResponse.agent_identity_hash`. Present iff `retrieval_endpoint` is |
 | `broker_fee` | optional Cost | 12 | Broker's fee for this transaction |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ## Messages -- CatalogService
 
@@ -630,9 +650,12 @@ Push or update content entries in the Exchange catalog.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `tenant_id` | string | 1 | Tenant identifier |
-| `entries` | repeated ResourceEntry | 2 | Content entries to push |
-| `caller_id` | string | 3 | Identity of the caller |
+| `ver` | string | 1 | Protocol version |
+| `tenant_id` | string | 2 | Tenant identifier |
+| `entries` | repeated ResourceEntry | 3 | Content entries to push |
+| `caller_id` | string | 4 | Identity of the caller |
+| `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### ResourceEntry
 
@@ -654,39 +677,49 @@ A single resource catalog entry.
 | `attestations` | repeated ResourceAttestation | 12 | Signed attestations about this content |
 | `terms` | repeated LicenseTerm | 13 | Publisher-declared licensing terms. For ENUMERATED terms, Pricing MUST be present. For REFERENCE_ONLY terms, License.uri is authoritative. |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### PushResourcesResponse
 
+The `accepted` / `rejected` counts are entry-level tallies of a successful push — not the removed failure bools. A push that could not be applied at all travels as a non-OK transport error carrying [`ErrorDetail.catalog_rejection`](#unified-error-model).
+
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `accepted` | int32 | 1 | Number of entries accepted |
-| `rejected` | int32 | 2 | Number of entries rejected |
-| `warnings` | repeated string | 3 | Non-fatal ingestion warnings (e.g., unrecognized vocab token in a Restriction). Warnings do not cause rejection. |
+| `ver` | string | 1 | Protocol version |
+| `accepted` | int32 | 2 | Number of entries accepted |
+| `rejected` | int32 | 3 | Number of entries rejected |
+| `warnings` | repeated string | 4 | Non-fatal ingestion warnings (e.g., unrecognized vocab token in a Restriction). Warnings do not cause rejection. |
+| `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### RemoveResourcesRequest
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `tenant_id` | string | 1 | Tenant identifier |
-| `paths` | repeated string | 2 | Paths to remove |
+| `ver` | string | 1 | Protocol version |
+| `tenant_id` | string | 2 | Tenant identifier |
+| `paths` | repeated string | 3 | Paths to remove |
 
 ### RemoveResourcesResponse
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `removed` | int32 | 1 | Number of entries removed |
+| `ver` | string | 1 | Protocol version |
+| `removed` | int32 | 2 | Number of entries removed |
 
 ### RefreshCatalogRequest
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `tenant_id` | string | 1 | Tenant identifier |
+| `ver` | string | 1 | Protocol version |
+| `tenant_id` | string | 2 | Tenant identifier |
 
 ### RefreshCatalogResponse
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `started` | bool | 1 | Whether the refresh was started |
+| `ver` | string | 1 | Protocol version |
+| `started` | bool | 2 | Whether the refresh was started |
 
 ## Universal Licensing Core
 
@@ -763,6 +796,168 @@ A post-use behavioral requirement attached to a `LicenseTerm`. Attribution and c
 | `trigger` | ObligationTrigger | 2 | When the obligation activates. |
 | `scope_license` | optional License | 3 | License derivatives must be released under. REQUIRED for `SHARE_ALIKE` (set `id` and/or `uri`). As a `License`, a referenced `uri` requires `uri_digest`. |
 | `detail` | optional string | 4 | Free-form detail (attribution string, notice file URI). `OBLIGATION_KIND_OTHER` without it → lint warning. |
+
+## Unified Error Model
+
+One way to communicate failure across every RPC. The transport carries a coarse canonical code (gRPC / Connect Code) as the error **class**; an `ErrorDetail` message — attached to the non-OK transport error's details (the same mechanism protovalidate uses to attach its Violations) — carries the precise, machine-readable **reason** and structured context. Clients branch on the typed reason, never on a human string.
+
+**Error vs. body.** A query that ran successfully returns its answer in the response body, and "no results" / per-item absence (`OfferGroup.absence_reason`) is a **success**, not an error. Only a method that could not perform the requested action returns a non-OK code plus an `ErrorDetail`. The per-domain reason enums below are the single source of truth that replaces the former in-body failure fields (`denial_reason`, `rejection_reason`, `accepted`, `verified`, `failure_reason`).
+
+### ErrorDetail
+
+The structured detail attached to every non-OK transport error.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `message` | string | 1 | Developer-facing, **non-authoritative** human message. Clients MUST branch on the typed reason, never on this text. |
+| `domain` | string | 2 | Stable grouping for the failing surface, e.g. `"ramp.v1.ExchangeService"`. Mirrors `google.rpc.ErrorInfo.domain`. |
+| `metadata` | map<string,string> | 3 | Dynamic key/value context that also appears in `message` (ids, limits, axes). Mirrors `google.rpc.ErrorInfo.metadata`. |
+| `transaction_denial` | TransactionDenial | 10 | `reason` oneof — ExecuteTransaction denial |
+| `catalog_rejection` | CatalogRejection | 11 | `reason` oneof — CatalogService rejection |
+| `registration_failure` | RegistrationFailure | 12 | `reason` oneof — agent/provider registration refused |
+| `dispute_failure` | DisputeFailure | 13 | `reason` oneof — DisputeTransaction filing refused |
+| `domain_verification_failure` | DomainVerificationFailure | 14 | `reason` oneof — domain verification failed |
+| `retrieval_auth_failure` | RetrievalAuthFailure | 15 | `reason` oneof — signed-URL / proof-of-possession check failed |
+| `usage_report_rejection` | UsageReportRejection | 16 | `reason` oneof — ReportUsage filing rejected |
+
+Exactly one typed reason block is set, selected by the failing method. The `reason` oneof is absent for generic transport-class failures (e.g. `INVALID_ARGUMENT`, `INTERNAL`) that carry no domain-specific reason.
+
+### TransactionDenial
+
+ExecuteTransaction could not complete. Reuses the `DenialReason` vocabulary.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `reason` | DenialReason | 1 | The denial reason (defined-only, non-zero) |
+| `restriction_mismatches` | repeated RestrictionKind | 2 | When `reason = RESTRICTION_NOT_SATISFIED`, the failed axes (same `RestrictionKind` vocabulary as the terms) |
+| `offer_id` | optional string | 3 | Batch mode: the offer this denial pertains to |
+
+### CatalogRejection
+
+A CatalogService call could not be applied.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `reason` | CatalogRejectionReason | 1 | The rejection reason (defined-only, non-zero) |
+| `rejected_paths` | repeated string | 2 | For partial-batch failures: the entry paths that were rejected |
+
+### RegistrationFailure
+
+A registration request could not be completed.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `reason` | RegistrationFailureReason | 1 | The failure reason (defined-only, non-zero) |
+
+### DisputeFailure
+
+A dispute could not be filed (distinct from `DisputeReason`, why the agent disputes, and `DisputeStatus`, an accepted dispute's lifecycle).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `reason` | DisputeFailureReason | 1 | The failure reason (defined-only, non-zero) |
+
+### DomainVerificationFailure
+
+`RequestDomainVerification` / `ConfirmDomainVerification` failed.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `reason` | DomainVerificationFailureReason | 1 | The failure reason (defined-only, non-zero) |
+
+### RetrievalAuthFailure
+
+A signed-URL retrieval or its proof-of-possession check failed at the delivery edge.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `reason` | RetrievalAuthFailureReason | 1 | The failure reason (defined-only, non-zero) |
+
+### UsageReportRejection
+
+A usage report could not be accepted.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `reason` | UsageReportRejectionReason | 1 | The rejection reason (defined-only, non-zero) |
+
+### CatalogRejectionReason
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | NOT_CATALOG_CONTRIBUTOR | Caller is not an authorized contributor for the domain |
+| 2 | TENANT_MISMATCH | `tenant_id` does not match the authenticated caller |
+| 3 | DOMAIN_NOT_VERIFIED | Contributing domain is not verified |
+| 4 | SIGNATURE_INVALID | Request signature missing or invalid |
+| 5 | MALFORMED_ENTRY | A resource entry failed schema/validation |
+| 6 | UNKNOWN_VOCAB_TOKEN | An unregistered vocab token in a restriction/term |
+| 7 | QUOTA_EXCEEDED | Contributor push quota exceeded |
+
+### RegistrationFailureReason
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | DOMAIN_NOT_VERIFIED | Caller domain is not verified |
+| 2 | INVALID_KEY | Signing key malformed or unsupported |
+| 3 | SIGNATURE_INVALID | Request signature invalid |
+| 4 | ALREADY_REGISTERED | Identity already registered |
+| 5 | QUOTA_EXCEEDED | Registration quota exceeded |
+
+### DisputeFailureReason
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | TRANSACTION_NOT_FOUND | `transaction_id` is unknown |
+| 2 | REPORT_NOT_FILED | No UsageReport precedes the dispute (`report_id` missing/unknown) |
+| 3 | WINDOW_EXPIRED | Filed outside the allowed dispute window |
+| 4 | DUPLICATE | A dispute already exists for this transaction |
+| 5 | INELIGIBLE | The transaction/state is not disputable |
+
+### DomainVerificationFailureReason
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | CHALLENGE_NOT_FOUND | Token not served at the well-known path |
+| 2 | CHALLENGE_MISMATCH | Served token does not match the issued token |
+| 3 | CHALLENGE_EXPIRED | Confirmation arrived after the challenge expired |
+| 4 | FETCH_FAILED | Exchange could not fetch the verification URL |
+| 5 | EXCHANGE_NOT_AUTHORIZED | `ramp.json` does not list this Exchange |
+| 6 | KEY_REGISTRATION_FAILED | Signing-key registration failed during confirmation |
+
+### RetrievalAuthFailureReason
+
+Single-sources the delivery-edge token unions (signed-URL checks in `verify.ts`, RFC 9421 proof-of-possession in `pop.ts`).
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | URL_EXPIRED | Signed URL expired |
+| 2 | URL_SIGNATURE_MISSING | Signed-URL signature missing |
+| 3 | URL_EXPIRY_MISSING | Signed-URL expiry missing |
+| 4 | URL_SIGNATURE_MISMATCH | Signed-URL signature mismatch |
+| 5 | AGENT_KEY_MISSING | Fetcher did not present its public key |
+| 6 | PROOF_SIGNATURE_MISSING | Proof-of-possession signature missing |
+| 7 | KEYID_MISMATCH | PoP keyid mismatch |
+| 8 | THUMBPRINT_MISMATCH | Presented key's thumbprint ≠ `agent_identity_hash` |
+| 9 | PROOF_CREATED_MISSING | PoP `created` parameter missing |
+| 10 | PROOF_EXPIRY_MISSING | PoP expiry missing |
+| 11 | PROOF_EXPIRED | PoP expired |
+| 12 | PROOF_SIGNATURE_INVALID | PoP signature invalid |
+
+### UsageReportRejectionReason
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | |
+| 1 | TRANSACTION_NOT_FOUND | `transaction_id` is unknown |
+| 2 | DUPLICATE | A report was already filed for this transaction |
+| 3 | WINDOW_EXPIRED | Filed outside the reporting window |
+| 4 | MISSING_REQUIRED_FIELDS | `ReportingObligation.required_fields` not satisfied |
+| 5 | MALFORMED | Report payload failed validation |
 
 ## Enums
 
@@ -858,13 +1053,20 @@ When an `Obligation` activates.
 | 2 | INSUFFICIENT_BALANCE | Buyer's balance too low |
 | 3 | RATE_LIMITED | Too many requests |
 | 4 | CONTENT_UNAVAILABLE | Content no longer available |
-| 5 | RESTRICTION_NOT_SATISFIED | Accepted term's restriction not satisfied by the request (axes in `restriction_mismatches`, same `RestrictionKind` vocabulary as the terms) |
-| 6 | REPORTING_OVERDUE | Buyer has overdue reports |
+| 5 | RESTRICTION_NOT_SATISFIED | Accepted term's restriction not satisfied by the request (axes in `restriction_mismatches` — on `ErrorDetail.transaction_denial` for a single denial, or on `TransactionResultItem` for a batch item; same `RestrictionKind` vocabulary as the terms) |
+| 6 | REPORTING_OVERDUE | Buyer has >20% overdue reports (MAY threshold) |
 | 7 | OFFER_EXPIRED | Offer TTL exceeded |
-| 8 | SIGNATURE_INVALID | Signature verification failed |
+| 8 | SIGNATURE_INVALID | Offer signature verification failed |
 | 9 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
-| 10 | DELEGATION_INVALID | Delegation missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent |
+| 10 | DELEGATION_INVALID | Delegation missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or its attenuation does not check out |
 | 11 | SCOPE_INSUFFICIENT | Requester scopes don't cover this resource |
+| 12 | ENTITLEMENT_MISSING | No entitlement biscuit presented for a subscription-only offer |
+| 13 | ENTITLEMENT_MALFORMED | Entitlement biscuit failed Biscuit v2 decode |
+| 14 | ENTITLEMENT_EXPIRED | Entitlement biscuit's validity window has passed |
+| 15 | ENTITLEMENT_WRONG_BUYER | Biscuit's `subscriber_org` does not match the asserted buyer |
+| 16 | SUBSCRIPTION_LAPSED | The covering subscription contract has lapsed |
+| 17 | ENTITLEMENT_NOT_GRANTED | Subscription exists but no buyer-side grant ties this caller to it |
+| 18 | ENTITLEMENT_STALE_ATTENUATION | Biscuit authority sound but the per-request attenuation is missing/stale |
 
 ### DisputeReason
 

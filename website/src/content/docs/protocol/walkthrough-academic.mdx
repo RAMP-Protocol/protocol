@@ -206,7 +206,6 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
 ```json
 {
   "ver": "1.0",
-  "id": "sq-litrev-001",
   "exchange": "exchange.scholarsgate.com",
   "offer_groups": [
     {
@@ -616,7 +615,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
 
 {
   "ver": "1.0",
-  "id": "tx-litrev-001",
+  "idempotencyKey": "tx-litrev-001",
   "requester": {
     "id": "litrev-agent",
     "domain": "cs.stanford.edu",
@@ -849,7 +848,6 @@ Response (abbreviated — showing one item from each category):
 ```json
 {
   "ver": "1.0",
-  "id": "tx-litrev-001",
   "items": [
     {
       "offer_id": "offer-arxiv-2406-11838",
@@ -946,7 +944,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ReportUsa
 
 {
   "ver": "1.0",
-  "id": "ur-litrev-001",
+  "idempotencyKey": "ur-litrev-001",
   "transaction_id": "txn-litrev-batch-001",
   "billing_id": "bill-litrev-batch-001",
   "usage": {
@@ -986,7 +984,6 @@ Response:
 
 ```json
 {
-  "accepted": true,
   "report_id": "rpt-litrev-001"
 }
 ```
