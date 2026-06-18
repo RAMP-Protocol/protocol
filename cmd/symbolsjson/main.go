@@ -24,6 +24,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
@@ -79,23 +81,89 @@ func buildSymbols() map[string]symbol {
 
 func main() {
 	out := flag.String("o", "", "output path for symbols.json (default: stdout)")
+	enumsOut := flag.String("enums", "", "output path for enums.json (the <EnumTable> view); omit to skip")
+	protoPath := flag.String("proto", "proto/ramp/v1/ramp.proto", "path to the .proto source, read for enum value descriptions")
 	flag.Parse()
 
-	data, err := json.MarshalIndent(buildSymbols(), "", "  ")
+	writeJSON(*out, buildSymbols())
+
+	if *enumsOut != "" {
+		enums, err := buildEnums(*protoPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "symbolsjson: enums: %v\n", err)
+			os.Exit(1)
+		}
+		writeJSON(*enumsOut, enums)
+	}
+}
+
+func writeJSON(path string, v any) {
+	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "symbolsjson: marshal: %v\n", err)
 		os.Exit(1)
 	}
 	data = append(data, '\n')
-
-	if *out == "" {
+	if path == "" {
 		os.Stdout.Write(data)
 		return
 	}
-	if err := os.WriteFile(*out, data, 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "symbolsjson: write %s: %v\n", *out, err)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "symbolsjson: write %s: %v\n", path, err)
 		os.Exit(1)
 	}
+}
+
+// enumValue is one row of the <EnumTable> view: the proto number, the short name
+// (UNSPECIFIED, ATTRIBUTION, …), the fully-qualified name, and the description.
+type enumValue struct {
+	Number int    `json:"number"`
+	Value  string `json:"value"`
+	Full   string `json:"full"`
+	Doc    string `json:"doc"`
+}
+
+var (
+	enumHeaderRe = regexp.MustCompile(`^\s*enum\s+(\w+)\s*\{`)
+	enumValueRe  = regexp.MustCompile(`^\s*([A-Z][A-Z0-9_]+)\s*=\s*(\d+)\s*(?:\[[^\]]*\])?\s*;\s*(?://\s*(.*?)\s*)?$`)
+)
+
+// buildEnums parses the .proto source for enum values and their trailing-comment
+// descriptions. The generated Go descriptor strips source comments, so the proto
+// text is the only place these descriptions live — which keeps the proto the single
+// source for the docs <EnumTable>.
+func buildEnums(protoPath string) (map[string][]enumValue, error) {
+	data, err := os.ReadFile(protoPath)
+	if err != nil {
+		return nil, err
+	}
+	enums := map[string][]enumValue{}
+	var cur string
+	for _, ln := range strings.Split(string(data), "\n") {
+		if m := enumHeaderRe.FindStringSubmatch(ln); m != nil {
+			cur = m[1]
+			enums[cur] = []enumValue{}
+			continue
+		}
+		if cur == "" {
+			continue
+		}
+		if strings.TrimSpace(ln) == "}" {
+			cur = ""
+			continue
+		}
+		if m := enumValueRe.FindStringSubmatch(ln); m != nil {
+			num, _ := strconv.Atoi(m[2])
+			full := m[1]
+			enums[cur] = append(enums[cur], enumValue{
+				Number: num,
+				Value:  strings.TrimPrefix(full, screamingSnake(cur)+"_"),
+				Full:   full,
+				Doc:    m[3],
+			})
+		}
+	}
+	return enums, nil
 }
 
 func walkMessages(mds protoreflect.MessageDescriptors, add func(string, symbol)) {

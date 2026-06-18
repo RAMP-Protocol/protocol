@@ -7,6 +7,7 @@ dist/
 # (cmd/symbolsjson) feeds the rehype-proto-autolink reference guard.
 src/data/vocab.json
 src/data/symbols.json
+src/data/enums.json
 
 # dependencies
 node_modules/

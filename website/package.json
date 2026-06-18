@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "gen:vocab": "cd .. && go run ./cmd/vocabjson -o website/src/data/vocab.json",
-    "gen:symbols": "cd .. && go run ./cmd/symbolsjson -o website/src/data/symbols.json",
+    "gen:symbols": "cd .. && go run ./cmd/symbolsjson -o website/src/data/symbols.json -enums website/src/data/enums.json",
     "gen:docdata": "npm run gen:vocab && npm run gen:symbols",
     "predev": "npm run gen:docdata",
     "prestart": "npm run gen:docdata",

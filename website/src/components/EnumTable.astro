@@ -1,0 +1,61 @@
+---
+// EnumTable renders a proto enum as a live view of the contract. The values and
+// their descriptions are NOT authored here: they come from src/data/enums.json,
+// generated on every build from the proto by `npm run gen:symbols` (cmd/symbolsjson),
+// which reads the enum value trailing comments straight from ramp.proto. The proto
+// stays the single source — to change a description, edit the proto comment.
+//
+// Props:
+//   enum         the enum name (e.g. "ObligationKind")
+//   numbers      show the proto field number + include the UNSPECIFIED zero row
+//                (reference-style table). Default false (guide-style: name + description,
+//                UNSPECIFIED omitted).
+//   label        header for the name column in guide-style tables. Default "Value".
+import enums from '../data/enums.json';
+
+interface EnumValue {
+  number: number;
+  value: string;
+  full: string;
+  doc: string;
+}
+interface Props {
+  enum: string;
+  numbers?: boolean;
+  label?: string;
+}
+
+const { enum: name, numbers = false, label = 'Value' } = Astro.props;
+const all = (enums as Record<string, EnumValue[]>)[name] ?? [];
+const rows = numbers ? all : all.filter((v) => v.number !== 0);
+---
+{rows.length === 0 ? (
+  <p>
+    <em>
+      No generated enum data for <code>{name}</code>. Run <code>npm run gen:symbols</code>{' '}
+      (requires the Go toolchain) to populate it.
+    </em>
+  </p>
+) : numbers ? (
+  <table>
+    <thead>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      {rows.map((v) => (
+        <tr><td>{v.number}</td><td><code>{v.value}</code></td><td>{v.doc}</td></tr>
+      ))}
+    </tbody>
+  </table>
+) : (
+  <table>
+    <thead>
+      <tr><th>{label}</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      {rows.map((v) => (
+        <tr><td><code>{v.value}</code></td><td>{v.doc}</td></tr>
+      ))}
+    </tbody>
+  </table>
+)}
