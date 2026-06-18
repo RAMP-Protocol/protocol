@@ -961,6 +961,12 @@ message Restriction {
     message: "a token cannot appear in both permitted and prohibited"
     expression: "this.permitted.all(p, !(p in this.prohibited))"
   };
+  // The restriction axis must be specified; UNSPECIFIED is not a valid kind.
+  option (buf.validate.message).cel = {
+    id: "restriction.kind_specified"
+    message: "kind must not be RESTRICTION_KIND_UNSPECIFIED"
+    expression: "this.kind != ramp.v1.RestrictionKind.RESTRICTION_KIND_UNSPECIFIED"
+  };
 
   // Which dimension this restriction applies to.
   RestrictionKind kind = 1;
@@ -1061,6 +1067,12 @@ message Obligation {
     message: "SHARE_ALIKE requires scope_license to identify a license (id or uri)"
     expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))"
   };
+  // The obligation kind must be specified; UNSPECIFIED is not a valid kind.
+  option (buf.validate.message).cel = {
+    id: "obligation.kind_specified"
+    message: "kind must not be OBLIGATION_KIND_UNSPECIFIED"
+    expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIED"
+  };
 
   // What the agent must do.
   ObligationKind kind = 1;
@@ -1121,6 +1133,12 @@ message LicenseTerm {
     id: "license_term.one_restriction_per_kind"
     message: "at most one restriction is allowed per kind"
     expression: "this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)"
+  };
+  // Every term must declare its semantics; UNSPECIFIED is not a valid term.
+  option (buf.validate.message).cel = {
+    id: "license_term.semantics_specified"
+    message: "semantics must not be TERM_SEMANTICS_UNSPECIFIED"
+    expression: "this.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_UNSPECIFIED"
   };
 
   // Governing license document. Authoritative for REFERENCE_ONLY terms, which
@@ -1232,6 +1250,12 @@ message Pricing {
     id: "pricing.free.zero_rate"
     message: "rate must be 0 when model is FREE"
     expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0"
+  };
+  // Pricing must declare a model; UNSPECIFIED is not a valid pricing model.
+  option (buf.validate.message).cel = {
+    id: "pricing.model_specified"
+    message: "model must not be PRICING_MODEL_UNSPECIFIED"
+    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_UNSPECIFIED"
   };
 
   // Provider's pricing model.
@@ -1393,7 +1417,8 @@ message Requester {
   // RBAC and open-market subscription entitlements.
   //
   // Scope format: colon-separated segments, "{domain}:{permission}" or
-  // "{profile}:{permission}", optionally hierarchical ("dist:US:CA").
+  // "{profile}:{permission}", optionally multi-segment ("dist:US:CA");
+  // matching is segment-wise per the rule below (no implicit hierarchy).
   // Examples:
   //   "credit:read"                — can access credit reports
   //   "subscription:marketdata-2026" — has active MarketData subscription
@@ -1416,7 +1441,7 @@ message Requester {
   repeated string scopes = 6 [(buf.validate.field).repeated.max_items = 64];
 
   // Request authentication is handled at the HTTP layer via RFC 9421
-  // HTTP Message Signatures (alg=EdDSA). The Requester's public key
+  // HTTP Message Signatures (alg=ed25519). The Requester's public key
   // is published at {domain}/.well-known/ramp.json as a WellKnownManifest
   // (role=ROLE_AGENT) with inline JWK keys.
 
@@ -1781,7 +1806,7 @@ enum DenialReason {
   DENIAL_REASON_OFFER_EXPIRED = 7;        // Offer TTL exceeded
   DENIAL_REASON_SIGNATURE_INVALID = 8;    // Offer signature verification failed
   DENIAL_REASON_QUOTA_EXCEEDED = 9;       // Subscription access count exhausted for this period
-  DENIAL_REASON_DELEGATION_INVALID = 10;  // Delegation missing, unverifiable, expired, or its attenuation does not check out
+  DENIAL_REASON_DELEGATION_INVALID = 10;  // Delegation missing, unverifiable, expired, holder binding failed, or scopes/caps do not cover the request
   DENIAL_REASON_SCOPE_INSUFFICIENT = 11;  // Requester scopes don't cover this resource
 }
 
@@ -2004,8 +2029,16 @@ message Usage {
   repeated AttributionDetail attribution = 6;
 
   // Metering unit for consumed_quantity. Must match the Offer's Pricing.unit.
-  // If omitted, defaults to "tokens".
-  optional string consumed_unit = 8;
+  // If omitted, defaults to "tokens". Same token format as Pricing.unit:
+  // a bare registered token or a vendor:namespaced token.
+  optional string consumed_unit = 8 [
+    (buf.validate.field).string.max_len = 64,
+    (buf.validate.field).cel = {
+      id: "usage_report.consumed_unit.format"
+      message: "consumed_unit must be a bare registered token ([a-z0-9-]) or vendor:namespaced"
+      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
+    }
+  ];
 }
 
 // UsageAsset — A single asset included in the usage report.
