@@ -115,7 +115,7 @@ handleRequest(ctx):
 
 ### Bot Detection and 403 Redirect
 
-When an AI crawler requests protected content without signed URL parameters, the edge function detects the request is from a bot and returns `403 Forbidden` with an `X-Content-Rules` header pointing to the Exchange info endpoint. This is the "accidental discovery" path (Path C in the protocol flow). The 403 is not punitive -- it is a protocol handshake directing the bot to the correct transaction endpoint. See [Bot Detection](./bot-detection) for details.
+When an AI crawler requests protected content without signed URL parameters, the edge function detects the request is from a bot and returns `403 Forbidden` with an `X-Content-Rules` header pointing to the Exchange info endpoint. This is the "accidental discovery" path (Path C in the protocol flow). The 403 is not punitive -- it is a protocol handshake directing the bot to the correct transaction endpoint. See [Bot Detection](/components/edge-function/bot-detection/) for details.
 
 ### ramp.json and rsl.txt Generation and Serving
 
@@ -123,7 +123,7 @@ The edge function serves `/.well-known/ramp.json` containing the `WellKnownManif
 
 ### Signed URL Passthrough with Agent Identity Validation
 
-When a request arrives with signed URL parameters, the edge function verifies the signature, checks expiry, validates agent identity binding (if enabled), and enforces single-use (if enabled). See [Signed URL Verification](./signed-url-verification) for the full verification flow.
+When a request arrives with signed URL parameters, the edge function verifies the signature, checks expiry, validates agent identity binding (if enabled), and enforces single-use (if enabled). See [Signed URL Verification](/components/edge-function/signed-url-verification/) for the full verification flow.
 
 ## Performance Budget
 

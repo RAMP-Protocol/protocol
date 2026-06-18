@@ -202,7 +202,7 @@ The Exchange/edge verifies a delegation by (offline, using only the owner's publ
 
 1. **Verify the authority JWT** with the resource owner's published key (the trust anchor). Read its `scope`, `exp`, and `cnf.jkt`.
 2. **Verify each delegation JWT** with the key in its own JOSE header `jwk` — but only after checking `thumbprint(header key) == parent cnf.jkt` (the **chain-linkage invariant**). Reject a JWT signed by a key the parent did not name. Check each child's `scope` is covered by its parent's.
-3. **Verify holder binding** — the key that signed the HTTP request ([RFC 9421](#request-signatures)) MUST hash to the final delegation's `cnf.jkt`. If not, **reject** (`DENIAL_REASON_DELEGATION_INVALID`). This is what makes a leaked token useless to a thief: possessing the bytes is not enough — you must control the bound private key. It is **not optional** and **not skippable**; an Exchange that omits it reduces the token to a bearer credential and breaks the anti-theft guarantee.
+3. **Verify holder binding** — the key that signed the HTTP request ([RFC 9421](#request-signatures-rfc-9421)) MUST hash to the final delegation's `cnf.jkt`. If not, **reject** (`DENIAL_REASON_DELEGATION_INVALID`). This is what makes a leaked token useless to a thief: possessing the bytes is not enough — you must control the bound private key. It is **not optional** and **not skippable**; an Exchange that omits it reduces the token to a bearer credential and breaks the anti-theft guarantee.
 4. Check `exp` on every JWT in the chain against current time.
 5. Optionally check `revocation_uri` for high-value transactions.
 
