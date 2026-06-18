@@ -195,7 +195,7 @@ For the full identity model specification — Requester fields, the JWT chain, s
 
 ## Attestation Verification
 
-Your Exchange verifies `ResourceAttestation` signatures at catalog push time. When a provider or verification vendor pushes resource metadata via `CatalogService.PushContent`, your Exchange:
+Your Exchange verifies `ResourceAttestation` signatures at catalog push time. When a provider or verification vendor pushes resource metadata via `CatalogService.PushResources`, your Exchange:
 
 1. Fetches the signer's public key from `https://{verifier}/.well-known/ramp.json` (`public_keys`, selected by `kid`)
 2. Verifies the Ed25519 signature over JCS-canonicalized claims

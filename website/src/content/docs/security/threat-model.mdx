@@ -128,7 +128,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T24: Transaction replay
 **Attack**: Attacker captures valid TransactionRequest and replays it.
-**Countermeasure (protocol)**: **Idempotency keys.** TransactionRequest.id is unique. Exchange rejects duplicates.
+**Countermeasure (protocol)**: **Idempotency keys.** TransactionRequest.idempotency_key is unique. Exchange rejects duplicates.
 
 ### T25: Billing_id forgery in usage reports
 **Attack**: Attacker fabricates billing_ids in usage reports.
@@ -186,7 +186,7 @@ Line 3: Legal/contractual enforcement
 
 ### T-ATT-1: Forged attestation injection
 
-**Attack**: Attacker crafts a fake `ResourceAttestation` with a fabricated `verifier` domain and pushes it via `CatalogService.PushContent`.
+**Attack**: Attacker crafts a fake `ResourceAttestation` with a fabricated `verifier` domain and pushes it via `CatalogService.PushResources`.
 **Countermeasure (protocol)**: Exchange verifies `caller_id` is listed in the provider's `catalog_contributors` (from `ramp.json`). Exchange verifies the attestation `signature` against the verifier's public key in `public_keys` from its `/.well-known/ramp.json`. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor). Both checks must pass.
 
 ### T-ATT-2: Stale attestation exploitation

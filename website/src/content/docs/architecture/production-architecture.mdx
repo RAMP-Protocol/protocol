@@ -76,7 +76,7 @@ The protocol supports three transaction patterns:
 
 The Exchange is responsible for attestation verification at two points:
 
-1. **At catalog push time**: when a verification vendor (e.g., GumGum, DoubleVerify) pushes content metadata via `CatalogService.PushContent`, the Exchange validates that the vendor is in the provider's `catalog_contributors` list and verifies the attestation signature against the vendor's public key from `/.well-known/ramp.json` (`public_keys`, selected by `kid`).
+1. **At catalog push time**: when a verification vendor (e.g., GumGum, DoubleVerify) pushes content metadata via `CatalogService.PushResources`, the Exchange validates that the vendor is in the provider's `catalog_contributors` list and verifies the attestation signature against the vendor's public key from `/.well-known/ramp.json` (`public_keys`, selected by `kid`).
 2. **At offer construction time**: attestations from the catalog are attached to `Offer.attestations` so agents can evaluate content trust level (Level 0/1/2) during selection.
 
 ### Dispute Resolution Handler (v1.0)

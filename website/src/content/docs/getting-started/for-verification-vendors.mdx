@@ -108,7 +108,7 @@ Profile-specific claims use a namespaced format. Any Exchange that declares conf
 You push signed `ResourceAttestation` entries to Exchanges via the **CatalogService API**:
 
 ```
-POST /ramp.v1.CatalogService/PushContent
+POST /ramp.v1.CatalogService/PushResources
 
 {
   "tenant_id": "hearst-media",
@@ -145,7 +145,7 @@ POST /ramp.v1.CatalogService/PushContent
 
 The request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) in the HTTP headers (not an in-message field); `caller_id` identifies the pusher.
 
-The same `PushContent` API works regardless of domain. A de-identification auditor pushing HIPAA compliance attestations for medical imaging uses the same endpoint — only the `claims` content differs.
+The same `PushResources` API works regardless of domain. A de-identification auditor pushing HIPAA compliance attestations for medical imaging uses the same endpoint — only the `claims` content differs.
 
 The Exchange verifies your signature using your public key from `/.well-known/ramp.json` (`public_keys`, selected by `kid`), confirms you are listed in the provider's `catalog_contributors`, and attaches your attestation to the catalog entry.
 
@@ -184,9 +184,9 @@ Your Analysis Pipeline (crawlers, APIs, audit tools, QA systems)
        |
   Sign ResourceAttestation with your Ed25519 key (JCS canonicalization)
        |
-  CatalogService.PushContent() → Exchange A
-  CatalogService.PushContent() → Exchange B
-  CatalogService.PushContent() → Exchange C
+  CatalogService.PushResources() → Exchange A
+  CatalogService.PushResources() → Exchange B
+  CatalogService.PushResources() → Exchange C
        |
   Exchanges verify signature, check catalog_contributors, attach attestation
        |
@@ -201,7 +201,7 @@ Your Analysis Pipeline (crawlers, APIs, audit tools, QA systems)
 
 ## Authentication
 
-Every `PushContent` request is signed with your Ed25519 private key. Each `ResourceAttestation` also carries its own Ed25519 signature over JCS-canonicalized claims. The Exchange verifies both:
+Every `PushResources` request is signed with your Ed25519 private key. Each `ResourceAttestation` also carries its own Ed25519 signature over JCS-canonicalized claims. The Exchange verifies both:
 
 1. **Request-level**: The request carries `caller_id` and is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) in the HTTP headers (not an in-message field), proving the request came from your domain
 2. **Attestation-level**: The `signature` field on each `ResourceAttestation` proves the claims were signed by the key identified by `kid`

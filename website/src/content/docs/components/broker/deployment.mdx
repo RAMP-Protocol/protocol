@@ -283,7 +283,7 @@ graph TD
 | Crash Point | Impact | Recovery |
 |---|---|---|
 | Before ExecuteTransaction sent | No financial impact | Agent retries the full request |
-| After ExecuteTransaction sent, before response | Exchange has charged but agent doesn't know | Agent retries with same `TransactionRequest.id` -- Exchange returns same response (idempotency) |
+| After ExecuteTransaction sent, before response | Exchange has charged but agent doesn't know | Agent retries with same `TransactionRequest.idempotency_key` -- Exchange returns same response (idempotency) |
 | After RAMPResponse returned | Agent has the signed URL | Agent tracks reporting obligations independently |
 
 **Budget tracking lost on crash.** Session budget is ephemeral. The agent re-declares on reconnect. The Exchange's billing adapter is the authoritative source.
@@ -292,7 +292,7 @@ graph TD
 
 ### Idempotency
 
-The Broker generates deterministic idempotency keys for `TransactionRequest.id`:
+The Broker generates deterministic idempotency keys for `TransactionRequest.idempotency_key`:
 
 ```go
 func transactionRequestID(requestID string, offerID string) string {
@@ -304,7 +304,7 @@ func transactionRequestID(requestID string, offerID string) string {
 }
 ```
 
-If the agent retries the same `RAMPRequest.id`, the Broker generates the same `TransactionRequest.id`, which the Exchange recognizes as a duplicate.
+If the agent retries the same `RAMPRequest.id`, the Broker generates the same `TransactionRequest.idempotency_key`, which the Exchange recognizes as a duplicate.
 
 ## Scaling Considerations
 
