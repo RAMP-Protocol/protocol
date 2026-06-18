@@ -56,7 +56,10 @@ exclude_re='(reference/changelog\.mdx|docs/design-history\.md|proto/CHANGELOG\.m
 # `proto/comp` — because comp.proto mirrors the external CoMP standard, which
 # has its own vocabulary (e.g. a legitimate `revshare` field) that the RAMP
 # removal denylist must not police.
-roots=(website/src docs proto/ramp)
+# Authored documentation prose only — NOT website/src/data (generated proto views
+# like symbols.json, whose live field names e.g. `maxIntermediaryHops` would
+# substring-match removal-denylist entries) and NOT website/src/components (code).
+roots=(website/src/content docs proto/ramp)
 
 status=0
 
