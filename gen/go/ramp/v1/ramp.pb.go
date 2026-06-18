@@ -39,7 +39,7 @@ const (
 type DiscoveryMethod int32
 
 const (
-	DiscoveryMethod_DISCOVERY_METHOD_UNSPECIFIED DiscoveryMethod = 0
+	DiscoveryMethod_DISCOVERY_METHOD_UNSPECIFIED DiscoveryMethod = 0 // unset — rejected at ingest
 	// URI was requested by the agent directly or found via Exchange query.
 	DiscoveryMethod_DISCOVERY_METHOD_EXCHANGE DiscoveryMethod = 1
 	// URI was discovered via a search engine (e.g., Exa, Tavily, Brave Search).
@@ -102,7 +102,7 @@ func (DiscoveryMethod) EnumDescriptor() ([]byte, []int) {
 type OfferAbsenceReason int32
 
 const (
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED OfferAbsenceReason = 0
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED OfferAbsenceReason = 0 // unset — rejected at ingest
 	// Resource URI is not in this Exchange's catalog.
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_IN_CATALOG OfferAbsenceReason = 1
 	// Resource exists but has a BLOCKED access policy (provider opted out of AI access).
@@ -186,8 +186,8 @@ type TermSemantics int32
 
 const (
 	TermSemantics_TERM_SEMANTICS_UNSPECIFIED    TermSemantics = 0 // unset — rejected at ingest
-	TermSemantics_TERM_SEMANTICS_ENUMERATED     TermSemantics = 1
-	TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY TermSemantics = 2
+	TermSemantics_TERM_SEMANTICS_ENUMERATED     TermSemantics = 1 // Machine `restrictions`/`quotas`/`obligations` are the complete, authoritative expression of the term (internally consistent, no self-contradiction) and are enforced. `Pricing` MUST be present.
+	TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY TermSemantics = 2 // The document at `License.uri` (MUST be non-empty) is the authoritative, complete source; the agent reads it before using. Machine `restrictions`/`quotas`/`obligations` are optional here (the publisher MAY send `Pricing` alone) but any that are sent must be accurate (MUST NOT contradict the referenced document) and are enforced just like ENUMERATED. `Pricing` is still required.
 )
 
 // Enum value maps for TermSemantics.
@@ -547,9 +547,9 @@ func (PricingModel) EnumDescriptor() ([]byte, []int) {
 type PricingMetering int32
 
 const (
-	PricingMetering_PRICING_METERING_ONLINE                PricingMetering = 0
-	PricingMetering_PRICING_METERING_NONE                  PricingMetering = 1
-	PricingMetering_PRICING_METERING_OFFLINE_SELF_REPORTED PricingMetering = 2
+	PricingMetering_PRICING_METERING_ONLINE                PricingMetering = 0 // Default. Exchange tracks usage events in real time. `ReportUsage` is required.
+	PricingMetering_PRICING_METERING_NONE                  PricingMetering = 1 // One-time perpetual sale. No ongoing metering; `billing_id` is issued at `ExecuteTransaction` and the ledger entry is closed. No `ReportUsage` required.
+	PricingMetering_PRICING_METERING_OFFLINE_SELF_REPORTED PricingMetering = 2 // Agent self-reports physical-world consumption (e.g. units manufactured from a licensed design). Exchange audits.
 )
 
 // Enum value maps for PricingMetering.
@@ -596,7 +596,7 @@ func (PricingMetering) EnumDescriptor() ([]byte, []int) {
 type DeliveryMethod int32
 
 const (
-	DeliveryMethod_DELIVERY_METHOD_UNSPECIFIED DeliveryMethod = 0
+	DeliveryMethod_DELIVERY_METHOD_UNSPECIFIED DeliveryMethod = 0 // unset — rejected at ingest
 	// Exchange returns resource inline or via its own endpoint.
 	DeliveryMethod_DELIVERY_METHOD_DIRECT DeliveryMethod = 1
 	// Exchange returns access info (signed URL, token) for retrieval
@@ -655,7 +655,7 @@ func (DeliveryMethod) EnumDescriptor() ([]byte, []int) {
 type RequesterType int32
 
 const (
-	RequesterType_REQUESTER_TYPE_UNSPECIFIED RequesterType = 0
+	RequesterType_REQUESTER_TYPE_UNSPECIFIED RequesterType = 0 // unset — rejected at ingest
 	// Autonomous AI agent (LLM, RAG system, research bot).
 	RequesterType_REQUESTER_TYPE_AGENT RequesterType = 1
 	// Human using an AI-powered tool (copilot, assistant).
@@ -728,7 +728,7 @@ func (RequesterType) EnumDescriptor() ([]byte, []int) {
 type C2PAStatus int32
 
 const (
-	C2PAStatus_C2PA_STATUS_UNSPECIFIED C2PAStatus = 0
+	C2PAStatus_C2PA_STATUS_UNSPECIFIED C2PAStatus = 0 // unset — rejected at ingest
 	// Manifest is valid AND signer certificate chains to a C2PA Trust List root.
 	// Highest assurance: provenance is cryptographically verified by a trusted CA.
 	C2PAStatus_C2PA_STATUS_TRUSTED C2PAStatus = 1
@@ -801,7 +801,7 @@ func (C2PAStatus) EnumDescriptor() ([]byte, []int) {
 type ResourceMutability int32
 
 const (
-	ResourceMutability_RESOURCE_MUTABILITY_UNSPECIFIED ResourceMutability = 0
+	ResourceMutability_RESOURCE_MUTABILITY_UNSPECIFIED ResourceMutability = 0 // unset — rejected at ingest
 	// Content is immutable. Hash computed at offer time will match at delivery time.
 	// Agent SHOULD verify content_hash on delivery. Mismatch is disputable.
 	ResourceMutability_RESOURCE_MUTABILITY_STATIC ResourceMutability = 1
@@ -864,7 +864,7 @@ func (ResourceMutability) EnumDescriptor() ([]byte, []int) {
 type DenialReason int32
 
 const (
-	DenialReason_DENIAL_REASON_UNSPECIFIED               DenialReason = 0
+	DenialReason_DENIAL_REASON_UNSPECIFIED               DenialReason = 0  // unset — rejected at ingest
 	DenialReason_DENIAL_REASON_BILLING_REF_INACTIVE      DenialReason = 1  // billing_ref is not active / not recognized by the billing system
 	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE      DenialReason = 2  // Requester's balance too low
 	DenialReason_DENIAL_REASON_RATE_LIMITED              DenialReason = 3  // Too many requests
@@ -968,7 +968,7 @@ func (DenialReason) EnumDescriptor() ([]byte, []int) {
 type IngestionSource int32
 
 const (
-	IngestionSource_INGESTION_SOURCE_UNSPECIFIED  IngestionSource = 0
+	IngestionSource_INGESTION_SOURCE_UNSPECIFIED  IngestionSource = 0 // unset — rejected at ingest
 	IngestionSource_INGESTION_SOURCE_RAMP_SITEMAP IngestionSource = 1 // RAMP XML namespace in sitemap
 	IngestionSource_INGESTION_SOURCE_RSL          IngestionSource = 2 // RSL rsl.txt
 	IngestionSource_INGESTION_SOURCE_SITEMAP      IngestionSource = 3 // Standard sitemap.xml
@@ -1033,9 +1033,9 @@ func (IngestionSource) EnumDescriptor() ([]byte, []int) {
 type CitationFormat int32
 
 const (
-	CitationFormat_CITATION_FORMAT_LINK     CitationFormat = 0
-	CitationFormat_CITATION_FORMAT_FOOTNOTE CitationFormat = 1
-	CitationFormat_CITATION_FORMAT_INLINE   CitationFormat = 2
+	CitationFormat_CITATION_FORMAT_LINK     CitationFormat = 0 // Hyperlink citation
+	CitationFormat_CITATION_FORMAT_FOOTNOTE CitationFormat = 1 // Footnote citation
+	CitationFormat_CITATION_FORMAT_INLINE   CitationFormat = 2 // Inline text citation
 )
 
 // Enum value maps for CitationFormat.
@@ -1085,7 +1085,7 @@ func (CitationFormat) EnumDescriptor() ([]byte, []int) {
 type Role int32
 
 const (
-	Role_ROLE_UNSPECIFIED Role = 0
+	Role_ROLE_UNSPECIFIED Role = 0 // unset — rejected at ingest
 	Role_ROLE_AGENT       Role = 1
 	Role_ROLE_EXCHANGE    Role = 2
 	Role_ROLE_BROKER      Role = 3
@@ -1140,7 +1140,7 @@ func (Role) EnumDescriptor() ([]byte, []int) {
 type ProviderRelationship int32
 
 const (
-	ProviderRelationship_PROVIDER_RELATIONSHIP_UNSPECIFIED ProviderRelationship = 0
+	ProviderRelationship_PROVIDER_RELATIONSHIP_UNSPECIFIED ProviderRelationship = 0 // unset — rejected at ingest
 	// Provider has a direct contract with this Exchange.
 	ProviderRelationship_PROVIDER_RELATIONSHIP_DIRECT ProviderRelationship = 1
 	// Exchange resells resources via another authorized party.
@@ -1193,7 +1193,7 @@ func (ProviderRelationship) EnumDescriptor() ([]byte, []int) {
 type AuthMethod int32
 
 const (
-	AuthMethod_AUTH_METHOD_UNSPECIFIED AuthMethod = 0
+	AuthMethod_AUTH_METHOD_UNSPECIFIED AuthMethod = 0 // unset — rejected at ingest
 	// GNAP (RFC 9635) — key-first identity, key-bound tokens. Recommended.
 	AuthMethod_AUTH_METHOD_GNAP AuthMethod = 1
 	// OAuth 2.0 + DPoP (RFC 9449) — sender-constrained tokens. Enterprise recommended.
@@ -1332,7 +1332,7 @@ func (DisputeReason) EnumDescriptor() ([]byte, []int) {
 type DisputeStatus int32
 
 const (
-	DisputeStatus_DISPUTE_STATUS_UNSPECIFIED DisputeStatus = 0
+	DisputeStatus_DISPUTE_STATUS_UNSPECIFIED DisputeStatus = 0 // unset — rejected at ingest
 	// Agent submitted DisputeRequest. Initial state.
 	DisputeStatus_DISPUTE_STATUS_FILED DisputeStatus = 1
 	// Exchange auto-resolved via Tier 1 rules (CDN logs, hash comparison).
@@ -1415,7 +1415,7 @@ func (DisputeStatus) EnumDescriptor() ([]byte, []int) {
 type ResolutionType int32
 
 const (
-	ResolutionType_RESOLUTION_TYPE_UNSPECIFIED ResolutionType = 0
+	ResolutionType_RESOLUTION_TYPE_UNSPECIFIED ResolutionType = 0 // unset — rejected at ingest
 	// Account credit applied to the agent's next billing cycle.
 	ResolutionType_RESOLUTION_TYPE_CREDIT ResolutionType = 1
 	// New signed URL issued for the same resource (e.g., when content hash
@@ -1478,7 +1478,7 @@ func (ResolutionType) EnumDescriptor() ([]byte, []int) {
 type CatalogRejectionReason int32
 
 const (
-	CatalogRejectionReason_CATALOG_REJECTION_REASON_UNSPECIFIED             CatalogRejectionReason = 0
+	CatalogRejectionReason_CATALOG_REJECTION_REASON_UNSPECIFIED             CatalogRejectionReason = 0 // unset — rejected at ingest
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_NOT_CATALOG_CONTRIBUTOR CatalogRejectionReason = 1 // caller is not an authorized contributor for the domain
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_TENANT_MISMATCH         CatalogRejectionReason = 2 // tenant_id does not match the authenticated caller
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_DOMAIN_NOT_VERIFIED     CatalogRejectionReason = 3 // contributing domain is not verified
@@ -1544,7 +1544,7 @@ func (CatalogRejectionReason) EnumDescriptor() ([]byte, []int) {
 type RegistrationFailureReason int32
 
 const (
-	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_UNSPECIFIED         RegistrationFailureReason = 0
+	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_UNSPECIFIED         RegistrationFailureReason = 0 // unset — rejected at ingest
 	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED RegistrationFailureReason = 1 // caller domain is not verified
 	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_KEY         RegistrationFailureReason = 2 // signing key malformed or unsupported
 	RegistrationFailureReason_REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID   RegistrationFailureReason = 3 // request signature invalid
@@ -1605,7 +1605,7 @@ func (RegistrationFailureReason) EnumDescriptor() ([]byte, []int) {
 type DisputeFailureReason int32
 
 const (
-	DisputeFailureReason_DISPUTE_FAILURE_REASON_UNSPECIFIED           DisputeFailureReason = 0
+	DisputeFailureReason_DISPUTE_FAILURE_REASON_UNSPECIFIED           DisputeFailureReason = 0 // unset — rejected at ingest
 	DisputeFailureReason_DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND DisputeFailureReason = 1 // transaction_id is unknown
 	DisputeFailureReason_DISPUTE_FAILURE_REASON_REPORT_NOT_FILED      DisputeFailureReason = 2 // no UsageReport precedes the dispute (report_id missing/unknown)
 	DisputeFailureReason_DISPUTE_FAILURE_REASON_WINDOW_EXPIRED        DisputeFailureReason = 3 // filed outside the allowed dispute window
@@ -1664,7 +1664,7 @@ func (DisputeFailureReason) EnumDescriptor() ([]byte, []int) {
 type DomainVerificationFailureReason int32
 
 const (
-	DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_UNSPECIFIED             DomainVerificationFailureReason = 0
+	DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_UNSPECIFIED             DomainVerificationFailureReason = 0 // unset — rejected at ingest
 	DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_NOT_FOUND     DomainVerificationFailureReason = 1 // token not served at the well-known path
 	DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH      DomainVerificationFailureReason = 2 // served token does not match the issued token
 	DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_EXPIRED       DomainVerificationFailureReason = 3 // confirmation arrived after the challenge expired
@@ -1728,7 +1728,7 @@ func (DomainVerificationFailureReason) EnumDescriptor() ([]byte, []int) {
 type RetrievalAuthFailureReason int32
 
 const (
-	RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_UNSPECIFIED RetrievalAuthFailureReason = 0
+	RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_UNSPECIFIED RetrievalAuthFailureReason = 0 // unset — rejected at ingest
 	// Signed-URL checks (verify.ts).
 	RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED            RetrievalAuthFailureReason = 1 // 'expired'
 	RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_URL_SIGNATURE_MISSING  RetrievalAuthFailureReason = 2 // 'missing_sig'
@@ -1811,7 +1811,7 @@ func (RetrievalAuthFailureReason) EnumDescriptor() ([]byte, []int) {
 type UsageReportRejectionReason int32
 
 const (
-	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_UNSPECIFIED             UsageReportRejectionReason = 0
+	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_UNSPECIFIED             UsageReportRejectionReason = 0 // unset — rejected at ingest
 	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND   UsageReportRejectionReason = 1 // transaction_id is unknown
 	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_DUPLICATE               UsageReportRejectionReason = 2 // a report was already filed for this transaction
 	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED          UsageReportRejectionReason = 3 // filed outside the reporting window

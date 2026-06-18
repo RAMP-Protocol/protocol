@@ -266,7 +266,7 @@ message OfferGroup {
 // DiscoveryMethod — How the Broker discovered this resource URI.
 // Metadata for the agent; does not affect transaction flow.
 enum DiscoveryMethod {
-  DISCOVERY_METHOD_UNSPECIFIED = 0;
+  DISCOVERY_METHOD_UNSPECIFIED = 0;  // unset — rejected at ingest
   // URI was requested by the agent directly or found via Exchange query.
   DISCOVERY_METHOD_EXCHANGE = 1;
   // URI was discovered via a search engine (e.g., Exa, Tavily, Brave Search).
@@ -282,7 +282,7 @@ enum DiscoveryMethod {
 // Used in OfferGroup.absence_reason when offers is empty.
 // Enables diagnostic feedback without requiring a transaction attempt.
 enum OfferAbsenceReason {
-  OFFER_ABSENCE_REASON_UNSPECIFIED = 0;
+  OFFER_ABSENCE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Resource URI is not in this Exchange's catalog.
   OFFER_ABSENCE_REASON_NOT_IN_CATALOG = 1;
   // Resource exists but has a BLOCKED access policy (provider opted out of AI access).
@@ -768,8 +768,8 @@ message ResourceAttestation {
 // TermSemantics — How the Exchange interprets a LicenseTerm's machine fields.
 enum TermSemantics {
   TERM_SEMANTICS_UNSPECIFIED    = 0;  // unset — rejected at ingest
-  TERM_SEMANTICS_ENUMERATED     = 1;
-  TERM_SEMANTICS_REFERENCE_ONLY = 2;
+  TERM_SEMANTICS_ENUMERATED     = 1;  // Machine `restrictions`/`quotas`/`obligations` are the complete, authoritative expression of the term (internally consistent, no self-contradiction) and are enforced. `Pricing` MUST be present.
+  TERM_SEMANTICS_REFERENCE_ONLY = 2;  // The document at `License.uri` (MUST be non-empty) is the authoritative, complete source; the agent reads it before using. Machine `restrictions`/`quotas`/`obligations` are optional here (the publisher MAY send `Pricing` alone) but any that are sent must be accurate (MUST NOT contradict the referenced document) and are enforced just like ENUMERATED. `Pricing` is still required.
 }
 
 // RestrictionKind — Which dimension a Restriction constrains.
@@ -1351,13 +1351,13 @@ enum PricingModel {
 //   for 3D-printed items from a licensed design). Exchange audits; metering is not
 //   possible online because the event occurs in the physical world.
 enum PricingMetering {
-  PRICING_METERING_ONLINE                = 0;
-  PRICING_METERING_NONE                  = 1;
-  PRICING_METERING_OFFLINE_SELF_REPORTED = 2;
+  PRICING_METERING_ONLINE                = 0;  // Default. Exchange tracks usage events in real time. `ReportUsage` is required.
+  PRICING_METERING_NONE                  = 1;  // One-time perpetual sale. No ongoing metering; `billing_id` is issued at `ExecuteTransaction` and the ledger entry is closed. No `ReportUsage` required.
+  PRICING_METERING_OFFLINE_SELF_REPORTED = 2;  // Agent self-reports physical-world consumption (e.g. units manufactured from a licensed design). Exchange audits.
 }
 
 enum DeliveryMethod {
-  DELIVERY_METHOD_UNSPECIFIED = 0;
+  DELIVERY_METHOD_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Exchange returns resource inline or via its own endpoint.
   DELIVERY_METHOD_DIRECT = 1;
   // Exchange returns access info (signed URL, token) for retrieval
@@ -1481,7 +1481,7 @@ message Requester {
 
 // RequesterType — What kind of entity is making the request.
 enum RequesterType {
-  REQUESTER_TYPE_UNSPECIFIED = 0;
+  REQUESTER_TYPE_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Autonomous AI agent (LLM, RAG system, research bot).
   REQUESTER_TYPE_AGENT = 1;
   // Human using an AI-powered tool (copilot, assistant).
@@ -1593,7 +1593,7 @@ message Delegation {
 // verification vendor validates the C2PA manifest and publishes
 // the results as attestation claims signed with Ed25519.
 enum C2PAStatus {
-  C2PA_STATUS_UNSPECIFIED = 0;
+  C2PA_STATUS_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Manifest is valid AND signer certificate chains to a C2PA Trust List root.
   // Highest assurance: provenance is cryptographically verified by a trusted CA.
   C2PA_STATUS_TRUSTED = 1;
@@ -1618,7 +1618,7 @@ enum C2PAStatus {
 //   DYNAMIC: D&B credit report, DrugBank interactions, satellite catalog, news article (corrections)
 //   LIVE:    MarketData quote stream, NPR live broadcast, news monitoring feed
 enum ResourceMutability {
-  RESOURCE_MUTABILITY_UNSPECIFIED = 0;
+  RESOURCE_MUTABILITY_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Content is immutable. Hash computed at offer time will match at delivery time.
   // Agent SHOULD verify content_hash on delivery. Mismatch is disputable.
   RESOURCE_MUTABILITY_STATIC = 1;
@@ -1811,7 +1811,7 @@ message Cost {
 // Logged as enum values, not strings. Enables automated processing
 // of denial patterns across the ecosystem.
 enum DenialReason {
-  DENIAL_REASON_UNSPECIFIED = 0;
+  DENIAL_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   DENIAL_REASON_BILLING_REF_INACTIVE = 1; // billing_ref is not active / not recognized by the billing system
   DENIAL_REASON_INSUFFICIENT_BALANCE = 2; // Requester's balance too low
   DENIAL_REASON_RATE_LIMITED = 3;         // Too many requests
@@ -1841,7 +1841,7 @@ enum DenialReason {
 // IngestionSource — How the catalog entry was discovered.
 // Used by the Content Ingestion Pipeline to track provenance.
 enum IngestionSource {
-  INGESTION_SOURCE_UNSPECIFIED = 0;
+  INGESTION_SOURCE_UNSPECIFIED = 0;  // unset — rejected at ingest
   INGESTION_SOURCE_RAMP_SITEMAP = 1;  // RAMP XML namespace in sitemap
   INGESTION_SOURCE_RSL = 2;            // RSL rsl.txt
   INGESTION_SOURCE_SITEMAP = 3;        // Standard sitemap.xml
@@ -2052,9 +2052,9 @@ message UsageReport {
 
 // CitationFormat — How the citation is presented to the user.
 enum CitationFormat {
-  CITATION_FORMAT_LINK = 0;
-  CITATION_FORMAT_FOOTNOTE = 1;
-  CITATION_FORMAT_INLINE = 2;
+  CITATION_FORMAT_LINK = 0;  // Hyperlink citation
+  CITATION_FORMAT_FOOTNOTE = 1;  // Footnote citation
+  CITATION_FORMAT_INLINE = 2;  // Inline text citation
 }
 
 // AttributionDetail — Structured attribution metadata for usage reporting.
@@ -2295,7 +2295,7 @@ message RequestConstraints {
 // describes. Verifiers fold into the role of the domain that operates
 // them (typically EXCHANGE or PUBLISHER); they are not a distinct role.
 enum Role {
-  ROLE_UNSPECIFIED = 0;
+  ROLE_UNSPECIFIED = 0;  // unset — rejected at ingest
   ROLE_AGENT = 1;
   ROLE_EXCHANGE = 2;
   ROLE_BROKER = 3;
@@ -2520,7 +2520,7 @@ message AuthorizedExchange {
 }
 
 enum ProviderRelationship {
-  PROVIDER_RELATIONSHIP_UNSPECIFIED = 0;
+  PROVIDER_RELATIONSHIP_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Provider has a direct contract with this Exchange.
   PROVIDER_RELATIONSHIP_DIRECT = 1;
   // Exchange resells resources via another authorized party.
@@ -2530,7 +2530,7 @@ enum ProviderRelationship {
 // AuthMethod — Authorization methods an Exchange can support.
 // Advertised in WellKnownManifest.supported_auth_methods (ordered by preference).
 enum AuthMethod {
-  AUTH_METHOD_UNSPECIFIED = 0;
+  AUTH_METHOD_UNSPECIFIED = 0;  // unset — rejected at ingest
   // GNAP (RFC 9635) — key-first identity, key-bound tokens. Recommended.
   AUTH_METHOD_GNAP = 1;
   // OAuth 2.0 + DPoP (RFC 9449) — sender-constrained tokens. Enterprise recommended.
@@ -2691,7 +2691,7 @@ enum DisputeReason {
 // Appeals: losing party may appeal with new evidence.
 //   RESOLVED → APPEALED → UNDER_REVIEW (re-enters Tier 2).
 enum DisputeStatus {
-  DISPUTE_STATUS_UNSPECIFIED = 0;
+  DISPUTE_STATUS_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Agent submitted DisputeRequest. Initial state.
   DISPUTE_STATUS_FILED = 1;
   // Exchange auto-resolved via Tier 1 rules (CDN logs, hash comparison).
@@ -2717,7 +2717,7 @@ enum DisputeStatus {
 // Populated in DisputeResponse.resolution when the dispute reaches a
 // terminal state (RESOLVED, SETTLED, or FINAL).
 enum ResolutionType {
-  RESOLUTION_TYPE_UNSPECIFIED = 0;
+  RESOLUTION_TYPE_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Account credit applied to the agent's next billing cycle.
   RESOLUTION_TYPE_CREDIT = 1;
   // New signed URL issued for the same resource (e.g., when content hash
@@ -2946,7 +2946,7 @@ message TransactionDenial {
 // hand-rolled catalog reason strings ("caller not in catalog contributors",
 // "tenant mismatch", "signature middleware missing").
 enum CatalogRejectionReason {
-  CATALOG_REJECTION_REASON_UNSPECIFIED = 0;
+  CATALOG_REJECTION_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   CATALOG_REJECTION_REASON_NOT_CATALOG_CONTRIBUTOR = 1; // caller is not an authorized contributor for the domain
   CATALOG_REJECTION_REASON_TENANT_MISMATCH = 2;         // tenant_id does not match the authenticated caller
   CATALOG_REJECTION_REASON_DOMAIN_NOT_VERIFIED = 3;     // contributing domain is not verified
@@ -2969,7 +2969,7 @@ message CatalogRejection {
 // RegistrationFailureReason — why agent/provider registration was refused.
 // Replaces the hand-rolled errors on POST /exchange/v1/agents/register.
 enum RegistrationFailureReason {
-  REGISTRATION_FAILURE_REASON_UNSPECIFIED = 0;
+  REGISTRATION_FAILURE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED = 1; // caller domain is not verified
   REGISTRATION_FAILURE_REASON_INVALID_KEY = 2;         // signing key malformed or unsupported
   REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID = 3;   // request signature invalid
@@ -2988,7 +2988,7 @@ message RegistrationFailure {
 // from DisputeReason (why the agent disputes) and DisputeStatus (an accepted
 // dispute's lifecycle).
 enum DisputeFailureReason {
-  DISPUTE_FAILURE_REASON_UNSPECIFIED = 0;
+  DISPUTE_FAILURE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND = 1; // transaction_id is unknown
   DISPUTE_FAILURE_REASON_REPORT_NOT_FILED = 2;      // no UsageReport precedes the dispute (report_id missing/unknown)
   DISPUTE_FAILURE_REASON_WINDOW_EXPIRED = 3;        // filed outside the allowed dispute window
@@ -3005,7 +3005,7 @@ message DisputeFailure {
 
 // DomainVerificationFailureReason — why provider domain verification failed.
 enum DomainVerificationFailureReason {
-  DOMAIN_VERIFICATION_FAILURE_REASON_UNSPECIFIED = 0;
+  DOMAIN_VERIFICATION_FAILURE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_NOT_FOUND = 1;     // token not served at the well-known path
   DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH = 2;      // served token does not match the issued token
   DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_EXPIRED = 3;       // confirmation arrived after the challenge expired
@@ -3025,7 +3025,7 @@ message DomainVerificationFailure {
 // possession was rejected at the delivery edge. Single-sources the edge
 // TypeScript token unions in verify.ts (signed-URL) and pop.ts (RFC 9421 PoP).
 enum RetrievalAuthFailureReason {
-  RETRIEVAL_AUTH_FAILURE_REASON_UNSPECIFIED = 0;
+  RETRIEVAL_AUTH_FAILURE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Signed-URL checks (verify.ts).
   RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED = 1;             // 'expired'
   RETRIEVAL_AUTH_FAILURE_REASON_URL_SIGNATURE_MISSING = 2;   // 'missing_sig'
@@ -3052,7 +3052,7 @@ message RetrievalAuthFailure {
 // UsageReportRejectionReason — why a ReportUsage filing was rejected. Replaces
 // the free-text UsageReportResponse.rejection_reason string.
 enum UsageReportRejectionReason {
-  USAGE_REPORT_REJECTION_REASON_UNSPECIFIED = 0;
+  USAGE_REPORT_REJECTION_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND = 1;     // transaction_id is unknown
   USAGE_REPORT_REJECTION_REASON_DUPLICATE = 2;                 // a report was already filed for this transaction
   USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED = 3;            // filed outside the reporting window

@@ -22,6 +22,10 @@ step "buf lint"
 
 step "buf generate"
 (cd proto && buf generate) || fail=1
+# The docs site reads the schema from the compiler's descriptor (comments + custom
+# options included), not from hand-written tables. Emit it as a committed, drift-gated
+# artifact so the Amplify build needs only the file, never buf. See docs/design-history.md.
+(cd proto && buf build -o ../gen/descriptor.binpb) || fail=1
 
 step "assert no generated drift"
 # gen/ is generated output; after `buf generate` it MUST match the committed

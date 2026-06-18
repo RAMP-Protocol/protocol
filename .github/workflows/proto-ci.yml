@@ -40,6 +40,13 @@ jobs:
         working-directory: proto
         run: buf generate
 
+      # The docs site reads the schema from this descriptor (comments + custom options
+      # included) rather than hand-written tables; emit it as a committed, drift-gated
+      # artifact so the docs build needs only the file, not buf.
+      - name: buf build descriptor
+        working-directory: proto
+        run: buf build -o ../gen/descriptor.binpb
+
       - name: assert no generated drift
         run: |
           # Stage everything first so NEW (untracked) generated files — e.g. a

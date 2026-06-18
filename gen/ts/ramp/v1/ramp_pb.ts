@@ -4212,6 +4212,8 @@ export const UsageReportRejectionSchema: GenMessage<UsageReportRejection> = /*@_
  */
 export enum DiscoveryMethod {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: DISCOVERY_METHOD_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -4261,6 +4263,8 @@ export const DiscoveryMethodSchema: GenEnum<DiscoveryMethod> = /*@__PURE__*/
  */
 export enum OfferAbsenceReason {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: OFFER_ABSENCE_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -4346,11 +4350,15 @@ export enum TermSemantics {
   UNSPECIFIED = 0,
 
   /**
+   * Machine `restrictions`/`quotas`/`obligations` are the complete, authoritative expression of the term (internally consistent, no self-contradiction) and are enforced. `Pricing` MUST be present.
+   *
    * @generated from enum value: TERM_SEMANTICS_ENUMERATED = 1;
    */
   ENUMERATED = 1,
 
   /**
+   * The document at `License.uri` (MUST be non-empty) is the authoritative, complete source; the agent reads it before using. Machine `restrictions`/`quotas`/`obligations` are optional here (the publisher MAY send `Pricing` alone) but any that are sent must be accurate (MUST NOT contradict the referenced document) and are enforced just like ENUMERATED. `Pricing` is still required.
+   *
    * @generated from enum value: TERM_SEMANTICS_REFERENCE_ONLY = 2;
    */
   REFERENCE_ONLY = 2,
@@ -4639,16 +4647,22 @@ export const PricingModelSchema: GenEnum<PricingModel> = /*@__PURE__*/
  */
 export enum PricingMetering {
   /**
+   * Default. Exchange tracks usage events in real time. `ReportUsage` is required.
+   *
    * @generated from enum value: PRICING_METERING_ONLINE = 0;
    */
   ONLINE = 0,
 
   /**
+   * One-time perpetual sale. No ongoing metering; `billing_id` is issued at `ExecuteTransaction` and the ledger entry is closed. No `ReportUsage` required.
+   *
    * @generated from enum value: PRICING_METERING_NONE = 1;
    */
   NONE = 1,
 
   /**
+   * Agent self-reports physical-world consumption (e.g. units manufactured from a licensed design). Exchange audits.
+   *
    * @generated from enum value: PRICING_METERING_OFFLINE_SELF_REPORTED = 2;
    */
   OFFLINE_SELF_REPORTED = 2,
@@ -4665,6 +4679,8 @@ export const PricingMeteringSchema: GenEnum<PricingMetering> = /*@__PURE__*/
  */
 export enum DeliveryMethod {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: DELIVERY_METHOD_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -4707,6 +4723,8 @@ export const DeliveryMethodSchema: GenEnum<DeliveryMethod> = /*@__PURE__*/
  */
 export enum RequesterType {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: REQUESTER_TYPE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -4769,6 +4787,8 @@ export const RequesterTypeSchema: GenEnum<RequesterType> = /*@__PURE__*/
  */
 export enum C2PAStatus {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: C2PA_STATUS_UNSPECIFIED = 0;
    */
   C2PA_STATUS_UNSPECIFIED = 0,
@@ -4827,6 +4847,8 @@ export const C2PAStatusSchema: GenEnum<C2PAStatus> = /*@__PURE__*/
  */
 export enum ResourceMutability {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: RESOURCE_MUTABILITY_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -4873,6 +4895,8 @@ export const ResourceMutabilitySchema: GenEnum<ResourceMutability> = /*@__PURE__
  */
 export enum DenialReason {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: DENIAL_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5024,6 +5048,8 @@ export const DenialReasonSchema: GenEnum<DenialReason> = /*@__PURE__*/
  */
 export enum IngestionSource {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: INGESTION_SOURCE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5091,16 +5117,22 @@ export const IngestionSourceSchema: GenEnum<IngestionSource> = /*@__PURE__*/
  */
 export enum CitationFormat {
   /**
+   * Hyperlink citation
+   *
    * @generated from enum value: CITATION_FORMAT_LINK = 0;
    */
   LINK = 0,
 
   /**
+   * Footnote citation
+   *
    * @generated from enum value: CITATION_FORMAT_FOOTNOTE = 1;
    */
   FOOTNOTE = 1,
 
   /**
+   * Inline text citation
+   *
    * @generated from enum value: CITATION_FORMAT_INLINE = 2;
    */
   INLINE = 2,
@@ -5121,6 +5153,8 @@ export const CitationFormatSchema: GenEnum<CitationFormat> = /*@__PURE__*/
  */
 export enum Role {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: ROLE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5157,6 +5191,8 @@ export const RoleSchema: GenEnum<Role> = /*@__PURE__*/
  */
 export enum ProviderRelationship {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: PROVIDER_RELATIONSHIP_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5190,6 +5226,8 @@ export const ProviderRelationshipSchema: GenEnum<ProviderRelationship> = /*@__PU
  */
 export enum AuthMethod {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: AUTH_METHOD_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5303,6 +5341,8 @@ export const DisputeReasonSchema: GenEnum<DisputeReason> = /*@__PURE__*/
  */
 export enum DisputeStatus {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: DISPUTE_STATUS_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5387,6 +5427,8 @@ export const DisputeStatusSchema: GenEnum<DisputeStatus> = /*@__PURE__*/
  */
 export enum ResolutionType {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: RESOLUTION_TYPE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5436,6 +5478,8 @@ export const ResolutionTypeSchema: GenEnum<ResolutionType> = /*@__PURE__*/
  */
 export enum CatalogRejectionReason {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: CATALOG_REJECTION_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5504,6 +5548,8 @@ export const CatalogRejectionReasonSchema: GenEnum<CatalogRejectionReason> = /*@
  */
 export enum RegistrationFailureReason {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: REGISTRATION_FAILURE_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5559,6 +5605,8 @@ export const RegistrationFailureReasonSchema: GenEnum<RegistrationFailureReason>
  */
 export enum DisputeFailureReason {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: DISPUTE_FAILURE_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5612,6 +5660,8 @@ export const DisputeFailureReasonSchema: GenEnum<DisputeFailureReason> = /*@__PU
  */
 export enum DomainVerificationFailureReason {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: DOMAIN_VERIFICATION_FAILURE_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5674,6 +5724,8 @@ export const DomainVerificationFailureReasonSchema: GenEnum<DomainVerificationFa
  */
 export enum RetrievalAuthFailureReason {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: RETRIEVAL_AUTH_FAILURE_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
@@ -5781,6 +5833,8 @@ export const RetrievalAuthFailureReasonSchema: GenEnum<RetrievalAuthFailureReaso
  */
 export enum UsageReportRejectionReason {
   /**
+   * unset — rejected at ingest
+   *
    * @generated from enum value: USAGE_REPORT_REJECTION_REASON_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
