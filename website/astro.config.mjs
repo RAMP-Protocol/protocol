@@ -2,8 +2,15 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightMermaid from '@pasqal-io/starlight-client-mermaid';
+import rehypeProtoAutolink from './plugins/rehype-proto-autolink.mjs';
 
 export default defineConfig({
+	markdown: {
+		// Validates + links every `Message.field` / `ENUM_VALUE` reference in the
+		// docs against the proto descriptor (src/data/symbols.json); fails the build
+		// on an unknown high-confidence reference. See plugins/rehype-proto-autolink.mjs.
+		rehypePlugins: [rehypeProtoAutolink],
+	},
 	integrations: [
 		starlight({
 			title: 'RAMP Protocol',
