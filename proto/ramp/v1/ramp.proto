@@ -835,21 +835,21 @@ enum RestrictionKind {
 // QuotaWindow — Time window over which a Quota.limit accumulates.
 enum QuotaWindow {
   QUOTA_WINDOW_UNSPECIFIED = 0;  // unset — rejected at ingest
-  QUOTA_WINDOW_HOURLY      = 1;
-  QUOTA_WINDOW_DAILY       = 2;
-  QUOTA_WINDOW_MONTHLY     = 3;
+  QUOTA_WINDOW_HOURLY      = 1;  // Resets each hour
+  QUOTA_WINDOW_DAILY       = 2;  // Resets each day
+  QUOTA_WINDOW_MONTHLY     = 3;  // Resets each month
   QUOTA_WINDOW_TOTAL       = 4;  // Lifetime cap — never resets
 }
 
 // ObligationKind — What the agent must do after use.
 enum ObligationKind {
   OBLIGATION_KIND_UNSPECIFIED      = 0;  // unset — rejected at ingest
-  OBLIGATION_KIND_ATTRIBUTION      = 1;  // Credit the author / publisher
-  OBLIGATION_KIND_CONTRIBUTION     = 2;  // Good-faith payment (amount suggested)
-  OBLIGATION_KIND_SHARE_ALIKE      = 3;  // Derivatives must use the same license (CC-BY-SA / GPL)
-  OBLIGATION_KIND_NETWORK_COPYLEFT = 4;  // Network service triggers copyleft (AGPL-style)
+  OBLIGATION_KIND_ATTRIBUTION      = 1;  // Credit the author or publisher whenever the resource is used
+  OBLIGATION_KIND_CONTRIBUTION     = 2;  // Good-faith payment — amount suggested, not contractually fixed
+  OBLIGATION_KIND_SHARE_ALIKE      = 3;  // Derivatives must be released under the same / compatible license (CC-BY-SA / GPL style); scope_license required
+  OBLIGATION_KIND_NETWORK_COPYLEFT = 4;  // Network service triggers copyleft (AGPL style)
   OBLIGATION_KIND_NOTICE           = 5;  // Include the specified copyright notice
-  OBLIGATION_KIND_OTHER            = 6;  // Described in Obligation.detail
+  OBLIGATION_KIND_OTHER            = 6;  // Custom requirement, described in Obligation.detail
 }
 
 // ObligationTrigger — When the obligation activates.
@@ -1336,7 +1336,7 @@ message Pricing {
 // are obligations (see ObligationKind); revenue-share settlement is off-protocol.
 enum PricingModel {
   PRICING_MODEL_UNSPECIFIED = 0;  // unset — rejected at ingest (omission cannot default to FREE)
-  PRICING_MODEL_FREE        = 1;  // no charge; rate must be 0
+  PRICING_MODEL_FREE        = 1;  // no charge; rate must be 0 (state FREE explicitly — absent Pricing is not free)
   PRICING_MODEL_PER_UNIT    = 2;  // rate per Pricing.unit; unit REQUIRED (registered token or vendor:custom)
   PRICING_MODEL_FLAT        = 3;  // one-time flat fee; rate is the total, no unit
 }

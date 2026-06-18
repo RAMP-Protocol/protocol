@@ -4433,16 +4433,22 @@ export enum QuotaWindow {
   UNSPECIFIED = 0,
 
   /**
+   * Resets each hour
+   *
    * @generated from enum value: QUOTA_WINDOW_HOURLY = 1;
    */
   HOURLY = 1,
 
   /**
+   * Resets each day
+   *
    * @generated from enum value: QUOTA_WINDOW_DAILY = 2;
    */
   DAILY = 2,
 
   /**
+   * Resets each month
+   *
    * @generated from enum value: QUOTA_WINDOW_MONTHLY = 3;
    */
   MONTHLY = 3,
@@ -4475,28 +4481,28 @@ export enum ObligationKind {
   UNSPECIFIED = 0,
 
   /**
-   * Credit the author / publisher
+   * Credit the author or publisher whenever the resource is used
    *
    * @generated from enum value: OBLIGATION_KIND_ATTRIBUTION = 1;
    */
   ATTRIBUTION = 1,
 
   /**
-   * Good-faith payment (amount suggested)
+   * Good-faith payment — amount suggested, not contractually fixed
    *
    * @generated from enum value: OBLIGATION_KIND_CONTRIBUTION = 2;
    */
   CONTRIBUTION = 2,
 
   /**
-   * Derivatives must use the same license (CC-BY-SA / GPL)
+   * Derivatives must be released under the same / compatible license (CC-BY-SA / GPL style); scope_license required
    *
    * @generated from enum value: OBLIGATION_KIND_SHARE_ALIKE = 3;
    */
   SHARE_ALIKE = 3,
 
   /**
-   * Network service triggers copyleft (AGPL-style)
+   * Network service triggers copyleft (AGPL style)
    *
    * @generated from enum value: OBLIGATION_KIND_NETWORK_COPYLEFT = 4;
    */
@@ -4510,7 +4516,7 @@ export enum ObligationKind {
   NOTICE = 5,
 
   /**
-   * Described in Obligation.detail
+   * Custom requirement, described in Obligation.detail
    *
    * @generated from enum value: OBLIGATION_KIND_OTHER = 6;
    */
@@ -4591,7 +4597,7 @@ export enum PricingModel {
   UNSPECIFIED = 0,
 
   /**
-   * no charge; rate must be 0
+   * no charge; rate must be 0 (state FREE explicitly — absent Pricing is not free)
    *
    * @generated from enum value: PRICING_MODEL_FREE = 1;
    */

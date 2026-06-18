@@ -304,9 +304,9 @@ type QuotaWindow int32
 
 const (
 	QuotaWindow_QUOTA_WINDOW_UNSPECIFIED QuotaWindow = 0 // unset — rejected at ingest
-	QuotaWindow_QUOTA_WINDOW_HOURLY      QuotaWindow = 1
-	QuotaWindow_QUOTA_WINDOW_DAILY       QuotaWindow = 2
-	QuotaWindow_QUOTA_WINDOW_MONTHLY     QuotaWindow = 3
+	QuotaWindow_QUOTA_WINDOW_HOURLY      QuotaWindow = 1 // Resets each hour
+	QuotaWindow_QUOTA_WINDOW_DAILY       QuotaWindow = 2 // Resets each day
+	QuotaWindow_QUOTA_WINDOW_MONTHLY     QuotaWindow = 3 // Resets each month
 	QuotaWindow_QUOTA_WINDOW_TOTAL       QuotaWindow = 4 // Lifetime cap — never resets
 )
 
@@ -360,12 +360,12 @@ type ObligationKind int32
 
 const (
 	ObligationKind_OBLIGATION_KIND_UNSPECIFIED      ObligationKind = 0 // unset — rejected at ingest
-	ObligationKind_OBLIGATION_KIND_ATTRIBUTION      ObligationKind = 1 // Credit the author / publisher
-	ObligationKind_OBLIGATION_KIND_CONTRIBUTION     ObligationKind = 2 // Good-faith payment (amount suggested)
-	ObligationKind_OBLIGATION_KIND_SHARE_ALIKE      ObligationKind = 3 // Derivatives must use the same license (CC-BY-SA / GPL)
-	ObligationKind_OBLIGATION_KIND_NETWORK_COPYLEFT ObligationKind = 4 // Network service triggers copyleft (AGPL-style)
+	ObligationKind_OBLIGATION_KIND_ATTRIBUTION      ObligationKind = 1 // Credit the author or publisher whenever the resource is used
+	ObligationKind_OBLIGATION_KIND_CONTRIBUTION     ObligationKind = 2 // Good-faith payment — amount suggested, not contractually fixed
+	ObligationKind_OBLIGATION_KIND_SHARE_ALIKE      ObligationKind = 3 // Derivatives must be released under the same / compatible license (CC-BY-SA / GPL style); scope_license required
+	ObligationKind_OBLIGATION_KIND_NETWORK_COPYLEFT ObligationKind = 4 // Network service triggers copyleft (AGPL style)
 	ObligationKind_OBLIGATION_KIND_NOTICE           ObligationKind = 5 // Include the specified copyright notice
-	ObligationKind_OBLIGATION_KIND_OTHER            ObligationKind = 6 // Described in Obligation.detail
+	ObligationKind_OBLIGATION_KIND_OTHER            ObligationKind = 6 // Custom requirement, described in Obligation.detail
 )
 
 // Enum value maps for ObligationKind.
@@ -484,7 +484,7 @@ type PricingModel int32
 
 const (
 	PricingModel_PRICING_MODEL_UNSPECIFIED PricingModel = 0 // unset — rejected at ingest (omission cannot default to FREE)
-	PricingModel_PRICING_MODEL_FREE        PricingModel = 1 // no charge; rate must be 0
+	PricingModel_PRICING_MODEL_FREE        PricingModel = 1 // no charge; rate must be 0 (state FREE explicitly — absent Pricing is not free)
 	PricingModel_PRICING_MODEL_PER_UNIT    PricingModel = 2 // rate per Pricing.unit; unit REQUIRED (registered token or vendor:custom)
 	PricingModel_PRICING_MODEL_FLAT        PricingModel = 3 // one-time flat fee; rate is the total, no unit
 )
