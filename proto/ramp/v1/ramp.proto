@@ -583,6 +583,13 @@ message ResourceIdentity {
   // streams (MarketData quotes, NPR broadcast, news monitoring feeds).
   ResourceMutability resource_mutability = 8;
 
+  // Mutability must be specified; UNSPECIFIED is ambiguous at ingest.
+  option (buf.validate.message).cel = {
+    id: "resource_identity.resource_mutability_specified"
+    message: "resource_mutability must not be RESOURCE_MUTABILITY_UNSPECIFIED"
+    expression: "this.resource_mutability != ramp.v1.ResourceMutability.RESOURCE_MUTABILITY_UNSPECIFIED"
+  };
+
   // --- Provenance (C2PA Content Credentials) ---
 
   // C2PA content credentials manifest URI.
@@ -1405,6 +1412,13 @@ message Requester {
   // What kind of entity is making this request.
   RequesterType type = 3;
 
+  // The requester type must be specified; UNSPECIFIED is ambiguous at ingest.
+  option (buf.validate.message).cel = {
+    id: "requester.type_specified"
+    message: "type must not be REQUESTER_TYPE_UNSPECIFIED"
+    expression: "this.type != ramp.v1.RequesterType.REQUESTER_TYPE_UNSPECIFIED"
+  };
+
   // Human-readable name (e.g., "Acme Research Assistant").
   optional string name = 4;
 
@@ -1815,13 +1829,13 @@ enum DenialReason {
   // and operator tooling can triage each mode. These single-source the
   // Exchange's KindEntitlement* refusal taxonomy, which today is distinguishable
   // only by a server-side tag (all collapse to UNAUTHENTICATED on the wire).
-  DENIAL_REASON_ENTITLEMENT_MISSING = 12;            // no entitlement biscuit presented for a subscription-only offer
-  DENIAL_REASON_ENTITLEMENT_MALFORMED = 13;          // entitlement biscuit failed Biscuit v2 decode
-  DENIAL_REASON_ENTITLEMENT_EXPIRED = 14;            // entitlement biscuit's validity window has passed
-  DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;        // biscuit's subscriber_org does not match the asserted buyer
+  DENIAL_REASON_ENTITLEMENT_MISSING = 12;            // no entitlement token presented for a subscription-only offer
+  DENIAL_REASON_ENTITLEMENT_MALFORMED = 13;          // entitlement token failed to decode (malformed)
+  DENIAL_REASON_ENTITLEMENT_EXPIRED = 14;            // entitlement token's validity window has passed
+  DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;        // token's subscriber_org does not match the asserted buyer
   DENIAL_REASON_SUBSCRIPTION_LAPSED = 16;            // the covering subscription contract has lapsed
   DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 17;        // subscription exists but no buyer-side grant ties this caller to it
-  DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION = 18;  // biscuit authority sound but the per-request attenuation is missing/stale
+  DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION = 18;  // token authority sound but the per-request attenuation is missing/stale
 }
 
 // IngestionSource — How the catalog entry was discovered.
@@ -2086,8 +2100,8 @@ message Usage {
   optional string consumed_unit = 8 [
     (buf.validate.field).string.max_len = 64,
     (buf.validate.field).cel = {
-      id: "usage_report.consumed_unit.format"
-      message: "consumed_unit must be a bare registered token ([a-z0-9-]) or vendor:namespaced"
+      id: "usage.consumed_unit.format"
+      message: "consumed_unit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)"
       expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
     }
   ];
@@ -2339,6 +2353,13 @@ message WellKnownManifest {
   // Role this manifest describes.
   Role role = 2;
 
+  // The manifest role must be specified; UNSPECIFIED is ambiguous at ingest.
+  option (buf.validate.message).cel = {
+    id: "well_known_manifest.role_specified"
+    message: "role must not be ROLE_UNSPECIFIED"
+    expression: "this.role != ramp.v1.Role.ROLE_UNSPECIFIED"
+  };
+
   // Canonical domain serving this manifest.
   string domain = 3;
 
@@ -2482,6 +2503,13 @@ message AuthorizedExchange {
   // Relationship type (mirrors ads.txt DIRECT/RESELLER).
   ProviderRelationship relationship = 3;
 
+  // The relationship must be specified; UNSPECIFIED is ambiguous at ingest.
+  option (buf.validate.message).cel = {
+    id: "authorized_exchange.relationship_specified"
+    message: "relationship must not be PROVIDER_RELATIONSHIP_UNSPECIFIED"
+    expression: "this.relationship != ramp.v1.ProviderRelationship.PROVIDER_RELATIONSHIP_UNSPECIFIED"
+  };
+
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2499,28 +2527,6 @@ enum ProviderRelationship {
   PROVIDER_RELATIONSHIP_RESELLER = 2;
 }
 
-// AccessPolicy — Per-path resource access rules.
-//
-// Used by Exchanges to communicate provider access policies.
-// May be included in ResourceResponse, edge function config, or other
-// contexts. Not required in ramp.json (RSL handles terms declaration).
-message AccessPolicy {
-  // Default policy for paths not matching any rule.
-  ResourceAccessPolicy default_policy = 1;
-
-  // Path-specific overrides.
-  repeated AccessPolicyRule rules = 2;
-}
-
-// AccessPolicyRule — Access policy for a URL path pattern.
-message AccessPolicyRule {
-  // Glob pattern (e.g. "/premium/*", "/free/*", "/archive/*").
-  string pattern = 1;
-
-  // Access policy for matching paths.
-  ResourceAccessPolicy policy = 2;
-}
-
 // AuthMethod — Authorization methods an Exchange can support.
 // Advertised in WellKnownManifest.supported_auth_methods (ordered by preference).
 enum AuthMethod {
@@ -2533,16 +2539,6 @@ enum AuthMethod {
   AUTH_METHOD_OAUTH_BEARER = 3;
   // OAuth 2.0 + mTLS — high-security environments.
   AUTH_METHOD_OAUTH_MTLS = 4;
-}
-
-enum ResourceAccessPolicy {
-  RESOURCE_ACCESS_POLICY_UNSPECIFIED = 0;
-  // Resource requires a RAMP transaction (licensed access).
-  RESOURCE_ACCESS_POLICY_LICENSED = 1;
-  // Resource is freely accessible, no transaction needed.
-  RESOURCE_ACCESS_POLICY_OPEN = 2;
-  // Resource is not available to AI systems.
-  RESOURCE_ACCESS_POLICY_BLOCKED = 3;
 }
 
 // RAMPResponse — Broker returns to Agent (Step 6).
@@ -2656,10 +2652,17 @@ message DisputeRequest {
   // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
   // Empty (default) → all ext keys are safe to ignore.
   repeated string ext_critical = 90;
+
+  // The dispute reason must be specified; UNSPECIFIED is ambiguous at ingest.
+  option (buf.validate.message).cel = {
+    id: "dispute_request.reason_specified"
+    message: "reason must not be DISPUTE_REASON_UNSPECIFIED"
+    expression: "this.reason != ramp.v1.DisputeReason.DISPUTE_REASON_UNSPECIFIED"
+  };
 }
 
 enum DisputeReason {
-  DISPUTE_REASON_UNSPECIFIED = 0;
+  DISPUTE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Content hash does not match what was promised in the Offer.
   DISPUTE_REASON_CONTENT_MISMATCH = 1;
   // Resource was not delivered (signed URL returned 404/403/5xx).
