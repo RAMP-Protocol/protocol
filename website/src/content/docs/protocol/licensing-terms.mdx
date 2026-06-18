@@ -3,6 +3,8 @@ title: "Licensing Terms"
 description: "How RAMP models resource licensing: terms, restrictions, quotas, and obligations"
 ---
 
+import VocabTable from '../../../components/VocabTable.astro';
+
 ## Overview
 
 RAMP introduces the **Universal Licensing Core**: a structured, cross-domain-portable model for expressing commercial licensing terms on any digital resource. A resource carries zero or more `LicenseTerm` entries — each term is a complete, self-contained access arrangement. Having multiple terms for a single resource is the normal case, not the exception.
@@ -56,11 +58,17 @@ Each restriction carries:
 
 **Reading a restriction**: a value is in-scope when it matches at least one `permitted[]` token AND matches none of the `prohibited[]` tokens. Multiple restrictions on the same term are AND-combined — the agent must satisfy all of them. The agent applies this itself when self-selecting a term; the Exchange does not pre-filter terms against requester attributes.
 
-**Standard function tokens**: `ai-input`, `ai-train`, `ai-index`, `search`, `display`, `editorial`, `commercial`, `manufacture`, `sync`.
+**Standard function tokens** (rendered from the proto at build, not hand-listed):
 
-**Standard geography tokens**: ISO 3166-1 alpha-2 codes (`US`, `DE`, `GB`, …) plus regional aliases `EU`, `EEA`, and the wildcard `*` (worldwide).
+<VocabTable axis="function" />
 
-**Standard user-type tokens**: `individual`, `academic`, `non_profit`, `news_publisher`, `broadcaster`, `commercial_entity`.
+**Standard geography tokens** — registered specials (plus structural ISO 3166-1 alpha-2 codes such as `US`, `DE`, `GB`, … and the wildcard `*` for worldwide):
+
+<VocabTable axis="geography" />
+
+**Standard user-type tokens**:
+
+<VocabTable axis="user-type" />
 
 Unknown tokens during ingest produce a `PushResourcesResponse.warnings[]` entry — the term is accepted but flagged. This is forward-compatible: new vocab tokens can be added to the registry and used immediately without breaking existing Exchange deployments.
 
@@ -73,7 +81,9 @@ Each quota has:
 - `limit` — the maximum value in the given window.
 - `window` — `HOURLY`, `DAILY`, `MONTHLY`, or `TOTAL` (lifetime cap, never resets).
 
-**Standard metric tokens**: `accesses`, `tokens`, `input-tokens`, `display-words`, `impressions`, `copies`, `seats`, `units-manufactured`.
+**Standard metric tokens** (rendered from the proto at build):
+
+<VocabTable axis="quota-metric" />
 
 Example: a stock photo with an impressions cap of 500,000 lifetime uses:
 ```
