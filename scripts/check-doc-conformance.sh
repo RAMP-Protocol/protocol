@@ -63,6 +63,16 @@ roots=(website/src/content docs proto/ramp)
 
 status=0
 
+# Hard-coded paths the positive-fact checks below depend on. Assert up front so a
+# rename fails loudly here instead of silently skipping a check — a grep against a
+# missing file just yields no matches and would false-pass. (LR-02)
+proto_ramp='proto/ramp/v1/ramp.proto'
+event_types='website/src/content/docs/components/transaction-log/event-types.mdx'
+auth='website/src/content/docs/protocol/authentication.mdx'
+for f in "$proto_ramp" "$event_types" "$auth"; do
+  [ -f "$f" ] || { echo "::error::check-doc-conformance: required file missing (renamed? update this script): $f"; status=1; }
+done
+
 # --- 1. Denylist: removed/renamed identifiers must not reappear -------------
 for p in "${patterns[@]}"; do
   hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
@@ -78,9 +88,6 @@ done
 # silently dropped from a "closed enum" table or a registry that drifted. These
 # assertions fail the build when a live wire value is missing from the doc that
 # claims to enumerate it.
-
-proto_ramp='proto/ramp/v1/ramp.proto'
-event_types='website/src/content/docs/components/transaction-log/event-types.mdx'
 
 # Every DenialReason value (except UNSPECIFIED) must appear in the event-types
 # "closed enum" table. (R4-9: the table silently lost values across renames.)
@@ -99,7 +106,6 @@ done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
 # field on the Delegation proto message — so a typo'd or orphaned registry claim
 # fails the build, and a newly-registered claim is checked automatically with no
 # hardcoded list to drift.
-auth='website/src/content/docs/protocol/authentication.mdx'
 # Scope the field lookup to the Delegation message body only — grepping the whole
 # proto would falsely accept e.g. `ramp_offer_id` (offer_id exists on
 # TransactionItem, not Delegation).
