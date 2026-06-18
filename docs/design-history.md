@@ -194,6 +194,12 @@ binding-by-default posture the licensing restrictions take.
 
 ## Biscuit v3; JWT verification deferred
 
+> **Superseded by "JWT (holder-of-key) is the default delegation token; Biscuit
+> is optional" below.** This section records the earlier decision (Biscuit v3 as
+> the v1 conformance format, JWT verification deferred). It was later reversed:
+> JWT holder-of-key is now the default and Biscuit v3 is the optional profile.
+> Retained for history; see the later section for the current model.
+
 The default delegation `token_format` moved from `biscuit-v2` to `"biscuit-v3"`,
 tracking the Biscuit specification's own v3 revision, and Biscuit v3 is the
 format RAMP implementations are expected to verify at v1. JWT remains

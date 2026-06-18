@@ -191,7 +191,7 @@ func (h *ExchangeHandler) DiscoverResources(
             return nil, connect.NewError(connect.CodeInternal, err)
         }
         offer.Signature = sig
-        offer.SignatureAlgorithm = "ed25519"
+        offer.SignatureAlgorithm = "EdDSA"
     }
 
     // 8. Build response — flat offers or OfferGroups depending on URI count.

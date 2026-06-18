@@ -652,7 +652,7 @@ A single resource catalog entry.
 | `provenance_source` | optional string | 10 | Who provided this metadata (e.g. "gumgum.com") |
 | `provenance_timestamp` | optional Timestamp | 11 | When metadata was collected |
 | `attestations` | repeated ResourceAttestation | 12 | Signed attestations about this content |
-| `terms` | repeated LicenseTerm | 13 | Publisher-declared licensing terms. For ENUMERATED terms, Pricing MUST be present. For REFERENCE_ONLY terms, License.uri is authoritative. |
+| `terms` | repeated LicenseTerm | 13 | Publisher-declared licensing terms. Pricing is REQUIRED on every term (any semantics). For REFERENCE_ONLY terms, License.uri is additionally authoritative. |
 | `ext` | Struct | 15 | Extension point |
 
 ### PushResourcesResponse
@@ -698,10 +698,12 @@ See [`/protocol/licensing-terms`](/protocol/licensing-terms/) for a full concept
 
 One complete access arrangement for a resource. Lives at both ingestion (`ResourceEntry.terms`) and emission (`Offer.terms`).
 
-Validation rules when `semantics = ENUMERATED`:
-- `pricing` MUST be present — absent Pricing is a validation error.
-- `model = FREE` must be stated explicitly — absent Pricing is not free.
-- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection.
+Validation rules (wire-enforced via protovalidate CEL unless noted):
+- `pricing` MUST be present on **every** term, any semantics — absent Pricing is a validation error (`fc65j`). `model = FREE` must be stated explicitly — absent Pricing is not free.
+- `semantics` MUST be set — `TERM_SEMANTICS_UNSPECIFIED` is rejected (`license_term.semantics_specified`).
+- `REFERENCE_ONLY` requires `license.uri` to be non-empty (`fc65j`); a `License` with a `uri` requires a `uri_digest` (`d8y64`).
+- At most one `Restriction` per `kind`; a token cannot be both permitted and prohibited (`6z1v3`).
+- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL).
 
 | Field | Type | Number | Description |
 |---|---|---|---|

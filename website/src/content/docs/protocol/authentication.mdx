@@ -250,7 +250,7 @@ Scopes follow the pattern `{domain}:{permission}` or `{profile}:{permission}`:
 | `"revshare:publisher-x"` | Party to an off-protocol revenue-share agreement (gates the `FREE` revshare term — see [Licensing Terms](/protocol/licensing-terms/#revenue-share-arrangements)) |
 | `"academic:*"` | Full access to academic resources |
 | `"internal:reports"` | Can access internal reports |
-| `"dist:US:CA"` | Hierarchical scope (colon-separated segments) |
+| `"dist:US:CA"` | Multi-segment scope (colon-separated; matched segment-wise, see below) |
 | `"*"` | Unrestricted (public Exchange default) |
 
 ### Scope Matching

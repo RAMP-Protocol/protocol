@@ -103,7 +103,7 @@ RAMP uses a two-layer signing model: the **agent's request signature** proves wh
 
 ### Request Authentication
 
-The `Requester` message carries identity and entitlements only (`id`, `domain`, `type`, `scopes`, optional `delegation`) — it has **no** signature field. The request is authenticated by an RFC 9421 HTTP Message Signature (alg=EdDSA) computed over the whole HTTP request and carried in the headers. The Exchange verifies it against the public key published at `{requester.domain}/.well-known/ramp.json`.
+The `Requester` message carries identity and entitlements only (`id`, `domain`, `type`, `scopes`, optional `delegation`) — it has **no** signature field. The request is authenticated by an RFC 9421 HTTP Message Signature (alg=ed25519) computed over the whole HTTP request and carried in the headers. The Exchange verifies it against the public key published at `{requester.domain}/.well-known/ramp.json`.
 
 The Broker passes `Requester` through unchanged -- it never modifies the requester's identity, scopes, or delegation -- and adds its own forwarding signature in the headers (see below).
 
@@ -170,7 +170,7 @@ The Broker's Exchange Registry contains three Exchanges:
 
 The Broker queries only **academic-mp.example.com** (profile match) and **general-mp.example.com** (no profile restriction -- always included). It skips **news-mp.example.com** (no matching profile).
 
-## Scope Forwarding, Token Attenuation, and Quota Aggregation
+## Scope Forwarding, Token Narrowing, and Quota Aggregation
 
 ### Scope Forwarding
 
