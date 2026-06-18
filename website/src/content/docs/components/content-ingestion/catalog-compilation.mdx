@@ -18,7 +18,7 @@ graph TD
         TRIE["RadixTrie<br/>keyed by URI path"]
         GLOBS["GlobMatchers[]<br/>compiled glob patterns"]
         OFFERS["AllOffers []*OfferTemplate"]
-        DP["DefaultPolicy"]
+        DP["BlockUnmatched"]
     end
 
     subgraph "Trie Node"
@@ -123,7 +123,7 @@ func (c *CatalogCompiler) buildTenantCatalog(
         URIIndex:      radixtree.New[*OfferTemplate](),
         GlobMatchers:  make([]GlobMatcher, 0),
         AllOffers:     make([]*OfferTemplate, 0, len(entries)),
-        DefaultPolicy: tenantCfg.DefaultAccessPolicy,
+        BlockUnmatched: tenantCfg.BlockUnmatched,
     }
 
     for _, entry := range entries {

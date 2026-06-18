@@ -52,8 +52,10 @@ type TenantCatalog struct {
     // All offer templates for enumeration (e.g., broad DiscoverResources queries).
     AllOffers []*OfferTemplate
 
-    // Default access policy for paths not in the trie.
-    DefaultPolicy rampv1.ResourceAccessPolicy
+    // Default for paths matching no entry: whether the tenant serves them
+    // openly or blocks AI access. Tenant-local config, NOT a wire type — a path
+    // is "licensed" exactly when it has a catalog entry carrying LicenseTerms.
+    BlockUnmatched bool
 }
 
 // OfferTemplate is the pre-computed offer skeleton. Pricing and identity
