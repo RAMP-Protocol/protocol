@@ -1049,6 +1049,13 @@ message Quota {
   // nothing — express "no access" by omitting the term, not a zero quota.
   int64 limit = 2 [(buf.validate.field).int64.gte = 1];
 
+  // The accumulation window must be specified; UNSPECIFIED is ambiguous.
+  option (buf.validate.message).cel = {
+    id: "quota.window_specified"
+    message: "window must not be QUOTA_WINDOW_UNSPECIFIED"
+    expression: "this.window != ramp.v1.QuotaWindow.QUOTA_WINDOW_UNSPECIFIED"
+  };
+
   // Time window over which the limit accumulates.
   QuotaWindow window = 3;
 }
@@ -1072,6 +1079,12 @@ message Obligation {
     id: "obligation.kind_specified"
     message: "kind must not be OBLIGATION_KIND_UNSPECIFIED"
     expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIED"
+  };
+  // The firing trigger must be specified; UNSPECIFIED is ambiguous.
+  option (buf.validate.message).cel = {
+    id: "obligation.trigger_specified"
+    message: "trigger must not be OBLIGATION_TRIGGER_UNSPECIFIED"
+    expression: "this.trigger != ramp.v1.ObligationTrigger.OBLIGATION_TRIGGER_UNSPECIFIED"
   };
 
   // What the agent must do.
