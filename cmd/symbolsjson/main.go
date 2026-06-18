@@ -42,14 +42,81 @@ type symbol struct {
 	Kind string `json:"kind"`
 	Page string `json:"page"`
 	// Heading is the reference-page heading text; the autolink plugin slugs it
-	// (github-slugger) to build the anchor. Empty means resolved-but-ambiguous
-	// (e.g. a short enum-value form shared by two enums): valid for the guard,
-	// but not linked.
+	// (github-slugger) to build the anchor. Empty means resolved-but-NOT-linkable:
+	// either a short enum-value form shared by two enums (ambiguous), or a symbol
+	// with no heading on the reference page (documented elsewhere, e.g. an ext
+	// profile). Such symbols still resolve for the guard; they just carry no link,
+	// so an autolink can never point at a non-existent anchor.
 	Heading string `json:"heading"`
 }
 
+// documented holds the slugs of every heading on the reference page; a symbol is
+// linkable only if its own slug is present (so we never emit a dead anchor).
+var documented = map[string]bool{}
+
+// headOf returns name as the link heading when the reference page documents it,
+// else "" (resolved but not linked).
+func headOf(name string) string {
+	if documented[slugify(name)] {
+		return name
+	}
+	return ""
+}
+
+// slugify approximates github-slugger (which Starlight uses for heading ids)
+// closely enough to test heading membership: lowercase, with runs of
+// non-alphanumerics collapsed to a single hyphen. Exact for the alphanumeric type
+// names we link.
+func slugify(s string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			dash = false
+		default:
+			if !dash && b.Len() > 0 {
+				b.WriteByte('-')
+				dash = true
+			}
+		}
+	}
+	return strings.TrimRight(b.String(), "-")
+}
+
+var headingLineRe = regexp.MustCompile(`^#{1,6}\s+(.+?)\s*$`)
+
+// readHeadingSlugs returns the set of heading slugs in a markdown/MDX file,
+// skipping fenced code blocks (a `### x` inside a ``` block is not a heading).
+func readHeadingSlugs(path string) map[string]bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "symbolsjson: refpage %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	out := map[string]bool{}
+	inFence := false
+	for _, ln := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(ln), "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		if m := headingLineRe.FindStringSubmatch(ln); m != nil {
+			out[slugify(m[1])] = true
+		}
+	}
+	return out
+}
+
 // buildSymbols walks the RAMP file descriptor and returns the full symbol table.
-func buildSymbols() map[string]symbol {
+// Only symbols whose slug appears in doc (the reference page's headings) are
+// emitted as linkable; the rest resolve for the guard but carry no link.
+func buildSymbols(doc map[string]bool) map[string]symbol {
+	documented = doc
 	syms := map[string]symbol{}
 	add := func(key string, s symbol) {
 		if existing, ok := syms[key]; ok {
@@ -70,10 +137,10 @@ func buildSymbols() map[string]symbol {
 	for i := 0; i < fd.Services().Len(); i++ {
 		svc := fd.Services().Get(i)
 		name := string(svc.Name())
-		add(name, symbol{Kind: "service", Page: refPage, Heading: name})
+		add(name, symbol{Kind: "service", Page: refPage, Heading: headOf(name)})
 		for j := 0; j < svc.Methods().Len(); j++ {
 			m := svc.Methods().Get(j)
-			add(name+"."+string(m.Name()), symbol{Kind: "method", Page: refPage, Heading: name})
+			add(name+"."+string(m.Name()), symbol{Kind: "method", Page: refPage, Heading: headOf(name)})
 		}
 	}
 	return syms
@@ -83,9 +150,10 @@ func main() {
 	out := flag.String("o", "", "output path for symbols.json (default: stdout)")
 	enumsOut := flag.String("enums", "", "output path for enums.json (the <EnumTable> view); omit to skip")
 	protoPath := flag.String("proto", "proto/ramp/v1/ramp.proto", "path to the .proto source, read for enum value descriptions")
+	refPage := flag.String("refpage", "website/src/content/docs/reference/proto-ramp.mdx", "reference page whose headings decide which symbols are linkable")
 	flag.Parse()
 
-	writeJSON(*out, buildSymbols())
+	writeJSON(*out, buildSymbols(readHeadingSlugs(*refPage)))
 
 	if *enumsOut != "" {
 		enums, err := buildEnums(*protoPath)
@@ -173,14 +241,14 @@ func walkMessages(mds protoreflect.MessageDescriptors, add func(string, symbol))
 			continue // synthetic map<k,v> entry types are not user-visible
 		}
 		name := string(md.Name())
-		add(name, symbol{Kind: "message", Page: refPage, Heading: name})
+		add(name, symbol{Kind: "message", Page: refPage, Heading: headOf(name)})
 		for j := 0; j < md.Fields().Len(); j++ {
 			f := md.Fields().Get(j)
-			add(name+"."+string(f.Name()), symbol{Kind: "field", Page: refPage, Heading: name})
+			add(name+"."+string(f.Name()), symbol{Kind: "field", Page: refPage, Heading: headOf(name)})
 			// Docs may use the proto3-JSON camelCase field name; index it too so a
 			// `Message.fieldName` reference resolves and links.
 			if jn := f.JSONName(); jn != "" && jn != string(f.Name()) {
-				add(name+"."+jn, symbol{Kind: "field", Page: refPage, Heading: name})
+				add(name+"."+jn, symbol{Kind: "field", Page: refPage, Heading: headOf(name)})
 			}
 		}
 		walkMessages(md.Messages(), add) // nested messages
@@ -192,16 +260,16 @@ func walkEnums(eds protoreflect.EnumDescriptors, add func(string, symbol)) {
 	for i := 0; i < eds.Len(); i++ {
 		ed := eds.Get(i)
 		name := string(ed.Name())
-		add(name, symbol{Kind: "enum", Page: refPage, Heading: name})
+		add(name, symbol{Kind: "enum", Page: refPage, Heading: headOf(name)})
 		prefix := screamingSnake(name) + "_"
 		for j := 0; j < ed.Values().Len(); j++ {
 			full := string(ed.Values().Get(j).Name())
-			add(full, symbol{Kind: "enum_value", Page: refPage, Heading: name})
+			add(full, symbol{Kind: "enum_value", Page: refPage, Heading: headOf(name)})
 			// Docs commonly use the short form (PER_UNIT for PRICING_MODEL_PER_UNIT);
 			// index it too so it links and resolves. Collisions across enums become
 			// validate-only via add()'s dedup.
 			if short := strings.TrimPrefix(full, prefix); short != full && short != "" {
-				add(short, symbol{Kind: "enum_value", Page: refPage, Heading: name})
+				add(short, symbol{Kind: "enum_value", Page: refPage, Heading: headOf(name)})
 			}
 		}
 	}

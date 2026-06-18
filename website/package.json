@@ -20,5 +20,8 @@
     "@pasqal-io/starlight-client-mermaid": "^0.1.0",
     "astro": "^6.0.1",
     "sharp": "^0.34.2"
+  },
+  "devDependencies": {
+    "starlight-links-validator": "^0.24.1"
   }
 }

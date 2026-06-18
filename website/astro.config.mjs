@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightMermaid from '@pasqal-io/starlight-client-mermaid';
+import starlightLinksValidator from 'starlight-links-validator';
 import rehypeProtoAutolink from './plugins/rehype-proto-autolink.mjs';
 
 export default defineConfig({
@@ -15,7 +16,7 @@ export default defineConfig({
 		starlight({
 			title: 'RAMP Protocol',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/RAMP-Protocol/protocol' }],
-			plugins: [starlightMermaid()],
+			plugins: [starlightMermaid(), starlightLinksValidator()],
 			components: {
 				Footer: './src/components/Footer.astro',
 			},

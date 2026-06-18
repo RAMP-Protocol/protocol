@@ -8,7 +8,17 @@ import "testing"
 // silently stopped emitting fields, this test fails rather than the guard passing
 // vacuously.
 func TestBuildSymbols(t *testing.T) {
-	syms := buildSymbols()
+	// Controlled "documented" set (heading slugs on the reference page) so the test
+	// is independent of the live docs: TransactionRequest is documented, Preview is
+	// deliberately not — exercising the linkable-only-if-documented gate.
+	doc := map[string]bool{
+		"transactionrequest": true,
+		"denialreason":       true,
+		"catalogservice":     true,
+		"pricingmodel":       true,
+		"errordetail":        true,
+	}
+	syms := buildSymbols(doc)
 
 	present := []string{
 		"TransactionRequest",                 // message
@@ -41,5 +51,13 @@ func TestBuildSymbols(t *testing.T) {
 
 	if got := syms["TransactionRequest.idempotency_key"].Heading; got != "TransactionRequest" {
 		t.Errorf("field heading = %q, want owning message %q", got, "TransactionRequest")
+	}
+
+	// Linkable-only-if-documented: Preview is a real message but absent from `doc`,
+	// so it must resolve (guard) yet carry no link heading (no dead anchor).
+	if p, ok := syms["Preview"]; !ok {
+		t.Error("Preview should resolve as a symbol")
+	} else if p.Heading != "" {
+		t.Errorf("Preview.Heading = %q, want \"\" (undocumented on the reference page → not linkable)", p.Heading)
 	}
 }
