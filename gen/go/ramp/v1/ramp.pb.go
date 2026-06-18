@@ -869,7 +869,7 @@ const (
 	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE      DenialReason = 2  // Requester's balance too low
 	DenialReason_DENIAL_REASON_RATE_LIMITED              DenialReason = 3  // Too many requests
 	DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE       DenialReason = 4  // Resource no longer available
-	DenialReason_DENIAL_REASON_RESTRICTION_NOT_SATISFIED DenialReason = 5  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+	DenialReason_DENIAL_REASON_RESTRICTION_NOT_SATISFIED DenialReason = 5  // Accepted term's restriction not satisfied by the request; the axes are in TransactionDenial.restriction_mismatches (single) / TransactionResultItem.restriction_mismatches (batch), same RestrictionKind vocabulary as the terms
 	DenialReason_DENIAL_REASON_REPORTING_OVERDUE         DenialReason = 6  // Requester has >20% overdue reports (MAY threshold)
 	DenialReason_DENIAL_REASON_OFFER_EXPIRED             DenialReason = 7  // Offer TTL exceeded
 	DenialReason_DENIAL_REASON_SIGNATURE_INVALID         DenialReason = 8  // Offer signature verification failed
@@ -8626,20 +8626,22 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"prohibited\x12\x1a\n" +
 	"\badvisory\x18\x04 \x01(\bR\badvisory:\xab\x02\xbaH\xa7\x02\x1a\x93\x01\n" +
 	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\x1a\x8e\x01\n" +
-	"\x1arestriction.kind_specified\x12-kind must not be RESTRICTION_KIND_UNSPECIFIED\x1aAthis.kind != ramp.v1.RestrictionKind.RESTRICTION_KIND_UNSPECIFIED\"\xc8\x03\n" +
+	"\x1arestriction.kind_specified\x12-kind must not be RESTRICTION_KIND_UNSPECIFIED\x1aAthis.kind != ramp.v1.RestrictionKind.RESTRICTION_KIND_UNSPECIFIED\"\xd4\x04\n" +
 	"\x05Quota\x12\xf1\x02\n" +
 	"\x06metric\x18\x01 \x01(\tB\xd8\x02\xbaH\xe5\x01\xba\x01\xdd\x01\n" +
 	"\x13quota.metric.format\x12cmetric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1aathis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))r\x02\x18@\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seatsR\x06metric\x12\x1d\n" +
 	"\x05limit\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\x05limit\x12,\n" +
-	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\x91\x05\n" +
+	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window:\x89\x01\xbaH\x85\x01\x1a\x82\x01\n" +
+	"\x16quota.window_specified\x12+window must not be QUOTA_WINDOW_UNSPECIFIED\x1a;this.window != ramp.v1.QuotaWindow.QUOTA_WINDOW_UNSPECIFIED\"\xb0\x06\n" +
 	"\n" +
 	"Obligation\x12+\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x17.ramp.v1.ObligationKindR\x04kind\x124\n" +
 	"\atrigger\x18\x02 \x01(\x0e2\x1a.ramp.v1.ObligationTriggerR\atrigger\x12:\n" +
 	"\rscope_license\x18\x03 \x01(\v2\x10.ramp.v1.LicenseH\x00R\fscopeLicense\x88\x01\x01\x12\x1b\n" +
-	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\xa9\x03\xbaH\xa5\x03\x1a\x95\x02\n" +
+	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\xc8\x04\xbaH\xc4\x04\x1a\x95\x02\n" +
 	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))\x1a\x8a\x01\n" +
-	"\x19obligation.kind_specified\x12,kind must not be OBLIGATION_KIND_UNSPECIFIED\x1a?this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIEDB\x10\n" +
+	"\x19obligation.kind_specified\x12,kind must not be OBLIGATION_KIND_UNSPECIFIED\x1a?this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIED\x1a\x9c\x01\n" +
+	"\x1cobligation.trigger_specified\x122trigger must not be OBLIGATION_TRIGGER_UNSPECIFIED\x1aHthis.trigger != ramp.v1.ObligationTrigger.OBLIGATION_TRIGGER_UNSPECIFIEDB\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
 	"\a_detail\"\xe6\a\n" +
 	"\vLicenseTerm\x12/\n" +
