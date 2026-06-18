@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -52,11 +53,16 @@ func walkDocs(t *testing.T, fn func(path, content string)) {
 	t.Logf("scanned %d .mdx files under %v", seen, docRoots)
 }
 
-var jsonFenceRe = regexp.MustCompile("(?s)```json\\s*\\n(.*?)```")
+// codeFenceRe matches the body of ANY fenced code block regardless of language
+// tag (```json, ```go, an unlabeled ```, …). The semantics check uses this
+// rather than jsonFences because LicenseTerm shapes also appear in unlabeled
+// pseudocode fences (walkthroughs), which the json-only scan could not see
+// (R6-7). The language tag, if any, is consumed up to the first newline.
+var codeFenceRe = regexp.MustCompile("(?s)```[a-zA-Z0-9]*\\s*\\n(.*?)```")
 
-func jsonFences(content string) []string {
+func codeFences(content string) []string {
 	var out []string
-	for _, m := range jsonFenceRe.FindAllStringSubmatch(content, -1) {
+	for _, m := range codeFenceRe.FindAllStringSubmatch(content, -1) {
 		out = append(out, m[1])
 	}
 	return out
@@ -95,50 +101,99 @@ func TestDocUnitsRegistered(t *testing.T) {
 	}
 }
 
-// TestDocSignatureAlgorithm: the Offer signature algorithm is "EdDSA"
-// (RFC 7515 JWS alg). Examples using the lowercase JWK curve name "ed25519" for
-// a `signature_algorithm` value drift from the wire contract.
+// TestDocSignatureAlgorithm enforces the two-name algorithm convention, which a
+// single `signature_algorithm`-field grep could not (R6-1/R6-7a):
+//   - ed25519 : RFC 9421 HTTP Message Signature (request authentication)
+//   - EdDSA   : JOSE/JWS (the Offer signature, delegation JWTs, JWKs)
+// It checks three forms — the `signature_algorithm` JSON field, the PascalCase
+// Go `SignatureAlgorithm = "…"` (the Offer field, always JOSE ⇒ EdDSA), and any
+// `alg=…`/`alg: "…"` token — and for the bare `alg` token it decides the
+// expected value from the surrounding context on the same line. Lines whose
+// context is ambiguous (both or neither family of keywords) are skipped rather
+// than guessed.
 func TestDocSignatureAlgorithm(t *testing.T) {
-	re := regexp.MustCompile(`"?signature_algorithm"?\s*:\s*"([^"]+)"`)
+	jsonField := regexp.MustCompile(`"?signature_algorithm"?\s*:\s*"([^"]+)"`)
+	goField := regexp.MustCompile(`\bSignatureAlgorithm\s*[:=]+\s*"([^"]+)"`)
+	algToken := regexp.MustCompile(`\balg\s*[:=]+\s*"?(ed25519|EdDSA)\b`)
+	rfc9421 := regexp.MustCompile(`(?i)RFC[ -]?9421|HTTP Message Signature|Signature-Input|@method|@target-uri|Signature header`)
+	jose := regexp.MustCompile(`(?i)\bJWS\b|\bJOSE\b|RFC[ -]?7515|RFC[ -]?7517|\bJWK\b|Compact Serialization|offer signature|canonical Offer|delegation JWT|content signature`)
+
 	checked := 0
 	var bad []string
+	flag := func(path string, n int, msg string) {
+		bad = append(bad, filepath.Base(path)+":"+strconv.Itoa(n)+": "+msg)
+	}
 	walkDocs(t, func(path, content string) {
-		for _, m := range re.FindAllStringSubmatch(content, -1) {
-			val := m[1]
-			if isPlaceholder(val) {
-				continue
+		for i, line := range strings.Split(content, "\n") {
+			n := i + 1
+			// signature_algorithm JSON field — the Offer field, always EdDSA.
+			if m := jsonField.FindStringSubmatch(line); m != nil && !isPlaceholder(m[1]) {
+				checked++
+				if m[1] != "EdDSA" {
+					flag(path, n, "signature_algorithm \""+m[1]+"\" should be \"EdDSA\" (JOSE/JWS)")
+				}
 			}
-			checked++
-			if val != "EdDSA" {
-				bad = append(bad, filepath.Base(path)+": signature_algorithm \""+val+"\" should be \"EdDSA\"")
+			// PascalCase Go form: Offer.SignatureAlgorithm = "…" — JOSE ⇒ EdDSA.
+			if m := goField.FindStringSubmatch(line); m != nil && !isPlaceholder(m[1]) {
+				checked++
+				if m[1] != "EdDSA" {
+					flag(path, n, "SignatureAlgorithm = \""+m[1]+"\" should be \"EdDSA\" (Offer signature is JOSE/JWS)")
+				}
+			}
+			// Bare alg=… token — decide expected value from same-line context.
+			if m := algToken.FindStringSubmatch(line); m != nil {
+				isReq := rfc9421.MatchString(line)
+				isJose := jose.MatchString(line)
+				switch {
+				case isReq && !isJose:
+					checked++
+					if m[1] != "ed25519" {
+						flag(path, n, "alg \""+m[1]+"\" in an RFC 9421 context should be \"ed25519\"")
+					}
+				case isJose && !isReq:
+					checked++
+					if m[1] != "EdDSA" {
+						flag(path, n, "alg \""+m[1]+"\" in a JOSE/JWS context should be \"EdDSA\"")
+					}
+				}
 			}
 		}
 	})
-	t.Logf("signature_algorithm values checked=%d", checked)
+	t.Logf("algorithm-name sites checked=%d", checked)
 	for _, b := range bad {
 		t.Error(b)
 	}
 }
 
-// TestDocLicenseTermSemantics: a LicenseTerm example (a JSON object carrying
-// both `pricing` and `restrictions`) MUST set the `semantics` discriminator —
-// `TermSemantics` UNSPECIFIED=0 is rejected at ingest, so a term example without
-// it would not validate. Heuristic at the fence level: if a fence contains a
-// term shape and no `semantics` anywhere, flag it.
+// TestDocLicenseTermSemantics: a LicenseTerm example MUST set the `semantics`
+// discriminator — `TermSemantics` UNSPECIFIED=0 is rejected by protovalidate
+// itself (the license_term.semantics_specified CEL), so a term example without
+// it would not validate. The scan covers ALL code fences (not just ```json) and
+// matches quoted or unquoted keys, because term shapes also appear in unlabeled
+// pseudocode fences in the walkthroughs (R6-7b). A term shape is a `terms: [`
+// array (lowercase data-literal key, not the Go `.Terms` field) that carries at
+// least one term-only key (`restrictions`/`quotas`/`obligations`). If such a
+// fence has no `semantics` anywhere, flag it.
+var (
+	termsArrayRe = regexp.MustCompile(`(^|[^.\w])"?terms"?\s*:\s*\[`)
+	termBodyRe   = regexp.MustCompile(`"?(restrictions|quotas|obligations)"?\s*:\s*\[`)
+	semanticsRe  = regexp.MustCompile(`"?semantics"?\s*:`)
+)
+
 func TestDocLicenseTermSemantics(t *testing.T) {
 	fences, flagged := 0, 0
 	var bad []string
 	walkDocs(t, func(path, content string) {
-		for _, f := range jsonFences(content) {
+		for _, f := range codeFences(content) {
 			fences++
-			hasTerm := strings.Contains(f, `"pricing"`) && strings.Contains(f, `"restrictions"`)
-			if hasTerm && !strings.Contains(f, `"semantics"`) {
+			hasTerm := termsArrayRe.MatchString(f) && termBodyRe.MatchString(f)
+			if hasTerm && !semanticsRe.MatchString(f) {
 				flagged++
-				bad = append(bad, filepath.Base(path)+": term example (pricing+restrictions) is missing the required \"semantics\" discriminator")
+				bad = append(bad, filepath.Base(path)+": LicenseTerm example (terms[] with restrictions/quotas/obligations) is missing the required \"semantics\" discriminator")
 			}
 		}
 	})
-	t.Logf("json fences scanned=%d term-shaped-without-semantics=%d", fences, flagged)
+	t.Logf("code fences scanned=%d term-shaped-without-semantics=%d", fences, flagged)
 	for _, b := range bad {
 		t.Error(b)
 	}

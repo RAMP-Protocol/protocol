@@ -102,6 +102,14 @@ deleg_block=$(awk '/^message Delegation \{/,/^\}/' "$proto_ramp")
 while read -r claim; do
   [ -z "$claim" ] && continue
   field=${claim#ramp_}
+  # Defensive: only [a-z_] field names are expected. Reject anything else rather
+  # than interpolate it into the grep pattern below, so a future change to the
+  # extraction regex can never smuggle a regex metacharacter into the match.
+  if ! [[ "$field" =~ ^[a-z_]+$ ]]; then
+    echo "::error::registered delegation claim '${claim}' has an unexpected field name '${field}' (only [a-z_] permitted)"
+    status=1
+    continue
+  fi
   if ! grep -qE "[[:space:]]${field}[[:space:]]*=" <<<"$deleg_block"; then
     echo "::error::registered delegation claim '${claim}' has no matching '${field}' field on the Delegation proto message"
     status=1
