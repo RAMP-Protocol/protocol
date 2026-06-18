@@ -4,6 +4,7 @@ description: "RAMP v1.0 protobuf reference -- ExchangeService, CatalogService, a
 ---
 
 import VocabTable from '../../../components/VocabTable.astro';
+import EnumTable from '../../../components/EnumTable.astro';
 
 Source: [`proto/ramp/v1/ramp.proto`](https://github.com/RAMP-Protocol/protocol/blob/main/proto/ramp/v1/ramp.proto)
 
@@ -956,14 +957,13 @@ Single-sources the delivery-edge token unions (signed-URL checks in `verify.ts`,
 
 The charging **structure** only (a closed set). The open-ended metering basis ("per what") is NOT enumerated here — it lives in `Pricing.unit` as a registry-governed vocabulary. `UNSPECIFIED` is rejected at ingest (omission cannot default to FREE).
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | Unset — rejected at ingest |
-| 1 | FREE | No charge; `rate` must be 0 (state FREE explicitly — absent Pricing is not free) |
-| 2 | PER_UNIT | Rate per `Pricing.unit`; `unit` REQUIRED (registered token or `vendor:custom`) |
-| 3 | FLAT | One-time flat fee; `rate` is the total, no unit |
+<EnumTable enum="PricingModel" numbers />
 
 The metering basis ("per what") is the `Pricing.unit` vocabulary, not a model; a subscription is `FREE` + `scopes`; attribution and contribution are `Obligation.kind`s; revenue-share settlement is off-protocol.
+
+**Registered `Pricing.unit` tokens** (the metering basis — rendered from the proto, any `vendor:namespaced` token also accepted):
+
+<VocabTable axis="pricing-unit" />
 
 ### PricingMetering
 
@@ -1020,39 +1020,19 @@ on every axis; these are the registered bare tokens.
 
 Time window over which a `Quota.limit` accumulates.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | Unset — rejected at ingest |
-| 1 | HOURLY | Resets each hour |
-| 2 | DAILY | Resets each day |
-| 3 | MONTHLY | Resets each month |
-| 4 | TOTAL | Lifetime cap — never resets |
+<EnumTable enum="QuotaWindow" numbers />
 
 ### ObligationKind
 
 What the agent must do after use. `ATTRIBUTION` and `CONTRIBUTION` are behavioral requirements, not pricing models.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | Unset — rejected at ingest |
-| 1 | ATTRIBUTION | Credit the author or publisher |
-| 2 | CONTRIBUTION | Good-faith payment (amount suggested, not contractually fixed) |
-| 3 | SHARE_ALIKE | Derivatives must use the same / compatible license (`scope_license` required) |
-| 4 | NETWORK_COPYLEFT | Network service triggers copyleft (AGPL style) |
-| 5 | NOTICE | Include the specified copyright notice |
-| 6 | OTHER | Described in `Obligation.detail` |
+<EnumTable enum="ObligationKind" numbers />
 
 ### ObligationTrigger
 
 When an `Obligation` activates.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | Unset — rejected at ingest |
-| 1 | ON_USE | Triggered on any use of the resource |
-| 2 | ON_DISTRIBUTION | Triggered when copies are distributed |
-| 3 | ON_NETWORK_SERVICE | Triggered when served over a network (AGPL style) |
-| 4 | ON_DERIVATIVE | Triggered when a derivative work is produced |
+<EnumTable enum="ObligationTrigger" numbers />
 
 ### DenialReason
 
