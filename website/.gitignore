@@ -2,6 +2,9 @@
 dist/
 # generated types
 .astro/
+# generated vocabulary view — recomputed every build from the proto by
+# `npm run gen:vocab` (cmd/vocabjson); never hand-edited, never committed.
+src/data/vocab.json
 
 # dependencies
 node_modules/

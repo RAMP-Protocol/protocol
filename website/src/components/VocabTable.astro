@@ -1,0 +1,33 @@
+---
+// VocabTable renders a RAMP vocabulary axis as a live view of the proto.
+//
+// The token lists are NOT authored here or anywhere in the docs: they come from
+// src/data/vocab.json, which is generated on every build from the proto's
+// (ramp.v1.vocab)/(ramp.v1.vocab_enum) options (see `npm run gen:vocab` →
+// cmd/vocabjson). vocab.json is gitignored and recomputed each build, so this
+// table cannot drift from the contract. The proto stays the single source.
+import vocab from '../data/vocab.json';
+
+interface Props {
+  axis: string;
+}
+const { axis } = Astro.props;
+const tokens: string[] = (vocab as Record<string, string[]>)[axis] ?? [];
+---
+{tokens.length === 0 ? (
+  <p>
+    <em>
+      No generated vocabulary for axis <code>{axis}</code>. Run{' '}
+      <code>npm run gen:vocab</code> (requires the Go toolchain) to populate it.
+    </em>
+  </p>
+) : (
+  <p class="vocab-tokens">
+    {tokens.map((t, i) => (
+      <>
+        {i > 0 ? ' ' : ''}
+        <code>{t}</code>
+      </>
+    ))}
+  </p>
+)}

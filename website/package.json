@@ -3,6 +3,10 @@
   "type": "module",
   "version": "0.0.1",
   "scripts": {
+    "gen:vocab": "cd .. && go run ./cmd/vocabjson -o website/src/data/vocab.json",
+    "predev": "npm run gen:vocab",
+    "prestart": "npm run gen:vocab",
+    "prebuild": "npm run gen:vocab",
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
