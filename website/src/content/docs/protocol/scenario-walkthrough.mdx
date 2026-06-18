@@ -142,7 +142,9 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
          signature: "base64-ed25519-gumgum..." }
      ],
      terms: [
-       { restrictions: [
+       { semantics: TERM_SEMANTICS_ENUMERATED,
+         pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD", unit: "accesses" },
+         restrictions: [
            { kind: RESTRICTION_KIND_FUNCTION,
              permitted: ["ai-input", "ai-index", "search"],
              prohibited: ["ai-train"] }
@@ -285,7 +287,9 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
          signature: "base64-ed25519-gumgum..." }
      ]
      terms: [
-       { restrictions: [
+       { semantics: TERM_SEMANTICS_ENUMERATED,
+         pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD", unit: "accesses" },
+         restrictions: [
            { kind: RESTRICTION_KIND_FUNCTION,
              permitted: ["ai-input", "ai-index", "search"],
              prohibited: ["ai-train"] }
@@ -303,7 +307,9 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
      identity: { same as Offer A }
      attestations: { same as Offer A }
      terms: [
-       { restrictions: [ same as Offer A ],
+       { semantics: TERM_SEMANTICS_ENUMERATED,
+         pricing: { model: PRICING_MODEL_FREE, rate: 0, currency: "USD" },
+         restrictions: [ same as Offer A ],
          scopes: ["subscription:SUB-ANTHROPIC-HEARST-2026"] }
      ]
      delivery_method: DELIVERY_METHOD_INSTRUCTIONS

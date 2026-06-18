@@ -175,17 +175,17 @@ Delegation JWTs support offline narrowing — an agent can narrow a token's perm
 │  Token: narrowed scopes  │
 │  • tax:customer:read     │  ← legal:read removed
 │  • max_spend_cents: 20000 │  ← spend cap reduced
-│  • uris: internal://tax/ │  ← URI prefix restricted
+│  • exp: +1h              │  ← shorter TTL
 └─────────────────────────┘
 ```
 
-The narrowed token is a new child delegation JWT linked into the chain via `cnf`. The sub-agent **cannot** widen permissions — it can only further restrict scope, spend, time, and URI patterns.
+The narrowed token is a new child delegation JWT linked into the chain via `cnf`. The sub-agent **cannot** widen permissions — it can only further restrict the registered grant dimensions: scope, spend (`max_spend_cents`), access count (`max_accesses`), and time (`exp`). Resource/URI access is gated through *scopes* (each requested URI is checked against the token's scopes), so confining a sub-agent to `internal://tax/` is expressed as a narrower scope, not a separate URI claim. Per-URI pattern confinement that is independent of scopes is not part of the default JWT registered-claim set; deployments that need it use the optional `biscuit-v3` profile (whose check blocks can carry URI constraints) or a vendor-namespaced claim.
 
 This happens entirely offline. No call to IAM. No network round-trip. No central bottleneck.
 
 **Why this matters:**
 - A research agent spawns 10 sub-agents for parallel data gathering. Each gets a narrowly scoped token. If one is compromised, damage is bounded by its attenuated scope and spend cap.
-- A compliance agent delegates to a document retrieval agent with read-only scope and a $50 spend limit. The retrieval agent cannot access resources outside its scope or exceed its budget — cryptographically enforced.
+- A compliance agent delegates to a document retrieval agent with read-only scope and a $50 spend limit. The retrieval agent cannot access resources outside its scope or exceed its budget — the holder binding (`cnf`) and scope/spend claims are cryptographically bound to the token, so a narrowed child grant cannot be widened.
 
 ## Data Classification
 

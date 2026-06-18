@@ -874,7 +874,7 @@ const (
 	DenialReason_DENIAL_REASON_OFFER_EXPIRED             DenialReason = 7  // Offer TTL exceeded
 	DenialReason_DENIAL_REASON_SIGNATURE_INVALID         DenialReason = 8  // Offer signature verification failed
 	DenialReason_DENIAL_REASON_QUOTA_EXCEEDED            DenialReason = 9  // Subscription access count exhausted for this period
-	DenialReason_DENIAL_REASON_DELEGATION_INVALID        DenialReason = 10 // Delegation missing, unverifiable, expired, or its attenuation does not check out
+	DenialReason_DENIAL_REASON_DELEGATION_INVALID        DenialReason = 10 // Delegation missing, unverifiable, expired, holder binding failed, or scopes/caps do not cover the request
 	DenialReason_DENIAL_REASON_SCOPE_INSUFFICIENT        DenialReason = 11 // Requester scopes don't cover this resource
 	// Entitlement family — subscription/biscuit access failures on a
 	// subscription-gated offer. Finer-grained than DELEGATION_INVALID so callers
@@ -4019,7 +4019,8 @@ type Requester struct {
 	// RBAC and open-market subscription entitlements.
 	//
 	// Scope format: colon-separated segments, "{domain}:{permission}" or
-	// "{profile}:{permission}", optionally hierarchical ("dist:US:CA").
+	// "{profile}:{permission}", optionally multi-segment ("dist:US:CA");
+	// matching is segment-wise per the rule below (no implicit hierarchy).
 	// Examples:
 	//
 	//	"credit:read"                — can access credit reports
@@ -5835,7 +5836,8 @@ type Usage struct {
 	// Structured attribution details for each citation provided.
 	Attribution []*AttributionDetail `protobuf:"bytes,6,rep,name=attribution,proto3" json:"attribution,omitempty"`
 	// Metering unit for consumed_quantity. Must match the Offer's Pricing.unit.
-	// If omitted, defaults to "tokens".
+	// If omitted, defaults to "tokens". Same token format as Pricing.unit:
+	// a bare registered token or a vendor:namespaced token.
 	ConsumedUnit  *string `protobuf:"bytes,8,opt,name=consumed_unit,json=consumedUnit,proto3,oneof" json:"consumed_unit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -8602,7 +8604,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_immutableB\r\n" +
-	"\v_uri_digest\"\xd3\x05\n" +
+	"\v_uri_digest\"\xe4\x06\n" +
 	"\vRestriction\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\xeb\x01\n" +
 	"\tpermitted\x18\x02 \x03(\tB\xcc\x01\xbaH\xc8\x01\xba\x01\xbf\x01\n" +
@@ -8611,22 +8613,24 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"prohibited\x18\x03 \x03(\tB\xcd\x01\xbaH\xc9\x01\xba\x01\xc0\x01\n" +
 	"\x1drestriction.prohibited.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\n" +
 	"prohibited\x12\x1a\n" +
-	"\badvisory\x18\x04 \x01(\bR\badvisory:\x9a\x01\xbaH\x96\x01\x1a\x93\x01\n" +
-	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\"\xc8\x03\n" +
+	"\badvisory\x18\x04 \x01(\bR\badvisory:\xab\x02\xbaH\xa7\x02\x1a\x93\x01\n" +
+	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\x1a\x8e\x01\n" +
+	"\x1arestriction.kind_specified\x12-kind must not be RESTRICTION_KIND_UNSPECIFIED\x1aAthis.kind != ramp.v1.RestrictionKind.RESTRICTION_KIND_UNSPECIFIED\"\xc8\x03\n" +
 	"\x05Quota\x12\xf1\x02\n" +
 	"\x06metric\x18\x01 \x01(\tB\xd8\x02\xbaH\xe5\x01\xba\x01\xdd\x01\n" +
 	"\x13quota.metric.format\x12cmetric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1aathis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))r\x02\x18@\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seatsR\x06metric\x12\x1d\n" +
 	"\x05limit\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\x05limit\x12,\n" +
-	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\x84\x04\n" +
+	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window\"\x91\x05\n" +
 	"\n" +
 	"Obligation\x12+\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x17.ramp.v1.ObligationKindR\x04kind\x124\n" +
 	"\atrigger\x18\x02 \x01(\x0e2\x1a.ramp.v1.ObligationTriggerR\atrigger\x12:\n" +
 	"\rscope_license\x18\x03 \x01(\v2\x10.ramp.v1.LicenseH\x00R\fscopeLicense\x88\x01\x01\x12\x1b\n" +
-	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\x9c\x02\xbaH\x98\x02\x1a\x95\x02\n" +
-	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))B\x10\n" +
+	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\xa9\x03\xbaH\xa5\x03\x1a\x95\x02\n" +
+	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))\x1a\x8a\x01\n" +
+	"\x19obligation.kind_specified\x12,kind must not be OBLIGATION_KIND_UNSPECIFIED\x1a?this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIEDB\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
-	"\a_detail\"\xcb\x06\n" +
+	"\a_detail\"\xe6\a\n" +
 	"\vLicenseTerm\x12/\n" +
 	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x124\n" +
 	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsR\tsemantics\x128\n" +
@@ -8636,9 +8640,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
 	"\n" +
-	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\x95\x03\xbaH\x91\x03\x1a\xe2\x01\n" +
+	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\xb0\x04\xbaH\xac\x04\x1a\xe2\x01\n" +
 	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')\x1a\xa9\x01\n" +
-	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1aSthis.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)B\n" +
+	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1aSthis.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)\x1a\x98\x01\n" +
+	" license_term.semantics_specified\x120semantics must not be TERM_SEMANTICS_UNSPECIFIED\x1aBthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_UNSPECIFIEDB\n" +
 	"\n" +
 	"\b_licenseB\n" +
 	"\n" +
@@ -8655,7 +8660,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\xf0\b\n" +
+	"\x05_size\"\xf7\t\n" +
 	"\aPricing\x12+\n" +
 	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelR\x05model\x12\x12\n" +
 	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
@@ -8666,9 +8671,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x04unit\x18\b \x01(\tB\x9e\x03\xbaH\xe9\x01\xba\x01\xe1\x01\n" +
 	"\x13pricing.unit.format\x12iunit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aseconds\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
 	"characters\x8a\xb5\x18\x05bytes\x8a\xb5\x18\x05items\x8a\xb5\x18\x05sq-kmH\x03R\x04unit\x88\x01\x01\x129\n" +
-	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xa7\x02\xbaH\xa3\x02\x1a\x97\x01\n" +
+	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xae\x03\xbaH\xaa\x03\x1a\x97\x01\n" +
 	"\x1epricing.per_unit.requires_unit\x12'unit is required when model is PER_UNIT\x1aLthis.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''\x1a\x86\x01\n" +
-	"\x16pricing.free.zero_rate\x12!rate must be 0 when model is FREE\x1aIthis.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0B\f\n" +
+	"\x16pricing.free.zero_rate\x12!rate must be 0 when model is FREE\x1aIthis.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0\x1a\x84\x01\n" +
+	"\x17pricing.model_specified\x12+model must not be PRICING_MODEL_UNSPECIFIED\x1a<this.model != ramp.v1.PricingModel.PRICING_MODEL_UNSPECIFIEDB\f\n" +
 	"\n" +
 	"_unit_costB\x15\n" +
 	"\x13_estimated_quantityB\x1a\n" +
@@ -8873,15 +8879,16 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0fvisible_to_user\x18\x03 \x01(\bH\x02R\rvisibleToUser\x88\x01\x01B\x10\n" +
 	"\x0e_displayed_urlB\t\n" +
 	"\a_formatB\x12\n" +
-	"\x10_visible_to_user\"\xef\x02\n" +
+	"\x10_visible_to_user\"\xd3\x04\n" +
 	"\x05Usage\x12\x1a\n" +
 	"\bfunction\x18\x01 \x03(\tR\bfunction\x12\x14\n" +
 	"\x05subfn\x18\x02 \x03(\tR\x05subfn\x12+\n" +
 	"\x11consumed_quantity\x18\x03 \x01(\x05R\x10consumedQuantity\x12/\n" +
 	"\x11displayed_to_user\x18\x04 \x01(\bH\x00R\x0fdisplayedToUser\x88\x01\x01\x120\n" +
 	"\x11citation_included\x18\x05 \x01(\bH\x01R\x10citationIncluded\x88\x01\x01\x12<\n" +
-	"\vattribution\x18\x06 \x03(\v2\x1a.ramp.v1.AttributionDetailR\vattribution\x12(\n" +
-	"\rconsumed_unit\x18\b \x01(\tH\x02R\fconsumedUnit\x88\x01\x01B\x14\n" +
+	"\vattribution\x18\x06 \x03(\v2\x1a.ramp.v1.AttributionDetailR\vattribution\x12\x8b\x02\n" +
+	"\rconsumed_unit\x18\b \x01(\tB\xe0\x01\xbaH\xdc\x01\xba\x01\xd4\x01\n" +
+	"!usage_report.consumed_unit.format\x12Nconsumed_unit must be a bare registered token ([a-z0-9-]) or vendor:namespaced\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@H\x02R\fconsumedUnit\x88\x01\x01B\x14\n" +
 	"\x12_displayed_to_userB\x14\n" +
 	"\x12_citation_includedB\x10\n" +
 	"\x0e_consumed_unit\"v\n" +

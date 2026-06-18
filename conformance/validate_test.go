@@ -59,6 +59,14 @@ func TestProtovalidateConstraints(t *testing.T) {
 		// Restriction.permitted/prohibited charset.
 		{"restriction permitted ok", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-input"}}, true},
 		{"restriction permitted control-char rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"bad\ttoken"}}, false},
+		{"restriction prohibited ok", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Prohibited: []string{"ai-train"}}, true},
+		{"restriction prohibited space rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Prohibited: []string{"ai train"}}, false},
+
+		// Quota.metric format — bare-dashed or vendor:namespaced; empty rejected.
+		{"quota metric bare ok", &rampv1.Quota{Metric: "display-words", Limit: 1}, true},
+		{"quota metric vendor ok", &rampv1.Quota{Metric: "acme:frames", Limit: 1}, true},
+		{"quota metric empty rejected", &rampv1.Quota{Metric: "", Limit: 1}, false},
+		{"quota metric space rejected", &rampv1.Quota{Metric: "two words", Limit: 1}, false},
 
 		// d8y64 — License.uri present requires uri_digest (any semantics).
 		{"license no uri ok", &rampv1.License{Id: proto.String("CC-BY-4.0")}, true},
@@ -82,6 +90,14 @@ func TestProtovalidateConstraints(t *testing.T) {
 		{"obligation share_alike without scope_license rejected", &rampv1.Obligation{Kind: rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE}, false},
 		{"obligation share_alike scope_license uri+digest ok", &rampv1.Obligation{Kind: rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE, ScopeLicense: &rampv1.License{Uri: proto.String("https://creativecommons.org/licenses/by-sa/4.0/"), UriDigest: proto.String("sha256:" + hex64)}}, true},
 		{"obligation share_alike scope_license uri without digest rejected", &rampv1.Obligation{Kind: rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE, ScopeLicense: &rampv1.License{Uri: proto.String("https://creativecommons.org/licenses/by-sa/4.0/")}}, false},
+
+		// Required-enum discriminators — UNSPECIFIED (zero) is never a valid value.
+		// These guard the gap where the conditional coherence CELs above are
+		// vacuously satisfied by an unset discriminator.
+		{"term semantics unspecified rejected", &rampv1.LicenseTerm{Pricing: freePricing()}, false},
+		{"pricing model unspecified rejected", &rampv1.Pricing{Rate: 0}, false},
+		{"restriction kind unspecified rejected", &rampv1.Restriction{Permitted: []string{"ai-input"}}, false},
+		{"obligation kind unspecified rejected", &rampv1.Obligation{}, false},
 	}
 
 	for _, tc := range cases {

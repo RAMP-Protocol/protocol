@@ -433,7 +433,7 @@ func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[stri
 
     payload := canonicalizeOffer(offer)
 
-    alg := "ed25519" // default for offer signatures
+    alg := "EdDSA" // JWS/JOSE alg for offer signatures
     if offer.SignatureAlgorithm != "" {
         alg = offer.SignatureAlgorithm
     }
