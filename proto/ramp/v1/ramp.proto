@@ -1835,6 +1835,23 @@ service CatalogService {
   rpc RefreshCatalog(RefreshCatalogRequest) returns (RefreshCatalogResponse);
 }
 
+// BrokerService is the agent-facing gateway: it runs the full RAMP flow
+// (discover → select → license → deliver) across one or more Exchanges on the
+// caller's behalf and returns a single canonical RAMPResponse.
+service BrokerService {
+  // Resolve runs the end-to-end flow for the requested URIs/query.
+  //
+  // A licensed result returns OK with the delivery fields populated on
+  // RAMPResponse (retrieval_endpoint, transaction_id, …). A request that ran
+  // but yielded nothing licensable (not in catalog, no offers, budget/authz
+  // refusal, upstream temporarily unavailable) returns OK with
+  // RAMPResponse.absence_reason set and no retrieval_endpoint — "no result" is
+  // a successful answer, mirroring DiscoverResources (ADR-019 §2). Malformed
+  // requests, auth failures, and internal faults are non-OK transport errors
+  // carrying an ErrorDetail.
+  rpc Resolve(RAMPRequest) returns (RAMPResponse);
+}
+
 message PushResourcesRequest {
   string ver = 1;
   string tenant_id = 2;
@@ -2556,6 +2573,11 @@ message RAMPResponse {
   // Present = explicit fee the agent can see and audit.
   // Broker MUST disclose fees when charging per-transaction.
   optional Cost broker_fee = 12;
+
+  // Why the resolve produced no licensed delivery. Set (and retrieval_endpoint
+  // unset) on a successful "no result" answer; unset on the licensed path. Same
+  // vocabulary DiscoverResources uses for OfferGroup.absence_reason.
+  optional OfferAbsenceReason absence_reason = 16;
 
   google.protobuf.Struct ext = 15;
 
