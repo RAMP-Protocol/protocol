@@ -167,8 +167,8 @@ billing state without giving the caller a different action to take. Separately,
 `DELEGATION_EXPIRED` was broadened to `DENIAL_REASON_DELEGATION_INVALID`, because
 expiry is only one of several ways a delegation token can fail to authorize
 (revoked, malformed, holder-binding mismatch, scope too narrow), and a single
-reason avoids implying that re-issuing for time alone will fix it. The enum is a
-contiguous 0–11 with no gaps left by the removals.
+reason avoids implying that re-issuing for time alone will fix it. The enum is
+contiguous, with no gaps or reused numbers left by the removals.
 
 ## Delegation-claims profile: opaque token, bound holder
 
@@ -200,16 +200,16 @@ binding-by-default posture the licensing restrictions take.
 > JWT holder-of-key is now the default and Biscuit v3 is the optional profile.
 > Retained for history; see the later section for the current model.
 
-The default delegation `token_format` moved from `biscuit-v2` to `"biscuit-v3"`,
-tracking the Biscuit specification's own v3 revision, and Biscuit v3 is the
-format RAMP implementations are expected to verify at v1. JWT remains
-wire-permitted — `token_format` accepts it and the claim vocabulary maps onto JWT
-registered claims — but its full verification path (proof-of-possession via
-`cnf`/DPoP, and OIDC issuer discovery through to JWKS fetch) is deferred past v1.
-Permitting the format now without mandating the heavier verification machinery
-lets deployments that already speak JWT carry tokens on the wire, while keeping
-the v1 conformance surface to the one format (Biscuit v3) whose offline,
-self-contained verification matches RAMP's no-extra-fetch posture.
+At the time of this (now-reversed) decision, the default delegation
+`token_format` was moved from `biscuit-v2` to `"biscuit-v3"`, tracking the
+Biscuit specification's own v3 revision, and Biscuit v3 was the format RAMP
+implementations were expected to verify at v1. JWT was wire-permitted —
+`token_format` accepted it and the claim vocabulary mapped onto JWT registered
+claims — but its full verification path (proof-of-possession via `cnf`/DPoP, and
+OIDC issuer discovery through to JWKS fetch) was deferred past v1. (This was
+later reversed: see the current model below — **JWT holder-of-key is the
+default**, and `biscuit-v3` is the optional alternative profile, never the
+default.)
 
 ## One normative scope-matching algorithm
 

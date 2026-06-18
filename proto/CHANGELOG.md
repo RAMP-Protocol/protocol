@@ -64,7 +64,7 @@ entitlement is scopes plus `Delegation`, so access is never gated on
 **DenialReason consolidation.** `INVALID_LICENSE` and `EXPIRED_LICENSE` collapse
 into a single `DENIAL_REASON_BILLING_REF_INACTIVE`, and `DELEGATION_EXPIRED`
 broadens to `DENIAL_REASON_DELEGATION_INVALID` (expiry is one of several ways a
-token fails to authorize). The enum is contiguous 0–11.
+token fails to authorize). The enum is contiguous, with no reused numbers.
 
 **Delegation-claims profile.** The delegation token stays opaque on the wire;
 `token_format` only selects the verifier. RAMP defines a small registered

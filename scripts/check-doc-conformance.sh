@@ -19,8 +19,10 @@ patterns=(
   # request signatures live in HTTP headers (RFC 9421), not message fields
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   'offer_signature_algorithm'
-  # token / vocabulary
-  'biscuit-v2'
+  # token / vocabulary — both the hyphenated token form and the prose spelling;
+  # the canonical optional delegation format is biscuit-v3, and entitlement
+  # denials are format-neutral ("entitlement token", not "biscuit").
+  'biscuit-v2' 'Biscuit v2'
   # 'revshare' is intentionally NOT denylisted: it is a live CoMP ext identifier
   # (comp.license[].revshare) and scope prefix (revshare:...). The retired RAMP
   # *pricing model* is guarded via the enum-constant patterns below instead.

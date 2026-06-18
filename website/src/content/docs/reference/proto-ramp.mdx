@@ -3,6 +3,8 @@ title: "Proto: RAMP v1"
 description: "RAMP v1.0 protobuf reference -- ExchangeService, CatalogService, and all message types"
 ---
 
+import VocabTable from '../../../components/VocabTable.astro';
+
 Source: [`proto/ramp/v1/ramp.proto`](https://github.com/RAMP-Protocol/protocol/blob/main/proto/ramp/v1/ramp.proto)
 
 :::note[Envelope and correlation]
@@ -353,13 +355,13 @@ Requirements attached to a delivery.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `function` | repeated string | 1 | Functions used (standard: "ai-train", "ai-input", "ai-index", "search", "display") |
+| `function` | repeated string | 1 | Functions used — the FUNCTION restriction vocabulary (e.g. `ai-train`, `ai-input`, `search`; see [RestrictionKind → Registered tokens](#registered-tokens) for the complete list) |
 | `subfn` | repeated string | 2 | Sub-functions used (standard: "training", "rag", "grounding", "agent_view", "agent_actions") |
 | `consumed_quantity` | int32 | 3 | **REQUIRED.** Actual quantity consumed in the metering unit |
 | `displayed_to_user` | optional bool | 4 | Was output shown to a human? |
 | `citation_included` | optional bool | 5 | Was citation included? |
 | `attribution` | repeated AttributionDetail | 6 | Structured citation details |
-| `consumed_unit` | optional string | 8 | Metering unit for consumed_quantity (defaults to "tokens"). Same format as `Pricing.unit`/`Quota.metric`: a bare registered token (`[a-z0-9-]`) or a `vendor:namespaced` token, ≤64 chars (wire-enforced CEL). |
+| `consumed_unit` | optional string | 8 | Metering unit for consumed_quantity (defaults to "tokens"). Same format as `Pricing.unit`/`Quota.metric`: a bare lowercase-dashed token (`[a-z0-9-]`) or a `vendor:namespaced` token, ≤64 chars (wire-enforced CEL — structure only). |
 
 ### AttributionDetail
 
@@ -560,24 +562,6 @@ A Exchange authorized to sell this provider's content.
 | `endpoint` | string | 2 | RAMP ExchangeService endpoint URL |
 | `relationship` | ProviderRelationship | 3 | Relationship type (mirrors ads.txt DIRECT/RESELLER) |
 | `ext` | Struct | 15 | Extension point |
-
-### AccessPolicy
-
-Per-path content access rules. Used by Exchanges to communicate provider access policies.
-
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `default_policy` | ResourceAccessPolicy | 1 | Default policy for paths not matching any rule |
-| `rules` | repeated AccessPolicyRule | 2 | Path-specific overrides |
-
-### AccessPolicyRule
-
-Access policy for a URL path pattern.
-
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `pattern` | string | 1 | Glob pattern (e.g. "/premium/*", "/free/*") |
-| `policy` | ResourceAccessPolicy | 2 | Access policy for matching paths |
 
 ## Messages -- Broker Protocol
 
@@ -783,7 +767,9 @@ A single constraint on one licensing dimension: function (what), geography (wher
 
 A usage cap that gates whether a `LicenseTerm` remains valid. Quotas limit consumption before a term expires or must be renegotiated — they are NOT billing quantities.
 
-**Metric vocabulary**: proto-native — `(ramp.v1.vocab)` on `Quota.metric`. Standard metrics: `accesses`, `tokens`, `input-tokens`, `display-words`, `impressions`, `copies`, `seats`, `units-manufactured`.
+**Metric vocabulary**: proto-native — `(ramp.v1.vocab)` on `Quota.metric`. The registered metrics, rendered from the proto at build time:
+
+<VocabTable axis="quota-metric" />
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -816,7 +802,7 @@ The structured detail attached to every non-OK transport error.
 |---|---|---|---|
 | `message` | string | 1 | Developer-facing, **non-authoritative** human message. Clients MUST branch on the typed reason, never on this text. |
 | `domain` | string | 2 | Stable grouping for the failing surface, e.g. `"ramp.v1.ExchangeService"`. Mirrors `google.rpc.ErrorInfo.domain`. |
-| `metadata` | map<string,string> | 3 | Dynamic key/value context that also appears in `message` (ids, limits, axes). Mirrors `google.rpc.ErrorInfo.metadata`. |
+| `metadata` | `map<string,string>` | 3 | Dynamic key/value context that also appears in `message` (ids, limits, axes). Mirrors `google.rpc.ErrorInfo.metadata`. |
 | `transaction_denial` | TransactionDenial | 10 | `reason` oneof — ExecuteTransaction denial |
 | `catalog_rejection` | CatalogRejection | 11 | `reason` oneof — CatalogService rejection |
 | `registration_failure` | RegistrationFailure | 12 | `reason` oneof — agent/provider registration refused |
@@ -1011,6 +997,25 @@ Which dimension a `Restriction` constrains.
 | 3 | USER_TYPE | Who the agent is. Tokens authored as `(ramp.v1.vocab_enum)` on this value. |
 | 4 | OTHER | Custom dimension; escape hatch, linted and discouraged. |
 
+#### Registered tokens
+
+The complete token list for each axis, rendered directly from the proto's
+`(ramp.v1.vocab_enum)` options at build time — not hand-maintained here, so it
+cannot drift from the contract. Any `vendor:namespaced` token is also accepted
+on every axis; these are the registered bare tokens.
+
+**FUNCTION** — what the agent may do:
+
+<VocabTable axis="function" />
+
+**GEOGRAPHY** — registered specials (plus structural ISO 3166-1 alpha-2 codes):
+
+<VocabTable axis="geography" />
+
+**USER_TYPE** — what kind of entity the agent represents:
+
+<VocabTable axis="user-type" />
+
 ### QuotaWindow
 
 Time window over which a `Quota.limit` accumulates.
@@ -1065,13 +1070,13 @@ When an `Obligation` activates.
 | 9 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
 | 10 | DELEGATION_INVALID | Delegation missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or its attenuation does not check out |
 | 11 | SCOPE_INSUFFICIENT | Requester scopes don't cover this resource |
-| 12 | ENTITLEMENT_MISSING | No entitlement biscuit presented for a subscription-only offer |
-| 13 | ENTITLEMENT_MALFORMED | Entitlement biscuit failed Biscuit v2 decode |
-| 14 | ENTITLEMENT_EXPIRED | Entitlement biscuit's validity window has passed |
-| 15 | ENTITLEMENT_WRONG_BUYER | Biscuit's `subscriber_org` does not match the asserted buyer |
+| 12 | ENTITLEMENT_MISSING | No entitlement token presented for a subscription-only offer |
+| 13 | ENTITLEMENT_MALFORMED | Entitlement token failed to decode (malformed) |
+| 14 | ENTITLEMENT_EXPIRED | Entitlement token's validity window has passed |
+| 15 | ENTITLEMENT_WRONG_BUYER | Token's `subscriber_org` does not match the asserted buyer |
 | 16 | SUBSCRIPTION_LAPSED | The covering subscription contract has lapsed |
 | 17 | ENTITLEMENT_NOT_GRANTED | Subscription exists but no buyer-side grant ties this caller to it |
-| 18 | ENTITLEMENT_STALE_ATTENUATION | Biscuit authority sound but the per-request attenuation is missing/stale |
+| 18 | ENTITLEMENT_STALE_ATTENUATION | Token authority sound but the per-request attenuation is missing/stale |
 
 ### DisputeReason
 
@@ -1213,12 +1218,3 @@ Signals whether resource content changes over time. Drives hash verification beh
 | 0 | UNSPECIFIED | |
 | 1 | DIRECT | Provider has a direct contract with this Exchange |
 | 2 | RESELLER | Exchange resells content via another authorized party |
-
-### ResourceAccessPolicy
-
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | LICENSED | Content requires a RAMP transaction |
-| 2 | OPEN | Content is freely accessible |
-| 3 | BLOCKED | Content is not available to AI systems |

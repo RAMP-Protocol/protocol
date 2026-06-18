@@ -127,13 +127,13 @@ Authorization denials use a closed enum:
 | `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access/spend count exhausted for the current period |
 | `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent |
 | `DENIAL_REASON_SCOPE_INSUFFICIENT` | Requester scopes do not cover the resource |
-| `DENIAL_REASON_ENTITLEMENT_MISSING` | No entitlement biscuit presented for a subscription-only offer |
-| `DENIAL_REASON_ENTITLEMENT_MALFORMED` | Entitlement biscuit failed Biscuit v2 decode |
-| `DENIAL_REASON_ENTITLEMENT_EXPIRED` | Entitlement biscuit's validity window has passed |
-| `DENIAL_REASON_ENTITLEMENT_WRONG_BUYER` | Biscuit's `subscriber_org` does not match the asserted buyer |
+| `DENIAL_REASON_ENTITLEMENT_MISSING` | No entitlement token presented for a subscription-only offer |
+| `DENIAL_REASON_ENTITLEMENT_MALFORMED` | Entitlement token failed to decode (malformed) |
+| `DENIAL_REASON_ENTITLEMENT_EXPIRED` | Entitlement token's validity window has passed |
+| `DENIAL_REASON_ENTITLEMENT_WRONG_BUYER` | Token's `subscriber_org` does not match the asserted buyer |
 | `DENIAL_REASON_SUBSCRIPTION_LAPSED` | The covering subscription contract has lapsed |
 | `DENIAL_REASON_ENTITLEMENT_NOT_GRANTED` | Subscription exists but no buyer-side grant ties this caller to it |
-| `DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION` | Biscuit authority sound but the per-request attenuation is missing/stale |
+| `DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION` | Token authority sound but the per-request attenuation is missing/stale |
 
 ## SignedURLIssued
 
