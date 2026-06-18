@@ -386,3 +386,42 @@ deliberately — a key there would be ceremony, not a guarantee. The field is
 declared in the contract ahead of full enforcement: the Exchange dedupes
 `ExecuteTransaction` today, and the remaining RPCs adopt the same check as the
 implementation catches up to the contract — the proto leads, the services follow.
+
+## Docs are rendered from the proto descriptor, not hand-written or regex-parsed
+
+The documentation site derives everything it says about the contract from the
+**compiler's descriptor**, in one TypeScript pipeline — no hand-typed tables, no
+`.proto` text parsing, no reimplemented utilities.
+
+**Why the descriptor.** Protobuf is self-describing: `buf build -o gen/descriptor.binpb`
+emits a `FileDescriptorSet` — the schema as data — carrying every message, field,
+enum, service, the custom options (`buf.validate` CEL, `(ramp.v1.vocab)`), and, with
+source info, the comments (`SourceCodeInfo`). It is the same artifact every code
+generator consumes, and it is complete and language-neutral. Crucially it is NOT the
+generated `gen/ts` runtime (which lacks protovalidate and strips comments) — we read
+the descriptor as data via `@bufbuild/protobuf` as a codec, so `gen/ts`'s
+incompleteness never enters the docs pipeline.
+
+**The pipeline.**
+- `gen/descriptor.binpb` is a committed, drift-gated generated artifact (Amplify reads
+  the file; no `buf` at docs-build time).
+- One TS module reads it (`@bufbuild/protobuf`) and exposes enums/values with comments
+  (path-matched from `SourceCodeInfo`) and the vocab options.
+- A remark plugin injects enum/vocab tables as **mdast** and autolinks proto-symbol
+  references across prose *and* the generated table cells in a single pass, using
+  `github-slugger` (exactly Starlight's heading-id slugger) for anchors.
+  `starlight-links-validator` validates the result. Rendering and linking are one
+  pipeline, so a symbol named in a proto comment is rendered AND linked automatically.
+
+**Descriptions live in the proto.** An enum value's description is its proto comment —
+the single source — rendered to the table. To change a description, edit the proto.
+
+**Superseded approach (removed).** The earlier Go tooling — `cmd/symbolsjson`
+(descriptor walk + regex enum-comment parse + a hand-rolled `slugify`) and
+`cmd/vocabjson` (emitting a vocab JSON view from `gen/go/vocab`) — was a wrong-tradeoff
+detour: it optimized for "Go-only, reuse the vocab Go packages" and so reimplemented a
+slugger that already exists (`github-slugger`), parsed a compiled format with regex
+instead of reading the descriptor, and rendered tables as opaque Astro components the
+autolink pass could not see into. All of it is deleted. `protoc-gen-rampvocab` and
+`gen/go/vocab` stay — they are a real Go-SDK surface the conformance suite uses
+(`pricingunits.IsRegistered`).

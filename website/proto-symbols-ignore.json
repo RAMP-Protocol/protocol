@@ -1,5 +1,5 @@
 {
-  "_comment": "Proto-symbol-shaped tokens in prose that intentionally do NOT resolve against the current descriptor — references kept for historical contrast with a removed or renamed field, where the owning type still exists. The rehype-proto-autolink plugin fails the build on any reference whose proto type exists but whose member is gone, UNLESS it is listed here. Entries are self-cleaning: the build fails if a listed token starts resolving again (stale). Keep this list as small as possible — a live symbol belongs in the proto, not here.",
+  "_comment": "Proto-symbol-shaped tokens in prose that intentionally do NOT resolve against the current descriptor — references kept for historical contrast with a removed or renamed field, where the owning type still exists. The remark-proto plugin fails the build on any reference whose proto type exists but whose member is gone, UNLESS it is listed here. Entries are self-cleaning: the build fails if a listed token starts resolving again (stale). Keep this list as small as possible — a live symbol belongs in the proto, not here.",
   "ignore": [
     "Offer.quality",
     "Offer.restrictions",

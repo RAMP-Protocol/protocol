@@ -3,8 +3,6 @@ title: "Licensing Terms"
 description: "How RAMP models resource licensing: terms, restrictions, quotas, and obligations"
 ---
 
-import VocabTable from '../../../components/VocabTable.astro';
-import EnumTable from '../../../components/EnumTable.astro';
 
 ## Overview
 
@@ -61,15 +59,15 @@ Each restriction carries:
 
 **Standard function tokens** (rendered from the proto at build, not hand-listed):
 
-<VocabTable axis="function" />
+::proto-vocab{axis=function}
 
 **Standard geography tokens** — registered specials (plus structural ISO 3166-1 alpha-2 codes such as `US`, `DE`, `GB`, … and the wildcard `*` for worldwide):
 
-<VocabTable axis="geography" />
+::proto-vocab{axis=geography}
 
 **Standard user-type tokens**:
 
-<VocabTable axis="user-type" />
+::proto-vocab{axis=user-type}
 
 Unknown tokens during ingest produce a `PushResourcesResponse.warnings[]` entry — the term is accepted but flagged. This is forward-compatible: new vocab tokens can be added to the registry and used immediately without breaking existing Exchange deployments.
 
@@ -84,7 +82,7 @@ Each quota has:
 
 **Standard metric tokens** (rendered from the proto at build):
 
-<VocabTable axis="quota-metric" />
+::proto-vocab{axis=quota-metric}
 
 Example: a stock photo with an impressions cap of 500,000 lifetime uses:
 ```
@@ -101,9 +99,9 @@ Each obligation has:
 - `scope_license` — the license derivatives must be released under, as a `License` (required for `SHARE_ALIKE`; set `id` for an SPDX short-id and/or `uri`). A referenced `uri` requires a `uri_digest`, the same swap-protection as any other license reference.
 - `detail` — human-readable text (recommended for all kinds, e.g., exact attribution wording or notice text; an `OTHER` obligation without it produces a lint warning).
 
-<EnumTable enum="ObligationKind" label="Kind" />
+::proto-enum{name=ObligationKind label=Kind}
 
-<EnumTable enum="ObligationTrigger" label="Trigger" />
+::proto-enum{name=ObligationTrigger label=Trigger}
 
 Key distinction from the retired pricing model values: attribution is not a payment model. A resource can require attribution **and** charge per-access. A resource can require contribution **and** be subscribed. Keeping them separate in `ObligationKind` allows any combination of pricing and behavioral requirements.
 

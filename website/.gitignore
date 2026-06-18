@@ -2,13 +2,6 @@
 dist/
 # generated types
 .astro/
-# generated views — recomputed every build from the proto, never hand-edited,
-# never committed. vocab.json (cmd/vocabjson) feeds <VocabTable>; symbols.json
-# (cmd/symbolsjson) feeds the rehype-proto-autolink reference guard.
-src/data/vocab.json
-src/data/symbols.json
-src/data/enums.json
-
 # dependencies
 node_modules/
 

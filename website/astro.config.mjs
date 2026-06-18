@@ -3,14 +3,16 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightMermaid from '@pasqal-io/starlight-client-mermaid';
 import starlightLinksValidator from 'starlight-links-validator';
-import rehypeProtoAutolink from './plugins/rehype-proto-autolink.mjs';
+import remarkDirective from 'remark-directive';
+import remarkProto from './plugins/remark-proto.mjs';
 
 export default defineConfig({
 	markdown: {
-		// Validates + links every `Message.field` / `ENUM_VALUE` reference in the
-		// docs against the proto descriptor (src/data/symbols.json); fails the build
-		// on an unknown high-confidence reference. See plugins/rehype-proto-autolink.mjs.
-		rehypePlugins: [rehypeProtoAutolink],
+		// Render proto-derived tables (::proto-enum / ::proto-vocab) from the descriptor
+		// AND autolink/validate every proto reference in one mdast pass — so a reference
+		// in a rendered table links just like one in prose, and an unknown high-confidence
+		// reference fails the build. See plugins/remark-proto.mjs + proto-schema.mjs.
+		remarkPlugins: [remarkDirective, remarkProto],
 	},
 	integrations: [
 		starlight({

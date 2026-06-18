@@ -3,8 +3,6 @@ title: "Proto: RAMP v1"
 description: "RAMP v1.0 protobuf reference -- ExchangeService, CatalogService, and all message types"
 ---
 
-import VocabTable from '../../../components/VocabTable.astro';
-import EnumTable from '../../../components/EnumTable.astro';
 
 Source: [`proto/ramp/v1/ramp.proto`](https://github.com/RAMP-Protocol/protocol/blob/main/proto/ramp/v1/ramp.proto)
 
@@ -770,7 +768,7 @@ A usage cap that gates whether a `LicenseTerm` remains valid. Quotas limit consu
 
 **Metric vocabulary**: proto-native — `(ramp.v1.vocab)` on `Quota.metric`. The registered metrics, rendered from the proto at build time:
 
-<VocabTable axis="quota-metric" />
+::proto-vocab{axis=quota-metric}
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -875,81 +873,29 @@ A usage report could not be accepted.
 
 ### CatalogRejectionReason
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | NOT_CATALOG_CONTRIBUTOR | Caller is not an authorized contributor for the domain |
-| 2 | TENANT_MISMATCH | `tenant_id` does not match the authenticated caller |
-| 3 | DOMAIN_NOT_VERIFIED | Contributing domain is not verified |
-| 4 | SIGNATURE_INVALID | Request signature missing or invalid |
-| 5 | MALFORMED_ENTRY | A resource entry failed schema/validation |
-| 6 | UNKNOWN_VOCAB_TOKEN | An unregistered vocab token in a restriction/term |
-| 7 | QUOTA_EXCEEDED | Contributor push quota exceeded |
+::proto-enum{name=CatalogRejectionReason numbers}
 
 ### RegistrationFailureReason
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | DOMAIN_NOT_VERIFIED | Caller domain is not verified |
-| 2 | INVALID_KEY | Signing key malformed or unsupported |
-| 3 | SIGNATURE_INVALID | Request signature invalid |
-| 4 | ALREADY_REGISTERED | Identity already registered |
-| 5 | QUOTA_EXCEEDED | Registration quota exceeded |
+::proto-enum{name=RegistrationFailureReason numbers}
 
 ### DisputeFailureReason
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | TRANSACTION_NOT_FOUND | `transaction_id` is unknown |
-| 2 | REPORT_NOT_FILED | No UsageReport precedes the dispute (`report_id` missing/unknown) |
-| 3 | WINDOW_EXPIRED | Filed outside the allowed dispute window |
-| 4 | DUPLICATE | A dispute already exists for this transaction |
-| 5 | INELIGIBLE | The transaction/state is not disputable |
+::proto-enum{name=DisputeFailureReason numbers}
 
 ### DomainVerificationFailureReason
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | CHALLENGE_NOT_FOUND | Token not served at the well-known path |
-| 2 | CHALLENGE_MISMATCH | Served token does not match the issued token |
-| 3 | CHALLENGE_EXPIRED | Confirmation arrived after the challenge expired |
-| 4 | FETCH_FAILED | Exchange could not fetch the verification URL |
-| 5 | EXCHANGE_NOT_AUTHORIZED | `ramp.json` does not list this Exchange |
-| 6 | KEY_REGISTRATION_FAILED | Signing-key registration failed during confirmation |
+::proto-enum{name=DomainVerificationFailureReason numbers}
 
 ### RetrievalAuthFailureReason
 
 Single-sources the delivery-edge token unions (signed-URL checks in `verify.ts`, RFC 9421 proof-of-possession in `pop.ts`).
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | URL_EXPIRED | Signed URL expired |
-| 2 | URL_SIGNATURE_MISSING | Signed-URL signature missing |
-| 3 | URL_EXPIRY_MISSING | Signed-URL expiry missing |
-| 4 | URL_SIGNATURE_MISMATCH | Signed-URL signature mismatch |
-| 5 | AGENT_KEY_MISSING | Fetcher did not present its public key |
-| 6 | PROOF_SIGNATURE_MISSING | Proof-of-possession signature missing |
-| 7 | KEYID_MISMATCH | PoP keyid mismatch |
-| 8 | THUMBPRINT_MISMATCH | Presented key's thumbprint ≠ `agent_identity_hash` |
-| 9 | PROOF_CREATED_MISSING | PoP `created` parameter missing |
-| 10 | PROOF_EXPIRY_MISSING | PoP expiry missing |
-| 11 | PROOF_EXPIRED | PoP expired |
-| 12 | PROOF_SIGNATURE_INVALID | PoP signature invalid |
+::proto-enum{name=RetrievalAuthFailureReason numbers}
 
 ### UsageReportRejectionReason
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | TRANSACTION_NOT_FOUND | `transaction_id` is unknown |
-| 2 | DUPLICATE | A report was already filed for this transaction |
-| 3 | WINDOW_EXPIRED | Filed outside the reporting window |
-| 4 | MISSING_REQUIRED_FIELDS | `ReportingObligation.required_fields` not satisfied |
-| 5 | MALFORMED | Report payload failed validation |
+::proto-enum{name=UsageReportRejectionReason numbers}
 
 ## Enums
 
@@ -957,45 +903,31 @@ Single-sources the delivery-edge token unions (signed-URL checks in `verify.ts`,
 
 The charging **structure** only (a closed set). The open-ended metering basis ("per what") is NOT enumerated here — it lives in `Pricing.unit` as a registry-governed vocabulary. `UNSPECIFIED` is rejected at ingest (omission cannot default to FREE).
 
-<EnumTable enum="PricingModel" numbers />
+::proto-enum{name=PricingModel numbers}
 
 The metering basis ("per what") is the `Pricing.unit` vocabulary, not a model; a subscription is `FREE` + `scopes`; attribution and contribution are `Obligation.kind`s; revenue-share settlement is off-protocol.
 
 **Registered `Pricing.unit` tokens** (the metering basis — rendered from the proto, any `vendor:namespaced` token also accepted):
 
-<VocabTable axis="pricing-unit" />
+::proto-vocab{axis=pricing-unit}
 
 ### PricingMetering
 
 How usage is tracked for billing reconciliation. Used in `Pricing.metering` (field 9). Absent = `ONLINE`.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | ONLINE | Default. Exchange tracks usage events in real time. ReportUsage is required. |
-| 1 | NONE | One-time perpetual sale. No ongoing metering; `billing_id` is issued at `ExecuteTransaction` and the ledger entry is closed. No `ReportUsage` required. |
-| 2 | OFFLINE_SELF_REPORTED | Agent self-reports physical-world consumption (e.g. units manufactured from a licensed design). Exchange audits. |
+::proto-enum{name=PricingMetering numbers}
 
 ### TermSemantics
 
 How the Exchange interprets a `LicenseTerm`'s machine fields.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | Unset — rejected at ingest |
-| 1 | ENUMERATED | Machine `restrictions`/`quotas`/`obligations` are the complete, authoritative expression of the term (internally consistent, no self-contradiction) and are enforced. Pricing MUST be present. |
-| 2 | REFERENCE_ONLY | The document at `License.uri` (MUST be non-empty) is the authoritative, complete source; the agent reads it before using. Machine `restrictions`/`quotas`/`obligations` are **optional** here — the publisher MAY send Pricing alone — but any that **are** sent must be accurate (MUST NOT contradict the referenced document) and **are** enforced just like ENUMERATED. Pricing is still required. |
+::proto-enum{name=TermSemantics numbers}
 
 ### RestrictionKind
 
 Which dimension a `Restriction` constrains.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | Unset — rejected at ingest |
-| 1 | FUNCTION | What the agent may do. Tokens authored as `(ramp.v1.vocab_enum)` on this value. |
-| 2 | GEOGRAPHY | Where the agent operates. ISO 3166-1 alpha-2 (structural) + the specials `EU`, `EEA`, `*`. |
-| 3 | USER_TYPE | Who the agent is. Tokens authored as `(ramp.v1.vocab_enum)` on this value. |
-| 4 | OTHER | Custom dimension; escape hatch, linted and discouraged. |
+::proto-enum{name=RestrictionKind numbers}
 
 #### Registered tokens
 
@@ -1006,135 +938,71 @@ on every axis; these are the registered bare tokens.
 
 **FUNCTION** — what the agent may do:
 
-<VocabTable axis="function" />
+::proto-vocab{axis=function}
 
 **GEOGRAPHY** — registered specials (plus structural ISO 3166-1 alpha-2 codes):
 
-<VocabTable axis="geography" />
+::proto-vocab{axis=geography}
 
 **USER_TYPE** — what kind of entity the agent represents:
 
-<VocabTable axis="user-type" />
+::proto-vocab{axis=user-type}
 
 ### QuotaWindow
 
 Time window over which a `Quota.limit` accumulates.
 
-<EnumTable enum="QuotaWindow" numbers />
+::proto-enum{name=QuotaWindow numbers}
 
 ### ObligationKind
 
 What the agent must do after use. `ATTRIBUTION` and `CONTRIBUTION` are behavioral requirements, not pricing models.
 
-<EnumTable enum="ObligationKind" numbers />
+::proto-enum{name=ObligationKind numbers}
 
 ### ObligationTrigger
 
 When an `Obligation` activates.
 
-<EnumTable enum="ObligationTrigger" numbers />
+::proto-enum{name=ObligationTrigger numbers}
 
 ### DenialReason
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | BILLING_REF_INACTIVE | `billing_ref` is not active / not recognized by the billing system |
-| 2 | INSUFFICIENT_BALANCE | Buyer's balance too low |
-| 3 | RATE_LIMITED | Too many requests |
-| 4 | CONTENT_UNAVAILABLE | Content no longer available |
-| 5 | RESTRICTION_NOT_SATISFIED | Accepted term's restriction not satisfied by the request (axes in `restriction_mismatches` — on `ErrorDetail.transaction_denial` for a single denial, or on `TransactionResultItem` for a batch item; same `RestrictionKind` vocabulary as the terms) |
-| 6 | REPORTING_OVERDUE | Buyer has >20% overdue reports (MAY threshold) |
-| 7 | OFFER_EXPIRED | Offer TTL exceeded |
-| 8 | SIGNATURE_INVALID | Offer signature verification failed |
-| 9 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
-| 10 | DELEGATION_INVALID | Delegation missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or its attenuation does not check out |
-| 11 | SCOPE_INSUFFICIENT | Requester scopes don't cover this resource |
-| 12 | ENTITLEMENT_MISSING | No entitlement token presented for a subscription-only offer |
-| 13 | ENTITLEMENT_MALFORMED | Entitlement token failed to decode (malformed) |
-| 14 | ENTITLEMENT_EXPIRED | Entitlement token's validity window has passed |
-| 15 | ENTITLEMENT_WRONG_BUYER | Token's `subscriber_org` does not match the asserted buyer |
-| 16 | SUBSCRIPTION_LAPSED | The covering subscription contract has lapsed |
-| 17 | ENTITLEMENT_NOT_GRANTED | Subscription exists but no buyer-side grant ties this caller to it |
-| 18 | ENTITLEMENT_STALE_ATTENUATION | Token authority sound but the per-request attenuation is missing/stale |
+::proto-enum{name=DenialReason numbers}
 
 ### DisputeReason
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | CONTENT_MISMATCH | Content hash does not match what was promised in the Offer |
-| 2 | DELIVERY_FAILED | Resource not delivered (signed URL returned 404/403/5xx) |
-| 3 | WRONG_CONTENT | Delivered, but entirely different from what was described |
-| 4 | EXPIRED_BEFORE_FETCH | Signed URL expired before the agent could fetch |
-| 5 | INCOMPLETE_CONTENT | Resource was truncated or incomplete |
+::proto-enum{name=DisputeReason numbers}
 
 ### DisputeStatus
 
 Full dispute lifecycle from filing to final resolution.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | FILED | Dispute received, processing started |
-| 2 | AUTO_RESOLVED | Tier 1 automated resolution (< 1s) |
-| 3 | EVIDENCE_NEEDED | Additional evidence required from a party |
-| 4 | UNDER_REVIEW | Tier 2 rule-based review in progress |
-| 5 | ESCALATED | Tier 3 pattern investigation triggered |
-| 6 | RESOLVED | Decision made (Tier 2) |
-| 7 | APPEALED | Losing party submitted new evidence |
-| 8 | SETTLED | Investigation complete, settlement applied (Tier 3) |
-| 9 | FINAL | Terminal state -- dispute closed |
+::proto-enum{name=DisputeStatus numbers}
 
 ### ResolutionType
 
 Outcome of a resolved dispute.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | CREDIT | Account credit applied to next billing cycle |
-| 2 | REDELIVERY | New signed URL issued for same content |
-| 3 | REJECTED | Dispute rejected with reason |
-| 4 | INVESTIGATION | Escalated to pattern analysis (Tier 3) |
+::proto-enum{name=ResolutionType numbers}
 
 ### CitationFormat
 
 How the citation is presented to the user.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | LINK | Hyperlink citation |
-| 1 | FOOTNOTE | Footnote citation |
-| 2 | INLINE | Inline text citation |
+::proto-enum{name=CitationFormat numbers}
 
 ### OfferAbsenceReason
 
 Why no offers are available for a requested URI.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | NOT_IN_CATALOG | URI is not in this Exchange's catalog |
-| 2 | CONTENT_BLOCKED | Provider opted out of AI access |
-| 3 | RESTRICTION_FILTERED | Offers exist but were pre-filtered for one or more restriction axes the requester stated (axes in `restriction_filters`, same `RestrictionKind` vocabulary as the terms); convenience filter, not enforcement |
-| 4 | TEMPORARILY_UNAVAILABLE | Content temporarily unavailable (e.g. feed refresh) |
-| 5 | NOT_AUTHORIZED | Exchange not authorized by provider |
-| 6 | SCOPE_INSUFFICIENT | Requester's scopes/subscription do not cover this resource. Applies wherever access is subscription- or scope-gated; the resource exists but the requester's token/subscription doesn't grant it. (Exchange MAY omit silently where existence must stay hidden.) |
-| 7 | UNKNOWN_CRITICAL_EXTENSION | Consumer encountered `ext_critical` keys it does not recognize |
+::proto-enum{name=OfferAbsenceReason numbers}
 
 ### RequesterType
 
 What kind of entity is making the request.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | AGENT | Autonomous AI agent (LLM, RAG system, research bot) |
-| 2 | HUMAN_TOOL | Human using an AI-powered tool (copilot, assistant) |
-| 3 | SERVICE | Enterprise service account (automated pipeline, cron job) |
-| 4 | DELEGATED | Agent acting on behalf of a user (delegated identity) |
-| 5 | RESEARCH | Research pipeline (batch data collection, model training) |
+::proto-enum{name=RequesterType numbers}
 
 ### Role
 
@@ -1150,51 +1018,22 @@ Identifies which RAMP participant a `WellKnownManifest` describes.
 
 ### DiscoveryMethod
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | EXCHANGE | Standard Exchange catalog lookup |
-| 2 | SEARCH | Via search engine (Exa, Tavily, etc.) |
-| 3 | RECOMMENDATION | Via content recommendation service |
-| 4 | SYNDICATION | Via content syndication tracking |
+::proto-enum{name=DiscoveryMethod numbers}
 
 ### DeliveryMethod
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | DIRECT | Content returned inline |
-| 2 | INSTRUCTIONS | Delivery instructions (signed URL, token) |
-| 3 | STREAMING | Real-time streaming connection (WebSocket, SSE, gRPC stream) |
+::proto-enum{name=DeliveryMethod numbers}
 
 ### ResourceMutability
 
 Signals whether resource content changes over time. Drives hash verification behavior.
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | STATIC | Content is immutable. Hash is stable and verifiable. Mismatch is disputable. |
-| 2 | DYNAMIC | Content changes between offer and fetch. Hash mismatch is expected, not disputable. Use `data_as_of` for freshness. |
-| 3 | LIVE | Content does not exist at offer time (real-time streaming). No content_hash applicable. Metering is time-based. |
+::proto-enum{name=ResourceMutability numbers}
 
 ### IngestionSource
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | RAMP_SITEMAP | RAMP XML namespace in sitemap |
-| 2 | RSL | RSL rsl.txt |
-| 3 | SITEMAP | Standard sitemap.xml |
-| 4 | HTML_CRAWL | HTML crawl + readability extraction |
-| 5 | CMS_API | CMS REST API (WordPress, etc.) |
-| 6 | MANUAL | Manual configuration |
-| 7 | CATALOG_API | Third-party CatalogService push |
+::proto-enum{name=IngestionSource numbers}
 
 ### ProviderRelationship
 
-| Value | Name | Description |
-|---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | DIRECT | Provider has a direct contract with this Exchange |
-| 2 | RESELLER | Exchange resells content via another authorized party |
+::proto-enum{name=ProviderRelationship numbers}
