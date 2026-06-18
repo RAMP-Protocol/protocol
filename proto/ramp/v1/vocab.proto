@@ -1,0 +1,43 @@
+// RAMP v1.0 — Vocabulary field option.
+//
+// Defines the custom field option that carries registry-governed vocabularies
+// directly on the fields that use them. The token list for an open axis (the
+// metering basis on Pricing.unit, and sibling axes that follow) is authored in
+// exactly one place: the (ramp.v1.vocab) entries on the field itself.
+//
+// A small buf plugin (protoc-gen-rampvocab) reads these entries structurally
+// off the field descriptor and emits typed string constants, an All slice, and
+// an IsRegistered membership check per axis. Structural validation (format) and
+// cross-field rules live in protovalidate CEL — never re-listing the tokens —
+// so the constants, the membership check, and the registry cannot drift.
+
+syntax = "proto3";
+
+package ramp.v1;
+
+option go_package = "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+  // vocab carries the registered bare tokens for an open vocabulary axis,
+  // authored directly on the field that uses it as a repeated custom option.
+  // Number 50001 sits in the internal extension range (50000–99999). Field
+  // axes (Pricing.unit, Quota.metric) carry their tokens here; axes selected
+  // by an enum value (function, geography, user-type, selected by
+  // RestrictionKind) carry their tokens on the enum-value extension below.
+  repeated string vocab = 50001;
+}
+
+extend google.protobuf.EnumValueOptions {
+  // vocab_enum is the enum-value-scoped twin of (ramp.v1.vocab) above. Axes
+  // whose token list is selected by an enum value — the function / geography /
+  // user-type tokens carried in Restriction.permitted/prohibited and selected
+  // by Restriction.kind — author their tokens directly on the corresponding
+  // RestrictionKind enum value. Same registry mechanism: protoc-gen-rampvocab
+  // reads these entries structurally off the enum-value descriptor and emits
+  // the per-axis constants + IsRegistered. This is a separate extension because
+  // an extend block targets one options message — 50001 cannot also extend
+  // EnumValueOptions; 50002 is the next slot in the same internal block.
+  repeated string vocab_enum = 50002;
+}

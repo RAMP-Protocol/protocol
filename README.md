@@ -22,6 +22,7 @@ gen/          Generated SDKs
   go/         Go types + Connect-Go client/server
   ts/         TypeScript types (@bufbuild/protobuf + @connectrpc/connect)
 
+cmd/          Build tooling (Go) — protoc-gen-rampvocab (vocabulary codegen plugin)
 website/      Documentation site (Astro Starlight)
 amplify.yml   AWS Amplify build configuration for the website
 ```
@@ -51,4 +52,4 @@ import { ExchangeService } from "@postindustria-tech/ramp-protocol";
 
 ## License
 
-Code (everything under `proto/` and `gen/`) is licensed under the [Apache License 2.0](LICENSE). Documentation (the website source under `website/` and the rendered spec) is licensed under [Creative Commons Attribution-NoDerivatives 4.0 International (CC BY-ND 4.0)](https://creativecommons.org/licenses/by-nd/4.0/) — that license is declared in the website footer.
+Code (everything under `proto/`, `gen/`, and `cmd/`) is licensed under the [Apache License 2.0](LICENSE). Documentation (the website source under `website/` and the rendered spec) is licensed under [Creative Commons Attribution-NoDerivatives 4.0 International (CC BY-ND 4.0)](https://creativecommons.org/licenses/by-nd/4.0/) — that license is declared in the website footer.

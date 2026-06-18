@@ -216,7 +216,7 @@ CoMP metadata is carried as `comp.*` extension fields in the `ext` Struct on pro
 | **Core proto fields** | `c2pa_manifest`, `c2pa_status` (C2PAStatus enum), `soft_binding`, `soft_binding_method` on ResourceIdentity |
 | **Attestation claims** | 16 standardized `c2pa.*` claim names covering identity, trust, provenance, rights, and content binding |
 | **Standards** | C2PA 2.x, COSE Sign1 (RFC 9052), X.509, JUMBF (ISO 19566-5), RFC 3161 |
-| **Key capabilities** | C2PA manifest validation bridged to RAMP attestations; `c2pa.training_mining` mapped to `AccessRestrictions.prohibited_functions`; soft binding for post-transcoding dispute resolution; TSA-grade temporal claims |
+| **Key capabilities** | C2PA manifest validation bridged to RAMP attestations; `c2pa.training_mining` mapped to a `LicenseTerm.restrictions` `Restriction{kind: RESTRICTION_KIND_FUNCTION, prohibited: [...]}`; soft binding for post-transcoding dispute resolution; TSA-grade temporal claims |
 | **Conformance levels** | Level A (status + URI), Level B (bridged attestation + rights enforcement), Level C (full provenance + soft binding + TSA) |
 
 C2PA proves **what content IS** (provenance, creator, edit history). RAMP manages **what you can DO with it** (pricing, transaction, dispute). This profile bridges the two: a C2PA verification vendor validates the manifest using X.509/COSE and publishes the results as a RAMP `ResourceAttestation` signed with Ed25519. C2PA-unaware agents benefit from the validation results and rights enforcement without needing JUMBF or COSE libraries.

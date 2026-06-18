@@ -76,22 +76,22 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Discov
     "id": "neuro-bot",
     "domain": "brainlab.edu",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
-    ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
-    "scopes": ["*"],
-    "signature": "ed25519:f7a2b8c3d4e5...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
+  "uris": [
+    "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "supported_profiles": ["ramp-medimg-v1"]
 }
 ```
 
 **Key observations:**
 
-- **`uris`** — `dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42` is a Study Instance UID, the globally unique identifier for a DICOM imaging study. The Broker resolved "brain MRI from TCIA TCGA-GBM collection, patient TCGA-06-0152" into this UID before querying the Exchange.
-- **`intended_use`** — `FUNCTION_AI_INPUT` (inference), not `FUNCTION_AI_TRAIN`. This distinction matters: training use requires a different DUA class and often carries different pricing.
+- **`ResourceQuery.uris`** — `dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42` is a Study Instance UID, the globally unique identifier for a DICOM imaging study. The Broker resolved "brain MRI from TCIA TCGA-GBM collection, patient TCGA-06-0152" into this UID before querying the Exchange.
+- **`acceptable_restrictions`** — axis `FUNCTION` with value `ai-input` (inference), not `ai-train`. This distinction matters: training use requires a different DUA class and often carries different pricing.
 - **`supported_profiles`** — declares that the agent understands `ramp-medimg-v1` extension fields. The Exchange will include imaging-specific metadata in the response.
 
 ---
@@ -111,22 +111,14 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
       "offers": [
         {
           "offer_id": "offer-tcia-gbm-0152-001",
-          "package": {
-            "id": "PKG-TCIA-TCGA-GBM-0152",
-            "title": "Brain MRI — TCGA-GBM Subject TCGA-06-0152",
-            "seller": "imaging.tcia.org",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_BINARY"]
-            }
-          },
+          "title": "Brain MRI — TCGA-GBM Subject TCGA-06-0152",
           "pricing": {
-            "model": "PRICING_MODEL_PER_RECORD",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 25.00,
             "currency": "USD",
             "unit_cost": 0.0295,
             "estimated_quantity": 847,
-            "unit": "instances"
+            "unit": "records"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -162,13 +154,25 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
               "signature": "base64-ed25519-tcia-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_SEARCH"],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN", "FUNCTION_AI_INDEX"]
-          },
-          "exchange_signature": "base64-ed25519-medimg-offer-sig...",
-          "signature_algorithm": "ed25519",
+          "terms": [
+            {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": ["ai-input", "search"],
+                  "prohibited": ["ai-train", "ai-index"]
+                }
+              ]
+            }
+          ],
+          "signature": "base64-ed25519-medimg-offer-sig...",
+          "signature_algorithm": "EdDSA",
           "ext": {
+            "comp.package_id": "PKG-TCIA-TCGA-GBM-0152",
+            "comp.seller": "imaging.tcia.org",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_BINARY"],
             "medimg.dua_required": true,
             "medimg.dua_type": "TCIA-Standard-v3",
             "medimg.irb_exemption": "de-identified-public-dataset",
@@ -186,7 +190,7 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
 
 **What the agent learns from this response:**
 
-- **Pricing**: `PRICING_MODEL_PER_RECORD` at $25.00 per study. The `unit_cost` ($0.0295/instance) and `estimated_quantity` (847 DICOM instances) enable cross-exchange comparison — an alternative Exchange offering the same study at a higher per-instance rate would be less economical.
+- **Pricing**: `PRICING_MODEL_PER_UNIT` (`unit: "records"`) at $25.00 per study. The `unit_cost` ($0.0295/instance) and `estimated_quantity` (847 DICOM instances) enable cross-exchange comparison — an alternative Exchange offering the same study at a higher per-instance rate would be less economical.
 
 - **De-identification attestation**: TCIA self-attests (Level 1) that the study was de-identified using HIPAA Safe Harbor method. The claims include specific de-identification steps: `burned_in_text_removed` (no patient name baked into pixel data) and `defacing_applied` (facial features removed from volumetric data). These are not generic quality claims — they are regulatory compliance attestations.
 
@@ -198,7 +202,7 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
 
   Regular `ext` keys (like `medimg.dicom_transfer_syntax`) follow the robustness principle: unknown keys are safely ignored. Critical keys break the transaction if not understood.
 
-- **Restrictions**: `FUNCTION_AI_INPUT` and `FUNCTION_SEARCH` are permitted. Training (`FUNCTION_AI_TRAIN`) is explicitly prohibited under the standard TCIA DUA for inference-only access. A separate DUA class (and different pricing) would be required for training use.
+- **Restrictions**: `ai-input` and `search` are permitted. Training (`ai-train`) is explicitly prohibited under the standard TCIA DUA for inference-only access. A separate DUA class (and different pricing) would be required for training use.
 
 ---
 
@@ -214,21 +218,12 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
   "id": "tx-mri-001",
   "offer_id": "offer-tcia-gbm-0152-001",
   "offer_signature": "base64-ed25519-medimg-offer-sig...",
-  "offer_signature_algorithm": "ed25519",
   "requester": {
     "id": "neuro-bot",
     "domain": "brainlab.edu",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
-    ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
-    "scopes": ["*"],
-    "signature": "ed25519:a8b9c0d1e2f3...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
-  "agent_signature": "ed25519:a8b9c0d1e2f3...",
-  "agent_signature_algorithm": "ed25519",
   "ext": {
     "compliance.dua_id": "DUA-TCIA-2026-042",
     "compliance.dua_signatory": "Dr. Sarah Chen, PI",
@@ -243,8 +238,8 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
 **The Exchange performs these checks, in order:**
 
 1. **Signature verification** — verifies `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
-2. **Agent authentication** — verifies `agent_signature` against `brainlab.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
-3. **DUA verification** — looks up `DUA-TCIA-2026-042` in its compliance registry. Verifies the DUA is (a) signed, (b) covers `brainlab.edu`, (c) covers `FUNCTION_AI_INPUT` use, (d) has not expired. **If the DUA is invalid, missing, or does not cover the requested use, the transaction is denied.**
+2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in HTTP headers) against `brainlab.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
+3. **DUA verification** — looks up `DUA-TCIA-2026-042` in its compliance registry. Verifies the DUA is (a) signed, (b) covers `brainlab.edu`, (c) covers `ai-input` use, (d) has not expired. **If the DUA is invalid, missing, or does not cover the requested use, the transaction is denied.**
 4. **Balance check** — confirms `neuro-bot@brainlab.edu` has sufficient balance ($25.00).
 5. **WAL write** — records the transaction before generating delivery credentials (write-before-sign invariant).
 6. **Delivery manifest generation** — instead of a single signed URL, generates a manifest containing 847 per-instance signed URLs grouped by series.
@@ -257,7 +252,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
   "id": "tx-mri-001",
   "error": {
     "code": "COMPLIANCE_GATE_FAILED",
-    "message": "DUA-TCIA-2026-042 not found or does not cover brainlab.edu for FUNCTION_AI_INPUT",
+    "message": "DUA-TCIA-2026-042 not found or does not cover brainlab.edu for ai-input",
     "details": {
       "required_dua_type": "TCIA-Standard-v3",
       "apply_url": "https://imaging.tcia.org/access/dua-application"
@@ -432,9 +427,9 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Report
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
+    "function": ["ai-input"],
     "consumed_quantity": 1,
-    "consumed_unit": "studies",
+    "consumed_unit": "records",
     "displayed_to_user": false,
     "citation_included": true
   },
@@ -466,7 +461,7 @@ Response:
 
 **Key differences from text usage reporting:**
 
-- **`consumed_quantity: 1`** with **`consumed_unit: "studies"`** — the pricing model is per-study, not per-token. The agent consumed one study regardless of how many of the 847 instances it actually downloaded.
+- **`consumed_quantity: 1`** with **`consumed_unit: "records"`** — the pricing model is per-study, not per-token. The agent consumed one study regardless of how many of the 847 instances it actually downloaded.
 - **`displayed_to_user: false`** — medical imaging is processed by the AI model, not displayed to a human in a chat interface.
 - **`ext` metadata** — the agent reports which series it accessed (4 of 8), how many instances it downloaded (600 of 847), and which model processed the data. This level of audit detail is important for regulated data — if a DUA violation investigation occurs, the Exchange has a complete record of what data was accessed and how it was used.
 - **7-day reporting window** — the longer window accommodates the reality that imaging analysis pipelines are batch processes, not interactive sessions.
@@ -491,7 +486,6 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Disput
   "description": "PHI discovered in delivered data. Private DICOM tag (0009,0010) in DWI series instance 47 contains unredacted patient name. De-identification attestation claimed Safe Harbor compliance. Requesting regulatory incident escalation — this is not a billing dispute.",
   "received_content_hash": "sha256:d4e5f6a7...",
   "received_hash_method": "sha256",
-  "agent_signature": "ed25519:b9c0d1e2f3a4...",
   "report_id": "rpt-mri-001",
   "ext": {
     "medimg.dispute_type": "REGULATORY_INCIDENT",
@@ -554,7 +548,7 @@ The Exchange generates a regulatory incident ID, notifies the provider (TCIA), a
 | **Multi-file delivery** | Manifest of 847 signed URLs with per-instance hashes and Merkle verification tree. |
 | **Merkle content hash** | `sha256-merkle` hash method enables partial verification without downloading all files. |
 | **Domain extension profile** | `ramp-medimg-v1` vocabulary: `medimg.*` claims in attestations, `compliance.*` fields in transactions. |
-| **Per-record metering** | `PRICING_MODEL_PER_RECORD` with `unit: "studies"` — one study = one billing unit regardless of file count. |
+| **Per-record metering** | `PRICING_MODEL_PER_UNIT` with `unit: "records"` — one study = one billing unit regardless of file count. |
 | **Non-HTTP URI** | `dicom://study/...` — RAMP's URI field is not limited to web URLs. |
 | **Extended reporting window** | 7-day reporting obligation (vs. 24 hours for text) accommodates batch analysis pipelines. |
 | **Regulatory dispute path** | Same `DisputeTransaction` RPC, but `ext_critical` elevates to regulatory incident handling. |
@@ -563,7 +557,7 @@ The Exchange generates a regulatory incident ID, notifies the provider (TCIA), a
 
 ## Next Steps
 
-- [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1) — per-article and subscription access with Biscuit delegation
+- [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1) — per-article and subscription access with delegation (JWT)
 - [Extension Profiles](/protocol/extension-profiles) — how domain-specific metadata flows through `ext` fields
 - [Content Attestation](/protocol/content-attestation) — attestation levels and de-identification claims
 - [Resource Mutability](/protocol/content-mutability) — STATIC vs DYNAMIC vs LIVE

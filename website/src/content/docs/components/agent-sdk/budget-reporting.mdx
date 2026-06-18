@@ -216,7 +216,7 @@ When `AutoReport` is disabled, the caller is responsible for submitting usage re
 resp, err := client.ReportUsage(ctx, ramp.UsageReport{
     TransactionID: result.TransactionID,
     BillingID:     result.BillingID,
-    Function:      "FUNCTION_AI_INPUT",
+    Function:      "ai-input",
     TokenCount:    1500,
 })
 // resp.ReportID is needed for any subsequent dispute
@@ -228,7 +228,7 @@ Previously `ReportUsage` returned only an error. In v1.0, it returns a `UsageRep
 err := client.ReportUsage(ctx, ramp.UsageReport{
     TransactionID: result.TransactionID,
     BillingID:     result.BillingID,
-    Function:      "FUNCTION_AI_INPUT",
+    Function:      "ai-input",
     TokenCount:    1500,
 })
 ```
@@ -308,8 +308,8 @@ The SDK exposes Prometheus-compatible metrics via an optional `metrics.Handler`:
 ### Signing Key Protection
 
 - The `SigningKey` (Ed25519 private key) is stored in the `Config` struct and never serialized, logged, or included in error messages.
-- Ed25519 signatures are computed per-request. The private key produces `agent_signature` on `ResourceQuery` and `TransactionRequest` messages.
-- The Exchange verifies signatures using the agent's registered public key (looked up by `LicenseID`). The private key never leaves the agent.
+- Ed25519 signatures are computed per-request. The private key produces an RFC 9421 HTTP Message Signature in the HTTP headers of each `DiscoverResources` and `ExecuteTransaction` request.
+- The Exchange verifies signatures using the agent's registered public key (looked up by the agent's `domain` + signature `keyid` from its WellKnownManifest, not by any billing handle). The private key never leaves the agent.
 
 ### Transport Security
 

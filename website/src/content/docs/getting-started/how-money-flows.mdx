@@ -38,26 +38,20 @@ sequenceDiagram
 
     MP->>Agent: Monthly invoice (sum of billing_ids)
     Agent->>MP: Payment
-    MP->>Provider: Revenue share payment
+    MP->>Provider: Provider payout (off-protocol settlement)
 ```
 
 ## Pricing Models
 
-The protocol supports eleven pricing models, each mapping to an RSL equivalent:
+`PricingModel` is the charging **structure** only — a closed set of three. The open-ended metering basis ("per what") lives in `Pricing.unit` as a vocabulary, so per-access / per-token / per-fetch / per-page / per-minute / per-record are all `PER_UNIT` with a different `unit`.
 
 | Model | Description | RSL Equivalent |
 |---|---|---|
-| `PRICING_MODEL_PER_ACCESS` | One-time access fee per resource | purchase |
-| `PRICING_MODEL_PER_TOKEN` | Rate per LLM token consumed | use/inference |
-| `PRICING_MODEL_PER_FETCH` | Rate per fetch/crawl request | crawl |
-| `PRICING_MODEL_SUBSCRIPTION` | Recurring access under a subscription deal | subscription |
-| `PRICING_MODEL_FREE` | No charge | free |
-| `PRICING_MODEL_ATTRIBUTION` | Free with required attribution | attribution |
-| `PRICING_MODEL_CONTRIBUTION` | Good-faith payment, provider suggests amount | contribution |
-| `PRICING_MODEL_TRAINING` | Per training instance fee | training |
-| `PRICING_MODEL_PER_PAGE` | Per document page (legal filings, PDFs) | — |
-| `PRICING_MODEL_PER_MINUTE` | Per minute of audio/video | — |
-| `PRICING_MODEL_PER_RECORD` | Per structured data record | — |
+| `PRICING_MODEL_FREE` | No charge (state explicitly; absent Pricing ≠ free) | free |
+| `PRICING_MODEL_PER_UNIT` | Rate per `Pricing.unit` (metering basis: `accesses`, `tokens`, `fetches`, `pages`, `minutes`, `records`, …) | crawl / use / inference / training / metered purchase |
+| `PRICING_MODEL_FLAT` | One-time flat fee; `rate` is the total, no unit | one-time purchase |
+
+A **subscription** is `FREE` + a `subscription:*` scope (settled off-protocol). **Attribution** and **contribution** are `Obligation`s, not pricing models. There is no revenue-share model — settlement is off-protocol.
 
 Providers set their preferred pricing model and rate in their RSL file. The Exchange operationalizes these into live Offers. RSL pricing serves as a price ceiling (public declaration); private pricing between provider and Exchange may be lower.
 
@@ -75,7 +69,7 @@ For example:
 - Article at $0.05, estimated 3,300 tokens: unit_cost = $0.00001515 (unit: "tokens")
 - Per-token pricing at $0.00002: unit_cost = $0.00002 (unit: "tokens")
 - Per-page at $0.10, estimated 15 pages: unit_cost = $0.10 (unit: "pages")
-- Per-minute at $0.50, estimated 45 minutes: unit_cost = $0.50 (unit: "seconds")
+- Audio at $0.50/minute, estimated 45 minutes (2,700 s): unit_cost = $0.0083 (unit: "seconds")
 
 The Broker uses `unit_cost` to compare offers across Exchanges and pricing models, selecting the most cost-effective option regardless of how the provider originally priced it.
 
@@ -84,7 +78,7 @@ Every `Offer` in a `ResourceResponse` includes both the native pricing and the c
 ```json
 {
   "pricing": {
-    "model": "PRICING_MODEL_PER_ACCESS",
+    "model": "PRICING_MODEL_PER_UNIT",
     "rate": 0.05,
     "currency": "USD",
     "unit_cost": 0.00001515,
@@ -140,7 +134,7 @@ Here is a concrete transaction with dollar amounts.
 - Article: "AI Regulation: What Providers Need to Know" (2,500 words, ~3,300 tokens)
 - RSL price ceiling: $0.08 per crawl
 - SSP-Alpha private pricing: $0.05 per article (below RSL ceiling)
-- Buyer: Anthropic (Claude), license ID `LIC-ANTHROPIC-001`
+- Buyer: Anthropic (Claude), billing reference `billing_ref` `ANTHROPIC-COST-CENTER-001`
 - Anthropic has an annual subscription with Hearst via SSP-Alpha
 
 **What happens:**

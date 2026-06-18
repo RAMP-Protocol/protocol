@@ -17,12 +17,12 @@ Without Broker (direct, single exchange):
 
 ## Multi-Hop Routing
 
-Multi-hop is the common case, not the exception. A request typically travels `Agent -> Broker -> ... -> Exchange`, and the broker layer may itself be more than one hop. Each forwarding party appends an `IntermediaryHop` to the `intermediaries` array and authenticates its hop with its own [RFC 9421](https://datatracker.ietf.org/doc/html/rfc9421) HTTP Message Signature (one `Signature` / `Signature-Input` entry per hop). The Exchange verifies every hop by fetching each intermediary's key from `{hop.domain}/.well-known/ramp.json`. `IntermediaryHop.signature_label` optionally names the exact signature entry a hop added, so a verifier matches a hop to its signature without inferring by ordinal position or domain.
+Multi-hop is the common case, not the exception. A request typically travels `Agent -> Broker -> ... -> Exchange`, and the broker layer may itself be more than one hop. The forwarding chain lives entirely in the HTTP layer as a **stack of [RFC 9421](https://datatracker.ietf.org/doc/html/rfc9421) HTTP Message Signatures** — there is no in-message hop list. Each party that originates or forwards the request adds **one** labeled signature (`Signature` / `Signature-Input`, e.g. `ramp-agent`, `ramp-broker-1`). Each forwarder's signature covers the request essentials (`@method`, `@authority`, `@path`, `Content-Digest`) **plus the previous hop's signature**, so the chain is ordered and tamper-evident: no hop can be reordered, dropped, or inserted without invalidating a downstream signature. The `keyid` on each signature names the signer; the Exchange resolves it at `{domain}/.well-known/ramp.json`, verifies **every** signature, and confirms the chain is contiguous. The ordered set of signatures *is* the forwarding chain.
 
 **Chain-depth caps.** Two fields bound how deep a chain may go:
 
-- `RequestConstraints.max_hops` -- the agent caps its own chain depth. A Broker MUST NOT forward a request whose chain would exceed it.
-- `WellKnownManifest.max_intermediary_hops` -- the Exchange publishes the longest inbound chain it tolerates; longer chains SHOULD be rejected, and a Broker can prune before forwarding.
+- `RequestConstraints.max_hops` -- the agent caps its own chain depth. A Broker MUST NOT forward a request whose signature count would exceed it.
+- `WellKnownManifest.max_intermediary_hops` -- the Exchange publishes the longest inbound chain (signature count) it tolerates; longer chains SHOULD be rejected, and a Broker can prune before forwarding.
 
 **Response path: direct.** Responses do **not** retrace the hop chain. The terminal Exchange returns its `TransactionResponse` (or `ResourceResponse`) directly to the originating agent; the Exchange-facing Broker that holds the agent binding relays it back without re-fanning through every hop. This works because the signed `retrieval_endpoint` is bound to the agent's identity (`agent_identity_hash`), so delivery needs no return-path relay. Intermediaries observe requests, not responses.
 
@@ -45,25 +45,21 @@ Content-Type: application/json
     "id": "research-bot",
     "domain": "buyer.example.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
-    "intended_use": ["FUNCTION_AI_INPUT"],
-    "license_id": "LIC-BUYER-001",
-    "scopes": ["*"],
-    "signature": "ed25519:a4c9f2e8b7d1...",
-    "signature_algorithm": "ed25519"
+    "billing_ref": "ACCT-BUYER-001",
+    "scopes": ["*"]
   },
-  "intermediaries": []
+  "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
+  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }]
 }
 ```
 
 Key fields:
-- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the signature
-- `requester.uris` -- the content URI(s) being requested
-- `requester.intended_use` -- the intended use (RAG, training, search, etc.)
-- `requester.license_id` -- the buyer's license ID (public identifier, not a credential)
+- `requester.id` + `requester.domain` -- uniquely identifies the agent; the Exchange fetches the Ed25519 public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) to verify the request's RFC 9421 HTTP Message Signature
+- `ResourceQuery.uris` -- the content URI(s) being requested
+- `acceptable_restrictions` -- the restrictions the agent is willing to accept, grouped by axis; axis `FUNCTION` carries the intended use (RAG, training, search, etc.)
+- `requester.billing_ref` -- an opaque billing reference (invoicing/cost-attribution handle; not a credential). It links the requester to the Exchange's billing/accounting systems (billing account, PO number, cost center); it is not an entitlement or access-control input
 - `requester.scopes` -- entitlement scopes; `["*"]` means unrestricted public access
-- request authentication -- an RFC 9421 HTTP Message Signature over the request (the agent's key is published at its `ramp.json`)
-- `intermediaries` -- forwarding chain; empty when the agent queries the Exchange directly
+- request authentication -- an RFC 9421 HTTP Message Signature over the request (the agent's key is published at its `ramp.json`); when the request is forwarded, each hop adds its own labeled HTTP Message Signature, and the ordered stack of these header signatures is the forwarding chain (no in-message hop list)
 
 ### Response (`ResourceResponse`)
 
@@ -75,33 +71,21 @@ Key fields:
   "offers": [
     {
       "offer_id": "offer-tc-4921",
-      "package": {
-        "id": "PKG-TC-AI-INFRA",
-        "title": "The Future of AI Infrastructure",
-        "seller": "cdn.ramp-protocol.org",
-        "citation": 1,
-        "scope": {
-          "scope": "SCOPE_TYPE_OTHER",
-          "ctype": ["CONTENT_TYPE_TEXT"],
-          "text": [{
-            "title": "The Future of AI Infrastructure",
-            "wordcount": [2500],
-            "pubdate": "2026-03-10T08:00:00Z",
-            "published": 1,
-            "author": ["Sarah Chen"],
-            "sourcetype": 0
-          }]
-        },
-        "retrieval": {
-          "type": ["RETRIEVAL_TYPE_HTML"]
-        }
+      "title": "The Future of AI Infrastructure",
+      "ext": {
+        "comp.package_id": "PKG-TC-AI-INFRA",
+        "comp.seller": "cdn.ramp-protocol.org",
+        "comp.citation_required": true,
+        "comp.content_types": ["CONTENT_TYPE_TEXT"],
+        "comp.retrieval_type": ["RETRIEVAL_TYPE_HTML"]
       },
       "pricing": {
-        "model": "PRICING_MODEL_PER_ACCESS",
+        "model": "PRICING_MODEL_PER_UNIT",
         "rate": 0.05,
         "currency": "USD",
         "unit_cost": 0.00001515,
-        "estimated_quantity": 3300
+        "estimated_quantity": 3300,
+        "unit": "accesses"
       },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "reporting": {
@@ -113,11 +97,22 @@ Key fields:
         "canonical_url": "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
         "iptc_guid": "urn:newsml:ap.org:20260310:ai-infra-001"
       },
-      "restrictions": {
-        "permitted_functions": ["FUNCTION_AI_INPUT", "FUNCTION_AI_INDEX", "FUNCTION_SEARCH"],
-        "prohibited_functions": ["FUNCTION_AI_TRAIN"],
-        "permitted_users": ["commercial", "education"]
-      },
+      "terms": [
+        {
+          "semantics": "TERM_SEMANTICS_ENUMERATED",
+          "restrictions": [
+            {
+              "kind": "RESTRICTION_KIND_FUNCTION",
+              "permitted": ["ai-input", "ai-index", "search"],
+              "prohibited": ["ai-train"]
+            },
+            {
+              "kind": "RESTRICTION_KIND_USER_TYPE",
+              "permitted": ["commercial", "education"]
+            }
+          ]
+        }
+      ],
       "previews": [
         {
           "url": "https://cdn.ramp-protocol.org/preview/ai-infrastructure-snippet.txt",
@@ -125,18 +120,18 @@ Key fields:
           "size": "sample"
         }
       ],
-      "exchange_signature": "a1b2c3d4e5f6...",
-      "signature_algorithm": "ed25519"
+      "signature": "a1b2c3d4e5f6...",
+      "signature_algorithm": "EdDSA"
     }
   ]
 }
 ```
 
 Each `Offer` includes:
-- A CoMP `Package` with content metadata (title, author, word count, publication date)
+- `Offer.title` (human-readable) plus optional `ramp-comp-v1` `comp.*` ext fields carrying CoMP package metadata (`comp.package_id`, `comp.seller`, `comp.citation_required`, `comp.content_types`, `comp.retrieval_type`)
 - RAMP `Pricing` with the rate, currency, and normalized unit_cost
 - `ResourceIdentity` for cross-exchange deduplication
-- `AccessRestrictions` derived from the provider's RSL terms
+- `LicenseTerm` entries on `terms[]`, each carrying `restrictions` (`repeated Restriction`) derived from the provider's RSL terms
 - `ReportingObligation` defining post-usage reporting requirements
 - `Preview` URLs for pre-transaction evaluation (see [Resource Previews](#resource-previews))
 - An Ed25519 `exchange_signature` that proves the Exchange issued this offer
@@ -156,9 +151,9 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
       "offers": [
         {
           "offer_id": "offer-tc-4921",
-          "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
-          "exchange_signature": "a1b2c3...",
-          "signature_algorithm": "ed25519"
+          "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515, "unit": "accesses" },
+          "signature": "a1b2c3...",
+          "signature_algorithm": "EdDSA"
         }
       ]
     },
@@ -167,9 +162,9 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
       "offers": [
         {
           "offer_id": "offer-tc-4922",
-          "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001200 },
-          "exchange_signature": "d4e5f6...",
-          "signature_algorithm": "ed25519"
+          "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001200, "unit": "accesses" },
+          "signature": "d4e5f6...",
+          "signature_algorithm": "EdDSA"
         }
       ]
     },
@@ -192,17 +187,18 @@ When the buyer has a subscription, the Exchange includes both per-request and su
   "offers": [
     {
       "offer_id": "offer-tc-4921",
-      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
-      "exchange_signature": "a1b2c3...",
-      "signature_algorithm": "ed25519"
+      "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit_cost": 0.00001515, "unit": "accesses" },
+      "signature": "a1b2c3...",
+      "signature_algorithm": "EdDSA"
     },
     {
       "offer_id": "sub-offer-tc-4921",
-      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0, "currency": "USD", "unit_cost": 0 },
+      "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD", "unit_cost": 0 },
       "subscription_id": "SUB-12345",
+      "terms": [ { "semantics": "TERM_SEMANTICS_ENUMERATED", "scopes": ["subscription:SUB-12345"] } ],
       "reporting": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] },
-      "exchange_signature": "g7h8i9...",
-      "signature_algorithm": "ed25519"
+      "signature": "g7h8i9...",
+      "signature_algorithm": "EdDSA"
     }
   ]
 }
@@ -235,8 +231,9 @@ When the buyer holds a subscription, the Exchange attaches `SubscriptionQuotaInf
   "offers": [
     {
       "offer_id": "sub-offer-tc-4921",
-      "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0, "currency": "USD" },
+      "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" },
       "subscription_id": "SUB-12345",
+      "terms": [ { "semantics": "TERM_SEMANTICS_ENUMERATED", "scopes": ["subscription:SUB-12345"] } ],
       "subscription_quota": [
         {
           "subscription_id": "SUB-12345",
@@ -255,8 +252,8 @@ When the buyer holds a subscription, the Exchange attaches `SubscriptionQuotaInf
           "unit": "spend_cents"
         }
       ],
-      "exchange_signature": "g7h8i9...",
-      "signature_algorithm": "ed25519"
+      "signature": "g7h8i9...",
+      "signature_algorithm": "EdDSA"
     }
   ]
 }
@@ -284,16 +281,11 @@ Content-Type: application/json
     "id": "research-bot",
     "domain": "buyer.example.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
-    "intended_use": ["FUNCTION_AI_INPUT"],
-    "license_id": "LIC-BUYER-001",
-    "scopes": ["*"],
-    "signature": "ed25519:a4c9f2e8b7d1...",
-    "signature_algorithm": "ed25519"
+    "billing_ref": "ACCT-BUYER-001",
+    "scopes": ["*"]
   },
   "request_id": "sq-8f3a2b",
-  "offer_signature": "a1b2c3d4e5f6...",
-  "offer_signature_algorithm": "ed25519"
+  "offer_signature": "a1b2c3d4e5f6..."
 }
 ```
 
@@ -330,7 +322,7 @@ The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A b
 ### What Happens Inside the Exchange
 
 1. Validate request (proto validation)
-2. Verify Ed25519 agent signature (and broker signature if present)
+2. Verify the agent's RFC 9421 HTTP Message Signature (alg=ed25519) in the request headers (and each broker hop signature if present)
 3. Check idempotency key (prevent double-charge on retry)
 4. Verify offer signature (reconstruct offer from signed token)
 5. Authorize billing (`BillingAdapter.Authorize`) -- or skip for subscription offers
@@ -350,27 +342,18 @@ For batch transactions, use the `items` array:
     "id": "research-bot",
     "domain": "buyer.example.com",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
-      "https://cdn.ramp-protocol.org/premium/gpu-shortage-2026.html"
-    ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
-    "license_id": "LIC-BUYER-001",
-    "scopes": ["*"],
-    "signature": "ed25519:b5d0e3f9c8a2...",
-    "signature_algorithm": "ed25519"
+    "billing_ref": "ACCT-BUYER-001",
+    "scopes": ["*"]
   },
   "request_id": "sq-batch-01",
   "items": [
     {
       "offer_id": "offer-tc-4921",
-      "offer_signature": "a1b2c3...",
-      "offer_signature_algorithm": "ed25519"
+      "offer_signature": "a1b2c3..."
     },
     {
       "offer_id": "offer-tc-4922",
-      "offer_signature": "d4e5f6...",
-      "offer_signature_algorithm": "ed25519"
+      "offer_signature": "d4e5f6..."
     }
   ]
 }
@@ -442,8 +425,8 @@ Content-Type: application/json
   "transaction_id": "txn-mp-93a7f2",
   "billing_id": "bill-93a7f2-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
-    "subfn": ["SUB_FUNCTION_RAG"],
+    "function": ["ai-input"],
+    "subfn": ["rag"],
     "consumed_quantity": 3150,
     "displayed_to_user": true,
     "citation_included": true
@@ -614,7 +597,7 @@ message Preview {
 {
   "offer_id": "offer-reuters-001",
   "title": "Climate Summit Photo - Reuters",
-  "pricing": { "model": "PRICING_MODEL_PER_ACCESS", "rate": 0.50, "currency": "USD" },
+  "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.50, "currency": "USD", "unit": "accesses" },
   "previews": [
     {
       "url": "https://cdn.reuters.com/preview/150/climate-summit.jpg",

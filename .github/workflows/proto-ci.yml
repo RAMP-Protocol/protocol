@@ -1,0 +1,79 @@
+name: proto-ci
+
+# Guards the protocol wire contract and the generated SDKs:
+#   - buf lint
+#   - regenerate `gen/` and assert the committed tree matches (no drift)
+#   - go build / vet / test the generated packages + tooling (incl. the
+#     conformance suite: protovalidate CEL evaluation + doc-example validation)
+# The regenerate-and-diff step is the load-bearing one: it fails the build if
+# committed `gen/` (Go + TS SDKs and the rampvocab constant packages) does not
+# match a clean `buf generate` from the proto + plugin — i.e. someone changed
+# the proto/plugin without committing regenerated output, or hand-edited `gen/`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  proto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: buf lint
+        working-directory: proto
+        run: buf lint
+
+      # Regenerate the SDKs + vocab constant packages. `buf generate` runs the
+      # remote Go/TS plugins and the local `go run ...protoc-gen-rampvocab`
+      # plugin (Go is provided by setup-go above).
+      - name: buf generate
+        working-directory: proto
+        run: buf generate
+
+      - name: assert no generated drift
+        run: |
+          # Stage everything first so NEW (untracked) generated files — e.g. a
+          # newly added vocab axis whose gen/.../<axis>/ was generated but never
+          # committed — are caught too. A plain `git diff` only sees tracked
+          # files and would let that pass green (the exact C1 class this gate
+          # exists to seal).
+          git add -A
+          if ! git diff --cached --exit-code; then
+            echo "::error::Generated code is out of sync with the proto/plugin (including new untracked files). Run 'cd proto && buf generate' and commit the result."
+            exit 1
+          fi
+
+      - name: go build, vet & test
+        run: |
+          go build ./...
+          go vet ./...
+          # Includes the conformance suite (conformance/): it evaluates the
+          # protovalidate CEL constraints and validates the doc example payloads
+          # (registered units, signature_algorithm, LicenseTerm.semantics) —
+          # value/semantic checks the denylist gate structurally cannot perform.
+          go test ./...
+
+      # Doc-conformance: fail if a removed/renamed wire identifier reappears in
+      # the docs. The prose counterpart to the gen-drift gate above.
+      - name: doc conformance
+        run: ./scripts/check-doc-conformance.sh
+
+      # buf breaking is intentionally NOT a hard gate pre-v1: the licensing
+      # rollout includes accepted breaking changes (no shipped consumers yet).
+      # Enable this once the wire format is frozen and tagged at v1.
+      - name: buf breaking (informational, pre-v1)
+        working-directory: proto
+        continue-on-error: true
+        run: |
+          buf breaking \
+            --against 'https://github.com/RAMP-Protocol/protocol.git#branch=main,subdir=proto' || true

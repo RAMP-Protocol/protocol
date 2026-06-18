@@ -31,14 +31,16 @@ client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
   |
   |  4. Discover supply
   |     SupplyDiscoverer.Discover(ctx, exchanges, url)
-  |       - Build ResourceQuery with AISystem, agent_signature
+  |       - Build ResourceQuery with AISystem
+  |       - Authenticate via RFC 9421 HTTP Message Signature in the HTTP headers
   |       - Fan out DiscoverResources RPC to all resolved Exchanges (parallel)
   |       - Collect ResourceResponses (respect deadline, drop slow responders)
   |       - Flatten all Offers into candidate list
   |
   |  5. Select best offer
   |     SelectionEngine.Select(candidates, constraints)
-  |       - Filter by AccessRestrictions (function, geo)
+  |       - Self-select the Offer.terms[] term whose restrictions
+  |         (function, geo, user-type) the agent can honour
   |       - Group by ResourceIdentity (deduplication)
   |       - Rank: subscription offers first (rate=0)
   |              -> preferred Exchange offers second
@@ -53,7 +55,8 @@ client.Fetch(ctx, "https://techcrunch.com/premium/article.html")
   |
   |  7. Execute transaction
   |     TransactionExecutor.Execute(ctx, exchange, offer)
-  |       - Build TransactionRequest with offer_id, offer_signature, agent_signature
+  |       - Build TransactionRequest with offer_id, offer_signature
+  |       - Authenticate via RFC 9421 HTTP Message Signature in the HTTP headers
   |       - Send ExecuteTransaction RPC to winning Exchange
   |       - On DenialReason: return typed error (see Error Handling below)
   |       - On success: extract signed URL from retrieval_endpoint
@@ -180,7 +183,7 @@ client.FetchBatch(ctx, [url1, url2, url3])
 
 ```go
 client, err := ramp.NewClient(ramp.Config{
-    LicenseID:  "LIC-BUYER-001",
+    BillingRef: "ACCT-BUYER-001",
     SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
     Budget:     ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
 })
@@ -249,7 +252,7 @@ type NoOfferError struct {
 
 // TransactionDeniedError -- Exchange denied the transaction.
 type TransactionDeniedError struct {
-    Reason      DenialReason // INVALID_LICENSE, EXPIRED_LICENSE, etc.
+    Reason      DenialReason // BILLING_REF_INACTIVE, DELEGATION_INVALID, etc.
     Exchange string
     OfferID     string
 }
@@ -334,7 +337,7 @@ func TestAgentLogic(t *testing.T) {
     defer mock.Close()
 
     client, _ := ramp.NewClient(ramp.Config{
-        LicenseID: "test-license",
+        BillingRef: "test-billing-ref",
         SigningKey: "test-key",
         Budget:    ramp.Budget{MaxPerRequest: 1.00, Currency: "USD"},
         Exchanges: []ramp.ExchangeConfig{{

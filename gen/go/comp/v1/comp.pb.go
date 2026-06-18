@@ -607,10 +607,10 @@ func (x *AISystem) GetExt() *structpb.Struct {
 // CoMP §aisystemuse.json
 type AISystemUse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// License ID — public agent identifier. NOT a credential.
-	// Authentication is via agent_signature (Ed25519). Treat lid like a
-	// username, not a password. Exchange looks up agent's registered
-	// public key by lid.
+	// License ID — public agent identifier in CoMP. NOT a credential.
+	// In RAMP this maps to Requester.billing_ref (a billing handle, not an
+	// entitlement). Request authentication is an RFC 9421 HTTP Message Signature;
+	// the agent's key is resolved by its domain, never by this id.
 	Lid string `protobuf:"bytes,1,opt,name=lid,proto3" json:"lid,omitempty"`
 	// How the AI system authenticates itself.
 	Aiauth AuthMethod `protobuf:"varint,2,opt,name=aiauth,proto3,enum=comp.v1.AuthMethod" json:"aiauth,omitempty"`

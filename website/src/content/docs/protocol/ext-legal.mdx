@@ -270,7 +270,7 @@ Court-restricted documents use `legal.case.access_level`:
 |-------|---------|---------------|
 | `public` | Available to all. | Normal transaction flow. |
 | `sealed` | Not available; court order required. | Exchange returns `CONTENT_BLOCKED` as `OfferAbsenceReason`. |
-| `restricted` | Available with credentials. | Offer includes `AccessRestrictions` requiring specific `allowed_users` or credentials. |
+| `restricted` | Available with credentials. | Offer carries a `LicenseTerm` whose `restrictions` include a `Restriction{kind: RESTRICTION_KIND_USER_TYPE}` requiring specific user types or credentials. |
 | `redacted` | Public version with redactions. | Normal transaction; `legal.case.access_level` signals incompleteness. |
 
 ### EU case law (ECLI)
@@ -441,10 +441,10 @@ The `legal.case.language_of_case` field identifies the authentic language for EU
 | Content type | Typical pricing model | Typical unit |
 |--------------|----------------------|--------------|
 | Government raw text (EUR-Lex, USPTO bulk) | `PRICING_MODEL_FREE` | N/A |
-| PACER document | `PER_PAGE` ($0.10/page, $3.00 cap) | `pages` |
-| Commercial legal database (Westlaw, LexisNexis) | `PER_ARTICLE` or `SUBSCRIPTION` | `tokens` or `items` |
-| Patent (from commercial aggregator) | `PER_ARTICLE` | `items` |
-| Annotated legislation (Wolters Kluwer) | `PER_ARTICLE` | `items` |
+| PACER document | `PRICING_MODEL_PER_UNIT` ($0.10/page, $3.00 cap) | `pages` |
+| Commercial legal database (Westlaw, LexisNexis) | `PRICING_MODEL_PER_UNIT` or subscription (FREE + subscription scope) | `tokens` or `items` |
+| Patent (from commercial aggregator) | `PRICING_MODEL_PER_UNIT` | `items` |
+| Annotated legislation (Wolters Kluwer) | `PRICING_MODEL_PER_UNIT` | `items` |
 
 ---
 
@@ -510,7 +510,7 @@ An offer from a Legal Exchange for a specific filing in a Southern District of N
 {
   "offer_id": "off-pacer-sdny-45",
   "pricing": {
-    "model": "PRICING_MODEL_PER_PAGE",
+    "model": "PRICING_MODEL_PER_UNIT",
     "unit_cost": 0.10,
     "estimated_quantity": 12,
     "unit": "pages",
@@ -561,7 +561,7 @@ An offer for a granted US patent from a commercial patent aggregator:
 {
   "offer_id": "off-patent-us11234567",
   "pricing": {
-    "model": "PRICING_MODEL_PER_ARTICLE",
+    "model": "PRICING_MODEL_PER_UNIT",
     "unit_cost": 5.00,
     "estimated_quantity": 1,
     "unit": "items",
@@ -647,7 +647,7 @@ The Exchange returns an OfferGroup with two offers -- one free from EUR-Lex, one
     },
     {
       "offer_id": "off-wk-gdpr-de-annotated",
-      "pricing": { "model": "PRICING_MODEL_PER_ARTICLE", "unit_cost": 75.00, "unit": "items", "currency": "EUR" },
+      "pricing": { "model": "PRICING_MODEL_PER_UNIT", "unit_cost": 75.00, "unit": "items", "currency": "EUR" },
       "ext": {
         "legal.language": "de",
         "legal.available_languages": ["en", "fr", "de"],

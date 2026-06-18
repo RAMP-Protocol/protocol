@@ -39,11 +39,21 @@ Optional RPC for providers/CMS/third-party intelligence providers to push conten
 | `ver` | string | 1 | RAMP protocol version |
 | `id` | string | 2 | Unique query identifier |
 | `requester` | Requester | 3 | Requester identity, scopes, and optional delegation chain |
+| `uris` | repeated string | 8 | Resource URIs being queried |
+| `acceptable_restrictions` | repeated AcceptableRestriction | 9 | Limits the query operates within, per restriction axis. Advisory; the Exchange MAY pre-select offers against them, not enforced. |
 | `request_id` | optional string | 4 | Original RAMP request ID (traceability) |
-| `intermediaries` | repeated IntermediaryHop | 5 | Intermediary forwarding chain (Agent -> Broker -> Exchange). Empty for direct queries. |
 | `deadline` | optional Duration | 6 | Max wait time (default 500ms) |
 | `supported_profiles` | repeated string | 7 | Domain extension profiles the caller understands (e.g. "ramp-academic-v1") |
 | `ext` | Struct | 15 | Extension point |
+
+### AcceptableRestriction
+
+The limits a query operates within on one restriction axis, in the same `RestrictionKind` vocabulary the terms use. The Exchange/Broker MAY pre-select offers whose term restrictions fall within these (convenience, not enforcement). Used in `ResourceQuery` and `RAMPRequest`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `axis` | RestrictionKind | 1 | Which axis (same enum as `Restriction.kind`): FUNCTION / GEOGRAPHY / USER_TYPE / OTHER |
+| `values` | repeated string | 2 | Values the query operates within on this axis — same token vocabulary as the terms (e.g. FUNCTION `["ai-train"]`, GEOGRAPHY `["US","EU"]`) |
 
 ### ResourceResponse
 
@@ -65,6 +75,7 @@ Optional RPC for providers/CMS/third-party intelligence providers to push conten
 | `offers` | repeated Offer | 2 | Offers for this URI |
 | `discovery_method` | optional DiscoveryMethod | 3 | How the URI was discovered (v2 extension) |
 | `absence_reason` | optional OfferAbsenceReason | 4 | Why no offers are available for this URI |
+| `restriction_filters` | repeated RestrictionKind | 5 | When `absence_reason = RESTRICTION_FILTERED`, the axes that drove the convenience pre-filter (same `RestrictionKind` vocabulary as the terms) |
 
 ### RateLimitInfo
 
@@ -81,7 +92,7 @@ Rate limit status modeled after IETF RateLimit header fields.
 
 ### Requester
 
-Identifies who is making a request, what scopes they have, and an optional delegation chain. Used in `ResourceQuery` and `RAMPRequest`.
+Identity and entitlements only — who is asking and what they're entitled to. What they're asking for (`uris`) and the limits they'll accept (`acceptable_restrictions`) live on the ask (`ResourceQuery` / `RAMPRequest`), not here. Used in `ResourceQuery` and `RAMPRequest`.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -89,52 +100,40 @@ Identifies who is making a request, what scopes they have, and an optional deleg
 | `domain` | string | 2 | Requester's domain -- used for public key lookup at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) |
 | `type` | RequesterType | 3 | What kind of entity is making this request |
 | `name` | optional string | 4 | Human-readable name (e.g. "Acme Research Assistant") |
-| `uris` | repeated string | 5 | Resource URIs being requested (same role as CoMP `aisysuse.uri`) |
-| `intended_use` | repeated string | 6 | What the requester intends to do with the resources (CoMP Function values) |
-| `license_id` | optional string | 7 | Commercial license or subscription identifier (same role as CoMP `aisysuse.lid`) |
-| `scopes` | repeated string | 8 | Entitlement scopes declaring what the requester can access. Format: `"{domain}:{permission}"`. Empty = default access policy. |
-| `delegation` | optional Delegation | 9 | Present when requester acts on behalf of another entity |
+| `billing_ref` | optional string | 5 | Opaque billing reference linking the requester to the Exchange's/publisher's billing systems (account, PO, cost center). NOT an entitlement — access is via scopes/delegation. (Maps from CoMP `aisysuse.lid`.) |
+| `scopes` | repeated string | 6 | Entitlement scopes declaring what the requester can access. Format: `"{domain}:{permission}"`. Empty = default access policy. |
+| `delegation` | optional Delegation | 7 | Present when requester acts on behalf of another entity |
 | `ext` | Struct | 15 | Extension point |
 
 ### Delegation
 
-Scoped, time-limited, spend-capped credential using [Biscuit authorization tokens](https://biscuitsec.org). Biscuit tokens are Ed25519-signed block chains that can be attenuated (holder adds restrictions) without going back to the issuer. Each block in the chain narrows permissions -- never widens them.
+Scoped, time-limited, spend-capped credential. The credential itself is opaque bytes carried in `token`, and `token_format` selects how to interpret them: `"jwt"` (default) or `"biscuit-v3"` (optional). The format is never encoded as a prefix inside the token bytes. The default is a **holder-bound JWT**: a chain of `cnf`-linked JWTs (RFC 7800 `cnf.jkt` = RFC 7638 thumbprint) where each child is signed by the key its parent named and narrows scope, and the holder proves possession by signing the request (RFC 9421). `"biscuit-v3"` remains a permitted alternative for deep multi-hop offline attenuation.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `principal_domain` | string | 1 | Who granted this delegation (domain for public key lookup) |
-| `principal_id` | string | 2 | Principal's identifier (e.g. "user@acme.com", "bloomberg.com") |
+| `principal_id` | string | 2 | Principal's identifier (e.g. "user@acme.com", "marketdata.example.com") |
 | `scopes` | repeated string | 3 | Scopes granted by this delegation (MUST be a subset of the principal's own scopes) |
 | `expires_at` | Timestamp | 4 | When this delegation expires. Exchange MUST reject expired tokens. |
-| `max_spend` | optional Cost | 5 | Maximum spend allowed under this delegation |
-| `token` | string | 6 | Biscuit authorization token, base64-encoded |
-| `token_format` | string | 7 | Token format (default: "biscuit-v2") |
+| `max_spend_cents` | optional int64 | 5 | Maximum spend in currency minor units (e.g. cents for USD) |
+| `token` | bytes | 6 | Token bytes — a JWT (base64url JWS) by default |
+| `token_format` | string | 7 | Token format: "jwt" (default) or "biscuit-v3" (optional) |
 | `revocation_uri` | optional string | 8 | URI for real-time revocation checking (MAY be checked for high-value transactions) |
+| `max_accesses` | optional int32 | 9 | Maximum access count under this delegation |
+| `quota_period` | optional Duration | 10 | How often access/spend counters reset (e.g. 720h = 30 days); absent = lifetime |
+| `issuer` | optional string | 11 | Token issuer — OIDC issuer URL (for JWT signature validation via OIDC→JWKS) |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
-**Biscuit authority block facts** (RAMP-specific):
+**Delegation claims.** The claim vocabulary carried inside the token is **not re-listed here** — the authoritative registry is the [Delegation-Claims Profile](/protocol/authentication/#delegation-claims-profile) table in `authentication.mdx`. The one claim worth restating: every delegation **MUST** carry a **holder binding** (the `cnf` claim, `cnf.jkt` = the RFC 7638 thumbprint of the holder key) — the request-signing key MUST hash to `cnf.jkt`, or the token is rejected. Without it the token is bearer-usable. Everything else (scope, spend cap, expiry, etc.) is optional and defined in that single source of truth.
 
-```
-user({principal_id});
-scope({scope_string});           // one fact per granted scope
-max_spend_cents({amount});       // spending cap in currency minor units
-expires({RFC3339_timestamp});    // expiration time
-```
+**Narrowing example**: An agent can further restrict (but never widen) a delegation by issuing a child JWT:
+- Original: `scope: credit:*, max_spend_cents: 100000`
+- Attenuated: `scope: credit:read, max_spend_cents: 20000, uris: duns:123*`
 
-**Attenuation example**: An agent can further restrict (but never widen) a delegation:
-- Original: `scope: credit:*, max_spend: $1000`
-- Attenuated: `scope: credit:read, max_spend: $200, uris: duns:123*`
+### Multi-hop forwarding (no message — HTTP layer)
 
-### IntermediaryHop
-
-One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop authenticates by adding its own RFC 9421 HTTP Message Signature, proving the request passed through legitimately. Modeled after OpenRTB schain (Supply Chain Object). Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent.
-
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `domain` | string | 1 | Domain of the intermediary (for public key lookup) |
-| `id` | string | 2 | Intermediary's identifier |
-| `forwarded_at` | Timestamp | 3 | When this intermediary forwarded the request |
-| `signature_label` | optional string | 4 | Binds this hop to its RFC 9421 `Signature` header label, so a verifier matches a hop to its signature without inferring by ordinal position or domain |
+There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → … → Exchange) is a **stack of RFC 9421 HTTP Message Signatures**: each forwarding party adds one labeled signature, and each signature covers the request plus the prior hop's signature, so the ordered set of signatures is the chain (tamper-evident, order-bound). The Exchange resolves each `keyid` at `{domain}/.well-known/ramp.json`, verifies every signature, and enforces `RequestConstraints.max_hops` / `WellKnownManifest.max_intermediary_hops` by counting them. Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent (bound by `agent_identity_hash`).
 
 ## Messages -- Offers and Pricing
 
@@ -143,21 +142,23 @@ One hop in the request forwarding chain (Agent -> Broker -> Exchange). Each hop 
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `offer_id` | string | 1 | Unique offer identifier |
-| `package` | comp.v1.Package | 2 | CoMP content metadata |
+| `title` | optional string | 2 | Resource title (human-readable, for display/logging) |
 | `pricing` | Pricing | 3 | Pricing terms with unit_cost |
 | `delivery_method` | DeliveryMethod | 4 | How content is delivered |
 | `reporting` | optional ReportingObligation | 5 | Post-usage reporting requirements |
 | `expires_at` | optional Timestamp | 6 | Offer expiry |
 | `identity` | optional ResourceIdentity | 7 | Content identity for dedup |
-| `restrictions` | optional AccessRestrictions | 8 | Access restrictions from RSL |
-| `exchange_signature` | string | 9 | **REQUIRED.** Ed25519 signature |
-| `signature_algorithm` | string | 10 | Signature algorithm (default: "ed25519") |
+| `signature` | string | 9 | **REQUIRED.** JWS (EdDSA) over the canonical Offer (incl. `terms`, `pricing`, `expires_at`) (informally called the *exchange signature*) |
+| `signature_algorithm` | string | 10 | Signature algorithm (always "EdDSA") |
 | `subscription_id` | optional string | 11 | Subscription/deal identifier |
 | `iab_categories` | repeated string | 13 | IAB Content Taxonomy codes |
 | `attestations` | repeated ResourceAttestation | 14 | Signed content attestations (replaces ContentQuality) |
 | `data_as_of` | optional Timestamp | 16 | When the offered data was current (for DYNAMIC resources) |
 | `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Pre-commit quota snapshot for subscription offers |
+| `previews` | repeated Preview | 18 | Lightweight previews for offer evaluation (thumbnails, clips, snippets) |
+| `terms` | repeated LicenseTerm | 19 | Licensing terms for this offer. See [Universal Licensing Core](#universal-licensing-core). |
 | `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 :::note[Breaking change in v1.0]
 `Offer.quality` (field 12, `ContentQuality`) has been removed. Use `Offer.attestations` with `ResourceAttestation` claims instead. See [Content Attestation](/protocol/content-attestation/).
@@ -193,10 +194,11 @@ Three verification levels:
 | `currency` | string | 3 | ISO 4217 currency code |
 | `unit_cost` | optional double | 4 | Normalized cost per unit (universal comparison metric) |
 | `estimated_quantity` | optional int32 | 5 | Estimated consumption in the metering unit |
-| `revshare` | optional double | 6 | Revenue share percentage (0.0--1.0) |
 | `license_duration_months` | optional int32 | 7 | License duration in months |
-| `unit` | optional string | 8 | Metering unit for unit_cost and estimated_quantity (e.g. "tokens", "pages", "seconds", "records") |
-| `ext` | Struct | 15 | Extension point |
+| `unit` | optional string | 8 | Metering basis (the "per what" of `PER_UNIT`). REQUIRED when `model = PER_UNIT`. Registered token (e.g. `accesses`, `tokens`, `pages`) or `vendor:custom`. Authored as `(ramp.v1.vocab)` on this field. |
+| `metering` | optional PricingMetering | 9 | How usage is tracked for billing reconciliation. Absent = ONLINE (default). |
+
+`Pricing` has no `ext` / `ext_critical` fields — the licensing core is closed.
 
 ### ResourceIdentity
 
@@ -212,20 +214,11 @@ Layered content identification for cross-exchange dedup and integrity verificati
 | `hash_method` | optional string | 6 | Hash algorithm ("simhash-v1", "sha256") |
 | `c2pa_manifest` | optional string | 7 | C2PA credentials manifest URI |
 | `resource_mutability` | ResourceMutability | 8 | Whether resource content is static, dynamic, or live |
+| `c2pa_status` | optional C2PAStatus | 9 | Summary validation status of the C2PA manifest |
+| `soft_binding` | optional string | 10 | Soft binding hash surviving format transcoding |
+| `soft_binding_method` | optional string | 11 | Soft binding algorithm (e.g. "phash-v1", "c2pa-watermark") |
 | `ext` | Struct | 15 | Extension point |
-
-### AccessRestrictions
-
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `permitted_functions` | repeated Function | 1 | Permitted CoMP usage functions |
-| `prohibited_functions` | repeated Function | 2 | Prohibited CoMP usage functions |
-| `permitted_users` | repeated string | 3 | Permitted user categories |
-| `prohibited_users` | repeated string | 4 | Prohibited user categories |
-| `permitted_geo` | repeated string | 5 | Permitted geographies (ISO 3166-1 alpha-2) |
-| `prohibited_geo` | repeated string | 6 | Prohibited geographies |
-| `max_display_words` | optional int32 | 7 | Maximum words displayed to users (from CoMP License.maxword) |
-| `ext` | Struct | 15 | Extension point |
+| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
 
 ### SubscriptionQuotaInfo
 
@@ -271,6 +264,7 @@ Quota status for a subscription within the current billing period. Appears on `O
 | `agent_identity_hash` | string | 10 | RFC 7638 JWK Thumbprint of the agent's Ed25519 request-signing key, bound into the signed `retrieval_endpoint`. Empty string when absent; non-empty iff a signed `retrieval_endpoint` is present |
 | `retrieval_endpoint` | optional string | 18 | Signed URL the agent uses to fetch the resource. Bound to `agent_identity_hash`; expires at `expires_at`. Absent on denial and when `delivery_method` is not signed-URL-based |
 | `denial_reason` | optional DenialReason | 11 | Set when denied |
+| `restriction_mismatches` | repeated RestrictionKind | 19 | When `denial_reason = RESTRICTION_NOT_SATISFIED`, the restriction axes the request failed (same `RestrictionKind` vocabulary as the terms) |
 | `subscription_id` | optional string | 12 | Subscription/deal identifier |
 | `subscription_unit_value` | optional Cost | 16 | Per-unit cost for subscription accounting |
 | `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Post-transaction remaining quota snapshot |
@@ -285,7 +279,7 @@ A single offer commitment within a batch transaction.
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `offer_id` | string | 1 | The offer_id from the selected Offer |
-| `offer_signature` | string | 2 | The exchange_signature from the selected Offer |
+| `offer_signature` | string | 2 | The `signature` from the selected Offer (informally called the *exchange signature*) |
 
 ### TransactionResultItem
 
@@ -301,6 +295,7 @@ Result for a single offer in a batch transaction.
 | `subscription_id` | optional string | 6 | Subscription identifier (no per-request charge) |
 | `subscription_unit_value` | optional Cost | 11 | Per-unit cost for subscription accounting (ASC 606) |
 | `denial_reason` | optional DenialReason | 7 | Set if this item was denied |
+| `restriction_mismatches` | repeated RestrictionKind | 13 | When `denial_reason = RESTRICTION_NOT_SATISFIED`, the restriction axes the request failed (same `RestrictionKind` vocabulary as the terms) |
 | `expires_at` | optional Timestamp | 8 | When `retrieval_endpoint` expires |
 | `delivery_method` | DeliveryMethod | 9 | How content is delivered for this item |
 | `reporting_obligation` | optional ReportingObligation | 10 | Reporting requirements for this item |
@@ -349,13 +344,13 @@ Requirements attached to a delivery.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `function` | repeated Function | 1 | CoMP functions used |
-| `subfn` | repeated SubFunction | 2 | CoMP sub-functions used |
+| `function` | repeated string | 1 | Functions used (standard: "ai-train", "ai-input", "ai-index", "search", "display") |
+| `subfn` | repeated string | 2 | Sub-functions used (standard: "training", "rag", "grounding", "agent_view", "agent_actions") |
 | `consumed_quantity` | int32 | 3 | **REQUIRED.** Actual quantity consumed in the metering unit |
 | `displayed_to_user` | optional bool | 4 | Was output shown to a human? |
 | `citation_included` | optional bool | 5 | Was citation included? |
 | `attribution` | repeated AttributionDetail | 6 | Structured citation details |
-| `consumed_unit` | optional string | 8 | Metering unit for consumed_quantity (defaults to "tokens") |
+| `consumed_unit` | optional string | 8 | Metering unit for consumed_quantity (defaults to "tokens"). Same format as `Pricing.unit`/`Quota.metric`: a bare registered token (`[a-z0-9-]`) or a `vendor:namespaced` token, ≤64 chars (wire-enforced CEL). |
 
 ### AttributionDetail
 
@@ -577,9 +572,11 @@ Agent sends to Broker (Step 1).
 | `ver` | string | 1 | RAMP protocol version |
 | `id` | string | 2 | Unique request identifier |
 | `requester` | Requester | 3 | Requester identity, scopes, and optional delegation. Broker forwards this in `ResourceQuery.requester`. |
+| `uris` | repeated string | 8 | Resource URIs the agent wants. Broker forwards these in `ResourceQuery.uris`. Optional when `query`/`search_filters` drive discovery. |
+| `acceptable_restrictions` | repeated AcceptableRestriction | 9 | Limits the agent will operate within, per restriction axis. Broker forwards these in `ResourceQuery.acceptable_restrictions`. Advisory, not enforced. |
 | `constraints` | optional RequestConstraints | 4 | Budget and preference constraints |
 | `supported_profiles` | repeated string | 5 | Domain extension profiles the agent understands (e.g. "ramp-academic-v1") |
-| `query` | optional string | 6 | Search query for Broker-side resource discovery. When present, the Broker interprets the query and discovers resources across Exchanges on the agent's behalf. Can be used alongside `Requester.uris`. |
+| `query` | optional string | 6 | Search query for Broker-side resource discovery. When present, the Broker interprets the query and discovers resources across Exchanges on the agent's behalf. Can be used alongside `uris`. |
 | `search_filters` | optional Struct | 7 | Structured search filters (alongside or instead of `query`). Keys are profile-specific: `"academic.topic"`, `"news.category"`, `"legal.jurisdiction"`, etc. The Broker maps these to Exchange-specific query parameters. |
 | `ext` | Struct | 15 | Extension point |
 
@@ -655,6 +652,7 @@ A single resource catalog entry.
 | `provenance_source` | optional string | 10 | Who provided this metadata (e.g. "gumgum.com") |
 | `provenance_timestamp` | optional Timestamp | 11 | When metadata was collected |
 | `attestations` | repeated ResourceAttestation | 12 | Signed attestations about this content |
+| `terms` | repeated LicenseTerm | 13 | Publisher-declared licensing terms. Pricing is REQUIRED on every term (any semantics). For REFERENCE_ONLY terms, License.uri is additionally authoritative. |
 | `ext` | Struct | 15 | Extension point |
 
 ### PushResourcesResponse
@@ -663,6 +661,7 @@ A single resource catalog entry.
 |---|---|---|---|
 | `accepted` | int32 | 1 | Number of entries accepted |
 | `rejected` | int32 | 2 | Number of entries rejected |
+| `warnings` | repeated string | 3 | Non-fatal ingestion warnings (e.g., unrecognized vocab token in a Restriction). Warnings do not cause rejection. |
 
 ### RemoveResourcesRequest
 
@@ -689,55 +688,199 @@ A single resource catalog entry.
 |---|---|---|---|
 | `started` | bool | 1 | Whether the refresh was started |
 
+## Universal Licensing Core
+
+A resource carries zero or more `LicenseTerm` entries — each term is a complete commercial arrangement. Multiple terms are the normal case: a news article may be free for academic use and paid for commercial use; a stock photo may be perpetually licensed with an impressions cap.
+
+See [`/protocol/licensing-terms`](/protocol/licensing-terms/) for a full conceptual walkthrough with examples.
+
+### LicenseTerm
+
+One complete access arrangement for a resource. Lives at both ingestion (`ResourceEntry.terms`) and emission (`Offer.terms`).
+
+Validation rules (wire-enforced via protovalidate CEL unless noted). Parenthetical
+codes are the source-of-truth references: requirement tracking-codes (e.g. `fc65j`)
+cross-referenced in the proto comments and conformance suite, or a CEL rule `id:`
+(e.g. `license_term.semantics_specified`).
+- `pricing` MUST be present on **every** term, any semantics — absent Pricing is a validation error (`fc65j`). `model = FREE` must be stated explicitly — absent Pricing is not free.
+- `semantics` MUST be set — `TERM_SEMANTICS_UNSPECIFIED` is rejected (`license_term.semantics_specified`).
+- `REFERENCE_ONLY` requires `license.uri` to be non-empty (`fc65j`); a `License` with a `uri` requires a `uri_digest` (`d8y64`).
+- At most one `Restriction` per `kind`; a token cannot be both permitted and prohibited (`6z1v3`).
+- Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `license` | optional License | 1 | Governing license document. Authoritative for REFERENCE_ONLY terms (which MUST carry a non-empty `uri`). |
+| `semantics` | TermSemantics | 2 | How the Exchange interprets the machine fields |
+| `restrictions` | repeated Restriction | 3 | Usage restrictions (function, geography, user-type). AND-combined. |
+| `quotas` | repeated Quota | 4 | Usage caps. The agent must not exceed any individual Quota. |
+| `obligations` | repeated Obligation | 5 | Post-use behavioral requirements. |
+| `pricing` | optional Pricing | 6 | Commercial terms. REQUIRED on every term regardless of semantics (absent Pricing is rejected; `model = FREE` must be explicit). |
+| `scopes` | repeated string | 7 | Delegation scope-gating (AND-semantics). Empty = public. Segment-wise matching — see [Scope Matching](/protocol/authentication/#scope-matching) (`dist:*` covers `dist:US`; `dist` covers only `dist`). |
+| `part_label` | optional string | 8 | Informational human-readable name for a sub-part term. |
+
+### License
+
+Identifies the governing license document for a `LicenseTerm`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `uri` | optional string | 1 | Canonical license identity (RFC 3986; e.g. `"https://creativecommons.org/licenses/by/4.0/"`). MUST NOT be URL-validated — data-labels TDL identifiers use non-URL schemes. |
+| `id` | optional string | 2 | Stable short id: SPDX short-id (`"GPL-3.0-only"`), TollBit cuid, or catalog doc-id |
+| `name` | optional string | 3 | Human-readable name (e.g. `"CC BY 4.0"`) |
+| `immutable` | optional bool | 4 | The document at `uri` is versioned and will not change (data-labels TDL) |
+| `uri_digest` | optional string | 5 | `method:hexdigest` pin of the document at `uri` (e.g. `"sha256:…"`). REQUIRED whenever `uri` is present (any semantics, mutable or not — MitM/swap protection); covered by the offer signature. |
+
+### Restriction
+
+A single constraint on one licensing dimension: function (what), geography (where), or user-type (who).
+
+**Reading a restriction**: a value is in-scope when it matches at least one `permitted[]` token AND none of the `prohibited[]` tokens. Empty `permitted[]` = any value permitted on this axis. Restrictions ride on the offer; the agent self-selects the term it can honour (the Exchange does not pre-filter terms against requester attributes).
+
+**Vocabulary sources**: proto-native — `(ramp.v1.vocab_enum)` on the `RESTRICTION_KIND_FUNCTION` / `RESTRICTION_KIND_GEOGRAPHY` / `RESTRICTION_KIND_USER_TYPE` enum values (no side-car JSON registry).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `kind` | RestrictionKind | 1 | Which dimension this restriction constrains |
+| `permitted` | repeated string | 2 | Tokens allowed on this axis. Empty = all permitted. |
+| `prohibited` | repeated string | 3 | Tokens blocked on this axis. Takes precedence over permitted[]. |
+| `advisory` | bool | 4 | Default false = **binding** (a consumer that cannot evaluate a token MUST decline the term). true = non-blocking. Inverts the COSE-`crit` opt-in default — fail-closed by default. |
+
+### Quota
+
+A usage cap that gates whether a `LicenseTerm` remains valid. Quotas limit consumption before a term expires or must be renegotiated — they are NOT billing quantities.
+
+**Metric vocabulary**: proto-native — `(ramp.v1.vocab)` on `Quota.metric`. Standard metrics: `accesses`, `tokens`, `input-tokens`, `display-words`, `impressions`, `copies`, `seats`, `units-manufactured`.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `metric` | string | 1 | Unit being capped. A registered token from `(ramp.v1.vocab)` on this field, or a `vendor:` namespaced custom. |
+| `limit` | int64 | 2 | Maximum allowed value in the given window. |
+| `window` | QuotaWindow | 3 | Time window over which the limit accumulates. |
+
+### Obligation
+
+A post-use behavioral requirement attached to a `LicenseTerm`. Attribution and contribution are behavioral requirements here, not pricing models.
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `kind` | ObligationKind | 1 | What the agent must do. |
+| `trigger` | ObligationTrigger | 2 | When the obligation activates. |
+| `scope_license` | optional License | 3 | License derivatives must be released under. REQUIRED for `SHARE_ALIKE` (set `id` and/or `uri`). As a `License`, a referenced `uri` requires `uri_digest`. |
+| `detail` | optional string | 4 | Free-form detail (attribution string, notice file URI). `OBLIGATION_KIND_OTHER` without it → lint warning. |
+
 ## Enums
 
 ### PricingModel
 
+The charging **structure** only (a closed set). The open-ended metering basis ("per what") is NOT enumerated here — it lives in `Pricing.unit` as a registry-governed vocabulary. `UNSPECIFIED` is rejected at ingest (omission cannot default to FREE).
+
 | Value | Name | Description |
 |---|---|---|
-| 0 | UNSPECIFIED | |
-| 1 | PER_ACCESS | One-time access fee |
-| 2 | PER_TOKEN | Rate per LLM token consumed |
-| 3 | PER_FETCH | Rate per fetch request |
-| 4 | SUBSCRIPTION | Recurring access |
-| 5 | FREE | No charge |
-| 6 | ATTRIBUTION | Free with required attribution |
-| 7 | CONTRIBUTION | Good-faith payment |
-| 8 | TRAINING | Per training instance fee |
-| 9 | REVENUE_SHARE | Revenue share model (percentage of agent revenue) |
-| 10 | PER_PAGE | Per document page (legal filings, PDFs) |
-| 11 | PER_MINUTE | Per minute of audio/video |
-| 12 | PER_RECORD | Per structured data record |
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | FREE | No charge; `rate` must be 0 (state FREE explicitly — absent Pricing is not free) |
+| 2 | PER_UNIT | Rate per `Pricing.unit`; `unit` REQUIRED (registered token or `vendor:custom`) |
+| 3 | FLAT | One-time flat fee; `rate` is the total, no unit |
+
+The metering basis ("per what") is the `Pricing.unit` vocabulary, not a model; a subscription is `FREE` + `scopes`; attribution and contribution are `Obligation.kind`s; revenue-share settlement is off-protocol.
+
+### PricingMetering
+
+How usage is tracked for billing reconciliation. Used in `Pricing.metering` (field 9). Absent = `ONLINE`.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | ONLINE | Default. Exchange tracks usage events in real time. ReportUsage is required. |
+| 1 | NONE | One-time perpetual sale. No ongoing metering; `billing_id` is issued at `ExecuteTransaction` and the ledger entry is closed. No `ReportUsage` required. |
+| 2 | OFFLINE_SELF_REPORTED | Agent self-reports physical-world consumption (e.g. units manufactured from a licensed design). Exchange audits. |
+
+### TermSemantics
+
+How the Exchange interprets a `LicenseTerm`'s machine fields.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | ENUMERATED | Machine `restrictions`/`quotas`/`obligations` are the complete, authoritative expression of the term (internally consistent, no self-contradiction) and are enforced. Pricing MUST be present. |
+| 2 | REFERENCE_ONLY | The document at `License.uri` (MUST be non-empty) is the authoritative, complete source; the agent reads it before using. Machine `restrictions`/`quotas`/`obligations` are **optional** here — the publisher MAY send Pricing alone — but any that **are** sent must be accurate (MUST NOT contradict the referenced document) and **are** enforced just like ENUMERATED. Pricing is still required. |
+
+### RestrictionKind
+
+Which dimension a `Restriction` constrains.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | FUNCTION | What the agent may do. Tokens authored as `(ramp.v1.vocab_enum)` on this value. |
+| 2 | GEOGRAPHY | Where the agent operates. ISO 3166-1 alpha-2 (structural) + the specials `EU`, `EEA`, `*`. |
+| 3 | USER_TYPE | Who the agent is. Tokens authored as `(ramp.v1.vocab_enum)` on this value. |
+| 4 | OTHER | Custom dimension; escape hatch, linted and discouraged. |
+
+### QuotaWindow
+
+Time window over which a `Quota.limit` accumulates.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | HOURLY | Resets each hour |
+| 2 | DAILY | Resets each day |
+| 3 | MONTHLY | Resets each month |
+| 4 | TOTAL | Lifetime cap — never resets |
+
+### ObligationKind
+
+What the agent must do after use. `ATTRIBUTION` and `CONTRIBUTION` are behavioral requirements, not pricing models.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | ATTRIBUTION | Credit the author or publisher |
+| 2 | CONTRIBUTION | Good-faith payment (amount suggested, not contractually fixed) |
+| 3 | SHARE_ALIKE | Derivatives must use the same / compatible license (`scope_license` required) |
+| 4 | NETWORK_COPYLEFT | Network service triggers copyleft (AGPL style) |
+| 5 | NOTICE | Include the specified copyright notice |
+| 6 | OTHER | Described in `Obligation.detail` |
+
+### ObligationTrigger
+
+When an `Obligation` activates.
+
+| Value | Name | Description |
+|---|---|---|
+| 0 | UNSPECIFIED | Unset — rejected at ingest |
+| 1 | ON_USE | Triggered on any use of the resource |
+| 2 | ON_DISTRIBUTION | Triggered when copies are distributed |
+| 3 | ON_NETWORK_SERVICE | Triggered when served over a network (AGPL style) |
+| 4 | ON_DERIVATIVE | Triggered when a derivative work is produced |
 
 ### DenialReason
 
 | Value | Name | Description |
 |---|---|---|
 | 0 | UNSPECIFIED | |
-| 1 | INVALID_LICENSE | License ID not recognized |
-| 2 | EXPIRED_LICENSE | License ID expired |
-| 3 | INSUFFICIENT_BALANCE | Buyer's balance too low |
-| 4 | RATE_LIMITED | Too many requests |
-| 5 | CONTENT_UNAVAILABLE | Content no longer available |
-| 6 | FUNCTION_PROHIBITED | Requested function not permitted |
-| 7 | GEO_RESTRICTED | Buyer's geography not permitted |
-| 8 | REPORTING_OVERDUE | Buyer has overdue reports |
-| 9 | OFFER_EXPIRED | Offer TTL exceeded |
-| 10 | SIGNATURE_INVALID | Signature verification failed |
-| 11 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
-| 12 | DELEGATION_EXPIRED | Biscuit delegation token expired |
-| 13 | SCOPE_INSUFFICIENT | Requester's scopes do not cover this resource |
+| 1 | BILLING_REF_INACTIVE | `billing_ref` is not active / not recognized by the billing system |
+| 2 | INSUFFICIENT_BALANCE | Buyer's balance too low |
+| 3 | RATE_LIMITED | Too many requests |
+| 4 | CONTENT_UNAVAILABLE | Content no longer available |
+| 5 | RESTRICTION_NOT_SATISFIED | Accepted term's restriction not satisfied by the request (axes in `restriction_mismatches`, same `RestrictionKind` vocabulary as the terms) |
+| 6 | REPORTING_OVERDUE | Buyer has overdue reports |
+| 7 | OFFER_EXPIRED | Offer TTL exceeded |
+| 8 | SIGNATURE_INVALID | Signature verification failed |
+| 9 | QUOTA_EXCEEDED | Subscription access count exhausted for this period |
+| 10 | DELEGATION_INVALID | Delegation missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent |
+| 11 | SCOPE_INSUFFICIENT | Requester scopes don't cover this resource |
 
 ### DisputeReason
 
 | Value | Name | Description |
 |---|---|---|
 | 0 | UNSPECIFIED | |
-| 1 | DELIVERY_FAILED | CDN returned 4xx/5xx |
-| 2 | CONTENT_MISMATCH | Content hash does not match attested hash |
-| 3 | INCOMPLETE_CONTENT | Significantly fewer tokens than promised |
-| 4 | WRONG_CONTENT | Different content than described |
-| 5 | EXPIRED_BEFORE_FETCH | Signed URL expired before agent could fetch |
+| 1 | CONTENT_MISMATCH | Content hash does not match what was promised in the Offer |
+| 2 | DELIVERY_FAILED | Resource not delivered (signed URL returned 404/403/5xx) |
+| 3 | WRONG_CONTENT | Delivered, but entirely different from what was described |
+| 4 | EXPIRED_BEFORE_FETCH | Signed URL expired before the agent could fetch |
+| 5 | INCOMPLETE_CONTENT | Resource was truncated or incomplete |
 
 ### DisputeStatus
 
@@ -787,13 +930,11 @@ Why no offers are available for a requested URI.
 | 0 | UNSPECIFIED | |
 | 1 | NOT_IN_CATALOG | URI is not in this Exchange's catalog |
 | 2 | CONTENT_BLOCKED | Provider opted out of AI access |
-| 3 | FUNCTION_PROHIBITED | Requested function prohibited by provider terms |
-| 4 | GEO_RESTRICTED | Requester's geography is restricted |
-| 5 | USER_CATEGORY_PROHIBITED | Requester's user category not permitted |
-| 6 | TEMPORARILY_UNAVAILABLE | Content temporarily unavailable (e.g. feed refresh) |
-| 7 | NOT_AUTHORIZED | Exchange not authorized by provider |
-| 8 | SCOPE_INSUFFICIENT | Requester's scopes do not cover this resource. Used in enterprise deployments; public Exchanges SHOULD silently omit. |
-| 9 | UNKNOWN_CRITICAL_EXTENSION | Consumer encountered `ext_critical` keys it does not recognize |
+| 3 | RESTRICTION_FILTERED | Offers exist but were pre-filtered for one or more restriction axes the requester stated (axes in `restriction_filters`, same `RestrictionKind` vocabulary as the terms); convenience filter, not enforcement |
+| 4 | TEMPORARILY_UNAVAILABLE | Content temporarily unavailable (e.g. feed refresh) |
+| 5 | NOT_AUTHORIZED | Exchange not authorized by provider |
+| 6 | SCOPE_INSUFFICIENT | Requester's scopes/subscription do not cover this resource. Applies wherever access is subscription- or scope-gated; the resource exists but the requester's token/subscription doesn't grant it. (Exchange MAY omit silently where existence must stay hidden.) |
+| 7 | UNKNOWN_CRITICAL_EXTENSION | Consumer encountered `ext_critical` keys it does not recognize |
 
 ### RequesterType
 

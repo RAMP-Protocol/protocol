@@ -30,7 +30,7 @@ Loss is acceptable -- this is telemetry, not financial data.
 | `event_type` | `EventType` | yes | `EVENT_SUPPLY_QUERY_RECEIVED` |
 | `timestamp` | `time.Time` | yes | Server receipt time (UTC, nanosecond precision) |
 | `query_id` | `string` | yes | `ResourceQuery.id` |
-| `buyer_lid` | `string` | yes | `aisystem.aisysuse.lid` (license ID) |
+| `buyer_lid` | `string` | yes | CoMP's `aisystem.aisysuse.lid`, mapped to `Requester.billing_ref` |
 | `buyer_name` | `string` | yes | `aisystem.name` (e.g. "claude.ai") |
 | `requested_uris` | `[]string` | yes | `aisystem.aisysuse.uri` |
 | `requested_functions` | `[]string` | yes | `aisystem.aisysuse.function` |
@@ -50,7 +50,7 @@ Rebuildable from supply query + catalog state.
 | `event_type` | `EventType` | yes | `EVENT_OFFERS_PRESENTED` |
 | `timestamp` | `time.Time` | yes | Server response time |
 | `query_id` | `string` | yes | Corresponding `ResourceQuery.id` |
-| `buyer_lid` | `string` | yes | License ID of the requester |
+| `buyer_lid` | `string` | yes | Billing reference of the requester (`Requester.billing_ref`) |
 | `offer_count` | `int32` | yes | Number of offers returned |
 | `offers` | `[]OfferSummary` | yes | Summarized offer data |
 | `exchange_id` | `string` | yes | This Exchange's identity |
@@ -60,8 +60,8 @@ Rebuildable from supply query + catalog state.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `offer_id` | `string` | yes | `Offer.offer_id` |
-| `package_id` | `string` | yes | `Offer.package.id` |
-| `provider_domain` | `string` | yes | `Offer.package.seller` |
+| `package_id` | `string` | no | `Offer.ext["comp.package_id"]` (ramp-comp-v1; present only if the Offer carries CoMP metadata) |
+| `provider_domain` | `string` | no | `Offer.ext["comp.seller"]` (ramp-comp-v1) or resolved from the offer's identity |
 | `content_url` | `string` | no | `ResourceIdentity.canonical_url` |
 | `pricing_model` | `string` | yes | `Pricing.model` |
 | `rate` | `float64` | yes | `Pricing.rate` |
@@ -99,7 +99,7 @@ Logged after the Billing Adapter returns its authorization decision. Captures bo
 | `timestamp` | `time.Time` | yes | Authorization decision time |
 | `request_id` | `string` | yes | Corresponding `TransactionRequest.id` |
 | `offer_id` | `string` | yes | The offer being authorized |
-| `buyer_lid` | `string` | yes | License ID |
+| `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
 | `authorized` | `bool` | yes | Whether billing was approved |
 | `denial_reason` | `DenialReason` | cond | Required when `authorized=false` |
 | `billing_id` | `string` | cond | Assigned by billing adapter (only on approval) |
@@ -116,16 +116,17 @@ Authorization denials use a closed enum:
 
 | Enum Value | Description |
 |---|---|
-| `DENIAL_REASON_INVALID_LICENSE` | License ID not recognized by the billing adapter |
-| `DENIAL_REASON_EXPIRED_LICENSE` | License exists but has expired |
+| `DENIAL_REASON_BILLING_REF_INACTIVE` | `billing_ref` not active / not recognized by the billing adapter |
 | `DENIAL_REASON_INSUFFICIENT_BALANCE` | Buyer's prepaid balance or credit limit exhausted |
 | `DENIAL_REASON_RATE_LIMITED` | Buyer exceeded per-period transaction rate limit |
 | `DENIAL_REASON_CONTENT_UNAVAILABLE` | Provider has withdrawn or paused the content |
-| `DENIAL_REASON_FUNCTION_PROHIBITED` | Requested function not permitted under license |
-| `DENIAL_REASON_GEO_RESTRICTED` | Buyer's jurisdiction disallowed for this content |
+| `DENIAL_REASON_RESTRICTION_NOT_SATISFIED` | Accepted term's restriction (function / geography / user-type axis) not satisfied by the request |
 | `DENIAL_REASON_REPORTING_OVERDUE` | Buyer blocked due to overdue usage reports |
 | `DENIAL_REASON_OFFER_EXPIRED` | The referenced offer has expired since presentation |
 | `DENIAL_REASON_SIGNATURE_INVALID` | Request signature verification failed |
+| `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access/spend count exhausted for the current period |
+| `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent |
+| `DENIAL_REASON_SCOPE_INSUFFICIENT` | Requester scopes do not cover the resource |
 
 ## SignedURLIssued
 
@@ -142,7 +143,7 @@ The Exchange MUST NOT return the `TransactionResponse` until this event is durab
 | `billing_id` | `string` | yes | `TransactionResponse.billing_id` |
 | `request_id` | `string` | yes | `TransactionRequest.id` (idempotency key) |
 | `offer_id` | `string` | yes | Selected offer |
-| `buyer_lid` | `string` | yes | License ID |
+| `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
 | `buyer_name` | `string` | yes | AI system name |
 | `provider_domain` | `string` | yes | Content owner domain |
 | `content_url` | `string` | yes | Canonical URL of content |
@@ -235,7 +236,7 @@ Logged when a dispute reaches a resolution state (`AUTO_RESOLVED`, `RESOLVED`, o
 | `dispute_id` | `string` | yes | The resolved dispute |
 | `transaction_id` | `string` | yes | The original transaction |
 | `report_id` | `string` | yes | The linked usage report |
-| `buyer_lid` | `string` | yes | License ID |
+| `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
 | `status` | `DisputeStatus` | yes | Final status (e.g., `AUTO_RESOLVED`, `RESOLVED`, `SETTLED`) |
 | `resolution` | `ResolutionType` | yes | Resolution outcome (`CREDIT`, `REDELIVERY`, `REJECTED`, `INVESTIGATION`) |
 | `credit_amount` | `float64` | no | Credit amount if resolution is `CREDIT` |

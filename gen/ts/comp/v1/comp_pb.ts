@@ -83,10 +83,10 @@ export const AISystemSchema: GenMessage<AISystem> = /*@__PURE__*/
  */
 export type AISystemUse = Message<"comp.v1.AISystemUse"> & {
   /**
-   * License ID — public agent identifier. NOT a credential.
-   * Authentication is via agent_signature (Ed25519). Treat lid like a
-   * username, not a password. Exchange looks up agent's registered
-   * public key by lid.
+   * License ID — public agent identifier in CoMP. NOT a credential.
+   * In RAMP this maps to Requester.billing_ref (a billing handle, not an
+   * entitlement). Request authentication is an RFC 9421 HTTP Message Signature;
+   * the agent's key is resolved by its domain, never by this id.
    *
    * @generated from field: string lid = 1;
    */

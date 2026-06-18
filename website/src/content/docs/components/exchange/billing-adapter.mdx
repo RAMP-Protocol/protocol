@@ -40,13 +40,13 @@ type BillingAdapter interface {
     // GetBalance returns the buyer's remaining balance or credit.
     // Optional — used for informational purposes only.
     // Return ErrNotSupported if the billing system doesn't support balance queries.
-    GetBalance(ctx context.Context, buyerLicenseID string) (*BillingBalance, error)
+    GetBalance(ctx context.Context, billingRef string) (*BillingBalance, error)
 
     // CheckSubscription checks whether the buyer has an active subscription with the tenant.
     // Returns subscription status including quota and unit value for financial attribution.
     // Used by DiscoverResources to include zero-cost subscription offers and by ExecuteTransaction
     // to skip per-request billing authorization for subscription-based access.
-    CheckSubscription(ctx context.Context, buyerLicenseID string, tenantID string) (*SubscriptionStatus, error)
+    CheckSubscription(ctx context.Context, billingRef string, tenantID string) (*SubscriptionStatus, error)
 }
 
 // SubscriptionStatus describes the state of a buyer's subscription with a tenant.
@@ -58,7 +58,7 @@ type SubscriptionStatus struct {
 }
 
 type BillingAuthorizeRequest struct {
-    BuyerLicenseID string  // The agent's license ID
+    BillingRef     string  // The buyer's billing reference (handle into the operator's billing system)
     Amount         float64 // Transaction amount
     Currency       string  // ISO 4217
     OfferID        string  // For audit trail
@@ -77,7 +77,7 @@ type BillingRecordRequest struct {
     Amount        float64
     Currency      string
     TenantID      string
-    BuyerLicense  string
+    BillingRef    string
     ContentURI    string
     Timestamp     time.Time
 }
@@ -104,7 +104,7 @@ For development, testing, and PoC deployments:
 // All state is in-memory — lost on restart.
 type InMemoryBillingAdapter struct {
     mu       sync.RWMutex
-    balances map[string]float64 // license ID -> balance
+    balances map[string]float64 // billing reference -> balance
     holds    map[string]float64 // billing ID -> held amount
     records  []BillingRecordRequest
 }
@@ -122,7 +122,7 @@ func (a *InMemoryBillingAdapter) Authorize(
     a.mu.Lock()
     defer a.mu.Unlock()
 
-    balance, ok := a.balances[req.BuyerLicenseID]
+    balance, ok := a.balances[req.BillingRef]
     if !ok {
         return &BillingAuthorizeResponse{
             Approved: false,
@@ -137,7 +137,7 @@ func (a *InMemoryBillingAdapter) Authorize(
     }
 
     billingID := fmt.Sprintf("bill-%s", ulid.Make().String())
-    a.balances[req.BuyerLicenseID] -= req.Amount
+    a.balances[req.BillingRef] -= req.Amount
     a.holds[billingID] = req.Amount
 
     return &BillingAuthorizeResponse{
@@ -156,8 +156,8 @@ For AWS deployments, wrapping DynamoDB with consistent reads:
 ```go
 // DynamoDBBillingAdapter implements BillingAdapter using DynamoDB.
 // Table schema:
-//   PK: "BUYER#<license_id>"  SK: "BALANCE"     → {available, currency, credit_limit}
-//   PK: "BUYER#<license_id>"  SK: "TXN#<ulid>"  → {billing_id, amount, ...}
+//   PK: "BUYER#<billing_ref>"  SK: "BALANCE"     → {available, currency, credit_limit}
+//   PK: "BUYER#<billing_ref>"  SK: "TXN#<ulid>"  → {billing_id, amount, ...}
 //   PK: "HOLD#<billing_id>"   SK: "HOLD"        → {amount, buyer, created_at}
 //
 // Uses DynamoDB transactions for atomic balance deduction + hold creation.
@@ -186,7 +186,7 @@ func (a *ExampleSSPBillingAdapter) Authorize(
 ) (*BillingAuthorizeResponse, error) {
     // Call SSP Corp's internal billing API
     sspReq := &ssp.AuthorizeRequest{
-        AccountID: mapLicenseToAccount(req.BuyerLicenseID),
+        AccountID: mapBillingRefToAccount(req.BillingRef),
         Amount:    req.Amount,
         Currency:  req.Currency,
         Product:   "content-licensing",
@@ -244,19 +244,13 @@ The Exchange operator sets tenant-level defaults (e.g., "$0.05 per article for a
 
 ### Pricing Models
 
+`PricingModel` is the charging structure only. The metering basis ("per what") is the open `Pricing.unit` vocabulary (tokens, pages, accesses, records, ...), not a pricing model. Attribution and contribution are `Obligation`s, not pricing models. Subscriptions are expressed via delegation/scopes (offers come back FREE), not a pricing model.
+
 | Pricing Model | Billing Basis | Quantity Estimate Used For |
 |---|---|---|
-| `per_article` | Fixed price per article | unit_cost comparison |
-| `per_crawl` | Fixed price per crawl session | unit_cost comparison |
-| `per_token` | Actual tokens consumed (reported) | unit_cost comparison + initial estimate |
-| `per_page` | Fixed price per page | unit_cost comparison (legal, court filings) |
-| `per_minute` | Price per minute of content | unit_cost comparison (video, audio, streaming) |
-| `per_record` | Price per record accessed | unit_cost comparison (database records, credit reports) |
-| `subscription` | Flat rate per period | Not applicable |
+| `per_unit` | Price per metering unit; the unit (tokens, pages, accesses, records, minutes, ...) comes from `Pricing.unit` | unit_cost comparison + initial estimate |
+| `flat` | Fixed price per transaction, independent of quantity | unit_cost comparison |
 | `free` | No charge | Not applicable |
-| `attribution` | Free with mandatory citation | Not applicable |
-| `contribution` | Revenue share on downstream output | unit_cost comparison |
-| `training` | Bulk licensing for model training | Not applicable |
 
 ---
 
@@ -274,7 +268,7 @@ The 1.32 multiplier is derived from empirical analysis of English-language conte
 
 ### Data Source
 
-`word_count` comes from RSL content metadata or sitemap `<content:wordcount>` extensions. If unavailable, the Exchange estimates from content length: `word_count ~ content_length_bytes / 5.5`. For non-token pricing models (per_page, per_minute, per_record), the `estimated_quantity` is derived from content metadata specific to the unit type.
+`word_count` comes from RSL content metadata or sitemap `<content:wordcount>` extensions. If unavailable, the Exchange estimates from content length: `word_count ~ content_length_bytes / 5.5`. For non-token metering units (`unit: "pages"`, `"minutes"`, `"records"`), the `estimated_quantity` is derived from content metadata specific to that unit type.
 
 ### Subscription Content and Unit Cost
 
@@ -323,7 +317,7 @@ Each tenant configuration includes a revenue share percentage:
 RevenueSharePct float64 // Provider's share (e.g., 0.85 = 85%)
 ```
 
-Revenue tracking and reconciliation are handled through the transaction log. The `BillingRecordRequest` includes all fields needed for settlement: `BillingID`, `TransactionID`, `Amount`, `Currency`, `TenantID`, `BuyerLicense`, `ContentURI`, and `Timestamp`.
+Revenue tracking and reconciliation are handled through the transaction log. The `BillingRecordRequest` includes all fields needed for settlement: `BillingID`, `TransactionID`, `Amount`, `Currency`, `TenantID`, `BillingRef`, `ContentURI`, and `Timestamp`.
 
 ---
 

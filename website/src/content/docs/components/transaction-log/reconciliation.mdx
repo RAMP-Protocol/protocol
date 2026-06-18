@@ -294,7 +294,7 @@ Each event record is signed by the Exchange's Ed25519 private key. Providers and
 func SignEvent(event *TransactionEvent, privateKey ed25519.PrivateKey) {
     chainHashBytes, _ := hex.DecodeString(event.ChainHash)
     sig := ed25519.Sign(privateKey, chainHashBytes)
-    event.ExchangeSignature = base64.StdEncoding.EncodeToString(sig)
+    event.OfferSignature = base64.StdEncoding.EncodeToString(sig)
 }
 ```
 
@@ -319,7 +319,7 @@ txn-mp-93a7f2,bill-93a7f2-001,2026-03-14T01:43:00Z,LIC-BUYER-001,claude.ai,techc
 ### JSON Lines (for programmatic consumers)
 
 ```jsonl
-{"transaction_id":"txn-mp-93a7f2","billing_id":"bill-93a7f2-001","timestamp":"2026-03-14T01:43:00Z","buyer_lid":"LIC-BUYER-001","buyer_name":"claude.ai","provider_domain":"techcrunch.com","content_url":"https://techcrunch.com/premium/ai-infrastructure.html","package_id":"PKG-TC-AI-INFRA","cost":{"amount":0.05,"currency":"USD","unit_cost":0.00001515},"delivery_method":"INSTRUCTIONS","reporting":{"required":true,"received":true,"within_window":true,"consumed_quantity":3150},"chain_hash":"a7f3b2c1...","exchange_signature":"base64..."}
+{"transaction_id":"txn-mp-93a7f2","billing_id":"bill-93a7f2-001","timestamp":"2026-03-14T01:43:00Z","buyer_lid":"LIC-BUYER-001","buyer_name":"claude.ai","provider_domain":"techcrunch.com","content_url":"https://techcrunch.com/premium/ai-infrastructure.html","package_id":"PKG-TC-AI-INFRA","cost":{"amount":0.05,"currency":"USD","unit_cost":0.00001515},"delivery_method":"INSTRUCTIONS","reporting":{"required":true,"received":true,"within_window":true,"consumed_quantity":3150},"chain_hash":"a7f3b2c1...","offer_signature":"base64..."}
 ```
 
 ### Encoding Strategy

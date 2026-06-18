@@ -16,6 +16,7 @@
 package rampv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -34,8 +35,7 @@ const (
 )
 
 // DiscoveryMethod — How the Broker discovered this resource URI.
-// v1 extension point for future discovery integration (search engines,
-// resource recommendation, etc.). Does not affect transaction flow.
+// Metadata for the agent; does not affect transaction flow.
 type DiscoveryMethod int32
 
 const (
@@ -107,27 +107,27 @@ const (
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_IN_CATALOG OfferAbsenceReason = 1
 	// Resource exists but has a BLOCKED access policy (provider opted out of AI access).
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_CONTENT_BLOCKED OfferAbsenceReason = 2
-	// Resource exists but the requested CoMP function is prohibited by provider terms.
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED OfferAbsenceReason = 3
-	// Resource exists but the requester's geography is restricted.
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_GEO_RESTRICTED OfferAbsenceReason = 4
-	// Resource exists but the requester's user category is not permitted.
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED OfferAbsenceReason = 5
+	// Resource exists but its offers were pre-filtered out for one or more
+	// restriction axes the requester stated (a convenience filter matched to the
+	// query, not an enforcement verdict — see Restriction). The filtered axes are
+	// listed in OfferGroup.restriction_filters, in the same RestrictionKind
+	// vocabulary the terms use. The agent MAY still be eligible.
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_RESTRICTION_FILTERED OfferAbsenceReason = 3
 	// Resource is temporarily unavailable (e.g., provider feed refresh in progress).
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE OfferAbsenceReason = 6
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE OfferAbsenceReason = 4
 	// Exchange is not authorized by the provider to sell this resource.
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_AUTHORIZED OfferAbsenceReason = 7
-	// Requester's scopes do not cover this resource.
-	// Used in enterprise deployments where the requester knows resources exist
-	// but their delegation token doesn't grant access. The Exchange MAY
-	// use this instead of silent omission when the deployment context makes
-	// it appropriate (e.g., internal Exchange where resources are known).
-	// Public Exchanges SHOULD silently omit (not reveal existence).
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT OfferAbsenceReason = 8
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_AUTHORIZED OfferAbsenceReason = 5
+	// Requester's scopes/subscription do not cover this resource. Applies wherever
+	// access is gated by subscription or scope entitlements (not only enterprise
+	// deployments): the resource exists but the requester's delegation token or
+	// subscription does not grant it. The Exchange returns this so the requester
+	// learns the resource is reachable under the right subscription/scope. (Where
+	// existence itself must stay hidden, the Exchange MAY omit it silently instead.)
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT OfferAbsenceReason = 6
 	// Consumer encountered ext_critical keys it does not recognize.
 	// The unrecognized keys SHOULD be listed in the OfferGroup's ext field
 	// under "unrecognized_critical_extensions" for diagnostic purposes.
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION OfferAbsenceReason = 9
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION OfferAbsenceReason = 7
 )
 
 // Enum value maps for OfferAbsenceReason.
@@ -136,25 +136,21 @@ var (
 		0: "OFFER_ABSENCE_REASON_UNSPECIFIED",
 		1: "OFFER_ABSENCE_REASON_NOT_IN_CATALOG",
 		2: "OFFER_ABSENCE_REASON_CONTENT_BLOCKED",
-		3: "OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED",
-		4: "OFFER_ABSENCE_REASON_GEO_RESTRICTED",
-		5: "OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED",
-		6: "OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE",
-		7: "OFFER_ABSENCE_REASON_NOT_AUTHORIZED",
-		8: "OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT",
-		9: "OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION",
+		3: "OFFER_ABSENCE_REASON_RESTRICTION_FILTERED",
+		4: "OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE",
+		5: "OFFER_ABSENCE_REASON_NOT_AUTHORIZED",
+		6: "OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT",
+		7: "OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION",
 	}
 	OfferAbsenceReason_value = map[string]int32{
 		"OFFER_ABSENCE_REASON_UNSPECIFIED":                0,
 		"OFFER_ABSENCE_REASON_NOT_IN_CATALOG":             1,
 		"OFFER_ABSENCE_REASON_CONTENT_BLOCKED":            2,
-		"OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED":        3,
-		"OFFER_ABSENCE_REASON_GEO_RESTRICTED":             4,
-		"OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED":   5,
-		"OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE":    6,
-		"OFFER_ABSENCE_REASON_NOT_AUTHORIZED":             7,
-		"OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT":         8,
-		"OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION": 9,
+		"OFFER_ABSENCE_REASON_RESTRICTION_FILTERED":       3,
+		"OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE":    4,
+		"OFFER_ABSENCE_REASON_NOT_AUTHORIZED":             5,
+		"OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT":         6,
+		"OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION": 7,
 	}
 )
 
@@ -185,55 +181,327 @@ func (OfferAbsenceReason) EnumDescriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{1}
 }
 
+// TermSemantics — How the Exchange interprets a LicenseTerm's machine fields.
+type TermSemantics int32
+
+const (
+	TermSemantics_TERM_SEMANTICS_UNSPECIFIED    TermSemantics = 0 // unset — rejected at ingest
+	TermSemantics_TERM_SEMANTICS_ENUMERATED     TermSemantics = 1
+	TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY TermSemantics = 2
+)
+
+// Enum value maps for TermSemantics.
+var (
+	TermSemantics_name = map[int32]string{
+		0: "TERM_SEMANTICS_UNSPECIFIED",
+		1: "TERM_SEMANTICS_ENUMERATED",
+		2: "TERM_SEMANTICS_REFERENCE_ONLY",
+	}
+	TermSemantics_value = map[string]int32{
+		"TERM_SEMANTICS_UNSPECIFIED":    0,
+		"TERM_SEMANTICS_ENUMERATED":     1,
+		"TERM_SEMANTICS_REFERENCE_ONLY": 2,
+	}
+)
+
+func (x TermSemantics) Enum() *TermSemantics {
+	p := new(TermSemantics)
+	*p = x
+	return p
+}
+
+func (x TermSemantics) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TermSemantics) Descriptor() protoreflect.EnumDescriptor {
+	return file_ramp_v1_ramp_proto_enumTypes[2].Descriptor()
+}
+
+func (TermSemantics) Type() protoreflect.EnumType {
+	return &file_ramp_v1_ramp_proto_enumTypes[2]
+}
+
+func (x TermSemantics) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TermSemantics.Descriptor instead.
+func (TermSemantics) EnumDescriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{2}
+}
+
+// RestrictionKind — Which dimension a Restriction constrains.
+//
+// The token vocabulary for each open axis is authored ONLY in the
+// (ramp.v1.vocab_enum) entries on the corresponding enum value below; the
+// functiontokens / geographytokens / usertypes constants + IsRegistered derive
+// from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
+// 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
+// not enumerated.
+type RestrictionKind int32
+
+const (
+	RestrictionKind_RESTRICTION_KIND_UNSPECIFIED RestrictionKind = 0 // unset — rejected at ingest
+	// What the agent may do with the content. Seeded from RSL 1.0 AI-use
+	// vocabulary and extended with established IP/copyright terms.
+	RestrictionKind_RESTRICTION_KIND_FUNCTION RestrictionKind = 1
+	// Where the agent may use the content. ISO 3166-1 alpha-2 codes (US, DE, GB)
+	// are valid structurally; only the non-ISO specials are registered here.
+	RestrictionKind_RESTRICTION_KIND_GEOGRAPHY RestrictionKind = 2
+	// Who may access and use the content.
+	RestrictionKind_RESTRICTION_KIND_USER_TYPE RestrictionKind = 3
+	RestrictionKind_RESTRICTION_KIND_OTHER     RestrictionKind = 4 // Custom axis; values carried in permitted/prohibited
+)
+
+// Enum value maps for RestrictionKind.
+var (
+	RestrictionKind_name = map[int32]string{
+		0: "RESTRICTION_KIND_UNSPECIFIED",
+		1: "RESTRICTION_KIND_FUNCTION",
+		2: "RESTRICTION_KIND_GEOGRAPHY",
+		3: "RESTRICTION_KIND_USER_TYPE",
+		4: "RESTRICTION_KIND_OTHER",
+	}
+	RestrictionKind_value = map[string]int32{
+		"RESTRICTION_KIND_UNSPECIFIED": 0,
+		"RESTRICTION_KIND_FUNCTION":    1,
+		"RESTRICTION_KIND_GEOGRAPHY":   2,
+		"RESTRICTION_KIND_USER_TYPE":   3,
+		"RESTRICTION_KIND_OTHER":       4,
+	}
+)
+
+func (x RestrictionKind) Enum() *RestrictionKind {
+	p := new(RestrictionKind)
+	*p = x
+	return p
+}
+
+func (x RestrictionKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RestrictionKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_ramp_v1_ramp_proto_enumTypes[3].Descriptor()
+}
+
+func (RestrictionKind) Type() protoreflect.EnumType {
+	return &file_ramp_v1_ramp_proto_enumTypes[3]
+}
+
+func (x RestrictionKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RestrictionKind.Descriptor instead.
+func (RestrictionKind) EnumDescriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{3}
+}
+
+// QuotaWindow — Time window over which a Quota.limit accumulates.
+type QuotaWindow int32
+
+const (
+	QuotaWindow_QUOTA_WINDOW_UNSPECIFIED QuotaWindow = 0 // unset — rejected at ingest
+	QuotaWindow_QUOTA_WINDOW_HOURLY      QuotaWindow = 1
+	QuotaWindow_QUOTA_WINDOW_DAILY       QuotaWindow = 2
+	QuotaWindow_QUOTA_WINDOW_MONTHLY     QuotaWindow = 3
+	QuotaWindow_QUOTA_WINDOW_TOTAL       QuotaWindow = 4 // Lifetime cap — never resets
+)
+
+// Enum value maps for QuotaWindow.
+var (
+	QuotaWindow_name = map[int32]string{
+		0: "QUOTA_WINDOW_UNSPECIFIED",
+		1: "QUOTA_WINDOW_HOURLY",
+		2: "QUOTA_WINDOW_DAILY",
+		3: "QUOTA_WINDOW_MONTHLY",
+		4: "QUOTA_WINDOW_TOTAL",
+	}
+	QuotaWindow_value = map[string]int32{
+		"QUOTA_WINDOW_UNSPECIFIED": 0,
+		"QUOTA_WINDOW_HOURLY":      1,
+		"QUOTA_WINDOW_DAILY":       2,
+		"QUOTA_WINDOW_MONTHLY":     3,
+		"QUOTA_WINDOW_TOTAL":       4,
+	}
+)
+
+func (x QuotaWindow) Enum() *QuotaWindow {
+	p := new(QuotaWindow)
+	*p = x
+	return p
+}
+
+func (x QuotaWindow) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (QuotaWindow) Descriptor() protoreflect.EnumDescriptor {
+	return file_ramp_v1_ramp_proto_enumTypes[4].Descriptor()
+}
+
+func (QuotaWindow) Type() protoreflect.EnumType {
+	return &file_ramp_v1_ramp_proto_enumTypes[4]
+}
+
+func (x QuotaWindow) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use QuotaWindow.Descriptor instead.
+func (QuotaWindow) EnumDescriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{4}
+}
+
+// ObligationKind — What the agent must do after use.
+type ObligationKind int32
+
+const (
+	ObligationKind_OBLIGATION_KIND_UNSPECIFIED      ObligationKind = 0 // unset — rejected at ingest
+	ObligationKind_OBLIGATION_KIND_ATTRIBUTION      ObligationKind = 1 // Credit the author / publisher
+	ObligationKind_OBLIGATION_KIND_CONTRIBUTION     ObligationKind = 2 // Good-faith payment (amount suggested)
+	ObligationKind_OBLIGATION_KIND_SHARE_ALIKE      ObligationKind = 3 // Derivatives must use the same license (CC-BY-SA / GPL)
+	ObligationKind_OBLIGATION_KIND_NETWORK_COPYLEFT ObligationKind = 4 // Network service triggers copyleft (AGPL-style)
+	ObligationKind_OBLIGATION_KIND_NOTICE           ObligationKind = 5 // Include the specified copyright notice
+	ObligationKind_OBLIGATION_KIND_OTHER            ObligationKind = 6 // Described in Obligation.detail
+)
+
+// Enum value maps for ObligationKind.
+var (
+	ObligationKind_name = map[int32]string{
+		0: "OBLIGATION_KIND_UNSPECIFIED",
+		1: "OBLIGATION_KIND_ATTRIBUTION",
+		2: "OBLIGATION_KIND_CONTRIBUTION",
+		3: "OBLIGATION_KIND_SHARE_ALIKE",
+		4: "OBLIGATION_KIND_NETWORK_COPYLEFT",
+		5: "OBLIGATION_KIND_NOTICE",
+		6: "OBLIGATION_KIND_OTHER",
+	}
+	ObligationKind_value = map[string]int32{
+		"OBLIGATION_KIND_UNSPECIFIED":      0,
+		"OBLIGATION_KIND_ATTRIBUTION":      1,
+		"OBLIGATION_KIND_CONTRIBUTION":     2,
+		"OBLIGATION_KIND_SHARE_ALIKE":      3,
+		"OBLIGATION_KIND_NETWORK_COPYLEFT": 4,
+		"OBLIGATION_KIND_NOTICE":           5,
+		"OBLIGATION_KIND_OTHER":            6,
+	}
+)
+
+func (x ObligationKind) Enum() *ObligationKind {
+	p := new(ObligationKind)
+	*p = x
+	return p
+}
+
+func (x ObligationKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObligationKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_ramp_v1_ramp_proto_enumTypes[5].Descriptor()
+}
+
+func (ObligationKind) Type() protoreflect.EnumType {
+	return &file_ramp_v1_ramp_proto_enumTypes[5]
+}
+
+func (x ObligationKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObligationKind.Descriptor instead.
+func (ObligationKind) EnumDescriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{5}
+}
+
+// ObligationTrigger — When the obligation activates.
+type ObligationTrigger int32
+
+const (
+	ObligationTrigger_OBLIGATION_TRIGGER_UNSPECIFIED        ObligationTrigger = 0 // unset — rejected at ingest
+	ObligationTrigger_OBLIGATION_TRIGGER_ON_USE             ObligationTrigger = 1 // Triggered on any use
+	ObligationTrigger_OBLIGATION_TRIGGER_ON_DISTRIBUTION    ObligationTrigger = 2 // Triggered when copies are distributed
+	ObligationTrigger_OBLIGATION_TRIGGER_ON_NETWORK_SERVICE ObligationTrigger = 3 // Triggered when served over a network (AGPL)
+	ObligationTrigger_OBLIGATION_TRIGGER_ON_DERIVATIVE      ObligationTrigger = 4 // Triggered when a derivative work is produced
+)
+
+// Enum value maps for ObligationTrigger.
+var (
+	ObligationTrigger_name = map[int32]string{
+		0: "OBLIGATION_TRIGGER_UNSPECIFIED",
+		1: "OBLIGATION_TRIGGER_ON_USE",
+		2: "OBLIGATION_TRIGGER_ON_DISTRIBUTION",
+		3: "OBLIGATION_TRIGGER_ON_NETWORK_SERVICE",
+		4: "OBLIGATION_TRIGGER_ON_DERIVATIVE",
+	}
+	ObligationTrigger_value = map[string]int32{
+		"OBLIGATION_TRIGGER_UNSPECIFIED":        0,
+		"OBLIGATION_TRIGGER_ON_USE":             1,
+		"OBLIGATION_TRIGGER_ON_DISTRIBUTION":    2,
+		"OBLIGATION_TRIGGER_ON_NETWORK_SERVICE": 3,
+		"OBLIGATION_TRIGGER_ON_DERIVATIVE":      4,
+	}
+)
+
+func (x ObligationTrigger) Enum() *ObligationTrigger {
+	p := new(ObligationTrigger)
+	*p = x
+	return p
+}
+
+func (x ObligationTrigger) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObligationTrigger) Descriptor() protoreflect.EnumDescriptor {
+	return file_ramp_v1_ramp_proto_enumTypes[6].Descriptor()
+}
+
+func (ObligationTrigger) Type() protoreflect.EnumType {
+	return &file_ramp_v1_ramp_proto_enumTypes[6]
+}
+
+func (x ObligationTrigger) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObligationTrigger.Descriptor instead.
+func (ObligationTrigger) EnumDescriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{6}
+}
+
+// PricingModel — the charging STRUCTURE only (a genuinely closed, small set;
+// changes far less than yearly, so an enum is correct per Google AIP-126). The
+// open-ended metering basis ("per what") is NOT enumerated here — it lives in
+// Pricing.unit as a registry-governed vocabulary (the (ramp.v1.vocab) field
+// options on Pricing.unit; see vocab.proto).
+// Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
+// are obligations (see ObligationKind); revenue-share settlement is off-protocol.
 type PricingModel int32
 
 const (
-	PricingModel_PRICING_MODEL_UNSPECIFIED   PricingModel = 0
-	PricingModel_PRICING_MODEL_PER_ACCESS    PricingModel = 1  // One-time access fee per resource (RSL: purchase)
-	PricingModel_PRICING_MODEL_PER_TOKEN     PricingModel = 2  // Rate per LLM token consumed (RSL: use/inference)
-	PricingModel_PRICING_MODEL_PER_FETCH     PricingModel = 3  // Rate per fetch request (RSL: crawl)
-	PricingModel_PRICING_MODEL_SUBSCRIPTION  PricingModel = 4  // Recurring access (RSL: subscription)
-	PricingModel_PRICING_MODEL_FREE          PricingModel = 5  // No charge (RSL: free)
-	PricingModel_PRICING_MODEL_ATTRIBUTION   PricingModel = 6  // Free with required attribution (RSL: attribution)
-	PricingModel_PRICING_MODEL_CONTRIBUTION  PricingModel = 7  // Good-faith payment, amount suggested (RSL: contribution)
-	PricingModel_PRICING_MODEL_TRAINING      PricingModel = 8  // Per training instance fee (RSL: training)
-	PricingModel_PRICING_MODEL_REVENUE_SHARE PricingModel = 9  // Revenue share model (percentage of agent revenue)
-	PricingModel_PRICING_MODEL_PER_PAGE      PricingModel = 10 // Per document page (legal filings, PDFs)
-	PricingModel_PRICING_MODEL_PER_MINUTE    PricingModel = 11 // Per minute of audio/video
-	PricingModel_PRICING_MODEL_PER_RECORD    PricingModel = 12 // Per structured data record
+	PricingModel_PRICING_MODEL_UNSPECIFIED PricingModel = 0 // unset — rejected at ingest (omission cannot default to FREE)
+	PricingModel_PRICING_MODEL_FREE        PricingModel = 1 // no charge; rate must be 0
+	PricingModel_PRICING_MODEL_PER_UNIT    PricingModel = 2 // rate per Pricing.unit; unit REQUIRED (registered token or vendor:custom)
+	PricingModel_PRICING_MODEL_FLAT        PricingModel = 3 // one-time flat fee; rate is the total, no unit
 )
 
 // Enum value maps for PricingModel.
 var (
 	PricingModel_name = map[int32]string{
-		0:  "PRICING_MODEL_UNSPECIFIED",
-		1:  "PRICING_MODEL_PER_ACCESS",
-		2:  "PRICING_MODEL_PER_TOKEN",
-		3:  "PRICING_MODEL_PER_FETCH",
-		4:  "PRICING_MODEL_SUBSCRIPTION",
-		5:  "PRICING_MODEL_FREE",
-		6:  "PRICING_MODEL_ATTRIBUTION",
-		7:  "PRICING_MODEL_CONTRIBUTION",
-		8:  "PRICING_MODEL_TRAINING",
-		9:  "PRICING_MODEL_REVENUE_SHARE",
-		10: "PRICING_MODEL_PER_PAGE",
-		11: "PRICING_MODEL_PER_MINUTE",
-		12: "PRICING_MODEL_PER_RECORD",
+		0: "PRICING_MODEL_UNSPECIFIED",
+		1: "PRICING_MODEL_FREE",
+		2: "PRICING_MODEL_PER_UNIT",
+		3: "PRICING_MODEL_FLAT",
 	}
 	PricingModel_value = map[string]int32{
-		"PRICING_MODEL_UNSPECIFIED":   0,
-		"PRICING_MODEL_PER_ACCESS":    1,
-		"PRICING_MODEL_PER_TOKEN":     2,
-		"PRICING_MODEL_PER_FETCH":     3,
-		"PRICING_MODEL_SUBSCRIPTION":  4,
-		"PRICING_MODEL_FREE":          5,
-		"PRICING_MODEL_ATTRIBUTION":   6,
-		"PRICING_MODEL_CONTRIBUTION":  7,
-		"PRICING_MODEL_TRAINING":      8,
-		"PRICING_MODEL_REVENUE_SHARE": 9,
-		"PRICING_MODEL_PER_PAGE":      10,
-		"PRICING_MODEL_PER_MINUTE":    11,
-		"PRICING_MODEL_PER_RECORD":    12,
+		"PRICING_MODEL_UNSPECIFIED": 0,
+		"PRICING_MODEL_FREE":        1,
+		"PRICING_MODEL_PER_UNIT":    2,
+		"PRICING_MODEL_FLAT":        3,
 	}
 )
 
@@ -248,11 +516,11 @@ func (x PricingModel) String() string {
 }
 
 func (PricingModel) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[2].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[7].Descriptor()
 }
 
 func (PricingModel) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[2]
+	return &file_ramp_v1_ramp_proto_enumTypes[7]
 }
 
 func (x PricingModel) Number() protoreflect.EnumNumber {
@@ -261,7 +529,68 @@ func (x PricingModel) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PricingModel.Descriptor instead.
 func (PricingModel) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{2}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{7}
+}
+
+// PricingMetering — How usage is tracked for billing reconciliation.
+//
+// ONLINE (default, field absent or = 0): Exchange tracks usage events in real time.
+// NONE: one-time transaction; no ongoing metering required (stock image perpetual
+//
+//	license, CAD file one-time download). Billing_id is issued at ExecuteTransaction
+//	and the ledger entry is closed — no ReportUsage required.
+//
+// OFFLINE_SELF_REPORTED: agent self-reports consumption (e.g., units-manufactured
+//
+//	for 3D-printed items from a licensed design). Exchange audits; metering is not
+//	possible online because the event occurs in the physical world.
+type PricingMetering int32
+
+const (
+	PricingMetering_PRICING_METERING_ONLINE                PricingMetering = 0
+	PricingMetering_PRICING_METERING_NONE                  PricingMetering = 1
+	PricingMetering_PRICING_METERING_OFFLINE_SELF_REPORTED PricingMetering = 2
+)
+
+// Enum value maps for PricingMetering.
+var (
+	PricingMetering_name = map[int32]string{
+		0: "PRICING_METERING_ONLINE",
+		1: "PRICING_METERING_NONE",
+		2: "PRICING_METERING_OFFLINE_SELF_REPORTED",
+	}
+	PricingMetering_value = map[string]int32{
+		"PRICING_METERING_ONLINE":                0,
+		"PRICING_METERING_NONE":                  1,
+		"PRICING_METERING_OFFLINE_SELF_REPORTED": 2,
+	}
+)
+
+func (x PricingMetering) Enum() *PricingMetering {
+	p := new(PricingMetering)
+	*p = x
+	return p
+}
+
+func (x PricingMetering) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PricingMetering) Descriptor() protoreflect.EnumDescriptor {
+	return file_ramp_v1_ramp_proto_enumTypes[8].Descriptor()
+}
+
+func (PricingMetering) Type() protoreflect.EnumType {
+	return &file_ramp_v1_ramp_proto_enumTypes[8]
+}
+
+func (x PricingMetering) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PricingMetering.Descriptor instead.
+func (PricingMetering) EnumDescriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{8}
 }
 
 type DeliveryMethod int32
@@ -306,11 +635,11 @@ func (x DeliveryMethod) String() string {
 }
 
 func (DeliveryMethod) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[3].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[9].Descriptor()
 }
 
 func (DeliveryMethod) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[3]
+	return &file_ramp_v1_ramp_proto_enumTypes[9]
 }
 
 func (x DeliveryMethod) Number() protoreflect.EnumNumber {
@@ -319,7 +648,7 @@ func (x DeliveryMethod) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DeliveryMethod.Descriptor instead.
 func (DeliveryMethod) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{3}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{9}
 }
 
 // RequesterType — What kind of entity is making the request.
@@ -370,11 +699,11 @@ func (x RequesterType) String() string {
 }
 
 func (RequesterType) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[4].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[10].Descriptor()
 }
 
 func (RequesterType) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[4]
+	return &file_ramp_v1_ramp_proto_enumTypes[10]
 }
 
 func (x RequesterType) Number() protoreflect.EnumNumber {
@@ -383,7 +712,7 @@ func (x RequesterType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RequesterType.Descriptor instead.
 func (RequesterType) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{4}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{10}
 }
 
 // C2PAStatus — Summary validation status of a C2PA content credentials manifest.
@@ -443,11 +772,11 @@ func (x C2PAStatus) String() string {
 }
 
 func (C2PAStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[5].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[11].Descriptor()
 }
 
 func (C2PAStatus) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[5]
+	return &file_ramp_v1_ramp_proto_enumTypes[11]
 }
 
 func (x C2PAStatus) Number() protoreflect.EnumNumber {
@@ -456,7 +785,7 @@ func (x C2PAStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use C2PAStatus.Descriptor instead.
 func (C2PAStatus) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{5}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{11}
 }
 
 // ResourceMutability — Signals whether resource content changes over time.
@@ -468,7 +797,7 @@ func (C2PAStatus) EnumDescriptor() ([]byte, []int) {
 //
 //	STATIC:  NYT article, academic paper, patent, EU regulation, podcast episode
 //	DYNAMIC: D&B credit report, DrugBank interactions, satellite catalog, news article (corrections)
-//	LIVE:    Bloomberg quote stream, NPR live broadcast, news monitoring feed
+//	LIVE:    MarketData quote stream, NPR live broadcast, news monitoring feed
 type ResourceMutability int32
 
 const (
@@ -513,11 +842,11 @@ func (x ResourceMutability) String() string {
 }
 
 func (ResourceMutability) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[6].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[12].Descriptor()
 }
 
 func (ResourceMutability) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[6]
+	return &file_ramp_v1_ramp_proto_enumTypes[12]
 }
 
 func (x ResourceMutability) Number() protoreflect.EnumNumber {
@@ -526,7 +855,7 @@ func (x ResourceMutability) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ResourceMutability.Descriptor instead.
 func (ResourceMutability) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{6}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{12}
 }
 
 // DenialReason — Standard vocabulary for transaction denial.
@@ -535,55 +864,49 @@ func (ResourceMutability) EnumDescriptor() ([]byte, []int) {
 type DenialReason int32
 
 const (
-	DenialReason_DENIAL_REASON_UNSPECIFIED          DenialReason = 0
-	DenialReason_DENIAL_REASON_INVALID_LICENSE      DenialReason = 1  // License ID not recognized
-	DenialReason_DENIAL_REASON_EXPIRED_LICENSE      DenialReason = 2  // License ID expired
-	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE DenialReason = 3  // Requester's balance too low
-	DenialReason_DENIAL_REASON_RATE_LIMITED         DenialReason = 4  // Too many requests
-	DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE  DenialReason = 5  // Resource no longer available
-	DenialReason_DENIAL_REASON_FUNCTION_PROHIBITED  DenialReason = 6  // Requested function not permitted
-	DenialReason_DENIAL_REASON_GEO_RESTRICTED       DenialReason = 7  // Requester's geography not permitted
-	DenialReason_DENIAL_REASON_REPORTING_OVERDUE    DenialReason = 8  // Requester has >20% overdue reports (MAY threshold)
-	DenialReason_DENIAL_REASON_OFFER_EXPIRED        DenialReason = 9  // Offer TTL exceeded
-	DenialReason_DENIAL_REASON_SIGNATURE_INVALID    DenialReason = 10 // Offer signature verification failed
-	DenialReason_DENIAL_REASON_QUOTA_EXCEEDED       DenialReason = 11 // Subscription access count exhausted for this period
-	DenialReason_DENIAL_REASON_DELEGATION_EXPIRED   DenialReason = 12 // Biscuit delegation token expired
-	DenialReason_DENIAL_REASON_SCOPE_INSUFFICIENT   DenialReason = 13 // Requester scopes don't cover this resource
+	DenialReason_DENIAL_REASON_UNSPECIFIED               DenialReason = 0
+	DenialReason_DENIAL_REASON_BILLING_REF_INACTIVE      DenialReason = 1  // billing_ref is not active / not recognized by the billing system
+	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE      DenialReason = 2  // Requester's balance too low
+	DenialReason_DENIAL_REASON_RATE_LIMITED              DenialReason = 3  // Too many requests
+	DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE       DenialReason = 4  // Resource no longer available
+	DenialReason_DENIAL_REASON_RESTRICTION_NOT_SATISFIED DenialReason = 5  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+	DenialReason_DENIAL_REASON_REPORTING_OVERDUE         DenialReason = 6  // Requester has >20% overdue reports (MAY threshold)
+	DenialReason_DENIAL_REASON_OFFER_EXPIRED             DenialReason = 7  // Offer TTL exceeded
+	DenialReason_DENIAL_REASON_SIGNATURE_INVALID         DenialReason = 8  // Offer signature verification failed
+	DenialReason_DENIAL_REASON_QUOTA_EXCEEDED            DenialReason = 9  // Subscription access count exhausted for this period
+	DenialReason_DENIAL_REASON_DELEGATION_INVALID        DenialReason = 10 // Delegation missing, unverifiable, expired, holder binding failed, or scopes/caps do not cover the request
+	DenialReason_DENIAL_REASON_SCOPE_INSUFFICIENT        DenialReason = 11 // Requester scopes don't cover this resource
 )
 
 // Enum value maps for DenialReason.
 var (
 	DenialReason_name = map[int32]string{
 		0:  "DENIAL_REASON_UNSPECIFIED",
-		1:  "DENIAL_REASON_INVALID_LICENSE",
-		2:  "DENIAL_REASON_EXPIRED_LICENSE",
-		3:  "DENIAL_REASON_INSUFFICIENT_BALANCE",
-		4:  "DENIAL_REASON_RATE_LIMITED",
-		5:  "DENIAL_REASON_CONTENT_UNAVAILABLE",
-		6:  "DENIAL_REASON_FUNCTION_PROHIBITED",
-		7:  "DENIAL_REASON_GEO_RESTRICTED",
-		8:  "DENIAL_REASON_REPORTING_OVERDUE",
-		9:  "DENIAL_REASON_OFFER_EXPIRED",
-		10: "DENIAL_REASON_SIGNATURE_INVALID",
-		11: "DENIAL_REASON_QUOTA_EXCEEDED",
-		12: "DENIAL_REASON_DELEGATION_EXPIRED",
-		13: "DENIAL_REASON_SCOPE_INSUFFICIENT",
+		1:  "DENIAL_REASON_BILLING_REF_INACTIVE",
+		2:  "DENIAL_REASON_INSUFFICIENT_BALANCE",
+		3:  "DENIAL_REASON_RATE_LIMITED",
+		4:  "DENIAL_REASON_CONTENT_UNAVAILABLE",
+		5:  "DENIAL_REASON_RESTRICTION_NOT_SATISFIED",
+		6:  "DENIAL_REASON_REPORTING_OVERDUE",
+		7:  "DENIAL_REASON_OFFER_EXPIRED",
+		8:  "DENIAL_REASON_SIGNATURE_INVALID",
+		9:  "DENIAL_REASON_QUOTA_EXCEEDED",
+		10: "DENIAL_REASON_DELEGATION_INVALID",
+		11: "DENIAL_REASON_SCOPE_INSUFFICIENT",
 	}
 	DenialReason_value = map[string]int32{
-		"DENIAL_REASON_UNSPECIFIED":          0,
-		"DENIAL_REASON_INVALID_LICENSE":      1,
-		"DENIAL_REASON_EXPIRED_LICENSE":      2,
-		"DENIAL_REASON_INSUFFICIENT_BALANCE": 3,
-		"DENIAL_REASON_RATE_LIMITED":         4,
-		"DENIAL_REASON_CONTENT_UNAVAILABLE":  5,
-		"DENIAL_REASON_FUNCTION_PROHIBITED":  6,
-		"DENIAL_REASON_GEO_RESTRICTED":       7,
-		"DENIAL_REASON_REPORTING_OVERDUE":    8,
-		"DENIAL_REASON_OFFER_EXPIRED":        9,
-		"DENIAL_REASON_SIGNATURE_INVALID":    10,
-		"DENIAL_REASON_QUOTA_EXCEEDED":       11,
-		"DENIAL_REASON_DELEGATION_EXPIRED":   12,
-		"DENIAL_REASON_SCOPE_INSUFFICIENT":   13,
+		"DENIAL_REASON_UNSPECIFIED":               0,
+		"DENIAL_REASON_BILLING_REF_INACTIVE":      1,
+		"DENIAL_REASON_INSUFFICIENT_BALANCE":      2,
+		"DENIAL_REASON_RATE_LIMITED":              3,
+		"DENIAL_REASON_CONTENT_UNAVAILABLE":       4,
+		"DENIAL_REASON_RESTRICTION_NOT_SATISFIED": 5,
+		"DENIAL_REASON_REPORTING_OVERDUE":         6,
+		"DENIAL_REASON_OFFER_EXPIRED":             7,
+		"DENIAL_REASON_SIGNATURE_INVALID":         8,
+		"DENIAL_REASON_QUOTA_EXCEEDED":            9,
+		"DENIAL_REASON_DELEGATION_INVALID":        10,
+		"DENIAL_REASON_SCOPE_INSUFFICIENT":        11,
 	}
 )
 
@@ -598,11 +921,11 @@ func (x DenialReason) String() string {
 }
 
 func (DenialReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[7].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[13].Descriptor()
 }
 
 func (DenialReason) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[7]
+	return &file_ramp_v1_ramp_proto_enumTypes[13]
 }
 
 func (x DenialReason) Number() protoreflect.EnumNumber {
@@ -611,7 +934,7 @@ func (x DenialReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DenialReason.Descriptor instead.
 func (DenialReason) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{7}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{13}
 }
 
 // IngestionSource — How the catalog entry was discovered.
@@ -664,11 +987,11 @@ func (x IngestionSource) String() string {
 }
 
 func (IngestionSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[8].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[14].Descriptor()
 }
 
 func (IngestionSource) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[8]
+	return &file_ramp_v1_ramp_proto_enumTypes[14]
 }
 
 func (x IngestionSource) Number() protoreflect.EnumNumber {
@@ -677,7 +1000,7 @@ func (x IngestionSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use IngestionSource.Descriptor instead.
 func (IngestionSource) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{8}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{14}
 }
 
 // CitationFormat — How the citation is presented to the user.
@@ -714,11 +1037,11 @@ func (x CitationFormat) String() string {
 }
 
 func (CitationFormat) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[9].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[15].Descriptor()
 }
 
 func (CitationFormat) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[9]
+	return &file_ramp_v1_ramp_proto_enumTypes[15]
 }
 
 func (x CitationFormat) Number() protoreflect.EnumNumber {
@@ -727,7 +1050,7 @@ func (x CitationFormat) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CitationFormat.Descriptor instead.
 func (CitationFormat) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{9}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{15}
 }
 
 // Role — Identifies which kind of RAMP participant a WellKnownManifest
@@ -772,11 +1095,11 @@ func (x Role) String() string {
 }
 
 func (Role) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[10].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[16].Descriptor()
 }
 
 func (Role) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[10]
+	return &file_ramp_v1_ramp_proto_enumTypes[16]
 }
 
 func (x Role) Number() protoreflect.EnumNumber {
@@ -785,7 +1108,7 @@ func (x Role) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Role.Descriptor instead.
 func (Role) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{10}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{16}
 }
 
 type ProviderRelationship int32
@@ -823,11 +1146,11 @@ func (x ProviderRelationship) String() string {
 }
 
 func (ProviderRelationship) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[11].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[17].Descriptor()
 }
 
 func (ProviderRelationship) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[11]
+	return &file_ramp_v1_ramp_proto_enumTypes[17]
 }
 
 func (x ProviderRelationship) Number() protoreflect.EnumNumber {
@@ -836,7 +1159,7 @@ func (x ProviderRelationship) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProviderRelationship.Descriptor instead.
 func (ProviderRelationship) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{11}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{17}
 }
 
 // AuthMethod — Authorization methods an Exchange can support.
@@ -884,11 +1207,11 @@ func (x AuthMethod) String() string {
 }
 
 func (AuthMethod) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[12].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[18].Descriptor()
 }
 
 func (AuthMethod) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[12]
+	return &file_ramp_v1_ramp_proto_enumTypes[18]
 }
 
 func (x AuthMethod) Number() protoreflect.EnumNumber {
@@ -897,7 +1220,7 @@ func (x AuthMethod) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AuthMethod.Descriptor instead.
 func (AuthMethod) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{12}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{18}
 }
 
 type ResourceAccessPolicy int32
@@ -939,11 +1262,11 @@ func (x ResourceAccessPolicy) String() string {
 }
 
 func (ResourceAccessPolicy) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[13].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[19].Descriptor()
 }
 
 func (ResourceAccessPolicy) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[13]
+	return &file_ramp_v1_ramp_proto_enumTypes[19]
 }
 
 func (x ResourceAccessPolicy) Number() protoreflect.EnumNumber {
@@ -952,7 +1275,7 @@ func (x ResourceAccessPolicy) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ResourceAccessPolicy.Descriptor instead.
 func (ResourceAccessPolicy) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{13}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{19}
 }
 
 type DisputeReason int32
@@ -1002,11 +1325,11 @@ func (x DisputeReason) String() string {
 }
 
 func (DisputeReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[14].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[20].Descriptor()
 }
 
 func (DisputeReason) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[14]
+	return &file_ramp_v1_ramp_proto_enumTypes[20]
 }
 
 func (x DisputeReason) Number() protoreflect.EnumNumber {
@@ -1015,7 +1338,7 @@ func (x DisputeReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DisputeReason.Descriptor instead.
 func (DisputeReason) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{14}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{20}
 }
 
 // DisputeStatus — Lifecycle state of a resource dispute.
@@ -1098,11 +1421,11 @@ func (x DisputeStatus) String() string {
 }
 
 func (DisputeStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[15].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[21].Descriptor()
 }
 
 func (DisputeStatus) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[15]
+	return &file_ramp_v1_ramp_proto_enumTypes[21]
 }
 
 func (x DisputeStatus) Number() protoreflect.EnumNumber {
@@ -1111,7 +1434,7 @@ func (x DisputeStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DisputeStatus.Descriptor instead.
 func (DisputeStatus) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{15}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{21}
 }
 
 // ResolutionType — Outcome of a resolved dispute.
@@ -1162,11 +1485,11 @@ func (x ResolutionType) String() string {
 }
 
 func (ResolutionType) Descriptor() protoreflect.EnumDescriptor {
-	return file_ramp_v1_ramp_proto_enumTypes[16].Descriptor()
+	return file_ramp_v1_ramp_proto_enumTypes[22].Descriptor()
 }
 
 func (ResolutionType) Type() protoreflect.EnumType {
-	return &file_ramp_v1_ramp_proto_enumTypes[16]
+	return &file_ramp_v1_ramp_proto_enumTypes[22]
 }
 
 func (x ResolutionType) Number() protoreflect.EnumNumber {
@@ -1175,7 +1498,68 @@ func (x ResolutionType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ResolutionType.Descriptor instead.
 func (ResolutionType) EnumDescriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{16}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{22}
+}
+
+// AcceptableRestriction — the limits a query operates within on one restriction
+// axis, expressed in the same RestrictionKind vocabulary that terms use. The
+// Exchange/Broker MAY pre-select offers whose term restrictions fall within
+// these as a convenience (see Restriction); it is NOT enforcement — the agent
+// self-selects and bears compliance.
+type AcceptableRestriction struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Which axis (same enum as Restriction.kind): FUNCTION / GEOGRAPHY /
+	// USER_TYPE / OTHER.
+	Axis RestrictionKind `protobuf:"varint,1,opt,name=axis,proto3,enum=ramp.v1.RestrictionKind" json:"axis,omitempty"`
+	// The values the query operates within on this axis — same token vocabulary
+	// as the terms (e.g. FUNCTION ["ai-train"], GEOGRAPHY ["US", "EU"]).
+	Values        []string `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptableRestriction) Reset() {
+	*x = AcceptableRestriction{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptableRestriction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptableRestriction) ProtoMessage() {}
+
+func (x *AcceptableRestriction) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptableRestriction.ProtoReflect.Descriptor instead.
+func (*AcceptableRestriction) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *AcceptableRestriction) GetAxis() RestrictionKind {
+	if x != nil {
+		return x.Axis
+	}
+	return RestrictionKind_RESTRICTION_KIND_UNSPECIFIED
+}
+
+func (x *AcceptableRestriction) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
 }
 
 // ResourceQuery — Query an Exchange for available resource offers.
@@ -1190,14 +1574,17 @@ type ResourceQuery struct {
 	// Unique query identifier.
 	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	// Requester identity — who is making this request, what scopes they have,
-	// and optional delegation chain. Replaces CoMP AISystem.
+	// and optional delegation chain.
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
+	// Resource URIs being queried.
+	Uris []string `protobuf:"bytes,8,rep,name=uris,proto3" json:"uris,omitempty"`
+	// The limits this query operates within, per restriction axis (function,
+	// geography, user-type, …) — see AcceptableRestriction. Advisory selection
+	// inputs the Exchange/Broker MAY pre-select offers against (convenience, not
+	// enforcement); the agent self-selects and bears compliance.
+	AcceptableRestrictions []*AcceptableRestriction `protobuf:"bytes,9,rep,name=acceptable_restrictions,json=acceptableRestrictions,proto3" json:"acceptable_restrictions,omitempty"`
 	// Original RAMP request ID from Step 1, for traceability.
 	RequestId *string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3,oneof" json:"request_id,omitempty"`
-	// Intermediary forwarding chain (Agent → Broker → Exchange).
-	// Each hop is signed, proving the request path is legitimate.
-	// Empty when agent queries Exchange directly.
-	Intermediaries []*IntermediaryHop `protobuf:"bytes,5,rep,name=intermediaries,proto3" json:"intermediaries,omitempty"`
 	// Maximum time the caller will wait for a response.
 	// Exchange SHOULD prioritize speed over completeness when tight.
 	// Absent = 500ms default.
@@ -1228,7 +1615,7 @@ type ResourceQuery struct {
 
 func (x *ResourceQuery) Reset() {
 	*x = ResourceQuery{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[0]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1240,7 +1627,7 @@ func (x *ResourceQuery) String() string {
 func (*ResourceQuery) ProtoMessage() {}
 
 func (x *ResourceQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[0]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1253,7 +1640,7 @@ func (x *ResourceQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceQuery.ProtoReflect.Descriptor instead.
 func (*ResourceQuery) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{0}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ResourceQuery) GetVer() string {
@@ -1277,18 +1664,25 @@ func (x *ResourceQuery) GetRequester() *Requester {
 	return nil
 }
 
+func (x *ResourceQuery) GetUris() []string {
+	if x != nil {
+		return x.Uris
+	}
+	return nil
+}
+
+func (x *ResourceQuery) GetAcceptableRestrictions() []*AcceptableRestriction {
+	if x != nil {
+		return x.AcceptableRestrictions
+	}
+	return nil
+}
+
 func (x *ResourceQuery) GetRequestId() string {
 	if x != nil && x.RequestId != nil {
 		return *x.RequestId
 	}
 	return ""
-}
-
-func (x *ResourceQuery) GetIntermediaries() []*IntermediaryHop {
-	if x != nil {
-		return x.Intermediaries
-	}
-	return nil
 }
 
 func (x *ResourceQuery) GetDeadline() *durationpb.Duration {
@@ -1355,7 +1749,7 @@ type ResourceResponse struct {
 
 func (x *ResourceResponse) Reset() {
 	*x = ResourceResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[1]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1367,7 +1761,7 @@ func (x *ResourceResponse) String() string {
 func (*ResourceResponse) ProtoMessage() {}
 
 func (x *ResourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[1]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1380,7 +1774,7 @@ func (x *ResourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceResponse.ProtoReflect.Descriptor instead.
 func (*ResourceResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{1}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ResourceResponse) GetVer() string {
@@ -1444,7 +1838,7 @@ func (x *ResourceResponse) GetExtCritical() []string {
 // which offers correspond to which requested resource.
 type OfferGroup struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The URI this group of offers is for (echoed from ResourceQuery.requester.uris).
+	// The URI this group of offers is for (echoed from ResourceQuery.uris).
 	Uri string `protobuf:"bytes,1,opt,name=uri,proto3" json:"uri,omitempty"`
 	// Zero or more offers for this URI. Empty = resource not available.
 	Offers []*Offer `protobuf:"bytes,2,rep,name=offers,proto3" json:"offers,omitempty"`
@@ -1463,13 +1857,18 @@ type OfferGroup struct {
 	// trial-and-error transactions. Analogous to OpenRTB nbr codes and
 	// Shutterstock per-item error metadata in batch responses.
 	AbsenceReason *OfferAbsenceReason `protobuf:"varint,4,opt,name=absence_reason,json=absenceReason,proto3,enum=ramp.v1.OfferAbsenceReason,oneof" json:"absence_reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// When absence_reason = RESTRICTION_FILTERED, the restriction axes that drove
+	// the convenience pre-filter, in the same RestrictionKind vocabulary the terms
+	// use (e.g. [GEOGRAPHY] when the requester's stated geography matched no term).
+	// Advisory diagnostics, not an enforcement verdict.
+	RestrictionFilters []RestrictionKind `protobuf:"varint,5,rep,packed,name=restriction_filters,json=restrictionFilters,proto3,enum=ramp.v1.RestrictionKind" json:"restriction_filters,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *OfferGroup) Reset() {
 	*x = OfferGroup{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[2]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1481,7 +1880,7 @@ func (x *OfferGroup) String() string {
 func (*OfferGroup) ProtoMessage() {}
 
 func (x *OfferGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[2]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1494,7 +1893,7 @@ func (x *OfferGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OfferGroup.ProtoReflect.Descriptor instead.
 func (*OfferGroup) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{2}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *OfferGroup) GetUri() string {
@@ -1525,6 +1924,13 @@ func (x *OfferGroup) GetAbsenceReason() OfferAbsenceReason {
 	return OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED
 }
 
+func (x *OfferGroup) GetRestrictionFilters() []RestrictionKind {
+	if x != nil {
+		return x.RestrictionFilters
+	}
+	return nil
+}
+
 // RateLimitInfo — Caller's rate limit status on this Exchange.
 // Modeled after IETF RateLimit header fields (RFC 9110 §15.5.30)
 // and Shutterstock's rate limit response pattern.
@@ -1544,7 +1950,7 @@ type RateLimitInfo struct {
 
 func (x *RateLimitInfo) Reset() {
 	*x = RateLimitInfo{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[3]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1556,7 +1962,7 @@ func (x *RateLimitInfo) String() string {
 func (*RateLimitInfo) ProtoMessage() {}
 
 func (x *RateLimitInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[3]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +1975,7 @@ func (x *RateLimitInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RateLimitInfo.ProtoReflect.Descriptor instead.
 func (*RateLimitInfo) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{3}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RateLimitInfo) GetLimit() int32 {
@@ -1637,7 +2043,7 @@ type SubscriptionQuotaInfo struct {
 
 func (x *SubscriptionQuotaInfo) Reset() {
 	*x = SubscriptionQuotaInfo{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[4]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1649,7 +2055,7 @@ func (x *SubscriptionQuotaInfo) String() string {
 func (*SubscriptionQuotaInfo) ProtoMessage() {}
 
 func (x *SubscriptionQuotaInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[4]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1662,7 +2068,7 @@ func (x *SubscriptionQuotaInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscriptionQuotaInfo.ProtoReflect.Descriptor instead.
 func (*SubscriptionQuotaInfo) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{4}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SubscriptionQuotaInfo) GetSubscriptionId() string {
@@ -1717,7 +2123,12 @@ type Offer struct {
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
 	// Resource title (human-readable, for display/logging).
 	Title *string `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	// Pricing terms including unit cost for cross-exchange comparison.
+	// Pricing for this offer. An offer represents a single licensing
+	// arrangement: each projected LicenseTerm yields its own offer, so this is
+	// that term's pricing (the authoritative copy lives in `terms[].pricing`).
+	// Used for cross-exchange comparison and Broker ranking. A resource with
+	// multiple alternative terms (e.g. dual-licensed) produces multiple separate
+	// offers, one per term — never one offer with a "headline" picked among them.
 	Pricing *Pricing `protobuf:"bytes,3,opt,name=pricing,proto3" json:"pricing,omitempty"`
 	// How resource will be delivered.
 	DeliveryMethod DeliveryMethod `protobuf:"varint,4,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
@@ -1729,18 +2140,20 @@ type Offer struct {
 	// Enables Brokers to recognize the same resource offered by
 	// different Exchanges and compare pricing.
 	Identity *ResourceIdentity `protobuf:"bytes,7,opt,name=identity,proto3,oneof" json:"identity,omitempty"`
-	// Access restrictions derived from provider terms (e.g. RSL permits/prohibits).
-	// Specifies which usage types, user categories, and geographies are
-	// allowed or blocked for this offer.
-	Restrictions *AccessRestrictions `protobuf:"bytes,8,opt,name=restrictions,proto3,oneof" json:"restrictions,omitempty"`
-	// REQUIRED. JWS Compact Serialization (alg=EdDSA) over offer fields
-	// (offer_id, package.id, pricing, identity).
-	// Prevents intermediaries (Brokers) from tampering with price
-	// or resource description. Agent SHOULD verify signature (RFC 2119)
-	// against Exchange's public key.
+	// REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
+	// Offer — every field, including `pricing`, `terms` (the full licensing
+	// payload), and `expires_at`. Canonicalization is deterministic protobuf
+	// marshaling (lexicographic field order); only `signature` and
+	// `signature_algorithm` are excluded from the signed bytes. `expires_at` is
+	// signed so the offer's validity window is integrity-protected: a relaying
+	// Broker cannot extend (or shorten) the TTL of a signed offer to replay it
+	// outside the window the Exchange intended.
 	//
-	// Also enables stateless offer verification on ExecuteTransaction —
-	// Exchange does not need to store offers, just verify the signature.
+	// Because the signature covers `terms`, `pricing`, and `expires_at`, an
+	// intermediary (Broker) cannot tamper with price, restrictions, quotas,
+	// obligations, the expiry, or any licensing term without invalidating it.
+	// Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
+	// key, and MUST reject an offer whose `expires_at` is in the past.
 	Signature string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
 	// JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
 	SignatureAlgorithm string `protobuf:"bytes,10,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
@@ -1754,7 +2167,7 @@ type Offer struct {
 	// Uses IAB Content Taxonomy 3.1 codes.
 	IabCategories []string `protobuf:"bytes,13,rep,name=iab_categories,json=iabCategories,proto3" json:"iab_categories,omitempty"`
 	// Signed attestations about the resource at this URI.
-	// Replaces ContentQuality. Attestations provide cryptographic proof of
+	// Attestations provide cryptographic proof of
 	// resource properties from trusted parties (providers or verification vendors).
 	//
 	// Three verification levels determine what is independently verifiable:
@@ -1808,8 +2221,12 @@ type Offer struct {
 	// Modeled after Shutterstock (multi-size thumbnail URLs),
 	// Spotify (preview_url to 30s clip), IIIF (parameterized image URLs),
 	// and OpenRTB native (img.url + dimensions).
-	Previews []*Preview       `protobuf:"bytes,18,rep,name=previews,proto3" json:"previews,omitempty"`
-	Ext      *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	Previews []*Preview `protobuf:"bytes,18,rep,name=previews,proto3" json:"previews,omitempty"`
+	// Licensing terms for this offer, sourced from the publisher's ResourceEntry.
+	// Multiple terms when the resource has different arrangements by use case.
+	// See: Universal Licensing Core section.
+	Terms []*LicenseTerm   `protobuf:"bytes,19,rep,name=terms,proto3" json:"terms,omitempty"`
+	Ext   *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -1821,7 +2238,7 @@ type Offer struct {
 
 func (x *Offer) Reset() {
 	*x = Offer{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[5]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1833,7 +2250,7 @@ func (x *Offer) String() string {
 func (*Offer) ProtoMessage() {}
 
 func (x *Offer) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[5]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1846,7 +2263,7 @@ func (x *Offer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Offer.ProtoReflect.Descriptor instead.
 func (*Offer) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{5}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Offer) GetOfferId() string {
@@ -1894,13 +2311,6 @@ func (x *Offer) GetExpiresAt() *timestamppb.Timestamp {
 func (x *Offer) GetIdentity() *ResourceIdentity {
 	if x != nil {
 		return x.Identity
-	}
-	return nil
-}
-
-func (x *Offer) GetRestrictions() *AccessRestrictions {
-	if x != nil {
-		return x.Restrictions
 	}
 	return nil
 }
@@ -1957,6 +2367,13 @@ func (x *Offer) GetSubscriptionQuota() []*SubscriptionQuotaInfo {
 func (x *Offer) GetPreviews() []*Preview {
 	if x != nil {
 		return x.Previews
+	}
+	return nil
+}
+
+func (x *Offer) GetTerms() []*LicenseTerm {
+	if x != nil {
+		return x.Terms
 	}
 	return nil
 }
@@ -2044,7 +2461,7 @@ type ResourceIdentity struct {
 	//
 	// Validated across 18 use cases: static content (articles, patents, legislation),
 	// dynamic data (credit reports, drug interactions, stock snapshots), and live
-	// streams (Bloomberg quotes, NPR broadcast, news monitoring feeds).
+	// streams (MarketData quotes, NPR broadcast, news monitoring feeds).
 	ResourceMutability ResourceMutability `protobuf:"varint,8,opt,name=resource_mutability,json=resourceMutability,proto3,enum=ramp.v1.ResourceMutability" json:"resource_mutability,omitempty"`
 	// C2PA content credentials manifest URI.
 	// Points to a sidecar or embedded C2PA manifest for this resource.
@@ -2093,7 +2510,7 @@ type ResourceIdentity struct {
 
 func (x *ResourceIdentity) Reset() {
 	*x = ResourceIdentity{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[6]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2105,7 +2522,7 @@ func (x *ResourceIdentity) String() string {
 func (*ResourceIdentity) ProtoMessage() {}
 
 func (x *ResourceIdentity) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[6]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2118,7 +2535,7 @@ func (x *ResourceIdentity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceIdentity.ProtoReflect.Descriptor instead.
 func (*ResourceIdentity) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{6}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ResourceIdentity) GetCanonicalUrl() string {
@@ -2243,9 +2660,8 @@ func (x *ResourceIdentity) GetExtCritical() []string {
 //	https://{verifier-domain}/.well-known/ramp.json
 //
 // Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or
-// ROLE_PUBLISHER depending on operator). Claims-schema location migrated to
-// `ext` under key "ramp.attestation.claims_schema" (see Verifier transition
-// in CHANGELOG).
+// ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema
+// structure at WellKnownManifest.ext["ramp.attestation.claims_schema"].
 type ResourceAttestation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Canonical domain of the attesting party (e.g., "nytimes.com" for
@@ -2296,7 +2712,7 @@ type ResourceAttestation struct {
 
 func (x *ResourceAttestation) Reset() {
 	*x = ResourceAttestation{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[7]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2308,7 +2724,7 @@ func (x *ResourceAttestation) String() string {
 func (*ResourceAttestation) ProtoMessage() {}
 
 func (x *ResourceAttestation) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[7]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2321,7 +2737,7 @@ func (x *ResourceAttestation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceAttestation.ProtoReflect.Descriptor instead.
 func (*ResourceAttestation) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{7}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ResourceAttestation) GetVerifier() string {
@@ -2366,59 +2782,67 @@ func (x *ResourceAttestation) GetSignature() string {
 	return ""
 }
 
-// AccessRestrictions — Provider-defined access rules.
-//
-// Maps to RSL <permits>/<prohibits> elements. Expressed as allow/deny
-// lists so agents and Brokers can filter offers before transacting.
-type AccessRestrictions struct {
+// License — Identifies the governing license document for a LicenseTerm.
+type License struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Permitted usage functions. Empty = all permitted.
-	// Wire format: dashed-lowercase per RSL XML standard.
-	// Standard RSL values: "ai-train", "ai-input", "ai-index", "search", "display".
-	// CoMP-specific values available via ramp-comp-v1 extension profile (same
-	// dashed-lowercase format). Intentionally `repeated string` rather than enum
-	// so RSL and CoMP can extend the vocabulary without proto changes.
-	PermittedFunctions []string `protobuf:"bytes,1,rep,name=permitted_functions,json=permittedFunctions,proto3" json:"permitted_functions,omitempty"`
-	// Prohibited usage functions. Same vocabulary as `permitted_functions`.
-	ProhibitedFunctions []string `protobuf:"bytes,2,rep,name=prohibited_functions,json=prohibitedFunctions,proto3" json:"prohibited_functions,omitempty"`
-	// Permitted user categories (RSL: permits type="user").
-	// E.g. "commercial", "non-commercial", "education", "government".
-	PermittedUsers []string `protobuf:"bytes,3,rep,name=permitted_users,json=permittedUsers,proto3" json:"permitted_users,omitempty"`
-	// Prohibited user categories.
-	ProhibitedUsers []string `protobuf:"bytes,4,rep,name=prohibited_users,json=prohibitedUsers,proto3" json:"prohibited_users,omitempty"`
-	// Permitted geographies — ISO 3166-1 alpha-2 (RSL: permits type="geo").
-	// Empty = all geographies permitted.
-	PermittedGeo []string `protobuf:"bytes,5,rep,name=permitted_geo,json=permittedGeo,proto3" json:"permitted_geo,omitempty"`
-	// Prohibited geographies.
-	ProhibitedGeo []string `protobuf:"bytes,6,rep,name=prohibited_geo,json=prohibitedGeo,proto3" json:"prohibited_geo,omitempty"`
-	// Maximum number of words from the resource that may be displayed to users.
-	// Enforces word display limits at the access restriction level.
-	MaxDisplayWords *int32           `protobuf:"varint,7,opt,name=max_display_words,json=maxDisplayWords,proto3,oneof" json:"max_display_words,omitempty"`
-	Ext             *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
-	// Critical extension keys (COSE crit pattern, RFC 9052).
-	// Lists keys within ext that the consumer MUST understand.
-	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
-	// Empty (default) → all ext keys are safe to ignore.
-	ExtCritical   []string `protobuf:"bytes,90,rep,name=ext_critical,json=extCritical,proto3" json:"ext_critical,omitempty"`
+	// Canonical identity of the license document (RFC 3986). MUST NOT be
+	// URL-validated — data-labels TDL identifiers use non-URL schemes.
+	// For REFERENCE_ONLY terms this is the authoritative specification.
+	// Examples:
+	//
+	//	"https://creativecommons.org/licenses/by/4.0/"
+	//	"https://techcrunch.com/licensing/ai-terms-2026"
+	//
+	// "MUST NOT URL-validate" means do not REJECT non-URL schemes — it does NOT
+	// mean fetch blindly. A consumer that dereferences this URI MUST apply the
+	// SSRF countermeasures in the security threat model (T-LIC-1): scheme
+	// allowlist, block loopback/private/metadata addresses (resolve-then-check),
+	// fetch via an egress proxy, and treat the response as untrusted content.
+	// Verify the fetched bytes against `uri_digest` before use.
+	Uri *string `protobuf:"bytes,1,opt,name=uri,proto3,oneof" json:"uri,omitempty"`
+	// Stable short identifier: SPDX short-id ("GPL-3.0-only"), TollBit cuid,
+	// or catalog doc-id. Used by agents and the vocab linter for known-license
+	// lookup; SHARE_ALIKE derivatives default their scope_license to this.
+	Id *string `protobuf:"bytes,2,opt,name=id,proto3,oneof" json:"id,omitempty"`
+	// Human-readable name (licenseType, schema.org node name).
+	Name *string `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	// Data-labels TDL: the document at uri is versioned and will not change.
+	Immutable *bool `protobuf:"varint,4,opt,name=immutable,proto3,oneof" json:"immutable,omitempty"`
+	// Cryptographic digest of the document at `uri`, in "method:hexdigest" form
+	// (e.g. "sha256:9f86d081..."). Pins the referenced document so a consumer can
+	// verify the bytes it fetches match what was offered; covered by the offer
+	// signature, so it is tamper-evident end to end. REQUIRED whenever `uri` is
+	// non-empty — any semantics, mutable or not: without a pinned digest a MitM
+	// (or the publisher) can swap the document the agent reads. The Exchange pins
+	// it at ingestion (computing it over the safely-fetched document, or
+	// accepting a publisher-supplied value when uri is not HTTP-fetchable, e.g. a
+	// non-URL TDL scheme).
+	//
+	// The method MUST be a collision-resistant hash — sha256, sha384, or sha512.
+	// Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat
+	// the swap-protection this field exists for. The CEL is STRUCTURE ONLY
+	// (allowlisted prefix + matching hex length); presence (digest-when-uri) is
+	// enforced at ingest.
+	UriDigest     *string `protobuf:"bytes,5,opt,name=uri_digest,json=uriDigest,proto3,oneof" json:"uri_digest,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AccessRestrictions) Reset() {
-	*x = AccessRestrictions{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[8]
+func (x *License) Reset() {
+	*x = License{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AccessRestrictions) String() string {
+func (x *License) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AccessRestrictions) ProtoMessage() {}
+func (*License) ProtoMessage() {}
 
-func (x *AccessRestrictions) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[8]
+func (x *License) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2429,72 +2853,486 @@ func (x *AccessRestrictions) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AccessRestrictions.ProtoReflect.Descriptor instead.
-func (*AccessRestrictions) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{8}
+// Deprecated: Use License.ProtoReflect.Descriptor instead.
+func (*License) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *AccessRestrictions) GetPermittedFunctions() []string {
+func (x *License) GetUri() string {
+	if x != nil && x.Uri != nil {
+		return *x.Uri
+	}
+	return ""
+}
+
+func (x *License) GetId() string {
+	if x != nil && x.Id != nil {
+		return *x.Id
+	}
+	return ""
+}
+
+func (x *License) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *License) GetImmutable() bool {
+	if x != nil && x.Immutable != nil {
+		return *x.Immutable
+	}
+	return false
+}
+
+func (x *License) GetUriDigest() string {
+	if x != nil && x.UriDigest != nil {
+		return *x.UriDigest
+	}
+	return ""
+}
+
+// Restriction — A single constraint on one licensing dimension.
+//
+// Restrictions model allowed and prohibited values on one axis (function,
+// geography, or user-type). They are validated and normalized at ingest and
+// RIDE ON THE OFFER: the AGENT is the responsible party — it self-selects the
+// term whose restrictions it can honour and bears compliance, and enforcement
+// happens downstream at accept → report → reconcile. Restrictions are NOT an
+// Exchange-side gate the requester must pass to see a term.
+//
+// An Exchange or Broker MAY, purely as a CONVENIENCE, pre-filter the offers it
+// returns against the limits the query states in ResourceQuery.acceptable_restrictions
+// (the same RestrictionKind axes/vocabulary the terms use) — e.g. an agent that
+// only wants US-eligible content can ask the Exchange to skip the rest so it
+// doesn't pay to discover offers it would never accept. That filter is advisory and
+// optional: a different Broker may not apply it, and it is a recommendation
+// matched to the request, never an enforcement verdict. When an Exchange does
+// drop offers this way it MAY signal it via OfferAbsenceReason.RESTRICTION_FILTERED
+// (with the axes in OfferGroup.restriction_filters). Term visibility is otherwise
+// gated only by resource_id/URI and delegation scope coverage — see
+// LicenseTerm.scopes.
+//
+// Reading a restriction:
+//
+//	A value is in-scope when it matches at least one permitted[] token
+//	AND matches none of the prohibited[] tokens.
+//	Empty permitted[] = any value is permitted on this axis.
+//	Empty prohibited[] = nothing is explicitly prohibited.
+//
+// Vocabulary sources (authored on the RestrictionKind enum values via
+// (ramp.v1.vocab_enum); the functiontokens / geographytokens / usertypes
+// constants + IsRegistered derive from them):
+//
+//	FUNCTION  — RSL 1.0 AI-use vocabulary + established IP/copyright terms
+//	GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA
+//	USER_TYPE — RAMP user/organization categories
+type Restriction struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Which dimension this restriction applies to.
+	Kind RestrictionKind `protobuf:"varint,1,opt,name=kind,proto3,enum=ramp.v1.RestrictionKind" json:"kind,omitempty"`
+	// Tokens allowed on this axis. Empty = all permitted.
+	// For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
+	// For GEOGRAPHY: "US", "DE", "EU", "EEA", "*", …
+	// For USER_TYPE: "individual", "academic", "commercial_entity", …
+	Permitted []string `protobuf:"bytes,2,rep,name=permitted,proto3" json:"permitted,omitempty"`
+	// Tokens blocked on this axis. Takes precedence over permitted[].
+	Prohibited []string `protobuf:"bytes,3,rep,name=prohibited,proto3" json:"prohibited,omitempty"`
+	// Fail-closed by default. When false (the default), this restriction is
+	// BINDING: an agent that cannot evaluate every token in it — including an
+	// unknown vendor token — MUST decline the term. Set advisory = true to
+	// downgrade an unverifiable restriction to non-blocking. This deliberately
+	// inverts the COSE-`crit` opt-in default: a license restriction a consumer
+	// does not understand should stop it, not be silently ignored.
+	Advisory      bool `protobuf:"varint,4,opt,name=advisory,proto3" json:"advisory,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Restriction) Reset() {
+	*x = Restriction{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Restriction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Restriction) ProtoMessage() {}
+
+func (x *Restriction) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[10]
 	if x != nil {
-		return x.PermittedFunctions
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Restriction.ProtoReflect.Descriptor instead.
+func (*Restriction) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Restriction) GetKind() RestrictionKind {
+	if x != nil {
+		return x.Kind
+	}
+	return RestrictionKind_RESTRICTION_KIND_UNSPECIFIED
+}
+
+func (x *Restriction) GetPermitted() []string {
+	if x != nil {
+		return x.Permitted
 	}
 	return nil
 }
 
-func (x *AccessRestrictions) GetProhibitedFunctions() []string {
+func (x *Restriction) GetProhibited() []string {
 	if x != nil {
-		return x.ProhibitedFunctions
+		return x.Prohibited
 	}
 	return nil
 }
 
-func (x *AccessRestrictions) GetPermittedUsers() []string {
+func (x *Restriction) GetAdvisory() bool {
 	if x != nil {
-		return x.PermittedUsers
+		return x.Advisory
 	}
-	return nil
+	return false
 }
 
-func (x *AccessRestrictions) GetProhibitedUsers() []string {
-	if x != nil {
-		return x.ProhibitedUsers
-	}
-	return nil
+// Quota — A usage cap that gates whether this LicenseTerm remains valid.
+//
+// Quotas limit how much a licensee may consume before the term expires or
+// must be renegotiated. They are NOT billing quantities — billing is in Pricing.
+//
+// The metric vocabulary is authored ONLY in the (ramp.v1.vocab) entries on
+// Quota.metric below; the quotametrics constants + IsRegistered derive from it.
+type Quota struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The unit being capped — an open vocabulary axis.
+	//
+	// The (ramp.v1.vocab) entries below are the SOLE authored source of the
+	// registered bare metric tokens. A buf plugin reads them structurally and
+	// emits the quotametrics constants + IsRegistered; ingest enforces membership
+	// from those. The CEL is STRUCTURE ONLY (non-empty bare token or
+	// vendor:namespaced) — it never lists the tokens, so it cannot drift.
+	//
+	// Token meanings:
+	//
+	//	display-words      Words of content text rendered to an end user.
+	//	impressions        Times the content is displayed to an end user.
+	//	tokens             LLM output tokens generated using this content.
+	//	input-tokens       LLM input tokens consumed from this content.
+	//	units-manufactured Physical units manufactured from this design/pattern.
+	//	accesses           Distinct content access / retrieval events.
+	//	copies             Digital or physical copies produced.
+	//	seats              Distinct named users licensed to access the content.
+	Metric string `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
+	// Maximum allowed value in the given window. (6z1v3) A quota of 0 grants
+	// nothing — express "no access" by omitting the term, not a zero quota.
+	Limit int64 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Time window over which the limit accumulates.
+	Window        QuotaWindow `protobuf:"varint,3,opt,name=window,proto3,enum=ramp.v1.QuotaWindow" json:"window,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AccessRestrictions) GetPermittedGeo() []string {
-	if x != nil {
-		return x.PermittedGeo
-	}
-	return nil
+func (x *Quota) Reset() {
+	*x = Quota{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
-func (x *AccessRestrictions) GetProhibitedGeo() []string {
-	if x != nil {
-		return x.ProhibitedGeo
-	}
-	return nil
+func (x *Quota) String() string {
+	return protoimpl.X.MessageStringOf(x)
 }
 
-func (x *AccessRestrictions) GetMaxDisplayWords() int32 {
-	if x != nil && x.MaxDisplayWords != nil {
-		return *x.MaxDisplayWords
+func (*Quota) ProtoMessage() {}
+
+func (x *Quota) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Quota.ProtoReflect.Descriptor instead.
+func (*Quota) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *Quota) GetMetric() string {
+	if x != nil {
+		return x.Metric
+	}
+	return ""
+}
+
+func (x *Quota) GetLimit() int64 {
+	if x != nil {
+		return x.Limit
 	}
 	return 0
 }
 
-func (x *AccessRestrictions) GetExt() *structpb.Struct {
+func (x *Quota) GetWindow() QuotaWindow {
 	if x != nil {
-		return x.Ext
+		return x.Window
+	}
+	return QuotaWindow_QUOTA_WINDOW_UNSPECIFIED
+}
+
+// Obligation — A post-use behavioral requirement attached to a LicenseTerm.
+//
+// Examples:
+//
+//	Attribution on display: cite the author whenever content is shown to a user.
+//	Share-alike on derivative: AI-generated content that incorporates this work
+//	  must be released under the same license.
+//	Notice on distribution: include the copyright notice when distributing copies.
+type Obligation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the agent must do.
+	Kind ObligationKind `protobuf:"varint,1,opt,name=kind,proto3,enum=ramp.v1.ObligationKind" json:"kind,omitempty"`
+	// When the obligation activates.
+	Trigger ObligationTrigger `protobuf:"varint,2,opt,name=trigger,proto3,enum=ramp.v1.ObligationTrigger" json:"trigger,omitempty"`
+	// The license that derivatives must be released under. REQUIRED for
+	// SHARE_ALIKE (rejected if absent), where it MUST identify a license — set
+	// `id` (SPDX short-id, the common copyleft case, often the term's own
+	// License.id) and/or `uri`. Because it is a License, a referenced `uri`
+	// inherits the uri_digest swap-protection rule: a uri without a digest is
+	// rejected, exactly as for any other license reference. (6z1v3)
+	ScopeLicense *License `protobuf:"bytes,3,opt,name=scope_license,json=scopeLicense,proto3,oneof" json:"scope_license,omitempty"`
+	// Free-form detail: attribution string, notice file URI, etc.
+	// OBLIGATION_KIND_OTHER without it → lint warning.
+	Detail        *string `protobuf:"bytes,4,opt,name=detail,proto3,oneof" json:"detail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Obligation) Reset() {
+	*x = Obligation{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Obligation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Obligation) ProtoMessage() {}
+
+func (x *Obligation) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Obligation.ProtoReflect.Descriptor instead.
+func (*Obligation) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *Obligation) GetKind() ObligationKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ObligationKind_OBLIGATION_KIND_UNSPECIFIED
+}
+
+func (x *Obligation) GetTrigger() ObligationTrigger {
+	if x != nil {
+		return x.Trigger
+	}
+	return ObligationTrigger_OBLIGATION_TRIGGER_UNSPECIFIED
+}
+
+func (x *Obligation) GetScopeLicense() *License {
+	if x != nil {
+		return x.ScopeLicense
 	}
 	return nil
 }
 
-func (x *AccessRestrictions) GetExtCritical() []string {
+func (x *Obligation) GetDetail() string {
+	if x != nil && x.Detail != nil {
+		return *x.Detail
+	}
+	return ""
+}
+
+// LicenseTerm — Universal licensing unit.
+//
+// One LicenseTerm describes one complete access arrangement for a resource.
+// A resource carries zero or more terms; having multiple terms is the normal
+// case (one per use category, user type, or commercial arrangement).
+//
+// The same LicenseTerm shape appears at ingestion (ResourceEntry.terms) and
+// at emission (Offer.terms). The Exchange stores what the publisher pushed
+// and surfaces it on discovery, so agents see the same terms the publisher
+// declared — no translation or reformulation.
+//
+// Validation rules:
+//   - Pricing MUST be present on EVERY term, regardless of semantics.
+//     Absent Pricing → reject at ingest: an agent cannot act on a term with
+//     no price. This holds for REFERENCE_ONLY too — its License governs the
+//     human-readable terms, but the machine-readable price is still stated
+//     here, not deferred to the document.
+//   - model=FREE must be explicit. Absent Pricing ≠ free. A term may be FREE
+//     under an arbitrary license; the agent still needs the price stated so it
+//     knows the access is free rather than unpriced.
+//   - REFERENCE_ONLY terms MUST carry a License with a non-empty uri. A
+//     REFERENCE_ONLY term that references no document is meaningless → reject
+//     at ingest.
+//   - Restriction tokens are validated against the vocab registry.
+//     Unknown tokens produce a PushResourcesResponse.warnings[] entry
+//     but do NOT cause rejection (forward-compatible).
+type LicenseTerm struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Governing license document. Authoritative for REFERENCE_ONLY terms, which
+	// MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that
+	// references nothing is rejected at ingest.
+	License *License `protobuf:"bytes,1,opt,name=license,proto3,oneof" json:"license,omitempty"`
+	// How to interpret the machine fields.
+	Semantics TermSemantics `protobuf:"varint,2,opt,name=semantics,proto3,enum=ramp.v1.TermSemantics" json:"semantics,omitempty"`
+	// Usage restrictions (function, geography, user-type).
+	// Multiple restrictions are AND-combined — the agent must satisfy all of them.
+	Restrictions []*Restriction `protobuf:"bytes,3,rep,name=restrictions,proto3" json:"restrictions,omitempty"`
+	// Usage caps. The agent must not exceed any individual Quota.
+	Quotas []*Quota `protobuf:"bytes,4,rep,name=quotas,proto3" json:"quotas,omitempty"`
+	// Post-use behavioral requirements.
+	Obligations []*Obligation `protobuf:"bytes,5,rep,name=obligations,proto3" json:"obligations,omitempty"`
+	// Pricing for this term. REQUIRED for every term regardless of semantics —
+	// an agent cannot act on a priceless term, so absent Pricing is a validation
+	// error at ingest. model = FREE must be stated explicitly (absent Pricing is
+	// not free). A REFERENCE_ONLY term states its price here too; its License
+	// governs the human-readable terms but does not replace the machine-readable
+	// price.
+	Pricing *Pricing `protobuf:"bytes,6,opt,name=pricing,proto3,oneof" json:"pricing,omitempty"`
+	// Delegation scope-gating: the Exchange returns this term to an agent iff the
+	// agent's delegation grant covers ALL of these scopes (AND-semantics).
+	// Empty = public. A subscription term is Pricing{model:FREE} +
+	// scopes:["subscription:..."].
+	//
+	// Coverage uses the SAME matching rule as Requester/delegation scopes:
+	// segment-wise (":" separated), each granted segment must equal the
+	// corresponding required segment or be "*", a terminal "*" matches all
+	// remaining segments, and there is NO implicit prefix match (a grant
+	// narrower than the requirement does not cover it). "dist:*" covers
+	// "dist:US" and "dist:US:CA"; "dist" covers only "dist". There is exactly
+	// one scope-matching algorithm across the protocol.
+	Scopes []string `protobuf:"bytes,7,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// Informational human-readable name for this sub-part (sub-part terms).
+	PartLabel     *string `protobuf:"bytes,8,opt,name=part_label,json=partLabel,proto3,oneof" json:"part_label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LicenseTerm) Reset() {
+	*x = LicenseTerm{}
+	mi := &file_ramp_v1_ramp_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LicenseTerm) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LicenseTerm) ProtoMessage() {}
+
+func (x *LicenseTerm) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_v1_ramp_proto_msgTypes[13]
 	if x != nil {
-		return x.ExtCritical
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LicenseTerm.ProtoReflect.Descriptor instead.
+func (*LicenseTerm) Descriptor() ([]byte, []int) {
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *LicenseTerm) GetLicense() *License {
+	if x != nil {
+		return x.License
 	}
 	return nil
+}
+
+func (x *LicenseTerm) GetSemantics() TermSemantics {
+	if x != nil {
+		return x.Semantics
+	}
+	return TermSemantics_TERM_SEMANTICS_UNSPECIFIED
+}
+
+func (x *LicenseTerm) GetRestrictions() []*Restriction {
+	if x != nil {
+		return x.Restrictions
+	}
+	return nil
+}
+
+func (x *LicenseTerm) GetQuotas() []*Quota {
+	if x != nil {
+		return x.Quotas
+	}
+	return nil
+}
+
+func (x *LicenseTerm) GetObligations() []*Obligation {
+	if x != nil {
+		return x.Obligations
+	}
+	return nil
+}
+
+func (x *LicenseTerm) GetPricing() *Pricing {
+	if x != nil {
+		return x.Pricing
+	}
+	return nil
+}
+
+func (x *LicenseTerm) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *LicenseTerm) GetPartLabel() string {
+	if x != nil && x.PartLabel != nil {
+		return *x.PartLabel
+	}
+	return ""
 }
 
 // Preview — Lightweight resource preview for offer evaluation.
@@ -2541,7 +3379,7 @@ type Preview struct {
 
 func (x *Preview) Reset() {
 	*x = Preview{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[9]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2553,7 +3391,7 @@ func (x *Preview) String() string {
 func (*Preview) ProtoMessage() {}
 
 func (x *Preview) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[9]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2566,7 +3404,7 @@ func (x *Preview) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Preview.ProtoReflect.Descriptor instead.
 func (*Preview) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{9}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Preview) GetUrl() string {
@@ -2617,6 +3455,9 @@ func (x *Preview) GetSize() string {
 // normalizes to unit cost (effective cost per unit) for cross-exchange
 // comparison — analogous to eCPM in programmatic advertising.
 // Unit cost is denominated in the Exchange's base currency.
+//
+// Fields: model, rate, currency, unit_cost, estimated_quantity,
+// license_duration_months, unit, metering.
 type Pricing struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Provider's pricing model.
@@ -2626,7 +3467,7 @@ type Pricing struct {
 	// ISO 4217 currency code (e.g. "USD", "EUR").
 	Currency string `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
 	// Normalized cost per unit — the universal comparison metric.
-	// For text: cost per token (replaces eCPT). For video: cost per second.
+	// For text: cost per token. For video: cost per second.
 	// For data: cost per record. For APIs: cost per call.
 	// Denominated in the Exchange's base_currency (from its WellKnownManifest).
 	UnitCost *float64 `protobuf:"fixed64,4,opt,name=unit_cost,json=unitCost,proto3,oneof" json:"unit_cost,omitempty"`
@@ -2634,27 +3475,30 @@ type Pricing struct {
 	// For text: token count. For video: duration in seconds.
 	// For documents: page count. For data: record count.
 	EstimatedQuantity *int32 `protobuf:"varint,5,opt,name=estimated_quantity,json=estimatedQuantity,proto3,oneof" json:"estimated_quantity,omitempty"`
-	// Revenue share percentage (0.0–1.0). Used with PRICING_MODEL_REVENUE_SHARE.
-	Revshare *float64 `protobuf:"fixed64,6,opt,name=revshare,proto3,oneof" json:"revshare,omitempty"`
 	// License duration in months. How long the granted access remains valid.
 	LicenseDurationMonths *int32 `protobuf:"varint,7,opt,name=license_duration_months,json=licenseDurationMonths,proto3,oneof" json:"license_duration_months,omitempty"`
-	// Metering unit for unit_cost and estimated_quantity.
-	// Standard units: "tokens", "seconds", "pages", "records", "bytes", "calls", "items"
-	// Domain-specific units allowed (e.g., "sq_km", "characters", "images").
-	Unit *string          `protobuf:"bytes,8,opt,name=unit,proto3,oneof" json:"unit,omitempty"`
-	Ext  *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
-	// Critical extension keys (COSE crit pattern, RFC 9052).
-	// Lists keys within ext that the consumer MUST understand.
-	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
-	// Empty (default) → all ext keys are safe to ignore.
-	ExtCritical   []string `protobuf:"bytes,90,rep,name=ext_critical,json=extCritical,proto3" json:"ext_critical,omitempty"`
+	// Metering basis — the "per what" of PER_UNIT pricing. REQUIRED when
+	// model = PER_UNIT. Custom units namespace as "vendor:unit". Ignored for
+	// FREE / FLAT.
+	//
+	// The (ramp.v1.vocab) entries below are the SOLE authored source of the
+	// registered bare tokens. A buf plugin reads them structurally and emits the
+	// pricingunits constants + IsRegistered; ingest enforces membership from
+	// those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —
+	// it never lists the tokens, so it cannot drift from the registry.
+	Unit *string `protobuf:"bytes,8,opt,name=unit,proto3,oneof" json:"unit,omitempty"`
+	// How usage is tracked for billing reconciliation.
+	// Absent = PRICING_METERING_ONLINE (default real-time tracking).
+	// NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.
+	// OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.
+	Metering      *PricingMetering `protobuf:"varint,9,opt,name=metering,proto3,enum=ramp.v1.PricingMetering,oneof" json:"metering,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Pricing) Reset() {
 	*x = Pricing{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[10]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2666,7 +3510,7 @@ func (x *Pricing) String() string {
 func (*Pricing) ProtoMessage() {}
 
 func (x *Pricing) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[10]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2679,7 +3523,7 @@ func (x *Pricing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pricing.ProtoReflect.Descriptor instead.
 func (*Pricing) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{10}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Pricing) GetModel() PricingModel {
@@ -2717,13 +3561,6 @@ func (x *Pricing) GetEstimatedQuantity() int32 {
 	return 0
 }
 
-func (x *Pricing) GetRevshare() float64 {
-	if x != nil && x.Revshare != nil {
-		return *x.Revshare
-	}
-	return 0
-}
-
 func (x *Pricing) GetLicenseDurationMonths() int32 {
 	if x != nil && x.LicenseDurationMonths != nil {
 		return *x.LicenseDurationMonths
@@ -2738,25 +3575,22 @@ func (x *Pricing) GetUnit() string {
 	return ""
 }
 
-func (x *Pricing) GetExt() *structpb.Struct {
-	if x != nil {
-		return x.Ext
+func (x *Pricing) GetMetering() PricingMetering {
+	if x != nil && x.Metering != nil {
+		return *x.Metering
 	}
-	return nil
-}
-
-func (x *Pricing) GetExtCritical() []string {
-	if x != nil {
-		return x.ExtCritical
-	}
-	return nil
+	return PricingMetering_PRICING_METERING_ONLINE
 }
 
 // Requester — Universal identity for any RAMP client.
 //
-// Carries identity, intended use, resource URIs, and entitlement scopes.
-// The Exchange verifies identity via Ed25519 signature, then filters
-// its catalog by the requester's scopes.
+// Carries identity, entitlements, and a billing handle ONLY — who is asking,
+// what they are entitled to (scopes, delegation), and how to bill them
+// (billing_ref). What they are asking for (uris) and the limits they will
+// operate within (acceptable_restrictions) belong to the ask, not the identity,
+// and live on ResourceQuery / RAMPRequest. The Exchange verifies identity via
+// the RFC 9421 request signature, then filters its catalog by the requester's
+// scopes.
 type Requester struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique requester identifier (e.g., "agent-research-bot-001").
@@ -2768,15 +3602,13 @@ type Requester struct {
 	Type RequesterType `protobuf:"varint,3,opt,name=type,proto3,enum=ramp.v1.RequesterType" json:"type,omitempty"`
 	// Human-readable name (e.g., "Acme Research Assistant").
 	Name *string `protobuf:"bytes,4,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	// Resource URIs being requested.
-	Uris []string `protobuf:"bytes,5,rep,name=uris,proto3" json:"uris,omitempty"`
-	// What the requester intends to do with the resources.
-	// Standard values: "ai_train", "ai_input", "ai_index", "search", "display".
-	IntendedUse []string `protobuf:"bytes,6,rep,name=intended_use,json=intendedUse,proto3" json:"intended_use,omitempty"`
-	// Commercial license or subscription identifier.
-	// Exchange uses this to look up entitlements, pricing tiers, and
-	// existing subscription deals.
-	LicenseId *string `protobuf:"bytes,7,opt,name=license_id,json=licenseId,proto3,oneof" json:"license_id,omitempty"`
+	// Opaque billing reference linking this requester to the Exchange's (and,
+	// through the Exchange, the publisher's) billing/accounting systems — e.g. a
+	// billing account, PO number, or cost center. NOT an entitlement or
+	// subscription credential: access is governed by scopes and delegation, and
+	// identity by the request signature. The Exchange uses it only for invoicing
+	// and cost attribution.
+	BillingRef *string `protobuf:"bytes,5,opt,name=billing_ref,json=billingRef,proto3,oneof" json:"billing_ref,omitempty"`
 	// Entitlement scopes. Declare what the requester can access.
 	//
 	// The Exchange filters its catalog to resources matching these scopes.
@@ -2784,21 +3616,33 @@ type Requester struct {
 	// learns they exist. This is the enforcement mechanism for both enterprise
 	// RBAC and open-market subscription entitlements.
 	//
-	// Scope format: "{domain}:{permission}" or "{profile}:{permission}"
+	// Scope format: colon-separated segments, "{domain}:{permission}" or
+	// "{profile}:{permission}", optionally multi-segment ("dist:US:CA");
+	// matching is segment-wise per the rule below (no implicit hierarchy).
 	// Examples:
 	//
 	//	"credit:read"                — can access credit reports
-	//	"subscription:bloomberg-2026" — has active Bloomberg subscription
+	//	"subscription:marketdata-2026" — has active MarketData subscription
 	//	"academic:*"                 — full access to academic resources
 	//	"internal:reports"           — can access internal reports
 	//	"*"                         — unrestricted (public Exchange default)
 	//
+	// Matching is SEGMENT-WISE (":" separated). A granted scope G covers a
+	// required scope R iff, segment by segment, each G segment equals the
+	// corresponding R segment or is "*"; a terminal "*" matches all remaining
+	// segments. There is NO implicit prefix match, and a grant NARROWER than
+	// the requirement does not cover it (G must be equal-to-or-broader than R).
+	// Examples: "dist:*" covers "dist:US" and "dist:US:CA"; "dist:US:*" covers
+	// "dist:US:CA" but not "dist:EU"; bare "dist" covers only "dist"; granted
+	// "dist:US:CA" does NOT cover required "dist:US"; "*" covers everything.
+	// This same rule governs LicenseTerm.scopes — one algorithm protocol-wide.
+	//
 	// When empty, Exchange applies its default access policy (typically
 	// returns all publicly available resources).
-	Scopes []string `protobuf:"bytes,8,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Scopes []string `protobuf:"bytes,6,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	// Optional delegation — present when the requester acts on behalf of
 	// another entity (user, organization, upstream agent).
-	Delegation *Delegation      `protobuf:"bytes,9,opt,name=delegation,proto3,oneof" json:"delegation,omitempty"`
+	Delegation *Delegation      `protobuf:"bytes,7,opt,name=delegation,proto3,oneof" json:"delegation,omitempty"`
 	Ext        *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
@@ -2811,7 +3655,7 @@ type Requester struct {
 
 func (x *Requester) Reset() {
 	*x = Requester{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[11]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2823,7 +3667,7 @@ func (x *Requester) String() string {
 func (*Requester) ProtoMessage() {}
 
 func (x *Requester) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[11]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2836,7 +3680,7 @@ func (x *Requester) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Requester.ProtoReflect.Descriptor instead.
 func (*Requester) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{11}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Requester) GetId() string {
@@ -2867,23 +3711,9 @@ func (x *Requester) GetName() string {
 	return ""
 }
 
-func (x *Requester) GetUris() []string {
-	if x != nil {
-		return x.Uris
-	}
-	return nil
-}
-
-func (x *Requester) GetIntendedUse() []string {
-	if x != nil {
-		return x.IntendedUse
-	}
-	return nil
-}
-
-func (x *Requester) GetLicenseId() string {
-	if x != nil && x.LicenseId != nil {
-		return *x.LicenseId
+func (x *Requester) GetBillingRef() string {
+	if x != nil && x.BillingRef != nil {
+		return *x.BillingRef
 	}
 	return ""
 }
@@ -2918,36 +3748,41 @@ func (x *Requester) GetExtCritical() []string {
 
 // Delegation — Scoped, time-limited, spend-capped credential.
 //
-// Token-format agnostic. Supports JWT (universal default) and Biscuit
-// (advanced multi-hop offline attenuation). The token_format field
-// indicates which format the token field contains.
+// The token is an opaque, signed credential. The DEFAULT and fully-specified
+// format is a JWT (token_format "jwt"); "biscuit-v3" remains a permitted
+// alternative for deployments that want deep multi-hop offline attenuation (see
+// the auth spec). Its claims are the AUTHORITATIVE source of the grant; the
+// plaintext fields below (scopes, expires_at, max_spend_cents, …) are a
+// convenience mirror the Exchange MAY use for fast pre-filtering before it
+// verifies the token.
 //
-// JWT (token_format="jwt"):
+// Holder binding (the load-bearing property). The grant is bound to a holder key
+// via the RFC 7800 `cnf` confirmation claim — `cnf.jkt`, the RFC 7638 JWK
+// thumbprint of the holder's key. Verification MUST check that the key signing
+// the request (RFC 9421) hashes to that thumbprint; a token possessed without
+// the matching private key is rejected. This is what makes a leaked token NOT
+// bearer-usable. Delegation is a chain of cnf-linked JWTs: a principal narrows a
+// grant by issuing a child JWT (cnf = the next holder, scopes ⊆ parent), signed
+// by the key the parent's cnf named — the chain-linkage invariant. Verifiers
+// need only the root issuer's public key; intermediate keys ride inside the
+// chain (JOSE header `jwk`), so verification is offline.
 //
-//	Standard JWT with RAMP claims (sub, scope, exp, ramp_max_spend,
-//	ramp_max_accesses, ramp_quota_period). Issued by any OAuth/GNAP
-//	authorization server. Sub-delegation requires IdP round-trip
-//	(Token Exchange RFC 8693).
+// The claim schema is a small registered vocabulary — see the RAMP
+// delegation-claims profile in the auth spec. All claims are OPTIONAL except the
+// holder binding (cnf). Vendors MAY add namespaced claims (their own "vendor:"
+// namespace; "ramp_"-prefixed names are reserved for the registered vocabulary
+// and MUST NOT be redefined); any constraint a verifier cannot evaluate is
+// binding by default (fail closed) unless the issuer marks it advisory —
+// mirroring Restriction.advisory.
 //
-// Biscuit (token_format="biscuit-v2"):
-//
-//	Ed25519-signed block chains with offline attenuation. Each block
-//	narrows permissions — never widens. Sub-delegation is local (no
-//	server contact). Libraries: biscuit-go, @biscuit-auth/biscuit-wasm,
-//	biscuit-python.
-//
-// Both formats carry the same semantic claims. The Exchange verifies
-// the token using the appropriate library based on token_format.
-// The convenience fields (scopes, expires_at, max_spend_cents, etc.)
-// are extracted from the token for fast pre-filtering.
-//
-// Zero breach risk: if the token leaks, damage is bounded by
-// scope + time + spend cap. The token is useless after expiry.
+// Scope/time/spend caps are defense-in-depth that bound the blast radius only in
+// the residual case where the holder's signing key is also compromised; the
+// primary protection against theft is the holder binding above.
 type Delegation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Who granted this delegation (domain for public key lookup).
 	PrincipalDomain string `protobuf:"bytes,1,opt,name=principal_domain,json=principalDomain,proto3" json:"principal_domain,omitempty"`
-	// Principal's identifier (e.g., "user@acme.com", "bloomberg.com").
+	// Principal's identifier (e.g., "user@acme.com", "marketdata.example.com").
 	PrincipalId string `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
 	// Scopes granted by this delegation. MUST be a subset of the
 	// principal's own scopes (attenuation — can only narrow, not widen).
@@ -2966,9 +3801,11 @@ type Delegation struct {
 	// Example: 720h (30 days) for monthly subscriptions.
 	// When absent, the quota is lifetime (bounded only by expires_at).
 	QuotaPeriod *durationpb.Duration `protobuf:"bytes,10,opt,name=quota_period,json=quotaPeriod,proto3,oneof" json:"quota_period,omitempty"`
-	// Token bytes. JWT (base64url-encoded) or Biscuit (binary, base64-encoded).
+	// Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,
+	// base64-encoded) when token_format is "biscuit-v3".
 	Token []byte `protobuf:"bytes,6,opt,name=token,proto3" json:"token,omitempty"`
-	// Token format: "jwt" (default) or "biscuit-v2".
+	// Token format: "jwt" (default) or "biscuit-v3" (optional, for deep
+	// multi-hop offline attenuation). Empty is treated as "jwt".
 	TokenFormat string `protobuf:"bytes,7,opt,name=token_format,json=tokenFormat,proto3" json:"token_format,omitempty"`
 	// Optional: URI for real-time revocation checking.
 	// Exchange MAY check this for high-value transactions.
@@ -2990,7 +3827,7 @@ type Delegation struct {
 
 func (x *Delegation) Reset() {
 	*x = Delegation{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[12]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3002,7 +3839,7 @@ func (x *Delegation) String() string {
 func (*Delegation) ProtoMessage() {}
 
 func (x *Delegation) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[12]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3015,7 +3852,7 @@ func (x *Delegation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Delegation.ProtoReflect.Descriptor instead.
 func (*Delegation) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{12}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Delegation) GetPrincipalDomain() string {
@@ -3109,82 +3946,6 @@ func (x *Delegation) GetExtCritical() []string {
 	return nil
 }
 
-// IntermediaryHop — One hop in the request forwarding chain.
-type IntermediaryHop struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Domain of the intermediary (for public key lookup).
-	Domain string `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
-	// Intermediary's identifier.
-	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	// When this intermediary forwarded the request.
-	ForwardedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=forwarded_at,json=forwardedAt,proto3" json:"forwarded_at,omitempty"`
-	// Binds this hop to its RFC 9421 Signature header: carries the label of the
-	// Signature / Signature-Input entry this intermediary added, so a verifier
-	// matches a hop to its signature directly instead of inferring by ordinal
-	// position or domain. Optional; omit on single-signature paths.
-	SignatureLabel *string `protobuf:"bytes,4,opt,name=signature_label,json=signatureLabel,proto3,oneof" json:"signature_label,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *IntermediaryHop) Reset() {
-	*x = IntermediaryHop{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *IntermediaryHop) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*IntermediaryHop) ProtoMessage() {}
-
-func (x *IntermediaryHop) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use IntermediaryHop.ProtoReflect.Descriptor instead.
-func (*IntermediaryHop) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *IntermediaryHop) GetDomain() string {
-	if x != nil {
-		return x.Domain
-	}
-	return ""
-}
-
-func (x *IntermediaryHop) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *IntermediaryHop) GetForwardedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ForwardedAt
-	}
-	return nil
-}
-
-func (x *IntermediaryHop) GetSignatureLabel() string {
-	if x != nil && x.SignatureLabel != nil {
-		return *x.SignatureLabel
-	}
-	return ""
-}
-
 // TransactionRequest — Commit to one or more offers.
 //
 // After selecting offers, the caller commits by sending this to the
@@ -3220,7 +3981,7 @@ type TransactionRequest struct {
 
 func (x *TransactionRequest) Reset() {
 	*x = TransactionRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[14]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3232,7 +3993,7 @@ func (x *TransactionRequest) String() string {
 func (*TransactionRequest) ProtoMessage() {}
 
 func (x *TransactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[14]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3245,7 +4006,7 @@ func (x *TransactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionRequest.ProtoReflect.Descriptor instead.
 func (*TransactionRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{14}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TransactionRequest) GetVer() string {
@@ -3316,7 +4077,7 @@ type TransactionItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The offer_id from the selected Offer.
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
-	// The exchange_signature from the selected Offer.
+	// The selected Offer's `signature` (informally, the exchange signature).
 	OfferSignature string `protobuf:"bytes,2,opt,name=offer_signature,json=offerSignature,proto3" json:"offer_signature,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -3324,7 +4085,7 @@ type TransactionItem struct {
 
 func (x *TransactionItem) Reset() {
 	*x = TransactionItem{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[15]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3336,7 +4097,7 @@ func (x *TransactionItem) String() string {
 func (*TransactionItem) ProtoMessage() {}
 
 func (x *TransactionItem) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[15]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3349,7 +4110,7 @@ func (x *TransactionItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionItem.ProtoReflect.Descriptor instead.
 func (*TransactionItem) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{15}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *TransactionItem) GetOfferId() string {
@@ -3400,6 +4161,9 @@ type TransactionResponse struct {
 	RetrievalEndpoint *string `protobuf:"bytes,18,opt,name=retrieval_endpoint,json=retrievalEndpoint,proto3,oneof" json:"retrieval_endpoint,omitempty"`
 	// Set when the transaction is denied. Absent on success.
 	DenialReason *DenialReason `protobuf:"varint,11,opt,name=denial_reason,json=denialReason,proto3,enum=ramp.v1.DenialReason,oneof" json:"denial_reason,omitempty"`
+	// When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the
+	// request failed, in the same RestrictionKind vocabulary the terms use.
+	RestrictionMismatches []RestrictionKind `protobuf:"varint,19,rep,packed,name=restriction_mismatches,json=restrictionMismatches,proto3,enum=ramp.v1.RestrictionKind" json:"restriction_mismatches,omitempty"`
 	// If set, this transaction was fulfilled under a subscription/deal.
 	// No per-request charge — usage tracked against subscription quota.
 	SubscriptionId *string `protobuf:"bytes,12,opt,name=subscription_id,json=subscriptionId,proto3,oneof" json:"subscription_id,omitempty"`
@@ -3427,7 +4191,7 @@ type TransactionResponse struct {
 
 func (x *TransactionResponse) Reset() {
 	*x = TransactionResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[16]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3439,7 +4203,7 @@ func (x *TransactionResponse) String() string {
 func (*TransactionResponse) ProtoMessage() {}
 
 func (x *TransactionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[16]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3452,7 +4216,7 @@ func (x *TransactionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionResponse.ProtoReflect.Descriptor instead.
 func (*TransactionResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{16}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *TransactionResponse) GetVer() string {
@@ -3539,6 +4303,13 @@ func (x *TransactionResponse) GetDenialReason() DenialReason {
 	return DenialReason_DENIAL_REASON_UNSPECIFIED
 }
 
+func (x *TransactionResponse) GetRestrictionMismatches() []RestrictionKind {
+	if x != nil {
+		return x.RestrictionMismatches
+	}
+	return nil
+}
+
 func (x *TransactionResponse) GetSubscriptionId() string {
 	if x != nil && x.SubscriptionId != nil {
 		return *x.SubscriptionId
@@ -3609,6 +4380,9 @@ type TransactionResultItem struct {
 	SubscriptionUnitValue *Cost `protobuf:"bytes,11,opt,name=subscription_unit_value,json=subscriptionUnitValue,proto3,oneof" json:"subscription_unit_value,omitempty"`
 	// Set if this specific item was denied (others may succeed).
 	DenialReason *DenialReason `protobuf:"varint,7,opt,name=denial_reason,json=denialReason,proto3,enum=ramp.v1.DenialReason,oneof" json:"denial_reason,omitempty"`
+	// When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the
+	// request failed, in the same RestrictionKind vocabulary the terms use.
+	RestrictionMismatches []RestrictionKind `protobuf:"varint,13,rep,packed,name=restriction_mismatches,json=restrictionMismatches,proto3,enum=ramp.v1.RestrictionKind" json:"restriction_mismatches,omitempty"`
 	// When retrieval_endpoint expires.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
 	// Signed retrieval URL for this item. Bound to the requesting agent's identity
@@ -3626,7 +4400,7 @@ type TransactionResultItem struct {
 
 func (x *TransactionResultItem) Reset() {
 	*x = TransactionResultItem{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[17]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3638,7 +4412,7 @@ func (x *TransactionResultItem) String() string {
 func (*TransactionResultItem) ProtoMessage() {}
 
 func (x *TransactionResultItem) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[17]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3651,7 +4425,7 @@ func (x *TransactionResultItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionResultItem.ProtoReflect.Descriptor instead.
 func (*TransactionResultItem) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{17}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *TransactionResultItem) GetOfferId() string {
@@ -3710,6 +4484,13 @@ func (x *TransactionResultItem) GetDenialReason() DenialReason {
 	return DenialReason_DENIAL_REASON_UNSPECIFIED
 }
 
+func (x *TransactionResultItem) GetRestrictionMismatches() []RestrictionKind {
+	if x != nil {
+		return x.RestrictionMismatches
+	}
+	return nil
+}
+
 func (x *TransactionResultItem) GetExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpiresAt
@@ -3750,7 +4531,7 @@ type Cost struct {
 
 func (x *Cost) Reset() {
 	*x = Cost{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[18]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3762,7 +4543,7 @@ func (x *Cost) String() string {
 func (*Cost) ProtoMessage() {}
 
 func (x *Cost) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[18]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3775,7 +4556,7 @@ func (x *Cost) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cost.ProtoReflect.Descriptor instead.
 func (*Cost) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{18}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Cost) GetAmount() float64 {
@@ -3812,7 +4593,7 @@ type PushResourcesRequest struct {
 
 func (x *PushResourcesRequest) Reset() {
 	*x = PushResourcesRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[19]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3824,7 +4605,7 @@ func (x *PushResourcesRequest) String() string {
 func (*PushResourcesRequest) ProtoMessage() {}
 
 func (x *PushResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[19]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3837,7 +4618,7 @@ func (x *PushResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushResourcesRequest.ProtoReflect.Descriptor instead.
 func (*PushResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{19}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *PushResourcesRequest) GetTenantId() string {
@@ -3887,7 +4668,13 @@ type ResourceEntry struct {
 	// /.well-known/ramp.json endpoint (WellKnownManifest, role determined
 	// by the verifier's operator).
 	Attestations []*ResourceAttestation `protobuf:"bytes,12,rep,name=attestations,proto3" json:"attestations,omitempty"`
-	Ext          *structpb.Struct       `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	// Publisher-declared licensing terms for this resource.
+	// See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
+	// be present. For REFERENCE_ONLY terms, License.uri is authoritative.
+	// The Exchange validates ENUMERATED terms at push time and surfaces them
+	// in Offer.terms on discovery.
+	Terms []*LicenseTerm   `protobuf:"bytes,13,rep,name=terms,proto3" json:"terms,omitempty"`
+	Ext   *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -3899,7 +4686,7 @@ type ResourceEntry struct {
 
 func (x *ResourceEntry) Reset() {
 	*x = ResourceEntry{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[20]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3911,7 +4698,7 @@ func (x *ResourceEntry) String() string {
 func (*ResourceEntry) ProtoMessage() {}
 
 func (x *ResourceEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[20]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3924,7 +4711,7 @@ func (x *ResourceEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceEntry.ProtoReflect.Descriptor instead.
 func (*ResourceEntry) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{20}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ResourceEntry) GetDomain() string {
@@ -4011,6 +4798,13 @@ func (x *ResourceEntry) GetAttestations() []*ResourceAttestation {
 	return nil
 }
 
+func (x *ResourceEntry) GetTerms() []*LicenseTerm {
+	if x != nil {
+		return x.Terms
+	}
+	return nil
+}
+
 func (x *ResourceEntry) GetExt() *structpb.Struct {
 	if x != nil {
 		return x.Ext
@@ -4026,16 +4820,24 @@ func (x *ResourceEntry) GetExtCritical() []string {
 }
 
 type PushResourcesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Accepted      int32                  `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
-	Rejected      int32                  `protobuf:"varint,2,opt,name=rejected,proto3" json:"rejected,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Accepted int32                  `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	Rejected int32                  `protobuf:"varint,2,opt,name=rejected,proto3" json:"rejected,omitempty"`
+	// Non-fatal issues encountered during ingestion.
+	// Examples: unrecognized vocab token in a Restriction (term accepted but flagged),
+	//
+	//	REFERENCE_ONLY term missing License.uri (informational).
+	//
+	// Warnings do not cause rejection — they are surfaced so publishers can fix
+	// their feeds without a hard failure.
+	Warnings      []string `protobuf:"bytes,3,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PushResourcesResponse) Reset() {
 	*x = PushResourcesResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[21]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4047,7 +4849,7 @@ func (x *PushResourcesResponse) String() string {
 func (*PushResourcesResponse) ProtoMessage() {}
 
 func (x *PushResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[21]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4060,7 +4862,7 @@ func (x *PushResourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushResourcesResponse.ProtoReflect.Descriptor instead.
 func (*PushResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{21}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PushResourcesResponse) GetAccepted() int32 {
@@ -4077,6 +4879,13 @@ func (x *PushResourcesResponse) GetRejected() int32 {
 	return 0
 }
 
+func (x *PushResourcesResponse) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
+}
+
 type RemoveResourcesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -4087,7 +4896,7 @@ type RemoveResourcesRequest struct {
 
 func (x *RemoveResourcesRequest) Reset() {
 	*x = RemoveResourcesRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[22]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4099,7 +4908,7 @@ func (x *RemoveResourcesRequest) String() string {
 func (*RemoveResourcesRequest) ProtoMessage() {}
 
 func (x *RemoveResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[22]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4112,7 +4921,7 @@ func (x *RemoveResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveResourcesRequest.ProtoReflect.Descriptor instead.
 func (*RemoveResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{22}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RemoveResourcesRequest) GetTenantId() string {
@@ -4138,7 +4947,7 @@ type RemoveResourcesResponse struct {
 
 func (x *RemoveResourcesResponse) Reset() {
 	*x = RemoveResourcesResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[23]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4150,7 +4959,7 @@ func (x *RemoveResourcesResponse) String() string {
 func (*RemoveResourcesResponse) ProtoMessage() {}
 
 func (x *RemoveResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[23]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4163,7 +4972,7 @@ func (x *RemoveResourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveResourcesResponse.ProtoReflect.Descriptor instead.
 func (*RemoveResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{23}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RemoveResourcesResponse) GetRemoved() int32 {
@@ -4182,7 +4991,7 @@ type RefreshCatalogRequest struct {
 
 func (x *RefreshCatalogRequest) Reset() {
 	*x = RefreshCatalogRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[24]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4194,7 +5003,7 @@ func (x *RefreshCatalogRequest) String() string {
 func (*RefreshCatalogRequest) ProtoMessage() {}
 
 func (x *RefreshCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[24]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4207,7 +5016,7 @@ func (x *RefreshCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshCatalogRequest.ProtoReflect.Descriptor instead.
 func (*RefreshCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{24}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *RefreshCatalogRequest) GetTenantId() string {
@@ -4226,7 +5035,7 @@ type RefreshCatalogResponse struct {
 
 func (x *RefreshCatalogResponse) Reset() {
 	*x = RefreshCatalogResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[25]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4238,7 +5047,7 @@ func (x *RefreshCatalogResponse) String() string {
 func (*RefreshCatalogResponse) ProtoMessage() {}
 
 func (x *RefreshCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[25]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4251,7 +5060,7 @@ func (x *RefreshCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshCatalogResponse.ProtoReflect.Descriptor instead.
 func (*RefreshCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{25}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RefreshCatalogResponse) GetStarted() bool {
@@ -4284,7 +5093,7 @@ type ReportingObligation struct {
 
 func (x *ReportingObligation) Reset() {
 	*x = ReportingObligation{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[26]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4296,7 +5105,7 @@ func (x *ReportingObligation) String() string {
 func (*ReportingObligation) ProtoMessage() {}
 
 func (x *ReportingObligation) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[26]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4309,7 +5118,7 @@ func (x *ReportingObligation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportingObligation.ProtoReflect.Descriptor instead.
 func (*ReportingObligation) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{26}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ReportingObligation) GetRequired() bool {
@@ -4389,7 +5198,7 @@ type UsageReport struct {
 
 func (x *UsageReport) Reset() {
 	*x = UsageReport{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[27]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4401,7 +5210,7 @@ func (x *UsageReport) String() string {
 func (*UsageReport) ProtoMessage() {}
 
 func (x *UsageReport) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[27]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4414,7 +5223,7 @@ func (x *UsageReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageReport.ProtoReflect.Descriptor instead.
 func (*UsageReport) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{27}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *UsageReport) GetVer() string {
@@ -4509,7 +5318,7 @@ type AttributionDetail struct {
 
 func (x *AttributionDetail) Reset() {
 	*x = AttributionDetail{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[28]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4521,7 +5330,7 @@ func (x *AttributionDetail) String() string {
 func (*AttributionDetail) ProtoMessage() {}
 
 func (x *AttributionDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[28]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4534,7 +5343,7 @@ func (x *AttributionDetail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttributionDetail.ProtoReflect.Descriptor instead.
 func (*AttributionDetail) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{28}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *AttributionDetail) GetDisplayedUrl() string {
@@ -4561,8 +5370,8 @@ func (x *AttributionDetail) GetVisibleToUser() bool {
 // Usage — How resource was actually used by the AI system.
 type Usage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// How the resource was used. Standard values: "ai_train", "ai_input",
-	// "ai_index", "search", "display". Multiple allowed.
+	// How the resource was used. Standard values: "ai-train", "ai-input",
+	// "ai-index", "search", "display". Multiple allowed.
 	// CoMP-specific values available via ramp-comp-v1 extension profile.
 	Function []string `protobuf:"bytes,1,rep,name=function,proto3" json:"function,omitempty"`
 	// Sub-function detail. Standard values: "training", "rag", "grounding",
@@ -4579,7 +5388,8 @@ type Usage struct {
 	// Structured attribution details for each citation provided.
 	Attribution []*AttributionDetail `protobuf:"bytes,6,rep,name=attribution,proto3" json:"attribution,omitempty"`
 	// Metering unit for consumed_quantity. Must match the Offer's Pricing.unit.
-	// If omitted, defaults to "tokens" for backward compatibility.
+	// If omitted, defaults to "tokens". Same token format as Pricing.unit:
+	// a bare registered token or a vendor:namespaced token.
 	ConsumedUnit  *string `protobuf:"bytes,8,opt,name=consumed_unit,json=consumedUnit,proto3,oneof" json:"consumed_unit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4587,7 +5397,7 @@ type Usage struct {
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[29]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4599,7 +5409,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[29]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4612,7 +5422,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{29}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *Usage) GetFunction() []string {
@@ -4676,7 +5486,7 @@ type UsageAsset struct {
 
 func (x *UsageAsset) Reset() {
 	*x = UsageAsset{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[30]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4688,7 +5498,7 @@ func (x *UsageAsset) String() string {
 func (*UsageAsset) ProtoMessage() {}
 
 func (x *UsageAsset) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[30]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4701,7 +5511,7 @@ func (x *UsageAsset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageAsset.ProtoReflect.Descriptor instead.
 func (*UsageAsset) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{30}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *UsageAsset) GetUri() string {
@@ -4752,7 +5562,7 @@ type UsageReportResponse struct {
 
 func (x *UsageReportResponse) Reset() {
 	*x = UsageReportResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[31]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4764,7 +5574,7 @@ func (x *UsageReportResponse) String() string {
 func (*UsageReportResponse) ProtoMessage() {}
 
 func (x *UsageReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[31]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4777,7 +5587,7 @@ func (x *UsageReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageReportResponse.ProtoReflect.Descriptor instead.
 func (*UsageReportResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{31}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *UsageReportResponse) GetAccepted() bool {
@@ -4824,6 +5634,15 @@ type RAMPRequest struct {
 	// Requester identity — who is making this request, what scopes they have.
 	// The Broker forwards this to Exchanges in ResourceQuery.requester.
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
+	// Resource URIs the agent wants. The Broker forwards these to Exchanges in
+	// ResourceQuery.uris. Optional when `query` / `search_filters` drive
+	// Broker-side discovery instead.
+	Uris []string `protobuf:"bytes,8,rep,name=uris,proto3" json:"uris,omitempty"`
+	// The limits the agent will operate within, per restriction axis — see
+	// AcceptableRestriction. The Broker forwards these to Exchanges in
+	// ResourceQuery.acceptable_restrictions. Advisory selection inputs, not
+	// enforcement.
+	AcceptableRestrictions []*AcceptableRestriction `protobuf:"bytes,9,rep,name=acceptable_restrictions,json=acceptableRestrictions,proto3" json:"acceptable_restrictions,omitempty"`
 	// Constraints for exchange filtering and offer selection.
 	Constraints *RequestConstraints `protobuf:"bytes,4,opt,name=constraints,proto3,oneof" json:"constraints,omitempty"`
 	// Domain extension profiles the agent understands.
@@ -4841,7 +5660,7 @@ type RAMPRequest struct {
 	// When present, the Broker interprets the query and discovers resources
 	// across Exchanges on the agent's behalf. Results returned as Offers
 	// in RAMPResponse, same as for specific URI requests.
-	// Can be used alongside Requester.uris (specific URIs + search in one request).
+	// Can be used alongside uris (specific URIs + search in one request).
 	Query *string `protobuf:"bytes,6,opt,name=query,proto3,oneof" json:"query,omitempty"`
 	// Structured search filters (optional, alongside or instead of query).
 	// Keys are profile-specific: "academic.topic", "news.category",
@@ -4860,7 +5679,7 @@ type RAMPRequest struct {
 
 func (x *RAMPRequest) Reset() {
 	*x = RAMPRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[32]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4872,7 +5691,7 @@ func (x *RAMPRequest) String() string {
 func (*RAMPRequest) ProtoMessage() {}
 
 func (x *RAMPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[32]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4885,7 +5704,7 @@ func (x *RAMPRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RAMPRequest.ProtoReflect.Descriptor instead.
 func (*RAMPRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{32}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RAMPRequest) GetVer() string {
@@ -4905,6 +5724,20 @@ func (x *RAMPRequest) GetId() string {
 func (x *RAMPRequest) GetRequester() *Requester {
 	if x != nil {
 		return x.Requester
+	}
+	return nil
+}
+
+func (x *RAMPRequest) GetUris() []string {
+	if x != nil {
+		return x.Uris
+	}
+	return nil
+}
+
+func (x *RAMPRequest) GetAcceptableRestrictions() []*AcceptableRestriction {
+	if x != nil {
+		return x.AcceptableRestrictions
 	}
 	return nil
 }
@@ -4989,12 +5822,12 @@ type RequestConstraints struct {
 	//	1 hour   — "stock snapshot from the last hour"
 	//	30 days  — "drug interaction database updated this month"
 	MaxDataAge *durationpb.Duration `protobuf:"bytes,10,opt,name=max_data_age,json=maxDataAge,proto3,oneof" json:"max_data_age,omitempty"`
-	// Maximum intermediary hops the agent will allow in its request chain
-	// (Agent → Broker → … → Exchange). Caps chain depth so a request is not
-	// relayed through more brokers than the agent is willing to trust or pay.
-	// The Broker MUST NOT forward a request whose chain would exceed this.
-	// Absent = agent imposes no cap (the Exchange's max_intermediary_hops
-	// still applies).
+	// Maximum forwarding hops the agent will allow (Agent → Broker → … →
+	// Exchange), counted as the number of RFC 9421 HTTP Message Signatures on the
+	// request. Caps chain depth so a request is not relayed through more brokers
+	// than the agent is willing to trust or pay. A Broker MUST NOT forward a
+	// request whose signature count would exceed this. Absent = agent imposes no
+	// cap (the Exchange's max_intermediary_hops still applies).
 	MaxHops       *int32 `protobuf:"varint,11,opt,name=max_hops,json=maxHops,proto3,oneof" json:"max_hops,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -5002,7 +5835,7 @@ type RequestConstraints struct {
 
 func (x *RequestConstraints) Reset() {
 	*x = RequestConstraints{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[33]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5014,7 +5847,7 @@ func (x *RequestConstraints) String() string {
 func (*RequestConstraints) ProtoMessage() {}
 
 func (x *RequestConstraints) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[33]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5027,7 +5860,7 @@ func (x *RequestConstraints) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestConstraints.ProtoReflect.Descriptor instead.
 func (*RequestConstraints) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{33}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *RequestConstraints) GetExchanges() []string {
@@ -5141,7 +5974,7 @@ type JsonWebKey struct {
 
 func (x *JsonWebKey) Reset() {
 	*x = JsonWebKey{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[34]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5153,7 +5986,7 @@ func (x *JsonWebKey) String() string {
 func (*JsonWebKey) ProtoMessage() {}
 
 func (x *JsonWebKey) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[34]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5166,7 +5999,7 @@ func (x *JsonWebKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JsonWebKey.ProtoReflect.Descriptor instead.
 func (*JsonWebKey) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{34}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *JsonWebKey) GetKid() string {
@@ -5301,10 +6134,10 @@ type WellKnownManifest struct {
 	// Exchange-only. Base currency for pricing (ISO 4217). All unit_cost
 	// values from this Exchange are denominated in this currency.
 	BaseCurrency *string `protobuf:"bytes,27,opt,name=base_currency,json=baseCurrency,proto3,oneof" json:"base_currency,omitempty"`
-	// Exchange-only. Maximum intermediary hops this Exchange tolerates in an
-	// inbound request chain (Agent → Broker → … → Exchange). A request whose
-	// intermediaries chain is longer SHOULD be rejected. Lets Exchanges publish
-	// their chain-depth tolerance so Brokers prune before forwarding.
+	// Exchange-only. Maximum forwarding hops this Exchange tolerates on an inbound
+	// request (Agent → Broker → … → Exchange), counted as RFC 9421 HTTP Message
+	// Signatures. A request carrying more SHOULD be rejected. Lets Exchanges
+	// publish their chain-depth tolerance so Brokers prune before forwarding.
 	// Absent = no published limit (Exchange applies its own default policy).
 	MaxIntermediaryHops *int32           `protobuf:"varint,28,opt,name=max_intermediary_hops,json=maxIntermediaryHops,proto3,oneof" json:"max_intermediary_hops,omitempty"`
 	Ext                 *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -5318,7 +6151,7 @@ type WellKnownManifest struct {
 
 func (x *WellKnownManifest) Reset() {
 	*x = WellKnownManifest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[35]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5330,7 +6163,7 @@ func (x *WellKnownManifest) String() string {
 func (*WellKnownManifest) ProtoMessage() {}
 
 func (x *WellKnownManifest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[35]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5343,7 +6176,7 @@ func (x *WellKnownManifest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WellKnownManifest.ProtoReflect.Descriptor instead.
 func (*WellKnownManifest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{35}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *WellKnownManifest) GetVer() string {
@@ -5570,7 +6403,7 @@ type KeyInvalidationList struct {
 
 func (x *KeyInvalidationList) Reset() {
 	*x = KeyInvalidationList{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[36]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5582,7 +6415,7 @@ func (x *KeyInvalidationList) String() string {
 func (*KeyInvalidationList) ProtoMessage() {}
 
 func (x *KeyInvalidationList) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[36]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5595,7 +6428,7 @@ func (x *KeyInvalidationList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyInvalidationList.ProtoReflect.Descriptor instead.
 func (*KeyInvalidationList) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{36}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *KeyInvalidationList) GetAsOf() *timestamppb.Timestamp {
@@ -5628,7 +6461,7 @@ type CatalogContributor struct {
 
 func (x *CatalogContributor) Reset() {
 	*x = CatalogContributor{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[37]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5640,7 +6473,7 @@ func (x *CatalogContributor) String() string {
 func (*CatalogContributor) ProtoMessage() {}
 
 func (x *CatalogContributor) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[37]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5653,7 +6486,7 @@ func (x *CatalogContributor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogContributor.ProtoReflect.Descriptor instead.
 func (*CatalogContributor) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{37}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *CatalogContributor) GetDomain() string {
@@ -5691,7 +6524,7 @@ type AuthorizedExchange struct {
 
 func (x *AuthorizedExchange) Reset() {
 	*x = AuthorizedExchange{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5703,7 +6536,7 @@ func (x *AuthorizedExchange) String() string {
 func (*AuthorizedExchange) ProtoMessage() {}
 
 func (x *AuthorizedExchange) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5716,7 +6549,7 @@ func (x *AuthorizedExchange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizedExchange.ProtoReflect.Descriptor instead.
 func (*AuthorizedExchange) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{38}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *AuthorizedExchange) GetDomain() string {
@@ -5771,7 +6604,7 @@ type AccessPolicy struct {
 
 func (x *AccessPolicy) Reset() {
 	*x = AccessPolicy{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[39]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5783,7 +6616,7 @@ func (x *AccessPolicy) String() string {
 func (*AccessPolicy) ProtoMessage() {}
 
 func (x *AccessPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[39]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5796,7 +6629,7 @@ func (x *AccessPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessPolicy.ProtoReflect.Descriptor instead.
 func (*AccessPolicy) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{39}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *AccessPolicy) GetDefaultPolicy() ResourceAccessPolicy {
@@ -5826,7 +6659,7 @@ type AccessPolicyRule struct {
 
 func (x *AccessPolicyRule) Reset() {
 	*x = AccessPolicyRule{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[40]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5838,7 +6671,7 @@ func (x *AccessPolicyRule) String() string {
 func (*AccessPolicyRule) ProtoMessage() {}
 
 func (x *AccessPolicyRule) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[40]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5851,7 +6684,7 @@ func (x *AccessPolicyRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessPolicyRule.ProtoReflect.Descriptor instead.
 func (*AccessPolicyRule) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{40}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *AccessPolicyRule) GetPattern() string {
@@ -5915,7 +6748,7 @@ type RAMPResponse struct {
 
 func (x *RAMPResponse) Reset() {
 	*x = RAMPResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[41]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5927,7 +6760,7 @@ func (x *RAMPResponse) String() string {
 func (*RAMPResponse) ProtoMessage() {}
 
 func (x *RAMPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[41]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5940,7 +6773,7 @@ func (x *RAMPResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RAMPResponse.ProtoReflect.Descriptor instead.
 func (*RAMPResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{41}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *RAMPResponse) GetVer() string {
@@ -6092,7 +6925,7 @@ type DisputeRequest struct {
 
 func (x *DisputeRequest) Reset() {
 	*x = DisputeRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[42]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6104,7 +6937,7 @@ func (x *DisputeRequest) String() string {
 func (*DisputeRequest) ProtoMessage() {}
 
 func (x *DisputeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[42]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6117,7 +6950,7 @@ func (x *DisputeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisputeRequest.ProtoReflect.Descriptor instead.
 func (*DisputeRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{42}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *DisputeRequest) GetVer() string {
@@ -6233,7 +7066,7 @@ type DisputeResponse struct {
 
 func (x *DisputeResponse) Reset() {
 	*x = DisputeResponse{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[43]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6245,7 +7078,7 @@ func (x *DisputeResponse) String() string {
 func (*DisputeResponse) ProtoMessage() {}
 
 func (x *DisputeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[43]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6258,7 +7091,7 @@ func (x *DisputeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisputeResponse.ProtoReflect.Descriptor instead.
 func (*DisputeResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{43}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *DisputeResponse) GetAccepted() bool {
@@ -6331,7 +7164,7 @@ type DomainVerificationRequest struct {
 
 func (x *DomainVerificationRequest) Reset() {
 	*x = DomainVerificationRequest{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[44]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6343,7 +7176,7 @@ func (x *DomainVerificationRequest) String() string {
 func (*DomainVerificationRequest) ProtoMessage() {}
 
 func (x *DomainVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[44]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6356,7 +7189,7 @@ func (x *DomainVerificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationRequest.ProtoReflect.Descriptor instead.
 func (*DomainVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{44}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *DomainVerificationRequest) GetVer() string {
@@ -6396,7 +7229,7 @@ type DomainVerificationChallenge struct {
 
 func (x *DomainVerificationChallenge) Reset() {
 	*x = DomainVerificationChallenge{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6408,7 +7241,7 @@ func (x *DomainVerificationChallenge) String() string {
 func (*DomainVerificationChallenge) ProtoMessage() {}
 
 func (x *DomainVerificationChallenge) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6421,7 +7254,7 @@ func (x *DomainVerificationChallenge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationChallenge.ProtoReflect.Descriptor instead.
 func (*DomainVerificationChallenge) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{45}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *DomainVerificationChallenge) GetToken() string {
@@ -6465,7 +7298,7 @@ type DomainVerificationConfirmation struct {
 
 func (x *DomainVerificationConfirmation) Reset() {
 	*x = DomainVerificationConfirmation{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[46]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6477,7 +7310,7 @@ func (x *DomainVerificationConfirmation) String() string {
 func (*DomainVerificationConfirmation) ProtoMessage() {}
 
 func (x *DomainVerificationConfirmation) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[46]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6490,7 +7323,7 @@ func (x *DomainVerificationConfirmation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationConfirmation.ProtoReflect.Descriptor instead.
 func (*DomainVerificationConfirmation) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{46}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DomainVerificationConfirmation) GetVer() string {
@@ -6545,7 +7378,7 @@ type DomainVerificationResult struct {
 
 func (x *DomainVerificationResult) Reset() {
 	*x = DomainVerificationResult{}
-	mi := &file_ramp_v1_ramp_proto_msgTypes[47]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6557,7 +7390,7 @@ func (x *DomainVerificationResult) String() string {
 func (*DomainVerificationResult) ProtoMessage() {}
 
 func (x *DomainVerificationResult) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_v1_ramp_proto_msgTypes[47]
+	mi := &file_ramp_v1_ramp_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6570,7 +7403,7 @@ func (x *DomainVerificationResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainVerificationResult.ProtoReflect.Descriptor instead.
 func (*DomainVerificationResult) Descriptor() ([]byte, []int) {
-	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{47}
+	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *DomainVerificationResult) GetVerified() bool {
@@ -6605,14 +7438,19 @@ var File_ramp_v1_ramp_proto protoreflect.FileDescriptor
 
 const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\n" +
-	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\"\x9e\x03\n" +
+	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bbuf/validate/validate.proto\x1a\x13ramp/v1/vocab.proto\"\xb5\x02\n" +
+	"\x15AcceptableRestriction\x12,\n" +
+	"\x04axis\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04axis\x12\xed\x01\n" +
+	"\x06values\x18\x02 \x03(\tB\xd4\x01\xbaH\xd0\x01\xba\x01\xc7\x01\n" +
+	"$acceptable_restriction.values.format\x12Meach value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\x06values\"\xd4\x03\n" +
 	"\rResourceQuery\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
-	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\"\n" +
+	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
+	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
+	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12\"\n" +
 	"\n" +
-	"request_id\x18\x04 \x01(\tH\x00R\trequestId\x88\x01\x01\x12@\n" +
-	"\x0eintermediaries\x18\x05 \x03(\v2\x18.ramp.v1.IntermediaryHopR\x0eintermediaries\x12:\n" +
+	"request_id\x18\x04 \x01(\tH\x00R\trequestId\x88\x01\x01\x12:\n" +
 	"\bdeadline\x18\x06 \x01(\v2\x19.google.protobuf.DurationH\x01R\bdeadline\x88\x01\x01\x12-\n" +
 	"\x12supported_profiles\x18\a \x03(\tR\x11supportedProfiles\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
@@ -6629,13 +7467,14 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"rate_limit\x18\x06 \x01(\v2\x16.ramp.v1.RateLimitInfoH\x00R\trateLimit\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
-	"\v_rate_limit\"\x81\x02\n" +
+	"\v_rate_limit\"\xcc\x02\n" +
 	"\n" +
 	"OfferGroup\x12\x10\n" +
 	"\x03uri\x18\x01 \x01(\tR\x03uri\x12&\n" +
 	"\x06offers\x18\x02 \x03(\v2\x0e.ramp.v1.OfferR\x06offers\x12H\n" +
 	"\x10discovery_method\x18\x03 \x01(\x0e2\x18.ramp.v1.DiscoveryMethodH\x00R\x0fdiscoveryMethod\x88\x01\x01\x12G\n" +
-	"\x0eabsence_reason\x18\x04 \x01(\x0e2\x1b.ramp.v1.OfferAbsenceReasonH\x01R\rabsenceReason\x88\x01\x01B\x13\n" +
+	"\x0eabsence_reason\x18\x04 \x01(\x0e2\x1b.ramp.v1.OfferAbsenceReasonH\x01R\rabsenceReason\x88\x01\x01\x12I\n" +
+	"\x13restriction_filters\x18\x05 \x03(\x0e2\x18.ramp.v1.RestrictionKindR\x12restrictionFiltersB\x13\n" +
 	"\x11_discovery_methodB\x11\n" +
 	"\x0f_absence_reason\"\xbd\x01\n" +
 	"\rRateLimitInfo\x12\x14\n" +
@@ -6655,7 +7494,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x04unit\x18\x06 \x01(\tH\x01R\x04unit\x88\x01\x01B\f\n" +
 	"\n" +
 	"_resets_atB\a\n" +
-	"\x05_unit\"\x86\b\n" +
+	"\x05_unit\"\xdb\a\n" +
 	"\x05Offer\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12\x19\n" +
 	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12*\n" +
@@ -6664,26 +7503,25 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\treporting\x18\x05 \x01(\v2\x1c.ramp.v1.ReportingObligationH\x01R\treporting\x88\x01\x01\x12>\n" +
 	"\n" +
 	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampH\x02R\texpiresAt\x88\x01\x01\x12:\n" +
-	"\bidentity\x18\a \x01(\v2\x19.ramp.v1.ResourceIdentityH\x03R\bidentity\x88\x01\x01\x12D\n" +
-	"\frestrictions\x18\b \x01(\v2\x1b.ramp.v1.AccessRestrictionsH\x04R\frestrictions\x88\x01\x01\x12\x1c\n" +
+	"\bidentity\x18\a \x01(\v2\x19.ramp.v1.ResourceIdentityH\x03R\bidentity\x88\x01\x01\x12\x1c\n" +
 	"\tsignature\x18\t \x01(\tR\tsignature\x12/\n" +
 	"\x13signature_algorithm\x18\n" +
 	" \x01(\tR\x12signatureAlgorithm\x12,\n" +
-	"\x0fsubscription_id\x18\v \x01(\tH\x05R\x0esubscriptionId\x88\x01\x01\x12%\n" +
+	"\x0fsubscription_id\x18\v \x01(\tH\x04R\x0esubscriptionId\x88\x01\x01\x12%\n" +
 	"\x0eiab_categories\x18\r \x03(\tR\riabCategories\x12@\n" +
 	"\fattestations\x18\x0e \x03(\v2\x1c.ramp.v1.ResourceAttestationR\fattestations\x12=\n" +
 	"\n" +
-	"data_as_of\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampH\x06R\bdataAsOf\x88\x01\x01\x12M\n" +
+	"data_as_of\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampH\x05R\bdataAsOf\x88\x01\x01\x12M\n" +
 	"\x12subscription_quota\x18\x11 \x03(\v2\x1e.ramp.v1.SubscriptionQuotaInfoR\x11subscriptionQuota\x12,\n" +
-	"\bpreviews\x18\x12 \x03(\v2\x10.ramp.v1.PreviewR\bpreviews\x12)\n" +
+	"\bpreviews\x18\x12 \x03(\v2\x10.ramp.v1.PreviewR\bpreviews\x12*\n" +
+	"\x05terms\x18\x13 \x03(\v2\x14.ramp.v1.LicenseTermR\x05terms\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\b\n" +
 	"\x06_titleB\f\n" +
 	"\n" +
 	"_reportingB\r\n" +
 	"\v_expires_atB\v\n" +
-	"\t_identityB\x0f\n" +
-	"\r_restrictionsB\x12\n" +
+	"\t_identityB\x12\n" +
 	"\x10_subscription_idB\r\n" +
 	"\v_data_as_of\"\xd7\x05\n" +
 	"\x10ResourceIdentity\x12(\n" +
@@ -6721,18 +7559,68 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"attestedAt\x12\x10\n" +
 	"\x03uri\x18\x04 \x01(\tR\x03uri\x12/\n" +
 	"\x06claims\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06claims\x12\x1c\n" +
-	"\tsignature\x18\x06 \x01(\tR\tsignature\"\xad\x03\n" +
-	"\x12AccessRestrictions\x12/\n" +
-	"\x13permitted_functions\x18\x01 \x03(\tR\x12permittedFunctions\x121\n" +
-	"\x14prohibited_functions\x18\x02 \x03(\tR\x13prohibitedFunctions\x12'\n" +
-	"\x0fpermitted_users\x18\x03 \x03(\tR\x0epermittedUsers\x12)\n" +
-	"\x10prohibited_users\x18\x04 \x03(\tR\x0fprohibitedUsers\x12#\n" +
-	"\rpermitted_geo\x18\x05 \x03(\tR\fpermittedGeo\x12%\n" +
-	"\x0eprohibited_geo\x18\x06 \x03(\tR\rprohibitedGeo\x12/\n" +
-	"\x11max_display_words\x18\a \x01(\x05H\x00R\x0fmaxDisplayWords\x88\x01\x01\x12)\n" +
-	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x14\n" +
-	"\x12_max_display_words\"\xd7\x01\n" +
+	"\tsignature\x18\x06 \x01(\tR\tsignature\"\xd4\x04\n" +
+	"\aLicense\x12\x15\n" +
+	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x13\n" +
+	"\x02id\x18\x02 \x01(\tH\x01R\x02id\x88\x01\x01\x12\x17\n" +
+	"\x04name\x18\x03 \x01(\tH\x02R\x04name\x88\x01\x01\x12!\n" +
+	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01\x12\xad\x02\n" +
+	"\n" +
+	"uri_digest\x18\x05 \x01(\tB\x88\x02\xbaH\x84\x02\xba\x01\x80\x02\n" +
+	"\x19license.uri_digest.format\x12Zuri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length\x1a\x86\x01this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')H\x04R\turiDigest\x88\x01\x01:|\xbaHy\x1aw\n" +
+	" license.digest_required_with_uri\x12*uri_digest is required whenever uri is set\x1a'this.uri == '' || this.uri_digest != ''B\x06\n" +
+	"\x04_uriB\x05\n" +
+	"\x03_idB\a\n" +
+	"\x05_nameB\f\n" +
+	"\n" +
+	"_immutableB\r\n" +
+	"\v_uri_digest\"\xe4\x06\n" +
+	"\vRestriction\x12,\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\xeb\x01\n" +
+	"\tpermitted\x18\x02 \x03(\tB\xcc\x01\xbaH\xc8\x01\xba\x01\xbf\x01\n" +
+	"\x1crestriction.permitted.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\tpermitted\x12\xee\x01\n" +
+	"\n" +
+	"prohibited\x18\x03 \x03(\tB\xcd\x01\xbaH\xc9\x01\xba\x01\xc0\x01\n" +
+	"\x1drestriction.prohibited.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\n" +
+	"prohibited\x12\x1a\n" +
+	"\badvisory\x18\x04 \x01(\bR\badvisory:\xab\x02\xbaH\xa7\x02\x1a\x93\x01\n" +
+	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\x1a\x8e\x01\n" +
+	"\x1arestriction.kind_specified\x12-kind must not be RESTRICTION_KIND_UNSPECIFIED\x1aAthis.kind != ramp.v1.RestrictionKind.RESTRICTION_KIND_UNSPECIFIED\"\xd4\x04\n" +
+	"\x05Quota\x12\xf1\x02\n" +
+	"\x06metric\x18\x01 \x01(\tB\xd8\x02\xbaH\xe5\x01\xba\x01\xdd\x01\n" +
+	"\x13quota.metric.format\x12cmetric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1aathis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))r\x02\x18@\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seatsR\x06metric\x12\x1d\n" +
+	"\x05limit\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\x05limit\x12,\n" +
+	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window:\x89\x01\xbaH\x85\x01\x1a\x82\x01\n" +
+	"\x16quota.window_specified\x12+window must not be QUOTA_WINDOW_UNSPECIFIED\x1a;this.window != ramp.v1.QuotaWindow.QUOTA_WINDOW_UNSPECIFIED\"\xb0\x06\n" +
+	"\n" +
+	"Obligation\x12+\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x17.ramp.v1.ObligationKindR\x04kind\x124\n" +
+	"\atrigger\x18\x02 \x01(\x0e2\x1a.ramp.v1.ObligationTriggerR\atrigger\x12:\n" +
+	"\rscope_license\x18\x03 \x01(\v2\x10.ramp.v1.LicenseH\x00R\fscopeLicense\x88\x01\x01\x12\x1b\n" +
+	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\xc8\x04\xbaH\xc4\x04\x1a\x95\x02\n" +
+	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))\x1a\x8a\x01\n" +
+	"\x19obligation.kind_specified\x12,kind must not be OBLIGATION_KIND_UNSPECIFIED\x1a?this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIED\x1a\x9c\x01\n" +
+	"\x1cobligation.trigger_specified\x122trigger must not be OBLIGATION_TRIGGER_UNSPECIFIED\x1aHthis.trigger != ramp.v1.ObligationTrigger.OBLIGATION_TRIGGER_UNSPECIFIEDB\x10\n" +
+	"\x0e_scope_licenseB\t\n" +
+	"\a_detail\"\xe6\a\n" +
+	"\vLicenseTerm\x12/\n" +
+	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x124\n" +
+	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsR\tsemantics\x128\n" +
+	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionR\frestrictions\x12&\n" +
+	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaR\x06quotas\x125\n" +
+	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationR\vobligations\x127\n" +
+	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +
+	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
+	"\n" +
+	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\xb0\x04\xbaH\xac\x04\x1a\xe2\x01\n" +
+	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')\x1a\xa9\x01\n" +
+	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1aSthis.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)\x1a\x98\x01\n" +
+	" license_term.semantics_specified\x120semantics must not be TERM_SEMANTICS_UNSPECIFIED\x1aBthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_UNSPECIFIEDB\n" +
+	"\n" +
+	"\b_licenseB\n" +
+	"\n" +
+	"\b_pricingB\r\n" +
+	"\v_part_label\"\xd7\x01\n" +
 	"\aPreview\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1d\n" +
 	"\n" +
@@ -6744,41 +7632,42 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\xd8\x03\n" +
+	"\x05_size\"\xf7\t\n" +
 	"\aPricing\x12+\n" +
 	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelR\x05model\x12\x12\n" +
 	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12 \n" +
 	"\tunit_cost\x18\x04 \x01(\x01H\x00R\bunitCost\x88\x01\x01\x122\n" +
-	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12\x1f\n" +
-	"\brevshare\x18\x06 \x01(\x01H\x02R\brevshare\x88\x01\x01\x12;\n" +
-	"\x17license_duration_months\x18\a \x01(\x05H\x03R\x15licenseDurationMonths\x88\x01\x01\x12\x17\n" +
-	"\x04unit\x18\b \x01(\tH\x04R\x04unit\x88\x01\x01\x12)\n" +
-	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCriticalB\f\n" +
+	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12;\n" +
+	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\xb8\x03\n" +
+	"\x04unit\x18\b \x01(\tB\x9e\x03\xbaH\xe9\x01\xba\x01\xe1\x01\n" +
+	"\x13pricing.unit.format\x12iunit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aseconds\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
+	"characters\x8a\xb5\x18\x05bytes\x8a\xb5\x18\x05items\x8a\xb5\x18\x05sq-kmH\x03R\x04unit\x88\x01\x01\x129\n" +
+	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xae\x03\xbaH\xaa\x03\x1a\x97\x01\n" +
+	"\x1epricing.per_unit.requires_unit\x12'unit is required when model is PER_UNIT\x1aLthis.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''\x1a\x86\x01\n" +
+	"\x16pricing.free.zero_rate\x12!rate must be 0 when model is FREE\x1aIthis.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0\x1a\x84\x01\n" +
+	"\x17pricing.model_specified\x12+model must not be PRICING_MODEL_UNSPECIFIED\x1a<this.model != ramp.v1.PricingModel.PRICING_MODEL_UNSPECIFIEDB\f\n" +
 	"\n" +
 	"_unit_costB\x15\n" +
-	"\x13_estimated_quantityB\v\n" +
-	"\t_revshareB\x1a\n" +
+	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
-	"\x05_unit\"\x9a\x03\n" +
+	"\x05_unitB\v\n" +
+	"\t_metering\"\xf0\x02\n" +
 	"\tRequester\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12*\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x16.ramp.v1.RequesterTypeR\x04type\x12\x17\n" +
-	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x12\n" +
-	"\x04uris\x18\x05 \x03(\tR\x04uris\x12!\n" +
-	"\fintended_use\x18\x06 \x03(\tR\vintendedUse\x12\"\n" +
+	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12$\n" +
+	"\vbilling_ref\x18\x05 \x01(\tH\x01R\n" +
+	"billingRef\x88\x01\x01\x12 \n" +
+	"\x06scopes\x18\x06 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x128\n" +
 	"\n" +
-	"license_id\x18\a \x01(\tH\x01R\tlicenseId\x88\x01\x01\x12\x16\n" +
-	"\x06scopes\x18\b \x03(\tR\x06scopes\x128\n" +
-	"\n" +
-	"delegation\x18\t \x01(\v2\x13.ramp.v1.DelegationH\x02R\n" +
+	"delegation\x18\a \x01(\v2\x13.ramp.v1.DelegationH\x02R\n" +
 	"delegation\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\a\n" +
-	"\x05_nameB\r\n" +
-	"\v_license_idB\r\n" +
+	"\x05_nameB\x0e\n" +
+	"\f_billing_refB\r\n" +
 	"\v_delegation\"\xe9\x04\n" +
 	"\n" +
 	"Delegation\x12)\n" +
@@ -6801,13 +7690,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\r_max_accessesB\x0f\n" +
 	"\r_quota_periodB\x11\n" +
 	"\x0f_revocation_uriB\t\n" +
-	"\a_issuer\"\xba\x01\n" +
-	"\x0fIntermediaryHop\x12\x16\n" +
-	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\x12=\n" +
-	"\fforwarded_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vforwardedAt\x12,\n" +
-	"\x0fsignature_label\x18\x04 \x01(\tH\x00R\x0esignatureLabel\x88\x01\x01B\x12\n" +
-	"\x10_signature_label\"\x88\x03\n" +
+	"\a_issuer\"\x88\x03\n" +
 	"\x12TransactionRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1e\n" +
@@ -6824,7 +7707,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x10_offer_signature\"U\n" +
 	"\x0fTransactionItem\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12'\n" +
-	"\x0foffer_signature\x18\x02 \x01(\tR\x0eofferSignature\"\xa6\t\n" +
+	"\x0foffer_signature\x18\x02 \x01(\tR\x0eofferSignature\"\xf7\t\n" +
 	"\x13TransactionResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12*\n" +
@@ -6840,7 +7723,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13agent_identity_hash\x18\n" +
 	" \x01(\tR\x11agentIdentityHash\x122\n" +
 	"\x12retrieval_endpoint\x18\x12 \x01(\tH\x06R\x11retrievalEndpoint\x88\x01\x01\x12?\n" +
-	"\rdenial_reason\x18\v \x01(\x0e2\x15.ramp.v1.DenialReasonH\aR\fdenialReason\x88\x01\x01\x12,\n" +
+	"\rdenial_reason\x18\v \x01(\x0e2\x15.ramp.v1.DenialReasonH\aR\fdenialReason\x88\x01\x01\x12O\n" +
+	"\x16restriction_mismatches\x18\x13 \x03(\x0e2\x18.ramp.v1.RestrictionKindR\x15restrictionMismatches\x12,\n" +
 	"\x0fsubscription_id\x18\f \x01(\tH\bR\x0esubscriptionId\x88\x01\x01\x12J\n" +
 	"\x17subscription_unit_value\x18\x10 \x01(\v2\r.ramp.v1.CostH\tR\x15subscriptionUnitValue\x88\x01\x01\x124\n" +
 	"\x05items\x18\r \x03(\v2\x1e.ramp.v1.TransactionResultItemR\x05items\x121\n" +
@@ -6860,7 +7744,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0e_denial_reasonB\x12\n" +
 	"\x10_subscription_idB\x1a\n" +
 	"\x18_subscription_unit_valueB\r\n" +
-	"\v_total_cost\"\xa2\x06\n" +
+	"\v_total_cost\"\xf3\x06\n" +
 	"\x15TransactionResultItem\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12\x1d\n" +
@@ -6870,7 +7754,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x04cost\x18\x05 \x01(\v2\r.ramp.v1.CostR\x04cost\x12,\n" +
 	"\x0fsubscription_id\x18\x06 \x01(\tH\x01R\x0esubscriptionId\x88\x01\x01\x12J\n" +
 	"\x17subscription_unit_value\x18\v \x01(\v2\r.ramp.v1.CostH\x02R\x15subscriptionUnitValue\x88\x01\x01\x12?\n" +
-	"\rdenial_reason\x18\a \x01(\x0e2\x15.ramp.v1.DenialReasonH\x03R\fdenialReason\x88\x01\x01\x12>\n" +
+	"\rdenial_reason\x18\a \x01(\x0e2\x15.ramp.v1.DenialReasonH\x03R\fdenialReason\x88\x01\x01\x12O\n" +
+	"\x16restriction_mismatches\x18\r \x03(\x0e2\x18.ramp.v1.RestrictionKindR\x15restrictionMismatches\x12>\n" +
 	"\n" +
 	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x04R\texpiresAt\x88\x01\x01\x122\n" +
 	"\x12retrieval_endpoint\x18\f \x01(\tH\x05R\x11retrievalEndpoint\x88\x01\x01\x12@\n" +
@@ -6893,7 +7778,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x14PushResourcesRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x120\n" +
 	"\aentries\x18\x02 \x03(\v2\x16.ramp.v1.ResourceEntryR\aentries\x12\x1b\n" +
-	"\tcaller_id\x18\x03 \x01(\tR\bcallerId\"\x87\x06\n" +
+	"\tcaller_id\x18\x03 \x01(\tR\bcallerId\"\xb3\x06\n" +
 	"\rResourceEntry\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\"\n" +
@@ -6910,7 +7795,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x11provenance_source\x18\n" +
 	" \x01(\tH\aR\x10provenanceSource\x88\x01\x01\x12R\n" +
 	"\x14provenance_timestamp\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\bR\x13provenanceTimestamp\x88\x01\x01\x12@\n" +
-	"\fattestations\x18\f \x03(\v2\x1c.ramp.v1.ResourceAttestationR\fattestations\x12)\n" +
+	"\fattestations\x18\f \x03(\v2\x1c.ramp.v1.ResourceAttestationR\fattestations\x12*\n" +
+	"\x05terms\x18\r \x03(\v2\x14.ramp.v1.LicenseTermR\x05terms\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
 	"\v_content_idB\b\n" +
@@ -6921,10 +7807,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\f_hash_methodB\t\n" +
 	"\a_sourceB\x14\n" +
 	"\x12_provenance_sourceB\x17\n" +
-	"\x15_provenance_timestamp\"O\n" +
+	"\x15_provenance_timestamp\"k\n" +
 	"\x15PushResourcesResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\x05R\baccepted\x12\x1a\n" +
-	"\brejected\x18\x02 \x01(\x05R\brejected\"K\n" +
+	"\brejected\x18\x02 \x01(\x05R\brejected\x12\x1a\n" +
+	"\bwarnings\x18\x03 \x03(\tR\bwarnings\"K\n" +
 	"\x16RemoveResourcesRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x14\n" +
 	"\x05paths\x18\x02 \x03(\tR\x05paths\"3\n" +
@@ -6965,15 +7852,16 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0fvisible_to_user\x18\x03 \x01(\bH\x02R\rvisibleToUser\x88\x01\x01B\x10\n" +
 	"\x0e_displayed_urlB\t\n" +
 	"\a_formatB\x12\n" +
-	"\x10_visible_to_user\"\xef\x02\n" +
+	"\x10_visible_to_user\"\xd3\x04\n" +
 	"\x05Usage\x12\x1a\n" +
 	"\bfunction\x18\x01 \x03(\tR\bfunction\x12\x14\n" +
 	"\x05subfn\x18\x02 \x03(\tR\x05subfn\x12+\n" +
 	"\x11consumed_quantity\x18\x03 \x01(\x05R\x10consumedQuantity\x12/\n" +
 	"\x11displayed_to_user\x18\x04 \x01(\bH\x00R\x0fdisplayedToUser\x88\x01\x01\x120\n" +
 	"\x11citation_included\x18\x05 \x01(\bH\x01R\x10citationIncluded\x88\x01\x01\x12<\n" +
-	"\vattribution\x18\x06 \x03(\v2\x1a.ramp.v1.AttributionDetailR\vattribution\x12(\n" +
-	"\rconsumed_unit\x18\b \x01(\tH\x02R\fconsumedUnit\x88\x01\x01B\x14\n" +
+	"\vattribution\x18\x06 \x03(\v2\x1a.ramp.v1.AttributionDetailR\vattribution\x12\x8b\x02\n" +
+	"\rconsumed_unit\x18\b \x01(\tB\xe0\x01\xbaH\xdc\x01\xba\x01\xd4\x01\n" +
+	"!usage_report.consumed_unit.format\x12Nconsumed_unit must be a bare registered token ([a-z0-9-]) or vendor:namespaced\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@H\x02R\fconsumedUnit\x88\x01\x01B\x14\n" +
 	"\x12_displayed_to_userB\x14\n" +
 	"\x12_citation_includedB\x10\n" +
 	"\x0e_consumed_unit\"v\n" +
@@ -6991,11 +7879,13 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\treport_id\x18\x03 \x01(\tR\breportId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x13\n" +
-	"\x11_rejection_reason\"\xaf\x03\n" +
+	"\x11_rejection_reason\"\xa7\x04\n" +
 	"\vRAMPRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
-	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12B\n" +
+	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
+	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
+	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12B\n" +
 	"\vconstraints\x18\x04 \x01(\v2\x1b.ramp.v1.RequestConstraintsH\x00R\vconstraints\x88\x01\x01\x12-\n" +
 	"\x12supported_profiles\x18\x05 \x03(\tR\x11supportedProfiles\x12\x19\n" +
 	"\x05query\x18\x06 \x01(\tH\x01R\x05query\x88\x01\x01\x12C\n" +
@@ -7202,33 +8092,59 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x19DISCOVERY_METHOD_EXCHANGE\x10\x01\x12\x1b\n" +
 	"\x17DISCOVERY_METHOD_SEARCH\x10\x02\x12#\n" +
 	"\x1fDISCOVERY_METHOD_RECOMMENDATION\x10\x03\x12 \n" +
-	"\x1cDISCOVERY_METHOD_SYNDICATION\x10\x04*\xd4\x03\n" +
+	"\x1cDISCOVERY_METHOD_SYNDICATION\x10\x04*\xf9\x02\n" +
 	"\x12OfferAbsenceReason\x12$\n" +
 	" OFFER_ABSENCE_REASON_UNSPECIFIED\x10\x00\x12'\n" +
 	"#OFFER_ABSENCE_REASON_NOT_IN_CATALOG\x10\x01\x12(\n" +
-	"$OFFER_ABSENCE_REASON_CONTENT_BLOCKED\x10\x02\x12,\n" +
-	"(OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED\x10\x03\x12'\n" +
-	"#OFFER_ABSENCE_REASON_GEO_RESTRICTED\x10\x04\x121\n" +
-	"-OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED\x10\x05\x120\n" +
-	",OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE\x10\x06\x12'\n" +
-	"#OFFER_ABSENCE_REASON_NOT_AUTHORIZED\x10\a\x12+\n" +
-	"'OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT\x10\b\x123\n" +
-	"/OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION\x10\t*\x91\x03\n" +
+	"$OFFER_ABSENCE_REASON_CONTENT_BLOCKED\x10\x02\x12-\n" +
+	")OFFER_ABSENCE_REASON_RESTRICTION_FILTERED\x10\x03\x120\n" +
+	",OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE\x10\x04\x12'\n" +
+	"#OFFER_ABSENCE_REASON_NOT_AUTHORIZED\x10\x05\x12+\n" +
+	"'OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT\x10\x06\x123\n" +
+	"/OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION\x10\a*q\n" +
+	"\rTermSemantics\x12\x1e\n" +
+	"\x1aTERM_SEMANTICS_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19TERM_SEMANTICS_ENUMERATED\x10\x01\x12!\n" +
+	"\x1dTERM_SEMANTICS_REFERENCE_ONLY\x10\x02*\xb2\x04\n" +
+	"\x0fRestrictionKind\x12 \n" +
+	"\x1cRESTRICTION_KIND_UNSPECIFIED\x10\x00\x12\xac\x02\n" +
+	"\x19RESTRICTION_KIND_FUNCTION\x10\x01\x1a\x8c\x02\x92\xb5\x18\x03all\x92\xb5\x18\x06ai-all\x92\xb5\x18\bai-train\x92\xb5\x18\bai-input\x92\xb5\x18\bai-index\x92\xb5\x18\x06search\x92\xb5\x18\x05crawl\x92\xb5\x18\x14text-and-data-mining\x92\xb5\x18\x03tts\x92\xb5\x18\n" +
+	"commercial\x92\xb5\x18\vadvertising\x92\xb5\x18\teditorial\x92\xb5\x18\bresearch\x92\xb5\x18\treproduce\x92\xb5\x18\n" +
+	"distribute\x92\xb5\x18\x06modify\x92\xb5\x18\adisplay\x92\xb5\x18\x04sync\x92\xb5\x18\tbroadcast\x92\xb5\x18\x06stream\x92\xb5\x18\x05print\x92\xb5\x18\vmanufacture\x92\xb5\x18\x04sell\x122\n" +
+	"\x1aRESTRICTION_KIND_GEOGRAPHY\x10\x02\x1a\x12\x92\xb5\x18\x01*\x92\xb5\x18\x02EU\x92\xb5\x18\x03EEA\x12~\n" +
+	"\x1aRESTRICTION_KIND_USER_TYPE\x10\x03\x1a^\x92\xb5\x18\n" +
+	"individual\x92\xb5\x18\bacademic\x92\xb5\x18\n" +
+	"non_profit\x92\xb5\x18\x0enews_publisher\x92\xb5\x18\vbroadcaster\x92\xb5\x18\x11commercial_entity\x12\x1a\n" +
+	"\x16RESTRICTION_KIND_OTHER\x10\x04*\x8e\x01\n" +
+	"\vQuotaWindow\x12\x1c\n" +
+	"\x18QUOTA_WINDOW_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13QUOTA_WINDOW_HOURLY\x10\x01\x12\x16\n" +
+	"\x12QUOTA_WINDOW_DAILY\x10\x02\x12\x18\n" +
+	"\x14QUOTA_WINDOW_MONTHLY\x10\x03\x12\x16\n" +
+	"\x12QUOTA_WINDOW_TOTAL\x10\x04*\xf2\x01\n" +
+	"\x0eObligationKind\x12\x1f\n" +
+	"\x1bOBLIGATION_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bOBLIGATION_KIND_ATTRIBUTION\x10\x01\x12 \n" +
+	"\x1cOBLIGATION_KIND_CONTRIBUTION\x10\x02\x12\x1f\n" +
+	"\x1bOBLIGATION_KIND_SHARE_ALIKE\x10\x03\x12$\n" +
+	" OBLIGATION_KIND_NETWORK_COPYLEFT\x10\x04\x12\x1a\n" +
+	"\x16OBLIGATION_KIND_NOTICE\x10\x05\x12\x19\n" +
+	"\x15OBLIGATION_KIND_OTHER\x10\x06*\xcf\x01\n" +
+	"\x11ObligationTrigger\x12\"\n" +
+	"\x1eOBLIGATION_TRIGGER_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19OBLIGATION_TRIGGER_ON_USE\x10\x01\x12&\n" +
+	"\"OBLIGATION_TRIGGER_ON_DISTRIBUTION\x10\x02\x12)\n" +
+	"%OBLIGATION_TRIGGER_ON_NETWORK_SERVICE\x10\x03\x12$\n" +
+	" OBLIGATION_TRIGGER_ON_DERIVATIVE\x10\x04*y\n" +
 	"\fPricingModel\x12\x1d\n" +
-	"\x19PRICING_MODEL_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18PRICING_MODEL_PER_ACCESS\x10\x01\x12\x1b\n" +
-	"\x17PRICING_MODEL_PER_TOKEN\x10\x02\x12\x1b\n" +
-	"\x17PRICING_MODEL_PER_FETCH\x10\x03\x12\x1e\n" +
-	"\x1aPRICING_MODEL_SUBSCRIPTION\x10\x04\x12\x16\n" +
-	"\x12PRICING_MODEL_FREE\x10\x05\x12\x1d\n" +
-	"\x19PRICING_MODEL_ATTRIBUTION\x10\x06\x12\x1e\n" +
-	"\x1aPRICING_MODEL_CONTRIBUTION\x10\a\x12\x1a\n" +
-	"\x16PRICING_MODEL_TRAINING\x10\b\x12\x1f\n" +
-	"\x1bPRICING_MODEL_REVENUE_SHARE\x10\t\x12\x1a\n" +
-	"\x16PRICING_MODEL_PER_PAGE\x10\n" +
-	"\x12\x1c\n" +
-	"\x18PRICING_MODEL_PER_MINUTE\x10\v\x12\x1c\n" +
-	"\x18PRICING_MODEL_PER_RECORD\x10\f*\x8e\x01\n" +
+	"\x19PRICING_MODEL_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12PRICING_MODEL_FREE\x10\x01\x12\x1a\n" +
+	"\x16PRICING_MODEL_PER_UNIT\x10\x02\x12\x16\n" +
+	"\x12PRICING_MODEL_FLAT\x10\x03*u\n" +
+	"\x0fPricingMetering\x12\x1b\n" +
+	"\x17PRICING_METERING_ONLINE\x10\x00\x12\x19\n" +
+	"\x15PRICING_METERING_NONE\x10\x01\x12*\n" +
+	"&PRICING_METERING_OFFLINE_SELF_REPORTED\x10\x02*\x8e\x01\n" +
 	"\x0eDeliveryMethod\x12\x1f\n" +
 	"\x1bDELIVERY_METHOD_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DELIVERY_METHOD_DIRECT\x10\x01\x12 \n" +
@@ -7252,23 +8168,21 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x1fRESOURCE_MUTABILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aRESOURCE_MUTABILITY_STATIC\x10\x01\x12\x1f\n" +
 	"\x1bRESOURCE_MUTABILITY_DYNAMIC\x10\x02\x12\x1c\n" +
-	"\x18RESOURCE_MUTABILITY_LIVE\x10\x03*\x84\x04\n" +
+	"\x18RESOURCE_MUTABILITY_LIVE\x10\x03*\xca\x03\n" +
 	"\fDenialReason\x12\x1d\n" +
-	"\x19DENIAL_REASON_UNSPECIFIED\x10\x00\x12!\n" +
-	"\x1dDENIAL_REASON_INVALID_LICENSE\x10\x01\x12!\n" +
-	"\x1dDENIAL_REASON_EXPIRED_LICENSE\x10\x02\x12&\n" +
-	"\"DENIAL_REASON_INSUFFICIENT_BALANCE\x10\x03\x12\x1e\n" +
-	"\x1aDENIAL_REASON_RATE_LIMITED\x10\x04\x12%\n" +
-	"!DENIAL_REASON_CONTENT_UNAVAILABLE\x10\x05\x12%\n" +
-	"!DENIAL_REASON_FUNCTION_PROHIBITED\x10\x06\x12 \n" +
-	"\x1cDENIAL_REASON_GEO_RESTRICTED\x10\a\x12#\n" +
-	"\x1fDENIAL_REASON_REPORTING_OVERDUE\x10\b\x12\x1f\n" +
-	"\x1bDENIAL_REASON_OFFER_EXPIRED\x10\t\x12#\n" +
-	"\x1fDENIAL_REASON_SIGNATURE_INVALID\x10\n" +
-	"\x12 \n" +
-	"\x1cDENIAL_REASON_QUOTA_EXCEEDED\x10\v\x12$\n" +
-	" DENIAL_REASON_DELEGATION_EXPIRED\x10\f\x12$\n" +
-	" DENIAL_REASON_SCOPE_INSUFFICIENT\x10\r*\x8c\x02\n" +
+	"\x19DENIAL_REASON_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"DENIAL_REASON_BILLING_REF_INACTIVE\x10\x01\x12&\n" +
+	"\"DENIAL_REASON_INSUFFICIENT_BALANCE\x10\x02\x12\x1e\n" +
+	"\x1aDENIAL_REASON_RATE_LIMITED\x10\x03\x12%\n" +
+	"!DENIAL_REASON_CONTENT_UNAVAILABLE\x10\x04\x12+\n" +
+	"'DENIAL_REASON_RESTRICTION_NOT_SATISFIED\x10\x05\x12#\n" +
+	"\x1fDENIAL_REASON_REPORTING_OVERDUE\x10\x06\x12\x1f\n" +
+	"\x1bDENIAL_REASON_OFFER_EXPIRED\x10\a\x12#\n" +
+	"\x1fDENIAL_REASON_SIGNATURE_INVALID\x10\b\x12 \n" +
+	"\x1cDENIAL_REASON_QUOTA_EXCEEDED\x10\t\x12$\n" +
+	" DENIAL_REASON_DELEGATION_INVALID\x10\n" +
+	"\x12$\n" +
+	" DENIAL_REASON_SCOPE_INSUFFICIENT\x10\v*\x8c\x02\n" +
 	"\x0fIngestionSource\x12 \n" +
 	"\x1cINGESTION_SOURCE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dINGESTION_SOURCE_RAMP_SITEMAP\x10\x01\x12\x18\n" +
@@ -7354,212 +8268,237 @@ func file_ramp_v1_ramp_proto_rawDescGZIP() []byte {
 	return file_ramp_v1_ramp_proto_rawDescData
 }
 
-var file_ramp_v1_ramp_proto_enumTypes = make([]protoimpl.EnumInfo, 17)
-var file_ramp_v1_ramp_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
+var file_ramp_v1_ramp_proto_enumTypes = make([]protoimpl.EnumInfo, 23)
+var file_ramp_v1_ramp_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_ramp_v1_ramp_proto_goTypes = []any{
 	(DiscoveryMethod)(0),                   // 0: ramp.v1.DiscoveryMethod
 	(OfferAbsenceReason)(0),                // 1: ramp.v1.OfferAbsenceReason
-	(PricingModel)(0),                      // 2: ramp.v1.PricingModel
-	(DeliveryMethod)(0),                    // 3: ramp.v1.DeliveryMethod
-	(RequesterType)(0),                     // 4: ramp.v1.RequesterType
-	(C2PAStatus)(0),                        // 5: ramp.v1.C2PAStatus
-	(ResourceMutability)(0),                // 6: ramp.v1.ResourceMutability
-	(DenialReason)(0),                      // 7: ramp.v1.DenialReason
-	(IngestionSource)(0),                   // 8: ramp.v1.IngestionSource
-	(CitationFormat)(0),                    // 9: ramp.v1.CitationFormat
-	(Role)(0),                              // 10: ramp.v1.Role
-	(ProviderRelationship)(0),              // 11: ramp.v1.ProviderRelationship
-	(AuthMethod)(0),                        // 12: ramp.v1.AuthMethod
-	(ResourceAccessPolicy)(0),              // 13: ramp.v1.ResourceAccessPolicy
-	(DisputeReason)(0),                     // 14: ramp.v1.DisputeReason
-	(DisputeStatus)(0),                     // 15: ramp.v1.DisputeStatus
-	(ResolutionType)(0),                    // 16: ramp.v1.ResolutionType
-	(*ResourceQuery)(nil),                  // 17: ramp.v1.ResourceQuery
-	(*ResourceResponse)(nil),               // 18: ramp.v1.ResourceResponse
-	(*OfferGroup)(nil),                     // 19: ramp.v1.OfferGroup
-	(*RateLimitInfo)(nil),                  // 20: ramp.v1.RateLimitInfo
-	(*SubscriptionQuotaInfo)(nil),          // 21: ramp.v1.SubscriptionQuotaInfo
-	(*Offer)(nil),                          // 22: ramp.v1.Offer
-	(*ResourceIdentity)(nil),               // 23: ramp.v1.ResourceIdentity
-	(*ResourceAttestation)(nil),            // 24: ramp.v1.ResourceAttestation
-	(*AccessRestrictions)(nil),             // 25: ramp.v1.AccessRestrictions
-	(*Preview)(nil),                        // 26: ramp.v1.Preview
-	(*Pricing)(nil),                        // 27: ramp.v1.Pricing
-	(*Requester)(nil),                      // 28: ramp.v1.Requester
-	(*Delegation)(nil),                     // 29: ramp.v1.Delegation
-	(*IntermediaryHop)(nil),                // 30: ramp.v1.IntermediaryHop
-	(*TransactionRequest)(nil),             // 31: ramp.v1.TransactionRequest
-	(*TransactionItem)(nil),                // 32: ramp.v1.TransactionItem
-	(*TransactionResponse)(nil),            // 33: ramp.v1.TransactionResponse
-	(*TransactionResultItem)(nil),          // 34: ramp.v1.TransactionResultItem
-	(*Cost)(nil),                           // 35: ramp.v1.Cost
-	(*PushResourcesRequest)(nil),           // 36: ramp.v1.PushResourcesRequest
-	(*ResourceEntry)(nil),                  // 37: ramp.v1.ResourceEntry
-	(*PushResourcesResponse)(nil),          // 38: ramp.v1.PushResourcesResponse
-	(*RemoveResourcesRequest)(nil),         // 39: ramp.v1.RemoveResourcesRequest
-	(*RemoveResourcesResponse)(nil),        // 40: ramp.v1.RemoveResourcesResponse
-	(*RefreshCatalogRequest)(nil),          // 41: ramp.v1.RefreshCatalogRequest
-	(*RefreshCatalogResponse)(nil),         // 42: ramp.v1.RefreshCatalogResponse
-	(*ReportingObligation)(nil),            // 43: ramp.v1.ReportingObligation
-	(*UsageReport)(nil),                    // 44: ramp.v1.UsageReport
-	(*AttributionDetail)(nil),              // 45: ramp.v1.AttributionDetail
-	(*Usage)(nil),                          // 46: ramp.v1.Usage
-	(*UsageAsset)(nil),                     // 47: ramp.v1.UsageAsset
-	(*UsageReportResponse)(nil),            // 48: ramp.v1.UsageReportResponse
-	(*RAMPRequest)(nil),                    // 49: ramp.v1.RAMPRequest
-	(*RequestConstraints)(nil),             // 50: ramp.v1.RequestConstraints
-	(*JsonWebKey)(nil),                     // 51: ramp.v1.JsonWebKey
-	(*WellKnownManifest)(nil),              // 52: ramp.v1.WellKnownManifest
-	(*KeyInvalidationList)(nil),            // 53: ramp.v1.KeyInvalidationList
-	(*CatalogContributor)(nil),             // 54: ramp.v1.CatalogContributor
-	(*AuthorizedExchange)(nil),             // 55: ramp.v1.AuthorizedExchange
-	(*AccessPolicy)(nil),                   // 56: ramp.v1.AccessPolicy
-	(*AccessPolicyRule)(nil),               // 57: ramp.v1.AccessPolicyRule
-	(*RAMPResponse)(nil),                   // 58: ramp.v1.RAMPResponse
-	(*DisputeRequest)(nil),                 // 59: ramp.v1.DisputeRequest
-	(*DisputeResponse)(nil),                // 60: ramp.v1.DisputeResponse
-	(*DomainVerificationRequest)(nil),      // 61: ramp.v1.DomainVerificationRequest
-	(*DomainVerificationChallenge)(nil),    // 62: ramp.v1.DomainVerificationChallenge
-	(*DomainVerificationConfirmation)(nil), // 63: ramp.v1.DomainVerificationConfirmation
-	(*DomainVerificationResult)(nil),       // 64: ramp.v1.DomainVerificationResult
-	(*durationpb.Duration)(nil),            // 65: google.protobuf.Duration
-	(*structpb.Struct)(nil),                // 66: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),          // 67: google.protobuf.Timestamp
+	(TermSemantics)(0),                     // 2: ramp.v1.TermSemantics
+	(RestrictionKind)(0),                   // 3: ramp.v1.RestrictionKind
+	(QuotaWindow)(0),                       // 4: ramp.v1.QuotaWindow
+	(ObligationKind)(0),                    // 5: ramp.v1.ObligationKind
+	(ObligationTrigger)(0),                 // 6: ramp.v1.ObligationTrigger
+	(PricingModel)(0),                      // 7: ramp.v1.PricingModel
+	(PricingMetering)(0),                   // 8: ramp.v1.PricingMetering
+	(DeliveryMethod)(0),                    // 9: ramp.v1.DeliveryMethod
+	(RequesterType)(0),                     // 10: ramp.v1.RequesterType
+	(C2PAStatus)(0),                        // 11: ramp.v1.C2PAStatus
+	(ResourceMutability)(0),                // 12: ramp.v1.ResourceMutability
+	(DenialReason)(0),                      // 13: ramp.v1.DenialReason
+	(IngestionSource)(0),                   // 14: ramp.v1.IngestionSource
+	(CitationFormat)(0),                    // 15: ramp.v1.CitationFormat
+	(Role)(0),                              // 16: ramp.v1.Role
+	(ProviderRelationship)(0),              // 17: ramp.v1.ProviderRelationship
+	(AuthMethod)(0),                        // 18: ramp.v1.AuthMethod
+	(ResourceAccessPolicy)(0),              // 19: ramp.v1.ResourceAccessPolicy
+	(DisputeReason)(0),                     // 20: ramp.v1.DisputeReason
+	(DisputeStatus)(0),                     // 21: ramp.v1.DisputeStatus
+	(ResolutionType)(0),                    // 22: ramp.v1.ResolutionType
+	(*AcceptableRestriction)(nil),          // 23: ramp.v1.AcceptableRestriction
+	(*ResourceQuery)(nil),                  // 24: ramp.v1.ResourceQuery
+	(*ResourceResponse)(nil),               // 25: ramp.v1.ResourceResponse
+	(*OfferGroup)(nil),                     // 26: ramp.v1.OfferGroup
+	(*RateLimitInfo)(nil),                  // 27: ramp.v1.RateLimitInfo
+	(*SubscriptionQuotaInfo)(nil),          // 28: ramp.v1.SubscriptionQuotaInfo
+	(*Offer)(nil),                          // 29: ramp.v1.Offer
+	(*ResourceIdentity)(nil),               // 30: ramp.v1.ResourceIdentity
+	(*ResourceAttestation)(nil),            // 31: ramp.v1.ResourceAttestation
+	(*License)(nil),                        // 32: ramp.v1.License
+	(*Restriction)(nil),                    // 33: ramp.v1.Restriction
+	(*Quota)(nil),                          // 34: ramp.v1.Quota
+	(*Obligation)(nil),                     // 35: ramp.v1.Obligation
+	(*LicenseTerm)(nil),                    // 36: ramp.v1.LicenseTerm
+	(*Preview)(nil),                        // 37: ramp.v1.Preview
+	(*Pricing)(nil),                        // 38: ramp.v1.Pricing
+	(*Requester)(nil),                      // 39: ramp.v1.Requester
+	(*Delegation)(nil),                     // 40: ramp.v1.Delegation
+	(*TransactionRequest)(nil),             // 41: ramp.v1.TransactionRequest
+	(*TransactionItem)(nil),                // 42: ramp.v1.TransactionItem
+	(*TransactionResponse)(nil),            // 43: ramp.v1.TransactionResponse
+	(*TransactionResultItem)(nil),          // 44: ramp.v1.TransactionResultItem
+	(*Cost)(nil),                           // 45: ramp.v1.Cost
+	(*PushResourcesRequest)(nil),           // 46: ramp.v1.PushResourcesRequest
+	(*ResourceEntry)(nil),                  // 47: ramp.v1.ResourceEntry
+	(*PushResourcesResponse)(nil),          // 48: ramp.v1.PushResourcesResponse
+	(*RemoveResourcesRequest)(nil),         // 49: ramp.v1.RemoveResourcesRequest
+	(*RemoveResourcesResponse)(nil),        // 50: ramp.v1.RemoveResourcesResponse
+	(*RefreshCatalogRequest)(nil),          // 51: ramp.v1.RefreshCatalogRequest
+	(*RefreshCatalogResponse)(nil),         // 52: ramp.v1.RefreshCatalogResponse
+	(*ReportingObligation)(nil),            // 53: ramp.v1.ReportingObligation
+	(*UsageReport)(nil),                    // 54: ramp.v1.UsageReport
+	(*AttributionDetail)(nil),              // 55: ramp.v1.AttributionDetail
+	(*Usage)(nil),                          // 56: ramp.v1.Usage
+	(*UsageAsset)(nil),                     // 57: ramp.v1.UsageAsset
+	(*UsageReportResponse)(nil),            // 58: ramp.v1.UsageReportResponse
+	(*RAMPRequest)(nil),                    // 59: ramp.v1.RAMPRequest
+	(*RequestConstraints)(nil),             // 60: ramp.v1.RequestConstraints
+	(*JsonWebKey)(nil),                     // 61: ramp.v1.JsonWebKey
+	(*WellKnownManifest)(nil),              // 62: ramp.v1.WellKnownManifest
+	(*KeyInvalidationList)(nil),            // 63: ramp.v1.KeyInvalidationList
+	(*CatalogContributor)(nil),             // 64: ramp.v1.CatalogContributor
+	(*AuthorizedExchange)(nil),             // 65: ramp.v1.AuthorizedExchange
+	(*AccessPolicy)(nil),                   // 66: ramp.v1.AccessPolicy
+	(*AccessPolicyRule)(nil),               // 67: ramp.v1.AccessPolicyRule
+	(*RAMPResponse)(nil),                   // 68: ramp.v1.RAMPResponse
+	(*DisputeRequest)(nil),                 // 69: ramp.v1.DisputeRequest
+	(*DisputeResponse)(nil),                // 70: ramp.v1.DisputeResponse
+	(*DomainVerificationRequest)(nil),      // 71: ramp.v1.DomainVerificationRequest
+	(*DomainVerificationChallenge)(nil),    // 72: ramp.v1.DomainVerificationChallenge
+	(*DomainVerificationConfirmation)(nil), // 73: ramp.v1.DomainVerificationConfirmation
+	(*DomainVerificationResult)(nil),       // 74: ramp.v1.DomainVerificationResult
+	(*durationpb.Duration)(nil),            // 75: google.protobuf.Duration
+	(*structpb.Struct)(nil),                // 76: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),          // 77: google.protobuf.Timestamp
 }
 var file_ramp_v1_ramp_proto_depIdxs = []int32{
-	28,  // 0: ramp.v1.ResourceQuery.requester:type_name -> ramp.v1.Requester
-	30,  // 1: ramp.v1.ResourceQuery.intermediaries:type_name -> ramp.v1.IntermediaryHop
-	65,  // 2: ramp.v1.ResourceQuery.deadline:type_name -> google.protobuf.Duration
-	66,  // 3: ramp.v1.ResourceQuery.ext:type_name -> google.protobuf.Struct
-	22,  // 4: ramp.v1.ResourceResponse.offers:type_name -> ramp.v1.Offer
-	19,  // 5: ramp.v1.ResourceResponse.offer_groups:type_name -> ramp.v1.OfferGroup
-	20,  // 6: ramp.v1.ResourceResponse.rate_limit:type_name -> ramp.v1.RateLimitInfo
-	66,  // 7: ramp.v1.ResourceResponse.ext:type_name -> google.protobuf.Struct
-	22,  // 8: ramp.v1.OfferGroup.offers:type_name -> ramp.v1.Offer
-	0,   // 9: ramp.v1.OfferGroup.discovery_method:type_name -> ramp.v1.DiscoveryMethod
-	1,   // 10: ramp.v1.OfferGroup.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
-	67,  // 11: ramp.v1.RateLimitInfo.reset_at:type_name -> google.protobuf.Timestamp
-	65,  // 12: ramp.v1.RateLimitInfo.window:type_name -> google.protobuf.Duration
-	67,  // 13: ramp.v1.SubscriptionQuotaInfo.resets_at:type_name -> google.protobuf.Timestamp
-	27,  // 14: ramp.v1.Offer.pricing:type_name -> ramp.v1.Pricing
-	3,   // 15: ramp.v1.Offer.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	43,  // 16: ramp.v1.Offer.reporting:type_name -> ramp.v1.ReportingObligation
-	67,  // 17: ramp.v1.Offer.expires_at:type_name -> google.protobuf.Timestamp
-	23,  // 18: ramp.v1.Offer.identity:type_name -> ramp.v1.ResourceIdentity
-	25,  // 19: ramp.v1.Offer.restrictions:type_name -> ramp.v1.AccessRestrictions
-	24,  // 20: ramp.v1.Offer.attestations:type_name -> ramp.v1.ResourceAttestation
-	67,  // 21: ramp.v1.Offer.data_as_of:type_name -> google.protobuf.Timestamp
-	21,  // 22: ramp.v1.Offer.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
-	26,  // 23: ramp.v1.Offer.previews:type_name -> ramp.v1.Preview
-	66,  // 24: ramp.v1.Offer.ext:type_name -> google.protobuf.Struct
-	6,   // 25: ramp.v1.ResourceIdentity.resource_mutability:type_name -> ramp.v1.ResourceMutability
-	5,   // 26: ramp.v1.ResourceIdentity.c2pa_status:type_name -> ramp.v1.C2PAStatus
-	66,  // 27: ramp.v1.ResourceIdentity.ext:type_name -> google.protobuf.Struct
-	67,  // 28: ramp.v1.ResourceAttestation.attested_at:type_name -> google.protobuf.Timestamp
-	66,  // 29: ramp.v1.ResourceAttestation.claims:type_name -> google.protobuf.Struct
-	66,  // 30: ramp.v1.AccessRestrictions.ext:type_name -> google.protobuf.Struct
-	2,   // 31: ramp.v1.Pricing.model:type_name -> ramp.v1.PricingModel
-	66,  // 32: ramp.v1.Pricing.ext:type_name -> google.protobuf.Struct
-	4,   // 33: ramp.v1.Requester.type:type_name -> ramp.v1.RequesterType
-	29,  // 34: ramp.v1.Requester.delegation:type_name -> ramp.v1.Delegation
-	66,  // 35: ramp.v1.Requester.ext:type_name -> google.protobuf.Struct
-	67,  // 36: ramp.v1.Delegation.expires_at:type_name -> google.protobuf.Timestamp
-	65,  // 37: ramp.v1.Delegation.quota_period:type_name -> google.protobuf.Duration
-	66,  // 38: ramp.v1.Delegation.ext:type_name -> google.protobuf.Struct
-	67,  // 39: ramp.v1.IntermediaryHop.forwarded_at:type_name -> google.protobuf.Timestamp
-	28,  // 40: ramp.v1.TransactionRequest.requester:type_name -> ramp.v1.Requester
-	32,  // 41: ramp.v1.TransactionRequest.items:type_name -> ramp.v1.TransactionItem
-	66,  // 42: ramp.v1.TransactionRequest.ext:type_name -> google.protobuf.Struct
-	35,  // 43: ramp.v1.TransactionResponse.cost:type_name -> ramp.v1.Cost
-	3,   // 44: ramp.v1.TransactionResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	43,  // 45: ramp.v1.TransactionResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	67,  // 46: ramp.v1.TransactionResponse.expires_at:type_name -> google.protobuf.Timestamp
-	7,   // 47: ramp.v1.TransactionResponse.denial_reason:type_name -> ramp.v1.DenialReason
-	35,  // 48: ramp.v1.TransactionResponse.subscription_unit_value:type_name -> ramp.v1.Cost
-	34,  // 49: ramp.v1.TransactionResponse.items:type_name -> ramp.v1.TransactionResultItem
-	35,  // 50: ramp.v1.TransactionResponse.total_cost:type_name -> ramp.v1.Cost
-	21,  // 51: ramp.v1.TransactionResponse.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
-	66,  // 52: ramp.v1.TransactionResponse.ext:type_name -> google.protobuf.Struct
-	35,  // 53: ramp.v1.TransactionResultItem.cost:type_name -> ramp.v1.Cost
-	35,  // 54: ramp.v1.TransactionResultItem.subscription_unit_value:type_name -> ramp.v1.Cost
-	7,   // 55: ramp.v1.TransactionResultItem.denial_reason:type_name -> ramp.v1.DenialReason
-	67,  // 56: ramp.v1.TransactionResultItem.expires_at:type_name -> google.protobuf.Timestamp
-	3,   // 57: ramp.v1.TransactionResultItem.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	43,  // 58: ramp.v1.TransactionResultItem.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	37,  // 59: ramp.v1.PushResourcesRequest.entries:type_name -> ramp.v1.ResourceEntry
-	8,   // 60: ramp.v1.ResourceEntry.source:type_name -> ramp.v1.IngestionSource
-	67,  // 61: ramp.v1.ResourceEntry.provenance_timestamp:type_name -> google.protobuf.Timestamp
-	24,  // 62: ramp.v1.ResourceEntry.attestations:type_name -> ramp.v1.ResourceAttestation
-	66,  // 63: ramp.v1.ResourceEntry.ext:type_name -> google.protobuf.Struct
-	65,  // 64: ramp.v1.ReportingObligation.window:type_name -> google.protobuf.Duration
-	66,  // 65: ramp.v1.ReportingObligation.ext:type_name -> google.protobuf.Struct
-	46,  // 66: ramp.v1.UsageReport.usage:type_name -> ramp.v1.Usage
-	67,  // 67: ramp.v1.UsageReport.timestamp:type_name -> google.protobuf.Timestamp
-	47,  // 68: ramp.v1.UsageReport.assets:type_name -> ramp.v1.UsageAsset
-	66,  // 69: ramp.v1.UsageReport.ext:type_name -> google.protobuf.Struct
-	9,   // 70: ramp.v1.AttributionDetail.format:type_name -> ramp.v1.CitationFormat
-	45,  // 71: ramp.v1.Usage.attribution:type_name -> ramp.v1.AttributionDetail
-	66,  // 72: ramp.v1.UsageReportResponse.ext:type_name -> google.protobuf.Struct
-	28,  // 73: ramp.v1.RAMPRequest.requester:type_name -> ramp.v1.Requester
-	50,  // 74: ramp.v1.RAMPRequest.constraints:type_name -> ramp.v1.RequestConstraints
-	66,  // 75: ramp.v1.RAMPRequest.search_filters:type_name -> google.protobuf.Struct
-	66,  // 76: ramp.v1.RAMPRequest.ext:type_name -> google.protobuf.Struct
-	35,  // 77: ramp.v1.RequestConstraints.max_price:type_name -> ramp.v1.Cost
-	3,   // 78: ramp.v1.RequestConstraints.delivery_preference:type_name -> ramp.v1.DeliveryMethod
-	35,  // 79: ramp.v1.RequestConstraints.period_budget:type_name -> ramp.v1.Cost
-	65,  // 80: ramp.v1.RequestConstraints.budget_period:type_name -> google.protobuf.Duration
-	65,  // 81: ramp.v1.RequestConstraints.max_data_age:type_name -> google.protobuf.Duration
-	10,  // 82: ramp.v1.WellKnownManifest.role:type_name -> ramp.v1.Role
-	51,  // 83: ramp.v1.WellKnownManifest.public_keys:type_name -> ramp.v1.JsonWebKey
-	55,  // 84: ramp.v1.WellKnownManifest.exchanges:type_name -> ramp.v1.AuthorizedExchange
-	54,  // 85: ramp.v1.WellKnownManifest.catalog_contributors:type_name -> ramp.v1.CatalogContributor
-	2,   // 86: ramp.v1.WellKnownManifest.pricing_models_supported:type_name -> ramp.v1.PricingModel
-	3,   // 87: ramp.v1.WellKnownManifest.delivery_methods_supported:type_name -> ramp.v1.DeliveryMethod
-	12,  // 88: ramp.v1.WellKnownManifest.supported_auth_methods:type_name -> ramp.v1.AuthMethod
-	66,  // 89: ramp.v1.WellKnownManifest.ext:type_name -> google.protobuf.Struct
-	67,  // 90: ramp.v1.KeyInvalidationList.as_of:type_name -> google.protobuf.Timestamp
-	11,  // 91: ramp.v1.AuthorizedExchange.relationship:type_name -> ramp.v1.ProviderRelationship
-	66,  // 92: ramp.v1.AuthorizedExchange.ext:type_name -> google.protobuf.Struct
-	13,  // 93: ramp.v1.AccessPolicy.default_policy:type_name -> ramp.v1.ResourceAccessPolicy
-	57,  // 94: ramp.v1.AccessPolicy.rules:type_name -> ramp.v1.AccessPolicyRule
-	13,  // 95: ramp.v1.AccessPolicyRule.policy:type_name -> ramp.v1.ResourceAccessPolicy
-	35,  // 96: ramp.v1.RAMPResponse.cost:type_name -> ramp.v1.Cost
-	3,   // 97: ramp.v1.RAMPResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	43,  // 98: ramp.v1.RAMPResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	67,  // 99: ramp.v1.RAMPResponse.expires_at:type_name -> google.protobuf.Timestamp
-	35,  // 100: ramp.v1.RAMPResponse.broker_fee:type_name -> ramp.v1.Cost
-	66,  // 101: ramp.v1.RAMPResponse.ext:type_name -> google.protobuf.Struct
-	14,  // 102: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
-	66,  // 103: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
-	65,  // 104: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
-	15,  // 105: ramp.v1.DisputeResponse.status:type_name -> ramp.v1.DisputeStatus
-	16,  // 106: ramp.v1.DisputeResponse.resolution:type_name -> ramp.v1.ResolutionType
-	66,  // 107: ramp.v1.DisputeResponse.ext:type_name -> google.protobuf.Struct
-	67,  // 108: ramp.v1.DomainVerificationChallenge.expires_at:type_name -> google.protobuf.Timestamp
-	67,  // 109: ramp.v1.DomainVerificationResult.valid_until:type_name -> google.protobuf.Timestamp
-	17,  // 110: ramp.v1.ExchangeService.DiscoverResources:input_type -> ramp.v1.ResourceQuery
-	31,  // 111: ramp.v1.ExchangeService.ExecuteTransaction:input_type -> ramp.v1.TransactionRequest
-	44,  // 112: ramp.v1.ExchangeService.ReportUsage:input_type -> ramp.v1.UsageReport
-	59,  // 113: ramp.v1.ExchangeService.DisputeTransaction:input_type -> ramp.v1.DisputeRequest
-	61,  // 114: ramp.v1.ExchangeService.RequestDomainVerification:input_type -> ramp.v1.DomainVerificationRequest
-	63,  // 115: ramp.v1.ExchangeService.ConfirmDomainVerification:input_type -> ramp.v1.DomainVerificationConfirmation
-	36,  // 116: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
-	39,  // 117: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
-	41,  // 118: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
-	18,  // 119: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
-	33,  // 120: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
-	48,  // 121: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
-	60,  // 122: ramp.v1.ExchangeService.DisputeTransaction:output_type -> ramp.v1.DisputeResponse
-	62,  // 123: ramp.v1.ExchangeService.RequestDomainVerification:output_type -> ramp.v1.DomainVerificationChallenge
-	64,  // 124: ramp.v1.ExchangeService.ConfirmDomainVerification:output_type -> ramp.v1.DomainVerificationResult
-	38,  // 125: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
-	40,  // 126: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
-	42,  // 127: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
-	119, // [119:128] is the sub-list for method output_type
-	110, // [110:119] is the sub-list for method input_type
-	110, // [110:110] is the sub-list for extension type_name
-	110, // [110:110] is the sub-list for extension extendee
-	0,   // [0:110] is the sub-list for field type_name
+	3,   // 0: ramp.v1.AcceptableRestriction.axis:type_name -> ramp.v1.RestrictionKind
+	39,  // 1: ramp.v1.ResourceQuery.requester:type_name -> ramp.v1.Requester
+	23,  // 2: ramp.v1.ResourceQuery.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
+	75,  // 3: ramp.v1.ResourceQuery.deadline:type_name -> google.protobuf.Duration
+	76,  // 4: ramp.v1.ResourceQuery.ext:type_name -> google.protobuf.Struct
+	29,  // 5: ramp.v1.ResourceResponse.offers:type_name -> ramp.v1.Offer
+	26,  // 6: ramp.v1.ResourceResponse.offer_groups:type_name -> ramp.v1.OfferGroup
+	27,  // 7: ramp.v1.ResourceResponse.rate_limit:type_name -> ramp.v1.RateLimitInfo
+	76,  // 8: ramp.v1.ResourceResponse.ext:type_name -> google.protobuf.Struct
+	29,  // 9: ramp.v1.OfferGroup.offers:type_name -> ramp.v1.Offer
+	0,   // 10: ramp.v1.OfferGroup.discovery_method:type_name -> ramp.v1.DiscoveryMethod
+	1,   // 11: ramp.v1.OfferGroup.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
+	3,   // 12: ramp.v1.OfferGroup.restriction_filters:type_name -> ramp.v1.RestrictionKind
+	77,  // 13: ramp.v1.RateLimitInfo.reset_at:type_name -> google.protobuf.Timestamp
+	75,  // 14: ramp.v1.RateLimitInfo.window:type_name -> google.protobuf.Duration
+	77,  // 15: ramp.v1.SubscriptionQuotaInfo.resets_at:type_name -> google.protobuf.Timestamp
+	38,  // 16: ramp.v1.Offer.pricing:type_name -> ramp.v1.Pricing
+	9,   // 17: ramp.v1.Offer.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	53,  // 18: ramp.v1.Offer.reporting:type_name -> ramp.v1.ReportingObligation
+	77,  // 19: ramp.v1.Offer.expires_at:type_name -> google.protobuf.Timestamp
+	30,  // 20: ramp.v1.Offer.identity:type_name -> ramp.v1.ResourceIdentity
+	31,  // 21: ramp.v1.Offer.attestations:type_name -> ramp.v1.ResourceAttestation
+	77,  // 22: ramp.v1.Offer.data_as_of:type_name -> google.protobuf.Timestamp
+	28,  // 23: ramp.v1.Offer.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
+	37,  // 24: ramp.v1.Offer.previews:type_name -> ramp.v1.Preview
+	36,  // 25: ramp.v1.Offer.terms:type_name -> ramp.v1.LicenseTerm
+	76,  // 26: ramp.v1.Offer.ext:type_name -> google.protobuf.Struct
+	12,  // 27: ramp.v1.ResourceIdentity.resource_mutability:type_name -> ramp.v1.ResourceMutability
+	11,  // 28: ramp.v1.ResourceIdentity.c2pa_status:type_name -> ramp.v1.C2PAStatus
+	76,  // 29: ramp.v1.ResourceIdentity.ext:type_name -> google.protobuf.Struct
+	77,  // 30: ramp.v1.ResourceAttestation.attested_at:type_name -> google.protobuf.Timestamp
+	76,  // 31: ramp.v1.ResourceAttestation.claims:type_name -> google.protobuf.Struct
+	3,   // 32: ramp.v1.Restriction.kind:type_name -> ramp.v1.RestrictionKind
+	4,   // 33: ramp.v1.Quota.window:type_name -> ramp.v1.QuotaWindow
+	5,   // 34: ramp.v1.Obligation.kind:type_name -> ramp.v1.ObligationKind
+	6,   // 35: ramp.v1.Obligation.trigger:type_name -> ramp.v1.ObligationTrigger
+	32,  // 36: ramp.v1.Obligation.scope_license:type_name -> ramp.v1.License
+	32,  // 37: ramp.v1.LicenseTerm.license:type_name -> ramp.v1.License
+	2,   // 38: ramp.v1.LicenseTerm.semantics:type_name -> ramp.v1.TermSemantics
+	33,  // 39: ramp.v1.LicenseTerm.restrictions:type_name -> ramp.v1.Restriction
+	34,  // 40: ramp.v1.LicenseTerm.quotas:type_name -> ramp.v1.Quota
+	35,  // 41: ramp.v1.LicenseTerm.obligations:type_name -> ramp.v1.Obligation
+	38,  // 42: ramp.v1.LicenseTerm.pricing:type_name -> ramp.v1.Pricing
+	7,   // 43: ramp.v1.Pricing.model:type_name -> ramp.v1.PricingModel
+	8,   // 44: ramp.v1.Pricing.metering:type_name -> ramp.v1.PricingMetering
+	10,  // 45: ramp.v1.Requester.type:type_name -> ramp.v1.RequesterType
+	40,  // 46: ramp.v1.Requester.delegation:type_name -> ramp.v1.Delegation
+	76,  // 47: ramp.v1.Requester.ext:type_name -> google.protobuf.Struct
+	77,  // 48: ramp.v1.Delegation.expires_at:type_name -> google.protobuf.Timestamp
+	75,  // 49: ramp.v1.Delegation.quota_period:type_name -> google.protobuf.Duration
+	76,  // 50: ramp.v1.Delegation.ext:type_name -> google.protobuf.Struct
+	39,  // 51: ramp.v1.TransactionRequest.requester:type_name -> ramp.v1.Requester
+	42,  // 52: ramp.v1.TransactionRequest.items:type_name -> ramp.v1.TransactionItem
+	76,  // 53: ramp.v1.TransactionRequest.ext:type_name -> google.protobuf.Struct
+	45,  // 54: ramp.v1.TransactionResponse.cost:type_name -> ramp.v1.Cost
+	9,   // 55: ramp.v1.TransactionResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	53,  // 56: ramp.v1.TransactionResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
+	77,  // 57: ramp.v1.TransactionResponse.expires_at:type_name -> google.protobuf.Timestamp
+	13,  // 58: ramp.v1.TransactionResponse.denial_reason:type_name -> ramp.v1.DenialReason
+	3,   // 59: ramp.v1.TransactionResponse.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
+	45,  // 60: ramp.v1.TransactionResponse.subscription_unit_value:type_name -> ramp.v1.Cost
+	44,  // 61: ramp.v1.TransactionResponse.items:type_name -> ramp.v1.TransactionResultItem
+	45,  // 62: ramp.v1.TransactionResponse.total_cost:type_name -> ramp.v1.Cost
+	28,  // 63: ramp.v1.TransactionResponse.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
+	76,  // 64: ramp.v1.TransactionResponse.ext:type_name -> google.protobuf.Struct
+	45,  // 65: ramp.v1.TransactionResultItem.cost:type_name -> ramp.v1.Cost
+	45,  // 66: ramp.v1.TransactionResultItem.subscription_unit_value:type_name -> ramp.v1.Cost
+	13,  // 67: ramp.v1.TransactionResultItem.denial_reason:type_name -> ramp.v1.DenialReason
+	3,   // 68: ramp.v1.TransactionResultItem.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
+	77,  // 69: ramp.v1.TransactionResultItem.expires_at:type_name -> google.protobuf.Timestamp
+	9,   // 70: ramp.v1.TransactionResultItem.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	53,  // 71: ramp.v1.TransactionResultItem.reporting_obligation:type_name -> ramp.v1.ReportingObligation
+	47,  // 72: ramp.v1.PushResourcesRequest.entries:type_name -> ramp.v1.ResourceEntry
+	14,  // 73: ramp.v1.ResourceEntry.source:type_name -> ramp.v1.IngestionSource
+	77,  // 74: ramp.v1.ResourceEntry.provenance_timestamp:type_name -> google.protobuf.Timestamp
+	31,  // 75: ramp.v1.ResourceEntry.attestations:type_name -> ramp.v1.ResourceAttestation
+	36,  // 76: ramp.v1.ResourceEntry.terms:type_name -> ramp.v1.LicenseTerm
+	76,  // 77: ramp.v1.ResourceEntry.ext:type_name -> google.protobuf.Struct
+	75,  // 78: ramp.v1.ReportingObligation.window:type_name -> google.protobuf.Duration
+	76,  // 79: ramp.v1.ReportingObligation.ext:type_name -> google.protobuf.Struct
+	56,  // 80: ramp.v1.UsageReport.usage:type_name -> ramp.v1.Usage
+	77,  // 81: ramp.v1.UsageReport.timestamp:type_name -> google.protobuf.Timestamp
+	57,  // 82: ramp.v1.UsageReport.assets:type_name -> ramp.v1.UsageAsset
+	76,  // 83: ramp.v1.UsageReport.ext:type_name -> google.protobuf.Struct
+	15,  // 84: ramp.v1.AttributionDetail.format:type_name -> ramp.v1.CitationFormat
+	55,  // 85: ramp.v1.Usage.attribution:type_name -> ramp.v1.AttributionDetail
+	76,  // 86: ramp.v1.UsageReportResponse.ext:type_name -> google.protobuf.Struct
+	39,  // 87: ramp.v1.RAMPRequest.requester:type_name -> ramp.v1.Requester
+	23,  // 88: ramp.v1.RAMPRequest.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
+	60,  // 89: ramp.v1.RAMPRequest.constraints:type_name -> ramp.v1.RequestConstraints
+	76,  // 90: ramp.v1.RAMPRequest.search_filters:type_name -> google.protobuf.Struct
+	76,  // 91: ramp.v1.RAMPRequest.ext:type_name -> google.protobuf.Struct
+	45,  // 92: ramp.v1.RequestConstraints.max_price:type_name -> ramp.v1.Cost
+	9,   // 93: ramp.v1.RequestConstraints.delivery_preference:type_name -> ramp.v1.DeliveryMethod
+	45,  // 94: ramp.v1.RequestConstraints.period_budget:type_name -> ramp.v1.Cost
+	75,  // 95: ramp.v1.RequestConstraints.budget_period:type_name -> google.protobuf.Duration
+	75,  // 96: ramp.v1.RequestConstraints.max_data_age:type_name -> google.protobuf.Duration
+	16,  // 97: ramp.v1.WellKnownManifest.role:type_name -> ramp.v1.Role
+	61,  // 98: ramp.v1.WellKnownManifest.public_keys:type_name -> ramp.v1.JsonWebKey
+	65,  // 99: ramp.v1.WellKnownManifest.exchanges:type_name -> ramp.v1.AuthorizedExchange
+	64,  // 100: ramp.v1.WellKnownManifest.catalog_contributors:type_name -> ramp.v1.CatalogContributor
+	7,   // 101: ramp.v1.WellKnownManifest.pricing_models_supported:type_name -> ramp.v1.PricingModel
+	9,   // 102: ramp.v1.WellKnownManifest.delivery_methods_supported:type_name -> ramp.v1.DeliveryMethod
+	18,  // 103: ramp.v1.WellKnownManifest.supported_auth_methods:type_name -> ramp.v1.AuthMethod
+	76,  // 104: ramp.v1.WellKnownManifest.ext:type_name -> google.protobuf.Struct
+	77,  // 105: ramp.v1.KeyInvalidationList.as_of:type_name -> google.protobuf.Timestamp
+	17,  // 106: ramp.v1.AuthorizedExchange.relationship:type_name -> ramp.v1.ProviderRelationship
+	76,  // 107: ramp.v1.AuthorizedExchange.ext:type_name -> google.protobuf.Struct
+	19,  // 108: ramp.v1.AccessPolicy.default_policy:type_name -> ramp.v1.ResourceAccessPolicy
+	67,  // 109: ramp.v1.AccessPolicy.rules:type_name -> ramp.v1.AccessPolicyRule
+	19,  // 110: ramp.v1.AccessPolicyRule.policy:type_name -> ramp.v1.ResourceAccessPolicy
+	45,  // 111: ramp.v1.RAMPResponse.cost:type_name -> ramp.v1.Cost
+	9,   // 112: ramp.v1.RAMPResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	53,  // 113: ramp.v1.RAMPResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
+	77,  // 114: ramp.v1.RAMPResponse.expires_at:type_name -> google.protobuf.Timestamp
+	45,  // 115: ramp.v1.RAMPResponse.broker_fee:type_name -> ramp.v1.Cost
+	76,  // 116: ramp.v1.RAMPResponse.ext:type_name -> google.protobuf.Struct
+	20,  // 117: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
+	76,  // 118: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
+	75,  // 119: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
+	21,  // 120: ramp.v1.DisputeResponse.status:type_name -> ramp.v1.DisputeStatus
+	22,  // 121: ramp.v1.DisputeResponse.resolution:type_name -> ramp.v1.ResolutionType
+	76,  // 122: ramp.v1.DisputeResponse.ext:type_name -> google.protobuf.Struct
+	77,  // 123: ramp.v1.DomainVerificationChallenge.expires_at:type_name -> google.protobuf.Timestamp
+	77,  // 124: ramp.v1.DomainVerificationResult.valid_until:type_name -> google.protobuf.Timestamp
+	24,  // 125: ramp.v1.ExchangeService.DiscoverResources:input_type -> ramp.v1.ResourceQuery
+	41,  // 126: ramp.v1.ExchangeService.ExecuteTransaction:input_type -> ramp.v1.TransactionRequest
+	54,  // 127: ramp.v1.ExchangeService.ReportUsage:input_type -> ramp.v1.UsageReport
+	69,  // 128: ramp.v1.ExchangeService.DisputeTransaction:input_type -> ramp.v1.DisputeRequest
+	71,  // 129: ramp.v1.ExchangeService.RequestDomainVerification:input_type -> ramp.v1.DomainVerificationRequest
+	73,  // 130: ramp.v1.ExchangeService.ConfirmDomainVerification:input_type -> ramp.v1.DomainVerificationConfirmation
+	46,  // 131: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
+	49,  // 132: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
+	51,  // 133: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
+	25,  // 134: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
+	43,  // 135: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
+	58,  // 136: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
+	70,  // 137: ramp.v1.ExchangeService.DisputeTransaction:output_type -> ramp.v1.DisputeResponse
+	72,  // 138: ramp.v1.ExchangeService.RequestDomainVerification:output_type -> ramp.v1.DomainVerificationChallenge
+	74,  // 139: ramp.v1.ExchangeService.ConfirmDomainVerification:output_type -> ramp.v1.DomainVerificationResult
+	48,  // 140: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
+	50,  // 141: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
+	52,  // 142: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
+	134, // [134:143] is the sub-list for method output_type
+	125, // [125:134] is the sub-list for method input_type
+	125, // [125:125] is the sub-list for extension type_name
+	125, // [125:125] is the sub-list for extension extendee
+	0,   // [0:125] is the sub-list for field type_name
 }
 
 func init() { file_ramp_v1_ramp_proto_init() }
@@ -7567,46 +8506,48 @@ func file_ramp_v1_ramp_proto_init() {
 	if File_ramp_v1_ramp_proto != nil {
 		return
 	}
-	file_ramp_v1_ramp_proto_msgTypes[0].OneofWrappers = []any{}
+	file_ramp_v1_vocab_proto_init()
 	file_ramp_v1_ramp_proto_msgTypes[1].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[2].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[3].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[4].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[5].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[6].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[8].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[7].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[9].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[10].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[11].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[12].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[13].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[14].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[15].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[16].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[17].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[18].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[20].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[26].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[27].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[28].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[29].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[21].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[22].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[24].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[30].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[31].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[32].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[33].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[34].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[35].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[41].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[42].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[43].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[44].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[36].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[37].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[39].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[45].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[46].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[47].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[48].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[50].OneofWrappers = []any{}
+	file_ramp_v1_ramp_proto_msgTypes[51].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ramp_v1_ramp_proto_rawDesc), len(file_ramp_v1_ramp_proto_rawDesc)),
-			NumEnums:      17,
-			NumMessages:   48,
+			NumEnums:      23,
+			NumMessages:   52,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

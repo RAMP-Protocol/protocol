@@ -6,7 +6,7 @@ description: "End-to-end demonstration of the RAMP protocol using the live refer
 import { Aside } from '@astrojs/starlight/components';
 
 :::note[Reference Implementation]
-This walkthrough uses the live reference implementation with working curl examples. For the complete protocol flow with Requester identity, Biscuit delegation, and subscription quotas, see the [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1/).
+This walkthrough uses the live reference implementation with working curl examples. For the complete protocol flow with Requester identity, delegation (JWT), and subscription quotas, see the [RAMP v1.0 Walkthrough](/protocol/walkthrough-v1/).
 :::
 
 ## What You'll See
@@ -109,17 +109,15 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
       "offers": [
         {
           "offer_id": "offer-cdn.ramp-protocol.org-1773682699693224366",
-          "package": {
-            "id": "pkg-cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
-            "retrieval": {
-              "endpoint": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding.html"
-            }
+          "ext": {
+            "comp.package_id": "pkg-cdn.ramp-protocol.org/2024/01/15/ai-startups-funding"
           },
           "pricing": {
-            "model": "PRICING_MODEL_PER_ACCESS",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 0.05,
             "currency": "USD",
-            "estimated_quantity": 2000
+            "estimated_quantity": 2000,
+            "unit": "accesses"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -127,8 +125,8 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
             "window": "86400s",
             "required_fields": ["consumed_quantity"]
           },
-          "exchange_signature": "ae77b181...32607e08",
-          "signature_algorithm": "ed25519"
+          "signature": "ae77b181...32607e08",
+          "signature_algorithm": "EdDSA"
         }
       ]
     }
@@ -141,7 +139,7 @@ Key fields in each offer:
 - **pricing** — rate ($0.05/article), currency, estimated tokens. Pricing models are defined in the [protocol spec](/protocol/standards-layering) and follow [RSL conventions](/protocol/discovery-paths)
 - **exchange_signature** — [Ed25519 signature](/protocol/authentication) over the offer. Stateless: the Exchange can verify this signature on ExecuteTransaction without storing the offer
 - **reporting** — usage reporting is mandatory, due within 24 hours, must include `consumed_quantity`. See [how the billing cycle works](/getting-started/how-money-flows)
-- **package** — [IAB CoMP Package object](/protocol/standards-layering) describing the content
+- **title** — human-readable offer title, plus optional `ramp-comp-v1` `comp.*` ext fields (e.g. `comp.package_id`) carrying [IAB CoMP](/protocol/standards-layering) package metadata
 
 ### Step 4: Execute Transaction ([ExecuteTransaction RPC](/components/exchange/request-flows))
 
@@ -154,8 +152,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
     "ver": "1.0",
     "id": "demo-txn-001",
     "offer_id": "<offer_id from Step 3>",
-    "offer_signature": "<exchange_signature from Step 3>",
-    "offer_signature_algorithm": "ed25519",
+    "offer_signature": "<signature from Step 3>",
     "aisystem": {
       "name": "DemoAgent",
       "aisysuse": { "lid": "LIC-DEMO-001" }

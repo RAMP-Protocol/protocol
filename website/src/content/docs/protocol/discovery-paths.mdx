@@ -56,7 +56,7 @@ sequenceDiagram
 | Discover supply | `ResourceQuery` / `ResourceResponse` | **RAMP** wrapping **RAMP Requester** |
 | Offers returned | `Offer` with `Package` + `Pricing` | **RAMP** Pricing + **CoMP** Package |
 | Content attestations | `Offer.attestations` | **RAMP** `ResourceAttestation` (replaces ResourceAttestation) |
-| Access restrictions | `Offer.restrictions` | **RAMP** mapping of **RSL** permits/prohibits |
+| Access restrictions | `Offer.terms[].restrictions` (`repeated Restriction`) | **RAMP** mapping of **RSL** permits/prohibits |
 | Execute transaction | `TransactionRequest` / `TransactionResponse` | **RAMP** (billing_id, signed URL) |
 | Fetch content | Signed URL on CDN | **RAMP** extension (signed URL delivery) |
 | Report usage | `UsageReport` | **RAMP** (mandatory) |
@@ -184,7 +184,7 @@ sequenceDiagram
 | Read rsl.txt | **RSL 1.0** -- terms declaration |
 | Read ramp.json | **RAMP** -- exchange routing |
 | DiscoverResources | Exchange returns Offers with pricing derived from RSL |
-| Offer.restrictions | Maps RSL permits/prohibits to RAMP AccessRestrictions |
+| Offer.terms[].restrictions | Maps RSL permits/prohibits to RAMP `Restriction` (kind `RESTRICTION_KIND_FUNCTION`) on each `LicenseTerm` |
 
 ## Path E: Batch Multi-URL Acquisition
 
@@ -249,7 +249,7 @@ sequenceDiagram
 
 ### OfferAbsenceReason (v1.0)
 
-When an `OfferGroup` has no offers, the `absence_reason` field explains why. This enables agents and Brokers to distinguish "content not in catalog" from "content blocked for your use case" without trial-and-error transactions. Nine reasons are defined: `NOT_IN_CATALOG`, `CONTENT_BLOCKED`, `FUNCTION_PROHIBITED`, `GEO_RESTRICTED`, `USER_CATEGORY_PROHIBITED`, `TEMPORARILY_UNAVAILABLE`, `NOT_AUTHORIZED`, `SCOPE_INSUFFICIENT` (requester's scopes do not cover this resource), `UNKNOWN_CRITICAL_EXTENSION` (consumer encountered `ext_critical` keys it does not recognize).
+When an `OfferGroup` has no offers, the `absence_reason` field explains why. This enables agents and Brokers to distinguish "content not in catalog" from "no offers matched your request" without trial-and-error transactions. Seven reasons are defined: `NOT_IN_CATALOG`, `CONTENT_BLOCKED`, `RESTRICTION_FILTERED`, `TEMPORARILY_UNAVAILABLE`, `NOT_AUTHORIZED`, `SCOPE_INSUFFICIENT` (requester's scopes do not cover this resource), `UNKNOWN_CRITICAL_EXTENSION` (consumer encountered `ext_critical` keys it does not recognize). `RESTRICTION_FILTERED` reports an optional **convenience pre-filter** matched to the restriction attributes the requester volunteered (function / geography / user-type); the filtered axes are listed in `OfferGroup.restriction_filters` using the same `RestrictionKind` vocabulary the terms carry — not an enforcement verdict: restrictions ride on the offer and the agent self-selects (see [Licensing terms](/protocol/licensing-terms/)).
 
 ### RateLimitInfo (v1.0)
 

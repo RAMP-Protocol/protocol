@@ -84,14 +84,14 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/DiscoverR
     "id": "legal-research-agent",
     "domain": "lawfirm.eu",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "http://data.europa.eu/eli/reg/2024/1689/oj"
-    ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
-    "scopes": ["*"],
-    "signature": "ed25519:a4c9f2e8b7d1...",
-    "signature_algorithm": "ed25519"
+    "scopes": ["*"]
   },
+  "uris": [
+    "http://data.europa.eu/eli/reg/2024/1689/oj"
+  ],
+  "acceptable_restrictions": [
+    { "axis": "FUNCTION", "values": ["ai-input"] }
+  ],
   "supported_profiles": ["ramp-legal-v1"],
   "ext": {
     "legal.legislation.language_preference": "en"
@@ -120,15 +120,7 @@ The Broker receives one response from each Exchange. Here are both offers side b
       "offers": [
         {
           "offer_id": "offer-eurlex-aiact-001",
-          "package": {
-            "id": "PKG-EURLEX-REG-2024-1689",
-            "title": "Regulation (EU) 2024/1689 — EU AI Act",
-            "seller": "eur-lex.europa.eu",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_XML"]
-            }
-          },
+          "title": "Regulation (EU) 2024/1689 — EU AI Act",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
             "rate": 0,
@@ -172,16 +164,28 @@ The Broker receives one response from each Exchange. Here are both offers side b
               "signature": "base64-ed25519-opoce-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": [
-              "FUNCTION_AI_INPUT",
-              "FUNCTION_AI_INDEX",
-              "FUNCTION_SEARCH",
-              "FUNCTION_AI_TRAIN"
-            ],
-            "prohibited_functions": []
-          },
+          "terms": [
+            {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": [
+                    "ai-input",
+                    "ai-index",
+                    "search",
+                    "ai-train"
+                  ],
+                  "prohibited": []
+                }
+              ]
+            }
+          ],
           "ext": {
+            "comp.package_id": "PKG-EURLEX-REG-2024-1689",
+            "comp.seller": "eur-lex.europa.eu",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_XML"],
             "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
             "legal.legislation.celex": "32024R1689",
             "legal.legislation.consolidation_status": "original",
@@ -193,8 +197,8 @@ The Broker receives one response from each Exchange. Here are both offers side b
               "ro","sk","sl","sv"
             ]
           },
-          "exchange_signature": "base64-ed25519-eurlex-offer-sig...",
-          "signature_algorithm": "ed25519"
+          "signature": "base64-ed25519-eurlex-offer-sig...",
+          "signature_algorithm": "EdDSA"
         }
       ]
     }
@@ -215,22 +219,14 @@ The Broker receives one response from each Exchange. Here are both offers side b
       "offers": [
         {
           "offer_id": "offer-wk-aiact-001",
-          "package": {
-            "id": "PKG-WK-AIACT-ANNOTATED",
-            "title": "EU AI Act — Annotated & Consolidated (Wolters Kluwer)",
-            "seller": "wolterskluwer.com",
-            "citation": 1,
-            "retrieval": {
-              "type": ["RETRIEVAL_TYPE_HTML"]
-            }
-          },
+          "title": "EU AI Act — Annotated & Consolidated (Wolters Kluwer)",
           "pricing": {
-            "model": "PRICING_MODEL_PER_ACCESS",
+            "model": "PRICING_MODEL_PER_UNIT",
             "rate": 85.00,
             "currency": "EUR",
             "unit_cost": 0.000764,
             "estimated_quantity": 111200,
-            "unit": "tokens"
+            "unit": "accesses"
           },
           "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
           "reporting": {
@@ -267,15 +263,27 @@ The Broker receives one response from each Exchange. Here are both offers side b
               "signature": "base64-ed25519-wk-self-attestation..."
             }
           ],
-          "restrictions": {
-            "permitted_functions": [
-              "FUNCTION_AI_INPUT",
-              "FUNCTION_AI_INDEX",
-              "FUNCTION_SEARCH"
-            ],
-            "prohibited_functions": ["FUNCTION_AI_TRAIN"]
-          },
+          "terms": [
+            {
+              "semantics": "TERM_SEMANTICS_ENUMERATED",
+              "restrictions": [
+                {
+                  "kind": "RESTRICTION_KIND_FUNCTION",
+                  "permitted": [
+                    "ai-input",
+                    "ai-index",
+                    "search"
+                  ],
+                  "prohibited": ["ai-train"]
+                }
+              ]
+            }
+          ],
           "ext": {
+            "comp.package_id": "PKG-WK-AIACT-ANNOTATED",
+            "comp.seller": "wolterskluwer.com",
+            "comp.citation_required": true,
+            "comp.retrieval_type": ["RETRIEVAL_TYPE_HTML"],
             "legal.legislation.eli": "http://data.europa.eu/eli/reg/2024/1689/oj",
             "legal.legislation.celex": "32024R1689",
             "legal.legislation.consolidation_status": "consolidated_to_2026-01-15",
@@ -289,8 +297,8 @@ The Broker receives one response from each Exchange. Here are both offers side b
             "legal.legislation.date_consolidation": "2026-01-15",
             "legal.legislation.languages_available": ["en", "de", "fr", "nl"]
           },
-          "exchange_signature": "base64-ed25519-wk-offer-sig...",
-          "signature_algorithm": "ed25519"
+          "signature": "base64-ed25519-wk-offer-sig...",
+          "signature_algorithm": "EdDSA"
         }
       ]
     }
@@ -303,13 +311,13 @@ The Broker receives one response from each Exchange. Here are both offers side b
 | Dimension | EUR-Lex | Wolters Kluwer |
 |---|---|---|
 | **Price** | FREE | $85.00 |
-| **Pricing model** | `PRICING_MODEL_FREE` | `PRICING_MODEL_PER_ACCESS` |
+| **Pricing model** | `PRICING_MODEL_FREE` | `PRICING_MODEL_PER_UNIT` |
 | **Tokens (est.)** | 89,000 | 111,200 (more due to annotations) |
 | **Mutability** | `STATIC` (original OJ text) | `DYNAMIC` (consolidated, updates with amendments) |
 | **Attestation** | Level 2 -- `publications.europa.eu` (Publications Office) | Level 1 -- self-attested by `wolterskluwer.com` |
 | **Consolidation** | `original` (as published July 2024) | `consolidated_to_2026-01-15` (includes all amendments) |
 | **Annotations** | None | 47 cross-references, expert commentary |
-| **Training permitted** | Yes (public domain, Decision 2011/833/EU) | No (`FUNCTION_AI_TRAIN` prohibited) |
+| **Training permitted** | Yes (public domain, Decision 2011/833/EU) | No (`ai-train` prohibited) |
 | **Format** | Akoma Ntoso XML | HTML |
 | **Languages** | 24 (all EU official) | 4 (en, de, fr, nl) |
 
@@ -334,21 +342,12 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
   "id": "tx-eli-001",
   "offer_id": "offer-eurlex-aiact-001",
   "offer_signature": "base64-ed25519-eurlex-offer-sig...",
-  "offer_signature_algorithm": "ed25519",
   "requester": {
     "id": "legal-research-agent",
     "domain": "lawfirm.eu",
     "type": "REQUESTER_TYPE_AGENT",
-    "uris": [
-      "http://data.europa.eu/eli/reg/2024/1689/oj"
-    ],
-    "intended_use": ["FUNCTION_AI_INPUT"],
-    "scopes": ["*"],
-    "signature": "ed25519:b5d0e3f9c8a2...",
-    "signature_algorithm": "ed25519"
-  },
-  "agent_signature": "ed25519:b5d0e3f9c8a2...",
-  "agent_signature_algorithm": "ed25519"
+    "scopes": ["*"]
+  }
 }
 ```
 
@@ -409,7 +408,7 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ReportUsa
   "transaction_id": "txn-eurlex-001",
   "billing_id": "bill-eurlex-001",
   "usage": {
-    "function": ["FUNCTION_AI_INPUT"],
+    "function": ["ai-input"],
     "consumed_quantity": 87200,
     "consumed_unit": "tokens",
     "displayed_to_user": true,

@@ -17,7 +17,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 - **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers.
 - **RAMPRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
 - **Requester** — universal actor identity (AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH).
-- **Delegation** — token-format-agnostic (JWT default, Biscuit for multi-hop). Scoped, time-limited, spend-capped, attenuatable.
+- **Delegation** — holder-bound JWT by default (RFC 7800 `cnf`/`jkt` + RFC 9421 proof-of-possession; chain of `cnf`-linked JWTs), with `token_format: "biscuit-v3"` as an optional alternative. Scoped, time-limited, spend-capped, narrowable offline.
 - **Scope-based access control** — the Exchange filters its catalog by the requester's scopes; subscriptions are scopes.
 - **SubscriptionQuotaInfo** — proactive, multi-dimensional quota signaling on `Offer` and `TransactionResponse`.
 - **ResourceMutability** — STATIC (hash stable), DYNAMIC (hash drifts), LIVE (streaming, no content at offer time).
@@ -32,7 +32,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 
 ### Multi-hop
 
-- **IntermediaryHop** — schain-inspired forwarding chain for the Agent → Broker → … → Exchange path, with per-hop RFC 9421 signatures and an optional `signature_label` binding a hop to its signature.
+- **Signature-stack forwarding chain** — schain-inspired forwarding for the Agent → Broker → … → Exchange path carried as a stack of RFC 9421 HTTP Message Signatures in HTTP headers. Each forwarding party adds one labeled signature covering the request plus the prior hop's signature; the ordered set of signatures is the chain. (Replaces the in-message `IntermediaryHop` / `ResourceQuery.intermediaries` and the removed `broker_signature`.)
 - **Chain-depth caps** — `RequestConstraints.max_hops` (agent-side) and `WellKnownManifest.max_intermediary_hops` (Exchange-published).
 - **Direct response path** — the terminal Exchange returns directly to the originating agent; intermediaries are forward-path only.
 
@@ -58,11 +58,11 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 
 ### Pricing models
 
-PER_ACCESS, PER_TOKEN, PER_FETCH, SUBSCRIPTION, FREE, PER_PAGE, PER_MINUTE, PER_RECORD, REVENUE_SHARE.
+`PRICING_MODEL` is the charging structure only: FREE, PER_UNIT, FLAT (plus UNSPECIFIED=0, rejected at ingest). The metering basis ("per what") moved to the `Pricing.unit` vocabulary; revenue-share was removed (settlement is off-protocol); attribution/contribution are `Obligation`s.
 
 ### Denial reasons
 
-INVALID_LICENSE, EXPIRED_LICENSE, INSUFFICIENT_BALANCE, RATE_LIMITED, CONTENT_UNAVAILABLE, FUNCTION_PROHIBITED, GEO_RESTRICTED, REPORTING_OVERDUE, OFFER_EXPIRED, SIGNATURE_INVALID, QUOTA_EXCEEDED, DELEGATION_EXPIRED, SCOPE_INSUFFICIENT.
+BILLING_REF_INACTIVE, INSUFFICIENT_BALANCE, RATE_LIMITED, CONTENT_UNAVAILABLE, RESTRICTION_NOT_SATISFIED, REPORTING_OVERDUE, OFFER_EXPIRED, SIGNATURE_INVALID, QUOTA_EXCEEDED, DELEGATION_INVALID, SCOPE_INSUFFICIENT.
 
 ### Extension profiles
 
@@ -72,6 +72,21 @@ Domain-specific metadata carried in `ext` fields:
 - **ramp-academic-v1** — scholarly articles, preprints (CrossRef, OpenAlex, COUNTER 5.1)
 - **ramp-legal-v1** — legislation, case law, patents (ELI, ECLI, Akoma Ntoso)
 - **ramp-comp-v1** — IAB CoMP metadata (Package, Function, Scope) as optional ext fields
+
+### Licensing terms
+
+- **`LicenseTerm`** — universal licensing unit. A resource carries zero or more terms; each term is a complete, self-contained access arrangement (restrictions + quotas + obligations + pricing). Same shape at ingestion (`ResourceEntry.terms`) and emission (`Offer.terms`).
+- **`License`** — identifies the governing license document (`uri`, `id`, `name`, `immutable`, `uri_digest`). `uri_digest` pins the document hash and is required whenever a `License` carries a `uri` (any semantics, mutable or not).
+- **`Restriction`** — constrains one axis: `FUNCTION` (what), `GEOGRAPHY` (where), `USER_TYPE` (who). Tokens are proto-native (`(ramp.v1.vocab_enum)` on the `RestrictionKind` values). restrictions are **binding by default** (`advisory=true` downgrades an unverifiable restriction to non-blocking).
+- **`Quota`** — usage cap that gates term validity, not billing. Metrics are proto-native (`(ramp.v1.vocab)` on `Quota.metric`): `accesses`, `tokens`, `display-words`, `impressions`, `units-manufactured`, and more.
+- **`Obligation`** — post-use behavioral requirement. Replaces the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION` (attribution and contribution are obligations, not payment models). Kinds: `ATTRIBUTION`, `CONTRIBUTION`, `SHARE_ALIKE`, `NETWORK_COPYLEFT`, `NOTICE`, `OTHER`. `Obligation.scope_license` is a `License` (not a bare string), so a `SHARE_ALIKE` target inherits the `uri ⇒ uri_digest` tamper-evidence rule.
+- **`TermSemantics`** — `ENUMERATED` (machine fields are the complete, authoritative term; enforced downstream at reconciliation; Pricing required) vs `REFERENCE_ONLY` (the document at `License.uri` is the authoritative, complete source; machine restrictions/quotas/obligations are optional but, when present, must be accurate and are enforced; Pricing still required).
+- **`PricingMetering`** — `ONLINE` (default), `NONE` (one-time sale, no ongoing tracking), `OFFLINE_SELF_REPORTED` (agent self-reports; Exchange audits). Added as `Pricing.metering` (field 9).
+- `Offer.terms` (field 19) — repeated LicenseTerm from the publisher catalog. `Offer.restrictions` (the flat `AccessRestrictions` field) removed.
+- `ResourceEntry.terms` (field 13) — publisher-declared terms pushed via `CatalogService.PushResources`.
+- `PushResourcesResponse.warnings` (field 3) — non-fatal ingestion warnings (e.g., unrecognized vocab token).
+- `PRICING_MODEL_ATTRIBUTION` (6) and `PRICING_MODEL_CONTRIBUTION` (7) **removed** from `PricingModel`. Migrate to `Obligation.kind = ATTRIBUTION / CONTRIBUTION` in a `LicenseTerm`.
+- **Wire-enforced validation** — licensing presence and coherence rules are now expressed as protovalidate CEL embedded in the descriptors (not prose-only): pricing required on every term, `REFERENCE_ONLY ⇒ license.uri`, `uri ⇒ uri_digest`, the required discriminator enums reject `UNSPECIFIED` (`LicenseTerm.semantics`, `Pricing.model`, `Restriction.kind`, `Obligation.kind`, `Obligation.trigger`, `Quota.window`), one restriction per kind, permitted/prohibited disjoint, and token-format rules. A `conformance/` test suite evaluates the CEL against valid/invalid instances and validates the doc examples, wired into CI; a guard derives the discriminator set from the proto (each such enum's zero value is marked "rejected at ingest") and fails if any field of one is left unenforced, so the set can't silently drift. Enforced and tested in the Go SDK today; the TypeScript SDK is generated (protovalidate-es not yet wired) and Python is a tracked follow-up.
 
 ### Wire format
 

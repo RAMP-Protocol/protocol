@@ -77,8 +77,8 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 **Countermeasure (protocol)**: Rate limiting on DiscoverResources. Exchange tracks query-to-transaction ratio per agent.
 
 ### T13: Credential sharing / proxy laundering
-**Attack**: One license ID shared across organizations.
-**Countermeasure (protocol)**: Exchange monitors usage patterns (IP diversity, volume spikes). Ed25519 agent signatures bind requests to specific key pairs.
+**Attack**: One billing reference shared across organizations.
+**Countermeasure (protocol)**: Anti-abuse is anchored on the **verified requester identity** (domain/key), not on the self-supplied `billing_ref` (an opaque billing handle that proves no entitlement). Exchange monitors usage patterns (IP diversity, volume spikes). Ed25519 agent signatures bind requests to specific key pairs; `billing_ref` only attributes cost.
 
 ## 3. Provider-Side Threats (Dishonest Provider)
 
@@ -110,7 +110,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T20: Kickback-driven offer selection
 **Attack**: Broker always routes to a specific Exchange regardless of pricing.
-**Countermeasure (protocol)**: Agent can bypass Broker and query Exchanges directly. `broker_signature` provides non-repudiation.
+**Countermeasure (protocol)**: Agent can bypass Broker and query Exchanges directly. Each forwarding party adds its own RFC 9421 HTTP Message Signature to the request — covering the request plus the prior hop's signature — so the ordered stack of signatures in the HTTP headers is a tamper-evident forwarding chain that provides non-repudiation. Reordering, dropping, or inserting a hop breaks a downstream signature, and the Exchange verifies the whole stack.
 
 ### T21: Query intelligence harvesting
 **Attack**: Broker logs every DiscoverResources query, sells the data.
@@ -136,7 +136,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T26: DiscoverResources flooding (DoS)
 **Attack**: Flood DiscoverResources to exhaust Exchange resources.
-**Countermeasure (protocol)**: Per-partner rate limiting via license ID validation. Anonymous queries rejected.
+**Countermeasure (protocol)**: Per-partner rate limiting keyed on the **verified requester identity** (RFC 9421 request signature — domain/key), not on the self-supplied `billing_ref`. Anonymous queries rejected.
 
 ## 6. Systemic / Arbitrage Threats
 
@@ -169,8 +169,8 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 ```
 Line 1: Protocol-level prevention
   Signed offers, content hashes, agent-bound URLs, idempotency keys,
-  Biscuit append-only attenuation, Ed25519 intermediary chain verification,
-  subscription-level quota tracking
+  holder-bound JWT delegation chain (cnf), RFC 9421 forwarding-chain verification
+  (stack of per-hop HTTP Message Signatures), subscription-level quota tracking
   Makes attacks structurally impossible
 
 Line 2: Three-sided reconciliation
@@ -214,35 +214,57 @@ Line 3: Legal/contractual enforcement
 
 ## 8. Delegation and Authorization Threats
 
-### T-DEL-1: Biscuit token theft
+### T-DEL-1: Delegation token theft
 
-**Attack**: Attacker steals a delegation token (e.g., via log exfiltration, memory dump, or network interception) and uses it to access resources within the token's scope, time, and spend limits.
-**Countermeasure (protocol)**: Short TTLs (hours, not days). Spend caps via `max_spend` and access caps via `max_accesses` bound the blast radius. Optional `revocation_uri` checking for high-value transactions. Even with a stolen token, damage is bounded by the token's scope + time window + spend cap.
+**Attack**: Attacker steals a delegation token (e.g., via log exfiltration, memory dump, or network interception) and attempts to use it to access resources within the token's scope.
+**Countermeasure (protocol)**: **Holder binding neutralizes theft.** A delegation token is bound to the holder's key (via `cnf.jkt` for the default JWT; sealed/attenuated to the key for the optional `biscuit-v3` profile), and verification requires the key that signs the HTTP request ([RFC 9421](/protocol/authentication/#request-signatures)) to equal the bound key (see [Verification](/protocol/authentication/#verification) step 3). A thief who steals the token bytes but not the private signing key cannot produce a valid request — the token is **not bearer-usable**, so theft alone grants nothing. Spend caps (`max_spend_cents`), access caps (`max_accesses`), short TTLs, and optional `revocation_uri` checking are **defense-in-depth** that bound the blast radius in the residual case where the holder's signing key is *also* compromised. This is why T-DEL-1 is listed as structurally preventable rather than merely mitigated.
 
 ### T-DEL-2: Delegation scope escalation
 
-**Attack**: Attacker attempts to widen permissions by manipulating Biscuit attenuation blocks (e.g., removing a restriction to escalate from `ai-search` to `ai-train`).
-**Countermeasure (protocol)**: **Biscuit's cryptographic guarantee -- attenuation is append-only.** Each block is Ed25519 signed. Blocks can only narrow permissions, never widen. Any attempt to remove or modify an existing block invalidates the entire token's signature chain. Exchange verifies the full block chain before granting access.
+**Attack**: Attacker attempts to widen permissions by manipulating the delegation chain (e.g., editing a child JWT to escalate from `ai-search` to `ai-train`, or splicing in a forged link).
+**Countermeasure (protocol)**: **The delegation chain narrows only, and is cryptographically linked.** Each delegation JWT is Ed25519-signed, and a child's `scope` MUST be covered by its parent's (verified) — it can narrow, never widen. The **chain-linkage invariant** requires each JWT to be signed by the key the parent named in `cnf`; editing or splicing a link breaks signature verification against the upstream `cnf`. The Exchange verifies the full chain (and the request-signing key against the final `cnf.jkt`) before granting access.
 
 ### T-DEL-3: Revocation bypass
 
 **Attack**: Principal revokes a delegation but cached or stored tokens continue to work until their `expires_at` timestamp.
 **Countermeasure (protocol)**: Short `expires_at` (2-4 hours for standard access) limits the window of continued access. For high-value transactions, Exchange checks `revocation_uri` in real time before fulfillment. **Trade-off**: revocation checking adds latency (~50ms) so is only used for transactions above a configurable value threshold.
 
-### T-DEL-4: Intermediary chain forgery
+### T-DEL-4: Forwarding chain forgery
 
-**Attack**: Attacker inserts a fake `IntermediaryHop` into the delegation chain, claiming to be a trusted Broker to gain access or inject misleading provenance.
-**Countermeasure (protocol)**: **Each IntermediaryHop is Ed25519 signed.** Exchange verifies every hop's signature against the intermediary's published public key at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`). A forged hop fails signature verification, causing the entire request to be rejected.
+**Attack**: Attacker inserts a fake hop into the forwarding chain, claiming to be a trusted Broker to gain access or inject misleading provenance — or reorders or drops an existing hop.
+**Countermeasure (protocol)**: **The forwarding chain is a stack of RFC 9421 HTTP Message Signatures (Ed25519).** Each forwarding party adds one labeled signature covering the request plus the prior hop's signature, so the chain is tamper-evident. Exchange verifies every signature on the request against the signer's published public key at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, selected by `keyid`) and verifies the whole stack. A forged, reordered, dropped, or inserted hop breaks a downstream signature, causing the entire request to be rejected.
 
 ### T-DEL-5: Scope pollution
 
-**Attack**: Agent declares scopes it doesn't actually have (no Biscuit to prove entitlement), hoping the Exchange trusts the declared scopes and returns premium content.
-**Countermeasure (protocol)**: Exchange treats `Requester.scopes` as an **upper bound for catalog filtering only**. Actual entitlements are verified via Biscuit token at transaction time. Without a valid Biscuit, the Exchange applies its default access policy (typically public resources only). Declared scopes without a matching Biscuit grant no additional access.
+**Attack**: Agent declares scopes it doesn't actually have (no delegation token to prove entitlement), hoping the Exchange trusts the declared scopes and returns premium content.
+**Countermeasure (protocol)**: Exchange treats `Requester.scopes` as an **upper bound for catalog filtering only**. Actual entitlements are verified via the delegation JWT at transaction time. Without a valid delegation token, the Exchange applies its default access policy (typically public resources only). Declared scopes without a matching delegation grant no additional access.
 
 ### T-DEL-6: Quota gaming via multiple tokens
 
 **Attack**: Agent obtains multiple delegation tokens for the same subscription (e.g., by requesting new delegations from different intermediaries) to exceed per-subscription quotas.
 **Countermeasure (protocol)**: **Exchange tracks quotas by `subscription_id`, not by delegation token.** All tokens referencing the same subscription share one counter. Multiple tokens for the same subscription do not multiply the quota. Rate limiting is applied at the subscription level regardless of how many delegation tokens reference it.
+
+## 9. Licensing-Layer Threats
+
+### T-LIC-1: SSRF / phishing via `License.uri`
+
+**Attack**: A malicious publisher pushes a term whose `License.uri` points at an internal address — `http://169.254.169.254/latest/meta-data/…` (cloud metadata), `http://localhost:6379/`, or `file:///etc/passwd`. An agent platform that auto-fetches the document to "read the license before use" (REFERENCE_ONLY requires this) issues a server-side request into its own infrastructure — leaking cloud credentials, reaching internal services, or reading local files. A variant points `uri` at attacker-controlled HTTPS to harvest the fetcher's identity/IP or serve misleading terms.
+**Countermeasure (protocol)**: `License.uri` is deliberately never *rejected* at ingest (data-labels TDL identifiers use non-URL schemes) — but "do not reject" is not "blindly fetch." A consumer that resolves `uri` MUST: (a) allowlist schemes (`https` + known TDL schemes); (b) block loopback, link-local, private, and cloud-metadata IP ranges, resolving-then-checking to defeat DNS rebinding; (c) fetch client-side through an egress proxy, never from the Exchange's privileged network; (d) treat the fetched bytes as untrusted content. The Exchange applies the same rules when it fetches to pin `uri_digest` (T-LIC-4).
+
+### T-LIC-2: Silent restriction downgrade
+
+**Attack**: A publisher forbids training (`Restriction{kind: FUNCTION, prohibited: ["ai-train"]}`) but the consumer does not recognize a token, or the publisher forgot to mark the restriction binding. The consumer treats it as advisory and proceeds — silent infringement with plausible deniability.
+**Countermeasure (protocol)**: `Restriction.advisory` is **fail-closed by default** (it inverts the COSE-`crit` opt-in). A restriction is binding unless `advisory = true`; a consumer that cannot evaluate every token in a binding restriction MUST decline the term. A forgotten flag therefore fails *safe* — publishers opt into leniency explicitly and never lose protection by omission.
+
+### T-LIC-3: Scope-gating escalation
+
+**Attack**: Term visibility is gated by delegation scope coverage (`LicenseTerm.scopes`, AND-semantics, empty = public). Two failure modes: (a) a publisher forgets `scopes` on a premium term → it defaults to public and leaks for free; (b) two implementations match scopes differently — naive prefix matching lets `sub:` cover `subscription:premium`, or `dist:*` is read as covering `dist:US:internal` on one Exchange but not another → an agent's grant is read as covering a term it should not.
+**Countermeasure (protocol)**: Scope matching follows the single normative rule defined in [Scope Matching](/protocol/authentication/#scope-matching) (M9), and the **same rule applies to both** `Requester`/delegation scopes **and** `LicenseTerm.scopes` — there is exactly one matching algorithm: matching is **segment-wise** (`:`-delimited), never substring/prefix; a granted `*` segment matches one level and a **terminal `*` matches all remaining segments**; there is no implicit prefix match and a grant narrower than the requirement does not cover it. This is the authoritative string-segment definition. An Exchange MAY implement coverage with **Biscuit authorization (Datalog)** instead of literal string comparison, but the Datalog rules MUST produce results **identical** to the segment-wise definition — Datalog is a conformant implementation, not a second, divergent rule. So the example failures (`sub:` covering `subscription:premium`, or one Exchange reading `dist:*` as covering `dist:US:internal` and another not) are excluded by construction. `empty = public` stays the explicit, documented default; backfilling a sentinel scope (e.g. `r:all`) is **not** required — it only relocates the "forgot to set it" failure and forces every publisher to issue an extra scope grant, without adding enforcement. (cf. OAuth 2.0 and AWS IAM: exact-match with explicitly-defined wildcard expansion, no implicit hierarchy.)
+
+### T-LIC-4: Referenced-document swap
+
+**Attack**: A term carries a `License.uri`; the agent fetches and trusts the document. The publisher (or a MitM on the fetch) later changes the bytes at `uri` — which is just a URL — so the agent's understanding of the terms silently diverges from what was offered. `immutable: true` makes this worse (the agent caches and stops re-checking), but a mutable `uri` is swappable too.
+**Countermeasure (protocol)**: `License.uri_digest` pins the document as `method:hexdigest` and is **required whenever `uri` is present** — any semantics, mutable or not. The Exchange pins it at ingestion (computing it over the safely-fetched document per T-LIC-1, or accepting a publisher-supplied value for non-HTTP schemes). Because the entire Offer is signed, the digest is tamper-evident; the agent verifies the bytes it fetches against it and refuses on mismatch.
 
 ## Comparison to Ad-Tech Fixes
 

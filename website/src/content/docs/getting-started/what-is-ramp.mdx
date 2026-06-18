@@ -91,19 +91,19 @@ Three v1 profiles exist:
 
 ### Identity and authorization
 
-Every request carries a `Requester` message — a universal actor identity with fields for `id`, `domain`, `type`, `scopes`, and an Ed25519 `signature`. The Requester is not limited to AI systems: any entity that needs metered access — autonomous agents, human-operated copilots, enterprise service accounts, research pipelines — uses the same identity model.
+Every request carries a `Requester` message — a universal actor identity with fields for `id`, `domain`, `type`, and `scopes` (request authentication is a separate RFC 9421 HTTP Message Signature in the headers, not a field on `Requester`). The Requester is not limited to AI systems: any entity that needs metered access — autonomous agents, human-operated copilots, enterprise service accounts, research pipelines — uses the same identity model.
 
 **RequesterType** classifies the caller: `AGENT` (autonomous), `HUMAN_TOOL` (copilot), `SERVICE` (enterprise pipeline), `DELEGATED` (acting on behalf of another), `RESEARCH` (batch data collection).
 
-**Scopes** filter what the Requester can access. Examples: `subscription:bloomberg-2026`, `credit:read`, `academic:*`, `*` (unrestricted). The Exchange returns only resources matching the declared scopes.
+**Scopes** filter what the Requester can access. Examples: `subscription:marketdata-2026`, `credit:read`, `academic:*`, `*` (unrestricted). The Exchange returns only resources matching the declared scopes.
 
-**Delegation with Biscuit tokens** enables offline-verifiable, attenuable authorization. A principal (organization, IAM, upstream agent) issues a Biscuit token. Each holder in the chain can narrow permissions — restrict scopes, lower spend caps, shorten expiry — but can never widen them. Zero round trips to the original issuer, regardless of how many delegation levels deep.
+**Delegation with JWTs** enables offline-verifiable, narrowable authorization. A principal (organization, IAM, upstream agent) issues a delegation JWT. Each holder in the chain can narrow permissions by issuing a child delegation JWT — restrict scopes, lower spend caps, shorten expiry — but can never widen them. Zero round trips to the original issuer, regardless of how many delegation levels deep.
 
-**IntermediaryHop** records request provenance when a request passes through intermediaries (e.g., agent to broker to Exchange). Each hop signs the request with its own Ed25519 key, creating a verifiable chain modeled after OpenRTB's supply chain object.
+**Multi-hop forwarding** records request provenance when a request passes through intermediaries (e.g., agent to broker to Exchange) as a stack of RFC 9421 HTTP Message Signatures in the HTTP headers. Each forwarding party adds one labeled signature covering the request plus the prior hop's signature; the ordered set is the forwarding chain. The Exchange verifies the whole stack and counts hops against `max_hops` / `max_intermediary_hops`.
 
 **`ext_critical`** flags extension keys that an Exchange MUST understand to process the request. See [Extension Profiles](/protocol/extension-profiles/) for details.
 
-For the full identity model — key lookup, Biscuit attenuation examples, scope-based catalog filtering, and denial reasons — see [Authentication](/protocol/authentication/).
+For the full identity model — key lookup, child delegation JWT examples, scope-based catalog filtering, and denial reasons — see [Authentication](/protocol/authentication/).
 
 ### Cryptographic attestation
 

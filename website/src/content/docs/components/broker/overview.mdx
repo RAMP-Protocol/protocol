@@ -72,7 +72,7 @@ func (o *Broker) HandleRequest(ctx context.Context, req *rampv1.RAMPRequest) (*r
     // 3. Select best offer(s).
     //    Single-URI: select one winning offer.
     //    Multi-URI (batch): select best offer per URI, check total against budget.
-    uris := req.Aisystem.Aisysuse.Uri
+    uris := req.Uris
     if len(uris) > 1 {
         return o.handleBatchRequest(ctx, req, responses)
     }
@@ -97,38 +97,37 @@ func (o *Broker) HandleRequest(ctx context.Context, req *rampv1.RAMPRequest) (*r
 }
 ```
 
-## Request Signing and Intermediary Chain
+## Request Signing and the Forwarding Signature Stack
 
-RAMP uses a two-layer signing model: the **Requester signature** proves who originated the request, and the **intermediary chain** proves which intermediaries forwarded it.
+RAMP uses a two-layer signing model: the **agent's request signature** proves who originated the request, and the **forwarding signature stack** proves which intermediaries forwarded it.
 
-### Requester Signature
+### Request Authentication
 
-The `Requester` message carries an Ed25519 signature over `(id, domain, uris, scopes)`. This proves that the entity claiming to be `requester.id` at `requester.domain` actually authored the request. The Exchange verifies this signature against the public key published at `{requester.domain}/.well-known/ramp.json`.
+The `Requester` message carries identity and entitlements only (`id`, `domain`, `type`, `scopes`, optional `delegation`) — it has **no** signature field. The request is authenticated by an RFC 9421 HTTP Message Signature (alg=ed25519) computed over the whole HTTP request and carried in the headers. The Exchange verifies it against the public key published at `{requester.domain}/.well-known/ramp.json`.
 
-The Broker passes `Requester` through unchanged -- it never modifies the requester's identity or signature.
+The Broker passes `Requester` through unchanged -- it never modifies the requester's identity, scopes, or delegation -- and adds its own forwarding signature in the headers (see below).
 
-### Intermediary Chain (schain-inspired)
+### Forwarding Signature Stack (RFC 9421)
 
-When the Broker forwards a request, it appends a signed `IntermediaryHop` to the `ResourceQuery.intermediaries` chain. Each hop records:
+Multi-hop forwarding is carried entirely in the HTTP headers, not in the message body. Each forwarding party adds one labeled RFC 9421 HTTP Message Signature covering the request **and the prior hop's signature**. The ordered set of these labeled signatures *is* the forwarding chain -- there is no `intermediaries` field on `ResourceQuery`.
 
-- **`domain`** -- the intermediary's canonical domain (for public key lookup)
-- **`id`** -- the intermediary's identifier
-- **`forwarded_at`** -- timestamp of when the intermediary forwarded the request
-- **`signature`** -- Ed25519 signature over the request payload at this hop
+Each labeled signature, via its RFC 9421 signature parameters, effectively records:
 
-This chain is modeled after OpenRTB schain (Supply Chain Object). When the agent queries an Exchange directly, `intermediaries` is empty. When the request passes through a Broker, it contains one hop.
+- **`keyid`** -- the intermediary's canonical domain / `kid` (for public key lookup)
+- **`created`** -- timestamp of when the intermediary forwarded the request
+- the covered components -- the request plus the preceding hop's `Signature` value, chaining the hops together
+
+When the agent queries an Exchange directly, there are no forwarding signatures. When the request passes through a Broker, the Broker adds one labeled signature to the stack.
 
 ```go
-// Broker appends a signed hop when forwarding.
-func (o *Broker) signHop(query *rampv1.ResourceQuery) {
-    hop := &rampv1.IntermediaryHop{
-        Domain:      o.domain,                     // e.g., "broker.example.com"
-        Id:          o.id,
-        ForwardedAt: timestamppb.Now(),
-        Signature:   o.signPayload(query),          // Ed25519 over the query payload
-        SignatureAlgorithm: "ed25519",
-    }
-    query.Intermediaries = append(query.Intermediaries, hop)
+// Broker adds one labeled RFC 9421 signature to the outgoing request headers when forwarding.
+func (o *Broker) signHop(req *http.Request, priorSig string) {
+    // Covers the request line/headers AND the prior hop's Signature value,
+    // chaining this hop to the one before it.
+    label := o.domain // e.g., "broker.example.com"
+    sigInput, sig := o.rfc9421Sign(req, priorSig, label) // Ed25519, keyid=o.kid, created=now
+    req.Header.Add("Signature-Input", sigInput)
+    req.Header.Add("Signature", sig)
 }
 ```
 
@@ -137,9 +136,9 @@ func (o *Broker) signHop(query *rampv1.ResourceQuery) {
 The Exchange verifies both layers:
 
 1. **Requester signature** -- verified against the public key at `{requester.domain}/.well-known/ramp.json`
-2. **Each intermediary hop signature** -- verified against the public key at `{hop.domain}/.well-known/ramp.json`
+2. **The forwarding signature stack** -- each labeled RFC 9421 signature is verified against the public key at the forwarding party's domain (`{keyid-domain}/.well-known/ramp.json`), and the chained coverage is checked hop-by-hop.
 
-Both must pass. This replaces the earlier flat `agent_signature` + `broker_signature` model with a chain that generalizes to multiple intermediaries.
+All signatures must pass. The Exchange counts the number of forwarding hops in the stack against `max_hops` / `max_intermediary_hops` and rejects requests that exceed the limit.
 
 The Broker publishes its keys in `public_keys` (inline RFC 7517 Ed25519 JWKs, selected by `kid`) at `{domain}/.well-known/ramp.json` (same manifest format as agents, `role=ROLE_AGENT`). This allows any Exchange to verify the Broker's identity without prior registration.
 
@@ -171,20 +170,22 @@ The Broker's Exchange Registry contains three Exchanges:
 
 The Broker queries only **academic-mp.example.com** (profile match) and **general-mp.example.com** (no profile restriction -- always included). It skips **news-mp.example.com** (no matching profile).
 
-## Scope Forwarding, Token Attenuation, and Quota Aggregation
+## Scope Forwarding, Token Narrowing, and Quota Aggregation
 
 ### Scope Forwarding
 
 The Broker forwards `Requester.scopes` to every Exchange it queries. Scopes control what the requester can access -- the Exchange filters its catalog to resources matching these scopes. The Broker does not modify scopes; it passes them through as-is.
 
-### Biscuit Token Attenuation
+### Delegation Narrowing (only when the Broker is a delegated holder)
 
-When the `Requester.delegation` carries a Biscuit authorization token, the Broker MAY attenuate it before forwarding. Biscuit tokens support append-only attenuation -- the holder can add restrictions (narrower scope, lower spend cap, fewer URIs) without going back to the issuer. This lets the Broker narrow a broad delegation for a specific Exchange:
+By **default the Broker is a pure relay**: it passes `Requester.delegation` through unchanged and the **agent remains the holder** — the agent's RFC 9421 request signature is what the Exchange matches against the delegation's `cnf` (the Broker's hop signature is provenance only). A relay cannot narrow a delegation it does not hold: only a key named in the chain's `cnf` can issue a valid child JWT.
 
-- Original delegation: `scope: academic:*, max_spend: $500`
-- Attenuated for Exchange A: `scope: academic:read, max_spend: $100, uris: doi:10.*`
+Narrowing is therefore possible **only when the agent has explicitly delegated to the Broker's key** (the Broker is the terminal holder in the chain). In that case the Broker issues a child JWT — `scope ⊆ parent`, bound (`cnf.jkt`) to the Broker's key — and **signs the request itself**, so the binding now matches the Broker's signature:
 
-The attenuated token is a new signed block appended to the Biscuit chain. The Exchange verifies the full chain back to the original principal.
+- Original delegation (agent → Broker): `scope: academic:*, max_spend_cents: 50000`
+- Narrowed for Exchange A: `scope: academic:read, max_spend_cents: 10000`
+
+The child JWT is signed by the key its parent named in `cnf` (`scope ⊆ parent`); the Exchange verifies the full JWT chain back to the original principal. This is an opt-in delegation step, not the default forwarding behavior.
 
 ### SubscriptionQuotaInfo Aggregation
 
@@ -196,13 +197,11 @@ Agents can discover content through the Broker in three ways, depending on how m
 
 ### 1. Specific URIs
 
-The agent already knows which resources it wants. It sends `Requester.uris` with one or more specific content identifiers (DOIs, URLs, etc.). The Broker forwards these as a `ResourceQuery` to each Exchange and collects offers.
+The agent already knows which resources it wants. It sends `RAMPRequest.uris` with one or more specific content identifiers (DOIs, URLs, etc.). The Broker forwards these as a `ResourceQuery` to each Exchange and collects offers.
 
 ```json
 {
-  "requester": {
-    "uris": ["doi:10.1038/s41586-024-07386-0", "doi:10.1126/science.adq3854"]
-  }
+  "uris": ["doi:10.1038/s41586-024-07386-0", "doi:10.1126/science.adq3854"]
 }
 ```
 
@@ -242,9 +241,7 @@ All three modes can be combined in a single request. For example, an agent can s
 
 ```json
 {
-  "requester": {
-    "uris": ["doi:10.1038/s41586-024-07386-0"]
-  },
+  "uris": ["doi:10.1038/s41586-024-07386-0"],
   "query": "Related studies on CRISPR delivery mechanisms",
   "search_filters": {
     "academic.year_min": 2022
@@ -304,7 +301,7 @@ sequenceDiagram
         MPB-->>Orch: ResourceResponse (2 offers)
     end
 
-    Note over Orch: Selection Engine:<br/>5 offers received<br/>4 pass AccessRestrictions<br/>3 pass RequestConstraints<br/>2 after dedup (1 AP article from both)<br/>Rank by unit_cost: MP-A offer wins
+    Note over Orch: Selection Engine:<br/>5 offers received<br/>4 expose a term the agent can honour (Offer.terms[].restrictions)<br/>3 pass RequestConstraints<br/>2 after dedup (1 AP article from both)<br/>Rank by unit_cost: MP-A offer wins
 
     Note over Orch: Budget Tracker:<br/>Session spent $0.12 of $1.00<br/>This offer: $0.05<br/>Approved
 
@@ -334,7 +331,7 @@ sequenceDiagram
 | **Same protocol, transparent proxy** | The Exchange cannot distinguish Broker-mediated requests from direct agent requests. No special Exchange support needed. |
 | **Signed offer pass-through** | Exchange signatures cover pricing fields. The Broker cannot inflate prices without invalidating the signature. |
 | **Advisory budget enforcement** | The Broker pre-filters transactions by budget, but the Exchange is the authoritative enforcement point. No overspend occurs because the Exchange is the gatekeeper. |
-| **Ed25519 + intermediary chain** | Requester signs (id, domain, uris, scopes); Broker appends a signed `IntermediaryHop`. Exchange verifies both layers. Public keys discoverable via `public_keys` in `.well-known/ramp.json`. |
+| **Ed25519 + forwarding signature stack** | Requester signs the HTTP request with an RFC 9421 HTTP Message Signature (covering `@method`/`@target-uri`/`content-digest`); Broker adds one labeled RFC 9421 HTTP Message Signature (covering the request plus the prior hop's signature) to the header stack. Exchange verifies both layers and counts hops against `max_hops` / `max_intermediary_hops`. Public keys discoverable via `public_keys` in `.well-known/ramp.json`. |
 | **Partial results are normal** | If 3 of 5 Exchanges respond within the deadline, the Broker proceeds with 3 responses. Availability of any individual Exchange does not block the system. |
 
 ## Go Module Structure

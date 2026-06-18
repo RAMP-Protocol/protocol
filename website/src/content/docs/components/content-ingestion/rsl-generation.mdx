@@ -90,16 +90,14 @@ func (g *RSLGenerator) Generate(
 
 ### PricingModel to RSL Payment Type
 
+`PricingModel` is the charging structure only (`FREE`, `PER_UNIT`, `FLAT`). The metering basis ("per what") is the open `Pricing.unit` vocabulary, which maps to the RSL payment type granularity.
+
 | RAMP PricingModel | RSL Payment Type |
 |---|---|
-| `PricingModelPerArticle` | `purchase` |
-| `PricingModelPerToken` | `use` |
-| `PricingModelPerCrawl` | `crawl` |
-| `PricingModelSubscription` | `subscription` |
+| `PricingModelFlat` | `purchase` |
+| `PricingModelPerUnit` (`unit: "tokens"`) | `use` |
+| `PricingModelPerUnit` (`unit: "accesses"`) | `crawl` |
 | `PricingModelFree` | `free` |
-| `PricingModelAttribution` | `attribution` |
-| `PricingModelContribution` | `contribution` |
-| `PricingModelTraining` | `training` |
 
 ### CoMP Functions to RSL Usage Types
 
@@ -114,7 +112,7 @@ func (g *RSLGenerator) Generate(
 
 ## Generated RSL Example
 
-For a tenant with defaults "per_article, $0.05, permits ai-input + search, prohibits ai-train":
+For a tenant with defaults "flat, $0.05, permits ai-input + search, prohibits ai-train":
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -193,14 +191,9 @@ The formal schema definition for the RAMP sitemap namespace extension:
 
   <xs:simpleType name="pricingModelType">
     <xs:restriction base="xs:string">
-      <xs:enumeration value="per_article"/>
-      <xs:enumeration value="per_token"/>
-      <xs:enumeration value="per_crawl"/>
-      <xs:enumeration value="subscription"/>
       <xs:enumeration value="free"/>
-      <xs:enumeration value="attribution"/>
-      <xs:enumeration value="contribution"/>
-      <xs:enumeration value="training"/>
+      <xs:enumeration value="per_unit"/>
+      <xs:enumeration value="flat"/>
     </xs:restriction>
   </xs:simpleType>
 

@@ -16,6 +16,8 @@ option go_package = "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "buf/validate/validate.proto";
+import "ramp/v1/vocab.proto";
 
 // ============================================================================
 // RAMP Authentication Architecture
@@ -108,6 +110,28 @@ service ExchangeService {
 // Resource Discovery (Steps 2-3)
 // ============================================================================
 
+// AcceptableRestriction — the limits a query operates within on one restriction
+// axis, expressed in the same RestrictionKind vocabulary that terms use. The
+// Exchange/Broker MAY pre-select offers whose term restrictions fall within
+// these as a convenience (see Restriction); it is NOT enforcement — the agent
+// self-selects and bears compliance.
+message AcceptableRestriction {
+  // Which axis (same enum as Restriction.kind): FUNCTION / GEOGRAPHY /
+  // USER_TYPE / OTHER.
+  RestrictionKind axis = 1;
+
+  // The values the query operates within on this axis — same token vocabulary
+  // as the terms (e.g. FUNCTION ["ai-train"], GEOGRAPHY ["US", "EU"]).
+  repeated string values = 2 [
+    (buf.validate.field).repeated.max_items = 64,
+    (buf.validate.field).cel = {
+      id: "acceptable_restriction.values.format"
+      message: "each value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
+      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
+    }
+  ];
+}
+
 // ResourceQuery — Query an Exchange for available resource offers.
 //
 // Sent by a Broker or directly by an AI agent.
@@ -121,16 +145,29 @@ message ResourceQuery {
   string id = 2;
 
   // Requester identity — who is making this request, what scopes they have,
-  // and optional delegation chain. Replaces CoMP AISystem.
+  // and optional delegation chain.
   Requester requester = 3;
+
+  // Resource URIs being queried.
+  repeated string uris = 8 [(buf.validate.field).repeated.max_items = 256];
+
+  // The limits this query operates within, per restriction axis (function,
+  // geography, user-type, …) — see AcceptableRestriction. Advisory selection
+  // inputs the Exchange/Broker MAY pre-select offers against (convenience, not
+  // enforcement); the agent self-selects and bears compliance.
+  repeated AcceptableRestriction acceptable_restrictions = 9;
 
   // Original RAMP request ID from Step 1, for traceability.
   optional string request_id = 4;
 
-  // Intermediary forwarding chain (Agent → Broker → Exchange).
-  // Each hop is signed, proving the request path is legitimate.
-  // Empty when agent queries Exchange directly.
-  repeated IntermediaryHop intermediaries = 5;
+  // Multi-hop forwarding (Agent → Broker → … → Exchange) is carried in the HTTP
+  // layer, not in this message: each forwarding party adds its own labeled
+  // RFC 9421 HTTP Message Signature (Signature / Signature-Input), and each
+  // signature covers the request plus the prior hop's signature — so the ordered
+  // set of signatures IS the forwarding chain, tamper-evident and order-bound.
+  // The Exchange resolves each hop's key (keyid → domain → /.well-known/ramp.json),
+  // verifies every signature, and enforces RequestConstraints.max_hops /
+  // WellKnownManifest.max_intermediary_hops by counting them. (Field 5 unused.)
 
   // Maximum time the caller will wait for a response.
   // Exchange SHOULD prioritize speed over completeness when tight.
@@ -203,7 +240,7 @@ message ResourceResponse {
 // Enables multi-URI batch queries where the caller needs to know
 // which offers correspond to which requested resource.
 message OfferGroup {
-  // The URI this group of offers is for (echoed from ResourceQuery.requester.uris).
+  // The URI this group of offers is for (echoed from ResourceQuery.uris).
   string uri = 1;
 
   // Zero or more offers for this URI. Empty = resource not available.
@@ -224,11 +261,16 @@ message OfferGroup {
   // trial-and-error transactions. Analogous to OpenRTB nbr codes and
   // Shutterstock per-item error metadata in batch responses.
   optional OfferAbsenceReason absence_reason = 4;
+
+  // When absence_reason = RESTRICTION_FILTERED, the restriction axes that drove
+  // the convenience pre-filter, in the same RestrictionKind vocabulary the terms
+  // use (e.g. [GEOGRAPHY] when the requester's stated geography matched no term).
+  // Advisory diagnostics, not an enforcement verdict.
+  repeated RestrictionKind restriction_filters = 5;
 }
 
 // DiscoveryMethod — How the Broker discovered this resource URI.
-// v1 extension point for future discovery integration (search engines,
-// resource recommendation, etc.). Does not affect transaction flow.
+// Metadata for the agent; does not affect transaction flow.
 enum DiscoveryMethod {
   DISCOVERY_METHOD_UNSPECIFIED = 0;
   // URI was requested by the agent directly or found via Exchange query.
@@ -251,28 +293,28 @@ enum OfferAbsenceReason {
   OFFER_ABSENCE_REASON_NOT_IN_CATALOG = 1;
   // Resource exists but has a BLOCKED access policy (provider opted out of AI access).
   OFFER_ABSENCE_REASON_CONTENT_BLOCKED = 2;
-  // Resource exists but the requested CoMP function is prohibited by provider terms.
-  OFFER_ABSENCE_REASON_FUNCTION_PROHIBITED = 3;
-  // Resource exists but the requester's geography is restricted.
-  OFFER_ABSENCE_REASON_GEO_RESTRICTED = 4;
-  // Resource exists but the requester's user category is not permitted.
-  OFFER_ABSENCE_REASON_USER_CATEGORY_PROHIBITED = 5;
+  // Resource exists but its offers were pre-filtered out for one or more
+  // restriction axes the requester stated (a convenience filter matched to the
+  // query, not an enforcement verdict — see Restriction). The filtered axes are
+  // listed in OfferGroup.restriction_filters, in the same RestrictionKind
+  // vocabulary the terms use. The agent MAY still be eligible.
+  OFFER_ABSENCE_REASON_RESTRICTION_FILTERED = 3;
   // Resource is temporarily unavailable (e.g., provider feed refresh in progress).
-  OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE = 6;
+  OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE = 4;
   // Exchange is not authorized by the provider to sell this resource.
-  OFFER_ABSENCE_REASON_NOT_AUTHORIZED = 7;
-  // Requester's scopes do not cover this resource.
-  // Used in enterprise deployments where the requester knows resources exist
-  // but their delegation token doesn't grant access. The Exchange MAY
-  // use this instead of silent omission when the deployment context makes
-  // it appropriate (e.g., internal Exchange where resources are known).
-  // Public Exchanges SHOULD silently omit (not reveal existence).
-  OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT = 8;
+  OFFER_ABSENCE_REASON_NOT_AUTHORIZED = 5;
+  // Requester's scopes/subscription do not cover this resource. Applies wherever
+  // access is gated by subscription or scope entitlements (not only enterprise
+  // deployments): the resource exists but the requester's delegation token or
+  // subscription does not grant it. The Exchange returns this so the requester
+  // learns the resource is reachable under the right subscription/scope. (Where
+  // existence itself must stay hidden, the Exchange MAY omit it silently instead.)
+  OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT = 6;
 
   // Consumer encountered ext_critical keys it does not recognize.
   // The unrecognized keys SHOULD be listed in the OfferGroup's ext field
   // under "unrecognized_critical_extensions" for diagnostic purposes.
-  OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION = 9;
+  OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION = 7;
 }
 
 // RateLimitInfo — Caller's rate limit status on this Exchange.
@@ -344,7 +386,12 @@ message Offer {
   // Resource title (human-readable, for display/logging).
   optional string title = 2;
 
-  // Pricing terms including unit cost for cross-exchange comparison.
+  // Pricing for this offer. An offer represents a single licensing
+  // arrangement: each projected LicenseTerm yields its own offer, so this is
+  // that term's pricing (the authoritative copy lives in `terms[].pricing`).
+  // Used for cross-exchange comparison and Broker ranking. A resource with
+  // multiple alternative terms (e.g. dual-licensed) produces multiple separate
+  // offers, one per term — never one offer with a "headline" picked among them.
   Pricing pricing = 3;
 
   // How resource will be delivered.
@@ -361,19 +408,20 @@ message Offer {
   // different Exchanges and compare pricing.
   optional ResourceIdentity identity = 7;
 
-  // Access restrictions derived from provider terms (e.g. RSL permits/prohibits).
-  // Specifies which usage types, user categories, and geographies are
-  // allowed or blocked for this offer.
-  optional AccessRestrictions restrictions = 8;
-
-  // REQUIRED. JWS Compact Serialization (alg=EdDSA) over offer fields
-  // (offer_id, package.id, pricing, identity).
-  // Prevents intermediaries (Brokers) from tampering with price
-  // or resource description. Agent SHOULD verify signature (RFC 2119)
-  // against Exchange's public key.
+  // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
+  // Offer — every field, including `pricing`, `terms` (the full licensing
+  // payload), and `expires_at`. Canonicalization is deterministic protobuf
+  // marshaling (lexicographic field order); only `signature` and
+  // `signature_algorithm` are excluded from the signed bytes. `expires_at` is
+  // signed so the offer's validity window is integrity-protected: a relaying
+  // Broker cannot extend (or shorten) the TTL of a signed offer to replay it
+  // outside the window the Exchange intended.
   //
-  // Also enables stateless offer verification on ExecuteTransaction —
-  // Exchange does not need to store offers, just verify the signature.
+  // Because the signature covers `terms`, `pricing`, and `expires_at`, an
+  // intermediary (Broker) cannot tamper with price, restrictions, quotas,
+  // obligations, the expiry, or any licensing term without invalidating it.
+  // Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
+  // key, and MUST reject an offer whose `expires_at` is in the past.
   string signature = 9;
 
   // JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
@@ -391,7 +439,7 @@ message Offer {
   repeated string iab_categories = 13;
 
   // Signed attestations about the resource at this URI.
-  // Replaces ContentQuality. Attestations provide cryptographic proof of
+  // Attestations provide cryptographic proof of
   // resource properties from trusted parties (providers or verification vendors).
   //
   // Three verification levels determine what is independently verifiable:
@@ -447,6 +495,11 @@ message Offer {
   // Spotify (preview_url to 30s clip), IIIF (parameterized image URLs),
   // and OpenRTB native (img.url + dimensions).
   repeated Preview previews = 18;
+
+  // Licensing terms for this offer, sourced from the publisher's ResourceEntry.
+  // Multiple terms when the resource has different arrangements by use case.
+  // See: Universal Licensing Core section.
+  repeated LicenseTerm terms = 19;
 
   google.protobuf.Struct ext = 15;
 
@@ -533,7 +586,7 @@ message ResourceIdentity {
   //
   // Validated across 18 use cases: static content (articles, patents, legislation),
   // dynamic data (credit reports, drug interactions, stock snapshots), and live
-  // streams (Bloomberg quotes, NPR broadcast, news monitoring feeds).
+  // streams (MarketData quotes, NPR broadcast, news monitoring feeds).
   ResourceMutability resource_mutability = 8;
 
   // --- Provenance (C2PA Content Credentials) ---
@@ -613,9 +666,8 @@ message ResourceIdentity {
 // Verifiers MUST publish their keys at:
 //   https://{verifier-domain}/.well-known/ramp.json
 // Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or
-// ROLE_PUBLISHER depending on operator). Claims-schema location migrated to
-// `ext` under key "ramp.attestation.claims_schema" (see Verifier transition
-// in CHANGELOG).
+// ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema
+// structure at WellKnownManifest.ext["ramp.attestation.claims_schema"].
 message ResourceAttestation {
   // Canonical domain of the attesting party (e.g., "nytimes.com" for
   // self-attestation, "doubleverify.com" for third-party attestation).
@@ -663,47 +715,487 @@ message ResourceAttestation {
   string signature = 6;
 }
 
-// AccessRestrictions — Provider-defined access rules.
+// ============================================================================
+// Universal Licensing Core
 //
-// Maps to RSL <permits>/<prohibits> elements. Expressed as allow/deny
-// lists so agents and Brokers can filter offers before transacting.
-message AccessRestrictions {
-  // Permitted usage functions. Empty = all permitted.
-  // Wire format: dashed-lowercase per RSL XML standard.
-  // Standard RSL values: "ai-train", "ai-input", "ai-index", "search", "display".
-  // CoMP-specific values available via ramp-comp-v1 extension profile (same
-  // dashed-lowercase format). Intentionally `repeated string` rather than enum
-  // so RSL and CoMP can extend the vocabulary without proto changes.
-  repeated string permitted_functions = 1;
+// A resource carries zero or more LicenseTerm entries. Each term describes one
+// distinct commercial or access arrangement for that resource. Having multiple
+// terms is the normal case:
+//
+//   Article with two terms:
+//     Term 1 — ENUMERATED, ai-input permitted, academic only, FREE
+//     Term 2 — ENUMERATED, ai-input permitted, commercial_entity,
+//               PER_UNIT $0.05/access
+//
+//   Stock photo with one term:
+//     Term 1 — ENUMERATED, display permitted, worldwide, PER_UNIT $1.20/access,
+//               metering=NONE (perpetual), impressions quota 500k,
+//               ATTRIBUTION obligation
+//
+//   Patent design file:
+//     Term 1 — ENUMERATED, manufacture permitted, worldwide,
+//               FLAT $200, metering=OFFLINE_SELF_REPORTED,
+//               quota metric=units-manufactured limit=1000 window=TOTAL,
+//               CONTRIBUTION obligation
+//
+//   Licensed music track:
+//     Term 1 — ENUMERATED, sync permitted, worldwide, FLAT $500,
+//               metering=NONE, NOTICE obligation
+//     Term 2 — REFERENCE_ONLY — full MCPS/PRS terms at License.uri
+//
+// Pricing is REQUIRED on every term regardless of semantics — absent Pricing
+// is a validation error, and model=FREE must be stated explicitly (absent
+// Pricing ≠ free). The rest of the rules depend on semantics:
+//   ENUMERATED  — the machine restrictions/quotas/obligations are the COMPLETE,
+//                 authoritative expression of the term; they must be internally
+//                 consistent (a term may not contradict itself) and are enforced
+//                 by the Exchange.
+//   REFERENCE_ONLY — the document at License.uri (which MUST be present) is the
+//                 authoritative, complete source; the agent MUST read it before
+//                 using. The machine restrictions/quotas/obligations are
+//                 OPTIONAL here — the publisher MAY send Pricing alone — but any
+//                 that ARE sent must be accurate: they MUST NOT contradict the
+//                 referenced document, and whatever is expressed IS enforced
+//                 just like ENUMERATED. Pricing is stated machine-readably here
+//                 either way.
+//
+// LicenseTerm lives in ResourceEntry (ingestion) and Offer (emission) — the
+// same shape at both ends. The Exchange stores terms from PushResources and
+// surfaces them on DiscoverResources/ExecuteTransaction.
+// ============================================================================
 
-  // Prohibited usage functions. Same vocabulary as `permitted_functions`.
-  repeated string prohibited_functions = 2;
+// TermSemantics — How the Exchange interprets a LicenseTerm's machine fields.
+enum TermSemantics {
+  TERM_SEMANTICS_UNSPECIFIED    = 0;  // unset — rejected at ingest
+  TERM_SEMANTICS_ENUMERATED     = 1;
+  TERM_SEMANTICS_REFERENCE_ONLY = 2;
+}
 
-  // Permitted user categories (RSL: permits type="user").
-  // E.g. "commercial", "non-commercial", "education", "government".
-  repeated string permitted_users = 3;
+// RestrictionKind — Which dimension a Restriction constrains.
+//
+// The token vocabulary for each open axis is authored ONLY in the
+// (ramp.v1.vocab_enum) entries on the corresponding enum value below; the
+// functiontokens / geographytokens / usertypes constants + IsRegistered derive
+// from them. GEOGRAPHY lists only the non-ISO specials (*, EU, EEA) — ISO
+// 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
+// not enumerated.
+enum RestrictionKind {
+  RESTRICTION_KIND_UNSPECIFIED = 0;  // unset — rejected at ingest
 
-  // Prohibited user categories.
-  repeated string prohibited_users = 4;
+  // What the agent may do with the content. Seeded from RSL 1.0 AI-use
+  // vocabulary and extended with established IP/copyright terms.
+  RESTRICTION_KIND_FUNCTION = 1 [
+    (ramp.v1.vocab_enum) = "all",
+    (ramp.v1.vocab_enum) = "ai-all",
+    (ramp.v1.vocab_enum) = "ai-train",
+    (ramp.v1.vocab_enum) = "ai-input",
+    (ramp.v1.vocab_enum) = "ai-index",
+    (ramp.v1.vocab_enum) = "search",
+    (ramp.v1.vocab_enum) = "crawl",
+    (ramp.v1.vocab_enum) = "text-and-data-mining",
+    (ramp.v1.vocab_enum) = "tts",
+    (ramp.v1.vocab_enum) = "commercial",
+    (ramp.v1.vocab_enum) = "advertising",
+    (ramp.v1.vocab_enum) = "editorial",
+    (ramp.v1.vocab_enum) = "research",
+    (ramp.v1.vocab_enum) = "reproduce",
+    (ramp.v1.vocab_enum) = "distribute",
+    (ramp.v1.vocab_enum) = "modify",
+    (ramp.v1.vocab_enum) = "display",
+    (ramp.v1.vocab_enum) = "sync",
+    (ramp.v1.vocab_enum) = "broadcast",
+    (ramp.v1.vocab_enum) = "stream",
+    (ramp.v1.vocab_enum) = "print",
+    (ramp.v1.vocab_enum) = "manufacture",
+    (ramp.v1.vocab_enum) = "sell"
+  ];
 
-  // Permitted geographies — ISO 3166-1 alpha-2 (RSL: permits type="geo").
-  // Empty = all geographies permitted.
-  repeated string permitted_geo = 5;
+  // Where the agent may use the content. ISO 3166-1 alpha-2 codes (US, DE, GB)
+  // are valid structurally; only the non-ISO specials are registered here.
+  RESTRICTION_KIND_GEOGRAPHY = 2 [
+    (ramp.v1.vocab_enum) = "*",
+    (ramp.v1.vocab_enum) = "EU",
+    (ramp.v1.vocab_enum) = "EEA"
+  ];
 
-  // Prohibited geographies.
-  repeated string prohibited_geo = 6;
+  // Who may access and use the content.
+  RESTRICTION_KIND_USER_TYPE = 3 [
+    (ramp.v1.vocab_enum) = "individual",
+    (ramp.v1.vocab_enum) = "academic",
+    (ramp.v1.vocab_enum) = "non_profit",
+    (ramp.v1.vocab_enum) = "news_publisher",
+    (ramp.v1.vocab_enum) = "broadcaster",
+    (ramp.v1.vocab_enum) = "commercial_entity"
+  ];
 
-  // Maximum number of words from the resource that may be displayed to users.
-  // Enforces word display limits at the access restriction level.
-  optional int32 max_display_words = 7;
+  RESTRICTION_KIND_OTHER = 4;  // Custom axis; values carried in permitted/prohibited
+}
 
-  google.protobuf.Struct ext = 15;
+// QuotaWindow — Time window over which a Quota.limit accumulates.
+enum QuotaWindow {
+  QUOTA_WINDOW_UNSPECIFIED = 0;  // unset — rejected at ingest
+  QUOTA_WINDOW_HOURLY      = 1;
+  QUOTA_WINDOW_DAILY       = 2;
+  QUOTA_WINDOW_MONTHLY     = 3;
+  QUOTA_WINDOW_TOTAL       = 4;  // Lifetime cap — never resets
+}
 
-  // Critical extension keys (COSE crit pattern, RFC 9052).
-  // Lists keys within ext that the consumer MUST understand.
-  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
-  // Empty (default) → all ext keys are safe to ignore.
-  repeated string ext_critical = 90;
+// ObligationKind — What the agent must do after use.
+enum ObligationKind {
+  OBLIGATION_KIND_UNSPECIFIED      = 0;  // unset — rejected at ingest
+  OBLIGATION_KIND_ATTRIBUTION      = 1;  // Credit the author / publisher
+  OBLIGATION_KIND_CONTRIBUTION     = 2;  // Good-faith payment (amount suggested)
+  OBLIGATION_KIND_SHARE_ALIKE      = 3;  // Derivatives must use the same license (CC-BY-SA / GPL)
+  OBLIGATION_KIND_NETWORK_COPYLEFT = 4;  // Network service triggers copyleft (AGPL-style)
+  OBLIGATION_KIND_NOTICE           = 5;  // Include the specified copyright notice
+  OBLIGATION_KIND_OTHER            = 6;  // Described in Obligation.detail
+}
+
+// ObligationTrigger — When the obligation activates.
+enum ObligationTrigger {
+  OBLIGATION_TRIGGER_UNSPECIFIED        = 0;  // unset — rejected at ingest
+  OBLIGATION_TRIGGER_ON_USE             = 1;  // Triggered on any use
+  OBLIGATION_TRIGGER_ON_DISTRIBUTION    = 2;  // Triggered when copies are distributed
+  OBLIGATION_TRIGGER_ON_NETWORK_SERVICE = 3;  // Triggered when served over a network (AGPL)
+  OBLIGATION_TRIGGER_ON_DERIVATIVE      = 4;  // Triggered when a derivative work is produced
+}
+
+// License — Identifies the governing license document for a LicenseTerm.
+message License {
+  // uri_digest is REQUIRED whenever uri is present — any semantics. Without a
+  // pinned digest the referenced document can be swapped after the offer is
+  // signed; the agent must be able to verify the bytes it fetches. (d8y64)
+  option (buf.validate.message).cel = {
+    id: "license.digest_required_with_uri"
+    message: "uri_digest is required whenever uri is set"
+    expression: "this.uri == '' || this.uri_digest != ''"
+  };
+
+  // Canonical identity of the license document (RFC 3986). MUST NOT be
+  // URL-validated — data-labels TDL identifiers use non-URL schemes.
+  // For REFERENCE_ONLY terms this is the authoritative specification.
+  // Examples:
+  //   "https://creativecommons.org/licenses/by/4.0/"
+  //   "https://techcrunch.com/licensing/ai-terms-2026"
+  //
+  // "MUST NOT URL-validate" means do not REJECT non-URL schemes — it does NOT
+  // mean fetch blindly. A consumer that dereferences this URI MUST apply the
+  // SSRF countermeasures in the security threat model (T-LIC-1): scheme
+  // allowlist, block loopback/private/metadata addresses (resolve-then-check),
+  // fetch via an egress proxy, and treat the response as untrusted content.
+  // Verify the fetched bytes against `uri_digest` before use.
+  optional string uri = 1;
+
+  // Stable short identifier: SPDX short-id ("GPL-3.0-only"), TollBit cuid,
+  // or catalog doc-id. Used by agents and the vocab linter for known-license
+  // lookup; SHARE_ALIKE derivatives default their scope_license to this.
+  optional string id = 2;
+
+  // Human-readable name (licenseType, schema.org node name).
+  optional string name = 3;
+
+  // Data-labels TDL: the document at uri is versioned and will not change.
+  optional bool immutable = 4;
+
+  // Cryptographic digest of the document at `uri`, in "method:hexdigest" form
+  // (e.g. "sha256:9f86d081..."). Pins the referenced document so a consumer can
+  // verify the bytes it fetches match what was offered; covered by the offer
+  // signature, so it is tamper-evident end to end. REQUIRED whenever `uri` is
+  // non-empty — any semantics, mutable or not: without a pinned digest a MitM
+  // (or the publisher) can swap the document the agent reads. The Exchange pins
+  // it at ingestion (computing it over the safely-fetched document, or
+  // accepting a publisher-supplied value when uri is not HTTP-fetchable, e.g. a
+  // non-URL TDL scheme).
+  //
+  // The method MUST be a collision-resistant hash — sha256, sha384, or sha512.
+  // Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat
+  // the swap-protection this field exists for. The CEL is STRUCTURE ONLY
+  // (allowlisted prefix + matching hex length); presence (digest-when-uri) is
+  // enforced at ingest.
+  optional string uri_digest = 5 [
+    (buf.validate.field).cel = {
+      id: "license.uri_digest.format"
+      message: "uri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length"
+      expression: "this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')"
+    }
+  ];
+}
+
+// Restriction — A single constraint on one licensing dimension.
+//
+// Restrictions model allowed and prohibited values on one axis (function,
+// geography, or user-type). They are validated and normalized at ingest and
+// RIDE ON THE OFFER: the AGENT is the responsible party — it self-selects the
+// term whose restrictions it can honour and bears compliance, and enforcement
+// happens downstream at accept → report → reconcile. Restrictions are NOT an
+// Exchange-side gate the requester must pass to see a term.
+//
+// An Exchange or Broker MAY, purely as a CONVENIENCE, pre-filter the offers it
+// returns against the limits the query states in ResourceQuery.acceptable_restrictions
+// (the same RestrictionKind axes/vocabulary the terms use) — e.g. an agent that
+// only wants US-eligible content can ask the Exchange to skip the rest so it
+// doesn't pay to discover offers it would never accept. That filter is advisory and
+// optional: a different Broker may not apply it, and it is a recommendation
+// matched to the request, never an enforcement verdict. When an Exchange does
+// drop offers this way it MAY signal it via OfferAbsenceReason.RESTRICTION_FILTERED
+// (with the axes in OfferGroup.restriction_filters). Term visibility is otherwise
+// gated only by resource_id/URI and delegation scope coverage — see
+// LicenseTerm.scopes.
+//
+// Reading a restriction:
+//   A value is in-scope when it matches at least one permitted[] token
+//   AND matches none of the prohibited[] tokens.
+//   Empty permitted[] = any value is permitted on this axis.
+//   Empty prohibited[] = nothing is explicitly prohibited.
+//
+// Vocabulary sources (authored on the RestrictionKind enum values via
+// (ramp.v1.vocab_enum); the functiontokens / geographytokens / usertypes
+// constants + IsRegistered derive from them):
+//   FUNCTION  — RSL 1.0 AI-use vocabulary + established IP/copyright terms
+//   GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA
+//   USER_TYPE — RAMP user/organization categories
+message Restriction {
+  // A token cannot be both permitted and prohibited on the same axis. (6z1v3)
+  option (buf.validate.message).cel = {
+    id: "restriction.permitted_prohibited_disjoint"
+    message: "a token cannot appear in both permitted and prohibited"
+    expression: "this.permitted.all(p, !(p in this.prohibited))"
+  };
+  // The restriction axis must be specified; UNSPECIFIED is not a valid kind.
+  option (buf.validate.message).cel = {
+    id: "restriction.kind_specified"
+    message: "kind must not be RESTRICTION_KIND_UNSPECIFIED"
+    expression: "this.kind != ramp.v1.RestrictionKind.RESTRICTION_KIND_UNSPECIFIED"
+  };
+
+  // Which dimension this restriction applies to.
+  RestrictionKind kind = 1;
+
+  // Tokens allowed on this axis. Empty = all permitted.
+  // For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
+  // For GEOGRAPHY: "US", "DE", "EU", "EEA", "*", …
+  // For USER_TYPE: "individual", "academic", "commercial_entity", …
+  repeated string permitted = 2 [
+    (buf.validate.field).repeated.max_items = 64,
+    (buf.validate.field).cel = {
+      id: "restriction.permitted.format"
+      message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
+      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
+    }
+  ];
+
+  // Tokens blocked on this axis. Takes precedence over permitted[].
+  repeated string prohibited = 3 [
+    (buf.validate.field).repeated.max_items = 64,
+    (buf.validate.field).cel = {
+      id: "restriction.prohibited.format"
+      message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
+      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
+    }
+  ];
+
+  // Fail-closed by default. When false (the default), this restriction is
+  // BINDING: an agent that cannot evaluate every token in it — including an
+  // unknown vendor token — MUST decline the term. Set advisory = true to
+  // downgrade an unverifiable restriction to non-blocking. This deliberately
+  // inverts the COSE-`crit` opt-in default: a license restriction a consumer
+  // does not understand should stop it, not be silently ignored.
+  bool advisory = 4;
+}
+
+// Quota — A usage cap that gates whether this LicenseTerm remains valid.
+//
+// Quotas limit how much a licensee may consume before the term expires or
+// must be renegotiated. They are NOT billing quantities — billing is in Pricing.
+//
+// The metric vocabulary is authored ONLY in the (ramp.v1.vocab) entries on
+// Quota.metric below; the quotametrics constants + IsRegistered derive from it.
+message Quota {
+  // The unit being capped — an open vocabulary axis.
+  //
+  // The (ramp.v1.vocab) entries below are the SOLE authored source of the
+  // registered bare metric tokens. A buf plugin reads them structurally and
+  // emits the quotametrics constants + IsRegistered; ingest enforces membership
+  // from those. The CEL is STRUCTURE ONLY (non-empty bare token or
+  // vendor:namespaced) — it never lists the tokens, so it cannot drift.
+  //
+  // Token meanings:
+  //   display-words      Words of content text rendered to an end user.
+  //   impressions        Times the content is displayed to an end user.
+  //   tokens             LLM output tokens generated using this content.
+  //   input-tokens       LLM input tokens consumed from this content.
+  //   units-manufactured Physical units manufactured from this design/pattern.
+  //   accesses           Distinct content access / retrieval events.
+  //   copies             Digital or physical copies produced.
+  //   seats              Distinct named users licensed to access the content.
+  string metric = 1 [
+    (ramp.v1.vocab) = "display-words",
+    (ramp.v1.vocab) = "impressions",
+    (ramp.v1.vocab) = "tokens",
+    (ramp.v1.vocab) = "input-tokens",
+    (ramp.v1.vocab) = "units-manufactured",
+    (ramp.v1.vocab) = "accesses",
+    (ramp.v1.vocab) = "copies",
+    (ramp.v1.vocab) = "seats",
+    (buf.validate.field).string.max_len = 64,
+    (buf.validate.field).cel = {
+      id: "quota.metric.format"
+      message: "metric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)"
+      expression: "this != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))"
+    }
+  ];
+
+  // Maximum allowed value in the given window. (6z1v3) A quota of 0 grants
+  // nothing — express "no access" by omitting the term, not a zero quota.
+  int64 limit = 2 [(buf.validate.field).int64.gte = 1];
+
+  // The accumulation window must be specified; UNSPECIFIED is ambiguous.
+  option (buf.validate.message).cel = {
+    id: "quota.window_specified"
+    message: "window must not be QUOTA_WINDOW_UNSPECIFIED"
+    expression: "this.window != ramp.v1.QuotaWindow.QUOTA_WINDOW_UNSPECIFIED"
+  };
+
+  // Time window over which the limit accumulates.
+  QuotaWindow window = 3;
+}
+
+// Obligation — A post-use behavioral requirement attached to a LicenseTerm.
+//
+// Examples:
+//   Attribution on display: cite the author whenever content is shown to a user.
+//   Share-alike on derivative: AI-generated content that incorporates this work
+//     must be released under the same license.
+//   Notice on distribution: include the copyright notice when distributing copies.
+message Obligation {
+  // SHARE_ALIKE derivatives must name the license they inherit. (6z1v3)
+  option (buf.validate.message).cel = {
+    id: "obligation.share_alike.requires_scope_license"
+    message: "SHARE_ALIKE requires scope_license to identify a license (id or uri)"
+    expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))"
+  };
+  // The obligation kind must be specified; UNSPECIFIED is not a valid kind.
+  option (buf.validate.message).cel = {
+    id: "obligation.kind_specified"
+    message: "kind must not be OBLIGATION_KIND_UNSPECIFIED"
+    expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIED"
+  };
+  // The firing trigger must be specified; UNSPECIFIED is ambiguous.
+  option (buf.validate.message).cel = {
+    id: "obligation.trigger_specified"
+    message: "trigger must not be OBLIGATION_TRIGGER_UNSPECIFIED"
+    expression: "this.trigger != ramp.v1.ObligationTrigger.OBLIGATION_TRIGGER_UNSPECIFIED"
+  };
+
+  // What the agent must do.
+  ObligationKind kind = 1;
+
+  // When the obligation activates.
+  ObligationTrigger trigger = 2;
+
+  // The license that derivatives must be released under. REQUIRED for
+  // SHARE_ALIKE (rejected if absent), where it MUST identify a license — set
+  // `id` (SPDX short-id, the common copyleft case, often the term's own
+  // License.id) and/or `uri`. Because it is a License, a referenced `uri`
+  // inherits the uri_digest swap-protection rule: a uri without a digest is
+  // rejected, exactly as for any other license reference. (6z1v3)
+  optional License scope_license = 3;
+
+  // Free-form detail: attribution string, notice file URI, etc.
+  // OBLIGATION_KIND_OTHER without it → lint warning.
+  optional string detail = 4;
+}
+
+// LicenseTerm — Universal licensing unit.
+//
+// One LicenseTerm describes one complete access arrangement for a resource.
+// A resource carries zero or more terms; having multiple terms is the normal
+// case (one per use category, user type, or commercial arrangement).
+//
+// The same LicenseTerm shape appears at ingestion (ResourceEntry.terms) and
+// at emission (Offer.terms). The Exchange stores what the publisher pushed
+// and surfaces it on discovery, so agents see the same terms the publisher
+// declared — no translation or reformulation.
+//
+// Validation rules:
+//   - Pricing MUST be present on EVERY term, regardless of semantics.
+//     Absent Pricing → reject at ingest: an agent cannot act on a term with
+//     no price. This holds for REFERENCE_ONLY too — its License governs the
+//     human-readable terms, but the machine-readable price is still stated
+//     here, not deferred to the document.
+//   - model=FREE must be explicit. Absent Pricing ≠ free. A term may be FREE
+//     under an arbitrary license; the agent still needs the price stated so it
+//     knows the access is free rather than unpriced.
+//   - REFERENCE_ONLY terms MUST carry a License with a non-empty uri. A
+//     REFERENCE_ONLY term that references no document is meaningless → reject
+//     at ingest.
+//   - Restriction tokens are validated against the vocab registry.
+//     Unknown tokens produce a PushResourcesResponse.warnings[] entry
+//     but do NOT cause rejection (forward-compatible).
+message LicenseTerm {
+  // A REFERENCE_ONLY term MUST carry a License with a non-empty uri — a term
+  // that defers to a document but references nothing is rejected. (fc65j)
+  option (buf.validate.message).cel = {
+    id: "license_term.reference_only.requires_uri"
+    message: "REFERENCE_ONLY terms must carry a license with a non-empty uri"
+    expression: "this.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')"
+  };
+  // At most one Restriction per axis — restrictions on the same kind are
+  // AND-combined, so duplicates are an authoring error. (6z1v3)
+  option (buf.validate.message).cel = {
+    id: "license_term.one_restriction_per_kind"
+    message: "at most one restriction is allowed per kind"
+    expression: "this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)"
+  };
+  // Every term must declare its semantics; UNSPECIFIED is not a valid term.
+  option (buf.validate.message).cel = {
+    id: "license_term.semantics_specified"
+    message: "semantics must not be TERM_SEMANTICS_UNSPECIFIED"
+    expression: "this.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_UNSPECIFIED"
+  };
+
+  // Governing license document. Authoritative for REFERENCE_ONLY terms, which
+  // MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that
+  // references nothing is rejected at ingest.
+  optional License license = 1;
+
+  // How to interpret the machine fields.
+  TermSemantics semantics = 2;
+
+  // Usage restrictions (function, geography, user-type).
+  // Multiple restrictions are AND-combined — the agent must satisfy all of them.
+  repeated Restriction restrictions = 3;
+
+  // Usage caps. The agent must not exceed any individual Quota.
+  repeated Quota quotas = 4;
+
+  // Post-use behavioral requirements.
+  repeated Obligation obligations = 5;
+
+  // Pricing for this term. REQUIRED for every term regardless of semantics —
+  // an agent cannot act on a priceless term, so absent Pricing is a validation
+  // error at ingest. model = FREE must be stated explicitly (absent Pricing is
+  // not free). A REFERENCE_ONLY term states its price here too; its License
+  // governs the human-readable terms but does not replace the machine-readable
+  // price.
+  optional Pricing pricing = 6 [(buf.validate.field).required = true];
+
+  // Delegation scope-gating: the Exchange returns this term to an agent iff the
+  // agent's delegation grant covers ALL of these scopes (AND-semantics).
+  // Empty = public. A subscription term is Pricing{model:FREE} +
+  // scopes:["subscription:..."].
+  //
+  // Coverage uses the SAME matching rule as Requester/delegation scopes:
+  // segment-wise (":" separated), each granted segment must equal the
+  // corresponding required segment or be "*", a terminal "*" matches all
+  // remaining segments, and there is NO implicit prefix match (a grant
+  // narrower than the requirement does not cover it). "dist:*" covers
+  // "dist:US" and "dist:US:CA"; "dist" covers only "dist". There is exactly
+  // one scope-matching algorithm across the protocol.
+  repeated string scopes = 7 [(buf.validate.field).repeated.max_items = 64];
+
+  // Informational human-readable name for this sub-part (sub-part terms).
+  optional string part_label = 8;
 }
 
 // Preview — Lightweight resource preview for offer evaluation.
@@ -753,7 +1245,32 @@ message Preview {
 // normalizes to unit cost (effective cost per unit) for cross-exchange
 // comparison — analogous to eCPM in programmatic advertising.
 // Unit cost is denominated in the Exchange's base currency.
+//
+// Fields: model, rate, currency, unit_cost, estimated_quantity,
+// license_duration_months, unit, metering.
 message Pricing {
+  // Cross-field structural rules (protovalidate, OR form — CEL has no implies):
+  //   PER_UNIT ⇒ unit must be set; FREE ⇒ rate must be 0.
+  // Registry membership (a bare unit must be one of the registered tokens) is
+  // NOT here — it is checked at ingest via the generated IsRegistered, so the
+  // CEL never re-lists the vocabulary and cannot drift from it.
+  option (buf.validate.message).cel = {
+    id: "pricing.per_unit.requires_unit"
+    message: "unit is required when model is PER_UNIT"
+    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''"
+  };
+  option (buf.validate.message).cel = {
+    id: "pricing.free.zero_rate"
+    message: "rate must be 0 when model is FREE"
+    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0"
+  };
+  // Pricing must declare a model; UNSPECIFIED is not a valid pricing model.
+  option (buf.validate.message).cel = {
+    id: "pricing.model_specified"
+    message: "model must not be PRICING_MODEL_UNSPECIFIED"
+    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_UNSPECIFIED"
+  };
+
   // Provider's pricing model.
   PricingModel model = 1;
 
@@ -764,7 +1281,7 @@ message Pricing {
   string currency = 3;
 
   // Normalized cost per unit — the universal comparison metric.
-  // For text: cost per token (replaces eCPT). For video: cost per second.
+  // For text: cost per token. For video: cost per second.
   // For data: cost per record. For APIs: cost per call.
   // Denominated in the Exchange's base_currency (from its WellKnownManifest).
   optional double unit_cost = 4;
@@ -774,40 +1291,68 @@ message Pricing {
   // For documents: page count. For data: record count.
   optional int32 estimated_quantity = 5;
 
-  // Revenue share percentage (0.0–1.0). Used with PRICING_MODEL_REVENUE_SHARE.
-  optional double revshare = 6;
-
   // License duration in months. How long the granted access remains valid.
   optional int32 license_duration_months = 7;
 
-  // Metering unit for unit_cost and estimated_quantity.
-  // Standard units: "tokens", "seconds", "pages", "records", "bytes", "calls", "items"
-  // Domain-specific units allowed (e.g., "sq_km", "characters", "images").
-  optional string unit = 8;
+  // Metering basis — the "per what" of PER_UNIT pricing. REQUIRED when
+  // model = PER_UNIT. Custom units namespace as "vendor:unit". Ignored for
+  // FREE / FLAT.
+  //
+  // The (ramp.v1.vocab) entries below are the SOLE authored source of the
+  // registered bare tokens. A buf plugin reads them structurally and emits the
+  // pricingunits constants + IsRegistered; ingest enforces membership from
+  // those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —
+  // it never lists the tokens, so it cannot drift from the registry.
+  optional string unit = 8 [
+    (ramp.v1.vocab) = "fetches",  (ramp.v1.vocab) = "accesses", (ramp.v1.vocab) = "tokens",
+    (ramp.v1.vocab) = "calls",    (ramp.v1.vocab) = "pages",    (ramp.v1.vocab) = "seconds",
+    (ramp.v1.vocab) = "minutes",  (ramp.v1.vocab) = "records",  (ramp.v1.vocab) = "streams",
+    (ramp.v1.vocab) = "images",
+    (ramp.v1.vocab) = "seats",    (ramp.v1.vocab) = "units-manufactured",
+    (ramp.v1.vocab) = "characters", (ramp.v1.vocab) = "bytes",  (ramp.v1.vocab) = "items",
+    (ramp.v1.vocab) = "sq-km",
+    (buf.validate.field).string.max_len = 64,
+    (buf.validate.field).cel = {
+      id: "pricing.unit.format"
+      message: "unit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)"
+      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
+    }
+  ];
 
-  google.protobuf.Struct ext = 15;
-
-  // Critical extension keys (COSE crit pattern, RFC 9052).
-  // Lists keys within ext that the consumer MUST understand.
-  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
-  // Empty (default) → all ext keys are safe to ignore.
-  repeated string ext_critical = 90;
+  // How usage is tracked for billing reconciliation.
+  // Absent = PRICING_METERING_ONLINE (default real-time tracking).
+  // NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.
+  // OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.
+  optional PricingMetering metering = 9;
 }
 
+// PricingModel — the charging STRUCTURE only (a genuinely closed, small set;
+// changes far less than yearly, so an enum is correct per Google AIP-126). The
+// open-ended metering basis ("per what") is NOT enumerated here — it lives in
+// Pricing.unit as a registry-governed vocabulary (the (ramp.v1.vocab) field
+// options on Pricing.unit; see vocab.proto).
+// Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
+// are obligations (see ObligationKind); revenue-share settlement is off-protocol.
 enum PricingModel {
-  PRICING_MODEL_UNSPECIFIED = 0;
-  PRICING_MODEL_PER_ACCESS = 1;   // One-time access fee per resource (RSL: purchase)
-  PRICING_MODEL_PER_TOKEN = 2;     // Rate per LLM token consumed (RSL: use/inference)
-  PRICING_MODEL_PER_FETCH = 3;     // Rate per fetch request (RSL: crawl)
-  PRICING_MODEL_SUBSCRIPTION = 4;  // Recurring access (RSL: subscription)
-  PRICING_MODEL_FREE = 5;          // No charge (RSL: free)
-  PRICING_MODEL_ATTRIBUTION = 6;   // Free with required attribution (RSL: attribution)
-  PRICING_MODEL_CONTRIBUTION = 7;  // Good-faith payment, amount suggested (RSL: contribution)
-  PRICING_MODEL_TRAINING = 8;       // Per training instance fee (RSL: training)
-  PRICING_MODEL_REVENUE_SHARE = 9;  // Revenue share model (percentage of agent revenue)
-  PRICING_MODEL_PER_PAGE = 10;      // Per document page (legal filings, PDFs)
-  PRICING_MODEL_PER_MINUTE = 11;    // Per minute of audio/video
-  PRICING_MODEL_PER_RECORD = 12;    // Per structured data record
+  PRICING_MODEL_UNSPECIFIED = 0;  // unset — rejected at ingest (omission cannot default to FREE)
+  PRICING_MODEL_FREE        = 1;  // no charge; rate must be 0
+  PRICING_MODEL_PER_UNIT    = 2;  // rate per Pricing.unit; unit REQUIRED (registered token or vendor:custom)
+  PRICING_MODEL_FLAT        = 3;  // one-time flat fee; rate is the total, no unit
+}
+
+// PricingMetering — How usage is tracked for billing reconciliation.
+//
+// ONLINE (default, field absent or = 0): Exchange tracks usage events in real time.
+// NONE: one-time transaction; no ongoing metering required (stock image perpetual
+//   license, CAD file one-time download). Billing_id is issued at ExecuteTransaction
+//   and the ledger entry is closed — no ReportUsage required.
+// OFFLINE_SELF_REPORTED: agent self-reports consumption (e.g., units-manufactured
+//   for 3D-printed items from a licensed design). Exchange audits; metering is not
+//   possible online because the event occurs in the physical world.
+enum PricingMetering {
+  PRICING_METERING_ONLINE                = 0;
+  PRICING_METERING_NONE                  = 1;
+  PRICING_METERING_OFFLINE_SELF_REPORTED = 2;
 }
 
 enum DeliveryMethod {
@@ -826,10 +1371,9 @@ enum DeliveryMethod {
 // ============================================================================
 // Requester Identity
 //
-// Replaces CoMP AISystem with a universal actor model. The requester is not
-// assumed to be "an AI system consuming publisher content" — it can be any
-// entity that needs metered resource access: AI agent, human using a tool,
-// enterprise service account, research pipeline, compliance monitor.
+// Universal actor model. The requester can be any entity that needs metered
+// resource access: AI agent, human using a tool, enterprise service account,
+// research pipeline, compliance monitor.
 //
 // Identity is layered:
 //   1. Ed25519 signature proves possession of a registered key
@@ -839,7 +1383,7 @@ enum DeliveryMethod {
 // The Exchange uses scopes to filter the catalog:
 //   - Resources outside the requester's scopes are NOT returned (not even
 //     as OfferAbsenceReason — the requester never learns they exist)
-//   - Subscription entitlements are scopes: "subscription:bloomberg-2026"
+//   - Subscription entitlements are scopes: "subscription:marketdata-2026"
 //     tells the Exchange to return zero-cost subscription offers
 //
 // Open market: subscription providers mint delegation tokens with scopes.
@@ -849,9 +1393,13 @@ enum DeliveryMethod {
 
 // Requester — Universal identity for any RAMP client.
 //
-// Carries identity, intended use, resource URIs, and entitlement scopes.
-// The Exchange verifies identity via Ed25519 signature, then filters
-// its catalog by the requester's scopes.
+// Carries identity, entitlements, and a billing handle ONLY — who is asking,
+// what they are entitled to (scopes, delegation), and how to bill them
+// (billing_ref). What they are asking for (uris) and the limits they will
+// operate within (acceptable_restrictions) belong to the ask, not the identity,
+// and live on ResourceQuery / RAMPRequest. The Exchange verifies identity via
+// the RFC 9421 request signature, then filters its catalog by the requester's
+// scopes.
 message Requester {
   // Unique requester identifier (e.g., "agent-research-bot-001").
   string id = 1;
@@ -866,17 +1414,13 @@ message Requester {
   // Human-readable name (e.g., "Acme Research Assistant").
   optional string name = 4;
 
-  // Resource URIs being requested.
-  repeated string uris = 5;
-
-  // What the requester intends to do with the resources.
-  // Standard values: "ai_train", "ai_input", "ai_index", "search", "display".
-  repeated string intended_use = 6;
-
-  // Commercial license or subscription identifier.
-  // Exchange uses this to look up entitlements, pricing tiers, and
-  // existing subscription deals.
-  optional string license_id = 7;
+  // Opaque billing reference linking this requester to the Exchange's (and,
+  // through the Exchange, the publisher's) billing/accounting systems — e.g. a
+  // billing account, PO number, or cost center. NOT an entitlement or
+  // subscription credential: access is governed by scopes and delegation, and
+  // identity by the request signature. The Exchange uses it only for invoicing
+  // and cost attribution.
+  optional string billing_ref = 5;
 
   // Entitlement scopes. Declare what the requester can access.
   //
@@ -885,26 +1429,38 @@ message Requester {
   // learns they exist. This is the enforcement mechanism for both enterprise
   // RBAC and open-market subscription entitlements.
   //
-  // Scope format: "{domain}:{permission}" or "{profile}:{permission}"
+  // Scope format: colon-separated segments, "{domain}:{permission}" or
+  // "{profile}:{permission}", optionally multi-segment ("dist:US:CA");
+  // matching is segment-wise per the rule below (no implicit hierarchy).
   // Examples:
   //   "credit:read"                — can access credit reports
-  //   "subscription:bloomberg-2026" — has active Bloomberg subscription
+  //   "subscription:marketdata-2026" — has active MarketData subscription
   //   "academic:*"                 — full access to academic resources
   //   "internal:reports"           — can access internal reports
   //   "*"                         — unrestricted (public Exchange default)
   //
+  // Matching is SEGMENT-WISE (":" separated). A granted scope G covers a
+  // required scope R iff, segment by segment, each G segment equals the
+  // corresponding R segment or is "*"; a terminal "*" matches all remaining
+  // segments. There is NO implicit prefix match, and a grant NARROWER than
+  // the requirement does not cover it (G must be equal-to-or-broader than R).
+  // Examples: "dist:*" covers "dist:US" and "dist:US:CA"; "dist:US:*" covers
+  // "dist:US:CA" but not "dist:EU"; bare "dist" covers only "dist"; granted
+  // "dist:US:CA" does NOT cover required "dist:US"; "*" covers everything.
+  // This same rule governs LicenseTerm.scopes — one algorithm protocol-wide.
+  //
   // When empty, Exchange applies its default access policy (typically
   // returns all publicly available resources).
-  repeated string scopes = 8;
+  repeated string scopes = 6 [(buf.validate.field).repeated.max_items = 64];
 
   // Request authentication is handled at the HTTP layer via RFC 9421
-  // HTTP Message Signatures (alg=EdDSA). The Requester's public key
+  // HTTP Message Signatures (alg=ed25519). The Requester's public key
   // is published at {domain}/.well-known/ramp.json as a WellKnownManifest
   // (role=ROLE_AGENT) with inline JWK keys.
 
   // Optional delegation — present when the requester acts on behalf of
   // another entity (user, organization, upstream agent).
-  optional Delegation delegation = 9;
+  optional Delegation delegation = 7;
 
   google.protobuf.Struct ext = 15;
 
@@ -932,34 +1488,41 @@ enum RequesterType {
 
 // Delegation — Scoped, time-limited, spend-capped credential.
 //
-// Token-format agnostic. Supports JWT (universal default) and Biscuit
-// (advanced multi-hop offline attenuation). The token_format field
-// indicates which format the token field contains.
+// The token is an opaque, signed credential. The DEFAULT and fully-specified
+// format is a JWT (token_format "jwt"); "biscuit-v3" remains a permitted
+// alternative for deployments that want deep multi-hop offline attenuation (see
+// the auth spec). Its claims are the AUTHORITATIVE source of the grant; the
+// plaintext fields below (scopes, expires_at, max_spend_cents, …) are a
+// convenience mirror the Exchange MAY use for fast pre-filtering before it
+// verifies the token.
 //
-// JWT (token_format="jwt"):
-//   Standard JWT with RAMP claims (sub, scope, exp, ramp_max_spend,
-//   ramp_max_accesses, ramp_quota_period). Issued by any OAuth/GNAP
-//   authorization server. Sub-delegation requires IdP round-trip
-//   (Token Exchange RFC 8693).
+// Holder binding (the load-bearing property). The grant is bound to a holder key
+// via the RFC 7800 `cnf` confirmation claim — `cnf.jkt`, the RFC 7638 JWK
+// thumbprint of the holder's key. Verification MUST check that the key signing
+// the request (RFC 9421) hashes to that thumbprint; a token possessed without
+// the matching private key is rejected. This is what makes a leaked token NOT
+// bearer-usable. Delegation is a chain of cnf-linked JWTs: a principal narrows a
+// grant by issuing a child JWT (cnf = the next holder, scopes ⊆ parent), signed
+// by the key the parent's cnf named — the chain-linkage invariant. Verifiers
+// need only the root issuer's public key; intermediate keys ride inside the
+// chain (JOSE header `jwk`), so verification is offline.
 //
-// Biscuit (token_format="biscuit-v2"):
-//   Ed25519-signed block chains with offline attenuation. Each block
-//   narrows permissions — never widens. Sub-delegation is local (no
-//   server contact). Libraries: biscuit-go, @biscuit-auth/biscuit-wasm,
-//   biscuit-python.
+// The claim schema is a small registered vocabulary — see the RAMP
+// delegation-claims profile in the auth spec. All claims are OPTIONAL except the
+// holder binding (cnf). Vendors MAY add namespaced claims (their own "vendor:"
+// namespace; "ramp_"-prefixed names are reserved for the registered vocabulary
+// and MUST NOT be redefined); any constraint a verifier cannot evaluate is
+// binding by default (fail closed) unless the issuer marks it advisory —
+// mirroring Restriction.advisory.
 //
-// Both formats carry the same semantic claims. The Exchange verifies
-// the token using the appropriate library based on token_format.
-// The convenience fields (scopes, expires_at, max_spend_cents, etc.)
-// are extracted from the token for fast pre-filtering.
-//
-// Zero breach risk: if the token leaks, damage is bounded by
-// scope + time + spend cap. The token is useless after expiry.
+// Scope/time/spend caps are defense-in-depth that bound the blast radius only in
+// the residual case where the holder's signing key is also compromised; the
+// primary protection against theft is the holder binding above.
 message Delegation {
   // Who granted this delegation (domain for public key lookup).
   string principal_domain = 1;
 
-  // Principal's identifier (e.g., "user@acme.com", "bloomberg.com").
+  // Principal's identifier (e.g., "user@acme.com", "marketdata.example.com").
   string principal_id = 2;
 
   // Scopes granted by this delegation. MUST be a subset of the
@@ -984,10 +1547,12 @@ message Delegation {
   // When absent, the quota is lifetime (bounded only by expires_at).
   optional google.protobuf.Duration quota_period = 10;
 
-  // Token bytes. JWT (base64url-encoded) or Biscuit (binary, base64-encoded).
+  // Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,
+  // base64-encoded) when token_format is "biscuit-v3".
   bytes token = 6;
 
-  // Token format: "jwt" (default) or "biscuit-v2".
+  // Token format: "jwt" (default) or "biscuit-v3" (optional, for deep
+  // multi-hop offline attenuation). Empty is treated as "jwt".
   string token_format = 7;
 
   // Optional: URI for real-time revocation checking.
@@ -1007,41 +1572,6 @@ message Delegation {
   // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
   // Empty (default) → all ext keys are safe to ignore.
   repeated string ext_critical = 90;
-}
-
-// ============================================================================
-// Intermediary Chain (schain-inspired)
-//
-// Tracks the forwarding path of a request: Agent → Broker → Exchange.
-// Each hop signs the request, proving it passed through legitimately.
-// Modeled after OpenRTB schain (Supply Chain Object).
-//
-// Forward path only. The chain records request forwarding; responses do NOT
-// retrace it. The terminal Exchange (or the Exchange-facing Broker holding the
-// agent binding) returns the response directly to the originating agent — the
-// signed retrieval_endpoint is bound to agent_identity_hash, so delivery needs
-// no return-path relay. Intermediaries observe requests, not responses.
-// ============================================================================
-
-// IntermediaryHop — One hop in the request forwarding chain.
-message IntermediaryHop {
-  // Domain of the intermediary (for public key lookup).
-  string domain = 1;
-
-  // Intermediary's identifier.
-  string id = 2;
-
-  // When this intermediary forwarded the request.
-  google.protobuf.Timestamp forwarded_at = 3;
-
-  // Hop authentication is handled at the HTTP layer via RFC 9421
-  // HTTP Message Signatures. Each Broker adds its own Signature header.
-
-  // Binds this hop to its RFC 9421 Signature header: carries the label of the
-  // Signature / Signature-Input entry this intermediary added, so a verifier
-  // matches a hop to its signature directly instead of inferring by ordinal
-  // position or domain. Optional; omit on single-signature paths.
-  optional string signature_label = 4;
 }
 
 // C2PAStatus — Summary validation status of a C2PA content credentials manifest.
@@ -1078,7 +1608,7 @@ enum C2PAStatus {
 // Examples by level:
 //   STATIC:  NYT article, academic paper, patent, EU regulation, podcast episode
 //   DYNAMIC: D&B credit report, DrugBank interactions, satellite catalog, news article (corrections)
-//   LIVE:    Bloomberg quote stream, NPR live broadcast, news monitoring feed
+//   LIVE:    MarketData quote stream, NPR live broadcast, news monitoring feed
 enum ResourceMutability {
   RESOURCE_MUTABILITY_UNSPECIFIED = 0;
   // Content is immutable. Hash computed at offer time will match at delivery time.
@@ -1141,7 +1671,7 @@ message TransactionItem {
   // The offer_id from the selected Offer.
   string offer_id = 1;
 
-  // The exchange_signature from the selected Offer.
+  // The selected Offer's `signature` (informally, the exchange signature).
   string offer_signature = 2;
 }
 
@@ -1186,6 +1716,10 @@ message TransactionResponse {
 
   // Set when the transaction is denied. Absent on success.
   optional DenialReason denial_reason = 11;
+
+  // When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the
+  // request failed, in the same RestrictionKind vocabulary the terms use.
+  repeated RestrictionKind restriction_mismatches = 19;
 
   // If set, this transaction was fulfilled under a subscription/deal.
   // No per-request charge — usage tracked against subscription quota.
@@ -1244,6 +1778,10 @@ message TransactionResultItem {
   // Set if this specific item was denied (others may succeed).
   optional DenialReason denial_reason = 7;
 
+  // When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the
+  // request failed, in the same RestrictionKind vocabulary the terms use.
+  repeated RestrictionKind restriction_mismatches = 13;
+
   // When retrieval_endpoint expires.
   optional google.protobuf.Timestamp expires_at = 8;
 
@@ -1272,19 +1810,17 @@ message Cost {
 // of denial patterns across the ecosystem.
 enum DenialReason {
   DENIAL_REASON_UNSPECIFIED = 0;
-  DENIAL_REASON_INVALID_LICENSE = 1;      // License ID not recognized
-  DENIAL_REASON_EXPIRED_LICENSE = 2;      // License ID expired
-  DENIAL_REASON_INSUFFICIENT_BALANCE = 3; // Requester's balance too low
-  DENIAL_REASON_RATE_LIMITED = 4;         // Too many requests
-  DENIAL_REASON_CONTENT_UNAVAILABLE = 5;  // Resource no longer available
-  DENIAL_REASON_FUNCTION_PROHIBITED = 6;  // Requested function not permitted
-  DENIAL_REASON_GEO_RESTRICTED = 7;       // Requester's geography not permitted
-  DENIAL_REASON_REPORTING_OVERDUE = 8;    // Requester has >20% overdue reports (MAY threshold)
-  DENIAL_REASON_OFFER_EXPIRED = 9;        // Offer TTL exceeded
-  DENIAL_REASON_SIGNATURE_INVALID = 10;   // Offer signature verification failed
-  DENIAL_REASON_QUOTA_EXCEEDED = 11;      // Subscription access count exhausted for this period
-  DENIAL_REASON_DELEGATION_EXPIRED = 12;  // Biscuit delegation token expired
-  DENIAL_REASON_SCOPE_INSUFFICIENT = 13;  // Requester scopes don't cover this resource
+  DENIAL_REASON_BILLING_REF_INACTIVE = 1; // billing_ref is not active / not recognized by the billing system
+  DENIAL_REASON_INSUFFICIENT_BALANCE = 2; // Requester's balance too low
+  DENIAL_REASON_RATE_LIMITED = 3;         // Too many requests
+  DENIAL_REASON_CONTENT_UNAVAILABLE = 4;  // Resource no longer available
+  DENIAL_REASON_RESTRICTION_NOT_SATISFIED = 5;  // Accepted term's restriction not satisfied by the request; the axes are in TransactionResponse/TransactionResultItem.restriction_mismatches (same RestrictionKind vocabulary as the terms)
+  DENIAL_REASON_REPORTING_OVERDUE = 6;    // Requester has >20% overdue reports (MAY threshold)
+  DENIAL_REASON_OFFER_EXPIRED = 7;        // Offer TTL exceeded
+  DENIAL_REASON_SIGNATURE_INVALID = 8;    // Offer signature verification failed
+  DENIAL_REASON_QUOTA_EXCEEDED = 9;       // Subscription access count exhausted for this period
+  DENIAL_REASON_DELEGATION_INVALID = 10;  // Delegation missing, unverifiable, expired, holder binding failed, or scopes/caps do not cover the request
+  DENIAL_REASON_SCOPE_INSUFFICIENT = 11;  // Requester scopes don't cover this resource
 }
 
 // IngestionSource — How the catalog entry was discovered.
@@ -1349,6 +1885,13 @@ message ResourceEntry {
   // by the verifier's operator).
   repeated ResourceAttestation attestations = 12;
 
+  // Publisher-declared licensing terms for this resource.
+  // See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST
+  // be present. For REFERENCE_ONLY terms, License.uri is authoritative.
+  // The Exchange validates ENUMERATED terms at push time and surfaces them
+  // in Offer.terms on discovery.
+  repeated LicenseTerm terms = 13;
+
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1361,6 +1904,13 @@ message ResourceEntry {
 message PushResourcesResponse {
   int32 accepted = 1;
   int32 rejected = 2;
+
+  // Non-fatal issues encountered during ingestion.
+  // Examples: unrecognized vocab token in a Restriction (term accepted but flagged),
+  //           REFERENCE_ONLY term missing License.uri (informational).
+  // Warnings do not cause rejection — they are surfaced so publishers can fix
+  // their feeds without a hard failure.
+  repeated string warnings = 3;
 }
 
 message RemoveResourcesRequest {
@@ -1468,8 +2018,8 @@ message AttributionDetail {
 
 // Usage — How resource was actually used by the AI system.
 message Usage {
-  // How the resource was used. Standard values: "ai_train", "ai_input",
-  // "ai_index", "search", "display". Multiple allowed.
+  // How the resource was used. Standard values: "ai-train", "ai-input",
+  // "ai-index", "search", "display". Multiple allowed.
   // CoMP-specific values available via ramp-comp-v1 extension profile.
   repeated string function = 1;
 
@@ -1492,8 +2042,16 @@ message Usage {
   repeated AttributionDetail attribution = 6;
 
   // Metering unit for consumed_quantity. Must match the Offer's Pricing.unit.
-  // If omitted, defaults to "tokens" for backward compatibility.
-  optional string consumed_unit = 8;
+  // If omitted, defaults to "tokens". Same token format as Pricing.unit:
+  // a bare registered token or a vendor:namespaced token.
+  optional string consumed_unit = 8 [
+    (buf.validate.field).string.max_len = 64,
+    (buf.validate.field).cel = {
+      id: "usage_report.consumed_unit.format"
+      message: "consumed_unit must be a bare registered token ([a-z0-9-]) or vendor:namespaced"
+      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
+    }
+  ];
 }
 
 // UsageAsset — A single asset included in the usage report.
@@ -1547,6 +2105,17 @@ message RAMPRequest {
   // The Broker forwards this to Exchanges in ResourceQuery.requester.
   Requester requester = 3;
 
+  // Resource URIs the agent wants. The Broker forwards these to Exchanges in
+  // ResourceQuery.uris. Optional when `query` / `search_filters` drive
+  // Broker-side discovery instead.
+  repeated string uris = 8 [(buf.validate.field).repeated.max_items = 256];
+
+  // The limits the agent will operate within, per restriction axis — see
+  // AcceptableRestriction. The Broker forwards these to Exchanges in
+  // ResourceQuery.acceptable_restrictions. Advisory selection inputs, not
+  // enforcement.
+  repeated AcceptableRestriction acceptable_restrictions = 9;
+
   // Constraints for exchange filtering and offer selection.
   optional RequestConstraints constraints = 4;
 
@@ -1566,7 +2135,7 @@ message RAMPRequest {
   // When present, the Broker interprets the query and discovers resources
   // across Exchanges on the agent's behalf. Results returned as Offers
   // in RAMPResponse, same as for specific URI requests.
-  // Can be used alongside Requester.uris (specific URIs + search in one request).
+  // Can be used alongside uris (specific URIs + search in one request).
   optional string query = 6;
 
   // Structured search filters (optional, alongside or instead of query).
@@ -1630,12 +2199,12 @@ message RequestConstraints {
   //   30 days  — "drug interaction database updated this month"
   optional google.protobuf.Duration max_data_age = 10;
 
-  // Maximum intermediary hops the agent will allow in its request chain
-  // (Agent → Broker → … → Exchange). Caps chain depth so a request is not
-  // relayed through more brokers than the agent is willing to trust or pay.
-  // The Broker MUST NOT forward a request whose chain would exceed this.
-  // Absent = agent imposes no cap (the Exchange's max_intermediary_hops
-  // still applies).
+  // Maximum forwarding hops the agent will allow (Agent → Broker → … →
+  // Exchange), counted as the number of RFC 9421 HTTP Message Signatures on the
+  // request. Caps chain depth so a request is not relayed through more brokers
+  // than the agent is willing to trust or pay. A Broker MUST NOT forward a
+  // request whose signature count would exceed this. Absent = agent imposes no
+  // cap (the Exchange's max_intermediary_hops still applies).
   optional int32 max_hops = 11;
 }
 
@@ -1668,10 +2237,6 @@ message RequestConstraints {
 // (e.g. "agent-7.registry.example"). The agent generates its own keypair; the
 // registry publishes the public half at {registry}/.well-known/ramp.json. The
 // domain + well-known paradigm is preserved end to end.
-//
-// Relaxing the discovery anchor (e.g. an explicit per-requester keys URL) is
-// intentionally deferred: revisit at the protocol level only if self-hosting
-// or registry-hosting proves too rigid in practice.
 // ============================================================================
 
 // Role — Identifies which kind of RAMP participant a WellKnownManifest
@@ -1824,10 +2389,10 @@ message WellKnownManifest {
   // values from this Exchange are denominated in this currency.
   optional string base_currency = 27;
 
-  // Exchange-only. Maximum intermediary hops this Exchange tolerates in an
-  // inbound request chain (Agent → Broker → … → Exchange). A request whose
-  // intermediaries chain is longer SHOULD be rejected. Lets Exchanges publish
-  // their chain-depth tolerance so Brokers prune before forwarding.
+  // Exchange-only. Maximum forwarding hops this Exchange tolerates on an inbound
+  // request (Agent → Broker → … → Exchange), counted as RFC 9421 HTTP Message
+  // Signatures. A request carrying more SHOULD be rejected. Lets Exchanges
+  // publish their chain-depth tolerance so Brokers prune before forwarding.
   // Absent = no published limit (Exchange applies its own default policy).
   optional int32 max_intermediary_hops = 28;
 

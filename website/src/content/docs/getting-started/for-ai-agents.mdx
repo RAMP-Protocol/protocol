@@ -67,11 +67,11 @@ The SDK is not yet published to package registries. Use the working implementati
 - **Python**: See [`poc/mcp-tool/server.py`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/mcp-tool/server.py) for the Python reference implementation (FastMCP-based).
 </Aside>
 
-Configure it with your license ID, signing key, and budget:
+Configure it with your billing reference, signing key, and budget:
 
 ```go
 client, _ := ramp.NewClient(ramp.Config{
-    LicenseID:  "LIC-YOUR-COMPANY-001",
+    BillingRef:  "ACME-COST-CENTER-001",
     SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
     SupportedProfiles: []string{
         "ramp-news-v1",       // articles, podcasts, broadcasting
@@ -124,9 +124,8 @@ The `Requester` message is the identity envelope on every `ResourceQuery` and `T
 | `domain` | Domain where your public key is published | `"agents.acme.com"` |
 | `type` | What kind of entity you are (see below) | `REQUESTER_TYPE_AGENT` |
 | `scopes` | What you can access | `["academic:*", "credit:read"]` |
-| `signature` | Ed25519 signature over `(id, domain, uris, scopes)` | (computed by SDK) |
 
-The SDK signs every request with your Ed25519 private key. The Exchange verifies it against the public key published at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`), selected by `kid` from the manifest's `public_keys`.
+The `Requester` carries **no** signature field. The SDK signs every request with your Ed25519 private key as an RFC 9421 HTTP Message Signature (in the HTTP headers, covering the whole request). The Exchange verifies it against the public key published at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`), selected by `keyid` from the manifest's `public_keys`.
 
 ### RequesterType
 
@@ -146,19 +145,19 @@ Scopes declare what your agent is entitled to access. The Exchange filters its c
 
 | Scope Pattern | Meaning |
 |---|---|
-| `"subscription:bloomberg-2026"` | Active Bloomberg subscription |
+| `"subscription:marketdata-2026"` | Active MarketData subscription |
 | `"credit:read"` | Can access credit reports (read-only) |
 | `"academic:*"` | Full access to academic resources |
 | `"*"` | Unrestricted (public Exchange default) |
 | `[]` (empty) | Exchange applies its default access policy |
 
-### Biscuit Delegation for Sub-Agent Scenarios
+### Delegation for Sub-Agent Scenarios
 
-If your agent delegates to sub-agents, Biscuit tokens enable safe permission narrowing without round-tripping to the original issuer. Your agent attenuates its own token — restricting scopes, lowering spend caps, shortening expiry — and hands the narrowed token to the sub-agent. The sub-agent cannot widen permissions; this is cryptographically enforced.
+If your agent delegates to sub-agents, delegation JWTs enable safe permission narrowing without round-tripping to the original issuer. Your agent issues a child delegation JWT (narrowing) from its own token — restricting scopes, lowering spend caps, shortening expiry — and hands the narrowed token to the sub-agent. The sub-agent cannot widen permissions; this is cryptographically enforced.
 
-The attenuated token is carried in the `Requester.delegation` field. Set `type` to `REQUESTER_TYPE_DELEGATED` on the sub-agent's requests.
+The child delegation JWT is carried in the `Requester.delegation` field. Set `type` to `REQUESTER_TYPE_DELEGATED` on the sub-agent's requests.
 
-For the full delegation model — Biscuit structure, attenuation examples, and enterprise IAM integration — see [Authentication](/protocol/authentication/).
+For the full delegation model — the JWT chain, child delegation JWT examples, and enterprise IAM integration — see [Authentication](/protocol/authentication/).
 
 ### Subscription Quota
 
@@ -180,7 +179,7 @@ When a request is denied, the Exchange returns a specific `DenialReason` so your
 | Denial Reason | Meaning | What to Do |
 |---|---|---|
 | `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for this period | Wait for quota reset or upgrade subscription |
-| `DENIAL_REASON_DELEGATION_EXPIRED` | Biscuit delegation token has expired | Request a fresh token from the principal |
+| `DENIAL_REASON_DELEGATION_INVALID` | Delegation missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent | Obtain a fresh delegation from the principal |
 | `DENIAL_REASON_SCOPE_INSUFFICIENT` | Your scopes do not cover this resource | Request broader scopes or a different resource |
 | `DENIAL_REASON_INSUFFICIENT_BALANCE` | Buyer's balance too low for this transaction | Add funds or reduce request scope |
 | `DENIAL_REASON_SIGNATURE_INVALID` | Ed25519 signature verification failed | Check your signing key configuration |
@@ -220,7 +219,7 @@ Not all resources are static files. RAMP classifies resources by mutability, whi
 |---|---|---|---|
 | **STATIC** | Journal article, patent filing, archived news story | Hash is stable -- verify it | Compare SHA-256 of received bytes to attested `content_hash`. Mismatch is disputable. |
 | **DYNAMIC** | D&B credit report, DrugBank interaction database, satellite catalog | Hash changes between offer and fetch | Do NOT auto-dispute hash mismatch. Check `data_as_of` for freshness instead. |
-| **LIVE** | Bloomberg quote feed, NPR live broadcast, news monitoring stream | No content exists at offer time | No hash verification. Metering is time-based (minutes, hours). |
+| **LIVE** | MarketData quote feed, NPR live broadcast, news monitoring stream | No content exists at offer time | No hash verification. Metering is time-based (minutes, hours). |
 
 For dynamic resources, the `data_as_of` field on the Offer tells you when the data was current. Your agent can set `max_data_age` to filter out stale offers:
 
@@ -269,8 +268,8 @@ The SDK groups identifiers by domain, sends one query per Exchange, and executes
 RAMP supports streaming resources (WebSocket, SSE, HLS, Icecast) via `DELIVERY_METHOD_STREAMING`. The flow is the same -- `ExecuteTransaction` returns a signed URL, but that URL points to a streaming endpoint.
 
 ```go
-// Connect to a live Bloomberg quote feed
-stream, _ := client.Fetch(ctx, "bloomberg://stream/equities/AAPL,MSFT,GOOGL",
+// Connect to a live MarketData quote feed
+stream, _ := client.Fetch(ctx, "marketdata://stream/equities/AAPL,MSFT,GOOGL",
     ramp.WithDeliveryMethod(ramp.Streaming),
 )
 
@@ -365,7 +364,7 @@ The core protocol is domain-agnostic. Extension profiles add domain-specific met
 
 ## Next Steps
 
-1. Get a license ID from a participating Exchange operator
+1. Get a billing reference from a participating Exchange operator (the handle that links your requests to the Exchange's billing/accounting system)
 2. Install the SDK, declare your `supported_profiles`, and configure your budget
 3. Replace your per-provider integrations with `client.Fetch()`
 
