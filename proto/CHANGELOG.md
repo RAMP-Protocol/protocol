@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+**Discovery/offer response model (breaking).** The Agent-to-Broker discovery
+messages are renamed and the response is re-modeled to carry offers rather than
+a single transaction result:
+
+- **Renamed** `RAMPRequest` to `DiscoveryRequest` and `RAMPResponse` to
+  `DiscoveryResponse` — the Agent-to-Broker request/response pair (Steps 1 and 6).
+- **Re-modeled** `DiscoveryResponse` as discovery-only. Removed the
+  per-transaction fields (`transaction_id`, `billing_id`, `exchange`,
+  `resource_title`, `cost`, `delivery_method`, `reporting_obligation`,
+  `expires_at`, `broker_fee`, `retrieval_endpoint`, `agent_identity_hash`) —
+  these are carried solely by `TransactionResponse` — and added
+  `repeated OfferGroup offer_groups`, one group per requested URI, as the sole
+  offer representation. A group with no offers carries its `absence_reason`.
+- **Added** `Offer.exchange` (field 8): the canonical domain of the issuing
+  Exchange and the target for the execute call. It sits inside the signed Offer
+  bytes, so a relaying Broker cannot redirect execution to a different Exchange
+  without invalidating the signature.
+
+This is an accepted breaking change pre-v1 freeze; `buf breaking` reports the
+deltas as expected.
+
 **CoMP re-baseline to canonical V1 (breaking).** `proto/comp/v1/comp.proto` is
 re-aligned to be a 1:1 mirror of IAB Tech Lab Content Monetization Protocols
 **CoMP V1** (finalized 2026-04-28,
