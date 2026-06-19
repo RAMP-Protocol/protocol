@@ -75,6 +75,7 @@ export default defineConfig({
 					label: 'Reference',
 					items: [
 						{ label: 'Proto: RAMP v1', slug: 'reference/proto-ramp' },
+						{ label: 'Standards & References', slug: 'reference/standards' },
 						{ label: 'ramp.json Example', slug: 'reference/ramp-json-example' },
 						{ label: 'Changelog', slug: 'reference/changelog' },
 					],

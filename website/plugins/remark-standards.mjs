@@ -1,58 +1,47 @@
-// remark-standards links external standards references to their canonical sources
-// at build time — so a bare "RFC 9421" or "C2PA" in prose becomes an accurate link,
-// with no hand-maintained links in the source and no drift. It links the FIRST
-// unlinked mention of each standard per page (no link-spam), skipping headings,
-// code spans (inlineCode is not a text node), and text already inside a link.
+// remark-standards links external standards references to their canonical sources at
+// build time, from the single references registry (src/data/standards.mjs — which also
+// renders the References page). It links the FIRST unlinked mention of each standard
+// per page (no link-spam), skipping headings, code spans (inlineCode is not a text
+// node), and text already inside a link at ANY depth. A standard already linked
+// manually on the page is left alone (no redundant second link).
 //
-// RFCs are pattern-derived (rfc-editor.org is the authoritative published source).
-// Named standards come from the registry below — keep it accurate and canonical.
-import { visit, SKIP } from 'unist-util-visit';
+// Source of truth is the registry, so a standard cannot resolve to two different URLs
+// here or on the References page — to change a URL, edit the one entry.
+import { visitParents, SKIP } from 'unist-util-visit-parents';
+import { STANDARDS } from '../src/data/standards.mjs';
 
-const RFC_BASE = 'https://www.rfc-editor.org/rfc/rfc';
-
-// Named standards (and standard acronyms that are themselves defined by an RFC).
-// Listed longest-first so "W3C Trace Context" wins over "Trace Context".
-const NAMED = [
-  ['W3C Trace Context', 'https://www.w3.org/TR/trace-context/'],
-  ['Trace Context', 'https://www.w3.org/TR/trace-context/'],
-  ['ISO 3166', 'https://www.iso.org/iso-3166-country-codes.html'],
-  ['EdDSA', `${RFC_BASE}8032`],
-  ['ed25519', `${RFC_BASE}8032`],
-  ['C2PA', 'https://c2pa.org/specifications/'],
-  ['SPDX', 'https://spdx.org/licenses/'],
-  ['JWT', `${RFC_BASE}7519`],
-  ['JWK', `${RFC_BASE}7517`],
-  ['JCS', `${RFC_BASE}8785`],
-  ['COSE', `${RFC_BASE}9052`],
-  ['RSL', 'https://rslstandard.org/'],
-  ['biscuit', 'https://www.biscuitsec.org/'],
-];
-
-const RFC_RE = /\bRFC[\s ]?(\d{3,5})\b/;
-const wordRe = (w) => new RegExp(`(?<![A-Za-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9])`);
-const NAMED_RE = NAMED.map(([name, url]) => [name, url, wordRe(name)]);
+// Word boundary that also rejects a LEADING hyphen, so a term inside a compound
+// prefix isn't split (e.g. "C2PA" in "RAMP-C2PA" must not link), while still allowing
+// a trailing hyphen so a compound head links (e.g. "biscuit" in "biscuit-v3"). The
+// trailing alnum rejection keeps "JWK" out of "JWKS" and "JWT" out of "JWTs".
+const boundary = (w) =>
+  new RegExp(`(?<![A-Za-z0-9-])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9])`);
+const ENTRIES = STANDARDS.map((e) => ({ id: e.id, url: e.url, aliases: e.aliases.map(boundary) }));
 
 const textNode = (value) => ({ type: 'text', value });
 const linkNode = (url, value) => ({ type: 'link', url, children: [textNode(value)] });
 
-// linkify returns the replacement node list for a text value (first-occurrence of
-// each not-yet-linked standard turned into a link), or null if nothing matched.
-function linkify(text, linked) {
-  let best = null; // { start, end, key, url, label }
-  const consider = (start, end, key, url) => {
-    if (start < 0 || linked.has(key)) return;
-    if (!best || start < best.start) best = { start, end, key, url, label: text.slice(start, end) };
-  };
-
-  const rfc = RFC_RE.exec(text);
-  if (rfc) consider(rfc.index, rfc.index + rfc[0].length, `RFC${rfc[1]}`, `${RFC_BASE}${rfc[1]}`);
-  for (const [name, url, re] of NAMED_RE) {
-    const m = re.exec(text);
-    if (m) consider(m.index, m.index + name.length, name, url);
+// earliest unlinked standard match in text (leftmost position wins — this is what
+// resolves "Trace Context" vs "W3C Trace Context"; the word boundary keeps "JWK" out
+// of "JWKS"). Returns { start, end, id, url, label } or null.
+function earliest(text, linked) {
+  let best = null;
+  for (const e of ENTRIES) {
+    if (linked.has(e.id)) continue;
+    for (const re of e.aliases) {
+      const m = re.exec(text);
+      if (m && (!best || m.index < best.start)) {
+        best = { start: m.index, end: m.index + m[0].length, id: e.id, url: e.url, label: m[0] };
+      }
+    }
   }
-  if (!best) return null;
+  return best;
+}
 
-  linked.add(best.key);
+function linkify(text, linked) {
+  const best = earliest(text, linked);
+  if (!best) return null;
+  linked.add(best.id);
   const out = [];
   if (best.start > 0) out.push(textNode(text.slice(0, best.start)));
   out.push(linkNode(best.url, best.label));
@@ -63,16 +52,30 @@ function linkify(text, linked) {
   return out;
 }
 
+
 export default function remarkStandards() {
   return (tree) => {
-    const linked = new Set(); // one link per standard per page
-    visit(tree, 'text', (node, index, parent) => {
-      if (!parent || index == null) return;
-      if (parent.type === 'heading' || parent.type === 'link') return;
+    const linked = new Set();
+
+    // Seed: if a standard is already linked to its canonical source on the page,
+    // don't add a redundant second link. Keyed on the URL (not the link text) so a
+    // deep-link to a specific resource (a spec version, a trust list) or an in-page
+    // anchor does NOT suppress the general reference — only an existing canonical
+    // link does.
+    visitParents(tree, 'link', (node) => {
+      for (const e of ENTRIES) if (node.url === e.url) linked.add(e.id);
+    });
+
+    // Link the first unlinked mention of each standard in prose.
+    visitParents(tree, 'text', (node, ancestors) => {
+      if (ancestors.some((a) => a.type === 'link' || a.type === 'heading')) return;
+      const parent = ancestors[ancestors.length - 1];
+      const idx = parent?.children?.indexOf(node);
+      if (idx == null || idx < 0) return;
       const replacement = linkify(node.value, linked);
       if (replacement) {
-        parent.children.splice(index, 1, ...replacement);
-        return [SKIP, index + replacement.length];
+        parent.children.splice(idx, 1, ...replacement);
+        return [SKIP, idx + replacement.length];
       }
     });
   };
