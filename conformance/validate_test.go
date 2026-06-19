@@ -94,9 +94,9 @@ func licensingCases() []validationCase {
 		// License.uri_digest — strong-hash structure only.
 		{"uri_digest empty ok", &rampv1.License{UriDigest: proto.String("")}, true, ""},
 		{"uri_digest sha256 ok", &rampv1.License{UriDigest: proto.String("sha256:" + hex64)}, true, ""},
-		{"uri_digest md5 rejected", &rampv1.License{UriDigest: proto.String("md5:" + hex64)}, false, "license.uri_digest.format"},
-		{"uri_digest sha256 wrong length", &rampv1.License{UriDigest: proto.String("sha256:dead")}, false, "license.uri_digest.format"},
-		{"uri_digest sha256 non-hex", &rampv1.License{UriDigest: proto.String("sha256:" + "g" + hex64[1:])}, false, "license.uri_digest.format"},
+		{"uri_digest md5 rejected", &rampv1.License{UriDigest: proto.String("md5:" + hex64)}, false, "string.pattern"},
+		{"uri_digest sha256 wrong length", &rampv1.License{UriDigest: proto.String("sha256:dead")}, false, "string.pattern"},
+		{"uri_digest sha256 non-hex", &rampv1.License{UriDigest: proto.String("sha256:" + "g" + hex64[1:])}, false, "string.pattern"},
 
 		// Pricing message-level CEL: PER_UNIT⇒unit set; FREE⇒rate 0.
 		{"pricing per_unit with unit ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("tokens"), Currency: "USD", Rate: 0.05}, true, ""},
@@ -107,25 +107,25 @@ func licensingCases() []validationCase {
 		// Pricing.unit format: empty / bare-dashed / vendor:namespaced.
 		{"pricing unit bare ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("sq-km"), Rate: 1}, true, ""},
 		{"pricing unit vendor ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("acme:widgets"), Rate: 1}, true, ""},
-		{"pricing unit with space rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("two words"), Rate: 1}, false, "pricing.unit.format"},
+		{"pricing unit with space rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("two words"), Rate: 1}, false, "string.pattern"},
 
 		// AcceptableRestriction.values charset + max_items.
 		{"acceptable values ok", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train", "ai-input"}}, true, ""},
-		{"acceptable values space rejected", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai train"}}, false, "acceptable_restriction.values.format"},
+		{"acceptable values space rejected", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai train"}}, false, "string.pattern"},
 		{"acceptable values too many rejected", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: gen65()}, false, "repeated.max_items"},
 
 		// Restriction.permitted/prohibited charset.
 		{"restriction permitted ok", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-input"}}, true, ""},
-		{"restriction permitted control-char rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"bad\ttoken"}}, false, "restriction.permitted.format"},
+		{"restriction permitted control-char rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"bad\ttoken"}}, false, "string.pattern"},
 		{"restriction prohibited ok", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Prohibited: []string{"ai-train"}}, true, ""},
-		{"restriction prohibited space rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Prohibited: []string{"ai train"}}, false, "restriction.prohibited.format"},
+		{"restriction prohibited space rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Prohibited: []string{"ai train"}}, false, "string.pattern"},
 
 		// Quota.metric format — bare-dashed or vendor:namespaced; empty rejected.
 		// window set so the only variable under test is metric.
 		{"quota metric bare ok", &rampv1.Quota{Metric: "display-words", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, true, ""},
 		{"quota metric vendor ok", &rampv1.Quota{Metric: "acme:frames", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, true, ""},
-		{"quota metric empty rejected", &rampv1.Quota{Metric: "", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false, "quota.metric.format"},
-		{"quota metric space rejected", &rampv1.Quota{Metric: "two words", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false, "quota.metric.format"},
+		{"quota metric empty rejected", &rampv1.Quota{Metric: "", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false, "string.pattern"},
+		{"quota metric space rejected", &rampv1.Quota{Metric: "two words", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false, "string.pattern"},
 
 		// License.uri present requires uri_digest (any semantics).
 		{"license no uri ok", &rampv1.License{Id: proto.String("CC-BY-4.0")}, true, ""},
@@ -176,7 +176,7 @@ func licensingCases() []validationCase {
 		{"dispute_request reason unspecified rejected", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x"}, false, "enum.not_in"},
 		{"usage consumed_unit empty ok", &rampv1.Usage{}, true, ""},
 		{"usage consumed_unit bare ok", &rampv1.Usage{ConsumedUnit: proto.String("tokens")}, true, ""},
-		{"usage consumed_unit space rejected", &rampv1.Usage{ConsumedUnit: proto.String("two words")}, false, "usage.consumed_unit.format"},
+		{"usage consumed_unit space rejected", &rampv1.Usage{ConsumedUnit: proto.String("two words")}, false, "string.pattern"},
 	}
 }
 
@@ -256,6 +256,7 @@ func errorDetailCases() []validationCase {
 // listing them lets the integrity check reject a mistyped wantRule that is
 // neither a real custom CEL id nor a known standard rule.
 var standardRuleIDs = map[string]bool{
+	"string.pattern":     true,
 	"required":           true,
 	"repeated.max_items": true,
 	"int64.gte":          true,

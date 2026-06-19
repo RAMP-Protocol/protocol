@@ -8314,11 +8314,10 @@ var File_ramp_v1_ramp_proto protoreflect.FileDescriptor
 
 const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\n" +
-	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bbuf/validate/validate.proto\x1a\x13ramp/v1/vocab.proto\"\xb5\x02\n" +
+	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bbuf/validate/validate.proto\x1a\x13ramp/v1/vocab.proto\"\x84\x01\n" +
 	"\x15AcceptableRestriction\x12,\n" +
-	"\x04axis\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04axis\x12\xed\x01\n" +
-	"\x06values\x18\x02 \x03(\tB\xd4\x01\xbaH\xd0\x01\xba\x01\xc7\x01\n" +
-	"$acceptable_restriction.values.format\x12Meach value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\x06values\"\xa1\x03\n" +
+	"\x04axis\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04axis\x12=\n" +
+	"\x06values\x18\x02 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\x06values\"\xa1\x03\n" +
 	"\rResourceQuery\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
@@ -8431,35 +8430,31 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"attestedAt\x12\x10\n" +
 	"\x03uri\x18\x04 \x01(\tR\x03uri\x12/\n" +
 	"\x06claims\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06claims\x12\x1c\n" +
-	"\tsignature\x18\x06 \x01(\tR\tsignature\"\xd4\x04\n" +
+	"\tsignature\x18\x06 \x01(\tR\tsignature\"\x92\x03\n" +
 	"\aLicense\x12\x15\n" +
 	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x13\n" +
 	"\x02id\x18\x02 \x01(\tH\x01R\x02id\x88\x01\x01\x12\x17\n" +
 	"\x04name\x18\x03 \x01(\tH\x02R\x04name\x88\x01\x01\x12!\n" +
-	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01\x12\xad\x02\n" +
+	"\timmutable\x18\x04 \x01(\bH\x03R\timmutable\x88\x01\x01\x12l\n" +
 	"\n" +
-	"uri_digest\x18\x05 \x01(\tB\x88\x02\xbaH\x84\x02\xba\x01\x80\x02\n" +
-	"\x19license.uri_digest.format\x12Zuri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length\x1a\x86\x01this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')H\x04R\turiDigest\x88\x01\x01:|\xbaHy\x1aw\n" +
+	"uri_digest\x18\x05 \x01(\tBH\xbaHErC2A^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$H\x04R\turiDigest\x88\x01\x01:|\xbaHy\x1aw\n" +
 	" license.digest_required_with_uri\x12*uri_digest is required whenever uri is set\x1a'this.uri == '' || this.uri_digest != ''B\x06\n" +
 	"\x04_uriB\x05\n" +
 	"\x03_idB\a\n" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_immutableB\r\n" +
-	"\v_uri_digest\"\xdd\x05\n" +
+	"\v_uri_digest\"\x8a\x03\n" +
 	"\vRestriction\x126\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindB\b\xbaH\x05\x82\x01\x02 \x00R\x04kind\x12\xeb\x01\n" +
-	"\tpermitted\x18\x02 \x03(\tB\xcc\x01\xbaH\xc8\x01\xba\x01\xbf\x01\n" +
-	"\x1crestriction.permitted.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\tpermitted\x12\xee\x01\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindB\b\xbaH\x05\x82\x01\x02 \x00R\x04kind\x12C\n" +
+	"\tpermitted\x18\x02 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\tpermitted\x12E\n" +
 	"\n" +
-	"prohibited\x18\x03 \x03(\tB\xcd\x01\xbaH\xc9\x01\xba\x01\xc0\x01\n" +
-	"\x1drestriction.prohibited.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\n" +
+	"prohibited\x18\x03 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\n" +
 	"prohibited\x12\x1a\n" +
 	"\badvisory\x18\x04 \x01(\bR\badvisory:\x9a\x01\xbaH\x96\x01\x1a\x93\x01\n" +
-	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\"\xe2\x03\n" +
-	"\x05Quota\x12\x81\x03\n" +
-	"\x06metric\x18\x01 \x01(\tB\xe8\x02\xbaH\xe5\x01\xba\x01\xdd\x01\n" +
-	"\x13quota.metric.format\x12cmetric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1aathis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))r\x02\x18@\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seats\x9a\xb5\x18\fquotametricsR\x06metric\x12\x1d\n" +
+	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\"\xb0\x02\n" +
+	"\x05Quota\x12\xcf\x01\n" +
+	"\x06metric\x18\x01 \x01(\tB\xb6\x01\xbaH4r2\x18@2.^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seats\x9a\xb5\x18\fquotametricsR\x06metric\x12\x1d\n" +
 	"\x05limit\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\x05limit\x126\n" +
 	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowB\b\xbaH\x05\x82\x01\x02 \x00R\x06window\"\x98\x04\n" +
 	"\n" +
@@ -8499,16 +8494,15 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\x8a\t\n" +
+	"\x05_size\"\xd5\a\n" +
 	"\aPricing\x125\n" +
 	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelB\b\xbaH\x05\x82\x01\x02 \x00R\x05model\x12\x12\n" +
 	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12 \n" +
 	"\tunit_cost\x18\x04 \x01(\x01H\x00R\bunitCost\x88\x01\x01\x122\n" +
 	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12;\n" +
-	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\xc8\x03\n" +
-	"\x04unit\x18\b \x01(\tB\xae\x03\xbaH\xe9\x01\xba\x01\xe1\x01\n" +
-	"\x13pricing.unit.format\x12iunit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aseconds\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
+	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\x93\x02\n" +
+	"\x04unit\x18\b \x01(\tB\xf9\x01\xbaH5r3\x18@2/^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aseconds\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
 	"characters\x8a\xb5\x18\x05bytes\x8a\xb5\x18\x05items\x8a\xb5\x18\x05sq-km\x9a\xb5\x18\fpricingunitsH\x03R\x04unit\x88\x01\x01\x129\n" +
 	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xa7\x02\xbaH\xa3\x02\x1a\x97\x01\n" +
 	"\x1epricing.per_unit.requires_unit\x12'unit is required when model is PER_UNIT\x1aLthis.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''\x1a\x86\x01\n" +
@@ -8717,16 +8711,15 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0fvisible_to_user\x18\x03 \x01(\bH\x02R\rvisibleToUser\x88\x01\x01B\x10\n" +
 	"\x0e_displayed_urlB\t\n" +
 	"\a_formatB\x12\n" +
-	"\x10_visible_to_user\"\xf0\x04\n" +
+	"\x10_visible_to_user\"\xa9\x03\n" +
 	"\x05Usage\x12\x1a\n" +
 	"\bfunction\x18\x01 \x03(\tR\bfunction\x12\x14\n" +
 	"\x05subfn\x18\x02 \x03(\tR\x05subfn\x12+\n" +
 	"\x11consumed_quantity\x18\x03 \x01(\x05R\x10consumedQuantity\x12/\n" +
 	"\x11displayed_to_user\x18\x04 \x01(\bH\x00R\x0fdisplayedToUser\x88\x01\x01\x120\n" +
 	"\x11citation_included\x18\x05 \x01(\bH\x01R\x10citationIncluded\x88\x01\x01\x12<\n" +
-	"\vattribution\x18\x06 \x03(\v2\x1a.ramp.v1.AttributionDetailR\vattribution\x12\xa8\x02\n" +
-	"\rconsumed_unit\x18\b \x01(\tB\xfd\x01\xbaH\xf9\x01\xba\x01\xf1\x01\n" +
-	"\x1ausage.consumed_unit.format\x12rconsumed_unit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@H\x02R\fconsumedUnit\x88\x01\x01B\x14\n" +
+	"\vattribution\x18\x06 \x03(\v2\x1a.ramp.v1.AttributionDetailR\vattribution\x12b\n" +
+	"\rconsumed_unit\x18\b \x01(\tB8\xbaH5r3\x18@2/^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$H\x02R\fconsumedUnit\x88\x01\x01B\x14\n" +
 	"\x12_displayed_to_userB\x14\n" +
 	"\x12_citation_includedB\x10\n" +
 	"\x0e_consumed_unit\"v\n" +

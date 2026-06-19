@@ -124,11 +124,9 @@ message AcceptableRestriction {
   // as the terms (e.g. FUNCTION ["ai-train"], GEOGRAPHY ["US", "EU"]).
   repeated string values = 2 [
     (buf.validate.field).repeated.max_items = 64,
-    (buf.validate.field).cel = {
-      id: "acceptable_restriction.values.format"
-      message: "each value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
-      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
-    }
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 64,
+    (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
   ];
 }
 
@@ -911,11 +909,7 @@ message License {
   // (allowlisted prefix + matching hex length); presence (digest-when-uri) is
   // enforced at ingest.
   optional string uri_digest = 5 [
-    (buf.validate.field).cel = {
-      id: "license.uri_digest.format"
-      message: "uri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length"
-      expression: "this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')"
-    }
+    (buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$"
   ];
 }
 
@@ -969,21 +963,17 @@ message Restriction {
   // For USER_TYPE: "individual", "academic", "commercial_entity", …
   repeated string permitted = 2 [
     (buf.validate.field).repeated.max_items = 64,
-    (buf.validate.field).cel = {
-      id: "restriction.permitted.format"
-      message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
-      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
-    }
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 64,
+    (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
   ];
 
   // Tokens blocked on this axis. Takes precedence over permitted[].
   repeated string prohibited = 3 [
     (buf.validate.field).repeated.max_items = 64,
-    (buf.validate.field).cel = {
-      id: "restriction.prohibited.format"
-      message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
-      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
-    }
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 64,
+    (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
   ];
 
   // Fail-closed by default. When false (the default), this restriction is
@@ -1031,11 +1021,7 @@ message Quota {
     (ramp.v1.vocab) = "copies",
     (ramp.v1.vocab) = "seats",
     (buf.validate.field).string.max_len = 64,
-    (buf.validate.field).cel = {
-      id: "quota.metric.format"
-      message: "metric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)"
-      expression: "this != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))"
-    }
+    (buf.validate.field).string.pattern = "^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$"
   ];
 
   // Maximum allowed value in the given window. A quota of 0 grants
@@ -1276,11 +1262,7 @@ message Pricing {
     (ramp.v1.vocab) = "characters", (ramp.v1.vocab) = "bytes",  (ramp.v1.vocab) = "items",
     (ramp.v1.vocab) = "sq-km",
     (buf.validate.field).string.max_len = 64,
-    (buf.validate.field).cel = {
-      id: "pricing.unit.format"
-      message: "unit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)"
-      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
-    }
+    (buf.validate.field).string.pattern = "^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$"
   ];
 
   // How usage is tracked for billing reconciliation.
@@ -2056,11 +2038,7 @@ message Usage {
   // a bare registered token or a vendor:namespaced token.
   optional string consumed_unit = 8 [
     (buf.validate.field).string.max_len = 64,
-    (buf.validate.field).cel = {
-      id: "usage.consumed_unit.format"
-      message: "consumed_unit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)"
-      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
-    }
+    (buf.validate.field).string.pattern = "^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$"
   ];
 }
 

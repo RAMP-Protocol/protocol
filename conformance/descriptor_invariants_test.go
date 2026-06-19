@@ -240,76 +240,16 @@ func messageSnake(name string) string {
 	return b.String()
 }
 
-// ─── INV-3: the namespaced-token format is written identically everywhere ────
+// ─── INV-3 removed ───────────────────────────────────────────────────────────
 //
-// The "bare token or vendor:namespaced token" charset is hand-copied across
-// several field CELs (Pricing.unit, Quota.metric, Usage.consumed_unit).
-// protovalidate has no shared-macro mechanism, so the substitute is to assert
-// (3a) every such CEL uses EXACTLY the two canonical regex fragments — so the
-// charset cannot drift between copies — and (3b) its human message does not
-// claim registry/registration membership, which the CEL never checks. The
-// selector is structural (a CEL whose regex set includes the bare-token
-// fragment), so the digest format and the repeated-charset formats are excluded
-// automatically and a new token field is covered the moment it is added.
-const (
-	tokenBareRe = "^[a-z0-9-]+$"
-	tokenNsRe   = "^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$"
-)
-
-var matchesArgRe = regexp.MustCompile(`matches\('([^']*)'\)`)
-
-func TestTokenFormatCELsAreCanonical(t *testing.T) {
-	seen := 0
-	eachMessage(func(md protoreflect.MessageDescriptor) {
-		for j := 0; j < md.Fields().Len(); j++ {
-			fd := md.Fields().Get(j)
-			fr, err := protovalidate.ResolveFieldRules(fd)
-			if err != nil || fr == nil {
-				continue
-			}
-			for _, r := range fr.GetCel() {
-				args := matchArgs(r.GetExpression())
-				if !contains(args, tokenBareRe) {
-					continue // not a namespaced-token format (digest / repeated-charset formats)
-				}
-				seen++
-				// (3a) charset cannot drift — exactly the two canonical fragments.
-				if !(len(args) == 2 && contains(args, tokenNsRe)) {
-					t.Errorf("%s: token-format CEL must use exactly the canonical fragments {%q, %q}, got %v. "+
-						"Charset drift across the token-format copies is the disease; keep them identical.",
-						r.GetId(), tokenBareRe, tokenNsRe, args)
-				}
-				// (3b) the message must not claim registry/registration — the CEL
-				// is structure-only and never checks membership.
-				if strings.Contains(strings.ToLower(r.GetMessage()), "register") {
-					t.Errorf("%s: token-format CEL message %q claims registration/registry, but the CEL only checks structure. "+
-						"Drop the 'registered' wording — it misleads and diverges from the sibling messages.",
-						r.GetId(), r.GetMessage())
-				}
-			}
-		}
-	})
-	if seen == 0 {
-		t.Fatal("no token-format CELs found — the structural selector (bare-token fragment) drifted; INV-3 would be vacuous.")
-	}
-}
-
-func matchArgs(expr string) []string {
-	var out []string
-	for _, m := range matchesArgRe.FindAllStringSubmatch(expr, -1) {
-		out = append(out, m[1])
-	}
-	return out
-}
-
-func contains(ss []string, s string) bool {
-	for _, x := range ss {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
+// The namespaced-token format is now expressed as STANDARD protovalidate
+// string.pattern / repeated.items.string.pattern constraints on the fields
+// (Pricing.unit, Quota.metric, Usage.consumed_unit, Restriction.permitted/
+// prohibited, AcceptableRestriction.values), not custom CEL. There is no
+// token-format CEL left to keep canonical, so the old INV-3 (which asserted the
+// CEL regex fragments were identical across copies) is obsolete. The standard
+// patterns survive into the generated JSON Schema / Pydantic / Zod — which was
+// the point of the conversion.
 
 // ─── Positive controls ───────────────────────────────────────────────────────
 //
@@ -355,11 +295,7 @@ func TestInvariantHelpers(t *testing.T) {
 	}
 	pr := (&rampv1.Pricing{}).ProtoReflect().Descriptor()
 	if !fieldRejectsZero(pr, pr.Fields().ByName("model")) {
-		t.Error("fieldRejectsZero(Pricing.model) = false, want true (message-level CEL rejects zero)")
-	}
-
-	if args := matchArgs("a.matches('^x$') || b.matches('y:z')"); !(len(args) == 2 && args[0] == "^x$" && args[1] == "y:z") {
-		t.Errorf("matchArgs returned %v, want [^x$ y:z]", args)
+		t.Error("fieldRejectsZero(Pricing.model) = false, want true (field-level enum not_in:[0])")
 	}
 }
 
