@@ -202,13 +202,11 @@ class DisputeRequest(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1) | None = Field(
-        '',
+    idempotencyKey: constr(min_length=1) = Field(
+        ...,
         description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n filing does not open a duplicate case. The dispute's durable identity is the\n Exchange-assigned dispute_id in DisputeResponse.",
     )
-    reason: DisputeReason | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description='Reason for the dispute.'
-    )
+    reason: DisputeReason = Field(..., description='Reason for the dispute.')
     receivedContentHash: str | None = Field(
         None,
         description='Evidence: content hash of what was actually received.\n Exchange compares against the hash promised in ResourceIdentity.',
@@ -634,9 +632,9 @@ class RequestConstraints(WireModel):
         None,
         description='Budget scope identifier for per-period tracking.\n E.g. "user:u-12345" for per-user budgets, "team:eng" for per-team.\n The Broker tracks cumulative spend per scope across sessions.',
     )
-    deliveryPreference: (
-        list[DeliveryMethod | conint(ge=-2147483648, le=2147483647)] | None
-    ) = Field(None, description='Preferred delivery methods, in order of preference.')
+    deliveryPreference: list[DeliveryMethod] | None = Field(
+        None, description='Preferred delivery methods, in order of preference.'
+    )
     exchanges: list[str] | None = Field(
         None, description='Authorized Exchange domains. Broker queries only these.'
     )
@@ -809,12 +807,10 @@ class TransactionDenial(WireModel):
     offerId: str | None = Field(
         None, description='Batch mode: the offer this denial pertains to.'
     )
-    reason: DenialReason | conint(ge=1, le=18) | None = Field(
-        0, description='The denial reason (defined-only, non-zero)'
+    reason: DenialReason = Field(
+        ..., description='The denial reason (defined-only, non-zero)'
     )
-    restrictionMismatches: (
-        list[RestrictionKind | conint(ge=-2147483648, le=2147483647)] | None
-    ) = Field(
+    restrictionMismatches: list[RestrictionKind] | None = Field(
         None,
         description='When reason = RESTRICTION_NOT_SATISFIED, the failed axes (same\n RestrictionKind vocabulary the terms use).',
     )
@@ -843,7 +839,7 @@ class TransactionResultItem(WireModel):
         | conint(ge=-2147483648, le=2147483647)
         | None
     ) = Field(0, description='How resource is delivered for this item.')
-    denialReason: DenialReason | conint(ge=-2147483648, le=2147483647) | None = Field(
+    denialReason: DenialReason | None = Field(
         None, description='Set if this specific item was denied (others may succeed).'
     )
     expiresAt: AwareDatetime | None = Field(
@@ -856,9 +852,7 @@ class TransactionResultItem(WireModel):
     resourceTitle: str | None = Field(
         None, description='Resource title echoed from the Offer.'
     )
-    restrictionMismatches: (
-        list[RestrictionKind | conint(ge=-2147483648, le=2147483647)] | None
-    ) = Field(
+    restrictionMismatches: list[RestrictionKind] | None = Field(
         None,
         description='When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the\n request failed, in the same RestrictionKind vocabulary the terms use.',
     )
@@ -945,7 +939,7 @@ class AttributionDetail(WireModel):
     displayedUrl: str | None = Field(
         None, description='URL displayed to the user as the attribution link.'
     )
-    format: CitationFormat | conint(ge=-2147483648, le=2147483647) | None = Field(
+    format: CitationFormat | None = Field(
         None, description='How the citation was presented.'
     )
     visibleToUser: bool | None = Field(
@@ -964,17 +958,17 @@ class AuthorizedExchange(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    relationship: (
-        ProviderRelationship | conint(ge=-2147483648, le=2147483647) | None
-    ) = Field(0, description='Relationship type (mirrors ads.txt DIRECT/RESELLER).')
+    relationship: ProviderRelationship = Field(
+        ..., description='Relationship type (mirrors ads.txt DIRECT/RESELLER).'
+    )
 
 
 class CatalogRejection(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: CatalogRejectionReason | conint(ge=1, le=7) | None = Field(
-        0, description='The rejection reason (defined-only, non-zero)'
+    reason: CatalogRejectionReason = Field(
+        ..., description='The rejection reason (defined-only, non-zero)'
     )
     rejectedPaths: list[str] | None = Field(
         None,
@@ -986,8 +980,8 @@ class DisputeFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: DisputeFailureReason | conint(ge=1, le=5) | None = Field(
-        0, description='The failure reason (defined-only, non-zero)'
+    reason: DisputeFailureReason = Field(
+        ..., description='The failure reason (defined-only, non-zero)'
     )
 
 
@@ -1006,7 +1000,7 @@ class DisputeResponse(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    resolution: ResolutionType | conint(ge=-2147483648, le=2147483647) | None = Field(
+    resolution: ResolutionType | None = Field(
         None,
         description='Resolution outcome, populated when the dispute reaches a terminal\n state (RESOLVED, SETTLED, or FINAL). Absent while dispute is in\n progress (FILED, UNDER_REVIEW, ESCALATED, etc.).',
     )
@@ -1026,8 +1020,8 @@ class DomainVerificationFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: DomainVerificationFailureReason | conint(ge=1, le=6) | None = Field(
-        0, description='The failure reason (defined-only, non-zero)'
+    reason: DomainVerificationFailureReason = Field(
+        ..., description='The failure reason (defined-only, non-zero)'
     )
 
 
@@ -1039,15 +1033,13 @@ class Obligation(WireModel):
         None,
         description='Free-form detail: attribution string, notice file URI, etc.\n OBLIGATION_KIND_OTHER without it → lint warning.',
     )
-    kind: ObligationKind | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description='What the agent must do.'
-    )
+    kind: ObligationKind = Field(..., description='What the agent must do.')
     scopeLicense: License | None = Field(
         None,
         description="The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference.",
     )
-    trigger: ObligationTrigger | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description='When the obligation activates.'
+    trigger: ObligationTrigger = Field(
+        ..., description='When the obligation activates.'
     )
 
 
@@ -1066,13 +1058,11 @@ class Pricing(WireModel):
         None,
         description='License duration in months. How long the granted access remains valid.',
     )
-    metering: PricingMetering | conint(ge=-2147483648, le=2147483647) | None = Field(
+    metering: PricingMetering | None = Field(
         None,
         description='How usage is tracked for billing reconciliation.\n Absent = PRICING_METERING_ONLINE (default real-time tracking).\n NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.\n OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.',
     )
-    model: PricingModel | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description="Provider's pricing model."
-    )
+    model: PricingModel = Field(..., description="Provider's pricing model.")
     rate: Decimal | None = Field(
         '',
         description='Price in the provider\'s model, as an exact decimal string — e.g. "0.05" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. "0.0001234"). Denominated in `currency`.',
@@ -1096,19 +1086,18 @@ class Quota(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    limit: conint(ge=1) | None = Field(
-        None,
+    limit: conint(ge=1) = Field(
+        ...,
         description='Maximum allowed value in the given window. A quota of 0 grants\n nothing — express "no access" by omitting the term, not a zero quota.',
     )
-    metric: (
-        constr(pattern=r'^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$', max_length=64)
-        | None
+    metric: constr(
+        pattern=r'^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$', max_length=64
     ) = Field(
-        '',
+        ...,
         description='The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare metric tokens. A buf plugin reads them structurally and\n emits the quotametrics constants + IsRegistered; ingest enforces membership\n from those. The CEL is STRUCTURE ONLY (non-empty bare token or\n vendor:namespaced) — it never lists the tokens, so it cannot drift.\n\n Token meanings:\n   display-words      Words of content text rendered to an end user.\n   impressions        Times the content is displayed to an end user.\n   tokens             LLM output tokens generated using this content.\n   input-tokens       LLM input tokens consumed from this content.\n   units-manufactured Physical units manufactured from this design/pattern.\n   accesses           Distinct content access / retrieval events.\n   copies             Digital or physical copies produced.\n   seats              Distinct named users licensed to access the content.',
     )
-    window: QuotaWindow | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description='Time window over which the limit accumulates.'
+    window: QuotaWindow = Field(
+        ..., description='Time window over which the limit accumulates.'
     )
 
 
@@ -1116,11 +1105,9 @@ class RAMPResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    absenceReason: OfferAbsenceReason | conint(ge=-2147483648, le=2147483647) | None = (
-        Field(
-            None,
-            description='Why the resolve produced no licensed delivery. Set (and retrieval_endpoint\n unset) on a successful "no result" answer; unset on the licensed path. Same\n vocabulary DiscoverResources uses for OfferGroup.absence_reason.',
-        )
+    absenceReason: OfferAbsenceReason | None = Field(
+        None,
+        description='Why the resolve produced no licensed delivery. Set (and retrieval_endpoint\n unset) on a successful "no result" answer; unset on the licensed path. Same\n vocabulary DiscoverResources uses for OfferGroup.absence_reason.',
     )
     agentIdentityHash: str | None = Field(
         None,
@@ -1165,8 +1152,8 @@ class RegistrationFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: RegistrationFailureReason | conint(ge=1, le=5) | None = Field(
-        0, description='The failure reason (defined-only, non-zero)'
+    reason: RegistrationFailureReason = Field(
+        ..., description='The failure reason (defined-only, non-zero)'
     )
 
 
@@ -1202,8 +1189,8 @@ class Requester(WireModel):
         description='The Exchange filters its catalog to resources matching these scopes.\n Resources outside the scopes are not returned — the requester never\n learns they exist. This is the enforcement mechanism for both enterprise\n RBAC and open-market subscription entitlements.\n\n Scope format: colon-separated segments, "{domain}:{permission}" or\n "{profile}:{permission}", optionally multi-segment ("dist:US:CA");\n matching is segment-wise per the rule below (no implicit hierarchy).\n Examples:\n   "credit:read"                — can access credit reports\n   "subscription:marketdata-2026" — has active MarketData subscription\n   "academic:*"                 — full access to academic resources\n   "internal:reports"           — can access internal reports\n   "*"                         — unrestricted (public Exchange default)\n\n Matching is SEGMENT-WISE (":" separated). A granted scope G covers a\n required scope R iff, segment by segment, each G segment equals the\n corresponding R segment or is "*"; a terminal "*" matches all remaining\n segments. There is NO implicit prefix match, and a grant NARROWER than\n the requirement does not cover it (G must be equal-to-or-broader than R).\n Examples: "dist:*" covers "dist:US" and "dist:US:CA"; "dist:US:*" covers\n "dist:US:CA" but not "dist:EU"; bare "dist" covers only "dist"; granted\n "dist:US:CA" does NOT cover required "dist:US"; "*" covers everything.\n This same rule governs LicenseTerm.scopes — one algorithm protocol-wide.\n\n When empty, Exchange applies its default access policy (typically\n returns all publicly available resources).',
         max_length=64,
     )
-    type: RequesterType | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description='What kind of entity is making this request.'
+    type: RequesterType = Field(
+        ..., description='What kind of entity is making this request.'
     )
 
 
@@ -1215,7 +1202,7 @@ class ResourceIdentity(WireModel):
         None,
         description='Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...',
     )
-    c2paStatus: C2PAStatus | conint(ge=-2147483648, le=2147483647) | None = Field(
+    c2paStatus: C2PAStatus | None = Field(
         None,
         description='The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.',
     )
@@ -1246,10 +1233,8 @@ class ResourceIdentity(WireModel):
     isni: str | None = Field(
         None, description='International Standard Name Identifier for the creator.'
     )
-    resourceMutability: (
-        ResourceMutability | conint(ge=-2147483648, le=2147483647) | None
-    ) = Field(
-        0,
+    resourceMutability: ResourceMutability = Field(
+        ...,
         description='Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The "resource" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds).',
     )
     softBinding: str | None = Field(
@@ -1302,8 +1287,8 @@ class Restriction(WireModel):
         False,
         description='Fail-closed by default. When false (the default), this restriction is\n BINDING: an agent that cannot evaluate every token in it — including an\n unknown vendor token — MUST decline the term. Set advisory = true to\n downgrade an unverifiable restriction to non-blocking. This deliberately\n inverts the COSE-`crit` opt-in default: a license restriction a consumer\n does not understand should stop it, not be silently ignored.',
     )
-    kind: RestrictionKind | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description='Which dimension this restriction applies to.'
+    kind: RestrictionKind = Field(
+        ..., description='Which dimension this restriction applies to.'
     )
     permitted: (
         list[constr(pattern=r'^[A-Za-z0-9._:*-]+$', min_length=1, max_length=64)] | None
@@ -1325,8 +1310,8 @@ class RetrievalAuthFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: RetrievalAuthFailureReason | conint(ge=1, le=12) | None = Field(
-        0, description='The failure reason (defined-only, non-zero)'
+    reason: RetrievalAuthFailureReason = Field(
+        ..., description='The failure reason (defined-only, non-zero)'
     )
 
 
@@ -1339,8 +1324,8 @@ class TransactionRequest(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1) | None = Field(
-        '',
+    idempotencyKey: constr(min_length=1) = Field(
+        ...,
         description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.",
     )
     items: list[TransactionItem] | None = Field(
@@ -1470,8 +1455,8 @@ class UsageReport(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1) | None = Field(
-        '',
+    idempotencyKey: constr(min_length=1) = Field(
+        ...,
         description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n report does not double-count usage. The report's durable identity is the\n Exchange-assigned report_id in UsageReportResponse.",
     )
     timestamp: AwareDatetime | None = Field(
@@ -1488,8 +1473,8 @@ class UsageReportRejection(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: UsageReportRejectionReason | conint(ge=1, le=5) | None = Field(
-        0, description='The rejection reason (defined-only, non-zero)'
+    reason: UsageReportRejectionReason = Field(
+        ..., description='The rejection reason (defined-only, non-zero)'
     )
 
 
@@ -1515,9 +1500,9 @@ class WellKnownManifest(WireModel):
     contact: str | None = Field(
         None, description='Contact email (licensing, integration, security).'
     )
-    deliveryMethodsSupported: (
-        list[DeliveryMethod | conint(ge=-2147483648, le=2147483647)] | None
-    ) = Field(None, description='Exchange-only. Supported delivery methods.')
+    deliveryMethodsSupported: list[DeliveryMethod] | None = Field(
+        None, description='Exchange-only. Supported delivery methods.'
+    )
     domain: str | None = Field(
         '', description='Canonical domain serving this manifest.'
     )
@@ -1565,9 +1550,9 @@ class WellKnownManifest(WireModel):
         None,
         description="Exchange-only. Operator's corporate domain (may differ from domain).",
     )
-    pricingModelsSupported: (
-        list[PricingModel | conint(ge=-2147483648, le=2147483647)] | None
-    ) = Field(None, description='Exchange-only. Supported pricing models.')
+    pricingModelsSupported: list[PricingModel] | None = Field(
+        None, description='Exchange-only. Supported pricing models.'
+    )
     privacyUri: str | None = Field(
         None, description='Exchange-only. Privacy policy URL.'
     )
@@ -1579,12 +1564,8 @@ class WellKnownManifest(WireModel):
         None,
         description='Public keys for signature verification.\n MUST contain at least one entry whose [not_before, not_after) window\n covers current time at serve time.',
     )
-    role: Role | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description='Role this manifest describes.'
-    )
-    supportedAuthMethods: (
-        list[AuthMethod | conint(ge=-2147483648, le=2147483647)] | None
-    ) = Field(
+    role: Role = Field(..., description='Role this manifest describes.')
+    supportedAuthMethods: list[AuthMethod] | None = Field(
         None,
         description='Exchange-only. Authorization methods this Exchange supports\n (ordered by preference).',
     )
@@ -1672,8 +1653,8 @@ class LicenseTerm(WireModel):
         description='Coverage uses the SAME matching rule as Requester/delegation scopes:\n segment-wise (":" separated), each granted segment must equal the\n corresponding required segment or be "*", a terminal "*" matches all\n remaining segments, and there is NO implicit prefix match (a grant\n narrower than the requirement does not cover it). "dist:*" covers\n "dist:US" and "dist:US:CA"; "dist" covers only "dist". There is exactly\n one scope-matching algorithm across the protocol.',
         max_length=64,
     )
-    semantics: TermSemantics | conint(ge=-2147483648, le=2147483647) | None = Field(
-        0, description='How to interpret the machine fields.'
+    semantics: TermSemantics = Field(
+        ..., description='How to interpret the machine fields.'
     )
 
 
@@ -1751,25 +1732,19 @@ class OfferGroup(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    absenceReason: OfferAbsenceReason | conint(ge=-2147483648, le=2147483647) | None = (
-        Field(
-            None,
-            description='Why no offers are available for this URI.\n Present when `offers` is empty. Enables agents/Brokers to distinguish\n "resource not in catalog" from "resource blocked for your use case" without\n trial-and-error transactions. Analogous to OpenRTB nbr codes and\n Shutterstock per-item error metadata in batch responses.',
-        )
+    absenceReason: OfferAbsenceReason | None = Field(
+        None,
+        description='Why no offers are available for this URI.\n Present when `offers` is empty. Enables agents/Brokers to distinguish\n "resource not in catalog" from "resource blocked for your use case" without\n trial-and-error transactions. Analogous to OpenRTB nbr codes and\n Shutterstock per-item error metadata in batch responses.',
     )
-    discoveryMethod: DiscoveryMethod | conint(ge=-2147483648, le=2147483647) | None = (
-        Field(
-            None,
-            description="How this URI was discovered by the Broker (v2 extension point).\n v1: always DISCOVERY_METHOD_EXCHANGE (Broker queried an Exchange).\n v2: may include DISCOVERY_METHOD_SEARCH (URI found via search engine like Exa),\n     DISCOVERY_METHOD_RECOMMENDATION, etc. The Broker discovers URIs\n     through any source, then routes through Exchange for pricing/transaction.\n     The discovery method does not affect the transaction flow — it's metadata\n     for the agent to understand how the resource was found.",
-        )
+    discoveryMethod: DiscoveryMethod | None = Field(
+        None,
+        description="How this URI was discovered by the Broker (v2 extension point).\n v1: always DISCOVERY_METHOD_EXCHANGE (Broker queried an Exchange).\n v2: may include DISCOVERY_METHOD_SEARCH (URI found via search engine like Exa),\n     DISCOVERY_METHOD_RECOMMENDATION, etc. The Broker discovers URIs\n     through any source, then routes through Exchange for pricing/transaction.\n     The discovery method does not affect the transaction flow — it's metadata\n     for the agent to understand how the resource was found.",
     )
     offers: list[Offer] | None = Field(
         None,
         description='Zero or more offers for this URI. Empty = resource not available.',
     )
-    restrictionFilters: (
-        list[RestrictionKind | conint(ge=-2147483648, le=2147483647)] | None
-    ) = Field(
+    restrictionFilters: list[RestrictionKind] | None = Field(
         None,
         description="When absence_reason = RESTRICTION_FILTERED, the restriction axes that drove\n the convenience pre-filter, in the same RestrictionKind vocabulary the terms\n use (e.g. [GEOGRAPHY] when the requester's stated geography matched no term).\n Advisory diagnostics, not an enforcement verdict.",
     )
@@ -1798,8 +1773,8 @@ class RAMPRequest(WireModel):
     id: str | None = Field(
         '', description='Unique request identifier, assigned by the Requesting Party.'
     )
-    idempotencyKey: constr(min_length=1) | None = Field(
-        '',
+    idempotencyKey: constr(min_length=1) = Field(
+        ...,
         description='Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a\n retried request carrying the same key MUST NOT re-charge — the Broker returns\n the original result. Distinct from `id` (an opaque correlation tag): this is\n the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.',
     )
     query: str | None = Field(
@@ -1854,7 +1829,7 @@ class ResourceEntry(WireModel):
     provenanceTimestamp: AwareDatetime | None = Field(
         None, description='When this metadata was collected/generated.'
     )
-    source: IngestionSource | conint(ge=-2147483648, le=2147483647) | None = Field(
+    source: IngestionSource | None = Field(
         None, description='How the entry was discovered'
     )
     terms: list[LicenseTerm] | None = Field(

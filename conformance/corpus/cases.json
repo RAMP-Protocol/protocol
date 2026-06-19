@@ -1,0 +1,1692 @@
+[
+  {
+    "id": "AcceptableRestriction/valid",
+    "message": "AcceptableRestriction",
+    "valid": true,
+    "json": {
+      "axis": "RESTRICTION_KIND_FUNCTION",
+      "values": [
+        "ai-train"
+      ]
+    }
+  },
+  {
+    "id": "AcceptableRestriction/values/item_pattern",
+    "message": "AcceptableRestriction",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "axis": "RESTRICTION_KIND_FUNCTION",
+      "values": [
+        "ai-train",
+        "two words"
+      ]
+    }
+  },
+  {
+    "id": "AcceptableRestriction/values/too_many",
+    "message": "AcceptableRestriction",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "axis": "RESTRICTION_KIND_FUNCTION",
+      "values": [
+        "ai-train",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "AuthorizedExchange/relationship/not_in",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "AuthorizedExchange/valid",
+    "message": "AuthorizedExchange",
+    "valid": true,
+    "json": {
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "CatalogRejection/reason/not_in",
+    "message": "CatalogRejection",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "CatalogRejection/reason/undefined",
+    "message": "CatalogRejection",
+    "valid": false,
+    "rules": [
+      "enum.defined_only"
+    ],
+    "json": {
+      "reason": 8
+    }
+  },
+  {
+    "id": "CatalogRejection/valid",
+    "message": "CatalogRejection",
+    "valid": true,
+    "json": {
+      "reason": "CATALOG_REJECTION_REASON_NOT_CATALOG_CONTRIBUTOR"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "two words",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "two words"
+    }
+  },
+  {
+    "id": "Cost/valid",
+    "message": "Cost",
+    "valid": true,
+    "json": {
+      "amount": "0",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "DisputeFailure/reason/not_in",
+    "message": "DisputeFailure",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "DisputeFailure/reason/undefined",
+    "message": "DisputeFailure",
+    "valid": false,
+    "rules": [
+      "enum.defined_only"
+    ],
+    "json": {
+      "reason": 6
+    }
+  },
+  {
+    "id": "DisputeFailure/valid",
+    "message": "DisputeFailure",
+    "valid": true,
+    "json": {
+      "reason": "DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND"
+    }
+  },
+  {
+    "id": "DisputeRequest/idempotency_key/too_short",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/reason/not_in",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "idempotencyKey": "idem-dr"
+    }
+  },
+  {
+    "id": "DisputeRequest/valid",
+    "message": "DisputeRequest",
+    "valid": true,
+    "json": {
+      "idempotencyKey": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DomainVerificationFailure/reason/not_in",
+    "message": "DomainVerificationFailure",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "DomainVerificationFailure/reason/undefined",
+    "message": "DomainVerificationFailure",
+    "valid": false,
+    "rules": [
+      "enum.defined_only"
+    ],
+    "json": {
+      "reason": 7
+    }
+  },
+  {
+    "id": "DomainVerificationFailure/valid",
+    "message": "DomainVerificationFailure",
+    "valid": true,
+    "json": {
+      "reason": "DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_NOT_FOUND"
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": "two words"
+    }
+  },
+  {
+    "id": "License/valid",
+    "message": "License",
+    "valid": true,
+    "json": {
+      "id": "CC-BY-4.0"
+    }
+  },
+  {
+    "id": "LicenseTerm/pricing/missing",
+    "message": "LicenseTerm",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {
+      "semantics": "TERM_SEMANTICS_ENUMERATED"
+    }
+  },
+  {
+    "id": "LicenseTerm/scopes/too_many",
+    "message": "LicenseTerm",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "scopes": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ],
+      "semantics": "TERM_SEMANTICS_ENUMERATED"
+    }
+  },
+  {
+    "id": "LicenseTerm/semantics/not_in",
+    "message": "LicenseTerm",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "LicenseTerm/valid",
+    "message": "LicenseTerm",
+    "valid": true,
+    "json": {
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "semantics": "TERM_SEMANTICS_ENUMERATED"
+    }
+  },
+  {
+    "id": "Obligation/kind/not_in",
+    "message": "Obligation",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "trigger": "OBLIGATION_TRIGGER_ON_USE"
+    }
+  },
+  {
+    "id": "Obligation/trigger/not_in",
+    "message": "Obligation",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "kind": "OBLIGATION_KIND_ATTRIBUTION"
+    }
+  },
+  {
+    "id": "Obligation/valid",
+    "message": "Obligation",
+    "valid": true,
+    "json": {
+      "kind": "OBLIGATION_KIND_ATTRIBUTION",
+      "trigger": "OBLIGATION_TRIGGER_ON_USE"
+    }
+  },
+  {
+    "id": "Pricing/model/not_in",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "rate": "0"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "two words"
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": "two words"
+    }
+  },
+  {
+    "id": "Pricing/unit/too_long",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "two words"
+    }
+  },
+  {
+    "id": "Pricing/valid",
+    "message": "Pricing",
+    "valid": true,
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0"
+    }
+  },
+  {
+    "id": "Quota/limit/below_min",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "int64.gte"
+    ],
+    "json": {
+      "metric": "accesses",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "two words",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/too_long",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/valid",
+    "message": "Quota",
+    "valid": true,
+    "json": {
+      "limit": "1",
+      "metric": "accesses",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/window/not_in",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "accesses"
+    }
+  },
+  {
+    "id": "RAMPRequest/idempotency_key/too_short",
+    "message": "RAMPRequest",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RAMPRequest/uris/too_many",
+    "message": "RAMPRequest",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "idempotencyKey": "x",
+      "uris": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RAMPRequest/valid",
+    "message": "RAMPRequest",
+    "valid": true,
+    "json": {
+      "idempotencyKey": "x",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RegistrationFailure/reason/not_in",
+    "message": "RegistrationFailure",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "RegistrationFailure/reason/undefined",
+    "message": "RegistrationFailure",
+    "valid": false,
+    "rules": [
+      "enum.defined_only"
+    ],
+    "json": {
+      "reason": 6
+    }
+  },
+  {
+    "id": "RegistrationFailure/valid",
+    "message": "RegistrationFailure",
+    "valid": true,
+    "json": {
+      "reason": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "maxUnitCost": "two words"
+    }
+  },
+  {
+    "id": "RequestConstraints/valid",
+    "message": "RequestConstraints",
+    "valid": true,
+    "json": {
+      "maxUnitCost": "0"
+    }
+  },
+  {
+    "id": "Requester/scopes/too_many",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "scopes": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/type/not_in",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "scopes": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "Requester/valid",
+    "message": "Requester",
+    "valid": true,
+    "json": {
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "ResourceIdentity/resource_mutability/not_in",
+    "message": "ResourceIdentity",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "ResourceIdentity/valid",
+    "message": "ResourceIdentity",
+    "valid": true,
+    "json": {
+      "resourceMutability": "RESOURCE_MUTABILITY_STATIC"
+    }
+  },
+  {
+    "id": "ResourceQuery/uris/too_many",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "uris": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/valid",
+    "message": "ResourceQuery",
+    "valid": true,
+    "json": {
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/kind/not_in",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "permitted": [
+        "ai-input"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/permitted/item_pattern",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input",
+        "two words"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/permitted/too_many",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/prohibited/item_pattern",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input"
+      ],
+      "prohibited": [
+        "two words"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/prohibited/too_many",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input"
+      ],
+      "prohibited": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/valid",
+    "message": "Restriction",
+    "valid": true,
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input"
+      ]
+    }
+  },
+  {
+    "id": "RetrievalAuthFailure/reason/not_in",
+    "message": "RetrievalAuthFailure",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "RetrievalAuthFailure/reason/undefined",
+    "message": "RetrievalAuthFailure",
+    "valid": false,
+    "rules": [
+      "enum.defined_only"
+    ],
+    "json": {
+      "reason": 13
+    }
+  },
+  {
+    "id": "RetrievalAuthFailure/valid",
+    "message": "RetrievalAuthFailure",
+    "valid": true,
+    "json": {
+      "reason": "RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED"
+    }
+  },
+  {
+    "id": "TransactionDenial/reason/not_in",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "TransactionDenial/reason/undefined",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "enum.defined_only"
+    ],
+    "json": {
+      "reason": 19
+    }
+  },
+  {
+    "id": "TransactionDenial/valid",
+    "message": "TransactionDenial",
+    "valid": true,
+    "json": {
+      "reason": "DENIAL_REASON_BILLING_REF_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionRequest/idempotency_key/too_short",
+    "message": "TransactionRequest",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {}
+  },
+  {
+    "id": "TransactionRequest/valid",
+    "message": "TransactionRequest",
+    "valid": true,
+    "json": {
+      "idempotencyKey": "x"
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumedUnit": "two words"
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/too_long",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "consumedUnit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "Usage/valid",
+    "message": "Usage",
+    "valid": true,
+    "json": {
+      "consumedUnit": "x"
+    }
+  },
+  {
+    "id": "UsageReport/idempotency_key/too_short",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {}
+  },
+  {
+    "id": "UsageReport/valid",
+    "message": "UsageReport",
+    "valid": true,
+    "json": {
+      "idempotencyKey": "x"
+    }
+  },
+  {
+    "id": "UsageReportRejection/reason/not_in",
+    "message": "UsageReportRejection",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "UsageReportRejection/reason/undefined",
+    "message": "UsageReportRejection",
+    "valid": false,
+    "rules": [
+      "enum.defined_only"
+    ],
+    "json": {
+      "reason": 6
+    }
+  },
+  {
+    "id": "UsageReportRejection/valid",
+    "message": "UsageReportRejection",
+    "valid": true,
+    "json": {
+      "reason": "USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND"
+    }
+  },
+  {
+    "id": "WellKnownManifest/role/not_in",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {}
+  },
+  {
+    "id": "WellKnownManifest/valid",
+    "message": "WellKnownManifest",
+    "valid": true,
+    "json": {
+      "role": "ROLE_AGENT"
+    }
+  }
+]

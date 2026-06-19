@@ -109,6 +109,34 @@ def collapse_int_strings(o):
     return o
 
 
+def close_enum_unions(o, enum_names):
+    """proto enum fields are emitted as anyOf[{$ref: Enum}, {type: integer}] to
+    mirror proto-JSON's name-OR-number form. The open integer branch admits ANY
+    int — including 0 (the UNSPECIFIED sentinel) and undefined values — which
+    silently defeats enum.not_in / enum.defined_only once the schema is generated
+    into Pydantic/Zod (the field becomes `Enum | int`, so a bad number passes).
+    Collapse to the closed string enum ($ref only) so the generated validators
+    reject anything outside the defined, non-UNSPECIFIED set. The wire form is the
+    enum NAME (protojson default); the numeric form is intentionally not accepted
+    by the typed clients (the Go server still accepts it). The stray default: 0 (an
+    UNSPECIFIED int that is not even a valid member) is dropped with the union."""
+    if isinstance(o, dict):
+        aof = o.get("anyOf")
+        if isinstance(aof, list) and len(aof) == 2:
+            ref = next((b for b in aof if isinstance(b, dict) and isinstance(b.get("$ref"), str)
+                        and b["$ref"].rsplit("/", 1)[-1] in enum_names), None)
+            integ = next((b for b in aof if isinstance(b, dict) and b.get("type") == "integer"), None)
+            if ref is not None and integ is not None:
+                node = {"$ref": ref["$ref"]}
+                if "description" in o:
+                    node["description"] = o["description"]
+                return node
+        return {k: close_enum_unions(v, enum_names) for k, v in o.items()}
+    if isinstance(o, list):
+        return [close_enum_unions(x, enum_names) for x in o]
+    return o
+
+
 def fix_refs(o):
     if isinstance(o, dict):
         r = o.get("$ref")
@@ -127,7 +155,31 @@ def fix_refs(o):
     return o
 
 
-def main(src_dir, desc_path, out_file):
+def mark_required(defs, required_fields):
+    """A field whose proto zero value is rejected by its own rule (enum not_in:[0],
+    string min_len/non-empty pattern, numeric gte≥1, explicit required) is required
+    on the wire, but protoschema leaves it optional. required_fields (from the Go
+    requiredgen manifest — the authoritative protovalidate view) names them per
+    message by JSON field name; add each to the message's `required` and drop its
+    zero default, so generated Pydantic/Zod reject omission like the Go server."""
+    for msg, names in required_fields.items():
+        d = defs.get(msg)
+        if not isinstance(d, dict) or "properties" not in d:
+            continue
+        req = set(d.get("required", []))
+        for jname in names:
+            prop = d["properties"].get(jname)
+            if prop is None:
+                continue
+            req.add(jname)
+            if isinstance(prop, dict):
+                prop.pop("default", None)
+        if req:
+            d["required"] = sorted(req)
+    return defs
+
+
+def main(src_dir, desc_path, out_file, required_path=None):
     enum_name = enum_names_from_descriptor(desc_path)
     enum_defs = {}   # name -> {"type":"string","enum":[...]}
     unnamed = []
@@ -165,6 +217,11 @@ def main(src_dir, desc_path, out_file):
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
     defs = mark_money_decimal(collapse_int_strings(hoist_enums(fix_refs(defs))))
+    # hoist_enums has now populated enum_defs, so their names are known; close the
+    # open name-OR-integer enum unions down to the closed string enum.
+    defs = close_enum_unions(defs, set(enum_defs))
+    if required_path:
+        mark_required(defs, json.load(open(required_path)))
     defs.update(enum_defs)
 
     combined = {
@@ -183,4 +240,4 @@ def main(src_dir, desc_path, out_file):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    main(*sys.argv[1:5])

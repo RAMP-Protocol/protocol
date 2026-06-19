@@ -7,7 +7,14 @@
     "./wire/schemas": "./wire/schemas.ts",
     "./vocab/*": "./vocab/*.ts"
   },
+  "scripts": {
+    "test": "vitest run"
+  },
   "peerDependencies": {
     "zod": "^3.23.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
   }
 }

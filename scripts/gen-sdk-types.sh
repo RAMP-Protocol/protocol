@@ -31,7 +31,11 @@ python3 -m venv "$WORK/venv"
 # Pinned: generated output is byte-compared in CI, so the generator versions must be
 # fixed (an unpinned datamodel-code-generator drifts the models in CI).
 "$WORK/venv/bin/pip" install -q --disable-pip-version-check "datamodel-code-generator==0.64.0" protobuf
-"$PY" scripts/sdk-types/merge_schema.py "$JS" gen/descriptor.binpb "$COMBINED"
+# required_fields.json: the authoritative protovalidate view of which fields are
+# required on the wire (their zero value is rejected). merge_schema marks those
+# `required` so the generated clients reject omission, matching the Go server.
+go run ./conformance/requiredgen "$WORK/required_fields.json"
+"$PY" scripts/sdk-types/merge_schema.py "$JS" gen/descriptor.binpb "$COMBINED" "$WORK/required_fields.json"
 
 echo "==> 3/4 Pydantic v2 (datamodel-code-generator, --base-class + --collapse-root-models)"
 "$WORK/venv/bin/datamodel-codegen" \

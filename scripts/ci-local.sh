@@ -52,6 +52,19 @@ else
   note "no drift"
 fi
 
+step "regenerate validation corpus"
+# conformance/corpus/cases.json is the generated cross-language oracle (proto-JSON
+# instances + Go protovalidate's verdict). Regenerate and gate on drift, exactly
+# like gen/: a proto change that shifts a constraint must reflow into the corpus.
+go run ./conformance/corpusgen || fail=1
+if ! git diff --quiet HEAD -- conformance/corpus/ || [ -n "$(git ls-files --others --exclude-standard -- conformance/corpus/)" ]; then
+  echo "::error:: validation corpus out of sync — run 'go run ./conformance/corpusgen' and commit conformance/corpus/."
+  git status --short -- conformance/corpus/
+  fail=1
+else
+  note "no drift"
+fi
+
 step "go build / vet / test"
 go build ./... || fail=1
 go vet ./... || fail=1
