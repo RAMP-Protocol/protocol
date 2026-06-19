@@ -129,6 +129,31 @@ if [ "$claim_n" -eq 0 ]; then
   status=1
 fi
 
+# --- 3. Wrong-org references -----------------------------------------------
+# The project lives at github.com/RAMP-Protocol; the pre-rename "postindustria"
+# org must not appear anywhere (code, docs, config, copyright).
+org_hits=$(git grep -niE 'postindustria' -- . ':!scripts/check-doc-conformance.sh' 2>/dev/null || true)
+if [ -n "$org_hits" ]; then
+  echo "::error::stale 'postindustria' org reference (the project is github.com/RAMP-Protocol):"
+  echo "$org_hits"
+  status=1
+fi
+
+# --- 4. Beads tracking codes ------------------------------------------------
+# Internal requirement IDs (random base36, e.g. 6z1v3 / fc65j) are meaningless to
+# readers and must not appear in shipped proto comments or docs. A CEL rule id is
+# fine — it is dotted (license_term.x) and never in this (token) shape. Signature:
+# a 4-6 char parenthetical token that interleaves digits and letters BOTH ways
+# (contains [0-9][a-z] AND [a-z][0-9]) — which sha256 / base64 / 10mo do not.
+beads=$(grep -rhoE '\([a-z0-9]{4,6}\)' proto/ramp website/src/content/docs 2>/dev/null \
+  | sort -u | grep -E '[0-9][a-z]' | grep -E '[a-z][0-9]' || true)
+if [ -n "$beads" ]; then
+  echo "::error::beads tracking code(s) in shipped content — remove them (CEL rule ids are dotted and fine):"
+  echo "$beads"
+  for c in $beads; do git grep -nF "$c" -- proto/ramp website/src/content/docs; done
+  status=1
+fi
+
 if [ "$status" -eq 0 ]; then
   echo "doc-conformance: clean"
 fi
