@@ -10,22 +10,11 @@ plugins:
   - remote: buf.build/connectrpc/go
     out: ../gen/go
     opt: paths=source_relative
-  # TypeScript message types (protobuf-es)
-  - remote: buf.build/bufbuild/es
-    out: ../gen/ts
-    opt: target=ts
-  # TypeScript Connect service client/handler
-  - remote: buf.build/connectrpc/es
-    out: ../gen/ts
-    opt: target=ts
-  # Python message types + type stubs (.pyi) — the base Python SDK surface.
-  - remote: buf.build/protocolbuffers/python
-    out: ../gen/python
-  - remote: buf.build/protocolbuffers/pyi
-    out: ../gen/python
-  # Connect-Python service client/handler (Connect protocol — parity with Go/TS).
-  - remote: buf.build/connectrpc/python
-    out: ../gen/python
+  # NOTE: the protobuf-native TS (protobuf-es) and Python (_pb2/connect) SDKs were
+  # removed — they are not usable in the target ecosystems (FastMCP needs Pydantic,
+  # edge stacks need Zod), and consumers were hand-mirroring the proto anyway. The
+  # TS/Python *types export* is now generated as Pydantic + Zod from JSON Schema
+  # (see scripts/gen-sdk-types.sh). Go keeps native protobuf (it's the server).
   # RAMP vocabulary constants — reads (ramp.v1.vocab) field options and
   # (ramp.v1.vocab_enum) enum-value options and emits typed token constants +
   # membership check per axis (Pricing.unit, Quota.metric, function, geography,

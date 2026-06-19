@@ -8,23 +8,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ramp-protocol"
 version = "0.1.0"
-description = "Generated Python SDK for the RAMP protocol: protobuf messages, Connect service stubs, and registered vocabulary constants."
+description = "Generated RAMP vocabulary constants for Python. Message/validation types are generated as Pydantic models from JSON Schema (added via scripts/gen-sdk-types.sh)."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
-# Messages/enums are the only hard dependency — they import just google.protobuf.
-dependencies = [
-  "protobuf>=5.27",
-]
-
-[project.optional-dependencies]
-# Service client/handler stubs (ramp/v1/ramp_connect.py) import the `connectrpc`
-# runtime, published as connect-python. Optional so `pip install ramp-protocol`
-# works for message-only use. (Confirm the exact PyPI version when publishing.)
-connect = ["connect-python>=0.4"]
-# Runtime evaluation of the embedded protovalidate CEL rules — optional; consumers
-# that only construct/parse messages do not need it.
-validation = ["protovalidate>=0.7"]
+# Vocabulary constants are pure string literals — no runtime dependency. The
+# generated Pydantic models add `pydantic` here when the types export lands.
+dependencies = []
 
 [project.urls]
 Homepage = "https://ramp-protocol.org"
@@ -32,8 +22,7 @@ Source = "https://github.com/RAMP-Protocol/protocol"
 
 [tool.setuptools.packages.find]
 where = ["."]
-# PEP 420 namespace packages — the protobuf/connect plugins emit no __init__.py.
-# Imports mirror the proto package: `ramp.v1.ramp_pb2`, `comp.v1.comp_pb2`, and
-# the vocabulary constants at `vocab.pricingunits` (etc.).
+# PEP 420 namespace packages. Currently the vocabulary constants (vocab.pricingunits
+# etc.); the Pydantic message models (ramp.v1.*) are added by the types-export step.
 namespaces = true
-include = ["ramp*", "comp*", "vocab*"]
+include = ["ramp*", "vocab*"]
