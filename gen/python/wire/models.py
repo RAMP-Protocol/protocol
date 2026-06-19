@@ -274,7 +274,10 @@ class Cost(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    amount: Decimal | None = None
+    amount: Decimal | None = Field(
+        '',
+        description='Exact decimal string (not a float), e.g. "19.99". Denominated in `currency`.',
+    )
     currency: str | None = ''
     unitCost: Decimal | None = None
 
@@ -859,8 +862,8 @@ class Pricing(WireModel):
         0, description="Provider's pricing model."
     )
     rate: Decimal | None = Field(
-        None,
-        description="Price in the provider's model (e.g. 0.05 = $0.05 per article).",
+        '',
+        description='Price in the provider\'s model, as an exact decimal string — e.g. "0.05" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. "0.0001234"). Denominated in `currency`.',
     )
     unit: (
         constr(
@@ -873,7 +876,7 @@ class Pricing(WireModel):
     )
     unitCost: Decimal | None = Field(
         None,
-        description="Normalized cost per unit — the universal comparison metric.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).",
+        description="Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).",
     )
 
 
@@ -1448,7 +1451,8 @@ class RequestConstraints(WireModel):
         None, description='Maximum price the agent is willing to pay.'
     )
     maxUnitCost: Decimal | None = Field(
-        None, description='Maximum effective cost per unit.'
+        None,
+        description='Maximum effective cost per unit, as an exact decimal string (not a float).',
     )
     periodBudget: Cost | None = Field(
         None,

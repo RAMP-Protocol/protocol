@@ -1216,24 +1216,26 @@ message Pricing {
   };
   option (buf.validate.message).cel = {
     id: "pricing.free.zero_rate"
-    message: "rate must be 0 when model is FREE"
-    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0"
+    message: "rate must be 0 (or empty) when model is FREE"
+    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == '' || this.rate.matches('^0+([.]0+)?$')"
   };
 
   // Provider's pricing model.
   PricingModel model = 1 [(buf.validate.field).enum = {not_in: [0]}];
 
-  // Price in the provider's model (e.g. 0.05 = $0.05 per article).
-  double rate = 2;
+  // Price in the provider's model, as an exact decimal string — e.g. "0.05" =
+  // $0.05 per article. NOT a float: money is decimal to avoid binary rounding and
+  // to allow arbitrary sub-cent precision (e.g. "0.0001234"). Denominated in `currency`.
+  string rate = 2 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];
 
   // ISO 4217 currency code (e.g. "USD", "EUR").
   string currency = 3;
 
-  // Normalized cost per unit — the universal comparison metric.
+  // Normalized cost per unit — the universal comparison metric, exact decimal string.
   // For text: cost per token. For video: cost per second.
   // For data: cost per record. For APIs: cost per call.
   // Denominated in the Exchange's base_currency (from its WellKnownManifest).
-  optional double unit_cost = 4;
+  optional string unit_cost = 4 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];
 
   // Estimated quantity in the metering unit.
   // For text: token count. For video: duration in seconds.
@@ -1741,9 +1743,10 @@ message TransactionResultItem {
 
 // Cost — Actual transaction cost.
 message Cost {
-  double amount = 1;
+  // Exact decimal string (not a float), e.g. "19.99". Denominated in `currency`.
+  string amount = 1 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];
   string currency = 2;        // ISO 4217
-  optional double unit_cost = 3;   // Effective cost per unit
+  optional string unit_cost = 3 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];   // Effective cost per unit (decimal string)
 }
 
 // DenialReason — Standard vocabulary for transaction denial.
@@ -2148,8 +2151,8 @@ message RequestConstraints {
   // Maximum price the agent is willing to pay.
   optional Cost max_price = 2;
 
-  // Maximum effective cost per unit.
-  optional double max_unit_cost = 3;
+  // Maximum effective cost per unit, as an exact decimal string (not a float).
+  optional string max_unit_cost = 3 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];
 
   // Preferred delivery methods, in order of preference.
   repeated DeliveryMethod delivery_preference = 4;

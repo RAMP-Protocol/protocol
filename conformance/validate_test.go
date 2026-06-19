@@ -99,15 +99,15 @@ func licensingCases() []validationCase {
 		{"uri_digest sha256 non-hex", &rampv1.License{UriDigest: proto.String("sha256:" + "g" + hex64[1:])}, false, "string.pattern"},
 
 		// Pricing message-level CEL: PER_UNIT⇒unit set; FREE⇒rate 0.
-		{"pricing per_unit with unit ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("tokens"), Currency: "USD", Rate: 0.05}, true, ""},
-		{"pricing per_unit without unit rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Currency: "USD", Rate: 0.05}, false, "pricing.per_unit.requires_unit"},
-		{"pricing free zero rate ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: 0}, true, ""},
-		{"pricing free nonzero rate rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: 1.0}, false, "pricing.free.zero_rate"},
+		{"pricing per_unit with unit ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("tokens"), Currency: "USD", Rate: "0.05"}, true, ""},
+		{"pricing per_unit without unit rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Currency: "USD", Rate: "0.05"}, false, "pricing.per_unit.requires_unit"},
+		{"pricing free zero rate ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}, true, ""},
+		{"pricing free nonzero rate rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "1.0"}, false, "pricing.free.zero_rate"},
 
 		// Pricing.unit format: empty / bare-dashed / vendor:namespaced.
-		{"pricing unit bare ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("sq-km"), Rate: 1}, true, ""},
-		{"pricing unit vendor ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("acme:widgets"), Rate: 1}, true, ""},
-		{"pricing unit with space rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("two words"), Rate: 1}, false, "string.pattern"},
+		{"pricing unit bare ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("sq-km"), Rate: "1"}, true, ""},
+		{"pricing unit vendor ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("acme:widgets"), Rate: "1"}, true, ""},
+		{"pricing unit with space rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("two words"), Rate: "1"}, false, "string.pattern"},
 
 		// AcceptableRestriction.values charset + max_items.
 		{"acceptable values ok", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train", "ai-input"}}, true, ""},
@@ -154,7 +154,7 @@ func licensingCases() []validationCase {
 		// These guard the gap where the conditional coherence CELs above are
 		// vacuously satisfied by an unset discriminator.
 		{"term semantics unspecified rejected", &rampv1.LicenseTerm{Pricing: freePricing()}, false, "enum.not_in"},
-		{"pricing model unspecified rejected", &rampv1.Pricing{Rate: 0}, false, "enum.not_in"},
+		{"pricing model unspecified rejected", &rampv1.Pricing{Rate: "0"}, false, "enum.not_in"},
 		{"restriction kind unspecified rejected", &rampv1.Restriction{Permitted: []string{"ai-input"}}, false, "enum.not_in"},
 		{"obligation kind unspecified rejected", &rampv1.Obligation{Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE}, false, "enum.not_in"},
 		{"quota window unspecified rejected", &rampv1.Quota{Metric: "accesses", Limit: 1}, false, "enum.not_in"},
@@ -200,7 +200,7 @@ func idempotencyCases() []validationCase {
 }
 
 func freePricing() *rampv1.Pricing {
-	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: 0}
+	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 }
 
 func gen65() []string {

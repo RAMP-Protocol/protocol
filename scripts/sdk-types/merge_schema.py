@@ -60,31 +60,26 @@ def strip_titles(o):
     return o
 
 
-def doubles_to_decimal(o):
-    """protoc-gen-jsonschema models a proto `double` as
-    anyOf[{number}, {string enum Infinity/-Infinity/NaN}, {string}] — proto-JSON's
-    permissive float encoding. Every `double` in RAMP is MONEY (rate, unit_cost,
-    amount, max_unit_cost), so collapse such a field to {number, format: decimal}:
-      - datamodel-codegen emits `Decimal` (never float — money must not be a float);
-        parsed via model_validate_json it is exact, and serializes to a JSON string,
-        which proto-JSON accepts for a double.
-      - json-schema-to-zod ignores the format → `z.number()` (TS has no Decimal).
-    This also drops the Infinity/NaN string-enum the codegen would otherwise turn into
-    field-named Enum classes (Rate/UnitCost). int64-as-string anyOf is left untouched —
-    that string form IS the canonical proto-JSON int64 wire encoding."""
+# The decimal-string pattern carried by every money field in the proto
+# (Pricing.rate/unit_cost, Cost.amount/unit_cost, TransactionItem.max_unit_cost).
+MONEY_PATTERN = "^([0-9]+([.][0-9]+)?)?$"
+
+
+def mark_money_decimal(o):
+    """Money is a decimal STRING on the wire (exact, never a float). Tag those
+    fields format: decimal so datamodel-codegen emits `Decimal` — parsed via
+    model_validate_json it is exact and wire-exact. The pattern is kept so
+    json-schema-to-zod still emits z.string().regex(...) (TS has no Decimal type;
+    money is a validated decimal string there). The pattern is the format-only
+    guard; presence/zero-rules live in CEL (server-authoritative)."""
     if isinstance(o, dict):
-        aof = o.get("anyOf")
-        if isinstance(aof, list) and any(
-            isinstance(b, dict) and set(b.get("enum") or []) == {"Infinity", "-Infinity", "NaN"}
-            for b in aof
-        ):
-            node = {"type": "number", "format": "decimal"}
-            if "description" in o:
-                node["description"] = o["description"]
+        if o.get("type") == "string" and o.get("pattern") == MONEY_PATTERN:
+            node = dict(o)
+            node["format"] = "decimal"
             return node
-        return {k: doubles_to_decimal(v) for k, v in o.items()}
+        return {k: mark_money_decimal(v) for k, v in o.items()}
     if isinstance(o, list):
-        return [doubles_to_decimal(x) for x in o]
+        return [mark_money_decimal(x) for x in o]
     return o
 
 
@@ -141,7 +136,7 @@ def main(src_dir, desc_path, out_file):
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
-    defs = doubles_to_decimal(hoist_enums(fix_refs(defs)))
+    defs = mark_money_decimal(hoist_enums(fix_refs(defs)))
     defs.update(enum_defs)
 
     combined = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$defs": defs}

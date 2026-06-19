@@ -3809,15 +3809,17 @@ type Pricing struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Provider's pricing model.
 	Model PricingModel `protobuf:"varint,1,opt,name=model,proto3,enum=ramp.v1.PricingModel" json:"model,omitempty"`
-	// Price in the provider's model (e.g. 0.05 = $0.05 per article).
-	Rate float64 `protobuf:"fixed64,2,opt,name=rate,proto3" json:"rate,omitempty"`
+	// Price in the provider's model, as an exact decimal string — e.g. "0.05" =
+	// $0.05 per article. NOT a float: money is decimal to avoid binary rounding and
+	// to allow arbitrary sub-cent precision (e.g. "0.0001234"). Denominated in `currency`.
+	Rate string `protobuf:"bytes,2,opt,name=rate,proto3" json:"rate,omitempty"`
 	// ISO 4217 currency code (e.g. "USD", "EUR").
 	Currency string `protobuf:"bytes,3,opt,name=currency,proto3" json:"currency,omitempty"`
-	// Normalized cost per unit — the universal comparison metric.
+	// Normalized cost per unit — the universal comparison metric, exact decimal string.
 	// For text: cost per token. For video: cost per second.
 	// For data: cost per record. For APIs: cost per call.
 	// Denominated in the Exchange's base_currency (from its WellKnownManifest).
-	UnitCost *float64 `protobuf:"fixed64,4,opt,name=unit_cost,json=unitCost,proto3,oneof" json:"unit_cost,omitempty"`
+	UnitCost *string `protobuf:"bytes,4,opt,name=unit_cost,json=unitCost,proto3,oneof" json:"unit_cost,omitempty"`
 	// Estimated quantity in the metering unit.
 	// For text: token count. For video: duration in seconds.
 	// For documents: page count. For data: record count.
@@ -3880,11 +3882,11 @@ func (x *Pricing) GetModel() PricingModel {
 	return PricingModel_PRICING_MODEL_UNSPECIFIED
 }
 
-func (x *Pricing) GetRate() float64 {
+func (x *Pricing) GetRate() string {
 	if x != nil {
 		return x.Rate
 	}
-	return 0
+	return ""
 }
 
 func (x *Pricing) GetCurrency() string {
@@ -3894,11 +3896,11 @@ func (x *Pricing) GetCurrency() string {
 	return ""
 }
 
-func (x *Pricing) GetUnitCost() float64 {
+func (x *Pricing) GetUnitCost() string {
 	if x != nil && x.UnitCost != nil {
 		return *x.UnitCost
 	}
-	return 0
+	return ""
 }
 
 func (x *Pricing) GetEstimatedQuantity() int32 {
@@ -4833,10 +4835,11 @@ func (x *TransactionResultItem) GetReportingObligation() *ReportingObligation {
 
 // Cost — Actual transaction cost.
 type Cost struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Amount        float64                `protobuf:"fixed64,1,opt,name=amount,proto3" json:"amount,omitempty"`
-	Currency      string                 `protobuf:"bytes,2,opt,name=currency,proto3" json:"currency,omitempty"`                         // ISO 4217
-	UnitCost      *float64               `protobuf:"fixed64,3,opt,name=unit_cost,json=unitCost,proto3,oneof" json:"unit_cost,omitempty"` // Effective cost per unit
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Exact decimal string (not a float), e.g. "19.99". Denominated in `currency`.
+	Amount        string  `protobuf:"bytes,1,opt,name=amount,proto3" json:"amount,omitempty"`
+	Currency      string  `protobuf:"bytes,2,opt,name=currency,proto3" json:"currency,omitempty"`                       // ISO 4217
+	UnitCost      *string `protobuf:"bytes,3,opt,name=unit_cost,json=unitCost,proto3,oneof" json:"unit_cost,omitempty"` // Effective cost per unit (decimal string)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4871,11 +4874,11 @@ func (*Cost) Descriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *Cost) GetAmount() float64 {
+func (x *Cost) GetAmount() string {
 	if x != nil {
 		return x.Amount
 	}
-	return 0
+	return ""
 }
 
 func (x *Cost) GetCurrency() string {
@@ -4885,11 +4888,11 @@ func (x *Cost) GetCurrency() string {
 	return ""
 }
 
-func (x *Cost) GetUnitCost() float64 {
+func (x *Cost) GetUnitCost() string {
 	if x != nil && x.UnitCost != nil {
 		return *x.UnitCost
 	}
-	return 0
+	return ""
 }
 
 type PushResourcesRequest struct {
@@ -6174,8 +6177,8 @@ type RequestConstraints struct {
 	Exchanges []string `protobuf:"bytes,1,rep,name=exchanges,proto3" json:"exchanges,omitempty"`
 	// Maximum price the agent is willing to pay.
 	MaxPrice *Cost `protobuf:"bytes,2,opt,name=max_price,json=maxPrice,proto3,oneof" json:"max_price,omitempty"`
-	// Maximum effective cost per unit.
-	MaxUnitCost *float64 `protobuf:"fixed64,3,opt,name=max_unit_cost,json=maxUnitCost,proto3,oneof" json:"max_unit_cost,omitempty"`
+	// Maximum effective cost per unit, as an exact decimal string (not a float).
+	MaxUnitCost *string `protobuf:"bytes,3,opt,name=max_unit_cost,json=maxUnitCost,proto3,oneof" json:"max_unit_cost,omitempty"`
 	// Preferred delivery methods, in order of preference.
 	DeliveryPreference []DeliveryMethod `protobuf:"varint,4,rep,packed,name=delivery_preference,json=deliveryPreference,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_preference,omitempty"`
 	// Whether the agent supports post-usage reporting.
@@ -6260,11 +6263,11 @@ func (x *RequestConstraints) GetMaxPrice() *Cost {
 	return nil
 }
 
-func (x *RequestConstraints) GetMaxUnitCost() float64 {
+func (x *RequestConstraints) GetMaxUnitCost() string {
 	if x != nil && x.MaxUnitCost != nil {
 		return *x.MaxUnitCost
 	}
-	return 0
+	return ""
 }
 
 func (x *RequestConstraints) GetDeliveryPreference() []DeliveryMethod {
@@ -8494,19 +8497,19 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\xd5\a\n" +
+	"\x05_size\"\xc4\b\n" +
 	"\aPricing\x125\n" +
-	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelB\b\xbaH\x05\x82\x01\x02 \x00R\x05model\x12\x12\n" +
-	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
-	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12 \n" +
-	"\tunit_cost\x18\x04 \x01(\x01H\x00R\bunitCost\x88\x01\x01\x122\n" +
+	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelB\b\xbaH\x05\x82\x01\x02 \x00R\x05model\x122\n" +
+	"\x04rate\x18\x02 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$R\x04rate\x12\x1a\n" +
+	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12@\n" +
+	"\tunit_cost\x18\x04 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01\x122\n" +
 	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12;\n" +
 	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\x93\x02\n" +
 	"\x04unit\x18\b \x01(\tB\xf9\x01\xbaH5r3\x18@2/^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aseconds\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
 	"characters\x8a\xb5\x18\x05bytes\x8a\xb5\x18\x05items\x8a\xb5\x18\x05sq-km\x9a\xb5\x18\fpricingunitsH\x03R\x04unit\x88\x01\x01\x129\n" +
-	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xa7\x02\xbaH\xa3\x02\x1a\x97\x01\n" +
-	"\x1epricing.per_unit.requires_unit\x12'unit is required when model is PER_UNIT\x1aLthis.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''\x1a\x86\x01\n" +
-	"\x16pricing.free.zero_rate\x12!rate must be 0 when model is FREE\x1aIthis.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0B\f\n" +
+	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xd6\x02\xbaH\xd2\x02\x1a\x97\x01\n" +
+	"\x1epricing.per_unit.requires_unit\x12'unit is required when model is PER_UNIT\x1aLthis.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''\x1a\xb5\x01\n" +
+	"\x16pricing.free.zero_rate\x12,rate must be 0 (or empty) when model is FREE\x1amthis.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == '' || this.rate.matches('^0+([.]0+)?$')B\f\n" +
 	"\n" +
 	"_unit_costB\x15\n" +
 	"\x13_estimated_quantityB\x1a\n" +
@@ -8620,11 +8623,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0e_denial_reasonB\r\n" +
 	"\v_expires_atB\x15\n" +
 	"\x13_retrieval_endpointB\x17\n" +
-	"\x15_reporting_obligation\"j\n" +
-	"\x04Cost\x12\x16\n" +
-	"\x06amount\x18\x01 \x01(\x01R\x06amount\x12\x1a\n" +
-	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12 \n" +
-	"\tunit_cost\x18\x03 \x01(\x01H\x00R\bunitCost\x88\x01\x01B\f\n" +
+	"\x15_reporting_obligation\"\xaa\x01\n" +
+	"\x04Cost\x126\n" +
+	"\x06amount\x18\x01 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$R\x06amount\x12\x1a\n" +
+	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12@\n" +
+	"\tunit_cost\x18\x03 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01B\f\n" +
 	"\n" +
 	"_unit_cost\"\xe2\x01\n" +
 	"\x14PushResourcesRequest\x12\x10\n" +
@@ -8750,11 +8753,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0e\n" +
 	"\f_constraintsB\b\n" +
 	"\x06_queryB\x11\n" +
-	"\x0f_search_filters\"\xca\x05\n" +
+	"\x0f_search_filters\"\xea\x05\n" +
 	"\x12RequestConstraints\x12\x1c\n" +
 	"\texchanges\x18\x01 \x03(\tR\texchanges\x12/\n" +
-	"\tmax_price\x18\x02 \x01(\v2\r.ramp.v1.CostH\x00R\bmaxPrice\x88\x01\x01\x12'\n" +
-	"\rmax_unit_cost\x18\x03 \x01(\x01H\x01R\vmaxUnitCost\x88\x01\x01\x12H\n" +
+	"\tmax_price\x18\x02 \x01(\v2\r.ramp.v1.CostH\x00R\bmaxPrice\x88\x01\x01\x12G\n" +
+	"\rmax_unit_cost\x18\x03 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$H\x01R\vmaxUnitCost\x88\x01\x01\x12H\n" +
 	"\x13delivery_preference\x18\x04 \x03(\x0e2\x17.ramp.v1.DeliveryMethodR\x12deliveryPreference\x120\n" +
 	"\x11reporting_capable\x18\x05 \x01(\bH\x02R\x10reportingCapable\x88\x01\x01\x12/\n" +
 	"\x13preferred_exchanges\x18\x06 \x03(\tR\x12preferredExchanges\x12&\n" +
