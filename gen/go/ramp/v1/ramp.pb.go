@@ -105,7 +105,8 @@ const (
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED OfferAbsenceReason = 0 // unset — rejected at ingest
 	// Resource URI is not in this Exchange's catalog.
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_IN_CATALOG OfferAbsenceReason = 1
-	// Resource exists but has a BLOCKED access policy (provider opted out of AI access).
+	// Resource exists but the provider has opted out of AI access for it (the
+	// provider's consent/opt-out signal blocks licensing).
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_CONTENT_BLOCKED OfferAbsenceReason = 2
 	// Resource exists but its offers were pre-filtered out for one or more
 	// restriction axes the requester stated (a convenience filter matched to the
@@ -128,6 +129,11 @@ const (
 	// The unrecognized keys SHOULD be listed in the OfferGroup's ext field
 	// under "unrecognized_critical_extensions" for diagnostic purposes.
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION OfferAbsenceReason = 7
+	// Offers exist, but none fit within the requester's budget (e.g. every offer's
+	// price exceeds RequestConstraints.period_budget). Returned by Resolve as a
+	// successful "no result" answer when a budget/price ceiling filtered out every
+	// otherwise-licensable offer.
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_BUDGET_EXCEEDED OfferAbsenceReason = 8
 )
 
 // Enum value maps for OfferAbsenceReason.
@@ -141,6 +147,7 @@ var (
 		5: "OFFER_ABSENCE_REASON_NOT_AUTHORIZED",
 		6: "OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT",
 		7: "OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION",
+		8: "OFFER_ABSENCE_REASON_BUDGET_EXCEEDED",
 	}
 	OfferAbsenceReason_value = map[string]int32{
 		"OFFER_ABSENCE_REASON_UNSPECIFIED":                0,
@@ -151,6 +158,7 @@ var (
 		"OFFER_ABSENCE_REASON_NOT_AUTHORIZED":             5,
 		"OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT":         6,
 		"OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION": 7,
+		"OFFER_ABSENCE_REASON_BUDGET_EXCEEDED":            8,
 	}
 )
 
@@ -6065,6 +6073,11 @@ type RAMPRequest struct {
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Unique request identifier, assigned by the Requesting Party.
 	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a
+	// retried request carrying the same key MUST NOT re-charge — the Broker returns
+	// the original result. Distinct from `id` (an opaque correlation tag): this is
+	// the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.
+	IdempotencyKey string `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Requester identity — who is making this request, what scopes they have.
 	// The Broker forwards this to Exchanges in ResourceQuery.requester.
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
@@ -6152,6 +6165,13 @@ func (x *RAMPRequest) GetVer() string {
 func (x *RAMPRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *RAMPRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -8834,10 +8854,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
 	"\treport_id\x18\x03 \x01(\tR\breportId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa7\x04\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xd9\x04\n" +
 	"\vRAMPRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
+	"\x0fidempotency_key\x18\n" +
+	" \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x120\n" +
 	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
 	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
 	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12B\n" +
@@ -9089,7 +9111,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x19DISCOVERY_METHOD_EXCHANGE\x10\x01\x12\x1b\n" +
 	"\x17DISCOVERY_METHOD_SEARCH\x10\x02\x12#\n" +
 	"\x1fDISCOVERY_METHOD_RECOMMENDATION\x10\x03\x12 \n" +
-	"\x1cDISCOVERY_METHOD_SYNDICATION\x10\x04*\xf9\x02\n" +
+	"\x1cDISCOVERY_METHOD_SYNDICATION\x10\x04*\xa3\x03\n" +
 	"\x12OfferAbsenceReason\x12$\n" +
 	" OFFER_ABSENCE_REASON_UNSPECIFIED\x10\x00\x12'\n" +
 	"#OFFER_ABSENCE_REASON_NOT_IN_CATALOG\x10\x01\x12(\n" +
@@ -9098,7 +9120,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	",OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE\x10\x04\x12'\n" +
 	"#OFFER_ABSENCE_REASON_NOT_AUTHORIZED\x10\x05\x12+\n" +
 	"'OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT\x10\x06\x123\n" +
-	"/OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION\x10\a*q\n" +
+	"/OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION\x10\a\x12(\n" +
+	"$OFFER_ABSENCE_REASON_BUDGET_EXCEEDED\x10\b*q\n" +
 	"\rTermSemantics\x12\x1e\n" +
 	"\x1aTERM_SEMANTICS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19TERM_SEMANTICS_ENUMERATED\x10\x01\x12!\n" +

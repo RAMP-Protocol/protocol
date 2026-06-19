@@ -288,7 +288,8 @@ enum OfferAbsenceReason {
   OFFER_ABSENCE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Resource URI is not in this Exchange's catalog.
   OFFER_ABSENCE_REASON_NOT_IN_CATALOG = 1;
-  // Resource exists but has a BLOCKED access policy (provider opted out of AI access).
+  // Resource exists but the provider has opted out of AI access for it (the
+  // provider's consent/opt-out signal blocks licensing).
   OFFER_ABSENCE_REASON_CONTENT_BLOCKED = 2;
   // Resource exists but its offers were pre-filtered out for one or more
   // restriction axes the requester stated (a convenience filter matched to the
@@ -312,6 +313,12 @@ enum OfferAbsenceReason {
   // The unrecognized keys SHOULD be listed in the OfferGroup's ext field
   // under "unrecognized_critical_extensions" for diagnostic purposes.
   OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION = 7;
+
+  // Offers exist, but none fit within the requester's budget (e.g. every offer's
+  // price exceeds RequestConstraints.period_budget). Returned by Resolve as a
+  // successful "no result" answer when a budget/price ceiling filtered out every
+  // otherwise-licensable offer.
+  OFFER_ABSENCE_REASON_BUDGET_EXCEEDED = 8;
 }
 
 // RateLimitInfo — Caller's rate limit status on this Exchange.
@@ -2203,6 +2210,12 @@ message RAMPRequest {
 
   // Unique request identifier, assigned by the Requesting Party.
   string id = 2;
+
+  // Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a
+  // retried request carrying the same key MUST NOT re-charge — the Broker returns
+  // the original result. Distinct from `id` (an opaque correlation tag): this is
+  // the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.
+  string idempotency_key = 10 [(buf.validate.field).string.min_len = 1];
 
   // Requester identity — who is making this request, what scopes they have.
   // The Broker forwards this to Exchanges in ResourceQuery.requester.
