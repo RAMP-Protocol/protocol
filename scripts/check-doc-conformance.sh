@@ -20,9 +20,12 @@ patterns=(
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   'offer_signature_algorithm'
   # token / vocabulary — both the hyphenated token form and the prose spelling;
-  # the canonical optional delegation format is biscuit-v3, and entitlement
-  # denials are format-neutral ("entitlement token", not "biscuit").
-  'biscuit-v2' 'Biscuit v2'
+  # the canonical optional delegation format is biscuit-v3 (NEVER v2), and
+  # entitlement denials are format-neutral ("entitlement token", not "biscuit").
+  # The banned v2 spellings are split string literals so they don't appear
+  # verbatim in the repo; the runtime patterns still match both the hyphenated
+  # token and the spaced prose form.
+  'biscuit-''v2' 'Biscuit ''v2'
   # 'revshare' is intentionally NOT denylisted: it is a live CoMP ext identifier
   # (comp.license[].revshare) and scope prefix (revshare:...). The retired RAMP
   # *pricing model* is guarded via the enum-constant patterns below instead.
@@ -43,8 +46,10 @@ patterns=(
   # (ai-input/ai-train/ai-index). Lowercase underscore forms are wrong; CoMP's
   # uppercase AI_INPUT enum is unaffected (case-sensitive). (CON-05)
   'ai_input' 'ai_train' 'ai_index'
-  # real-company example names that must stay generic
-  '[Bb]loomberg'
+  # real-company example names that must stay generic. Split string literal so the
+  # banned word does not appear verbatim anywhere in the repo (the runtime pattern
+  # is still [Bb]loomberg).
+  '[Bb]loom''berg'
 )
 
 # Files where naming a removed identifier is legitimate (they record history).
