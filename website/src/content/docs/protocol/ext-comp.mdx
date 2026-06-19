@@ -5,10 +5,12 @@ description: "IAB CoMP metadata extension profile — Package, Function, Scope a
 
 ## Purpose
 
-Maps IAB Tech Lab CoMP (Content Metadata Protocol) fields into RAMP ext
+Maps IAB Tech Lab CoMP (Content Monetization Protocols, V1) fields into RAMP ext
 conventions. This extension profile enables publishers and ad-tech participants to carry CoMP
 metadata alongside RAMP transactions without requiring the core protocol
 to depend on CoMP.
+
+**Source of truth (immutable pin):** [CoMP V1 specification](https://github.com/IABTechLab/CoMP/blob/880238e0100b3d0d67d5afd7357a18fc21a97be5/CoMP-1.0.md) — IAB Tech Lab, finalized 2026-04-28; spec-file blob `aa8c796be7a9bcfa1189a1cf6c1ec50aa67a0f5f`. The `ramp-comp-v1` profile mirrors exactly this revision. (The `1.0-202604` release tag does not carry the spec; `main` does.)
 
 Exchanges that declare `supported_profiles: ["ramp-comp-v1"]` include
 these ext fields in Offers and expect them in UsageReports.

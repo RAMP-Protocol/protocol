@@ -196,14 +196,14 @@ The legal profile uses sub-domain namespacing: `legal.legislation.*` for statute
 
 ### ramp-comp-v1
 
-**Scope:** CoMP (Content Monetization Protocol) metadata -- optional extension for Exchanges that carry CoMP-originated content objects
+**Scope:** CoMP (Content Monetization Protocols, V1) metadata -- optional extension for Exchanges that carry CoMP-originated content objects
 
 | Property | Detail |
 |---|---|
-| **Ext fields** | CoMP `Package`, `Scope`, `Retrieval`, `License`, and media-type objects mapped to `comp.*` namespace |
-| **Standards** | CoMP v2.0 |
-| **Key capabilities** | Structured content metadata (Package, Scope, Text, Image, Video, Audio); retrieval method negotiation; license and rights modeling via `LicenseUse` enum |
-| **Conformance levels** | Basic (Package fields), Standard (Scope + media types), Full (License + Retrieval) |
+| **Ext fields** | CoMP `Package`, `Scope` (licensing folded into Scope in V1), `Retrieval`, and media-type objects, carried as a nested object under `ext.comp` |
+| **Standards** | [CoMP V1](https://github.com/IABTechLab/CoMP/blob/880238e0100b3d0d67d5afd7357a18fc21a97be5/CoMP-1.0.md) (finalized 2026-04-28; spec-file blob `aa8c796be7a9bcfa1189a1cf6c1ec50aa67a0f5f`) |
+| **Key capabilities** | Structured content metadata (Package, Scope, Text, Image, Video, Audio); retrieval method negotiation; licensing and rights modeling via `Scope` (`ause`, `pricetype`, `pricetier`, `unitprice`, `licensedur`) |
+| **Conformance levels** | Basic (Package fields), Standard (Scope + media types), Full (Scope licensing + Retrieval) |
 
 CoMP metadata is carried as `comp.*` extension fields in the `ext` Struct on protocol messages. Exchanges that support IAB CoMP include `comp.*` keys (e.g., `comp.package`, `comp.scope`, `comp.retrieval`). Exchanges that don't use CoMP simply omit these keys, and consumers that don't understand CoMP safely ignore them.
 

@@ -1,7 +1,9 @@
 // CoMP V1 — IAB Tech Lab Content Monetization Protocols (finalized 2026-04-28).
 //
 // 1:1 mapping from the canonical CoMP V1 specification.
-// Source: https://github.com/IABTechLab/CoMP/blob/main/CoMP-1.0.md
+// Source (immutable pin): https://github.com/IABTechLab/CoMP/blob/880238e0100b3d0d67d5afd7357a18fc21a97be5/CoMP-1.0.md
+// Spec-file content blob SHA (content-addressed): aa8c796be7a9bcfa1189a1cf6c1ec50aa67a0f5f
+// NOTE: the 1.0-202604 release tag does NOT contain the spec; main carries it.
 //
 // Enum alignment: proto3 enum values map directly to CoMP integer values
 // (first real CoMP value = 0). No UNSPECIFIED sentinels — proto3 default
