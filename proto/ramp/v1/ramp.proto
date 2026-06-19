@@ -2974,6 +2974,13 @@ message DomainVerificationResult {
 // is a success — NOT an error. Only a method that could not perform the
 // requested ACTION returns a non-OK code plus an ErrorDetail.
 //
+// Failure-type naming is intentionally NOT uniform — the suffix marks the KIND
+// of failure: *Denial is an access decision (a transaction was denied),
+// *Rejection is a submission refused (catalog push, usage report), and *Failure
+// is an operation that could not complete (registration, dispute, domain
+// verification, retrieval auth). The distinction is deliberate; do not flatten
+// these to a single suffix.
+//
 // The per-domain reason enums here are the single source of truth that replaces
 // the hand-rolled Go "Kind" enums (Exchange, Broker), the catalog free-text
 // strings, and the edge TypeScript token unions. Services map a domain failure
