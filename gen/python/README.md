@@ -1,30 +1,31 @@
-# RAMP — generated Python types export
+# Generated Python types export
 
 Generated from [`proto/`](../../proto) via JSON Schema. **Do not edit by hand** —
-regenerate with `scripts/gen-sdk-types.sh` and commit the result.
+regenerate with `scripts/gen-sdk-types.sh` and commit the result (CI drift-gates it).
 
-This is a **types export**, not a full SDK: Pydantic models + registered vocabulary
-constants. Transport (Connect), request signing (RFC 9421), and key management are a
-separate, hand-written SDK layer.
+A **types export**, not a full SDK: Pydantic models + registered vocabulary constants.
+Transport (Connect), request signing (RFC 9421), and key management are a separate,
+hand-written SDK layer.
 
 Contents:
-- `ramp/models.py` — Pydantic v2 models for every RAMP message (`License`, `Pricing`,
-  `LicenseTerm`, `Offer`, …). They carry **shape + per-field validation**: enums (with
-  `UNSPECIFIED` excluded where it's a required discriminator), string patterns, length
-  and item bounds. **Cross-field rules are NOT here** — they are enforced
-  server-side by the Exchange/Broker (Go protovalidate); this is the correct trust
-  boundary.
-- `vocab/` — registered vocabulary constants per axis (`pricingunits`, `quotametrics`,
-  `functiontokens`, `geographytokens`, `usertypes`): typed constants, an `ALL` tuple,
-  and `is_registered()`.
+- `wire/base.py` — **`WireModel`**, the single base class every model extends (the one
+  seam: SDK-wide config + your override point; neutral name so a protocol rename never
+  touches consumer imports). **Hand-written, not regenerated.**
+- `wire/models.py` — Pydantic v2 models for every message (`License`, `Pricing`,
+  `LicenseTerm`, `Offer`, …), all extending `WireModel`. They carry **shape + per-field
+  validation**: enums (named from the proto descriptor, `*_UNSPECIFIED` dropped),
+  string patterns, length/item bounds. Nested messages reference the same model
+  (`LicenseTerm.license` is a `License`), so the whole tree hydrates as typed models.
+  **Cross-field rules are NOT here** — enforced server-side by the Exchange/Broker.
+- `vocab/` — registered vocabulary constants per axis (`pricingunits`, …) with
+  `is_registered()`.
 
 ```python
-from ramp.models import LicenseTerm, Pricing
-from vocab import pricingunits
+from wire.models import LicenseTerm, License
+from wire.base import WireModel          # subclass this to customize ALL models at once
 
-# FastAPI / FastMCP: use the model directly as a request/response type.
 term = LicenseTerm.model_validate(incoming_json)   # raises on shape/per-field violations
-assert pricingunits.is_registered("tokens")
+assert isinstance(term.license, License)           # full nested hierarchy, typed
 ```
 
 Install (from this directory): `pip install .`

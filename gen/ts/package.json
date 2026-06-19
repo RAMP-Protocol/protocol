@@ -1,10 +1,10 @@
 {
   "name": "@ramp-protocol/sdk",
   "version": "1.0.0",
-  "description": "RAMP protocol — generated TypeScript types export: Zod schemas (./ramp/schemas) + vocabulary constants (./vocab/*), generated from the proto via JSON Schema.",
+  "description": "Generated TypeScript types export: Zod schemas (./wire/schemas) + vocabulary constants (./vocab/*), generated from the proto via JSON Schema.",
   "type": "module",
   "exports": {
-    "./ramp/schemas": "./ramp/schemas.ts",
+    "./wire/schemas": "./wire/schemas.ts",
     "./vocab/*": "./vocab/*.ts"
   },
   "peerDependencies": {

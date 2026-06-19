@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ramp-protocol"
 version = "0.1.0"
-description = "Generated RAMP types export for Python: Pydantic v2 models (ramp.models) + registered vocabulary constants (vocab.*), generated from the proto via JSON Schema."
+description = "Generated types export for Python: Pydantic v2 models (wire.models, extending wire.base.WireModel) + registered vocabulary constants (vocab.*), generated from the proto via JSON Schema."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
@@ -23,8 +23,7 @@ Source = "https://github.com/RAMP-Protocol/protocol"
 
 [tool.setuptools.packages.find]
 where = ["."]
-# PEP 420 namespace packages. Currently the vocabulary constants (vocab.pricingunits
-# etc.); the Pydantic message models (ramp.v1.*) are added by the types-export step.
+# PEP 420 namespace packages. Pydantic models + base at wire.* (neutral name, no
+# protocol coupling); vocabulary constants at vocab.pricingunits (etc.).
 namespaces = true
-# Pydantic models at ramp.models; vocabulary constants at vocab.pricingunits (etc.).
-include = ["ramp*", "vocab*"]
+include = ["wire*", "vocab*"]
