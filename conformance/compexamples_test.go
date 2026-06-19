@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -40,19 +41,7 @@ const compExamplesDir = "testdata/comp_v1_examples"
 // A green run is executable proof that comp.proto can losslessly carry every
 // documented CoMP V1 example. A red run names the exact example and field.
 func TestCompV1ExamplesRoundTrip(t *testing.T) {
-	entries, err := os.ReadDir(compExamplesDir)
-	if err != nil {
-		t.Fatalf("reading %s: %v", compExamplesDir, err)
-	}
-
-	var files []string
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		files = append(files, e.Name())
-	}
-	sort.Strings(files)
+	files := jsonFilesIn(t, compExamplesDir)
 
 	// Sanity floor: the standard ships 8 examples, each with a request
 	// (AISystem) and a response (Package) payload — 16 vendored files. If the
@@ -64,34 +53,124 @@ func TestCompV1ExamplesRoundTrip(t *testing.T) {
 	for _, name := range files {
 		name := name
 		t.Run(name, func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join(compExamplesDir, name))
-			if err != nil {
-				t.Fatalf("reading %s: %v", name, err)
+			roundTripExample(t, compExamplesDir, name)
+		})
+	}
+}
+
+// jsonFilesIn returns the sorted *.json file names directly under dir.
+func jsonFilesIn(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("reading %s: %v", dir, err)
+	}
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		files = append(files, e.Name())
+	}
+	sort.Strings(files)
+	return files
+}
+
+// roundTripExample runs the adversarial conformance round-trip for one example
+// payload and returns its raw bytes. The two load-bearing properties:
+//
+//   - Unmarshal uses DEFAULT protojson options — DiscardUnknown is false, so any
+//     field present in the payload but ABSENT from our proto is a hard error
+//     (a missing field surfaces here rather than being silently dropped).
+//   - Re-marshal uses enum-as-number (CoMP's integer List codes) with
+//     EmitDefaultValues so an explicitly-set zero is not elided, then
+//     assertJSONSemanticEqual proves every payload value survived the round-trip.
+func roundTripExample(t *testing.T, dir, name string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("reading %s: %v", name, err)
+	}
+
+	msg := rootTypeFor(t, name)
+
+	if err := protojson.Unmarshal(raw, msg); err != nil {
+		t.Fatalf("protojson.Unmarshal of %s into %T FAILED (a typed field in the payload is absent or mistyped in comp.proto): %v",
+			name, msg, err)
+	}
+
+	out, err := protojson.MarshalOptions{
+		UseEnumNumbers:    true,
+		EmitDefaultValues: true,
+	}.Marshal(msg)
+	if err != nil {
+		t.Fatalf("protojson.Marshal of %T (%s): %v", msg, name, err)
+	}
+
+	assertJSONSemanticEqual(t, name, raw, out)
+	return raw
+}
+
+// syntheticExamplesDir holds RAMP-authored conformance fixtures that are NOT
+// part of the verbatim IAB CoMP V1 worked-example set. The published examples
+// leave the Scope commercial block (ause/pricetype/pricetier/unitprice/cur/
+// country/licensedur) and the per-asset language/update fields unpopulated, so
+// those proto fields would round-trip green even if renamed, retyped, or
+// renumbered. These fixtures exercise that surface so such drift fails the gate.
+// They are kept in a separate directory (with their own README) so the verbatim
+// IAB set stays a clean, blob-pinned mirror. See testdata/comp_v1_synthetic.
+const syntheticExamplesDir = "testdata/comp_v1_synthetic"
+
+// requiredSyntheticCoverage declares, per synthetic fixture, the spec-value JSON
+// paths the fixture MUST populate. It is an anti-vacuity floor: if a future edit
+// drops one of these fields, the coverage the fixture exists to provide silently
+// disappears — so presence is asserted explicitly rather than assumed.
+var requiredSyntheticCoverage = map[string][]string{
+	"commercial_terms.package.json": {
+		"packager",
+		"reporturl",
+		"scope.ause",
+		"scope.pricetype",
+		"scope.pricetier",
+		"scope.unitprice",
+		"scope.cur",
+		"scope.country",
+		"scope.licensedur",
+		"scope.text[0].update",
+		"scope.text[0].language",
+	},
+}
+
+// TestCompV1SyntheticCoverageRoundTrip round-trips the RAMP-authored fixtures
+// with the same adversarial properties as the verbatim set, then asserts each
+// fixture still populates the proto fields it was authored to cover.
+func TestCompV1SyntheticCoverageRoundTrip(t *testing.T) {
+	files := jsonFilesIn(t, syntheticExamplesDir)
+	if len(files) == 0 {
+		t.Fatalf("no RAMP-authored synthetic fixtures found in %s", syntheticExamplesDir)
+	}
+
+	for _, name := range files {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			raw := roundTripExample(t, syntheticExamplesDir, name)
+
+			paths, ok := requiredSyntheticCoverage[name]
+			if !ok {
+				t.Fatalf("synthetic fixture %s has no entry in requiredSyntheticCoverage; "+
+					"declare the proto fields it covers or remove the file", name)
 			}
 
-			msg := rootTypeFor(t, name)
-
-			// DEFAULT options: DiscardUnknown defaults to false, so any field in
-			// the spec example that our proto does not declare is a hard error.
-			if err := protojson.Unmarshal(raw, msg); err != nil {
-				t.Fatalf("protojson.Unmarshal into %T FAILED (unknown/typed field in the CoMP V1 example is absent or mistyped in comp.proto): %v",
-					msg, err)
+			var tree any
+			if err := json.Unmarshal(raw, &tree); err != nil {
+				t.Fatalf("%s: not valid JSON: %v", name, err)
 			}
-
-			// Re-marshal with enum-as-number (the CoMP V1 wire form uses the
-			// integer List codes, e.g. "aiauth": 0, not "AUTH_METHOD_USER_AGENT")
-			// and emit default values so an explicitly-set zero in the spec
-			// example (e.g. "aiauth": 0, "resdis": 0) is not elided by proto3's
-			// default-scalar omission and thus survives the value comparison.
-			out, err := protojson.MarshalOptions{
-				UseEnumNumbers:    true,
-				EmitDefaultValues: true,
-			}.Marshal(msg)
-			if err != nil {
-				t.Fatalf("protojson.Marshal of %T: %v", msg, err)
+			for _, p := range paths {
+				if _, ok := lookupJSONPath(tree, p); !ok {
+					t.Errorf("%s: required coverage path %q is absent — the proto field this "+
+						"fixture exists to exercise is no longer present", name, p)
+				}
 			}
-
-			assertJSONSemanticEqual(t, name, raw, out)
 		})
 	}
 }
@@ -203,27 +282,47 @@ func joinPath(base, key string) string {
 }
 
 func indexPath(base string, i int) string {
-	return base + "[" + itoa(i) + "]"
+	return base + "[" + strconv.Itoa(i) + "]"
 }
 
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
+// lookupJSONPath resolves a dotted path with optional single [i] array indices
+// (e.g. "scope.text[0].language") against a decoded-JSON tree and reports
+// whether a value exists there. Used by the synthetic-coverage anti-vacuity
+// check; it does not assert on the value, only its presence.
+func lookupJSONPath(tree any, path string) (any, bool) {
+	cur := tree
+	for _, seg := range strings.Split(path, ".") {
+		key := seg
+		idx := -1
+		if lb := strings.IndexByte(seg, '['); lb >= 0 {
+			rb := strings.IndexByte(seg, ']')
+			if rb < lb+1 {
+				return nil, false
+			}
+			n, err := strconv.Atoi(seg[lb+1 : rb])
+			if err != nil {
+				return nil, false
+			}
+			key = seg[:lb]
+			idx = n
+		}
+
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		v, ok := m[key]
+		if !ok {
+			return nil, false
+		}
+		if idx >= 0 {
+			arr, ok := v.([]any)
+			if !ok || idx >= len(arr) {
+				return nil, false
+			}
+			v = arr[idx]
+		}
+		cur = v
 	}
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	var b [20]byte
-	pos := len(b)
-	for i > 0 {
-		pos--
-		b[pos] = byte('0' + i%10)
-		i /= 10
-	}
-	if neg {
-		pos--
-		b[pos] = '-'
-	}
-	return string(b[pos:])
+	return cur, true
 }
