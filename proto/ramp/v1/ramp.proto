@@ -408,18 +408,28 @@ message Offer {
   // different Exchanges and compare pricing.
   optional ResourceIdentity identity = 7;
 
+  // Canonical domain of the Exchange that issued this offer (e.g.
+  // "exchange.example.com"). This is the execute-routing target: the agent (or
+  // a relaying Broker) sends the ExecuteTransaction call for this offer to this
+  // Exchange. Because it is an ordinary Offer field it falls inside the signed
+  // bytes (see `signature` below — the signature covers every field except
+  // `signature` / `signature_algorithm`), so an intermediary cannot redirect
+  // the execute call to a different Exchange without invalidating the offer.
+  string exchange = 8;
+
   // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
   // Offer — every field, including `pricing`, `terms` (the full licensing
-  // payload), and `expires_at`. Canonicalization is deterministic protobuf
-  // marshaling (lexicographic field order); only `signature` and
+  // payload), `expires_at`, and `exchange`. Canonicalization is deterministic
+  // protobuf marshaling (lexicographic field order); only `signature` and
   // `signature_algorithm` are excluded from the signed bytes. `expires_at` is
   // signed so the offer's validity window is integrity-protected: a relaying
   // Broker cannot extend (or shorten) the TTL of a signed offer to replay it
   // outside the window the Exchange intended.
   //
-  // Because the signature covers `terms`, `pricing`, and `expires_at`, an
-  // intermediary (Broker) cannot tamper with price, restrictions, quotas,
-  // obligations, the expiry, or any licensing term without invalidating it.
+  // Because the signature covers `terms`, `pricing`, `expires_at`, and
+  // `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,
+  // quotas, obligations, the expiry, the execute-routing target, or any
+  // licensing term without invalidating it.
   // Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
   // key, and MUST reject an offer whose `expires_at` is in the past.
   string signature = 9;
@@ -1397,7 +1407,7 @@ enum DeliveryMethod {
 // what they are entitled to (scopes, delegation), and how to bill them
 // (billing_ref). What they are asking for (uris) and the limits they will
 // operate within (acceptable_restrictions) belong to the ask, not the identity,
-// and live on ResourceQuery / RAMPRequest. The Exchange verifies identity via
+// and live on ResourceQuery / DiscoveryRequest. The Exchange verifies identity via
 // the RFC 9421 request signature, then filters its catalog by the requester's
 // scopes.
 message Requester {
@@ -2089,13 +2099,16 @@ message UsageReportResponse {
 // ============================================================================
 // Broker Protocol (Steps 1, 6)
 //
-// These messages are for the Agent → Broker path.
+// These messages are for the Agent → Broker path. Step 1 is DiscoveryRequest;
+// Step 6 is DiscoveryResponse, which carries offers grouped by requested URI
+// (OfferGroup) — discovery only. Committing to an offer is a separate exchange
+// on the execute path, which returns TransactionResponse.
 // When an agent talks directly to an Exchange, it uses
 // ResourceQuery/TransactionRequest directly instead.
 // ============================================================================
 
-// RAMPRequest — Agent sends to Broker (Step 1).
-message RAMPRequest {
+// DiscoveryRequest — Agent sends to Broker (Step 1).
+message DiscoveryRequest {
   string ver = 1;
 
   // Unique request identifier, assigned by the Requesting Party.
@@ -2134,7 +2147,7 @@ message RAMPRequest {
   // to find matching resources across Exchanges.
   // When present, the Broker interprets the query and discovers resources
   // across Exchanges on the agent's behalf. Results returned as Offers
-  // in RAMPResponse, same as for specific URI requests.
+  // in DiscoveryResponse, same as for specific URI requests.
   // Can be used alongside uris (specific URIs + search in one request).
   optional string query = 6;
 
@@ -2507,51 +2520,27 @@ enum ResourceAccessPolicy {
   RESOURCE_ACCESS_POLICY_BLOCKED = 3;
 }
 
-// RAMPResponse — Broker returns to Agent (Step 6).
-message RAMPResponse {
+// DiscoveryResponse — Broker returns to Agent (Step 6).
+//
+// Carries discovery results only: the offers the Broker gathered across
+// Exchanges, grouped by the URI they were requested for. Committing to an offer
+// is a separate exchange on the execute path; that per-transaction result
+// (transaction_id, billing_id, cost, delivery_method, retrieval endpoint, …)
+// is returned by TransactionResponse, not here.
+message DiscoveryResponse {
   string ver = 1;
   string id = 2;
 
   // Echoed request ID from Step 1.
   string request_id = 3;
 
-  // Exchange-assigned identifiers.
-  string transaction_id = 4;
-  string billing_id = 5;
-
-  // Which Exchange won the selection.
-  string exchange = 6;
-
-  // Resource title for the disputed resource.
-  optional string resource_title = 7;
-
-  // Transaction cost.
-  Cost cost = 8;
-
-  // How resource is delivered.
-  DeliveryMethod delivery_method = 9;
-
-  // Reporting obligations the agent must fulfill.
-  optional ReportingObligation reporting_obligation = 10;
-
-  // When retrieval_endpoint expires.
-  optional google.protobuf.Timestamp expires_at = 11;
-
-  // Signed retrieval URL returned by the Exchange and forwarded unchanged by the
-  // Broker, together with agent_identity_hash. Bound to agent_identity_hash;
-  // expires at expires_at. Absent on denial and when delivery_method is not
-  // signed-URL-based.
-  optional string retrieval_endpoint = 13;
-
-  // Identity that retrieval_endpoint is bound to. Same value and computation as
-  // TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.
-  optional string agent_identity_hash = 14;
-
-  // Broker's fee for this transaction, if any.
-  // Absent = no per-transaction fee (governed by external agreement).
-  // Present = explicit fee the agent can see and audit.
-  // Broker MUST disclose fees when charging per-transaction.
-  optional Cost broker_fee = 12;
+  // Offers grouped by requested URI — the sole offer representation in this
+  // response. One OfferGroup per URI the agent asked for (echoed in
+  // OfferGroup.uri); a group with no offers carries OfferGroup.absence_reason
+  // explaining why. Each contained Offer is the full signed Offer the Exchange
+  // issued (including Offer.exchange, the execute-routing target), forwarded by
+  // the Broker unchanged so the agent can verify the signature end to end.
+  repeated OfferGroup offer_groups = 4;
 
   google.protobuf.Struct ext = 15;
 
