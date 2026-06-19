@@ -11,8 +11,7 @@
 #                                       every model extends wire.base.WireModel)
 #            --json-schema-to-zod--------> gen/ts/wire/schemas.ts   (Zod)
 #
-# Names are neutral (wire / WireModel) on purpose — a protocol rename must not ripple
-# into consumers. gen/python/wire/base.py is hand-written (the seam) and NOT generated.
+# gen/python/wire/base.py is hand-written (the seam) and NOT generated.
 # Prereqs: go, python3, node/npm. Provisions a throwaway venv + node_modules under
 # .sdk-types-work/ (gitignored).
 set -euo pipefail
