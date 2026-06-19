@@ -18,82 +18,45 @@ Request correlation is **not** carried in the proto body. It rides on the `X-Req
 
 The core protocol. Both AI agents and Brokers are valid clients.
 
-| RPC | Request | Response | Description |
-|---|---|---|---|
-| `DiscoverResources` | `ResourceQuery` | `ResourceResponse` | Discover available content offers (Steps 2-3) |
-| `ExecuteTransaction` | `TransactionRequest` | `TransactionResponse` | Commit to an offer, receive delivery info (Steps 4-5) |
-| `ReportUsage` | `UsageReport` | `UsageReportResponse` | Submit post-usage report (Step 7) |
-| `DisputeTransaction` | `DisputeRequest` | `DisputeResponse` | Signal a content dispute for a completed transaction |
-| `RequestDomainVerification` | `DomainVerificationRequest` | `DomainVerificationChallenge` | Request ACME-style domain verification challenge |
-| `ConfirmDomainVerification` | `DomainVerificationConfirmation` | `DomainVerificationResult` | Confirm domain verification and register signing key |
+::proto-service{name=ExchangeService}
 
 ### CatalogService
 
 Optional RPC for providers/CMS/third-party intelligence providers to push content metadata.
 
-| RPC | Request | Response | Description |
-|---|---|---|---|
-| `PushResources` | `PushResourcesRequest` | `PushResourcesResponse` | Push or update catalog entries |
-| `RemoveResources` | `RemoveResourcesRequest` | `RemoveResourcesResponse` | Remove catalog entries |
-| `RefreshCatalog` | `RefreshCatalogRequest` | `RefreshCatalogResponse` | Trigger full catalog refresh |
+::proto-service{name=CatalogService}
+
+### BrokerService
+
+The Broker entry point. A client sends the URIs/query it wants resolved and receives a licensed result (or a typed reason none was available).
+
+::proto-service{name=BrokerService}
 
 ## Messages -- Supply Discovery
 
 ### ResourceQuery
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | RAMP protocol version |
-| `id` | string | 2 | Unique query identifier |
-| `requester` | Requester | 3 | Requester identity, scopes, and optional delegation chain |
-| `uris` | repeated string | 8 | Resource URIs being queried |
-| `acceptable_restrictions` | repeated AcceptableRestriction | 9 | Limits the query operates within, per restriction axis. Advisory; the Exchange MAY pre-select offers against them, not enforced. |
-| `deadline` | optional Duration | 6 | Max wait time (default 500ms) |
-| `supported_profiles` | repeated string | 7 | Domain extension profiles the caller understands (e.g. "ramp-academic-v1") |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=ResourceQuery}
 
 ### AcceptableRestriction
 
 The limits a query operates within on one restriction axis, in the same `RestrictionKind` vocabulary the terms use. The Exchange/Broker MAY pre-select offers whose term restrictions fall within these (convenience, not enforcement). Used in `ResourceQuery` and `RAMPRequest`.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `axis` | RestrictionKind | 1 | Which axis (same enum as `Restriction.kind`): FUNCTION / GEOGRAPHY / USER_TYPE / OTHER |
-| `values` | repeated string | 2 | Values the query operates within on this axis — same token vocabulary as the terms (e.g. FUNCTION `["ai-train"]`, GEOGRAPHY `["US","EU"]`) |
+::proto-message{name=AcceptableRestriction}
 
 ### ResourceResponse
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `exchange` | string | 3 | Responding Exchange domain |
-| `offers` | repeated Offer | 4 | Flat offer list (single-URI queries) |
-| `offer_groups` | repeated OfferGroup | 5 | Grouped offers (multi-URI batch queries) |
-| `rate_limit` | optional RateLimitInfo | 6 | Rate limit status for this caller |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=ResourceResponse}
 
 ### OfferGroup
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `uri` | string | 1 | URI this group is for |
-| `offers` | repeated Offer | 2 | Offers for this URI |
-| `discovery_method` | optional DiscoveryMethod | 3 | How the URI was discovered (v2 extension) |
-| `absence_reason` | optional OfferAbsenceReason | 4 | Why no offers are available for this URI |
-| `restriction_filters` | repeated RestrictionKind | 5 | When `absence_reason = RESTRICTION_FILTERED`, the axes that drove the convenience pre-filter (same `RestrictionKind` vocabulary as the terms) |
+::proto-message{name=OfferGroup}
 
 ### RateLimitInfo
 
 Rate limit status modeled after IETF RateLimit header fields.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `limit` | int32 | 1 | Maximum requests allowed in the current window |
-| `remaining` | int32 | 2 | Requests remaining in the current window |
-| `reset_at` | Timestamp | 3 | When the current window resets (UTC) |
-| `window` | optional Duration | 4 | Duration of the rate limit window |
+::proto-message{name=RateLimitInfo}
 
 ## Messages -- Requester Identity
 
@@ -101,36 +64,13 @@ Rate limit status modeled after IETF RateLimit header fields.
 
 Identity and entitlements only — who is asking and what they're entitled to. What they're asking for (`uris`) and the limits they'll accept (`acceptable_restrictions`) live on the ask (`ResourceQuery` / `RAMPRequest`), not here. Used in `ResourceQuery` and `RAMPRequest`.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `id` | string | 1 | Unique requester identifier (e.g. "agent-research-bot-001") |
-| `domain` | string | 2 | Requester's domain -- used for public key lookup at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) |
-| `type` | RequesterType | 3 | What kind of entity is making this request |
-| `name` | optional string | 4 | Human-readable name (e.g. "Acme Research Assistant") |
-| `billing_ref` | optional string | 5 | Opaque billing reference linking the requester to the Exchange's/publisher's billing systems (account, PO, cost center). NOT an entitlement — access is via scopes/delegation. (Maps from CoMP `aisysuse.lid`.) |
-| `scopes` | repeated string | 6 | Entitlement scopes declaring what the requester can access. Format: `"{domain}:{permission}"`. Empty = default access policy. |
-| `delegation` | optional Delegation | 7 | Present when requester acts on behalf of another entity |
-| `ext` | Struct | 15 | Extension point |
+::proto-message{name=Requester}
 
 ### Delegation
 
 Scoped, time-limited, spend-capped credential. The credential itself is opaque bytes carried in `token`, and `token_format` selects how to interpret them: `"jwt"` (default) or `"biscuit-v3"` (optional). The format is never encoded as a prefix inside the token bytes. The default is a **holder-bound JWT**: a chain of `cnf`-linked JWTs (RFC 7800 `cnf.jkt` = RFC 7638 thumbprint) where each child is signed by the key its parent named and narrows scope, and the holder proves possession by signing the request (RFC 9421). `"biscuit-v3"` remains a permitted alternative for deep multi-hop offline attenuation.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `principal_domain` | string | 1 | Who granted this delegation (domain for public key lookup) |
-| `principal_id` | string | 2 | Principal's identifier (e.g. "user@acme.com", "marketdata.example.com") |
-| `scopes` | repeated string | 3 | Scopes granted by this delegation (MUST be a subset of the principal's own scopes) |
-| `expires_at` | Timestamp | 4 | When this delegation expires. Exchange MUST reject expired tokens. |
-| `max_spend_cents` | optional int64 | 5 | Maximum spend in currency minor units (e.g. cents for USD) |
-| `token` | bytes | 6 | Token bytes — a JWT (base64url JWS) by default |
-| `token_format` | string | 7 | Token format: "jwt" (default) or "biscuit-v3" (optional) |
-| `revocation_uri` | optional string | 8 | URI for real-time revocation checking (MAY be checked for high-value transactions) |
-| `max_accesses` | optional int32 | 9 | Maximum access count under this delegation |
-| `quota_period` | optional Duration | 10 | How often access/spend counters reset (e.g. 720h = 30 days); absent = lifetime |
-| `issuer` | optional string | 11 | Token issuer — OIDC issuer URL (for JWT signature validation via OIDC→JWKS) |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=Delegation}
 
 **Delegation claims.** The claim vocabulary carried inside the token is **not re-listed here** — the authoritative registry is the [Delegation-Claims Profile](/protocol/authentication/#delegation-claims-profile) table in `authentication.mdx`. The one claim worth restating: every delegation **MUST** carry a **holder binding** (the `cnf` claim, `cnf.jkt` = the RFC 7638 thumbprint of the holder key) — the request-signing key MUST hash to `cnf.jkt`, or the token is rejected. Without it the token is bearer-usable. Everything else (scope, spend cap, expiry, etc.) is optional and defined in that single source of truth.
 
@@ -146,26 +86,7 @@ There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → …
 
 ### Offer
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `offer_id` | string | 1 | Unique offer identifier |
-| `title` | optional string | 2 | Resource title (human-readable, for display/logging) |
-| `pricing` | Pricing | 3 | Pricing terms with unit_cost |
-| `delivery_method` | DeliveryMethod | 4 | How content is delivered |
-| `reporting` | optional ReportingObligation | 5 | Post-usage reporting requirements |
-| `expires_at` | optional Timestamp | 6 | Offer expiry |
-| `identity` | optional ResourceIdentity | 7 | Content identity for dedup |
-| `signature` | string | 9 | **REQUIRED.** JWS (EdDSA) over the canonical Offer (incl. `terms`, `pricing`, `expires_at`) (informally called the *exchange signature*) |
-| `signature_algorithm` | string | 10 | Signature algorithm (always "EdDSA") |
-| `subscription_id` | optional string | 11 | Subscription/deal identifier |
-| `iab_categories` | repeated string | 13 | IAB Content Taxonomy codes |
-| `attestations` | repeated ResourceAttestation | 14 | Signed content attestations (replaces ContentQuality) |
-| `data_as_of` | optional Timestamp | 16 | When the offered data was current (for DYNAMIC resources) |
-| `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Pre-commit quota snapshot for subscription offers |
-| `previews` | repeated Preview | 18 | Lightweight previews for offer evaluation (thumbnails, clips, snippets) |
-| `terms` | repeated LicenseTerm | 19 | Licensing terms for this offer. See [Universal Licensing Core](#universal-licensing-core). |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=Offer}
 
 :::note[Breaking change in v1.0]
 `Offer.quality` (field 12, `ContentQuality`) has been removed. Use `Offer.attestations` with `ResourceAttestation` claims instead. See [Content Attestation](/protocol/content-attestation/).
@@ -175,14 +96,7 @@ There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → …
 
 Signed envelope of claims from a trusted party (provider or verification vendor) about content at a specific URI.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `verifier` | string | 1 | Domain of the attesting party. Keys at `https://{verifier}/.well-known/ramp.json` (`WellKnownManifest.public_keys`; `role=ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor) |
-| `kid` | string | 2 | Key ID from the verifier's `public_keys` |
-| `attested_at` | Timestamp | 3 | When this attestation was created |
-| `uri` | string | 4 | Content URI this attestation covers |
-| `claims` | Struct | 5 | Signed claims about the content (max 4KB) |
-| `signature` | string | 6 | Ed25519 over JCS-canonicalized (RFC 8785) representation |
+::proto-message{name=ResourceAttestation}
 
 Three verification levels:
 
@@ -194,16 +108,7 @@ Three verification levels:
 
 ### Pricing
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `model` | PricingModel | 1 | Provider's pricing model |
-| `rate` | double | 2 | Price in provider's model |
-| `currency` | string | 3 | ISO 4217 currency code |
-| `unit_cost` | optional double | 4 | Normalized cost per unit (universal comparison metric) |
-| `estimated_quantity` | optional int32 | 5 | Estimated consumption in the metering unit |
-| `license_duration_months` | optional int32 | 7 | License duration in months |
-| `unit` | optional string | 8 | Metering basis (the "per what" of `PER_UNIT`). REQUIRED when `model = PER_UNIT`. Registered token (e.g. `accesses`, `tokens`, `pages`) or `vendor:custom`. Authored as `(ramp.v1.vocab)` on this field. |
-| `metering` | optional PricingMetering | 9 | How usage is tracked for billing reconciliation. Absent = ONLINE (default). |
+::proto-message{name=Pricing}
 
 `Pricing` has no `ext` / `ext_critical` fields — the licensing core is closed.
 
@@ -211,71 +116,29 @@ Three verification levels:
 
 Layered content identification for cross-exchange dedup and integrity verification.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `canonical_url` | optional string | 1 | Provider's canonical URL |
-| `doi` | optional string | 2 | Digital Object Identifier |
-| `iptc_guid` | optional string | 3 | IPTC NewsML-G2 identifier |
-| `isni` | optional string | 4 | International Standard Name Identifier |
-| `content_hash` | optional string | 5 | Content hash (SimHash or SHA-256) |
-| `hash_method` | optional string | 6 | Hash algorithm ("simhash-v1", "sha256") |
-| `c2pa_manifest` | optional string | 7 | C2PA credentials manifest URI |
-| `resource_mutability` | ResourceMutability | 8 | Whether resource content is static, dynamic, or live |
-| `c2pa_status` | optional C2PAStatus | 9 | Summary validation status of the C2PA manifest |
-| `soft_binding` | optional string | 10 | Soft binding hash surviving format transcoding |
-| `soft_binding_method` | optional string | 11 | Soft binding algorithm (e.g. "phash-v1", "c2pa-watermark") |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=ResourceIdentity}
 
 ### SubscriptionQuotaInfo
 
 Quota status for a subscription within the current billing period. Appears on `Offer` (field 17) as a pre-commit snapshot and on `TransactionResponse` (field 17) as the post-transaction remaining quota. The field is `repeated` to support multi-dimensional quotas (e.g. access count + spend cap).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `subscription_id` | string | 1 | Subscription this quota applies to |
-| `quota_limit` | int32 | 2 | Total allowed in the current period |
-| `quota_used` | int32 | 3 | Used so far in the current period |
-| `quota_remaining` | int32 | 4 | Remaining in the current period |
-| `resets_at` | Timestamp | 5 | When the quota counter resets (UTC) |
-| `unit` | string | 6 | What is metered: `"accesses"`, `"tokens"`, `"spend_cents"`, `"burst"` |
+::proto-message{name=SubscriptionQuotaInfo}
+
+### Preview
+
+Lightweight resource preview for offer evaluation. The Exchange populates preview URLs during catalog ingestion; assets are served by the provider's CDN, not by the Exchange. Carried on `Offer` (field 18, `repeated`).
+
+::proto-message{name=Preview}
 
 ## Messages -- Transaction
 
 ### TransactionRequest
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `idempotency_key` | string | 2 | Idempotency key (required, min_len=1); server dedupes on it; durable identity is the Exchange-assigned `transaction_id` in the response |
-| `offer_id` | optional string | 3 | Single-offer mode |
-| `requester` | Requester | 4 | Requester identity for authorization and audit |
-| `offer_signature` | optional string | 6 | Single-offer signature |
-| `items` | repeated TransactionItem | 7 | Batch mode: multiple offers |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=TransactionRequest}
 
 ### TransactionResponse
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `transaction_id` | optional string | 3 | Exchange-assigned transaction ID |
-| `billing_id` | optional string | 4 | Billing reference |
-| `resource_title` | optional string | 5 | Resource title echoed from the Offer |
-| `cost` | optional Cost | 6 | Transaction cost |
-| `delivery_method` | DeliveryMethod | 7 | How content is delivered |
-| `reporting_obligation` | optional ReportingObligation | 8 | Reporting requirements |
-| `expires_at` | optional Timestamp | 9 | When `retrieval_endpoint` expires |
-| `agent_identity_hash` | string | 10 | RFC 7638 JWK Thumbprint of the agent's Ed25519 request-signing key, bound into the signed `retrieval_endpoint`. Empty string when absent; non-empty iff a signed `retrieval_endpoint` is present |
-| `retrieval_endpoint` | optional string | 18 | Signed URL the agent uses to fetch the resource. Bound to `agent_identity_hash`; expires at `expires_at`. Absent on denial and when `delivery_method` is not signed-URL-based |
-| `subscription_id` | optional string | 12 | Subscription/deal identifier |
-| `subscription_unit_value` | optional Cost | 16 | Per-unit cost for subscription accounting |
-| `subscription_quota` | repeated SubscriptionQuotaInfo | 17 | Post-transaction remaining quota snapshot |
-| `items` | repeated TransactionResultItem | 13 | Batch mode results |
-| `total_cost` | optional Cost | 14 | Batch aggregate cost |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=TransactionResponse}
 
 :::note[Denial is not a success body]
 A denied single transaction is **not** returned in this body. It travels as a non-OK transport error carrying [`ErrorDetail.transaction_denial`](#unified-error-model) (`DenialReason` + `restriction_mismatches`). Batch per-item denials remain in-body on `TransactionResultItem` (`denial_reason` / `restriction_mismatches`), as partial results of a successful batch.
@@ -285,113 +148,53 @@ A denied single transaction is **not** returned in this body. It travels as a no
 
 A single offer commitment within a batch transaction.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `offer_id` | string | 1 | The offer_id from the selected Offer |
-| `offer_signature` | string | 2 | The `signature` from the selected Offer (informally called the *exchange signature*) |
+::proto-message{name=TransactionItem}
 
 ### TransactionResultItem
 
 Result for a single offer in a batch transaction.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `offer_id` | string | 1 | The offer_id this result is for |
-| `transaction_id` | string | 2 | Exchange-assigned transaction identifier |
-| `billing_id` | string | 3 | Billing reference |
-| `resource_title` | optional string | 4 | Resource title echoed from the Offer |
-| `cost` | Cost | 5 | Cost for this item |
-| `subscription_id` | optional string | 6 | Subscription identifier (no per-request charge) |
-| `subscription_unit_value` | optional Cost | 11 | Per-unit cost for subscription accounting (ASC 606) |
-| `denial_reason` | optional DenialReason | 7 | Set if this item was denied |
-| `restriction_mismatches` | repeated RestrictionKind | 13 | When `denial_reason = RESTRICTION_NOT_SATISFIED`, the restriction axes the request failed (same `RestrictionKind` vocabulary as the terms) |
-| `expires_at` | optional Timestamp | 8 | When `retrieval_endpoint` expires |
-| `delivery_method` | DeliveryMethod | 9 | How content is delivered for this item |
-| `reporting_obligation` | optional ReportingObligation | 10 | Reporting requirements for this item |
-| `retrieval_endpoint` | optional string | 12 | Signed URL for this item. Bound to the parent `TransactionResponse.agent_identity_hash` (shared across all batch items); expires at `expires_at`. Absent if this item was denied or its `delivery_method` is not signed-URL-based |
+::proto-message{name=TransactionResultItem}
 
 ### Cost
 
 Actual transaction cost.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `amount` | double | 1 | Cost amount |
-| `currency` | string | 2 | ISO 4217 currency code |
-| `unit_cost` | optional double | 3 | Effective cost per unit |
+::proto-message{name=Cost}
 
 ## Messages -- Reporting
 
 ### UsageReport
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `idempotency_key` | string | 2 | Idempotency key (required, min_len=1); server dedupes on it; durable identity is the Exchange-assigned `report_id` in the response |
-| `transaction_id` | string | 3 | Transaction ID from delivery |
-| `billing_id` | string | 4 | Billing reference from delivery |
-| `usage` | Usage | 5 | How content was used |
-| `timestamp` | Timestamp | 6 | When content was used |
-| `exchange` | optional string | 8 | Exchange this report is for |
-| `assets` | repeated UsageAsset | 9 | Assets delivered and used |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=UsageReport}
 
 ### ReportingObligation
 
 Requirements attached to a delivery.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `required` | bool | 1 | Whether post-usage reporting is required |
-| `window` | optional Duration | 2 | Duration within which report must be submitted (e.g. 24h) |
-| `endpoint` | optional string | 3 | URL to submit usage report (if different from Exchange) |
-| `required_fields` | repeated string | 4 | Field names that must be present in the report |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=ReportingObligation}
 
 ### Usage
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `function` | repeated string | 1 | Functions used — the FUNCTION restriction vocabulary (e.g. `ai-train`, `ai-input`, `search`; see [RestrictionKind → Registered tokens](#registered-tokens) for the complete list) |
-| `subfn` | repeated string | 2 | Sub-functions used (standard: "training", "rag", "grounding", "agent_view", "agent_actions") |
-| `consumed_quantity` | int32 | 3 | **REQUIRED.** Actual quantity consumed in the metering unit |
-| `displayed_to_user` | optional bool | 4 | Was output shown to a human? |
-| `citation_included` | optional bool | 5 | Was citation included? |
-| `attribution` | repeated AttributionDetail | 6 | Structured citation details |
-| `consumed_unit` | optional string | 8 | Metering unit for consumed_quantity (defaults to "tokens"). Same format as `Pricing.unit`/`Quota.metric`: a bare lowercase-dashed token (`[a-z0-9-]`) or a `vendor:namespaced` token, ≤64 chars (wire-enforced CEL — structure only). |
+::proto-message{name=Usage}
 
 ### AttributionDetail
 
 Structured attribution metadata for usage reporting.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `displayed_url` | optional string | 1 | URL displayed to the user as the attribution link |
-| `format` | optional CitationFormat | 2 | How the citation was presented |
-| `visible_to_user` | optional bool | 3 | Whether the attribution was visible to the end user |
+::proto-message{name=AttributionDetail}
 
 ### UsageAsset
 
 A single asset included in the usage report.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `uri` | string | 1 | Asset URI |
-| `title` | optional string | 2 | Asset title |
-| `package_id` | optional string | 3 | Package identifier |
+::proto-message{name=UsageAsset}
 
 ### UsageReportResponse
 
 Acknowledgment of a usage report. A successful response means the report was accepted; a rejection travels as a non-OK transport error carrying [`ErrorDetail.usage_report_rejection`](#unified-error-model).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `report_id` | string | 3 | Exchange-assigned report ID (required for dispute chain) |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=UsageReportResponse}
 
 ## Messages -- Dispute Resolution
 
@@ -399,33 +202,13 @@ Acknowledgment of a usage report. A successful response means the report was acc
 
 Agent signals a content delivery problem for a completed transaction.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `idempotency_key` | string | 2 | Idempotency key (required, min_len=1); server dedupes on it; durable identity is the Exchange-assigned `dispute_id` in the response |
-| `transaction_id` | string | 3 | Transaction this dispute is about |
-| `billing_id` | string | 4 | Billing reference |
-| `reason` | DisputeReason | 5 | Why the agent is disputing |
-| `description` | optional string | 6 | Human-readable description |
-| `received_content_hash` | optional string | 7 | Agent's computed hash of received content |
-| `received_hash_method` | optional string | 8 | Hash algorithm the agent used |
-| `report_id` | string | 9 | **REQUIRED.** Must reference a filed UsageReport |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=DisputeRequest}
 
 ### DisputeResponse
 
 Exchange acknowledges and processes the dispute. A successful response means the dispute was accepted for processing; a refusal to file travels as a non-OK transport error carrying [`ErrorDetail.dispute_failure`](#unified-error-model).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `dispute_id` | optional string | 2 | Exchange-assigned dispute identifier |
-| `estimated_resolution` | optional Duration | 4 | Estimated time to resolution |
-| `status` | DisputeStatus | 5 | Current lifecycle state |
-| `resolution` | optional ResolutionType | 6 | Populated at terminal states |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=DisputeResponse}
 
 ## Messages -- Domain Verification
 
@@ -433,52 +216,25 @@ Exchange acknowledges and processes the dispute. A successful response means the
 
 Request an ACME-style domain verification challenge.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `domain` | string | 2 | Provider domain to verify |
-| `caller_id` | optional string | 3 | Registered caller identity |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=DomainVerificationRequest}
 
 ### DomainVerificationChallenge
 
 Exchange returns a challenge token to be placed at the provider's domain.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `token` | string | 2 | Opaque challenge token |
-| `expires_at` | Timestamp | 3 | 10-minute expiry window |
-| `verification_url` | string | 4 | Exact URL the Exchange will fetch |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=DomainVerificationChallenge}
 
 ### DomainVerificationConfirmation
 
 Confirm domain verification and register a signing key.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `domain` | string | 2 | Provider domain |
-| `token` | string | 3 | Token from the challenge |
-| `signing_key` | optional string | 4 | PEM (CloudFront) or hex (HMAC) |
-| `cdn_type` | optional string | 5 | "cloudfront", "akamai", "fastly", "hmac" |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=DomainVerificationConfirmation}
 
 ### DomainVerificationResult
 
 A successful response means verification succeeded; a failure travels as a non-OK transport error carrying [`ErrorDetail.domain_verification_failure`](#unified-error-model).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `key_id` | optional string | 2 | Assigned key ID (on successful key registration) |
-| `valid_until` | optional Timestamp | 4 | Re-verification deadline |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=DomainVerificationResult}
 
 ## Messages -- Discovery
 
@@ -486,81 +242,31 @@ A successful response means verification succeeded; a failure travels as a non-O
 
 Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Carries inline keys (`JsonWebKey`) with explicit time bounds and an optional emergency-revocation pointer. Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version — MUST be `"1.0"` |
-| `role` | Role | 2 | Which participant this manifest describes |
-| `domain` | string | 3 | Canonical domain serving this manifest |
-| `contact` | optional string | 4 | Contact email |
-| `public_keys` | repeated JsonWebKey | 5 | Signature-verification keys; ≥1 valid at serve time |
-| `invalidation_url` | optional string | 6 | Emergency key-revocation list URL (`KeyInvalidationList`) |
-| `exchanges` | repeated AuthorizedExchange | 7 | Publisher-only. Authorized Exchanges (declares who may sell, like ads.txt) |
-| `catalog_contributors` | repeated CatalogContributor | 8 | Publisher-only. Authorized third-party catalog pushers |
-| `name` | optional string | 9 | Exchange-only. Human-readable Exchange name |
-| `operator` | optional string | 10 | Exchange-only. Operating organization |
-| `operator_domain` | optional string | 11 | Exchange-only. Operator's corporate domain |
-| `endpoint` | optional string | 12 | Exchange-only. ExchangeService endpoint URL |
-| `health_endpoint` | optional string | 13 | Exchange-only. Health check endpoint URL |
-| `catalog_endpoint` | optional string | 14 | Exchange-only. CatalogService endpoint URL |
-| `ext` | Struct | 15 | Extension point |
-| `protocol_versions_supported` | repeated string | 16 | Exchange-only. Supported RAMP versions |
-| `pricing_models_supported` | repeated PricingModel | 17 | Exchange-only |
-| `delivery_methods_supported` | repeated DeliveryMethod | 18 | Exchange-only |
-| `hash_methods_supported` | repeated string | 19 | Exchange-only. Accepted hash methods |
-| `accepted_verifiers` | repeated string | 20 | Exchange-only. Trusted verifier domains |
-| `terms_uri` | optional string | 21 | Exchange-only. Terms of service URL |
-| `privacy_uri` | optional string | 22 | Exchange-only. Privacy policy URL |
-| `supported_profiles` | repeated string | 23 | Exchange-only. Domain extension profiles |
-| `supported_auth_methods` | repeated AuthMethod | 24 | Exchange-only. Authorization methods (ordered by preference) |
-| `oidc_issuer` | optional string | 25 | Exchange-only. OIDC Discovery URL |
-| `gnap_grant_endpoint` | optional string | 26 | Exchange-only. GNAP grant endpoint |
-| `base_currency` | optional string | 27 | Exchange-only. ISO 4217 base currency for `unit_cost` |
-| `max_intermediary_hops` | optional int32 | 28 | Exchange-only. Max intermediary hops tolerated in an inbound request chain; longer chains SHOULD be rejected |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE `crit`, RFC 9052) |
+::proto-message{name=WellKnownManifest}
 
 ### JsonWebKey
 
 Inline RFC 7517 JWK. RAMP v1.0 supports Ed25519 only. Time bounds are RFC3339 strings; the validity window is half-open `[not_before, not_after)`.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `kid` | string | 1 | Key ID, unique within `public_keys` |
-| `kty` | string | 2 | Key type — MUST be `"OKP"` |
-| `crv` | string | 3 | Curve — MUST be `"Ed25519"` |
-| `use` | string | 4 | Intended use — MUST be `"sig"` |
-| `alg` | string | 5 | Algorithm — MUST be `"EdDSA"` |
-| `x` | string | 6 | base64url-encoded 32-byte Ed25519 public key |
-| `not_before` | string | 7 | RFC3339; key invalid before this instant |
-| `not_after` | string | 8 | RFC3339; key invalid **at and after** this instant (strict upper bound) |
+::proto-message{name=JsonWebKey}
 
 ### KeyInvalidationList
 
 Body served at `WellKnownManifest.invalidation_url`. Snapshot semantics: `revoked` is the complete set of revoked `kid`s at `as_of`; consumers replace their local revocation set on each successful poll.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `as_of` | Timestamp | 1 | Server response time (RFC3339, UTC) |
-| `revoked` | repeated string | 2 | Complete list of revoked `kid`s at `as_of` |
+::proto-message{name=KeyInvalidationList}
 
 ### CatalogContributor
 
 Authorizes a third party to push catalog metadata on the provider's behalf.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `domain` | string | 1 | Contributor domain (e.g. "doubleverify.com") |
-| `relationship` | string | 2 | Relationship type (e.g. "verifier", "exchange") |
+::proto-message{name=CatalogContributor}
 
 ### AuthorizedExchange
 
 A Exchange authorized to sell this provider's content.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `domain` | string | 1 | Canonical domain of the Exchange |
-| `endpoint` | string | 2 | RAMP ExchangeService endpoint URL |
-| `relationship` | ProviderRelationship | 3 | Relationship type (mirrors ads.txt DIRECT/RESELLER) |
-| `ext` | Struct | 15 | Extension point |
+::proto-message{name=AuthorizedExchange}
 
 ## Messages -- Broker Protocol
 
@@ -570,58 +276,19 @@ Messages for the Agent-to-Broker path (Steps 1 and 6). When an agent talks direc
 
 Agent sends to Broker (Step 1).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | RAMP protocol version |
-| `id` | string | 2 | Unique request identifier |
-| `requester` | Requester | 3 | Requester identity, scopes, and optional delegation. Broker forwards this in `ResourceQuery.requester`. |
-| `uris` | repeated string | 8 | Resource URIs the agent wants. Broker forwards these in `ResourceQuery.uris`. Optional when `query`/`search_filters` drive discovery. |
-| `acceptable_restrictions` | repeated AcceptableRestriction | 9 | Limits the agent will operate within, per restriction axis. Broker forwards these in `ResourceQuery.acceptable_restrictions`. Advisory, not enforced. |
-| `constraints` | optional RequestConstraints | 4 | Budget and preference constraints |
-| `supported_profiles` | repeated string | 5 | Domain extension profiles the agent understands (e.g. "ramp-academic-v1") |
-| `query` | optional string | 6 | Search query for Broker-side resource discovery. When present, the Broker interprets the query and discovers resources across Exchanges on the agent's behalf. Can be used alongside `uris`. |
-| `search_filters` | optional Struct | 7 | Structured search filters (alongside or instead of `query`). Keys are profile-specific: `"academic.topic"`, `"news.category"`, `"legal.jurisdiction"`, etc. The Broker maps these to Exchange-specific query parameters. |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=RAMPRequest}
 
 ### RequestConstraints
 
 Budget and preference constraints for exchange filtering and offer selection.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `exchanges` | repeated string | 1 | Authorized Exchange domains |
-| `max_price` | optional Cost | 2 | Maximum price the agent will pay |
-| `max_unit_cost` | optional double | 3 | Maximum effective cost per unit |
-| `delivery_preference` | repeated DeliveryMethod | 4 | Preferred delivery methods (in order) |
-| `reporting_capable` | optional bool | 5 | Whether agent supports post-usage reporting |
-| `preferred_exchanges` | repeated string | 6 | Exchanges with existing relationships (subscriptions) |
-| `budget_scope` | optional string | 7 | Budget scope identifier (e.g. "user:u-12345") |
-| `period_budget` | optional Cost | 8 | Per-period budget limit |
-| `budget_period` | optional Duration | 9 | Budget period (e.g. 720h = 30 days) |
-| `max_data_age` | optional Duration | 10 | Maximum acceptable age of resource data (for DYNAMIC resources) |
-| `max_hops` | optional int32 | 11 | Maximum intermediary hops the agent allows in its request chain; the Broker MUST NOT forward a longer chain |
+::proto-message{name=RequestConstraints}
 
 ### RAMPResponse
 
 Broker returns to Agent (Step 6).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `transaction_id` | string | 4 | Exchange-assigned transaction ID |
-| `billing_id` | string | 5 | Billing reference |
-| `exchange` | string | 6 | Which Exchange won the selection |
-| `resource_title` | optional string | 7 | Resource title for the disputed resource |
-| `cost` | Cost | 8 | Transaction cost |
-| `delivery_method` | DeliveryMethod | 9 | How content is delivered |
-| `reporting_obligation` | optional ReportingObligation | 10 | Reporting obligations the agent must fulfill |
-| `expires_at` | optional Timestamp | 11 | When `retrieval_endpoint` expires |
-| `retrieval_endpoint` | optional string | 13 | Signed URL returned by the Exchange and forwarded unchanged by the Broker, together with `agent_identity_hash`. Bound to `agent_identity_hash`; expires at `expires_at`. Absent on denial and when `delivery_method` is not signed-URL-based |
-| `agent_identity_hash` | optional string | 14 | Identity that `retrieval_endpoint` is bound to. Same value and computation as `TransactionResponse.agent_identity_hash`. Present iff `retrieval_endpoint` is |
-| `broker_fee` | optional Cost | 12 | Broker's fee for this transaction |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=RAMPResponse}
 
 ## Messages -- CatalogService
 
@@ -631,78 +298,35 @@ Messages for the optional CatalogService RPC.
 
 Push or update content entries in the Exchange catalog.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `tenant_id` | string | 2 | Tenant identifier |
-| `entries` | repeated ResourceEntry | 3 | Content entries to push |
-| `caller_id` | string | 4 | Identity of the caller |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=PushResourcesRequest}
 
 ### ResourceEntry
 
 A single resource catalog entry.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `domain` | string | 1 | Provider domain |
-| `path` | string | 2 | Content path |
-| `content_id` | optional string | 3 | Content identifier |
-| `title` | optional string | 4 | Content title |
-| `word_count` | optional int32 | 5 | Word count |
-| `estimated_quantity` | optional int32 | 6 | Estimated quantity in the metering unit |
-| `content_hash` | optional string | 7 | Content hash |
-| `hash_method` | optional string | 8 | Hash algorithm |
-| `source` | optional IngestionSource | 9 | How the entry was discovered |
-| `provenance_source` | optional string | 10 | Who provided this metadata (e.g. "gumgum.com") |
-| `provenance_timestamp` | optional Timestamp | 11 | When metadata was collected |
-| `attestations` | repeated ResourceAttestation | 12 | Signed attestations about this content |
-| `terms` | repeated LicenseTerm | 13 | Publisher-declared licensing terms. Pricing is REQUIRED on every term (any semantics). For REFERENCE_ONLY terms, License.uri is additionally authoritative. |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=ResourceEntry}
 
 ### PushResourcesResponse
 
 The `accepted` / `rejected` counts are entry-level tallies of a successful push — not the removed failure bools. A push that could not be applied at all travels as a non-OK transport error carrying [`ErrorDetail.catalog_rejection`](#unified-error-model).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `accepted` | int32 | 2 | Number of entries accepted |
-| `rejected` | int32 | 3 | Number of entries rejected |
-| `warnings` | repeated string | 4 | Non-fatal ingestion warnings (e.g., unrecognized vocab token in a Restriction). Warnings do not cause rejection. |
-| `ext` | Struct | 15 | Extension point |
-| `ext_critical` | repeated string | 90 | Critical extension keys (COSE crit, RFC 9052) |
+::proto-message{name=PushResourcesResponse}
 
 ### RemoveResourcesRequest
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `tenant_id` | string | 2 | Tenant identifier |
-| `paths` | repeated string | 3 | Paths to remove |
+::proto-message{name=RemoveResourcesRequest}
 
 ### RemoveResourcesResponse
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `removed` | int32 | 2 | Number of entries removed |
+::proto-message{name=RemoveResourcesResponse}
 
 ### RefreshCatalogRequest
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `tenant_id` | string | 2 | Tenant identifier |
+::proto-message{name=RefreshCatalogRequest}
 
 ### RefreshCatalogResponse
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `ver` | string | 1 | Protocol version |
-| `started` | bool | 2 | Whether the refresh was started |
+::proto-message{name=RefreshCatalogResponse}
 
 ## Universal Licensing Core
 
@@ -722,28 +346,13 @@ code is the CEL rule `id:` that enforces the rule (e.g. `license_term.semantics_
 - At most one `Restriction` per `kind` (`license_term.one_restriction_per_kind`); a token cannot be both permitted and prohibited (`restriction.permitted_prohibited_disjoint`).
 - Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `license` | optional License | 1 | Governing license document. Authoritative for REFERENCE_ONLY terms (which MUST carry a non-empty `uri`). |
-| `semantics` | TermSemantics | 2 | How the Exchange interprets the machine fields |
-| `restrictions` | repeated Restriction | 3 | Usage restrictions (function, geography, user-type). AND-combined. |
-| `quotas` | repeated Quota | 4 | Usage caps. The agent must not exceed any individual Quota. |
-| `obligations` | repeated Obligation | 5 | Post-use behavioral requirements. |
-| `pricing` | optional Pricing | 6 | Commercial terms. REQUIRED on every term regardless of semantics (absent Pricing is rejected; `model = FREE` must be explicit). |
-| `scopes` | repeated string | 7 | Delegation scope-gating (AND-semantics). Empty = public. Segment-wise matching — see [Scope Matching](/protocol/authentication/#scope-matching) (`dist:*` covers `dist:US`; `dist` covers only `dist`). |
-| `part_label` | optional string | 8 | Informational human-readable name for a sub-part term. |
+::proto-message{name=LicenseTerm}
 
 ### License
 
 Identifies the governing license document for a `LicenseTerm`.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `uri` | optional string | 1 | Canonical license identity (RFC 3986; e.g. `"https://creativecommons.org/licenses/by/4.0/"`). MUST NOT be URL-validated — data-labels TDL identifiers use non-URL schemes. |
-| `id` | optional string | 2 | Stable short id: SPDX short-id (`"GPL-3.0-only"`), TollBit cuid, or catalog doc-id |
-| `name` | optional string | 3 | Human-readable name (e.g. `"CC BY 4.0"`) |
-| `immutable` | optional bool | 4 | The document at `uri` is versioned and will not change (data-labels TDL) |
-| `uri_digest` | optional string | 5 | `method:hexdigest` pin of the document at `uri` (e.g. `"sha256:…"`). REQUIRED whenever `uri` is present (any semantics, mutable or not — MitM/swap protection); covered by the offer signature. |
+::proto-message{name=License}
 
 ### Restriction
 
@@ -753,12 +362,7 @@ A single constraint on one licensing dimension: function (what), geography (wher
 
 **Vocabulary sources**: proto-native — `(ramp.v1.vocab_enum)` on the `RESTRICTION_KIND_FUNCTION` / `RESTRICTION_KIND_GEOGRAPHY` / `RESTRICTION_KIND_USER_TYPE` enum values (no side-car JSON registry).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `kind` | RestrictionKind | 1 | Which dimension this restriction constrains |
-| `permitted` | repeated string | 2 | Tokens allowed on this axis. Empty = all permitted. |
-| `prohibited` | repeated string | 3 | Tokens blocked on this axis. Takes precedence over permitted[]. |
-| `advisory` | bool | 4 | Default false = **binding** (a consumer that cannot evaluate a token MUST decline the term). true = non-blocking. Inverts the COSE-`crit` opt-in default — fail-closed by default. |
+::proto-message{name=Restriction}
 
 ### Quota
 
@@ -768,22 +372,13 @@ A usage cap that gates whether a `LicenseTerm` remains valid. Quotas limit consu
 
 ::proto-vocab{axis=quota-metric}
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `metric` | string | 1 | Unit being capped. A registered token from `(ramp.v1.vocab)` on this field, or a `vendor:` namespaced custom. |
-| `limit` | int64 | 2 | Maximum allowed value in the given window. |
-| `window` | QuotaWindow | 3 | Time window over which the limit accumulates. |
+::proto-message{name=Quota}
 
 ### Obligation
 
 A post-use behavioral requirement attached to a `LicenseTerm`. Attribution and contribution are behavioral requirements here, not pricing models.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `kind` | ObligationKind | 1 | What the agent must do. |
-| `trigger` | ObligationTrigger | 2 | When the obligation activates. |
-| `scope_license` | optional License | 3 | License derivatives must be released under. REQUIRED for `SHARE_ALIKE` (set `id` and/or `uri`). As a `License`, a referenced `uri` requires `uri_digest`. |
-| `detail` | optional string | 4 | Free-form detail (attribution string, notice file URI). `OBLIGATION_KIND_OTHER` without it → lint warning. |
+::proto-message{name=Obligation}
 
 ## Unified Error Model
 
@@ -795,18 +390,7 @@ One way to communicate failure across every RPC. The transport carries a coarse 
 
 The structured detail attached to every non-OK transport error.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `message` | string | 1 | Developer-facing, **non-authoritative** human message. Clients MUST branch on the typed reason, never on this text. |
-| `domain` | string | 2 | Stable grouping for the failing surface, e.g. `"ramp.v1.ExchangeService"`. Mirrors `google.rpc.ErrorInfo.domain`. |
-| `metadata` | `map<string,string>` | 3 | Dynamic key/value context that also appears in `message` (ids, limits, axes). Mirrors `google.rpc.ErrorInfo.metadata`. |
-| `transaction_denial` | TransactionDenial | 10 | `reason` oneof — ExecuteTransaction denial |
-| `catalog_rejection` | CatalogRejection | 11 | `reason` oneof — CatalogService rejection |
-| `registration_failure` | RegistrationFailure | 12 | `reason` oneof — agent/provider registration refused |
-| `dispute_failure` | DisputeFailure | 13 | `reason` oneof — DisputeTransaction filing refused |
-| `domain_verification_failure` | DomainVerificationFailure | 14 | `reason` oneof — domain verification failed |
-| `retrieval_auth_failure` | RetrievalAuthFailure | 15 | `reason` oneof — signed-URL / proof-of-possession check failed |
-| `usage_report_rejection` | UsageReportRejection | 16 | `reason` oneof — ReportUsage filing rejected |
+::proto-message{name=ErrorDetail}
 
 Exactly one typed reason block is set, selected by the failing method. The `reason` oneof is absent for generic transport-class failures (e.g. `INVALID_ARGUMENT`, `INTERNAL`) that carry no domain-specific reason.
 
@@ -814,60 +398,43 @@ Exactly one typed reason block is set, selected by the failing method. The `reas
 
 ExecuteTransaction could not complete. Reuses the `DenialReason` vocabulary.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `reason` | DenialReason | 1 | The denial reason (defined-only, non-zero) |
-| `restriction_mismatches` | repeated RestrictionKind | 2 | When `reason = RESTRICTION_NOT_SATISFIED`, the failed axes (same `RestrictionKind` vocabulary as the terms) |
-| `offer_id` | optional string | 3 | Batch mode: the offer this denial pertains to |
+::proto-message{name=TransactionDenial}
 
 ### CatalogRejection
 
 A CatalogService call could not be applied.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `reason` | CatalogRejectionReason | 1 | The rejection reason (defined-only, non-zero) |
-| `rejected_paths` | repeated string | 2 | For partial-batch failures: the entry paths that were rejected |
+::proto-message{name=CatalogRejection}
 
 ### RegistrationFailure
 
 A registration request could not be completed.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `reason` | RegistrationFailureReason | 1 | The failure reason (defined-only, non-zero) |
+::proto-message{name=RegistrationFailure}
 
 ### DisputeFailure
 
 A dispute could not be filed (distinct from `DisputeReason`, why the agent disputes, and `DisputeStatus`, an accepted dispute's lifecycle).
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `reason` | DisputeFailureReason | 1 | The failure reason (defined-only, non-zero) |
+::proto-message{name=DisputeFailure}
 
 ### DomainVerificationFailure
 
 `RequestDomainVerification` / `ConfirmDomainVerification` failed.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `reason` | DomainVerificationFailureReason | 1 | The failure reason (defined-only, non-zero) |
+::proto-message{name=DomainVerificationFailure}
 
 ### RetrievalAuthFailure
 
 A signed-URL retrieval or its proof-of-possession check failed at the delivery edge.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `reason` | RetrievalAuthFailureReason | 1 | The failure reason (defined-only, non-zero) |
+::proto-message{name=RetrievalAuthFailure}
 
 ### UsageReportRejection
 
 A usage report could not be accepted.
 
-| Field | Type | Number | Description |
-|---|---|---|---|
-| `reason` | UsageReportRejectionReason | 1 | The rejection reason (defined-only, non-zero) |
+::proto-message{name=UsageReportRejection}
 
 ### CatalogRejectionReason
 
@@ -1006,13 +573,7 @@ What kind of entity is making the request.
 
 Identifies which RAMP participant a `WellKnownManifest` describes.
 
-| Value | Name | Number |
-|---|---|---|
-| 0 | ROLE_UNSPECIFIED | |
-| 1 | ROLE_AGENT | |
-| 2 | ROLE_EXCHANGE | |
-| 3 | ROLE_BROKER | |
-| 4 | ROLE_PUBLISHER | |
+::proto-enum{name=Role numbers}
 
 ### DiscoveryMethod
 
@@ -1035,3 +596,15 @@ Signals whether resource content changes over time. Drives hash verification beh
 ### ProviderRelationship
 
 ::proto-enum{name=ProviderRelationship numbers}
+
+### AuthMethod
+
+Authentication methods a participant advertises in its `WellKnownManifest`.
+
+::proto-enum{name=AuthMethod numbers}
+
+### C2PAStatus
+
+C2PA / content-provenance status carried on `ResourceIdentity`.
+
+::proto-enum{name=C2PAStatus numbers}
