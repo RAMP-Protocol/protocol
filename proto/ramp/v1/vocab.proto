@@ -27,6 +27,13 @@ extend google.protobuf.FieldOptions {
   // by an enum value (function, geography, user-type, selected by
   // RestrictionKind) carry their tokens on the enum-value extension below.
   repeated string vocab = 50001;
+
+  // vocab_package names the generated SDK package/module for this field's axis
+  // (e.g. "pricingunits", "quotametrics"). It lives on the field — alongside the
+  // tokens — so the axis→package mapping is part of the single proto source and
+  // protoc-gen-rampvocab needs no hand-maintained mapping table. Required on any
+  // field that carries (ramp.v1.vocab).
+  optional string vocab_package = 50003;
 }
 
 extend google.protobuf.EnumValueOptions {
@@ -40,4 +47,10 @@ extend google.protobuf.EnumValueOptions {
   // an extend block targets one options message — 50001 cannot also extend
   // EnumValueOptions; 50002 is the next slot in the same internal block.
   repeated string vocab_enum = 50002;
+
+  // vocab_enum_package is the enum-value twin of (ramp.v1.vocab_package): it
+  // names the generated package/module for an axis selected by an enum value
+  // (e.g. "functiontokens"). Required on any enum value that carries
+  // (ramp.v1.vocab_enum).
+  optional string vocab_enum_package = 50004;
 }

@@ -24,7 +24,7 @@ import { file_google_protobuf_descriptor } from "@bufbuild/protobuf/wkt";
  * Describes the file ramp/v1/vocab.proto.
  */
 export const file_ramp_v1_vocab: GenFile = /*@__PURE__*/
-  fileDesc("ChNyYW1wL3YxL3ZvY2FiLnByb3RvEgdyYW1wLnYxOjUKBXZvY2FiEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxjRhgMgAygJUgV2b2NhYjpCCgp2b2NhYl9lbnVtEiEuZ29vZ2xlLnByb3RvYnVmLkVudW1WYWx1ZU9wdGlvbnMY0oYDIAMoCVIJdm9jYWJFbnVtQo8BCgtjb20ucmFtcC52MUIKVm9jYWJQcm90b1ABWjdnaXRodWIuY29tL1JBTVAtUHJvdG9jb2wvcHJvdG9jb2wvZ2VuL2dvL3JhbXAvdjE7cmFtcHYxogIDUlhYqgIHUmFtcC5WMcoCB1JhbXBcVjHiAhNSYW1wXFYxXEdQQk1ldGFkYXRh6gIIUmFtcDo6VjFiBnByb3RvMw", [file_google_protobuf_descriptor]);
+  fileDesc("ChNyYW1wL3YxL3ZvY2FiLnByb3RvEgdyYW1wLnYxOjUKBXZvY2FiEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxjRhgMgAygJUgV2b2NhYjpHCg12b2NhYl9wYWNrYWdlEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxjThgMgASgJUgx2b2NhYlBhY2thZ2WIAQE6QgoKdm9jYWJfZW51bRIhLmdvb2dsZS5wcm90b2J1Zi5FbnVtVmFsdWVPcHRpb25zGNKGAyADKAlSCXZvY2FiRW51bTpUChJ2b2NhYl9lbnVtX3BhY2thZ2USIS5nb29nbGUucHJvdG9idWYuRW51bVZhbHVlT3B0aW9ucxjUhgMgASgJUhB2b2NhYkVudW1QYWNrYWdliAEBQo8BCgtjb20ucmFtcC52MUIKVm9jYWJQcm90b1ABWjdnaXRodWIuY29tL1JBTVAtUHJvdG9jb2wvcHJvdG9jb2wvZ2VuL2dvL3JhbXAvdjE7cmFtcHYxogIDUlhYqgIHUmFtcC5WMcoCB1JhbXBcVjHiAhNSYW1wXFYxXEdQQk1ldGFkYXRh6gIIUmFtcDo6VjFiBnByb3RvMw", [file_google_protobuf_descriptor]);
 
 /**
  * vocab carries the registered bare tokens for an open vocabulary axis,
@@ -40,6 +40,18 @@ export const vocab: GenExtension<FieldOptions, string[]> = /*@__PURE__*/
   extDesc(file_ramp_v1_vocab, 0);
 
 /**
+ * vocab_package names the generated SDK package/module for this field's axis
+ * (e.g. "pricingunits", "quotametrics"). It lives on the field — alongside the
+ * tokens — so the axis→package mapping is part of the single proto source and
+ * protoc-gen-rampvocab needs no hand-maintained mapping table. Required on any
+ * field that carries (ramp.v1.vocab).
+ *
+ * @generated from extension: optional string vocab_package = 50003;
+ */
+export const vocab_package: GenExtension<FieldOptions, string> = /*@__PURE__*/
+  extDesc(file_ramp_v1_vocab, 1);
+
+/**
  * vocab_enum is the enum-value-scoped twin of (ramp.v1.vocab) above. Axes
  * whose token list is selected by an enum value — the function / geography /
  * user-type tokens carried in Restriction.permitted/prohibited and selected
@@ -53,5 +65,16 @@ export const vocab: GenExtension<FieldOptions, string[]> = /*@__PURE__*/
  * @generated from extension: repeated string vocab_enum = 50002;
  */
 export const vocab_enum: GenExtension<EnumValueOptions, string[]> = /*@__PURE__*/
-  extDesc(file_ramp_v1_vocab, 1);
+  extDesc(file_ramp_v1_vocab, 2);
+
+/**
+ * vocab_enum_package is the enum-value twin of (ramp.v1.vocab_package): it
+ * names the generated package/module for an axis selected by an enum value
+ * (e.g. "functiontokens"). Required on any enum value that carries
+ * (ramp.v1.vocab_enum).
+ *
+ * @generated from extension: optional string vocab_enum_package = 50004;
+ */
+export const vocab_enum_package: GenExtension<EnumValueOptions, string> = /*@__PURE__*/
+  extDesc(file_ramp_v1_vocab, 3);
 

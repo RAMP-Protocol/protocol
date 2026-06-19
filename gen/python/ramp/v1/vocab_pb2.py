@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import descriptor_pb2 as google_dot_protobuf_dot_descriptor__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13ramp/v1/vocab.proto\x12\x07ramp.v1\x1a google/protobuf/descriptor.proto:5\n\x05vocab\x12\x1d.google.protobuf.FieldOptions\x18\xd1\x86\x03 \x03(\tR\x05vocab:B\n\nvocab_enum\x12!.google.protobuf.EnumValueOptions\x18\xd2\x86\x03 \x03(\tR\tvocabEnumB\x8f\x01\n\x0b\x63om.ramp.v1B\nVocabProtoP\x01Z7github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1\xa2\x02\x03RXX\xaa\x02\x07Ramp.V1\xca\x02\x07Ramp\\V1\xe2\x02\x13Ramp\\V1\\GPBMetadata\xea\x02\x08Ramp::V1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13ramp/v1/vocab.proto\x12\x07ramp.v1\x1a google/protobuf/descriptor.proto:5\n\x05vocab\x12\x1d.google.protobuf.FieldOptions\x18\xd1\x86\x03 \x03(\tR\x05vocab:G\n\rvocab_package\x12\x1d.google.protobuf.FieldOptions\x18\xd3\x86\x03 \x01(\tR\x0cvocabPackage\x88\x01\x01:B\n\nvocab_enum\x12!.google.protobuf.EnumValueOptions\x18\xd2\x86\x03 \x03(\tR\tvocabEnum:T\n\x12vocab_enum_package\x12!.google.protobuf.EnumValueOptions\x18\xd4\x86\x03 \x01(\tR\x10vocabEnumPackage\x88\x01\x01\x42\x8f\x01\n\x0b\x63om.ramp.v1B\nVocabProtoP\x01Z7github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1\xa2\x02\x03RXX\xaa\x02\x07Ramp.V1\xca\x02\x07Ramp\\V1\xe2\x02\x13Ramp\\V1\\GPBMetadata\xea\x02\x08Ramp::V1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)

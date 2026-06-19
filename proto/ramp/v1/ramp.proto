@@ -786,6 +786,7 @@ enum RestrictionKind {
   // What the agent may do with the content. Seeded from RSL 1.0 AI-use
   // vocabulary and extended with established IP/copyright terms.
   RESTRICTION_KIND_FUNCTION = 1 [
+    (ramp.v1.vocab_enum_package) = "functiontokens",
     (ramp.v1.vocab_enum) = "all",
     (ramp.v1.vocab_enum) = "ai-all",
     (ramp.v1.vocab_enum) = "ai-train",
@@ -814,6 +815,7 @@ enum RestrictionKind {
   // Where the agent may use the content. ISO 3166-1 alpha-2 codes (US, DE, GB)
   // are valid structurally; only the non-ISO specials are registered here.
   RESTRICTION_KIND_GEOGRAPHY = 2 [
+    (ramp.v1.vocab_enum_package) = "geographytokens",
     (ramp.v1.vocab_enum) = "*",
     (ramp.v1.vocab_enum) = "EU",
     (ramp.v1.vocab_enum) = "EEA"
@@ -821,6 +823,7 @@ enum RestrictionKind {
 
   // Who may access and use the content.
   RESTRICTION_KIND_USER_TYPE = 3 [
+    (ramp.v1.vocab_enum_package) = "usertypes",
     (ramp.v1.vocab_enum) = "individual",
     (ramp.v1.vocab_enum) = "academic",
     (ramp.v1.vocab_enum) = "non_profit",
@@ -1030,6 +1033,7 @@ message Quota {
   //   copies             Digital or physical copies produced.
   //   seats              Distinct named users licensed to access the content.
   string metric = 1 [
+    (ramp.v1.vocab_package) = "quotametrics",
     (ramp.v1.vocab) = "display-words",
     (ramp.v1.vocab) = "impressions",
     (ramp.v1.vocab) = "tokens",
@@ -1305,6 +1309,7 @@ message Pricing {
   // those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —
   // it never lists the tokens, so it cannot drift from the registry.
   optional string unit = 8 [
+    (ramp.v1.vocab_package) = "pricingunits",
     (ramp.v1.vocab) = "fetches",  (ramp.v1.vocab) = "accesses", (ramp.v1.vocab) = "tokens",
     (ramp.v1.vocab) = "calls",    (ramp.v1.vocab) = "pages",    (ramp.v1.vocab) = "seconds",
     (ramp.v1.vocab) = "minutes",  (ramp.v1.vocab) = "records",  (ramp.v1.vocab) = "streams",

@@ -1,20 +1,24 @@
 // Command protoc-gen-rampvocab is a buf/protoc plugin that reads the RAMP
 // vocabulary options off every annotated field and enum value and emits, per
-// axis, a typed Go package with one string constant per registered token, an
-// All slice, and an IsRegistered membership check.
+// axis and per SDK language (Go, TypeScript, Python), a typed package/module
+// with one string constant per registered token, an All/ALL collection, and an
+// IsRegistered/isRegistered/is_registered membership check.
 //
-// Two options carry the tokens, one per descriptor kind:
-//   - (ramp.v1.vocab)      — FieldOptions extension 50001, on fields whose
-//                            axis is the field itself (Pricing.unit, Quota.metric).
-//   - (ramp.v1.vocab_enum) — EnumValueOptions extension 50002, on enum values
-//                            that SELECT an axis (RestrictionKind values select
-//                            the function / geography / user-type token lists
-//                            carried in Restriction.permitted/prohibited).
+// Two pairs of options carry the data, one pair per descriptor kind — the
+// repeated tokens and the scalar generated-package name:
+//   - (ramp.v1.vocab) / (ramp.v1.vocab_package)           — FieldOptions
+//     extensions 50001/50003, on fields whose axis is the field itself
+//     (Pricing.unit, Quota.metric).
+//   - (ramp.v1.vocab_enum) / (ramp.v1.vocab_enum_package) — EnumValueOptions
+//     extensions 50002/50004, on enum values that SELECT an axis (RestrictionKind
+//     values select the function / geography / user-type token lists carried in
+//     Restriction.permitted/prohibited).
 //
-// The token list is authored in exactly one place — the option entries on the
-// field or enum value — so the generated constants and the ingest-time
-// membership check both derive from it and cannot drift. The plugin reads the
-// options STRUCTURALLY (it does not parse CEL and emits no drift assertion).
+// Everything — the tokens AND the target package name — is authored in exactly
+// one place, the options on the field or enum value, so the generated constants,
+// the membership check, and the package layout all derive from the proto and
+// cannot drift. There is no hand-maintained axis→package table in this plugin.
+// The plugin reads the options STRUCTURALLY (it does not parse CEL).
 //
 // A generic plugin binary does not have ramp.v1's extensions registered in its
 // global proto registry, so reading options through the global registry would
@@ -40,30 +44,21 @@ import (
 )
 
 const (
-	// vocabFieldExtNumber is FieldOptions extension 50001 — (ramp.v1.vocab).
-	vocabFieldExtNumber = 50001
-	// vocabEnumExtNumber is EnumValueOptions extension 50002 — (ramp.v1.vocab_enum).
-	vocabEnumExtNumber = 50002
+	// Token extensions — the repeated registered tokens for an axis.
+	vocabFieldExtNumber = 50001 // (ramp.v1.vocab) on FieldOptions
+	vocabEnumExtNumber  = 50002 // (ramp.v1.vocab_enum) on EnumValueOptions
+	// Package extensions — the generated package/module name for the axis. These
+	// replace the former hand-maintained axis→package maps: the mapping now lives
+	// in the proto, next to the tokens, so adding an axis touches only the .proto
+	// and never this plugin.
+	vocabFieldPkgExtNumber = 50003 // (ramp.v1.vocab_package) on FieldOptions
+	vocabEnumPkgExtNumber  = 50004 // (ramp.v1.vocab_enum_package) on EnumValueOptions
 
-	vocabFieldExtName = "ramp.v1.vocab"
-	vocabEnumExtName  = "ramp.v1.vocab_enum"
+	vocabFieldExtName    = "ramp.v1.vocab"
+	vocabEnumExtName     = "ramp.v1.vocab_enum"
+	vocabFieldPkgExtName = "ramp.v1.vocab_package"
+	vocabEnumPkgExtName  = "ramp.v1.vocab_enum_package"
 )
-
-// fieldAxisPackage maps the FULL name of a field carrying (ramp.v1.vocab) to
-// its generated Go package. Keyed by full name (not the bare field name) so two
-// like-named fields in different messages cannot collide onto one package.
-var fieldAxisPackage = map[string]string{
-	"ramp.v1.Pricing.unit": "pricingunits",
-	"ramp.v1.Quota.metric": "quotametrics",
-}
-
-// enumAxisPackage maps the FULL name of an enum value carrying
-// (ramp.v1.vocab_enum) to its generated Go package.
-var enumAxisPackage = map[string]string{
-	"ramp.v1.RESTRICTION_KIND_FUNCTION":  "functiontokens",
-	"ramp.v1.RESTRICTION_KIND_GEOGRAPHY": "geographytokens",
-	"ramp.v1.RESTRICTION_KIND_USER_TYPE": "usertypes",
-}
 
 func main() {
 	protogen.Options{}.Run(func(gen *protogen.Plugin) error {
@@ -74,7 +69,9 @@ func main() {
 			return fmt.Errorf("build extension resolver: %w", err)
 		}
 		fieldExt := findExtension(resolver, vocabFieldExtName, vocabFieldExtNumber)
+		fieldPkgExt := findExtension(resolver, vocabFieldPkgExtName, vocabFieldPkgExtNumber)
 		enumExt := findExtension(resolver, vocabEnumExtName, vocabEnumExtNumber)
+		enumPkgExt := findExtension(resolver, vocabEnumPkgExtName, vocabEnumPkgExtNumber)
 		if fieldExt == nil && enumExt == nil {
 			// This request carries neither vocab extension descriptor (e.g. a
 			// sibling module split with no vocab-bearing descriptor). Nothing
@@ -88,20 +85,20 @@ func main() {
 			}
 			if fieldExt != nil {
 				for _, msg := range f.Messages {
-					if err := genMessage(gen, fieldExt, msg); err != nil {
+					if err := genMessage(gen, fieldExt, fieldPkgExt, msg); err != nil {
 						return err
 					}
 				}
 			}
 			if enumExt != nil {
 				for _, enum := range f.Enums {
-					if err := genEnum(gen, enumExt, enum); err != nil {
+					if err := genEnum(gen, enumExt, enumPkgExt, enum); err != nil {
 						return err
 					}
 				}
 				// Enums nested in messages.
 				for _, msg := range f.Messages {
-					if err := genNestedEnums(gen, enumExt, msg); err != nil {
+					if err := genNestedEnums(gen, enumExt, enumPkgExt, msg); err != nil {
 						return err
 					}
 				}
@@ -152,23 +149,26 @@ func findExtension(files *protoregistry.Files, name protoreflect.FullName, numbe
 	return dynamicpb.NewExtensionType(found).TypeDescriptor()
 }
 
-func genMessage(gen *protogen.Plugin, ext protoreflect.ExtensionTypeDescriptor, msg *protogen.Message) error {
+func genMessage(gen *protogen.Plugin, tokensExt, pkgExt protoreflect.ExtensionTypeDescriptor, msg *protogen.Message) error {
 	for _, nested := range msg.Messages {
-		if err := genMessage(gen, ext, nested); err != nil {
+		if err := genMessage(gen, tokensExt, pkgExt, nested); err != nil {
 			return err
 		}
 	}
 	for _, field := range msg.Fields {
-		tokens, err := readVocab(ext, field.Desc.Options())
+		tokens, err := readVocabList(tokensExt, field.Desc.Options())
 		if err != nil {
 			return fmt.Errorf("read (ramp.v1.vocab) on %s: %w", field.Desc.FullName(), err)
 		}
 		if len(tokens) == 0 {
 			continue
 		}
-		pkg, known := fieldAxisPackage[string(field.Desc.FullName())]
-		if !known {
-			return fmt.Errorf("field %s carries (ramp.v1.vocab) but is not mapped to a package; add %q to fieldAxisPackage in protoc-gen-rampvocab", field.Desc.FullName(), field.Desc.FullName())
+		pkg, err := readVocabString(pkgExt, field.Desc.Options())
+		if err != nil {
+			return fmt.Errorf("read (ramp.v1.vocab_package) on %s: %w", field.Desc.FullName(), err)
+		}
+		if pkg == "" {
+			return fmt.Errorf("field %s carries (ramp.v1.vocab) but no (ramp.v1.vocab_package); add the package name on the field", field.Desc.FullName())
 		}
 		if err := emit(gen, pkg, string(field.Desc.FullName()), tokens); err != nil {
 			return err
@@ -177,32 +177,35 @@ func genMessage(gen *protogen.Plugin, ext protoreflect.ExtensionTypeDescriptor, 
 	return nil
 }
 
-func genNestedEnums(gen *protogen.Plugin, ext protoreflect.ExtensionTypeDescriptor, msg *protogen.Message) error {
+func genNestedEnums(gen *protogen.Plugin, tokensExt, pkgExt protoreflect.ExtensionTypeDescriptor, msg *protogen.Message) error {
 	for _, enum := range msg.Enums {
-		if err := genEnum(gen, ext, enum); err != nil {
+		if err := genEnum(gen, tokensExt, pkgExt, enum); err != nil {
 			return err
 		}
 	}
 	for _, nested := range msg.Messages {
-		if err := genNestedEnums(gen, ext, nested); err != nil {
+		if err := genNestedEnums(gen, tokensExt, pkgExt, nested); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func genEnum(gen *protogen.Plugin, ext protoreflect.ExtensionTypeDescriptor, enum *protogen.Enum) error {
+func genEnum(gen *protogen.Plugin, tokensExt, pkgExt protoreflect.ExtensionTypeDescriptor, enum *protogen.Enum) error {
 	for _, val := range enum.Values {
-		tokens, err := readVocab(ext, val.Desc.Options())
+		tokens, err := readVocabList(tokensExt, val.Desc.Options())
 		if err != nil {
 			return fmt.Errorf("read (ramp.v1.vocab_enum) on %s: %w", val.Desc.FullName(), err)
 		}
 		if len(tokens) == 0 {
 			continue
 		}
-		pkg, known := enumAxisPackage[string(val.Desc.FullName())]
-		if !known {
-			return fmt.Errorf("enum value %s carries (ramp.v1.vocab_enum) but is not mapped to a package; add %q to enumAxisPackage in protoc-gen-rampvocab", val.Desc.FullName(), val.Desc.FullName())
+		pkg, err := readVocabString(pkgExt, val.Desc.Options())
+		if err != nil {
+			return fmt.Errorf("read (ramp.v1.vocab_enum_package) on %s: %w", val.Desc.FullName(), err)
+		}
+		if pkg == "" {
+			return fmt.Errorf("enum value %s carries (ramp.v1.vocab_enum) but no (ramp.v1.vocab_enum_package); add the package name on the value", val.Desc.FullName())
 		}
 		if err := emit(gen, pkg, string(val.Desc.FullName()), tokens); err != nil {
 			return err
@@ -211,34 +214,37 @@ func genEnum(gen *protogen.Plugin, ext protoreflect.ExtensionTypeDescriptor, enu
 	return nil
 }
 
-// readVocab reads the repeated-string vocab values off a descriptor's options,
-// structurally, via the request-derived extension resolver. It re-parses the
-// raw options bytes so the dynamic extension is recognized. opts is the
-// descriptor's Options() (a *descriptorpb.FieldOptions or *EnumValueOptions);
-// the extension determines which is expected.
-// Returns (nil, nil) when the descriptor legitimately carries no vocab option,
-// and (nil, err) when decoding fails — the two are kept distinct so a real
-// resolver/marshal failure surfaces instead of masquerading as "no vocab".
-func readVocab(ext protoreflect.ExtensionTypeDescriptor, opts proto.Message) ([]string, error) {
-	if opts == nil {
-		return nil, nil
-	}
-	// Re-marshal/unmarshal the options through a resolver that knows the dynamic
-	// vocab extension, so its bytes are decoded into the dynamic extension
-	// rather than left in UnknownFields.
+// decodeThroughExt re-parses a descriptor's options through a resolver that knows
+// the dynamic vocab extension, so its bytes are decoded into the extension rather
+// than left in UnknownFields. opts is the descriptor's Options() (a
+// *descriptorpb.FieldOptions or *EnumValueOptions). A generic plugin binary has
+// no ramp.v1 extensions registered globally, hence this request-derived resolver.
+func decodeThroughExt(ext protoreflect.ExtensionTypeDescriptor, opts proto.Message) (protoreflect.Message, error) {
 	raw, err := proto.Marshal(opts)
 	if err != nil {
 		return nil, fmt.Errorf("marshal options: %w", err)
 	}
 	decoded := opts.ProtoReflect().New().Interface()
-	if err := (proto.UnmarshalOptions{
-		Resolver: resolverWith(ext),
-	}).Unmarshal(raw, decoded); err != nil {
+	if err := (proto.UnmarshalOptions{Resolver: resolverWith(ext)}).Unmarshal(raw, decoded); err != nil {
 		return nil, fmt.Errorf("unmarshal options through vocab resolver: %w", err)
 	}
+	return decoded.ProtoReflect(), nil
+}
 
-	val := decoded.ProtoReflect().Get(ext)
-	list := val.List()
+// readVocabList reads the repeated-string token values for ext off opts. Returns
+// (nil, nil) when the descriptor legitimately carries no such option — including
+// when ext is nil (the request did not carry the extension descriptor) — and
+// (nil, err) only on a real decode failure, so a resolver/marshal fault surfaces
+// instead of masquerading as "no vocab".
+func readVocabList(ext protoreflect.ExtensionTypeDescriptor, opts proto.Message) ([]string, error) {
+	if ext == nil || opts == nil {
+		return nil, nil
+	}
+	m, err := decodeThroughExt(ext, opts)
+	if err != nil {
+		return nil, err
+	}
+	list := m.Get(ext).List()
 	if list.Len() == 0 {
 		return nil, nil
 	}
@@ -247,6 +253,22 @@ func readVocab(ext protoreflect.ExtensionTypeDescriptor, opts proto.Message) ([]
 		tokens = append(tokens, list.Get(i).String())
 	}
 	return tokens, nil
+}
+
+// readVocabString reads the scalar string value for ext off opts — the axis's
+// generated package name. Returns "" when unset or when ext is nil.
+func readVocabString(ext protoreflect.ExtensionTypeDescriptor, opts proto.Message) (string, error) {
+	if ext == nil || opts == nil {
+		return "", nil
+	}
+	m, err := decodeThroughExt(ext, opts)
+	if err != nil {
+		return "", err
+	}
+	if !m.Has(ext) {
+		return "", nil
+	}
+	return m.Get(ext).String(), nil
 }
 
 // extResolver adapts a single ExtensionTypeDescriptor to the
