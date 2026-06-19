@@ -28,7 +28,9 @@ echo "==> 1/4 JSON Schema from proto (bufbuild/protoschema)"
 
 echo "==> 2/4 tools + merge (clean names; enums named from the descriptor)"
 python3 -m venv "$WORK/venv"
-"$WORK/venv/bin/pip" install -q --disable-pip-version-check datamodel-code-generator protobuf
+# Pinned: generated output is byte-compared in CI, so the generator versions must be
+# fixed (an unpinned datamodel-code-generator drifts the models in CI).
+"$WORK/venv/bin/pip" install -q --disable-pip-version-check "datamodel-code-generator==0.64.0" protobuf
 "$PY" scripts/sdk-types/merge_schema.py "$JS" gen/descriptor.binpb "$COMBINED"
 
 echo "==> 3/4 Pydantic v2 (datamodel-code-generator, --base-class + --collapse-root-models)"
@@ -50,7 +52,7 @@ PYEOF
 
 echo "==> 4/4 Zod (json-schema-to-zod)"
 printf '{"name":"ramp-sdk-types-work","private":true,"type":"module"}\n' > "$WORK/package.json"
-(cd "$WORK" && npm install --no-save json-schema-to-zod zod)
+(cd "$WORK" && npm install --no-save json-schema-to-zod@2.8.1 zod)
 cp scripts/sdk-types/gen_zod.mjs "$WORK/gen_zod.mjs"
 node "$WORK/gen_zod.mjs" "$COMBINED" gen/ts/wire/schemas.ts
 
