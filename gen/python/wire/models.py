@@ -28,13 +28,11 @@ class Delegation(WireModel):
         None,
         description='Token issuer. OIDC issuer URL or GNAP grant server URL.\n Exchange uses this for JWT validation (OIDC discovery → JWKS)\n or GNAP token introspection.',
     )
-    maxAccesses: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(
+    maxAccesses: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='Maximum number of accesses allowed under this delegation.\n Exchange tracks cumulative access count against this cap.\n Deny with DENIAL_REASON_QUOTA_EXCEEDED when count >= limit.\n For subscriptions with "10,000 accesses/month", this carries the ceiling.',
     )
-    maxSpendCents: int | constr(pattern=r'^-?[0-9]+$') | None = Field(
+    maxSpendCents: int | None = Field(
         None,
         description='Maximum spend in currency minor units (e.g., cents for USD).\n Exchange tracks cumulative spend against this cap.',
     )
@@ -135,12 +133,10 @@ class Preview(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    duration: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(None, description='Duration in seconds (for audio and video clips).')
-    height: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = None
+    duration: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Duration in seconds (for audio and video clips).'
+    )
+    height: conint(ge=-2147483648, le=2147483647) | None = None
     mediaType: str | None = Field(
         '',
         description='MIME type of the preview.\n Examples: "image/jpeg", "image/webp", "audio/mpeg", "video/mp4",\n           "text/plain", "application/json"',
@@ -153,9 +149,9 @@ class Preview(WireModel):
         '',
         description="URL to a preview asset (thumbnail, clip, snippet, sample).\n Served by the provider's CDN, not by the Exchange.",
     )
-    width: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(None, description='Dimensions in pixels (for images and video).')
+    width: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Dimensions in pixels (for images and video).'
+    )
 
 
 class JsonWebKey(WireModel):
@@ -206,12 +202,12 @@ class RateLimitInfo(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    limit: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(0, description='Maximum requests allowed in the current window.')
-    remaining: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(0, description='Requests remaining in the current window.')
+    limit: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Maximum requests allowed in the current window.'
+    )
+    remaining: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Requests remaining in the current window.'
+    )
     resetAt: AwareDatetime | None = Field(
         None,
         description='When the current window resets (UTC). After this time, `remaining` resets to `limit`.',
@@ -226,9 +222,7 @@ class RemoveResourcesResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    removed: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = 0
+    removed: conint(ge=-2147483648, le=2147483647) | None = None
     ver: str | None = ''
 
 
@@ -367,15 +361,15 @@ class SubscriptionQuotaInfo(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    quotaLimit: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(0, description='Total allowed in the current period.')
-    quotaRemaining: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(0, description='Remaining in the current period.')
-    quotaUsed: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(0, description='Used so far in the current period.')
+    quotaLimit: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Total allowed in the current period.'
+    )
+    quotaRemaining: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Remaining in the current period.'
+    )
+    quotaUsed: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Used so far in the current period.'
+    )
     resetsAt: AwareDatetime | None = Field(
         None, description='When the quota counter resets (UTC).'
     )
@@ -422,17 +416,13 @@ class PushResourcesResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    accepted: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = 0
+    accepted: conint(ge=-2147483648, le=2147483647) | None = None
     ext: dict[str, Any] | None = None
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    rejected: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = 0
+    rejected: conint(ge=-2147483648, le=2147483647) | None = None
     ver: str | None = ''
     warnings: list[str] | None = Field(
         None,
@@ -842,15 +832,11 @@ class Pricing(WireModel):
     currency: str | None = Field(
         '', description='ISO 4217 currency code (e.g. "USD", "EUR").'
     )
-    estimatedQuantity: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(
+    estimatedQuantity: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.',
     )
-    licenseDurationMonths: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(
+    licenseDurationMonths: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='License duration in months. How long the granted access remains valid.',
     )
@@ -1270,9 +1256,7 @@ class WellKnownManifest(WireModel):
         None,
         description="Optional emergency revocation channel. When set, consumers poll this\n URL on a 300s cadence (±10% jitter) and replace their local revoked\n set with the response. When unset, consumers rely on routine rotation\n and not_after expiry.\n This list's freshness bounds revocation latency — see the caching\n contract in the Well-Known Discovery section above.",
     )
-    maxIntermediaryHops: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(
+    maxIntermediaryHops: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='Exchange-only. Maximum forwarding hops this Exchange tolerates on an inbound\n request (Agent → Broker → … → Exchange), counted as RFC 9421 HTTP Message\n Signatures. A request carrying more SHOULD be rejected. Lets Exchanges\n publish their chain-depth tolerance so Brokers prune before forwarding.\n Absent = no published limit (Exchange applies its own default policy).',
     )
@@ -1344,8 +1328,8 @@ class Quota(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    limit: conint(ge=1) | constr(pattern=r'^-?[0-9]+$') | None = Field(
-        0,
+    limit: conint(ge=1) | None = Field(
+        None,
         description='Maximum allowed value in the given window. A quota of 0 grants\n nothing — express "no access" by omitting the term, not a zero quota.',
     )
     metric: (
@@ -1441,9 +1425,7 @@ class RequestConstraints(WireModel):
         None,
         description='Only relevant for DYNAMIC resources. Ignored for STATIC (content is\n immutable) and LIVE (content doesn\'t exist yet).\n\n Examples:\n   7 days   — "credit report updated within the last week"\n   1 hour   — "stock snapshot from the last hour"\n   30 days  — "drug interaction database updated this month"',
     )
-    maxHops: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(
+    maxHops: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description="Maximum forwarding hops the agent will allow (Agent → Broker → … →\n Exchange), counted as the number of RFC 9421 HTTP Message Signatures on the\n request. Caps chain depth so a request is not relayed through more brokers\n than the agent is willing to trust or pay. A Broker MUST NOT forward a\n request whose signature count would exceed this. Absent = agent imposes no\n cap (the Exchange's max_intermediary_hops still applies).",
     )
@@ -1539,9 +1521,7 @@ class ResourceEntry(WireModel):
     contentHash: str | None = None
     contentId: str | None = None
     domain: str | None = ''
-    estimatedQuantity: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = None
+    estimatedQuantity: conint(ge=-2147483648, le=2147483647) | None = None
     ext: dict[str, Any] | None = None
     extCritical: list[str] | None = Field(
         None,
@@ -1561,9 +1541,7 @@ class ResourceEntry(WireModel):
         None,
         description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery.',
     )
-    wordCount: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = None
+    wordCount: conint(ge=-2147483648, le=2147483647) | None = None
 
 
 class Usage(WireModel):
@@ -1577,10 +1555,8 @@ class Usage(WireModel):
         None,
         description='Whether citation was included as required by the offer terms.',
     )
-    consumedQuantity: (
-        conint(ge=-2147483648, le=2147483647) | constr(pattern=r'^-?[0-9]+$') | None
-    ) = Field(
-        0,
+    consumedQuantity: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None,
         description="REQUIRED. Actual quantity consumed, in the metering unit from the Offer's Pricing.\n For text: tokens consumed. For video: seconds watched. For data: records accessed.\n Exchange cross-references against Offer.pricing.estimated_quantity.",
     )
     consumedUnit: (

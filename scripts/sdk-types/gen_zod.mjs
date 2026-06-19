@@ -42,5 +42,12 @@ for (const name of Object.keys(defs).sort()) {
   out += `export const ${name}Schema = ${String(jsonSchemaToZod(root, { module: "none" }))};\n\n`;
 }
 
+// proto-JSON encodes an integer as a number OR a string (int64 is always a string).
+// json-schema-to-zod emits z.number().int(); make it z.coerce.number().int() so the
+// wire string form is accepted. All numeric fields here are integers (money is a
+// validated string), so coercing every z.number() is safe — a number passes through
+// unchanged, a numeric string is coerced.
+out = out.replace(/z\.number\(\)/g, "z.coerce.number()");
+
 fs.writeFileSync(outFile, out);
 console.log(`wrote ${Object.keys(defs).length} Zod schemas -> ${outFile}`);

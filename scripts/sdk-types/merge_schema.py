@@ -83,6 +83,32 @@ def mark_money_decimal(o):
     return o
 
 
+def collapse_int_strings(o):
+    """proto-JSON accepts an integer as a number OR a string (and emits int64 as a
+    string, to protect JS from >2^53 precision loss), so protoc-gen-jsonschema models
+    every integer field as anyOf[{integer}, {string, pattern ^-?[0-9]+$}]. Collapse to
+    the integer branch: datamodel-codegen emits a clean `int`/`conint` (Pydantic lax
+    parsing still coerces the wire string), instead of an `int | str` union. The Zod
+    side accepts the string via z.coerce.number() (see gen_zod.mjs). Go is unaffected —
+    protobuf-go uses native int64 and protojson does the string conversion."""
+    if isinstance(o, dict):
+        aof = o.get("anyOf")
+        if isinstance(aof, list) and any(
+            isinstance(b, dict) and b.get("type") == "string" and b.get("pattern") == "^-?[0-9]+$"
+            for b in aof
+        ):
+            intb = next((b for b in aof if isinstance(b, dict) and b.get("type") == "integer"), None)
+            if intb is not None:
+                node = dict(intb)
+                if "description" in o:
+                    node["description"] = o["description"]
+                return node
+        return {k: collapse_int_strings(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [collapse_int_strings(x) for x in o]
+    return o
+
+
 def fix_refs(o):
     if isinstance(o, dict):
         r = o.get("$ref")
@@ -136,7 +162,7 @@ def main(src_dir, desc_path, out_file):
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
-    defs = mark_money_decimal(hoist_enums(fix_refs(defs)))
+    defs = mark_money_decimal(collapse_int_strings(hoist_enums(fix_refs(defs))))
     defs.update(enum_defs)
 
     combined = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$defs": defs}
