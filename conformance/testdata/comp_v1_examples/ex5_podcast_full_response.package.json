@@ -1,0 +1,48 @@
+{
+  "id": "PKG-DAILY-BRIEF-FULL",
+  "title": "Daily Brief Podcast Archive",
+  "seller": "news-podcasts.com",
+  "licenseurl": "https://news-podcasts.com/licensing",
+  "reporturl": "https://news-podcasts.com/reporting/ai-usage",
+  "citation": 1,
+  "scope": {
+    "scope": 0,
+    "max": 0,
+    "ctype": [
+      3
+    ],
+    "audio": [
+      {
+        "title": [
+          "Global Markets Update - Feb 27"
+        ],
+        "cattax": 9,
+        "cat": [
+          392
+        ],
+        "dur": [
+          1800
+        ],
+        "wordcount": [
+          4500
+        ],
+        "transcript": 1,
+        "pubdate": "2026-02-27T06:00:00Z",
+        "published": 1,
+        "author": [
+          "Host Name",
+          "Guest Expert"
+        ],
+        "sourcetype": 0,
+        "provenance": 0
+      }
+    ]
+  },
+  "retrieval": {
+    "auth": 2,
+    "endpoint": "https://api.news-podcasts.com/v1/rss",
+    "type": [
+      1
+    ]
+  }
+}
