@@ -129,7 +129,7 @@ if !budget.CanAfford(winningOffer.Pricing.Rate, winningOffer.Pricing.Currency) {
 
 Session budget state is ephemeral. If the Broker crashes, the agent re-declares its budget on reconnect. Per-period budgets (monthly, daily) are persisted in Redis and survive restarts.
 
-This is a deliberate design choice: the Exchange's billing adapter is the authoritative source of truth for "can this buyer afford this transaction," not the Broker.
+This is a deliberate design choice: the Exchange's billing adapter is the authoritative source of truth for "can this requester afford this transaction," not the Broker.
 
 ## Currency Conversion
 
@@ -148,7 +148,7 @@ type CurrencyConverter interface {
 
 ## Budget Consistency at Scale
 
-Broker budget tracking is **advisory**. The Exchange is the authoritative enforcement point and rejects transactions if the buyer's balance is insufficient. This means:
+Broker budget tracking is **advisory**. The Exchange is the authoritative enforcement point and rejects transactions if the requester's balance is insufficient. This means:
 
 - If two Broker instances both think there is budget remaining and both submit `ExecuteTransaction` simultaneously, the Exchange authorizes the first and denies the second.
 - No overspend occurs because the Exchange is the gatekeeper.

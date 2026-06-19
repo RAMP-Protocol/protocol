@@ -37,11 +37,12 @@ test('a real prefixed enum value resolves and links', () => {
 });
 
 test('a resolved symbol not documented on the reference page is not linked (heading-gating)', () => {
-  // Preview is a real message, but documented on another page — linking it would
-  // emit a dead anchor, so it must resolve (no throw) yet stay plain inline code.
-  const tree = run(para('Preview'));
+  // Timestamp is a real symbol (google.protobuf well-known type) but has no
+  // section on the reference page — linking it would emit a dead anchor, so it
+  // must resolve (no throw) yet stay plain inline code.
+  const tree = run(para('Timestamp'));
   assert.ok(!has(tree, (n) => n.type === 'link'), 'must not link to a nonexistent reference-page anchor');
-  assert.ok(has(tree, (n) => n.type === 'inlineCode' && n.value === 'Preview'), 'left as plain inline code');
+  assert.ok(has(tree, (n) => n.type === 'inlineCode' && n.value === 'Timestamp'), 'left as plain inline code');
 });
 
 test('a non-proto ALL_CAPS token is left alone (no false positive)', () => {
@@ -60,6 +61,26 @@ test('proto-enum directive expands to a table', () => {
 
 test('proto-enum on an unknown enum fails the build', () => {
   assert.throws(() => run(directive('proto-enum', { name: 'NotARealEnum' })), /unknown enum/);
+});
+
+test('proto-message directive expands to a field table', () => {
+  const tree = run(directive('proto-message', { name: 'RAMPResponse' }));
+  assert.ok(has(tree, (n) => n.type === 'table'), 'directive should inject a table');
+  assert.ok(has(tree, (n) => n.type === 'inlineCode' && n.value === 'absence_reason'), 'table should carry the field names');
+});
+
+test('proto-message on an unknown message fails the build', () => {
+  assert.throws(() => run(directive('proto-message', { name: 'NotARealMessage' })), /unknown message/);
+});
+
+test('proto-service directive expands to an RPC table', () => {
+  const tree = run(directive('proto-service', { name: 'BrokerService' }));
+  assert.ok(has(tree, (n) => n.type === 'table'), 'directive should inject a table');
+  assert.ok(has(tree, (n) => n.type === 'inlineCode' && n.value === 'Resolve'), 'table should carry the RPC names');
+});
+
+test('proto-service on an unknown service fails the build', () => {
+  assert.throws(() => run(directive('proto-service', { name: 'NotARealService' })), /unknown service/);
 });
 
 test('proto-vocab directive renders the axis tokens', () => {

@@ -87,7 +87,7 @@ class Delegation(WireModel):
         None,
         description='When this delegation expires. Exchange MUST reject expired tokens.',
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -197,7 +197,7 @@ class DisputeRequest(WireModel):
     description: str | None = Field(
         None, description='Human-readable description of the issue.'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -213,13 +213,15 @@ class DisputeRequest(WireModel):
         None,
         description='Evidence: content hash of what was actually received.\n Exchange compares against the hash promised in ResourceIdentity.',
     )
-    receivedHashMethod: str | None = None
+    receivedHashMethod: str | None = Field(
+        None, description='Hash algorithm the agent used'
+    )
     reportId: str | None = Field(
         '',
         description='Must reference a filed UsageReport. The agent MUST file a UsageReport\n (via ReportUsage RPC) and receive a report_id BEFORE filing a dispute.\n This prevents fire-and-forget disputes and ensures the Exchange has\n the complete evidence chain: what was offered, what was transacted,\n what the agent reported using, and what the agent disputes.\n The dispute chain: Transaction → UsageReport → Dispute.',
     )
     transactionId: str | None = Field('', description='Transaction being disputed.')
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class DisputeStatus(Enum):
@@ -242,7 +244,7 @@ class DomainVerificationChallenge(WireModel):
         None,
         description='When this challenge expires. Provider must confirm before this time.',
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -251,7 +253,7 @@ class DomainVerificationChallenge(WireModel):
         '',
         description='Opaque challenge token. Provider must serve this at:\n https://{domain}/.well-known/ramp-verify/{token}',
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
     verificationUrl: str | None = Field(
         '', description='The exact URL the Exchange will fetch to verify.'
     )
@@ -263,7 +265,7 @@ class DomainVerificationConfirmation(WireModel):
     )
     cdnType: str | None = Field(None, description='CDN type this key is for.')
     domain: str | None = Field('', description='The domain being verified.')
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -275,7 +277,7 @@ class DomainVerificationConfirmation(WireModel):
     token: str | None = Field(
         '', description='The challenge token (echoed from DomainVerificationChallenge).'
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class DomainVerificationFailureReason(Enum):
@@ -309,19 +311,19 @@ class DomainVerificationRequest(WireModel):
     domain: str | None = Field(
         '', description='The provider domain to verify (e.g., "techcrunch.com").'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class DomainVerificationResult(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -334,7 +336,7 @@ class DomainVerificationResult(WireModel):
         None,
         description='Verification is valid until this time. Provider must re-verify periodically.',
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class IngestionSource(Enum):
@@ -448,6 +450,7 @@ class OfferAbsenceReason(Enum):
     OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION = (
         'OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION'
     )
+    OFFER_ABSENCE_REASON_BUDGET_EXCEEDED = 'OFFER_ABSENCE_REASON_BUDGET_EXCEEDED'
 
 
 class Preview(WireModel):
@@ -457,7 +460,9 @@ class Preview(WireModel):
     duration: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Duration in seconds (for audio and video clips).'
     )
-    height: conint(ge=-2147483648, le=2147483647) | None = None
+    height: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Height in pixels (images and video)'
+    )
     mediaType: str | None = Field(
         '',
         description='MIME type of the preview.\n Examples: "image/jpeg", "image/webp", "audio/mpeg", "video/mp4",\n           "text/plain", "application/json"',
@@ -496,14 +501,18 @@ class PushResourcesResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    accepted: conint(ge=-2147483648, le=2147483647) | None = None
-    ext: dict[str, Any] | None = None
+    accepted: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Number of entries accepted'
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    rejected: conint(ge=-2147483648, le=2147483647) | None = None
-    ver: str | None = ''
+    rejected: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Number of entries rejected'
+    )
+    ver: str | None = Field('', description='Protocol version')
     warnings: list[str] | None = Field(
         None,
         description='Non-fatal issues encountered during ingestion.\n Examples: unrecognized vocab token in a Restriction (term accepted but flagged),\n           REFERENCE_ONLY term missing License.uri (informational).\n Warnings do not cause rejection — they are surfaced so publishers can fix\n their feeds without a hard failure.',
@@ -541,16 +550,16 @@ class RefreshCatalogRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    tenantId: str | None = ''
-    ver: str | None = ''
+    tenantId: str | None = Field('', description='Tenant identifier')
+    ver: str | None = Field('', description='Protocol version')
 
 
 class RefreshCatalogResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    started: bool | None = False
-    ver: str | None = ''
+    started: bool | None = Field(False, description='Whether the refresh was started')
+    ver: str | None = Field('', description='Protocol version')
 
 
 class RegistrationFailureReason(Enum):
@@ -573,17 +582,19 @@ class RemoveResourcesRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    paths: list[str] | None = None
-    tenantId: str | None = ''
-    ver: str | None = ''
+    paths: list[str] | None = Field(None, description='Paths to remove')
+    tenantId: str | None = Field('', description='Tenant identifier')
+    ver: str | None = Field('', description='Protocol version')
 
 
 class RemoveResourcesResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    removed: conint(ge=-2147483648, le=2147483647) | None = None
-    ver: str | None = ''
+    removed: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Number of entries removed'
+    )
+    ver: str | None = Field('', description='Protocol version')
 
 
 class ReportingObligation(WireModel):
@@ -594,7 +605,7 @@ class ReportingObligation(WireModel):
         None,
         description='URL to submit the usage report to (if different from Exchange).',
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -798,7 +809,9 @@ class TransactionDenial(WireModel):
     offerId: str | None = Field(
         None, description='Batch mode: the offer this denial pertains to.'
     )
-    reason: DenialReason | conint(ge=1, le=18) | None = 0
+    reason: DenialReason | conint(ge=1, le=18) | None = Field(
+        0, description='The denial reason (defined-only, non-zero)'
+    )
     restrictionMismatches: (
         list[RestrictionKind | conint(ge=-2147483648, le=2147483647)] | None
     ) = Field(
@@ -869,8 +882,8 @@ class UsageAsset(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    packageId: str | None = None
-    uri: str | None = ''
+    packageId: str | None = Field(None, description='Package identifier')
+    uri: str | None = Field('', description='Asset URI')
 
 
 class UsageReportRejectionReason(Enum):
@@ -891,7 +904,7 @@ class UsageReportResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -900,7 +913,7 @@ class UsageReportResponse(WireModel):
         '',
         description='Exchange-assigned report identifier. Required for the dispute chain —\n the agent must reference this report_id in DisputeRequest to prove that\n a usage report was filed before disputing. The complete evidence chain:\n   Offer → Transaction (transaction_id, billing_id)\n        → UsageReport → UsageReportResponse (report_id)\n        → DisputeRequest (transaction_id + report_id)',
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class AcceptableRestriction(WireModel):
@@ -946,7 +959,7 @@ class AuthorizedExchange(WireModel):
     )
     domain: str | None = Field('', description='Canonical domain of the Exchange.')
     endpoint: str | None = Field('', description='RAMP ExchangeService endpoint URL.')
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -960,7 +973,9 @@ class CatalogRejection(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: CatalogRejectionReason | conint(ge=1, le=7) | None = 0
+    reason: CatalogRejectionReason | conint(ge=1, le=7) | None = Field(
+        0, description='The rejection reason (defined-only, non-zero)'
+    )
     rejectedPaths: list[str] | None = Field(
         None,
         description='For partial-batch failures: the entry paths that were rejected.',
@@ -971,7 +986,9 @@ class DisputeFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: DisputeFailureReason | conint(ge=1, le=5) | None = 0
+    reason: DisputeFailureReason | conint(ge=1, le=5) | None = Field(
+        0, description='The failure reason (defined-only, non-zero)'
+    )
 
 
 class DisputeResponse(WireModel):
@@ -984,7 +1001,7 @@ class DisputeResponse(WireModel):
     estimatedResolution: str | None = Field(
         None, description='Expected resolution timeline.'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1002,14 +1019,16 @@ class DisputeResponse(WireModel):
         0,
         description='Current lifecycle status of the dispute. Tracks progression through\n the three-tier resolution process:\n   Tier 1 (automated, <1s): FILED → AUTO_RESOLVED or EVIDENCE_NEEDED\n   Tier 2 (rule-based, <24h): UNDER_REVIEW → RESOLVED\n   Tier 3 (pattern investigation, async): ESCALATED → SETTLED → FINAL\n Losing party may appeal: RESOLVED → APPEALED → back to UNDER_REVIEW.',
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class DomainVerificationFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: DomainVerificationFailureReason | conint(ge=1, le=6) | None = 0
+    reason: DomainVerificationFailureReason | conint(ge=1, le=6) | None = Field(
+        0, description='The failure reason (defined-only, non-zero)'
+    )
 
 
 class Obligation(WireModel):
@@ -1107,7 +1126,7 @@ class RAMPResponse(WireModel):
         None,
         description='Identity that retrieval_endpoint is bound to. Same value and computation as\n TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.',
     )
-    billingId: str | None = ''
+    billingId: str | None = Field('', description='Billing reference')
     brokerFee: Cost | None = Field(
         None,
         description="Broker's fee for this transaction, if any.\n Absent = no per-transaction fee (governed by external agreement).\n Present = explicit fee the agent can see and audit.\n Broker MUST disclose fees when charging per-transaction.",
@@ -1123,7 +1142,7 @@ class RAMPResponse(WireModel):
     expiresAt: AwareDatetime | None = Field(
         None, description='When retrieval_endpoint expires.'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1139,14 +1158,16 @@ class RAMPResponse(WireModel):
         description='Signed retrieval URL returned by the Exchange and forwarded unchanged by the\n Broker, together with agent_identity_hash. Bound to agent_identity_hash;\n expires at expires_at. Absent on denial and when delivery_method is not\n signed-URL-based.',
     )
     transactionId: str | None = Field('', description='Exchange-assigned identifiers.')
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class RegistrationFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: RegistrationFailureReason | conint(ge=1, le=5) | None = 0
+    reason: RegistrationFailureReason | conint(ge=1, le=5) | None = Field(
+        0, description='The failure reason (defined-only, non-zero)'
+    )
 
 
 class Requester(WireModel):
@@ -1165,7 +1186,7 @@ class Requester(WireModel):
         '',
         description='Domain the requester belongs to — used for public key lookup.\n Keys published at {domain}/.well-known/ramp.json (WellKnownManifest, role=ROLE_AGENT).',
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1209,7 +1230,7 @@ class ResourceIdentity(WireModel):
     doi: str | None = Field(
         None, description='Digital Object Identifier — persistent, never changes.'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1253,7 +1274,7 @@ class ResourceQuery(WireModel):
         None,
         description='Maximum time the caller will wait for a response.\n Exchange SHOULD prioritize speed over completeness when tight.\n Absent = 500ms default.',
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1304,14 +1325,16 @@ class RetrievalAuthFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: RetrievalAuthFailureReason | conint(ge=1, le=12) | None = 0
+    reason: RetrievalAuthFailureReason | conint(ge=1, le=12) | None = Field(
+        0, description='The failure reason (defined-only, non-zero)'
+    )
 
 
 class TransactionRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1332,7 +1355,7 @@ class TransactionRequest(WireModel):
     requester: Requester | None = Field(
         None, description='Requester identity — forwarded for authorization and audit.'
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class TransactionResponse(WireModel):
@@ -1343,8 +1366,8 @@ class TransactionResponse(WireModel):
         '',
         description='Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of\n the agent\'s Ed25519 request-signing key (see "Retrieval-URL identity binding"\n above). Empty string when absent; non-empty iff a signed retrieval_endpoint\n is present. Delivery-endpoint enforcement of the binding is OPTIONAL.',
     )
-    billingId: str | None = None
-    cost: Cost | None = None
+    billingId: str | None = Field(None, description='Billing reference')
+    cost: Cost | None = Field(None, description='Transaction cost')
     deliveryMethod: (
         constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
         | DeliveryMethod
@@ -1354,7 +1377,7 @@ class TransactionResponse(WireModel):
     expiresAt: AwareDatetime | None = Field(
         None, description='When retrieval_endpoint expires.'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1391,7 +1414,7 @@ class TransactionResponse(WireModel):
         None,
         description='Single-offer result.\n For batch mode, these may be empty — check `items` instead.',
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class Usage(WireModel):
@@ -1442,7 +1465,7 @@ class UsageReport(WireModel):
         '', description='Billing reference from the delivery.'
     )
     exchange: str | None = Field(None, description='Exchange this report is for.')
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1458,14 +1481,16 @@ class UsageReport(WireModel):
         '', description='Transaction ID from the delivery.'
     )
     usage: Usage | None = Field(None, description='How the resource was actually used.')
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class UsageReportRejection(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    reason: UsageReportRejectionReason | conint(ge=1, le=5) | None = 0
+    reason: UsageReportRejectionReason | conint(ge=1, le=5) | None = Field(
+        0, description='The rejection reason (defined-only, non-zero)'
+    )
 
 
 class WellKnownManifest(WireModel):
@@ -1503,7 +1528,7 @@ class WellKnownManifest(WireModel):
         None,
         description="Publisher-only. Authorized exchanges for this publisher's resources.\n Like ads.txt — declares who may sell. MUST be empty for non-publisher\n roles.",
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052). Lists keys\n within ext that the consumer MUST understand. Unknown values reject\n with UNKNOWN_CRITICAL_EXTENSION. Empty (default) → ignore-unknown.',
@@ -1580,13 +1605,19 @@ class ErrorDetail(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    catalogRejection: CatalogRejection | None = None
-    disputeFailure: DisputeFailure | None = None
+    catalogRejection: CatalogRejection | None = Field(
+        None, description='`reason` oneof — CatalogService rejection'
+    )
+    disputeFailure: DisputeFailure | None = Field(
+        None, description='`reason` oneof — DisputeTransaction filing refused'
+    )
     domain: str | None = Field(
         '',
         description='Stable grouping for the failing surface, e.g. "ramp.v1.ExchangeService".\n Mirrors google.rpc.ErrorInfo.domain so generic tooling can group errors.',
     )
-    domainVerificationFailure: DomainVerificationFailure | None = None
+    domainVerificationFailure: DomainVerificationFailure | None = Field(
+        None, description='`reason` oneof — domain verification failed'
+    )
     message: str | None = Field(
         '',
         description='Developer-facing, NON-authoritative human message. Clients MUST branch on\n the typed reason below, never on this text.',
@@ -1595,10 +1626,19 @@ class ErrorDetail(WireModel):
         None,
         description='Dynamic key/value context that also appears in `message` (ids, limits,\n axes). Mirrors google.rpc.ErrorInfo.metadata. Strongly-typed context rides\n in the per-domain reason block below instead.',
     )
-    registrationFailure: RegistrationFailure | None = None
-    retrievalAuthFailure: RetrievalAuthFailure | None = None
-    transactionDenial: TransactionDenial | None = None
-    usageReportRejection: UsageReportRejection | None = None
+    registrationFailure: RegistrationFailure | None = Field(
+        None, description='`reason` oneof — agent/provider registration refused'
+    )
+    retrievalAuthFailure: RetrievalAuthFailure | None = Field(
+        None,
+        description='`reason` oneof — signed-URL / proof-of-possession check failed',
+    )
+    transactionDenial: TransactionDenial | None = Field(
+        None, description='`reason` oneof — ExecuteTransaction denial'
+    )
+    usageReportRejection: UsageReportRejection | None = Field(
+        None, description='`reason` oneof — ReportUsage filing rejected'
+    )
 
 
 class LicenseTerm(WireModel):
@@ -1658,7 +1698,7 @@ class Offer(WireModel):
     expiresAt: AwareDatetime | None = Field(
         None, description='When this offer expires (ISO 8601).'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1750,13 +1790,17 @@ class RAMPRequest(WireModel):
     constraints: RequestConstraints | None = Field(
         None, description='Constraints for exchange filtering and offer selection.'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
     id: str | None = Field(
         '', description='Unique request identifier, assigned by the Requesting Party.'
+    )
+    idempotencyKey: constr(min_length=1) | None = Field(
+        '',
+        description='Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a\n retried request carrying the same key MUST NOT re-charge — the Broker returns\n the original result. Distinct from `id` (an opaque correlation tag): this is\n the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.',
     )
     query: str | None = Field(
         None,
@@ -1779,7 +1823,7 @@ class RAMPRequest(WireModel):
         description='Resource URIs the agent wants. The Broker forwards these to Exchanges in\n ResourceQuery.uris. Optional when `query` / `search_filters` drive\n Broker-side discovery instead.',
         max_length=256,
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='RAMP protocol version')
 
 
 class ResourceEntry(WireModel):
@@ -1790,17 +1834,19 @@ class ResourceEntry(WireModel):
         None,
         description="Signed attestations about this resource entry.\n Same semantics as Offer.attestations — see ResourceAttestation message\n for verification levels and claim vocabulary. Attestations pushed via\n CatalogService are verified at push time: the Exchange checks that\n the attestation verifier is authorized to push for this provider\n (via catalog_contributors in the provider's WellKnownManifest) and validates the\n attestation signature against the verifier's public key from their\n /.well-known/ramp.json endpoint (WellKnownManifest, role determined\n by the verifier's operator).",
     )
-    contentHash: str | None = None
-    contentId: str | None = None
-    domain: str | None = ''
-    estimatedQuantity: conint(ge=-2147483648, le=2147483647) | None = None
-    ext: dict[str, Any] | None = None
+    contentHash: str | None = Field(None, description='Content hash')
+    contentId: str | None = Field(None, description='Content identifier')
+    domain: str | None = Field('', description='Provider domain')
+    estimatedQuantity: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Estimated quantity in the metering unit'
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    hashMethod: str | None = None
-    path: str | None = ''
+    hashMethod: str | None = Field(None, description='Hash algorithm')
+    path: str | None = Field('', description='Content path')
     provenanceSource: str | None = Field(
         None,
         description='Who provided this resource metadata. Creates audit trail for\n "where did this catalog entry come from?"',
@@ -1808,12 +1854,16 @@ class ResourceEntry(WireModel):
     provenanceTimestamp: AwareDatetime | None = Field(
         None, description='When this metadata was collected/generated.'
     )
-    source: IngestionSource | conint(ge=-2147483648, le=2147483647) | None = None
+    source: IngestionSource | conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='How the entry was discovered'
+    )
     terms: list[LicenseTerm] | None = Field(
         None,
         description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery.',
     )
-    wordCount: conint(ge=-2147483648, le=2147483647) | None = None
+    wordCount: conint(ge=-2147483648, le=2147483647) | None = Field(
+        None, description='Word count'
+    )
 
 
 class ResourceResponse(WireModel):
@@ -1823,7 +1873,7 @@ class ResourceResponse(WireModel):
     exchange: str | None = Field(
         '', description='Canonical domain of the responding Exchange.'
     )
-    ext: dict[str, Any] | None = None
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
@@ -1839,7 +1889,7 @@ class ResourceResponse(WireModel):
         None,
         description='Rate limit status for this caller.\n Present when the Exchange enforces per-caller rate limits on discovery.\n Enables agents/Brokers to throttle proactively rather than hitting\n hard limits. Particularly important when a Broker fans out the\n same batch query to multiple Exchanges — mid-batch rate limiting\n can cause partial results if not signaled early.',
     )
-    ver: str | None = ''
+    ver: str | None = Field('', description='Protocol version')
 
 
 class PushResourcesRequest(WireModel):
@@ -1850,11 +1900,13 @@ class PushResourcesRequest(WireModel):
         '',
         description='Identity of the caller (who is pushing this data).\n The Exchange verifies this matches a registered CatalogService client.',
     )
-    entries: list[ResourceEntry] | None = None
-    ext: dict[str, Any] | None = None
+    entries: list[ResourceEntry] | None = Field(
+        None, description='Content entries to push'
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    tenantId: str | None = ''
-    ver: str | None = ''
+    tenantId: str | None = Field('', description='Tenant identifier')
+    ver: str | None = Field('', description='Protocol version')

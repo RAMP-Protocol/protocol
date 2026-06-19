@@ -270,7 +270,7 @@ func (s *ExchangeServer) ExecuteTransaction(
     msg := req.Msg
 
     // 1. Idempotency check
-    // 2. Compliance check (is buyer blocked?)
+    // 2. Compliance check (is requester blocked?)
     // 3. Look up the offer
     // 4. Log: TransactionRequested (async, non-blocking)
     // 5. Authorize billing with billing adapter

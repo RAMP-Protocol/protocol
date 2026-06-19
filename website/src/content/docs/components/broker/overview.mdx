@@ -62,7 +62,7 @@ graph TB
 ## Internal Call Flow
 
 ```go
-func (o *Broker) HandleRequest(ctx context.Context, req *rampv1.RAMPRequest) (*rampv1.RAMPResponse, error) {
+func (o *Broker) Resolve(ctx context.Context, req *rampv1.RAMPRequest) (*rampv1.RAMPResponse, error) {
     // 1. Resolve which Exchanges to query
     exchanges := o.registry.Resolve(req.Constraints)
 
@@ -79,7 +79,11 @@ func (o *Broker) HandleRequest(ctx context.Context, req *rampv1.RAMPRequest) (*r
 
     selection, err := o.selector.Select(ctx, responses, req.Constraints, o.budget)
     if err != nil {
-        return nil, err // no viable offer
+        // "No viable offer" is a successful answer, not a transport error: return
+        // OK with RAMPResponse.absence_reason set and no retrieval_endpoint
+        // (mirrors DiscoverResources). Non-OK errors are reserved for malformed
+        // requests, auth failures, and internal faults.
+        return &rampv1.RAMPResponse{AbsenceReason: o.absenceReason(err)}, nil
     }
 
     // 4. Execute transaction with winning Exchange
@@ -343,7 +347,7 @@ github.com/RAMP-Protocol/protocol/broker/
             main.go
     pkg/
         broker/           # Core broker logic (used by all deployment modes)
-            broker.go     # Broker struct + HandleRequest
+            broker.go     # Broker struct + Resolve
             config.go           # Configuration loading
         registry/               # Exchange Registry
             registry.go         # ExchangeRegistry interface + in-memory impl

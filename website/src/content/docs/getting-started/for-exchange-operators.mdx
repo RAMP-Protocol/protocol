@@ -27,10 +27,10 @@ The value proposition is the same regardless of domain: providers get revenue fr
 You deploy an **Exchange Node** -- a Go service that handles three API calls:
 
 1. **DiscoverResources** -- AI agent asks "what's available at this URL and how much?" Your Exchange looks up the provider's catalog and returns offers with pricing.
-2. **ExecuteTransaction** -- AI agent says "I'll take it." Your Exchange checks the buyer's balance, logs the transaction, and returns a signed URL.
+2. **ExecuteTransaction** -- AI agent says "I'll take it." Your Exchange checks the requester's balance, logs the transaction, and returns a signed URL.
 3. **ReportUsage** -- AI agent reports what it did with the content. Mandatory. You track compliance.
 
-That's the whole protocol. Three RPCs. Your billing adapter plugs in where `Authorize(buyer, amount)` and `Record(transaction)` are called.
+That's the whole protocol. Three RPCs. Your billing adapter plugs in where `Authorize(requester, amount)` and `Record(transaction)` are called.
 
 ## Unit-Agnostic Metering
 
@@ -92,7 +92,7 @@ Ad-Tech Concept          →  RAMP Equivalent
 ─────────────────────────────────────────────
 SSP / Exchange           →  Exchange Node
 Publisher                →  Resource Provider
-ads.txt                  →  ramp.json (authorized sellers)
+ads.txt                  →  ramp.json (authorized providers)
 Bid Request              →  ResourceQuery
 Win Notification         →  TransactionRequest
 eCPM                     →  unit_cost (effective cost per unit)
@@ -120,11 +120,11 @@ For each provider, you:
 3. Configure their pricing tier (the `rsl.txt` rate is a ceiling; your private rate can be lower)
 4. Authorize `catalog_contributors` -- third-party verification vendors the provider permits to push attestations for their content
 5. If applicable, deploy the RAMP edge function to their delivery endpoint (CDN, API gateway, PACS server) for signed URL verification
-6. Done. Their content is now available to AI buyers through your Exchange
+6. Done. Their content is now available to AI requesters through your Exchange
 
 Providers deploy nothing themselves in the managed model. You manage everything. This is the [Exchange-Managed deployment model](/architecture/deployment-models/). Some providers (large publishers, data vendors) may prefer to manage their own delivery endpoint -- the protocol supports both.
 
-## Buyer Onboarding
+## Requester Onboarding
 
 AI companies register via your existing account management or a self-signup API:
 
@@ -265,7 +265,7 @@ AI agents can use a **Broker** to query multiple Exchanges and compare prices --
 
 - Competitive pressure keeps your margins honest
 - Premium content commands premium pricing (quality signals in offers)
-- Subscription deals give your providers an advantage (zero marginal cost for the buyer)
+- Subscription deals give your providers an advantage (zero marginal cost for the requester)
 - `base_currency` in your manifest enables cross-exchange price comparison even across currencies
 
 ## Technical Integration

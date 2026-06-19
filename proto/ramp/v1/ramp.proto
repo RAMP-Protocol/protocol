@@ -184,6 +184,7 @@ message ResourceQuery {
   // Examples: ["ramp-news-v1", "ramp-academic-v1", "ramp-legal-v1"]
   repeated string supported_profiles = 7;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -199,6 +200,7 @@ message ResourceQuery {
 // via OfferGroup. When a single URI is queried, the Exchange MAY use
 // either the flat `offers` field or a single OfferGroup.
 message ResourceResponse {
+  // Protocol version
   string ver = 1;
 
   // Canonical domain of the responding Exchange.
@@ -219,6 +221,7 @@ message ResourceResponse {
   // can cause partial results if not signaled early.
   optional RateLimitInfo rate_limit = 6;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -283,7 +286,8 @@ enum OfferAbsenceReason {
   OFFER_ABSENCE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
   // Resource URI is not in this Exchange's catalog.
   OFFER_ABSENCE_REASON_NOT_IN_CATALOG = 1;
-  // Resource exists but has a BLOCKED access policy (provider opted out of AI access).
+  // Resource exists but the provider has opted out of AI access for it (the
+  // provider's consent/opt-out signal blocks licensing).
   OFFER_ABSENCE_REASON_CONTENT_BLOCKED = 2;
   // Resource exists but its offers were pre-filtered out for one or more
   // restriction axes the requester stated (a convenience filter matched to the
@@ -307,6 +311,12 @@ enum OfferAbsenceReason {
   // The unrecognized keys SHOULD be listed in the OfferGroup's ext field
   // under "unrecognized_critical_extensions" for diagnostic purposes.
   OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION = 7;
+
+  // Offers exist, but none fit within the requester's budget (e.g. every offer's
+  // price exceeds RequestConstraints.period_budget). Returned by Resolve as a
+  // successful "no result" answer when a budget/price ceiling filtered out every
+  // otherwise-licensable offer.
+  OFFER_ABSENCE_REASON_BUDGET_EXCEEDED = 8;
 }
 
 // RateLimitInfo — Caller's rate limit status on this Exchange.
@@ -493,6 +503,7 @@ message Offer {
   // See: Universal Licensing Core section.
   repeated LicenseTerm terms = 19;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -622,6 +633,7 @@ message ResourceIdentity {
   // watermark), "chromaprint" (audio fingerprint).
   optional string soft_binding_method = 11;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1180,6 +1192,7 @@ message Preview {
 
   // Dimensions in pixels (for images and video).
   optional int32 width = 3;
+  // Height in pixels (images and video)
   optional int32 height = 4;
 
   // Duration in seconds (for audio and video clips).
@@ -1411,6 +1424,7 @@ message Requester {
   // another entity (user, organization, upstream agent).
   optional Delegation delegation = 7;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1514,6 +1528,7 @@ message Delegation {
   // or GNAP token introspection.
   optional string issuer = 11;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1584,6 +1599,7 @@ enum ResourceMutability {
 // The Exchange validates eligibility, authorizes billing, creates
 // delivery, and logs each transaction.
 message TransactionRequest {
+  // Protocol version
   string ver = 1;
 
   // Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns
@@ -1605,6 +1621,7 @@ message TransactionRequest {
   // When populated, `offer_id` and `offer_signature` SHOULD be empty.
   repeated TransactionItem items = 7;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1629,14 +1646,17 @@ message TransactionItem {
 // For batch mode, `items` contains per-offer results and `total_cost`
 // summarizes the aggregate cost.
 message TransactionResponse {
+  // Protocol version
   string ver = 1;
 
   // Single-offer result.
   // For batch mode, these may be empty — check `items` instead.
   optional string transaction_id = 3;
+  // Billing reference
   optional string billing_id = 4;
   // Resource title echoed from the Offer (for logging/display).
   optional string resource_title = 5;
+  // Transaction cost
   optional Cost cost = 6;
 
   // How resource is delivered in this transaction.
@@ -1684,6 +1704,7 @@ message TransactionResponse {
   // Multiple entries for multi-dimensional quotas.
   repeated SubscriptionQuotaInfo subscription_quota = 17;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1774,7 +1795,7 @@ enum DenialReason {
   DENIAL_REASON_ENTITLEMENT_MISSING = 12;            // no entitlement token presented for a subscription-only offer
   DENIAL_REASON_ENTITLEMENT_MALFORMED = 13;          // entitlement token failed to decode (malformed)
   DENIAL_REASON_ENTITLEMENT_EXPIRED = 14;            // entitlement token's validity window has passed
-  DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;        // token's subscriber_org does not match the asserted buyer
+  DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;        // token's subscriber_org does not match the asserted requester
   DENIAL_REASON_SUBSCRIPTION_LAPSED = 16;            // the covering subscription contract has lapsed
   DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 17;        // subscription exists but no buyer-side grant ties this caller to it
   DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION = 18;  // token authority sound but the per-request attenuation is missing/stale
@@ -1822,14 +1843,18 @@ service BrokerService {
 }
 
 message PushResourcesRequest {
+  // Protocol version
   string ver = 1;
+  // Tenant identifier
   string tenant_id = 2;
+  // Content entries to push
   repeated ResourceEntry entries = 3;
 
   // Identity of the caller (who is pushing this data).
   // The Exchange verifies this matches a registered CatalogService client.
   string caller_id = 4;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1840,14 +1865,23 @@ message PushResourcesRequest {
 }
 
 message ResourceEntry {
+  // Provider domain
   string domain = 1;
+  // Content path
   string path = 2;
+  // Content identifier
   optional string content_id = 3;
+  // Content title
   optional string title = 4;
+  // Word count
   optional int32 word_count = 5;
+  // Estimated quantity in the metering unit
   optional int32 estimated_quantity = 6;
+  // Content hash
   optional string content_hash = 7;
+  // Hash algorithm
   optional string hash_method = 8;
+  // How the entry was discovered
   optional IngestionSource source = 9;
 
   // Who provided this resource metadata. Creates audit trail for
@@ -1875,6 +1909,7 @@ message ResourceEntry {
   // in Offer.terms on discovery.
   repeated LicenseTerm terms = 13;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1885,8 +1920,11 @@ message ResourceEntry {
 }
 
 message PushResourcesResponse {
+  // Protocol version
   string ver = 1;
+  // Number of entries accepted
   int32 accepted = 2;
+  // Number of entries rejected
   int32 rejected = 3;
 
   // Non-fatal issues encountered during ingestion.
@@ -1896,6 +1934,7 @@ message PushResourcesResponse {
   // their feeds without a hard failure.
   repeated string warnings = 4;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1906,23 +1945,32 @@ message PushResourcesResponse {
 }
 
 message RemoveResourcesRequest {
+  // Protocol version
   string ver = 1;
+  // Tenant identifier
   string tenant_id = 2;
+  // Paths to remove
   repeated string paths = 3;
 }
 
 message RemoveResourcesResponse {
+  // Protocol version
   string ver = 1;
+  // Number of entries removed
   int32 removed = 2;
 }
 
 message RefreshCatalogRequest {
+  // Protocol version
   string ver = 1;
+  // Tenant identifier
   string tenant_id = 2;
 }
 
 message RefreshCatalogResponse {
+  // Protocol version
   string ver = 1;
+  // Whether the refresh was started
   bool started = 2;
 }
 
@@ -1944,6 +1992,7 @@ message ReportingObligation {
   // Field names that must be present in the report.
   repeated string required_fields = 4;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -1958,6 +2007,7 @@ message ReportingObligation {
 // Filed by the agent or Broker after resource is used.
 // Failure to report may result in the Exchange blocking subsequent access.
 message UsageReport {
+  // Protocol version
   string ver = 1;
 
   // Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
@@ -1983,6 +2033,7 @@ message UsageReport {
   // Assets that were delivered and used.
   repeated UsageAsset assets = 9;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2047,8 +2098,11 @@ message Usage {
 
 // UsageAsset — A single asset included in the usage report.
 message UsageAsset {
+  // Asset URI
   string uri = 1;
+  // Asset title
   optional string title = 2;
+  // Package identifier
   optional string package_id = 3;
 }
 
@@ -2057,6 +2111,7 @@ message UsageReportResponse {
   // A successful response means the report was accepted; a rejection travels as
   // a non-OK transport error carrying ErrorDetail.usage_report_rejection.
 
+  // Protocol version
   string ver = 1;
 
   // Exchange-assigned report identifier. Required for the dispute chain —
@@ -2067,6 +2122,7 @@ message UsageReportResponse {
   //        → DisputeRequest (transaction_id + report_id)
   string report_id = 3;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2086,10 +2142,17 @@ message UsageReportResponse {
 
 // RAMPRequest — Agent sends to Broker (Step 1).
 message RAMPRequest {
+  // RAMP protocol version
   string ver = 1;
 
   // Unique request identifier, assigned by the Requesting Party.
   string id = 2;
+
+  // Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a
+  // retried request carrying the same key MUST NOT re-charge — the Broker returns
+  // the original result. Distinct from `id` (an opaque correlation tag): this is
+  // the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.
+  string idempotency_key = 10 [(buf.validate.field).string.min_len = 1];
 
   // Requester identity — who is making this request, what scopes they have.
   // The Broker forwards this to Exchanges in ResourceQuery.requester.
@@ -2134,6 +2197,7 @@ message RAMPRequest {
   // query parameters.
   optional google.protobuf.Struct search_filters = 7;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2387,6 +2451,7 @@ message WellKnownManifest {
   // Absent = no published limit (Exchange applies its own default policy).
   optional int32 max_intermediary_hops = 28;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052). Lists keys
@@ -2436,6 +2501,7 @@ message AuthorizedExchange {
   ProviderRelationship relationship = 3 [(buf.validate.field).enum = {not_in: [0]}];
 
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2469,10 +2535,12 @@ enum AuthMethod {
 
 // RAMPResponse — Broker returns to Agent (Step 6).
 message RAMPResponse {
+  // Protocol version
   string ver = 1;
 
   // Exchange-assigned identifiers.
   string transaction_id = 4;
+  // Billing reference
   string billing_id = 5;
 
   // Which Exchange won the selection.
@@ -2514,6 +2582,7 @@ message RAMPResponse {
   // vocabulary DiscoverResources uses for OfferGroup.absence_reason.
   optional OfferAbsenceReason absence_reason = 16;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2539,6 +2608,7 @@ message RAMPResponse {
 
 // DisputeRequest — Agent signals a problem with delivered resource.
 message DisputeRequest {
+  // Protocol version
   string ver = 1;
 
   // Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
@@ -2561,6 +2631,7 @@ message DisputeRequest {
   // Evidence: content hash of what was actually received.
   // Exchange compares against the hash promised in ResourceIdentity.
   optional string received_content_hash = 7;
+  // Hash algorithm the agent used
   optional string received_hash_method = 8;
 
   // Must reference a filed UsageReport. The agent MUST file a UsageReport
@@ -2571,6 +2642,7 @@ message DisputeRequest {
   // The dispute chain: Transaction → UsageReport → Dispute.
   string report_id = 9;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2655,6 +2727,7 @@ message DisputeResponse {
   // refusal to file travels as a non-OK transport error carrying
   // ErrorDetail.dispute_failure.
 
+  // Protocol version
   string ver = 1;
 
   // Exchange-assigned dispute case identifier.
@@ -2676,6 +2749,7 @@ message DisputeResponse {
   // progress (FILED, UNDER_REVIEW, ESCALATED, etc.).
   optional ResolutionType resolution = 6;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2707,6 +2781,7 @@ message DisputeResponse {
 
 // DomainVerificationRequest — Provider requests a verification challenge.
 message DomainVerificationRequest {
+  // Protocol version
   string ver = 1;
 
   // The provider domain to verify (e.g., "techcrunch.com").
@@ -2715,6 +2790,7 @@ message DomainVerificationRequest {
   // Caller identity (registered with the Exchange).
   optional string caller_id = 3;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2726,6 +2802,7 @@ message DomainVerificationRequest {
 
 // DomainVerificationChallenge — Exchange returns a challenge.
 message DomainVerificationChallenge {
+  // Protocol version
   string ver = 1;
 
   // Opaque challenge token. Provider must serve this at:
@@ -2738,6 +2815,7 @@ message DomainVerificationChallenge {
   // The exact URL the Exchange will fetch to verify.
   string verification_url = 4;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2749,6 +2827,7 @@ message DomainVerificationChallenge {
 
 // DomainVerificationConfirmation — Provider confirms the challenge is placed.
 message DomainVerificationConfirmation {
+  // Protocol version
   string ver = 1;
 
   // The domain being verified.
@@ -2765,6 +2844,7 @@ message DomainVerificationConfirmation {
   // CDN type this key is for.
   optional string cdn_type = 5;  // "cloudfront", "akamai", "fastly", "hmac"
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2779,6 +2859,7 @@ message DomainVerificationResult {
   // A successful response means verification succeeded; a failure travels as a
   // non-OK transport error carrying ErrorDetail.domain_verification_failure.
 
+  // Protocol version
   string ver = 1;
 
   // If signing_key was provided: confirmation of key registration.
@@ -2787,6 +2868,7 @@ message DomainVerificationResult {
   // Verification is valid until this time. Provider must re-verify periodically.
   optional google.protobuf.Timestamp valid_until = 4;
 
+  // Extension point
   google.protobuf.Struct ext = 15;
 
   // Critical extension keys (COSE crit pattern, RFC 9052).
@@ -2810,6 +2892,13 @@ message DomainVerificationResult {
 // response body, and "no results" / per-item absence (OfferGroup.absence_reason)
 // is a success — NOT an error. Only a method that could not perform the
 // requested ACTION returns a non-OK code plus an ErrorDetail.
+//
+// Failure-type naming is intentionally NOT uniform — the suffix marks the KIND
+// of failure: *Denial is an access decision (a transaction was denied),
+// *Rejection is a submission refused (catalog push, usage report), and *Failure
+// is an operation that could not complete (registration, dispute, domain
+// verification, retrieval auth). The distinction is deliberate; do not flatten
+// these to a single suffix.
 //
 // The per-domain reason enums here are the single source of truth that replaces
 // the hand-rolled Go "Kind" enums (Exchange, Broker), the catalog free-text
@@ -2836,12 +2925,19 @@ message ErrorDetail {
   // generic transport-class failures (e.g. INVALID_ARGUMENT, INTERNAL) that
   // carry no domain-specific reason.
   oneof reason {
+    // `reason` oneof — ExecuteTransaction denial
     TransactionDenial transaction_denial = 10;
+    // `reason` oneof — CatalogService rejection
     CatalogRejection catalog_rejection = 11;
+    // `reason` oneof — agent/provider registration refused
     RegistrationFailure registration_failure = 12;
+    // `reason` oneof — DisputeTransaction filing refused
     DisputeFailure dispute_failure = 13;
+    // `reason` oneof — domain verification failed
     DomainVerificationFailure domain_verification_failure = 14;
+    // `reason` oneof — signed-URL / proof-of-possession check failed
     RetrievalAuthFailure retrieval_auth_failure = 15;
+    // `reason` oneof — ReportUsage filing rejected
     UsageReportRejection usage_report_rejection = 16;
   }
 }
@@ -2850,6 +2946,7 @@ message ErrorDetail {
 // reason the response body no longer holds (denial_reason / restriction_mismatches
 // move here in the response-shape normalization). Reuses the DenialReason vocab.
 message TransactionDenial {
+  // The denial reason (defined-only, non-zero)
   DenialReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
@@ -2878,6 +2975,7 @@ enum CatalogRejectionReason {
 
 // CatalogRejection — a CatalogService call could not be applied.
 message CatalogRejection {
+  // The rejection reason (defined-only, non-zero)
   CatalogRejectionReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
@@ -2899,6 +2997,7 @@ enum RegistrationFailureReason {
 
 // RegistrationFailure — a registration request could not be completed.
 message RegistrationFailure {
+  // The failure reason (defined-only, non-zero)
   RegistrationFailureReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
@@ -2918,6 +3017,7 @@ enum DisputeFailureReason {
 
 // DisputeFailure — a dispute could not be filed.
 message DisputeFailure {
+  // The failure reason (defined-only, non-zero)
   DisputeFailureReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
@@ -2936,6 +3036,7 @@ enum DomainVerificationFailureReason {
 
 // DomainVerificationFailure — RequestDomainVerification / ConfirmDomainVerification failed.
 message DomainVerificationFailure {
+  // The failure reason (defined-only, non-zero)
   DomainVerificationFailureReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
@@ -2964,6 +3065,7 @@ enum RetrievalAuthFailureReason {
 
 // RetrievalAuthFailure — a signed-URL retrieval / proof-of-possession check failed.
 message RetrievalAuthFailure {
+  // The failure reason (defined-only, non-zero)
   RetrievalAuthFailureReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
@@ -2982,6 +3084,7 @@ enum UsageReportRejectionReason {
 
 // UsageReportRejection — a usage report could not be accepted.
 message UsageReportRejection {
+  // The rejection reason (defined-only, non-zero)
   UsageReportRejectionReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];

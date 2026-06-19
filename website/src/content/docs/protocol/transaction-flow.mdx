@@ -178,7 +178,7 @@ An empty `offers` array indicates the content is not available through this Exch
 
 ### Subscription Offers
 
-When the buyer has a subscription, the Exchange includes both per-request and subscription offers:
+When the requester has a subscription, the Exchange includes both per-request and subscription offers:
 
 ```json
 {
@@ -204,7 +204,7 @@ When the buyer has a subscription, the Exchange includes both per-request and su
 
 ### Subscription Quota Info
 
-When the buyer holds a subscription, the Exchange attaches `SubscriptionQuotaInfo` entries so the agent can see remaining allowance *before* committing. After the transaction, the updated quota appears on the response so the agent can track burn-down without a separate API call.
+When the requester holds a subscription, the Exchange attaches `SubscriptionQuotaInfo` entries so the agent can see remaining allowance *before* committing. After the transaction, the updated quota appears on the response so the agent can track burn-down without a separate API call.
 
 **Where it appears:**
 

@@ -511,7 +511,7 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTran
 
 {
   "ver": "1.0",
-  "id": "tx-dd-credit-001",
+  "idempotency_key": "tx-dd-credit-001",
   "requester": {
     "id": "dd-analyst",
     "domain": "lawfirm.com",
@@ -534,7 +534,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 {
   "ver": "1.0",
-  "id": "tx-dd-legal-001",
+  "idempotency_key": "tx-dd-legal-001",
   "requester": {
     "id": "dd-analyst",
     "domain": "lawfirm.com",
@@ -565,7 +565,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 ```json
 {
   "ver": "1.0",
-  "id": "tx-dd-legal-001",
+  "idempotency_key": "tx-dd-legal-001",
   "items": [
     {
       "offer_id": "offer-legal-001",

@@ -61,9 +61,8 @@ exclude_re='(reference/changelog\.mdx|docs/design-history\.md|proto/CHANGELOG\.m
 # `proto/comp` — because comp.proto mirrors the external CoMP standard, which
 # has its own vocabulary (e.g. a legitimate `revshare` field) that the RAMP
 # removal denylist must not police.
-# Authored documentation prose only — NOT website/src/data (generated proto views
-# like symbols.json, whose live field names e.g. `maxIntermediaryHops` would
-# substring-match removal-denylist entries) and NOT website/src/components (code).
+# Authored documentation prose only — NOT website/src/data (data modules such as
+# standards.mjs, not authored prose) and NOT website/src/components (code).
 roots=(website/src/content docs proto/ramp)
 
 status=0
@@ -83,6 +82,35 @@ for p in "${patterns[@]}"; do
   hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
   if [ -n "$hits" ]; then
     echo "::error::removed/renamed identifier still present: ${p}"
+    echo "$hits"
+    status=1
+  fi
+done
+
+# --- 1b. Banned vocabulary: non-canonical role synonyms ---------------------
+# The contract's two roles are Requester (the AI/demand side) and Provider (the
+# content/supply side). "Buyer"/"Seller" are pre-standardization synonyms; left
+# in PROSE they drift the vocabulary the proto and the rest of the docs
+# standardize on (the M2 "Buyer's balance" class).
+#
+# This bans the PROSE word only. The boundary `(^|[^A-Za-z0-9._/-])…([^…]|$)`
+# (ERE, so it also works under BSD grep in ci-local) deliberately does NOT match
+# identifiers/URLs/tokens where the word is glued to `. _ / -`: the live CoMP
+# field `comp.seller`, code like `buyer_lid` / `QueryByBuyer`, `buyer.example.com`,
+# the `ramp-ai-buyer` user-agent, or the ordinary word "re·seller". Those are
+# protocol facts, not synonym drift. Each entry is "pattern#canonical" (`#`
+# delimiter, since the pattern itself contains `|`).
+bound_l='(^|[^A-Za-z0-9._/-])'
+bound_r='([^A-Za-z0-9._/-]|$)'
+vocab=(
+  "${bound_l}[Bb]uyers?${bound_r}#Requester"
+  "${bound_l}[Ss]ellers?${bound_r}#Provider"
+)
+for entry in "${vocab[@]}"; do
+  p=${entry%%#*}; canon=${entry#*#}
+  hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
+  if [ -n "$hits" ]; then
+    echo "::error::non-canonical role vocabulary (prose) — use '${canon}' (Requester/Provider are the standard role terms):"
     echo "$hits"
     status=1
   fi

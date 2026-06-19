@@ -25,7 +25,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 **Countermeasure (reconciliation)**: Provider compares CDN access logs against Exchange-reported transaction volumes and revenue.
 
 ### T2: Dynamic price discrimination
-**Attack**: Exchange serves different prices to different buyers for identical content.
+**Attack**: Exchange serves different prices to different requesters for identical content.
 **Countermeasure (protocol)**: Not directly preventable -- price discrimination is a business decision. If prices are derived from RSL (provider-set), the Exchange can't inflate beyond RSL terms without detection.
 **Countermeasure (reconciliation)**: Brokers querying from different identities can detect discrepancies.
 
@@ -49,10 +49,10 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 **Countermeasure (protocol)**: Protocol mandates maximum URL TTL (5 minutes). Provider's edge function enforces independently.
 
 ### T7: Signing key leakage
-**Attack**: Exchange shares signing keys with a preferred buyer, enabling URL forgery.
+**Attack**: Exchange shares signing keys with a preferred requester, enabling URL forgery.
 **Countermeasure (protocol)**: **Asymmetric signing.** Provider holds the private key; Exchange requests signed URLs from provider's signing service.
 
-## 2. Demand-Side Threats (Dishonest Agent / Buyer)
+## 2. Demand-Side Threats (Dishonest Agent / Requester)
 
 ### T8: Signed URL sharing
 **Attack**: Agent A pays, shares signed URL with Agents B, C, D before expiry.
@@ -142,7 +142,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T27: Content arbitrage (buy low, resell high)
 **Attack**: Entity buys from Exchange A at $0.04, resells via own Exchange at $0.05.
-**Countermeasure (protocol)**: ResourceIdentity enables detection. ramp.json declares authorized sellers.
+**Countermeasure (protocol)**: ResourceIdentity enables detection. ramp.json declares authorized providers.
 
 ### T28: Free content laundering
 **Attack**: Scrape freely available content, package behind paywall as "premium."
@@ -270,7 +270,7 @@ Line 3: Legal/contractual enforcement
 
 | Ad-Tech Fix | Year | RAMP Equivalent | Status |
 |---|---|---|---|
-| ads.txt | 2017 | ramp.json (authorized sellers) | In proto |
+| ads.txt | 2017 | ramp.json (authorized providers) | In proto |
 | sellers.json | 2019 | Exchange identity in ResourceResponse | In proto |
 | SupplyChain Object | 2019 | exchange_signature on Offer | In proto |
 | ads.cert | 2020 | exchange_signature + content_integrity_hash | In proto |

@@ -31,7 +31,7 @@ const RE_TYPE = /^[A-Z][A-Za-z0-9]+$/;
 let state;
 function setup() {
   if (state) return state;
-  const { enums, symbols, vocab } = loadSchema();
+  const { enums, messages, services, symbols, vocab } = loadSchema();
   // Reference-page heading slugs decide which symbols are linkable (no dead anchors).
   const sl = new GithubSlugger();
   const headings = new Set();
@@ -52,7 +52,7 @@ function setup() {
   // value, so it must resolve (a renamed/removed value fails the build) — unlike a
   // bare short form (PER_UNIT) or a non-proto ALL_CAPS token (RFC_9421).
   const enumPrefixes = Object.keys(enums).map((n) => screamingSnake(n) + '_');
-  state = { enums, symbols, vocab, headings, ignore, enumPrefixes };
+  state = { enums, messages, services, symbols, vocab, headings, ignore, enumPrefixes };
   return state;
 }
 
@@ -81,6 +81,22 @@ function enumTableNodes(rows, { numbers, label, full }) {
   return fromMarkdown(md, { extensions: [gfmTable()], mdastExtensions: [gfmTableFromMarkdown()] }).children;
 }
 
+// Message field table — same mdast shape a hand-written table produces, so a
+// backticked symbol in a field comment still autolinks in the pass below.
+function messageTableNodes(rows) {
+  const md = '| Field | Type | Number | Description |\n| --- | --- | --- | --- |\n' +
+    rows.map((r) => `| \`${r.field}\` | ${esc(r.type)} | ${r.number} | ${esc(r.doc)} |`).join('\n');
+  return fromMarkdown(md, { extensions: [gfmTable()], mdastExtensions: [gfmTableFromMarkdown()] }).children;
+}
+
+// Service RPC table — request/response are backticked so they autolink to their
+// message headings exactly as the hand-typed service tables did.
+function serviceTableNodes(rows) {
+  const md = '| RPC | Request | Response | Description |\n| --- | --- | --- | --- |\n' +
+    rows.map((r) => `| \`${r.rpc}\` | \`${r.request}\` | \`${r.response}\` | ${esc(r.doc)} |`).join('\n');
+  return fromMarkdown(md, { extensions: [gfmTable()], mdastExtensions: [gfmTableFromMarkdown()] }).children;
+}
+
 function vocabParagraph(tokens) {
   if (!tokens.length) return { type: 'paragraph', children: [{ type: 'emphasis', children: [text('(no registered tokens)')] }] };
   const kids = [];
@@ -96,7 +112,7 @@ function directiveText(node) {
 
 export default function remarkProto() {
   return (tree, file) => {
-    const { enums, symbols, vocab, headings, ignore, enumPrefixes } = setup();
+    const { enums, messages, services, symbols, vocab, headings, ignore, enumPrefixes } = setup();
     const where = file?.path ?? 'doc';
 
     // 1. expand directives into tables / token lists
@@ -107,6 +123,20 @@ export default function remarkProto() {
         const name = attrs.name || directiveText(node);
         if (!enums[name]) throw new Error(`${where}: proto-enum references unknown enum "${name}"`);
         const nodes = enumTableNodes(enums[name], { numbers: 'numbers' in attrs, label: attrs.label, full: 'full' in attrs });
+        parent.children.splice(index, 1, ...nodes);
+        return [SKIP, index + nodes.length];
+      }
+      if (node.name === 'proto-message') {
+        const name = attrs.name || directiveText(node);
+        if (!messages[name]) throw new Error(`${where}: proto-message references unknown message "${name}"`);
+        const nodes = messageTableNodes(messages[name]);
+        parent.children.splice(index, 1, ...nodes);
+        return [SKIP, index + nodes.length];
+      }
+      if (node.name === 'proto-service') {
+        const name = attrs.name || directiveText(node);
+        if (!services[name]) throw new Error(`${where}: proto-service references unknown service "${name}"`);
+        const nodes = serviceTableNodes(services[name]);
         parent.children.splice(index, 1, ...nodes);
         return [SKIP, index + nodes.length];
       }

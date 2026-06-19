@@ -37,7 +37,7 @@ sequenceDiagram
     participant Store as Durable Store (PG/CH)
 
     Agent->>MP: ExecuteTransaction(TransactionRequest)
-    MP->>BA: Authorize(buyer, amount)
+    MP->>BA: Authorize(requester, amount)
     BA-->>MP: AuthorizeResponse(billing_id)
     MP->>MP: Generate signed URL
 
@@ -92,7 +92,7 @@ graph TB
     end
 
     subgraph "Side 2: Exchange Transaction Log"
-        TXN[Transaction Log<br/>Every billing_id issued<br/>Fields: transaction_id, billing_id, cost, buyer, provider, signed_url_hash]
+        TXN[Transaction Log<br/>Every billing_id issued<br/>Fields: transaction_id, billing_id, cost, requester, provider, signed_url_hash]
     end
 
     subgraph "Side 3: Agent Usage Reports"
@@ -113,9 +113,9 @@ Core reconciliation queries:
 - **Q1**: All transactions for a provider in a time range (billing)
 - **Q2**: CDN accesses without billing_id (revenue leakage detection)
 - **Q3**: Billing IDs without usage reports (compliance enforcement)
-- **Q4**: Buyer compliance status (real-time lookup, < 1ms)
+- **Q4**: Requester compliance status (real-time lookup, < 1ms)
 - **Q5**: Transaction detail for dispute resolution
-- **Q6**: Buyer spending summary for a period (invoicing)
+- **Q6**: Requester spending summary for a period (invoicing)
 
 ## Key Design Decisions
 

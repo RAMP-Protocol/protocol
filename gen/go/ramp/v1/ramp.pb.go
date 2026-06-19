@@ -105,7 +105,8 @@ const (
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED OfferAbsenceReason = 0 // unset — rejected at ingest
 	// Resource URI is not in this Exchange's catalog.
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_IN_CATALOG OfferAbsenceReason = 1
-	// Resource exists but has a BLOCKED access policy (provider opted out of AI access).
+	// Resource exists but the provider has opted out of AI access for it (the
+	// provider's consent/opt-out signal blocks licensing).
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_CONTENT_BLOCKED OfferAbsenceReason = 2
 	// Resource exists but its offers were pre-filtered out for one or more
 	// restriction axes the requester stated (a convenience filter matched to the
@@ -128,6 +129,11 @@ const (
 	// The unrecognized keys SHOULD be listed in the OfferGroup's ext field
 	// under "unrecognized_critical_extensions" for diagnostic purposes.
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION OfferAbsenceReason = 7
+	// Offers exist, but none fit within the requester's budget (e.g. every offer's
+	// price exceeds RequestConstraints.period_budget). Returned by Resolve as a
+	// successful "no result" answer when a budget/price ceiling filtered out every
+	// otherwise-licensable offer.
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_BUDGET_EXCEEDED OfferAbsenceReason = 8
 )
 
 // Enum value maps for OfferAbsenceReason.
@@ -141,6 +147,7 @@ var (
 		5: "OFFER_ABSENCE_REASON_NOT_AUTHORIZED",
 		6: "OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT",
 		7: "OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION",
+		8: "OFFER_ABSENCE_REASON_BUDGET_EXCEEDED",
 	}
 	OfferAbsenceReason_value = map[string]int32{
 		"OFFER_ABSENCE_REASON_UNSPECIFIED":                0,
@@ -151,6 +158,7 @@ var (
 		"OFFER_ABSENCE_REASON_NOT_AUTHORIZED":             5,
 		"OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT":         6,
 		"OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION": 7,
+		"OFFER_ABSENCE_REASON_BUDGET_EXCEEDED":            8,
 	}
 )
 
@@ -884,7 +892,7 @@ const (
 	DenialReason_DENIAL_REASON_ENTITLEMENT_MISSING           DenialReason = 12 // no entitlement token presented for a subscription-only offer
 	DenialReason_DENIAL_REASON_ENTITLEMENT_MALFORMED         DenialReason = 13 // entitlement token failed to decode (malformed)
 	DenialReason_DENIAL_REASON_ENTITLEMENT_EXPIRED           DenialReason = 14 // entitlement token's validity window has passed
-	DenialReason_DENIAL_REASON_ENTITLEMENT_WRONG_BUYER       DenialReason = 15 // token's subscriber_org does not match the asserted buyer
+	DenialReason_DENIAL_REASON_ENTITLEMENT_WRONG_BUYER       DenialReason = 15 // token's subscriber_org does not match the asserted requester
 	DenialReason_DENIAL_REASON_SUBSCRIPTION_LAPSED           DenialReason = 16 // the covering subscription contract has lapsed
 	DenialReason_DENIAL_REASON_ENTITLEMENT_NOT_GRANTED       DenialReason = 17 // subscription exists but no buyer-side grant ties this caller to it
 	DenialReason_DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION DenialReason = 18 // token authority sound but the per-request attenuation is missing/stale
@@ -1965,8 +1973,9 @@ type ResourceQuery struct {
 	//
 	// Values match the Exchange's WellKnownManifest.supported_profiles entries.
 	// Examples: ["ramp-news-v1", "ramp-academic-v1", "ramp-legal-v1"]
-	SupportedProfiles []string         `protobuf:"bytes,7,rep,name=supported_profiles,json=supportedProfiles,proto3" json:"supported_profiles,omitempty"`
-	Ext               *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	SupportedProfiles []string `protobuf:"bytes,7,rep,name=supported_profiles,json=supportedProfiles,proto3" json:"supported_profiles,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -2076,7 +2085,8 @@ func (x *ResourceQuery) GetExtCritical() []string {
 // either the flat `offers` field or a single OfferGroup.
 type ResourceResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Canonical domain of the responding Exchange.
 	Exchange string `protobuf:"bytes,3,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// Flat list of offers (for single-URI queries).
@@ -2090,8 +2100,9 @@ type ResourceResponse struct {
 	// hard limits. Particularly important when a Broker fans out the
 	// same batch query to multiple Exchanges — mid-batch rate limiting
 	// can cause partial results if not signaled early.
-	RateLimit *RateLimitInfo   `protobuf:"bytes,6,opt,name=rate_limit,json=rateLimit,proto3,oneof" json:"rate_limit,omitempty"`
-	Ext       *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	RateLimit *RateLimitInfo `protobuf:"bytes,6,opt,name=rate_limit,json=rateLimit,proto3,oneof" json:"rate_limit,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -2572,8 +2583,9 @@ type Offer struct {
 	// Licensing terms for this offer, sourced from the publisher's ResourceEntry.
 	// Multiple terms when the resource has different arrangements by use case.
 	// See: Universal Licensing Core section.
-	Terms []*LicenseTerm   `protobuf:"bytes,19,rep,name=terms,proto3" json:"terms,omitempty"`
-	Ext   *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	Terms []*LicenseTerm `protobuf:"bytes,19,rep,name=terms,proto3" json:"terms,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -2844,8 +2856,9 @@ type ResourceIdentity struct {
 	// Algorithm used for soft_binding.
 	// Examples: "phash-v1" (perceptual hash), "c2pa-watermark" (C2PA invisible
 	// watermark), "chromaprint" (audio fingerprint).
-	SoftBindingMethod *string          `protobuf:"bytes,11,opt,name=soft_binding_method,json=softBindingMethod,proto3,oneof" json:"soft_binding_method,omitempty"`
-	Ext               *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	SoftBindingMethod *string `protobuf:"bytes,11,opt,name=soft_binding_method,json=softBindingMethod,proto3,oneof" json:"soft_binding_method,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -3708,7 +3721,8 @@ type Preview struct {
 	//	"text/plain", "application/json"
 	MediaType string `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
 	// Dimensions in pixels (for images and video).
-	Width  *int32 `protobuf:"varint,3,opt,name=width,proto3,oneof" json:"width,omitempty"`
+	Width *int32 `protobuf:"varint,3,opt,name=width,proto3,oneof" json:"width,omitempty"`
+	// Height in pixels (images and video)
 	Height *int32 `protobuf:"varint,4,opt,name=height,proto3,oneof" json:"height,omitempty"`
 	// Duration in seconds (for audio and video clips).
 	Duration *int32 `protobuf:"varint,5,opt,name=duration,proto3,oneof" json:"duration,omitempty"`
@@ -3991,8 +4005,9 @@ type Requester struct {
 	Scopes []string `protobuf:"bytes,6,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	// Optional delegation — present when the requester acts on behalf of
 	// another entity (user, organization, upstream agent).
-	Delegation *Delegation      `protobuf:"bytes,7,opt,name=delegation,proto3,oneof" json:"delegation,omitempty"`
-	Ext        *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	Delegation *Delegation `protobuf:"bytes,7,opt,name=delegation,proto3,oneof" json:"delegation,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -4163,8 +4178,9 @@ type Delegation struct {
 	// Token issuer. OIDC issuer URL or GNAP grant server URL.
 	// Exchange uses this for JWT validation (OIDC discovery → JWKS)
 	// or GNAP token introspection.
-	Issuer *string          `protobuf:"bytes,11,opt,name=issuer,proto3,oneof" json:"issuer,omitempty"`
-	Ext    *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	Issuer *string `protobuf:"bytes,11,opt,name=issuer,proto3,oneof" json:"issuer,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -4303,7 +4319,8 @@ func (x *Delegation) GetExtCritical() []string {
 // delivery, and logs each transaction.
 type TransactionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns
 	// the original result rather than re-executing. The transaction's durable
 	// identity is the Exchange-assigned transaction_id in the response.
@@ -4318,7 +4335,8 @@ type TransactionRequest struct {
 	// Batch mode: commit to multiple offers in one request.
 	// When populated, `offer_id` and `offer_signature` SHOULD be empty.
 	Items []*TransactionItem `protobuf:"bytes,7,rep,name=items,proto3" json:"items,omitempty"`
-	Ext   *structpb.Struct   `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -4476,14 +4494,17 @@ func (x *TransactionItem) GetOfferSignature() string {
 // summarizes the aggregate cost.
 type TransactionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Single-offer result.
 	// For batch mode, these may be empty — check `items` instead.
 	TransactionId *string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3,oneof" json:"transaction_id,omitempty"`
-	BillingId     *string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3,oneof" json:"billing_id,omitempty"`
+	// Billing reference
+	BillingId *string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3,oneof" json:"billing_id,omitempty"`
 	// Resource title echoed from the Offer (for logging/display).
 	ResourceTitle *string `protobuf:"bytes,5,opt,name=resource_title,json=resourceTitle,proto3,oneof" json:"resource_title,omitempty"`
-	Cost          *Cost   `protobuf:"bytes,6,opt,name=cost,proto3,oneof" json:"cost,omitempty"`
+	// Transaction cost
+	Cost *Cost `protobuf:"bytes,6,opt,name=cost,proto3,oneof" json:"cost,omitempty"`
 	// How resource is delivered in this transaction.
 	DeliveryMethod DeliveryMethod `protobuf:"varint,7,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
 	// Reporting requirements attached to this delivery.
@@ -4514,7 +4535,8 @@ type TransactionResponse struct {
 	// after this transaction. Enables proactive throttling ("1 access left").
 	// Multiple entries for multi-dimensional quotas.
 	SubscriptionQuota []*SubscriptionQuotaInfo `protobuf:"bytes,17,rep,name=subscription_quota,json=subscriptionQuota,proto3" json:"subscription_quota,omitempty"`
-	Ext               *structpb.Struct         `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -4896,14 +4918,18 @@ func (x *Cost) GetUnitCost() string {
 }
 
 type PushResourcesRequest struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Ver      string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	TenantId string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	Entries  []*ResourceEntry       `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Tenant identifier
+	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Content entries to push
+	Entries []*ResourceEntry `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
 	// Identity of the caller (who is pushing this data).
 	// The Exchange verifies this matches a registered CatalogService client.
-	CallerId string           `protobuf:"bytes,4,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
-	Ext      *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	CallerId string `protobuf:"bytes,4,opt,name=caller_id,json=callerId,proto3" json:"caller_id,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -4986,16 +5012,25 @@ func (x *PushResourcesRequest) GetExtCritical() []string {
 }
 
 type ResourceEntry struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Domain            string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
-	Path              string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	ContentId         *string                `protobuf:"bytes,3,opt,name=content_id,json=contentId,proto3,oneof" json:"content_id,omitempty"`
-	Title             *string                `protobuf:"bytes,4,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	WordCount         *int32                 `protobuf:"varint,5,opt,name=word_count,json=wordCount,proto3,oneof" json:"word_count,omitempty"`
-	EstimatedQuantity *int32                 `protobuf:"varint,6,opt,name=estimated_quantity,json=estimatedQuantity,proto3,oneof" json:"estimated_quantity,omitempty"`
-	ContentHash       *string                `protobuf:"bytes,7,opt,name=content_hash,json=contentHash,proto3,oneof" json:"content_hash,omitempty"`
-	HashMethod        *string                `protobuf:"bytes,8,opt,name=hash_method,json=hashMethod,proto3,oneof" json:"hash_method,omitempty"`
-	Source            *IngestionSource       `protobuf:"varint,9,opt,name=source,proto3,enum=ramp.v1.IngestionSource,oneof" json:"source,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Provider domain
+	Domain string `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	// Content path
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// Content identifier
+	ContentId *string `protobuf:"bytes,3,opt,name=content_id,json=contentId,proto3,oneof" json:"content_id,omitempty"`
+	// Content title
+	Title *string `protobuf:"bytes,4,opt,name=title,proto3,oneof" json:"title,omitempty"`
+	// Word count
+	WordCount *int32 `protobuf:"varint,5,opt,name=word_count,json=wordCount,proto3,oneof" json:"word_count,omitempty"`
+	// Estimated quantity in the metering unit
+	EstimatedQuantity *int32 `protobuf:"varint,6,opt,name=estimated_quantity,json=estimatedQuantity,proto3,oneof" json:"estimated_quantity,omitempty"`
+	// Content hash
+	ContentHash *string `protobuf:"bytes,7,opt,name=content_hash,json=contentHash,proto3,oneof" json:"content_hash,omitempty"`
+	// Hash algorithm
+	HashMethod *string `protobuf:"bytes,8,opt,name=hash_method,json=hashMethod,proto3,oneof" json:"hash_method,omitempty"`
+	// How the entry was discovered
+	Source *IngestionSource `protobuf:"varint,9,opt,name=source,proto3,enum=ramp.v1.IngestionSource,oneof" json:"source,omitempty"`
 	// Who provided this resource metadata. Creates audit trail for
 	// "where did this catalog entry come from?"
 	ProvenanceSource *string `protobuf:"bytes,10,opt,name=provenance_source,json=provenanceSource,proto3,oneof" json:"provenance_source,omitempty"` // e.g., "gumgum.com", "ssp-alpha.com", "wordpress-plugin"
@@ -5016,8 +5051,9 @@ type ResourceEntry struct {
 	// be present. For REFERENCE_ONLY terms, License.uri is authoritative.
 	// The Exchange validates ENUMERATED terms at push time and surfaces them
 	// in Offer.terms on discovery.
-	Terms []*LicenseTerm   `protobuf:"bytes,13,rep,name=terms,proto3" json:"terms,omitempty"`
-	Ext   *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	Terms []*LicenseTerm `protobuf:"bytes,13,rep,name=terms,proto3" json:"terms,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -5163,10 +5199,13 @@ func (x *ResourceEntry) GetExtCritical() []string {
 }
 
 type PushResourcesResponse struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Ver      string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	Accepted int32                  `protobuf:"varint,2,opt,name=accepted,proto3" json:"accepted,omitempty"`
-	Rejected int32                  `protobuf:"varint,3,opt,name=rejected,proto3" json:"rejected,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Number of entries accepted
+	Accepted int32 `protobuf:"varint,2,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	// Number of entries rejected
+	Rejected int32 `protobuf:"varint,3,opt,name=rejected,proto3" json:"rejected,omitempty"`
 	// Non-fatal issues encountered during ingestion.
 	// Examples: unrecognized vocab token in a Restriction (term accepted but flagged),
 	//
@@ -5174,8 +5213,9 @@ type PushResourcesResponse struct {
 	//
 	// Warnings do not cause rejection — they are surfaced so publishers can fix
 	// their feeds without a hard failure.
-	Warnings []string         `protobuf:"bytes,4,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	Ext      *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	Warnings []string `protobuf:"bytes,4,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -5258,10 +5298,13 @@ func (x *PushResourcesResponse) GetExtCritical() []string {
 }
 
 type RemoveResourcesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ver           string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	TenantId      string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	Paths         []string               `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Tenant identifier
+	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Paths to remove
+	Paths         []string `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5318,9 +5361,11 @@ func (x *RemoveResourcesRequest) GetPaths() []string {
 }
 
 type RemoveResourcesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ver           string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	Removed       int32                  `protobuf:"varint,2,opt,name=removed,proto3" json:"removed,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Number of entries removed
+	Removed       int32 `protobuf:"varint,2,opt,name=removed,proto3" json:"removed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5370,9 +5415,11 @@ func (x *RemoveResourcesResponse) GetRemoved() int32 {
 }
 
 type RefreshCatalogRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ver           string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	TenantId      string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Tenant identifier
+	TenantId      string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5422,9 +5469,11 @@ func (x *RefreshCatalogRequest) GetTenantId() string {
 }
 
 type RefreshCatalogResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ver           string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	Started       bool                   `protobuf:"varint,2,opt,name=started,proto3" json:"started,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Whether the refresh was started
+	Started       bool `protobuf:"varint,2,opt,name=started,proto3" json:"started,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5483,8 +5532,9 @@ type ReportingObligation struct {
 	// URL to submit the usage report to (if different from Exchange).
 	Endpoint *string `protobuf:"bytes,3,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
 	// Field names that must be present in the report.
-	RequiredFields []string         `protobuf:"bytes,4,rep,name=required_fields,json=requiredFields,proto3" json:"required_fields,omitempty"`
-	Ext            *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	RequiredFields []string `protobuf:"bytes,4,rep,name=required_fields,json=requiredFields,proto3" json:"required_fields,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -5572,7 +5622,8 @@ func (x *ReportingObligation) GetExtCritical() []string {
 // Failure to report may result in the Exchange blocking subsequent access.
 type UsageReport struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
 	// report does not double-count usage. The report's durable identity is the
 	// Exchange-assigned report_id in UsageReportResponse.
@@ -5588,8 +5639,9 @@ type UsageReport struct {
 	// Exchange this report is for.
 	Exchange *string `protobuf:"bytes,8,opt,name=exchange,proto3,oneof" json:"exchange,omitempty"`
 	// Assets that were delivered and used.
-	Assets []*UsageAsset    `protobuf:"bytes,9,rep,name=assets,proto3" json:"assets,omitempty"`
-	Ext    *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	Assets []*UsageAsset `protobuf:"bytes,9,rep,name=assets,proto3" json:"assets,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -5872,10 +5924,13 @@ func (x *Usage) GetConsumedUnit() string {
 
 // UsageAsset — A single asset included in the usage report.
 type UsageAsset struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Uri           string                 `protobuf:"bytes,1,opt,name=uri,proto3" json:"uri,omitempty"`
-	Title         *string                `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	PackageId     *string                `protobuf:"bytes,3,opt,name=package_id,json=packageId,proto3,oneof" json:"package_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Asset URI
+	Uri string `protobuf:"bytes,1,opt,name=uri,proto3" json:"uri,omitempty"`
+	// Asset title
+	Title *string `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
+	// Package identifier
+	PackageId     *string `protobuf:"bytes,3,opt,name=package_id,json=packageId,proto3,oneof" json:"package_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5934,7 +5989,8 @@ func (x *UsageAsset) GetPackageId() string {
 // UsageReportResponse — Acknowledgment of a usage report.
 type UsageReportResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Exchange-assigned report identifier. Required for the dispute chain —
 	// the agent must reference this report_id in DisputeRequest to prove that
 	// a usage report was filed before disputing. The complete evidence chain:
@@ -5942,8 +5998,9 @@ type UsageReportResponse struct {
 	//	Offer → Transaction (transaction_id, billing_id)
 	//	     → UsageReport → UsageReportResponse (report_id)
 	//	     → DisputeRequest (transaction_id + report_id)
-	ReportId string           `protobuf:"bytes,3,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
-	Ext      *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	ReportId string `protobuf:"bytes,3,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -6014,9 +6071,15 @@ func (x *UsageReportResponse) GetExtCritical() []string {
 // RAMPRequest — Agent sends to Broker (Step 1).
 type RAMPRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// RAMP protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Unique request identifier, assigned by the Requesting Party.
 	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a
+	// retried request carrying the same key MUST NOT re-charge — the Broker returns
+	// the original result. Distinct from `id` (an opaque correlation tag): this is
+	// the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.
+	IdempotencyKey string `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Requester identity — who is making this request, what scopes they have.
 	// The Broker forwards this to Exchanges in ResourceQuery.requester.
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
@@ -6053,7 +6116,8 @@ type RAMPRequest struct {
 	// "legal.jurisdiction", etc. The Broker maps these to Exchange-specific
 	// query parameters.
 	SearchFilters *structpb.Struct `protobuf:"bytes,7,opt,name=search_filters,json=searchFilters,proto3,oneof" json:"search_filters,omitempty"`
-	Ext           *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -6103,6 +6167,13 @@ func (x *RAMPRequest) GetVer() string {
 func (x *RAMPRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *RAMPRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -6525,8 +6596,9 @@ type WellKnownManifest struct {
 	// Signatures. A request carrying more SHOULD be rejected. Lets Exchanges
 	// publish their chain-depth tolerance so Brokers prune before forwarding.
 	// Absent = no published limit (Exchange applies its own default policy).
-	MaxIntermediaryHops *int32           `protobuf:"varint,28,opt,name=max_intermediary_hops,json=maxIntermediaryHops,proto3,oneof" json:"max_intermediary_hops,omitempty"`
-	Ext                 *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	MaxIntermediaryHops *int32 `protobuf:"varint,28,opt,name=max_intermediary_hops,json=maxIntermediaryHops,proto3,oneof" json:"max_intermediary_hops,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052). Lists keys
 	// within ext that the consumer MUST understand. Unknown values reject
 	// with UNKNOWN_CRITICAL_EXTENSION. Empty (default) → ignore-unknown.
@@ -6898,7 +6970,8 @@ type AuthorizedExchange struct {
 	Endpoint string `protobuf:"bytes,2,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
 	// Relationship type (mirrors ads.txt DIRECT/RESELLER).
 	Relationship ProviderRelationship `protobuf:"varint,3,opt,name=relationship,proto3,enum=ramp.v1.ProviderRelationship" json:"relationship,omitempty"`
-	Ext          *structpb.Struct     `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -6976,10 +7049,12 @@ func (x *AuthorizedExchange) GetExtCritical() []string {
 // RAMPResponse — Broker returns to Agent (Step 6).
 type RAMPResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Exchange-assigned identifiers.
 	TransactionId string `protobuf:"bytes,4,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	BillingId     string `protobuf:"bytes,5,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
+	// Billing reference
+	BillingId string `protobuf:"bytes,5,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// Which Exchange won the selection.
 	Exchange string `protobuf:"bytes,6,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// Resource title for the disputed resource.
@@ -7009,7 +7084,8 @@ type RAMPResponse struct {
 	// unset) on a successful "no result" answer; unset on the licensed path. Same
 	// vocabulary DiscoverResources uses for OfferGroup.absence_reason.
 	AbsenceReason *OfferAbsenceReason `protobuf:"varint,16,opt,name=absence_reason,json=absenceReason,proto3,enum=ramp.v1.OfferAbsenceReason,oneof" json:"absence_reason,omitempty"`
-	Ext           *structpb.Struct    `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -7157,7 +7233,8 @@ func (x *RAMPResponse) GetExtCritical() []string {
 // DisputeRequest — Agent signals a problem with delivered resource.
 type DisputeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
 	// filing does not open a duplicate case. The dispute's durable identity is the
 	// Exchange-assigned dispute_id in DisputeResponse.
@@ -7173,15 +7250,17 @@ type DisputeRequest struct {
 	// Evidence: content hash of what was actually received.
 	// Exchange compares against the hash promised in ResourceIdentity.
 	ReceivedContentHash *string `protobuf:"bytes,7,opt,name=received_content_hash,json=receivedContentHash,proto3,oneof" json:"received_content_hash,omitempty"`
-	ReceivedHashMethod  *string `protobuf:"bytes,8,opt,name=received_hash_method,json=receivedHashMethod,proto3,oneof" json:"received_hash_method,omitempty"`
+	// Hash algorithm the agent used
+	ReceivedHashMethod *string `protobuf:"bytes,8,opt,name=received_hash_method,json=receivedHashMethod,proto3,oneof" json:"received_hash_method,omitempty"`
 	// Must reference a filed UsageReport. The agent MUST file a UsageReport
 	// (via ReportUsage RPC) and receive a report_id BEFORE filing a dispute.
 	// This prevents fire-and-forget disputes and ensures the Exchange has
 	// the complete evidence chain: what was offered, what was transacted,
 	// what the agent reported using, and what the agent disputes.
 	// The dispute chain: Transaction → UsageReport → Dispute.
-	ReportId string           `protobuf:"bytes,9,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
-	Ext      *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	ReportId string `protobuf:"bytes,9,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -7301,7 +7380,8 @@ func (x *DisputeRequest) GetExtCritical() []string {
 // DisputeResponse — Exchange acknowledges the dispute.
 type DisputeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Exchange-assigned dispute case identifier.
 	DisputeId *string `protobuf:"bytes,2,opt,name=dispute_id,json=disputeId,proto3,oneof" json:"dispute_id,omitempty"`
 	// Expected resolution timeline.
@@ -7318,8 +7398,9 @@ type DisputeResponse struct {
 	// Resolution outcome, populated when the dispute reaches a terminal
 	// state (RESOLVED, SETTLED, or FINAL). Absent while dispute is in
 	// progress (FILED, UNDER_REVIEW, ESCALATED, etc.).
-	Resolution *ResolutionType  `protobuf:"varint,6,opt,name=resolution,proto3,enum=ramp.v1.ResolutionType,oneof" json:"resolution,omitempty"`
-	Ext        *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	Resolution *ResolutionType `protobuf:"varint,6,opt,name=resolution,proto3,enum=ramp.v1.ResolutionType,oneof" json:"resolution,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -7411,12 +7492,14 @@ func (x *DisputeResponse) GetExtCritical() []string {
 // DomainVerificationRequest — Provider requests a verification challenge.
 type DomainVerificationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The provider domain to verify (e.g., "techcrunch.com").
 	Domain string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	// Caller identity (registered with the Exchange).
-	CallerId *string          `protobuf:"bytes,3,opt,name=caller_id,json=callerId,proto3,oneof" json:"caller_id,omitempty"`
-	Ext      *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	CallerId *string `protobuf:"bytes,3,opt,name=caller_id,json=callerId,proto3,oneof" json:"caller_id,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -7494,15 +7577,17 @@ func (x *DomainVerificationRequest) GetExtCritical() []string {
 // DomainVerificationChallenge — Exchange returns a challenge.
 type DomainVerificationChallenge struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Opaque challenge token. Provider must serve this at:
 	// https://{domain}/.well-known/ramp-verify/{token}
 	Token string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
 	// When this challenge expires. Provider must confirm before this time.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	// The exact URL the Exchange will fetch to verify.
-	VerificationUrl string           `protobuf:"bytes,4,opt,name=verification_url,json=verificationUrl,proto3" json:"verification_url,omitempty"`
-	Ext             *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	VerificationUrl string `protobuf:"bytes,4,opt,name=verification_url,json=verificationUrl,proto3" json:"verification_url,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -7587,7 +7672,8 @@ func (x *DomainVerificationChallenge) GetExtCritical() []string {
 // DomainVerificationConfirmation — Provider confirms the challenge is placed.
 type DomainVerificationConfirmation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The domain being verified.
 	Domain string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	// The challenge token (echoed from DomainVerificationChallenge).
@@ -7597,8 +7683,9 @@ type DomainVerificationConfirmation struct {
 	// Key format depends on CDN type (PEM for CloudFront, hex for HMAC).
 	SigningKey *string `protobuf:"bytes,4,opt,name=signing_key,json=signingKey,proto3,oneof" json:"signing_key,omitempty"`
 	// CDN type this key is for.
-	CdnType *string          `protobuf:"bytes,5,opt,name=cdn_type,json=cdnType,proto3,oneof" json:"cdn_type,omitempty"` // "cloudfront", "akamai", "fastly", "hmac"
-	Ext     *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	CdnType *string `protobuf:"bytes,5,opt,name=cdn_type,json=cdnType,proto3,oneof" json:"cdn_type,omitempty"` // "cloudfront", "akamai", "fastly", "hmac"
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -7690,12 +7777,14 @@ func (x *DomainVerificationConfirmation) GetExtCritical() []string {
 // DomainVerificationResult — Exchange confirms verification.
 type DomainVerificationResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Protocol version
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// If signing_key was provided: confirmation of key registration.
 	KeyId *string `protobuf:"bytes,2,opt,name=key_id,json=keyId,proto3,oneof" json:"key_id,omitempty"`
 	// Verification is valid until this time. Provider must re-verify periodically.
 	ValidUntil *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=valid_until,json=validUntil,proto3,oneof" json:"valid_until,omitempty"`
-	Ext        *structpb.Struct       `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
+	// Extension point
+	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	// Critical extension keys (COSE crit pattern, RFC 9052).
 	// Lists keys within ext that the consumer MUST understand.
 	// Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
@@ -7927,30 +8016,37 @@ type isErrorDetail_Reason interface {
 }
 
 type ErrorDetail_TransactionDenial struct {
+	// `reason` oneof — ExecuteTransaction denial
 	TransactionDenial *TransactionDenial `protobuf:"bytes,10,opt,name=transaction_denial,json=transactionDenial,proto3,oneof"`
 }
 
 type ErrorDetail_CatalogRejection struct {
+	// `reason` oneof — CatalogService rejection
 	CatalogRejection *CatalogRejection `protobuf:"bytes,11,opt,name=catalog_rejection,json=catalogRejection,proto3,oneof"`
 }
 
 type ErrorDetail_RegistrationFailure struct {
+	// `reason` oneof — agent/provider registration refused
 	RegistrationFailure *RegistrationFailure `protobuf:"bytes,12,opt,name=registration_failure,json=registrationFailure,proto3,oneof"`
 }
 
 type ErrorDetail_DisputeFailure struct {
+	// `reason` oneof — DisputeTransaction filing refused
 	DisputeFailure *DisputeFailure `protobuf:"bytes,13,opt,name=dispute_failure,json=disputeFailure,proto3,oneof"`
 }
 
 type ErrorDetail_DomainVerificationFailure struct {
+	// `reason` oneof — domain verification failed
 	DomainVerificationFailure *DomainVerificationFailure `protobuf:"bytes,14,opt,name=domain_verification_failure,json=domainVerificationFailure,proto3,oneof"`
 }
 
 type ErrorDetail_RetrievalAuthFailure struct {
+	// `reason` oneof — signed-URL / proof-of-possession check failed
 	RetrievalAuthFailure *RetrievalAuthFailure `protobuf:"bytes,15,opt,name=retrieval_auth_failure,json=retrievalAuthFailure,proto3,oneof"`
 }
 
 type ErrorDetail_UsageReportRejection struct {
+	// `reason` oneof — ReportUsage filing rejected
 	UsageReportRejection *UsageReportRejection `protobuf:"bytes,16,opt,name=usage_report_rejection,json=usageReportRejection,proto3,oneof"`
 }
 
@@ -7972,8 +8068,9 @@ func (*ErrorDetail_UsageReportRejection) isErrorDetail_Reason() {}
 // reason the response body no longer holds (denial_reason / restriction_mismatches
 // move here in the response-shape normalization). Reuses the DenialReason vocab.
 type TransactionDenial struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Reason DenialReason           `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.DenialReason" json:"reason,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The denial reason (defined-only, non-zero)
+	Reason DenialReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.DenialReason" json:"reason,omitempty"`
 	// When reason = RESTRICTION_NOT_SATISFIED, the failed axes (same
 	// RestrictionKind vocabulary the terms use).
 	RestrictionMismatches []RestrictionKind `protobuf:"varint,2,rep,packed,name=restriction_mismatches,json=restrictionMismatches,proto3,enum=ramp.v1.RestrictionKind" json:"restriction_mismatches,omitempty"`
@@ -8036,7 +8133,8 @@ func (x *TransactionDenial) GetOfferId() string {
 
 // CatalogRejection — a CatalogService call could not be applied.
 type CatalogRejection struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The rejection reason (defined-only, non-zero)
 	Reason CatalogRejectionReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.CatalogRejectionReason" json:"reason,omitempty"`
 	// For partial-batch failures: the entry paths that were rejected.
 	RejectedPaths []string `protobuf:"bytes,2,rep,name=rejected_paths,json=rejectedPaths,proto3" json:"rejected_paths,omitempty"`
@@ -8090,7 +8188,8 @@ func (x *CatalogRejection) GetRejectedPaths() []string {
 
 // RegistrationFailure — a registration request could not be completed.
 type RegistrationFailure struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The failure reason (defined-only, non-zero)
 	Reason        RegistrationFailureReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.RegistrationFailureReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -8135,8 +8234,9 @@ func (x *RegistrationFailure) GetReason() RegistrationFailureReason {
 
 // DisputeFailure — a dispute could not be filed.
 type DisputeFailure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Reason        DisputeFailureReason   `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.DisputeFailureReason" json:"reason,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The failure reason (defined-only, non-zero)
+	Reason        DisputeFailureReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.DisputeFailureReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8180,7 +8280,8 @@ func (x *DisputeFailure) GetReason() DisputeFailureReason {
 
 // DomainVerificationFailure — RequestDomainVerification / ConfirmDomainVerification failed.
 type DomainVerificationFailure struct {
-	state         protoimpl.MessageState          `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The failure reason (defined-only, non-zero)
 	Reason        DomainVerificationFailureReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.DomainVerificationFailureReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -8225,7 +8326,8 @@ func (x *DomainVerificationFailure) GetReason() DomainVerificationFailureReason 
 
 // RetrievalAuthFailure — a signed-URL retrieval / proof-of-possession check failed.
 type RetrievalAuthFailure struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The failure reason (defined-only, non-zero)
 	Reason        RetrievalAuthFailureReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.RetrievalAuthFailureReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -8270,7 +8372,8 @@ func (x *RetrievalAuthFailure) GetReason() RetrievalAuthFailureReason {
 
 // UsageReportRejection — a usage report could not be accepted.
 type UsageReportRejection struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The rejection reason (defined-only, non-zero)
 	Reason        UsageReportRejectionReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.UsageReportRejectionReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -8738,10 +8841,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
 	"\treport_id\x18\x03 \x01(\tR\breportId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa7\x04\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xd9\x04\n" +
 	"\vRAMPRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
+	"\x0fidempotency_key\x18\n" +
+	" \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x120\n" +
 	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
 	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
 	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12B\n" +
@@ -8990,7 +9095,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x19DISCOVERY_METHOD_EXCHANGE\x10\x01\x12\x1b\n" +
 	"\x17DISCOVERY_METHOD_SEARCH\x10\x02\x12#\n" +
 	"\x1fDISCOVERY_METHOD_RECOMMENDATION\x10\x03\x12 \n" +
-	"\x1cDISCOVERY_METHOD_SYNDICATION\x10\x04*\xf9\x02\n" +
+	"\x1cDISCOVERY_METHOD_SYNDICATION\x10\x04*\xa3\x03\n" +
 	"\x12OfferAbsenceReason\x12$\n" +
 	" OFFER_ABSENCE_REASON_UNSPECIFIED\x10\x00\x12'\n" +
 	"#OFFER_ABSENCE_REASON_NOT_IN_CATALOG\x10\x01\x12(\n" +
@@ -8999,7 +9104,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	",OFFER_ABSENCE_REASON_TEMPORARILY_UNAVAILABLE\x10\x04\x12'\n" +
 	"#OFFER_ABSENCE_REASON_NOT_AUTHORIZED\x10\x05\x12+\n" +
 	"'OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT\x10\x06\x123\n" +
-	"/OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION\x10\a*q\n" +
+	"/OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION\x10\a\x12(\n" +
+	"$OFFER_ABSENCE_REASON_BUDGET_EXCEEDED\x10\b*q\n" +
 	"\rTermSemantics\x12\x1e\n" +
 	"\x1aTERM_SEMANTICS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19TERM_SEMANTICS_ENUMERATED\x10\x01\x12!\n" +

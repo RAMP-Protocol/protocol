@@ -181,7 +181,7 @@ When a request is denied, the Exchange returns a specific `DenialReason` so your
 | `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access count exhausted for this period | Wait for quota reset or upgrade subscription |
 | `DENIAL_REASON_DELEGATION_INVALID` | Delegation missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent | Obtain a fresh delegation from the principal |
 | `DENIAL_REASON_SCOPE_INSUFFICIENT` | Your scopes do not cover this resource | Request broader scopes or a different resource |
-| `DENIAL_REASON_INSUFFICIENT_BALANCE` | Buyer's balance too low for this transaction | Add funds or reduce request scope |
+| `DENIAL_REASON_INSUFFICIENT_BALANCE` | Requester's balance too low for this transaction | Add funds or reduce request scope |
 | `DENIAL_REASON_SIGNATURE_INVALID` | Ed25519 signature verification failed | Check your signing key configuration |
 
 ## What It Costs
