@@ -718,8 +718,8 @@ Validation rules (wire-enforced via protovalidate CEL unless noted). A parenthet
 code is the CEL rule `id:` that enforces the rule (e.g. `license_term.semantics_specified`).
 - `pricing` MUST be present on **every** term, any semantics — absent Pricing is a validation error. `model = FREE` must be stated explicitly — absent Pricing is not free.
 - `semantics` MUST be set — `TERM_SEMANTICS_UNSPECIFIED` is rejected (`license_term.semantics_specified`).
-- `REFERENCE_ONLY` requires `license.uri` to be non-empty; a `License` with a `uri` requires a `uri_digest`.
-- At most one `Restriction` per `kind`; a token cannot be both permitted and prohibited.
+- `REFERENCE_ONLY` requires `license.uri` to be non-empty (`license_term.reference_only.requires_uri`); a `License` with a `uri` requires a `uri_digest` (`license.digest_required_with_uri`).
+- At most one `Restriction` per `kind` (`license_term.one_restriction_per_kind`); a token cannot be both permitted and prohibited (`restriction.permitted_prohibited_disjoint`).
 - Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL).
 
 | Field | Type | Number | Description |

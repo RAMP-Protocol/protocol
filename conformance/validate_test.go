@@ -69,18 +69,18 @@ func TestProtovalidateConstraints(t *testing.T) {
 		{"quota metric empty rejected", &rampv1.Quota{Metric: "", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false},
 		{"quota metric space rejected", &rampv1.Quota{Metric: "two words", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false},
 
-		// d8y64 — License.uri present requires uri_digest (any semantics).
+		// License.uri present requires uri_digest (any semantics).
 		{"license no uri ok", &rampv1.License{Id: proto.String("CC-BY-4.0")}, true},
 		{"license uri with digest ok", &rampv1.License{Uri: proto.String("https://x.example/lic"), UriDigest: proto.String("sha256:" + hex64)}, true},
 		{"license uri without digest rejected", &rampv1.License{Uri: proto.String("https://x.example/lic")}, false},
 
-		// fc65j — LicenseTerm presence invariants (pricing required; REFERENCE_ONLY needs license.uri).
+		// LicenseTerm presence invariants (pricing required; REFERENCE_ONLY needs license.uri).
 		{"term enumerated with pricing ok", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: freePricing()}, true},
 		{"term missing pricing rejected", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED}, false},
 		{"term reference_only with license uri ok", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY, Pricing: freePricing(), License: &rampv1.License{Uri: proto.String("https://x.example/lic"), UriDigest: proto.String("sha256:" + hex64)}}, true},
 		{"term reference_only without license uri rejected", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY, Pricing: freePricing()}, false},
 
-		// 6z1v3 — license-term coherence rules.
+		// license-term coherence rules.
 		{"restriction disjoint ok", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-input"}, Prohibited: []string{"ai-train"}}, true},
 		{"restriction overlap rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-input"}, Prohibited: []string{"ai-input"}}, false},
 		{"term one restriction per kind ok", &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: freePricing(), Restrictions: []*rampv1.Restriction{{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION}, {Kind: rampv1.RestrictionKind_RESTRICTION_KIND_GEOGRAPHY}}}, true},
