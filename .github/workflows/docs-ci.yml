@@ -1,0 +1,50 @@
+name: docs-ci
+
+# Guards the documentation site against the proto contract — the PR gate the
+# docs-drift tooling was missing.
+#   - npm test: the remark-proto fail-path suite (proves the guard still throws on
+#     an unknown proto reference)
+#   - npm run build: astro build runs the remark-proto guard (build FAILS on an
+#     unknown reference / hand-typed enum table) and starlight-links-validator
+# Everything reads the committed gen/descriptor.binpb — no buf, no Go, no prebuild.
+# Complements proto-ci (which gates the committed descriptor against the proto);
+# together they chain docs -> descriptor -> proto.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'proto/**'
+      - 'gen/descriptor.binpb'
+      - '.github/workflows/docs-ci.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'proto/**'
+      - 'gen/descriptor.binpb'
+      - '.github/workflows/docs-ci.yml'
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: docs guards (remark-proto fail-path)
+        run: npm test
+
+      - name: build (remark guard + link validator)
+        run: npm run build
