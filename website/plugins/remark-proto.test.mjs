@@ -36,8 +36,12 @@ test('a real prefixed enum value resolves and links', () => {
   assert.ok(has(tree, (n) => n.type === 'link' && n.url.includes('#deliverymethod')));
 });
 
-test('a bare short enum form does not fail (no known prefix)', () => {
-  assert.doesNotThrow(() => run(para('PER_UNIT')));
+test('a resolved symbol not documented on the reference page is not linked (heading-gating)', () => {
+  // Preview is a real message, but documented on another page — linking it would
+  // emit a dead anchor, so it must resolve (no throw) yet stay plain inline code.
+  const tree = run(para('Preview'));
+  assert.ok(!has(tree, (n) => n.type === 'link'), 'must not link to a nonexistent reference-page anchor');
+  assert.ok(has(tree, (n) => n.type === 'inlineCode' && n.value === 'Preview'), 'left as plain inline code');
 });
 
 test('a non-proto ALL_CAPS token is left alone (no false positive)', () => {
