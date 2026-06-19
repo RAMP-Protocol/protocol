@@ -137,6 +137,8 @@ export type ResourceQuery = Message<"ramp.v1.ResourceQuery"> & {
   supportedProfiles: string[];
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -170,6 +172,8 @@ export const ResourceQuerySchema: GenMessage<ResourceQuery> = /*@__PURE__*/
  */
 export type ResourceResponse = Message<"ramp.v1.ResourceResponse"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -209,6 +213,8 @@ export type ResourceResponse = Message<"ramp.v1.ResourceResponse"> & {
   rateLimit?: RateLimitInfo | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -606,6 +612,8 @@ export type Offer = Message<"ramp.v1.Offer"> & {
   terms: LicenseTerm[];
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -790,6 +798,8 @@ export type ResourceIdentity = Message<"ramp.v1.ResourceIdentity"> & {
   softBindingMethod?: string | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -1354,6 +1364,8 @@ export type Preview = Message<"ramp.v1.Preview"> & {
   width?: number | undefined;
 
   /**
+   * Height in pixels (images and video)
+   *
    * @generated from field: optional int32 height = 4;
    */
   height?: number | undefined;
@@ -1578,6 +1590,8 @@ export type Requester = Message<"ramp.v1.Requester"> & {
   delegation?: Delegation | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -1728,6 +1742,8 @@ export type Delegation = Message<"ramp.v1.Delegation"> & {
   issuer?: string | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -1762,6 +1778,8 @@ export const DelegationSchema: GenMessage<Delegation> = /*@__PURE__*/
  */
 export type TransactionRequest = Message<"ramp.v1.TransactionRequest"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -1806,6 +1824,8 @@ export type TransactionRequest = Message<"ramp.v1.TransactionRequest"> & {
   items: TransactionItem[];
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -1867,6 +1887,8 @@ export const TransactionItemSchema: GenMessage<TransactionItem> = /*@__PURE__*/
  */
 export type TransactionResponse = Message<"ramp.v1.TransactionResponse"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -1880,6 +1902,8 @@ export type TransactionResponse = Message<"ramp.v1.TransactionResponse"> & {
   transactionId?: string | undefined;
 
   /**
+   * Billing reference
+   *
    * @generated from field: optional string billing_id = 4;
    */
   billingId?: string | undefined;
@@ -1892,6 +1916,8 @@ export type TransactionResponse = Message<"ramp.v1.TransactionResponse"> & {
   resourceTitle?: string | undefined;
 
   /**
+   * Transaction cost
+   *
    * @generated from field: optional ramp.v1.Cost cost = 6;
    */
   cost?: Cost | undefined;
@@ -1977,6 +2003,8 @@ export type TransactionResponse = Message<"ramp.v1.TransactionResponse"> & {
   subscriptionQuota: SubscriptionQuotaInfo[];
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -2117,6 +2145,8 @@ export const TransactionResultItemSchema: GenMessage<TransactionResultItem> = /*
  */
 export type Cost = Message<"ramp.v1.Cost"> & {
   /**
+   * Cost amount
+   *
    * @generated from field: double amount = 1;
    */
   amount: number;
@@ -2148,16 +2178,22 @@ export const CostSchema: GenMessage<Cost> = /*@__PURE__*/
  */
 export type PushResourcesRequest = Message<"ramp.v1.PushResourcesRequest"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
 
   /**
+   * Tenant identifier
+   *
    * @generated from field: string tenant_id = 2;
    */
   tenantId: string;
 
   /**
+   * Content entries to push
+   *
    * @generated from field: repeated ramp.v1.ResourceEntry entries = 3;
    */
   entries: ResourceEntry[];
@@ -2171,6 +2207,8 @@ export type PushResourcesRequest = Message<"ramp.v1.PushResourcesRequest"> & {
   callerId: string;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -2198,46 +2236,64 @@ export const PushResourcesRequestSchema: GenMessage<PushResourcesRequest> = /*@_
  */
 export type ResourceEntry = Message<"ramp.v1.ResourceEntry"> & {
   /**
+   * Provider domain
+   *
    * @generated from field: string domain = 1;
    */
   domain: string;
 
   /**
+   * Content path
+   *
    * @generated from field: string path = 2;
    */
   path: string;
 
   /**
+   * Content identifier
+   *
    * @generated from field: optional string content_id = 3;
    */
   contentId?: string | undefined;
 
   /**
+   * Content title
+   *
    * @generated from field: optional string title = 4;
    */
   title?: string | undefined;
 
   /**
+   * Word count
+   *
    * @generated from field: optional int32 word_count = 5;
    */
   wordCount?: number | undefined;
 
   /**
+   * Estimated quantity in the metering unit
+   *
    * @generated from field: optional int32 estimated_quantity = 6;
    */
   estimatedQuantity?: number | undefined;
 
   /**
+   * Content hash
+   *
    * @generated from field: optional string content_hash = 7;
    */
   contentHash?: string | undefined;
 
   /**
+   * Hash algorithm
+   *
    * @generated from field: optional string hash_method = 8;
    */
   hashMethod?: string | undefined;
 
   /**
+   * How the entry was discovered
+   *
    * @generated from field: optional ramp.v1.IngestionSource source = 9;
    */
   source?: IngestionSource | undefined;
@@ -2286,6 +2342,8 @@ export type ResourceEntry = Message<"ramp.v1.ResourceEntry"> & {
   terms: LicenseTerm[];
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -2313,16 +2371,22 @@ export const ResourceEntrySchema: GenMessage<ResourceEntry> = /*@__PURE__*/
  */
 export type PushResourcesResponse = Message<"ramp.v1.PushResourcesResponse"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
 
   /**
+   * Number of entries accepted
+   *
    * @generated from field: int32 accepted = 2;
    */
   accepted: number;
 
   /**
+   * Number of entries rejected
+   *
    * @generated from field: int32 rejected = 3;
    */
   rejected: number;
@@ -2339,6 +2403,8 @@ export type PushResourcesResponse = Message<"ramp.v1.PushResourcesResponse"> & {
   warnings: string[];
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -2366,16 +2432,22 @@ export const PushResourcesResponseSchema: GenMessage<PushResourcesResponse> = /*
  */
 export type RemoveResourcesRequest = Message<"ramp.v1.RemoveResourcesRequest"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
 
   /**
+   * Tenant identifier
+   *
    * @generated from field: string tenant_id = 2;
    */
   tenantId: string;
 
   /**
+   * Paths to remove
+   *
    * @generated from field: repeated string paths = 3;
    */
   paths: string[];
@@ -2393,11 +2465,15 @@ export const RemoveResourcesRequestSchema: GenMessage<RemoveResourcesRequest> = 
  */
 export type RemoveResourcesResponse = Message<"ramp.v1.RemoveResourcesResponse"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
 
   /**
+   * Number of entries removed
+   *
    * @generated from field: int32 removed = 2;
    */
   removed: number;
@@ -2415,11 +2491,15 @@ export const RemoveResourcesResponseSchema: GenMessage<RemoveResourcesResponse> 
  */
 export type RefreshCatalogRequest = Message<"ramp.v1.RefreshCatalogRequest"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
 
   /**
+   * Tenant identifier
+   *
    * @generated from field: string tenant_id = 2;
    */
   tenantId: string;
@@ -2437,11 +2517,15 @@ export const RefreshCatalogRequestSchema: GenMessage<RefreshCatalogRequest> = /*
  */
 export type RefreshCatalogResponse = Message<"ramp.v1.RefreshCatalogResponse"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
 
   /**
+   * Whether the refresh was started
+   *
    * @generated from field: bool started = 2;
    */
   started: boolean;
@@ -2489,6 +2573,8 @@ export type ReportingObligation = Message<"ramp.v1.ReportingObligation"> & {
   requiredFields: string[];
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -2521,6 +2607,8 @@ export const ReportingObligationSchema: GenMessage<ReportingObligation> = /*@__P
  */
 export type UsageReport = Message<"ramp.v1.UsageReport"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -2577,6 +2665,8 @@ export type UsageReport = Message<"ramp.v1.UsageReport"> & {
   assets: UsageAsset[];
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -2711,16 +2801,22 @@ export const UsageSchema: GenMessage<Usage> = /*@__PURE__*/
  */
 export type UsageAsset = Message<"ramp.v1.UsageAsset"> & {
   /**
+   * Asset URI
+   *
    * @generated from field: string uri = 1;
    */
   uri: string;
 
   /**
+   * Asset title
+   *
    * @generated from field: optional string title = 2;
    */
   title?: string | undefined;
 
   /**
+   * Package identifier
+   *
    * @generated from field: optional string package_id = 3;
    */
   packageId?: string | undefined;
@@ -2743,6 +2839,8 @@ export const UsageAssetSchema: GenMessage<UsageAsset> = /*@__PURE__*/
  */
 export type UsageReportResponse = Message<"ramp.v1.UsageReportResponse"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -2760,6 +2858,8 @@ export type UsageReportResponse = Message<"ramp.v1.UsageReportResponse"> & {
   reportId: string;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -2789,6 +2889,8 @@ export const UsageReportResponseSchema: GenMessage<UsageReportResponse> = /*@__P
  */
 export type RAMPRequest = Message<"ramp.v1.RAMPRequest"> & {
   /**
+   * RAMP protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -2872,6 +2974,8 @@ export type RAMPRequest = Message<"ramp.v1.RAMPRequest"> & {
   searchFilters?: JsonObject | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3304,6 +3408,8 @@ export type WellKnownManifest = Message<"ramp.v1.WellKnownManifest"> & {
   maxIntermediaryHops?: number | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3420,6 +3526,8 @@ export type AuthorizedExchange = Message<"ramp.v1.AuthorizedExchange"> & {
   relationship: ProviderRelationship;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3449,6 +3557,8 @@ export const AuthorizedExchangeSchema: GenMessage<AuthorizedExchange> = /*@__PUR
  */
 export type RAMPResponse = Message<"ramp.v1.RAMPResponse"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -3461,6 +3571,8 @@ export type RAMPResponse = Message<"ramp.v1.RAMPResponse"> & {
   transactionId: string;
 
   /**
+   * Billing reference
+   *
    * @generated from field: string billing_id = 5;
    */
   billingId: string;
@@ -3545,6 +3657,8 @@ export type RAMPResponse = Message<"ramp.v1.RAMPResponse"> & {
   absenceReason?: OfferAbsenceReason | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3574,6 +3688,8 @@ export const RAMPResponseSchema: GenMessage<RAMPResponse> = /*@__PURE__*/
  */
 export type DisputeRequest = Message<"ramp.v1.DisputeRequest"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -3624,6 +3740,8 @@ export type DisputeRequest = Message<"ramp.v1.DisputeRequest"> & {
   receivedContentHash?: string | undefined;
 
   /**
+   * Hash algorithm the agent used
+   *
    * @generated from field: optional string received_hash_method = 8;
    */
   receivedHashMethod?: string | undefined;
@@ -3641,6 +3759,8 @@ export type DisputeRequest = Message<"ramp.v1.DisputeRequest"> & {
   reportId: string;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3674,6 +3794,8 @@ export const DisputeRequestSchema: GenMessage<DisputeRequest> = /*@__PURE__*/
  */
 export type DisputeResponse = Message<"ramp.v1.DisputeResponse"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -3714,6 +3836,8 @@ export type DisputeResponse = Message<"ramp.v1.DisputeResponse"> & {
   resolution?: ResolutionType | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3743,6 +3867,8 @@ export const DisputeResponseSchema: GenMessage<DisputeResponse> = /*@__PURE__*/
  */
 export type DomainVerificationRequest = Message<"ramp.v1.DomainVerificationRequest"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -3762,6 +3888,8 @@ export type DomainVerificationRequest = Message<"ramp.v1.DomainVerificationReque
   callerId?: string | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3791,6 +3919,8 @@ export const DomainVerificationRequestSchema: GenMessage<DomainVerificationReque
  */
 export type DomainVerificationChallenge = Message<"ramp.v1.DomainVerificationChallenge"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -3818,6 +3948,8 @@ export type DomainVerificationChallenge = Message<"ramp.v1.DomainVerificationCha
   verificationUrl: string;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3847,6 +3979,8 @@ export const DomainVerificationChallengeSchema: GenMessage<DomainVerificationCha
  */
 export type DomainVerificationConfirmation = Message<"ramp.v1.DomainVerificationConfirmation"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -3884,6 +4018,8 @@ export type DomainVerificationConfirmation = Message<"ramp.v1.DomainVerification
   cdnType?: string | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3916,6 +4052,8 @@ export const DomainVerificationConfirmationSchema: GenMessage<DomainVerification
  */
 export type DomainVerificationResult = Message<"ramp.v1.DomainVerificationResult"> & {
   /**
+   * Protocol version
+   *
    * @generated from field: string ver = 1;
    */
   ver: string;
@@ -3935,6 +4073,8 @@ export type DomainVerificationResult = Message<"ramp.v1.DomainVerificationResult
   validUntil?: Timestamp | undefined;
 
   /**
+   * Extension point
+   *
    * @generated from field: google.protobuf.Struct ext = 15;
    */
   ext?: JsonObject | undefined;
@@ -3997,42 +4137,56 @@ export type ErrorDetail = Message<"ramp.v1.ErrorDetail"> & {
    */
   reason: {
     /**
+     * `reason` oneof — ExecuteTransaction denial
+     *
      * @generated from field: ramp.v1.TransactionDenial transaction_denial = 10;
      */
     value: TransactionDenial;
     case: "transactionDenial";
   } | {
     /**
+     * `reason` oneof — CatalogService rejection
+     *
      * @generated from field: ramp.v1.CatalogRejection catalog_rejection = 11;
      */
     value: CatalogRejection;
     case: "catalogRejection";
   } | {
     /**
+     * `reason` oneof — agent/provider registration refused
+     *
      * @generated from field: ramp.v1.RegistrationFailure registration_failure = 12;
      */
     value: RegistrationFailure;
     case: "registrationFailure";
   } | {
     /**
+     * `reason` oneof — DisputeTransaction filing refused
+     *
      * @generated from field: ramp.v1.DisputeFailure dispute_failure = 13;
      */
     value: DisputeFailure;
     case: "disputeFailure";
   } | {
     /**
+     * `reason` oneof — domain verification failed
+     *
      * @generated from field: ramp.v1.DomainVerificationFailure domain_verification_failure = 14;
      */
     value: DomainVerificationFailure;
     case: "domainVerificationFailure";
   } | {
     /**
+     * `reason` oneof — signed-URL / proof-of-possession check failed
+     *
      * @generated from field: ramp.v1.RetrievalAuthFailure retrieval_auth_failure = 15;
      */
     value: RetrievalAuthFailure;
     case: "retrievalAuthFailure";
   } | {
     /**
+     * `reason` oneof — ReportUsage filing rejected
+     *
      * @generated from field: ramp.v1.UsageReportRejection usage_report_rejection = 16;
      */
     value: UsageReportRejection;
@@ -4056,6 +4210,8 @@ export const ErrorDetailSchema: GenMessage<ErrorDetail> = /*@__PURE__*/
  */
 export type TransactionDenial = Message<"ramp.v1.TransactionDenial"> & {
   /**
+   * The denial reason (defined-only, non-zero)
+   *
    * @generated from field: ramp.v1.DenialReason reason = 1;
    */
   reason: DenialReason;
@@ -4090,6 +4246,8 @@ export const TransactionDenialSchema: GenMessage<TransactionDenial> = /*@__PURE_
  */
 export type CatalogRejection = Message<"ramp.v1.CatalogRejection"> & {
   /**
+   * The rejection reason (defined-only, non-zero)
+   *
    * @generated from field: ramp.v1.CatalogRejectionReason reason = 1;
    */
   reason: CatalogRejectionReason;
@@ -4116,6 +4274,8 @@ export const CatalogRejectionSchema: GenMessage<CatalogRejection> = /*@__PURE__*
  */
 export type RegistrationFailure = Message<"ramp.v1.RegistrationFailure"> & {
   /**
+   * The failure reason (defined-only, non-zero)
+   *
    * @generated from field: ramp.v1.RegistrationFailureReason reason = 1;
    */
   reason: RegistrationFailureReason;
@@ -4135,6 +4295,8 @@ export const RegistrationFailureSchema: GenMessage<RegistrationFailure> = /*@__P
  */
 export type DisputeFailure = Message<"ramp.v1.DisputeFailure"> & {
   /**
+   * The failure reason (defined-only, non-zero)
+   *
    * @generated from field: ramp.v1.DisputeFailureReason reason = 1;
    */
   reason: DisputeFailureReason;
@@ -4154,6 +4316,8 @@ export const DisputeFailureSchema: GenMessage<DisputeFailure> = /*@__PURE__*/
  */
 export type DomainVerificationFailure = Message<"ramp.v1.DomainVerificationFailure"> & {
   /**
+   * The failure reason (defined-only, non-zero)
+   *
    * @generated from field: ramp.v1.DomainVerificationFailureReason reason = 1;
    */
   reason: DomainVerificationFailureReason;
@@ -4173,6 +4337,8 @@ export const DomainVerificationFailureSchema: GenMessage<DomainVerificationFailu
  */
 export type RetrievalAuthFailure = Message<"ramp.v1.RetrievalAuthFailure"> & {
   /**
+   * The failure reason (defined-only, non-zero)
+   *
    * @generated from field: ramp.v1.RetrievalAuthFailureReason reason = 1;
    */
   reason: RetrievalAuthFailureReason;
@@ -4192,6 +4358,8 @@ export const RetrievalAuthFailureSchema: GenMessage<RetrievalAuthFailure> = /*@_
  */
 export type UsageReportRejection = Message<"ramp.v1.UsageReportRejection"> & {
   /**
+   * The rejection reason (defined-only, non-zero)
+   *
    * @generated from field: ramp.v1.UsageReportRejectionReason reason = 1;
    */
   reason: UsageReportRejectionReason;
@@ -5006,7 +5174,7 @@ export enum DenialReason {
   ENTITLEMENT_EXPIRED = 14,
 
   /**
-   * token's subscriber_org does not match the asserted buyer
+   * token's subscriber_org does not match the asserted requester
    *
    * @generated from enum value: DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;
    */
