@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any
 from pydantic import AwareDatetime, ConfigDict, Field, RootModel, conint, constr
 from wire.base import WireModel
+from decimal import Decimal
 from enum import Enum
 
 
@@ -273,9 +274,9 @@ class Cost(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    amount: float | None = None
+    amount: Decimal | None = None
     currency: str | None = ''
-    unitCost: float | None = None
+    unitCost: Decimal | None = None
 
 
 class TransactionItem(WireModel):
@@ -857,7 +858,7 @@ class Pricing(WireModel):
     model: PricingModel | conint(ge=-2147483648, le=2147483647) | None = Field(
         0, description="Provider's pricing model."
     )
-    rate: float | None = Field(
+    rate: Decimal | None = Field(
         None,
         description="Price in the provider's model (e.g. 0.05 = $0.05 per article).",
     )
@@ -870,7 +871,7 @@ class Pricing(WireModel):
         None,
         description='The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.',
     )
-    unitCost: float | None = Field(
+    unitCost: Decimal | None = Field(
         None,
         description="Normalized cost per unit — the universal comparison metric.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).",
     )
@@ -1446,7 +1447,7 @@ class RequestConstraints(WireModel):
     maxPrice: Cost | None = Field(
         None, description='Maximum price the agent is willing to pay.'
     )
-    maxUnitCost: float | None = Field(
+    maxUnitCost: Decimal | None = Field(
         None, description='Maximum effective cost per unit.'
     )
     periodBudget: Cost | None = Field(

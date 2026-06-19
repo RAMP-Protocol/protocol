@@ -60,26 +60,31 @@ def strip_titles(o):
     return o
 
 
-def collapse_double_specials(o):
+def doubles_to_decimal(o):
     """protoc-gen-jsonschema models a proto `double` as
     anyOf[{number}, {string enum Infinity/-Infinity/NaN}, {string}] — proto-JSON's
-    permissive float encoding. RAMP money/quantity values are finite, so collapse such
-    a field to a plain number (drops the special-value Enum classes datamodel-codegen
-    would name after the field, e.g. Rate/UnitCost). Leaves int64-as-string anyOf
-    untouched — that string form IS the canonical proto-JSON int64 wire encoding."""
+    permissive float encoding. Every `double` in RAMP is MONEY (rate, unit_cost,
+    amount, max_unit_cost), so collapse such a field to {number, format: decimal}:
+      - datamodel-codegen emits `Decimal` (never float — money must not be a float);
+        parsed via model_validate_json it is exact, and serializes to a JSON string,
+        which proto-JSON accepts for a double.
+      - json-schema-to-zod ignores the format → `z.number()` (TS has no Decimal).
+    This also drops the Infinity/NaN string-enum the codegen would otherwise turn into
+    field-named Enum classes (Rate/UnitCost). int64-as-string anyOf is left untouched —
+    that string form IS the canonical proto-JSON int64 wire encoding."""
     if isinstance(o, dict):
         aof = o.get("anyOf")
         if isinstance(aof, list) and any(
             isinstance(b, dict) and set(b.get("enum") or []) == {"Infinity", "-Infinity", "NaN"}
             for b in aof
         ):
-            node = {"type": "number"}
+            node = {"type": "number", "format": "decimal"}
             if "description" in o:
                 node["description"] = o["description"]
             return node
-        return {k: collapse_double_specials(v) for k, v in o.items()}
+        return {k: doubles_to_decimal(v) for k, v in o.items()}
     if isinstance(o, list):
-        return [collapse_double_specials(x) for x in o]
+        return [doubles_to_decimal(x) for x in o]
     return o
 
 
@@ -136,7 +141,7 @@ def main(src_dir, desc_path, out_file):
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
-    defs = collapse_double_specials(hoist_enums(fix_refs(defs)))
+    defs = doubles_to_decimal(hoist_enums(fix_refs(defs)))
     defs.update(enum_defs)
 
     combined = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$defs": defs}
