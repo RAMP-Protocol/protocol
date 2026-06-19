@@ -155,7 +155,9 @@ def main(src_dir, desc_path, out_file):
         return o
 
     defs = {}
-    for f in glob.glob(os.path.join(src_dir, "ramp.v1.*.jsonschema.json")):
+    # sorted() so the $defs order — and therefore the generated class order — is
+    # deterministic across machines (glob order is filesystem-dependent: macOS vs CI).
+    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.jsonschema.json"))):
         if ".strict." in f:
             continue
         name = os.path.basename(f).split(".jsonschema")[0].replace("ramp.v1.", "")
@@ -165,7 +167,10 @@ def main(src_dir, desc_path, out_file):
     defs = mark_money_decimal(collapse_int_strings(hoist_enums(fix_refs(defs))))
     defs.update(enum_defs)
 
-    combined = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$defs": defs}
+    combined = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {k: defs[k] for k in sorted(defs)},  # stable key order → stable codegen
+    }
     json.dump(combined, open(out_file, "w"), indent=2)
 
     leftover = sorted(set(re.findall(r'"\$ref":\s*"([^"#][^"]*)"', json.dumps(combined))))
