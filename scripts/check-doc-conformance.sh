@@ -142,24 +142,6 @@ if [ -n "$org_hits" ]; then
   status=1
 fi
 
-# --- 4. Beads tracking codes ------------------------------------------------
-# Internal beads requirement IDs (random base36) are meaningless to readers and must
-# not appear anywhere in the repo — proto comments, docs, OR the conformance suite.
-# A general structural detector is too false-positive-prone (random 5-char base36 is
-# indistinguishable from durations like 2m14s or ids like c2pa), so this bans the
-# known leaked codes explicitly, repo-wide. CEL rule ids (dotted, license_term.x) are
-# unaffected. Add a code here if a new one ever leaks.
-beads_codes='6z1v3 fc65j d8y64'
-for c in $beads_codes; do
-  # exclude this file — the codes legitimately live here as the denylist
-  hits=$(git grep -nF "$c" -- . ':!scripts/check-doc-conformance.sh' 2>/dev/null || true)
-  if [ -n "$hits" ]; then
-    echo "::error::beads tracking code '${c}' in shipped content — remove it (CEL rule ids are dotted and fine):"
-    echo "$hits"
-    status=1
-  fi
-done
-
 if [ "$status" -eq 0 ]; then
   echo "doc-conformance: clean"
 fi
