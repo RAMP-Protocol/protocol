@@ -246,7 +246,7 @@ type Obligation struct {
 
 **Storage**: Obligations are stored in the same durable store as transactions. The Reporting Tracker loads recent obligations (last 48h) into memory at startup for fast lookup. A background goroutine sweeps expired obligations every minute and transitions them to `Expired`.
 
-**Enforcement**: When ExecuteTransaction resolves the buyer's billing reference, it queries the Reporting Tracker for any `Expired` obligations. If found, the transaction is rejected with a `CodePermissionDenied` error indicating outstanding reporting obligations. This is the enforcement mechanism described in the RAMP protocol specification.
+**Enforcement**: When ExecuteTransaction resolves the requester's billing reference, it queries the Reporting Tracker for any `Expired` obligations. If found, the transaction is rejected with a `CodePermissionDenied` error indicating outstanding reporting obligations. This is the enforcement mechanism described in the RAMP protocol specification.
 
 ### Two Independent Metrics: Compliance Rate vs Token Accuracy
 

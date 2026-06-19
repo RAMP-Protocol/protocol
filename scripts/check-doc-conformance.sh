@@ -88,6 +88,35 @@ for p in "${patterns[@]}"; do
   fi
 done
 
+# --- 1b. Banned vocabulary: non-canonical role synonyms ---------------------
+# The contract's two roles are Requester (the AI/demand side) and Provider (the
+# content/supply side). "Buyer"/"Seller" are pre-standardization synonyms; left
+# in PROSE they drift the vocabulary the proto and the rest of the docs
+# standardize on (the M2 "Buyer's balance" class).
+#
+# This bans the PROSE word only. The boundary `(^|[^A-Za-z0-9._/-])…([^…]|$)`
+# (ERE, so it also works under BSD grep in ci-local) deliberately does NOT match
+# identifiers/URLs/tokens where the word is glued to `. _ / -`: the live CoMP
+# field `comp.seller`, code like `buyer_lid` / `QueryByBuyer`, `buyer.example.com`,
+# the `ramp-ai-buyer` user-agent, or the ordinary word "re·seller". Those are
+# protocol facts, not synonym drift. Each entry is "pattern#canonical" (`#`
+# delimiter, since the pattern itself contains `|`).
+bound_l='(^|[^A-Za-z0-9._/-])'
+bound_r='([^A-Za-z0-9._/-]|$)'
+vocab=(
+  "${bound_l}[Bb]uyers?${bound_r}#Requester"
+  "${bound_l}[Ss]ellers?${bound_r}#Provider"
+)
+for entry in "${vocab[@]}"; do
+  p=${entry%%#*}; canon=${entry#*#}
+  hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
+  if [ -n "$hits" ]; then
+    echo "::error::non-canonical role vocabulary (prose) — use '${canon}' (Requester/Provider are the standard role terms):"
+    echo "$hits"
+    status=1
+  fi
+done
+
 # --- 2. Positive facts: required identifiers MUST be documented -------------
 # A denylist is necessary but not sufficient: it cannot catch a value that was
 # silently dropped from a "closed enum" table or a registry that drifted. These

@@ -136,7 +136,7 @@ func (h *ExchangeHandler) DiscoverResources(
     }
 
     // 5b. Check for active subscription.
-    //     If the buyer has an active subscription with this tenant, include a
+    //     If the requester has an active subscription with this tenant, include a
     //     subscription offer variant (rate=0) for each catalog offer with
     //     SubscriptionQuotaInfo attached. Quota enforcement is deferred to
     //     ExecuteTransaction time — DiscoverResources checks subscription status
@@ -342,7 +342,7 @@ sequenceDiagram
     Note over Handler: Reconstruct offer data from signed token<br/>(no offer storage, no re-resolution)
 
     Handler->>BA: Authorize(ctx, AuthorizeRequest)
-    Note over BA: Check buyer balance/credit<br/>Resolve billing reference<br/>Reserve funds
+    Note over BA: Check requester balance/credit<br/>Resolve billing reference<br/>Reserve funds
 
     alt Authorization failed
         BA-->>Handler: AuthorizeResponse{Approved: false}

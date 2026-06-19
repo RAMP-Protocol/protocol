@@ -14,8 +14,8 @@ From the non-functional requirements:
 | Durability | Must survive total node loss |
 | Availability | 99.99% for transaction log store |
 | Cost per write | < $0.00001 |
-| Query pattern (reconciliation) | Batch, offline, range scans by time + provider + buyer |
-| Query pattern (compliance) | Point lookup by buyer_lid (is this buyer blocked?) |
+| Query pattern (reconciliation) | Batch, offline, range scans by time + provider + requester |
+| Query pattern (compliance) | Point lookup by buyer_lid (is this requester blocked?) |
 
 ## Backend Analysis
 

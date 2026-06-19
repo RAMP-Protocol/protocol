@@ -277,7 +277,7 @@ sequenceDiagram
 
     Agent->>MP: DiscoverResources (ResourceQuery)
 
-    Note over MP: Buyer has subscription SUB-12345<br/>Include subscription offer (rate=0)
+    Note over MP: Requester has subscription SUB-12345<br/>Include subscription offer (rate=0)
 
     MP-->>Agent: ResourceResponse (2 offers: per-request + subscription)
 
@@ -302,7 +302,7 @@ sequenceDiagram
 
 **Key points:**
 
-- **Subscription detection at query time**: The Exchange checks the buyer's subscription status and includes offers with `subscription_id` and `rate=0`.
+- **Subscription detection at query time**: The Exchange checks the requester's subscription status and includes offers with `subscription_id` and `rate=0`.
 - **Reporting is still mandatory**: Subscription offers carry `ReportingObligation.required = true`. Providers need consumption data for subscription renewals and content strategy.
 - **Quota enforcement**: The Exchange checks remaining quota before authorizing subscription transactions. If the subscription's token quota is exhausted, the subscription offer is not included.
 - **Broker preference**: The Broker's selection engine ranks subscription offers above all per-request offers (zero marginal cost). When `preferred_exchanges` is set and the agent has subscriptions there, those offers get top priority.

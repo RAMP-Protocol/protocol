@@ -14,7 +14,7 @@ graph TB
     end
 
     subgraph "Side 2: Exchange Transaction Log"
-        TXN[Transaction Log<br/>Every billing_id issued<br/>Fields: transaction_id, billing_id, cost, buyer, provider, signed_url_hash]
+        TXN[Transaction Log<br/>Every billing_id issued<br/>Fields: transaction_id, billing_id, cost, requester, provider, signed_url_hash]
     end
 
     subgraph "Side 3: Agent Usage Reports"
@@ -56,7 +56,7 @@ WHERE event_type = 5  -- EVENT_SIGNED_URL_ISSUED
 ORDER BY event_timestamp;
 ```
 
-### Q6: Buyer Spending Summary
+### Q6: Requester Spending Summary
 
 Used by the Exchange operator to generate invoices per AI company.
 
@@ -128,9 +128,9 @@ WHERE s.event_type = 5    -- EVENT_SIGNED_URL_ISSUED
 ORDER BY s.buyer_lid, s.event_timestamp;
 ```
 
-### Q4: Buyer Compliance Status (Real-Time)
+### Q4: Requester Compliance Status (Real-Time)
 
-Fast point lookup: "Is this buyer blocked for non-compliance?" Called on every `ExecuteTransaction` to enforce reporting obligations. Must return in < 1ms.
+Fast point lookup: "Is this requester blocked for non-compliance?" Called on every `ExecuteTransaction` to enforce reporting obligations. Must return in < 1ms.
 
 The solution is an in-memory cache rebuilt from the transaction log on startup and updated incrementally:
 
@@ -161,7 +161,7 @@ func (cc *ComplianceChecker) IsBlocked(buyerLID string) (bool, string) {
 }
 ```
 
-Default compliance policy: block buyer if overdue_reports > 10 or overdue_rate > 20%. The 20% threshold is a protocol OPTIONAL default (RFC 2119 MAY). Individual Exchanges decide whether and how to enforce it.
+Default compliance policy: block requester if overdue_reports > 10 or overdue_rate > 20%. The 20% threshold is a protocol OPTIONAL default (RFC 2119 MAY). Individual Exchanges decide whether and how to enforce it.
 
 ### Q5: Transaction Detail for Dispute Resolution
 
@@ -218,9 +218,9 @@ The open-source Exchange ships these reporting endpoints:
 | Endpoint | Consumer | Purpose | Reference Query |
 |---|---|---|---|
 | `GET /api/v1/reports/provider-revenue` | Provider | "How much am I owed for period X?" | Q1, Q6 |
-| `GET /api/v1/reports/buyer-invoice` | Exchange operator | "How much do I bill buyer Y for period X?" | Q6 |
-| `GET /api/v1/reports/compliance-status` | Exchange admin | Buyer reporting obligation status | Q3, Q4 |
-| `GET /api/v1/reports/transaction-detail` | Buyer, Provider | Full event timeline for a transaction | Q5 |
+| `GET /api/v1/reports/buyer-invoice` | Exchange operator | "How much do I bill requester Y for period X?" | Q6 |
+| `GET /api/v1/reports/compliance-status` | Exchange admin | Requester reporting obligation status | Q3, Q4 |
+| `GET /api/v1/reports/transaction-detail` | Requester, Provider | Full event timeline for a transaction | Q5 |
 | `GET /api/v1/reports/leakage-check` | Provider | CDN accesses without billing records | Q2 |
 
 These are reference implementations. A full analytics product (anomaly detection, spending trend visualization, dispute resolution API, automated invoice PDF generation) is outside the scope of the open-source Exchange.
@@ -338,5 +338,5 @@ The export never includes the signed URL itself (security), the raw agent IP (pr
 | Category | Examples | Scope |
 |---|---|---|
 | **Protocol endpoints** | Transaction history query, reporting obligation status, usage report submission | Part of the RAMP protocol spec |
-| **Admin API** | Key rotation, provider reporting API, invoice PDF generation, buyer management | Exchange-specific (not standardized) |
+| **Admin API** | Key rotation, provider reporting API, invoice PDF generation, requester management | Exchange-specific (not standardized) |
 | **Outside system boundary** | CDN log analysis, CDN configuration, WAF rule management | Provider infrastructure |
