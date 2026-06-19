@@ -28,6 +28,16 @@ each fixture must populate, so the coverage cannot silently regress.
 - `commercial_terms.package.json` → `comp.v1.Package`. Exercises the full Scope
   commercial block, `Package.packager`, `Package.reporturl`, and per-asset
   `Text.update` / `Text.language`.
+- `full_request.aisystem.json` → `comp.v1.AISystem`. Exercises the request side
+  the verbatim examples under-populate: `AISystemUse` `lid`/`aiauth`/`uri`/
+  `scope`/`function`/`subfn`/`resdis`, plus the `ext` Struct at both levels.
+- `media_assets.package.json` → `comp.v1.Package`. Exercises the non-text media
+  branches (`Video`/`Image`/`Audio`) and `Retrieval`, plus the `ext` Struct at
+  the package, scope, asset, and retrieval levels.
+
+Together these pin the proto fields the 16 blob-pinned IAB examples leave unset;
+`requiredSyntheticCoverage` in the test is the authoritative list of what each
+must populate.
 
 ## Note on field values
 

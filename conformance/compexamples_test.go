@@ -139,6 +139,46 @@ var requiredSyntheticCoverage = map[string][]string{
 		"scope.text[0].update",
 		"scope.text[0].language",
 	},
+	// Request side: the verbatim examples under-populate AISystemUse, so pin the
+	// fields that would otherwise round-trip green if renamed/retyped, plus the
+	// google.protobuf.Struct ext field (field 15, exercised by no other fixture).
+	"full_request.aisystem.json": {
+		"ua",
+		"id",
+		"aisysuse.lid",
+		"aisysuse.aiauth",
+		"aisysuse.uri",
+		"aisysuse.scope",
+		"aisysuse.function",
+		"aisysuse.subfn",
+		"aisysuse.resdis",
+		"aisysuse.ext",
+		"ext",
+	},
+	// Response side, non-text media: Video/Image/Audio and Retrieval, plus ext
+	// at the package, scope, asset, and retrieval levels.
+	"media_assets.package.json": {
+		"scope.ctype",
+		"scope.ext",
+		"scope.video[0].dur",
+		"scope.video[0].clip",
+		"scope.video[0].transcript",
+		"scope.video[0].update",
+		"scope.video[0].language",
+		"scope.video[0].ext",
+		"scope.image[0].update",
+		"scope.image[0].language",
+		"scope.audio[0].dur",
+		"scope.audio[0].transcript",
+		"scope.audio[0].update",
+		"scope.audio[0].language",
+		"scope.audio[0].ext",
+		"retrieval.auth",
+		"retrieval.endpoint",
+		"retrieval.type",
+		"retrieval.ext",
+		"ext",
+	},
 }
 
 // TestCompV1SyntheticCoverageRoundTrip round-trips the RAMP-authored fixtures
