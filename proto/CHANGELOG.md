@@ -1,5 +1,33 @@
 # RAMP Protocol Changelog
 
+## Unreleased
+
+**CoMP re-baseline to canonical V1 (breaking).** `proto/comp/v1/comp.proto` is
+re-aligned to be a 1:1 mirror of IAB Tech Lab Content Monetization Protocols
+**CoMP V1** (finalized 2026-04-28,
+[`CoMP-1.0.md`](https://github.com/IABTechLab/CoMP/blob/main/CoMP-1.0.md)). Our
+prior snapshot mirrored a pre-final draft. Changes:
+
+- **Removed** the `License` message, the `LicenseUse` enum, and `Package.license`
+  — canonical V1 has no separate `License` object.
+- **Folded licensing into `Scope`**: added `ause` (new `AllowedUse` enum),
+  `pricetype` (new `PriceType` enum), `pricetier`, `unitprice`, `cur`
+  (default `"USD"`), `country` (`repeated int32`, ISO-3166 numeric), and
+  `licensedur` (days).
+- **Added** `Package.reporturl` (usage-reporting URL).
+- **Added** per-media taxonomy fields `cattax` (default 9), `cat`
+  (`repeated int32`), and `language` (`repeated int32`, ISO-639-1) to `Text`,
+  `Video`, `Image`, and `Audio`.
+- **Removed** the RAMP-invented fields that were not part of canonical CoMP:
+  `Text.authority`, `Text.originality`, `Image.alt`, `Image.caption`,
+  `Video/Image/Audio.c2pa`, and `Retrieval.ratelmt`.
+- **Added** `RETRIEVAL_AUTH_OTHER = 4` to the retrieval auth enum.
+
+The request-side model (`AISystem`/`AISystemUse`, `Function`, `SubFunction`,
+`AuthMethod`, `ScopeType`, `ContentType`) is unchanged. This is an accepted
+breaking change pre-v1 freeze of the CoMP profile; `buf breaking` reports the
+deltas as expected.
+
 ## v1.0.0 — Initial release
 
 First public release of the RAMP Protocol (Resource Access Metering Protocol):
