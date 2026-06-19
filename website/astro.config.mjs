@@ -5,14 +5,17 @@ import starlightMermaid from '@pasqal-io/starlight-client-mermaid';
 import starlightLinksValidator from 'starlight-links-validator';
 import remarkDirective from 'remark-directive';
 import remarkProto from './plugins/remark-proto.mjs';
+import remarkStandards from './plugins/remark-standards.mjs';
 
 export default defineConfig({
 	markdown: {
-		// Render proto-derived tables (::proto-enum / ::proto-vocab) from the descriptor
-		// AND autolink/validate every proto reference in one mdast pass — so a reference
-		// in a rendered table links just like one in prose, and an unknown high-confidence
-		// reference fails the build. See plugins/remark-proto.mjs + proto-schema.mjs.
-		remarkPlugins: [remarkDirective, remarkProto],
+		// remarkProto: render proto-derived tables (::proto-enum / ::proto-vocab) from the
+		//   descriptor AND autolink/validate every proto reference in one mdast pass — so a
+		//   reference in a rendered table links like one in prose, and an unknown reference
+		//   fails the build. See plugins/remark-proto.mjs + proto-schema.mjs.
+		// remarkStandards: link the first mention of each external standard (RFC NNNN, C2PA,
+		//   …) to its canonical source. Runs after remarkProto so generated tables link too.
+		remarkPlugins: [remarkDirective, remarkProto, remarkStandards],
 	},
 	integrations: [
 		starlight({
