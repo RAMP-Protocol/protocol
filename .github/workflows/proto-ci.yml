@@ -27,6 +27,11 @@ jobs:
 
       - uses: bufbuild/buf-setup-action@v1
         with:
+          # Pin buf: gen/descriptor.binpb is a byte-exact, drift-gated artifact, and
+          # a newer buf re-encodes the descriptor (vendored well-known types +
+          # source_code_info spans) without any schema change — which fails the
+          # drift gate on every run. Keep in lockstep with want_buf in ci-local.sh.
+          version: 1.66.1
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       # The full gating sequence lives in ONE place — scripts/ci-local.sh, the

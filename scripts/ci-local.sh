@@ -18,6 +18,17 @@ fail=0
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 note() { printf '    %s\n' "$1"; }
 
+# Pin buf so the committed gen/descriptor.binpb (a byte-exact, drift-gated
+# artifact) is reproducible. A newer buf re-encodes the descriptor with no
+# schema change and fails the drift gate (the H1 class). CI pins the same
+# version in proto-ci.yml; keep the two in lockstep.
+want_buf=1.66.1
+have_buf=$(buf --version 2>/dev/null || echo 'not-found')
+if [ "$have_buf" != "$want_buf" ]; then
+  echo "::error:: buf ${have_buf} != pinned ${want_buf} — the committed gen/ is built with ${want_buf}; install it (the drift gate compares bytes, so a different buf fails)."
+  fail=1
+fi
+
 step "buf lint"
 (cd proto && buf lint) || fail=1
 
@@ -34,7 +45,7 @@ step "assert no generated drift"
 # against HEAD and also flag untracked generated files (e.g. a new vocab axis
 # whose gen/.../<axis>/ was generated but never committed).
 if ! git diff --quiet HEAD -- gen/ || [ -n "$(git ls-files --others --exclude-standard -- gen/)" ]; then
-  echo "::error:: generated code is out of sync with the proto/plugin. Run 'cd proto && buf generate' and commit gen/."
+  echo "::error:: generated code is out of sync with the proto/plugin. Run 'cd proto && buf generate && buf build -o ../gen/descriptor.binpb' (descriptor.binpb comes from buf build, not buf generate) and commit gen/."
   git status --short -- gen/
   fail=1
 else
