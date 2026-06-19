@@ -765,7 +765,7 @@ An agent requested the German version of an EU directive but received French:
 ```json
 {
   "ver": "1.0",
-  "id": "disp-lang-001",
+  "idempotency_key": "disp-lang-001",
   "transaction_id": "txn-eurlex-dir-2024",
   "billing_id": "bill-eurlex-dir-2024",
   "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
@@ -785,7 +785,7 @@ An agent requested legislation consolidated as of 2024-01-15 but received a vers
 ```json
 {
   "ver": "1.0",
-  "id": "disp-version-002",
+  "idempotency_key": "disp-version-002",
   "transaction_id": "txn-wk-reg-2024",
   "billing_id": "bill-wk-reg-2024",
   "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
