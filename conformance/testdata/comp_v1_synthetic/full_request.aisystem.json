@@ -1,0 +1,29 @@
+{
+  "name": "agent.example",
+  "ua": "ExampleBot/1.0",
+  "id": "agent-registry-id-123",
+  "aisysuse": {
+    "lid": "lid-abc",
+    "aiauth": 2,
+    "uri": [
+      "https://publisher.example/article/1",
+      "https://publisher.example/article/2"
+    ],
+    "scope": 4,
+    "function": [
+      3,
+      4
+    ],
+    "subfn": [
+      1,
+      2
+    ],
+    "resdis": 1,
+    "ext": {
+      "vendor.purpose": "grounding"
+    }
+  },
+  "ext": {
+    "vendor.trace": "t-1"
+  }
+}

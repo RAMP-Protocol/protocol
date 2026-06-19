@@ -1,0 +1,59 @@
+{
+  "id": "RAMP-SYNTH-COMMERCIAL-01",
+  "title": "RAMP synthetic fixture — Scope commercial terms coverage",
+  "seller": "publisher.example",
+  "packager": "marketplace.example",
+  "licenseurl": "https://publisher.example/licenses/commercial",
+  "citation": 1,
+  "reporturl": "https://publisher.example/usage",
+  "scope": {
+    "scope": 1,
+    "ause": 0,
+    "pricetype": 4,
+    "pricetier": 2,
+    "unitprice": 12.5,
+    "cur": "EUR",
+    "country": [
+      840,
+      826,
+      276
+    ],
+    "licensedur": 365,
+    "max": 1,
+    "ctype": [
+      0
+    ],
+    "text": [
+      {
+        "title": "Quarterly Market Report",
+        "wordcount": [
+          5200
+        ],
+        "pubdate": "2026-02-01T00:00:00Z",
+        "published": 1,
+        "update": "2026-03-15T09:30:00Z",
+        "author": [
+          "Jane Analyst"
+        ],
+        "sourcetype": 0,
+        "provenance": 1,
+        "provent": "c2pa.org",
+        "cattax": 9,
+        "cat": [
+          432
+        ],
+        "language": [
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "retrieval": {
+    "auth": 1,
+    "endpoint": "https://api.publisher.example/v1/packages",
+    "type": [
+      2
+    ]
+  }
+}
