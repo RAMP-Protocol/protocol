@@ -8395,7 +8395,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\v_expires_atB\v\n" +
 	"\t_identityB\x12\n" +
 	"\x10_subscription_idB\r\n" +
-	"\v_data_as_of\"\xab\a\n" +
+	"\v_data_as_of\"\xe1\x05\n" +
 	"\x10ResourceIdentity\x12(\n" +
 	"\rcanonical_url\x18\x01 \x01(\tH\x00R\fcanonicalUrl\x88\x01\x01\x12\x15\n" +
 	"\x03doi\x18\x02 \x01(\tH\x01R\x03doi\x88\x01\x01\x12 \n" +
@@ -8403,8 +8403,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x04isni\x18\x04 \x01(\tH\x03R\x04isni\x88\x01\x01\x12&\n" +
 	"\fcontent_hash\x18\x05 \x01(\tH\x04R\vcontentHash\x88\x01\x01\x12$\n" +
 	"\vhash_method\x18\x06 \x01(\tH\x05R\n" +
-	"hashMethod\x88\x01\x01\x12L\n" +
-	"\x13resource_mutability\x18\b \x01(\x0e2\x1b.ramp.v1.ResourceMutabilityR\x12resourceMutability\x12(\n" +
+	"hashMethod\x88\x01\x01\x12V\n" +
+	"\x13resource_mutability\x18\b \x01(\x0e2\x1b.ramp.v1.ResourceMutabilityB\b\xbaH\x05\x82\x01\x02 \x00R\x12resourceMutability\x12(\n" +
 	"\rc2pa_manifest\x18\a \x01(\tH\x06R\fc2paManifest\x88\x01\x01\x129\n" +
 	"\vc2pa_status\x18\t \x01(\x0e2\x13.ramp.v1.C2PAStatusH\aR\n" +
 	"c2paStatus\x88\x01\x01\x12&\n" +
@@ -8412,8 +8412,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	" \x01(\tH\bR\vsoftBinding\x88\x01\x01\x123\n" +
 	"\x13soft_binding_method\x18\v \x01(\tH\tR\x11softBindingMethod\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical:\xd1\x01\xbaH\xcd\x01\x1a\xca\x01\n" +
-	"/resource_identity.resource_mutability_specified\x12?resource_mutability must not be RESOURCE_MUTABILITY_UNSPECIFIED\x1aVthis.resource_mutability != ramp.v1.ResourceMutability.RESOURCE_MUTABILITY_UNSPECIFIEDB\x10\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x10\n" +
 	"\x0e_canonical_urlB\x06\n" +
 	"\x04_doiB\f\n" +
 	"\n" +
@@ -8447,48 +8446,43 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_immutableB\r\n" +
-	"\v_uri_digest\"\xe4\x06\n" +
-	"\vRestriction\x12,\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04kind\x12\xeb\x01\n" +
+	"\v_uri_digest\"\xdd\x05\n" +
+	"\vRestriction\x126\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindB\b\xbaH\x05\x82\x01\x02 \x00R\x04kind\x12\xeb\x01\n" +
 	"\tpermitted\x18\x02 \x03(\tB\xcc\x01\xbaH\xc8\x01\xba\x01\xbf\x01\n" +
 	"\x1crestriction.permitted.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\tpermitted\x12\xee\x01\n" +
 	"\n" +
 	"prohibited\x18\x03 \x03(\tB\xcd\x01\xbaH\xc9\x01\xba\x01\xc0\x01\n" +
 	"\x1drestriction.prohibited.format\x12Meach token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\n" +
 	"prohibited\x12\x1a\n" +
-	"\badvisory\x18\x04 \x01(\bR\badvisory:\xab\x02\xbaH\xa7\x02\x1a\x93\x01\n" +
-	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\x1a\x8e\x01\n" +
-	"\x1arestriction.kind_specified\x12-kind must not be RESTRICTION_KIND_UNSPECIFIED\x1aAthis.kind != ramp.v1.RestrictionKind.RESTRICTION_KIND_UNSPECIFIED\"\xe4\x04\n" +
+	"\badvisory\x18\x04 \x01(\bR\badvisory:\x9a\x01\xbaH\x96\x01\x1a\x93\x01\n" +
+	")restriction.permitted_prohibited_disjoint\x126a token cannot appear in both permitted and prohibited\x1a.this.permitted.all(p, !(p in this.prohibited))\"\xe2\x03\n" +
 	"\x05Quota\x12\x81\x03\n" +
 	"\x06metric\x18\x01 \x01(\tB\xe8\x02\xbaH\xe5\x01\xba\x01\xdd\x01\n" +
 	"\x13quota.metric.format\x12cmetric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1aathis != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))r\x02\x18@\x8a\xb5\x18\rdisplay-words\x8a\xb5\x18\vimpressions\x8a\xb5\x18\x06tokens\x8a\xb5\x18\finput-tokens\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06copies\x8a\xb5\x18\x05seats\x9a\xb5\x18\fquotametricsR\x06metric\x12\x1d\n" +
-	"\x05limit\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\x05limit\x12,\n" +
-	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowR\x06window:\x89\x01\xbaH\x85\x01\x1a\x82\x01\n" +
-	"\x16quota.window_specified\x12+window must not be QUOTA_WINDOW_UNSPECIFIED\x1a;this.window != ramp.v1.QuotaWindow.QUOTA_WINDOW_UNSPECIFIED\"\xb0\x06\n" +
+	"\x05limit\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\x05limit\x126\n" +
+	"\x06window\x18\x03 \x01(\x0e2\x14.ramp.v1.QuotaWindowB\b\xbaH\x05\x82\x01\x02 \x00R\x06window\"\x98\x04\n" +
 	"\n" +
-	"Obligation\x12+\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x17.ramp.v1.ObligationKindR\x04kind\x124\n" +
-	"\atrigger\x18\x02 \x01(\x0e2\x1a.ramp.v1.ObligationTriggerR\atrigger\x12:\n" +
+	"Obligation\x125\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x17.ramp.v1.ObligationKindB\b\xbaH\x05\x82\x01\x02 \x00R\x04kind\x12>\n" +
+	"\atrigger\x18\x02 \x01(\x0e2\x1a.ramp.v1.ObligationTriggerB\b\xbaH\x05\x82\x01\x02 \x00R\atrigger\x12:\n" +
 	"\rscope_license\x18\x03 \x01(\v2\x10.ramp.v1.LicenseH\x00R\fscopeLicense\x88\x01\x01\x12\x1b\n" +
-	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\xc8\x04\xbaH\xc4\x04\x1a\x95\x02\n" +
-	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))\x1a\x8a\x01\n" +
-	"\x19obligation.kind_specified\x12,kind must not be OBLIGATION_KIND_UNSPECIFIED\x1a?this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIED\x1a\x9c\x01\n" +
-	"\x1cobligation.trigger_specified\x122trigger must not be OBLIGATION_TRIGGER_UNSPECIFIED\x1aHthis.trigger != ramp.v1.ObligationTrigger.OBLIGATION_TRIGGER_UNSPECIFIEDB\x10\n" +
+	"\x06detail\x18\x04 \x01(\tH\x01R\x06detail\x88\x01\x01:\x9c\x02\xbaH\x98\x02\x1a\x95\x02\n" +
+	"-obligation.share_alike.requires_scope_license\x12DSHARE_ALIKE requires scope_license to identify a license (id or uri)\x1a\x9d\x01this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))B\x10\n" +
 	"\x0e_scope_licenseB\t\n" +
-	"\a_detail\"\xe6\a\n" +
+	"\a_detail\"\xd5\x06\n" +
 	"\vLicenseTerm\x12/\n" +
-	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x124\n" +
-	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsR\tsemantics\x128\n" +
+	"\alicense\x18\x01 \x01(\v2\x10.ramp.v1.LicenseH\x00R\alicense\x88\x01\x01\x12>\n" +
+	"\tsemantics\x18\x02 \x01(\x0e2\x16.ramp.v1.TermSemanticsB\b\xbaH\x05\x82\x01\x02 \x00R\tsemantics\x128\n" +
 	"\frestrictions\x18\x03 \x03(\v2\x14.ramp.v1.RestrictionR\frestrictions\x12&\n" +
 	"\x06quotas\x18\x04 \x03(\v2\x0e.ramp.v1.QuotaR\x06quotas\x125\n" +
 	"\vobligations\x18\x05 \x03(\v2\x13.ramp.v1.ObligationR\vobligations\x127\n" +
 	"\apricing\x18\x06 \x01(\v2\x10.ramp.v1.PricingB\x06\xbaH\x03\xc8\x01\x01H\x01R\apricing\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\a \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x12\"\n" +
 	"\n" +
-	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\xb0\x04\xbaH\xac\x04\x1a\xe2\x01\n" +
+	"part_label\x18\b \x01(\tH\x02R\tpartLabel\x88\x01\x01:\x95\x03\xbaH\x91\x03\x1a\xe2\x01\n" +
 	"(license_term.reference_only.requires_uri\x12>REFERENCE_ONLY terms must carry a license with a non-empty uri\x1avthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')\x1a\xa9\x01\n" +
-	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1aSthis.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)\x1a\x98\x01\n" +
-	" license_term.semantics_specified\x120semantics must not be TERM_SEMANTICS_UNSPECIFIED\x1aBthis.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_UNSPECIFIEDB\n" +
+	"%license_term.one_restriction_per_kind\x12+at most one restriction is allowed per kind\x1aSthis.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)B\n" +
 	"\n" +
 	"\b_licenseB\n" +
 	"\n" +
@@ -8505,10 +8499,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\x87\n" +
-	"\n" +
-	"\aPricing\x12+\n" +
-	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelR\x05model\x12\x12\n" +
+	"\x05_size\"\x8a\t\n" +
+	"\aPricing\x125\n" +
+	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelB\b\xbaH\x05\x82\x01\x02 \x00R\x05model\x12\x12\n" +
 	"\x04rate\x18\x02 \x01(\x01R\x04rate\x12\x1a\n" +
 	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12 \n" +
 	"\tunit_cost\x18\x04 \x01(\x01H\x00R\bunitCost\x88\x01\x01\x122\n" +
@@ -8517,20 +8510,19 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x04unit\x18\b \x01(\tB\xae\x03\xbaH\xe9\x01\xba\x01\xe1\x01\n" +
 	"\x13pricing.unit.format\x12iunit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)\x1a_this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')r\x02\x18@\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aseconds\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
 	"characters\x8a\xb5\x18\x05bytes\x8a\xb5\x18\x05items\x8a\xb5\x18\x05sq-km\x9a\xb5\x18\fpricingunitsH\x03R\x04unit\x88\x01\x01\x129\n" +
-	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xae\x03\xbaH\xaa\x03\x1a\x97\x01\n" +
+	"\bmetering\x18\t \x01(\x0e2\x18.ramp.v1.PricingMeteringH\x04R\bmetering\x88\x01\x01:\xa7\x02\xbaH\xa3\x02\x1a\x97\x01\n" +
 	"\x1epricing.per_unit.requires_unit\x12'unit is required when model is PER_UNIT\x1aLthis.model != ramp.v1.PricingModel.PRICING_MODEL_PER_UNIT || this.unit != ''\x1a\x86\x01\n" +
-	"\x16pricing.free.zero_rate\x12!rate must be 0 when model is FREE\x1aIthis.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0\x1a\x84\x01\n" +
-	"\x17pricing.model_specified\x12+model must not be PRICING_MODEL_UNSPECIFIED\x1a<this.model != ramp.v1.PricingModel.PRICING_MODEL_UNSPECIFIEDB\f\n" +
+	"\x16pricing.free.zero_rate\x12!rate must be 0 when model is FREE\x1aIthis.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0B\f\n" +
 	"\n" +
 	"_unit_costB\x15\n" +
 	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
 	"\x05_unitB\v\n" +
-	"\t_metering\"\x80\x04\n" +
+	"\t_metering\"\xfa\x02\n" +
 	"\tRequester\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
-	"\x06domain\x18\x02 \x01(\tR\x06domain\x12*\n" +
-	"\x04type\x18\x03 \x01(\x0e2\x16.ramp.v1.RequesterTypeR\x04type\x12\x17\n" +
+	"\x06domain\x18\x02 \x01(\tR\x06domain\x124\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x16.ramp.v1.RequesterTypeB\b\xbaH\x05\x82\x01\x02 \x00R\x04type\x12\x17\n" +
 	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12$\n" +
 	"\vbilling_ref\x18\x05 \x01(\tH\x01R\n" +
 	"billingRef\x88\x01\x01\x12 \n" +
@@ -8539,8 +8531,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"delegation\x18\a \x01(\v2\x13.ramp.v1.DelegationH\x02R\n" +
 	"delegation\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical:\x8d\x01\xbaH\x89\x01\x1a\x86\x01\n" +
-	"\x18requester.type_specified\x12+type must not be REQUESTER_TYPE_UNSPECIFIED\x1a=this.type != ramp.v1.RequesterType.REQUESTER_TYPE_UNSPECIFIEDB\a\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCriticalB\a\n" +
 	"\x05_nameB\x0e\n" +
 	"\f_billing_refB\r\n" +
 	"\v_delegation\"\xe9\x04\n" +
@@ -8800,10 +8791,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x01x\x18\x06 \x01(\tR\x01x\x12\x1d\n" +
 	"\n" +
 	"not_before\x18\a \x01(\tR\tnotBefore\x12\x1b\n" +
-	"\tnot_after\x18\b \x01(\tR\bnotAfter\"\xdf\r\n" +
+	"\tnot_after\x18\b \x01(\tR\bnotAfter\"\xef\f\n" +
 	"\x11WellKnownManifest\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12!\n" +
-	"\x04role\x18\x02 \x01(\x0e2\r.ramp.v1.RoleR\x04role\x12\x16\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x12+\n" +
+	"\x04role\x18\x02 \x01(\x0e2\r.ramp.v1.RoleB\b\xbaH\x05\x82\x01\x02 \x00R\x04role\x12\x16\n" +
 	"\x06domain\x18\x03 \x01(\tR\x06domain\x12\x1d\n" +
 	"\acontact\x18\x04 \x01(\tH\x00R\acontact\x88\x01\x01\x124\n" +
 	"\vpublic_keys\x18\x05 \x03(\v2\x13.ramp.v1.JsonWebKeyR\n" +
@@ -8835,8 +8826,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\rbase_currency\x18\x1b \x01(\tH\fR\fbaseCurrency\x88\x01\x01\x127\n" +
 	"\x15max_intermediary_hops\x18\x1c \x01(\x05H\rR\x13maxIntermediaryHops\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical:x\xbaHu\x1as\n" +
-	"\"well_known_manifest.role_specified\x12!role must not be ROLE_UNSPECIFIED\x1a*this.role != ramp.v1.Role.ROLE_UNSPECIFIEDB\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCriticalB\n" +
 	"\n" +
 	"\b_contactB\x13\n" +
 	"\x11_invalidation_urlB\a\n" +
@@ -8858,14 +8848,13 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\arevoked\x18\x02 \x03(\tR\arevoked\"P\n" +
 	"\x12CatalogContributor\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\"\n" +
-	"\frelationship\x18\x02 \x01(\tR\frelationship\"\xa0\x03\n" +
+	"\frelationship\x18\x02 \x01(\tR\frelationship\"\xe3\x01\n" +
 	"\x12AuthorizedExchange\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x1a\n" +
-	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12A\n" +
-	"\frelationship\x18\x03 \x01(\x0e2\x1d.ramp.v1.ProviderRelationshipR\frelationship\x12)\n" +
+	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12K\n" +
+	"\frelationship\x18\x03 \x01(\x0e2\x1d.ramp.v1.ProviderRelationshipB\b\xbaH\x05\x82\x01\x02 \x00R\frelationship\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical:\xc4\x01\xbaH\xc0\x01\x1a\xbd\x01\n" +
-	"*authorized_exchange.relationship_specified\x12:relationship must not be PROVIDER_RELATIONSHIP_UNSPECIFIED\x1aSthis.relationship != ramp.v1.ProviderRelationship.PROVIDER_RELATIONSHIP_UNSPECIFIED\"\xe8\x06\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe8\x06\n" +
 	"\fRAMPResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12%\n" +
 	"\x0etransaction_id\x18\x04 \x01(\tR\rtransactionId\x12\x1d\n" +
@@ -8892,21 +8881,20 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13_retrieval_endpointB\x16\n" +
 	"\x14_agent_identity_hashB\r\n" +
 	"\v_broker_feeB\x11\n" +
-	"\x0f_absence_reason\"\xab\x05\n" +
+	"\x0f_absence_reason\"\x99\x04\n" +
 	"\x0eDisputeRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x120\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12%\n" +
 	"\x0etransaction_id\x18\x03 \x01(\tR\rtransactionId\x12\x1d\n" +
 	"\n" +
-	"billing_id\x18\x04 \x01(\tR\tbillingId\x12.\n" +
-	"\x06reason\x18\x05 \x01(\x0e2\x16.ramp.v1.DisputeReasonR\x06reason\x12%\n" +
+	"billing_id\x18\x04 \x01(\tR\tbillingId\x128\n" +
+	"\x06reason\x18\x05 \x01(\x0e2\x16.ramp.v1.DisputeReasonB\b\xbaH\x05\x82\x01\x02 \x00R\x06reason\x12%\n" +
 	"\vdescription\x18\x06 \x01(\tH\x00R\vdescription\x88\x01\x01\x127\n" +
 	"\x15received_content_hash\x18\a \x01(\tH\x01R\x13receivedContentHash\x88\x01\x01\x125\n" +
 	"\x14received_hash_method\x18\b \x01(\tH\x02R\x12receivedHashMethod\x88\x01\x01\x12\x1b\n" +
 	"\treport_id\x18\t \x01(\tR\breportId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical:\x99\x01\xbaH\x95\x01\x1a\x92\x01\n" +
-	" dispute_request.reason_specified\x12-reason must not be DISPUTE_REASON_UNSPECIFIED\x1a?this.reason != ramp.v1.DisputeReason.DISPUTE_REASON_UNSPECIFIEDB\x0e\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0e\n" +
 	"\f_descriptionB\x18\n" +
 	"\x16_received_content_hashB\x17\n" +
 	"\x15_received_hash_method\"\x8d\x03\n" +
