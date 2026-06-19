@@ -364,16 +364,13 @@ In a real [Broker](/components/broker/overview) deployment, the [selection engin
 The reference implementation is open source. See the [Exchange component docs](/components/exchange/overview) for architecture details, or run it locally:
 
 ```bash
-git clone https://github.com/RAMP-Protocol/agentic-content-access.git
-cd agentic-content-access/v0.2-poc/exchange
+git clone https://github.com/RAMP-Protocol/reference-implementation.git
+cd reference-implementation
 
-# Run directly (requires Go 1.23+)
-go run ./cmd/server
+# Build and run the Exchange locally — follow the repo README for the current
+# commands (Go 1.23+, with a Docker Compose option).
 
-# Or with Docker
-docker compose up
-
-# Test
+# Once it's up, the Exchange answers:
 curl http://localhost:3000/health
 curl http://localhost:3000/.well-known/ramp.json
 ```
