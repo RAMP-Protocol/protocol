@@ -5,21 +5,9 @@ from __future__ import annotations
 
 from typing import Any
 from pydantic import AwareDatetime, ConfigDict, Field, RootModel, conint, constr
-from enum import Enum
 from wire.base import WireModel
+from enum import Enum
 
-
-
-class Rate(Enum):
-    Infinity = 'Infinity'
-    field_Infinity = '-Infinity'
-    NaN = 'NaN'
-
-
-class UnitCost(Enum):
-    Infinity = 'Infinity'
-    field_Infinity = '-Infinity'
-    NaN = 'NaN'
 
 
 class Delegation(WireModel):
@@ -281,19 +269,13 @@ class DomainVerificationRequest(WireModel):
     ver: str | None = ''
 
 
-class Amount(Enum):
-    Infinity = 'Infinity'
-    field_Infinity = '-Infinity'
-    NaN = 'NaN'
-
-
 class Cost(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    amount: float | Amount | str | None = 0
+    amount: float | None = None
     currency: str | None = ''
-    unitCost: float | UnitCost | str | None = None
+    unitCost: float | None = None
 
 
 class TransactionItem(WireModel):
@@ -375,12 +357,6 @@ class RemoveResourcesRequest(WireModel):
     paths: list[str] | None = None
     tenantId: str | None = ''
     ver: str | None = ''
-
-
-class MaxUnitCost(Enum):
-    Infinity = 'Infinity'
-    field_Infinity = '-Infinity'
-    NaN = 'NaN'
 
 
 class SubscriptionQuotaInfo(WireModel):
@@ -881,8 +857,9 @@ class Pricing(WireModel):
     model: PricingModel | conint(ge=-2147483648, le=2147483647) | None = Field(
         0, description="Provider's pricing model."
     )
-    rate: float | Rate | str | None = Field(
-        0, description="Price in the provider's model (e.g. 0.05 = $0.05 per article)."
+    rate: float | None = Field(
+        None,
+        description="Price in the provider's model (e.g. 0.05 = $0.05 per article).",
     )
     unit: (
         constr(
@@ -893,7 +870,7 @@ class Pricing(WireModel):
         None,
         description='The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.',
     )
-    unitCost: float | UnitCost | str | None = Field(
+    unitCost: float | None = Field(
         None,
         description="Normalized cost per unit — the universal comparison metric.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).",
     )
@@ -1469,7 +1446,7 @@ class RequestConstraints(WireModel):
     maxPrice: Cost | None = Field(
         None, description='Maximum price the agent is willing to pay.'
     )
-    maxUnitCost: float | MaxUnitCost | str | None = Field(
+    maxUnitCost: float | None = Field(
         None, description='Maximum effective cost per unit.'
     )
     periodBudget: Cost | None = Field(
