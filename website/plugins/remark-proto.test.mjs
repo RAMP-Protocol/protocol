@@ -26,6 +26,24 @@ test('a Type.member whose type is not proto is left alone (no false positive)', 
   assert.doesNotThrow(() => run(para('TenantCatalog.Lookup')));
 });
 
+test('a renamed/removed enum value (known enum prefix) FAILS the build', () => {
+  assert.throws(() => run(para('DENIAL_REASON_NONEXISTENT_XYZ')), /unknown proto reference/,
+    'a token carrying a known enum prefix must resolve — rename-safety in manual tables too');
+});
+
+test('a real prefixed enum value resolves and links', () => {
+  const tree = run(para('DELIVERY_METHOD_DIRECT'));
+  assert.ok(has(tree, (n) => n.type === 'link' && n.url.includes('#deliverymethod')));
+});
+
+test('a bare short enum form does not fail (no known prefix)', () => {
+  assert.doesNotThrow(() => run(para('PER_UNIT')));
+});
+
+test('a non-proto ALL_CAPS token is left alone (no false positive)', () => {
+  assert.doesNotThrow(() => run(para('RFC_9421')));
+});
+
 test('ignore-listed historical reference does not fail', () => {
   assert.doesNotThrow(() => run(para('Offer.quality')));
 });

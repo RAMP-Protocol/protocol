@@ -123,11 +123,7 @@ For CoMP interop, a CoMP `revshare` rate is carried verbatim in the `ramp-comp-v
 
 `Pricing.metering` (field 9, `PricingMetering`) controls how usage is tracked after a transaction:
 
-| Mode | Description |
-|---|---|
-| `ONLINE` (default) | The Exchange tracks usage events in real time. `ReportUsage` is required. |
-| `NONE` | One-time perpetual sale. The `billing_id` is issued at `ExecuteTransaction` and the ledger entry is closed immediately. No `ReportUsage` required. |
-| `OFFLINE_SELF_REPORTED` | Physical-world consumption (e.g. units manufactured from a licensed design file). The agent self-reports; the Exchange audits. |
+::proto-enum{name=PricingMetering label=Mode}
 
 `NONE` is appropriate for stock images with perpetual licenses, font licenses, one-time CAD file purchases, and any resource where the entire commercial relationship is settled at the time of the transaction.
 

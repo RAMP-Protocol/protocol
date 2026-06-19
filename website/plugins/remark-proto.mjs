@@ -47,10 +47,16 @@ function setup() {
   if (stale.length) {
     throw new Error(`proto-symbols-ignore.json: entries now resolve in the descriptor — remove: ${stale.sort().join(', ')}`);
   }
-  state = { enums, symbols, vocab, headings, ignore };
+  // SCREAMING_SNAKE_ prefix per enum (PricingModel -> PRICING_MODEL_). A token
+  // carrying one of these prefixes is unambiguously a reference to that enum's
+  // value, so it must resolve (a renamed/removed value fails the build) — unlike a
+  // bare short form (PER_UNIT) or a non-proto ALL_CAPS token (RFC_9421).
+  const enumPrefixes = Object.keys(enums).map((n) => screamingSnake(n) + '_');
+  state = { enums, symbols, vocab, headings, ignore, enumPrefixes };
   return state;
 }
 
+const screamingSnake = (pascal) => pascal.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
 const slug = (s) => new GithubSlugger().slug(s);
 const text = (value) => ({ type: 'text', value });
 const code = (value) => ({ type: 'inlineCode', value });
@@ -59,14 +65,18 @@ const code = (value) => ({ type: 'inlineCode', value });
 // shape a hand-written table produces (which Astro renders), and lets a backticked
 // symbol in a proto comment become inline code that the autolink pass then links.
 const esc = (s) => (s || '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ').trim();
-function enumTableNodes(rows, { numbers, label }) {
+function enumTableNodes(rows, { numbers, label, full }) {
+  const nameOf = (r) => (full ? r.full : r.value); // full = fully-qualified DENIAL_REASON_X
   let md;
   if (numbers) {
     md = '| Value | Name | Description |\n| --- | --- | --- |\n' +
-      rows.map((r) => `| ${r.number} | \`${r.value}\` | ${esc(r.doc)} |`).join('\n');
+      rows.map((r) => `| ${r.number} | \`${nameOf(r)}\` | ${esc(r.doc)} |`).join('\n');
   } else {
+    // Drop only the *_UNSPECIFIED sentinel zero — an enum whose 0 is a real value
+    // (PricingMetering.ONLINE, CitationFormat.LINK) keeps it.
     md = `| ${label || 'Value'} | Description |\n| --- | --- |\n` +
-      rows.filter((r) => r.number !== 0).map((r) => `| \`${r.value}\` | ${esc(r.doc)} |`).join('\n');
+      rows.filter((r) => !(r.number === 0 && /_UNSPECIFIED$/.test(r.full)))
+        .map((r) => `| \`${nameOf(r)}\` | ${esc(r.doc)} |`).join('\n');
   }
   return fromMarkdown(md, { extensions: [gfmTable()], mdastExtensions: [gfmTableFromMarkdown()] }).children;
 }
@@ -86,7 +96,7 @@ function directiveText(node) {
 
 export default function remarkProto() {
   return (tree, file) => {
-    const { enums, symbols, vocab, headings, ignore } = setup();
+    const { enums, symbols, vocab, headings, ignore, enumPrefixes } = setup();
     const where = file?.path ?? 'doc';
 
     // 1. expand directives into tables / token lists
@@ -96,7 +106,7 @@ export default function remarkProto() {
       if (node.name === 'proto-enum') {
         const name = attrs.name || directiveText(node);
         if (!enums[name]) throw new Error(`${where}: proto-enum references unknown enum "${name}"`);
-        const nodes = enumTableNodes(enums[name], { numbers: 'numbers' in attrs, label: attrs.label });
+        const nodes = enumTableNodes(enums[name], { numbers: 'numbers' in attrs, label: attrs.label, full: 'full' in attrs });
         parent.children.splice(index, 1, ...nodes);
         return [SKIP, index + nodes.length];
       }
@@ -113,16 +123,24 @@ export default function remarkProto() {
     visit(tree, 'inlineCode', (node, index, parent) => {
       if (!parent || index == null || parent.type === 'link') return;
       const t = node.value;
-      const hard = RE_MSG_FIELD.test(t) || RE_SVC_METHOD.test(t);
+      // A token carrying a known enum prefix is unambiguously an enum-value
+      // reference — resolve-or-fail, so a renamed value fails anywhere (manual
+      // tables included). Bare short forms / unknown prefixes stay best-effort.
+      const prefixedEnumValue = RE_ENUM_VALUE.test(t) && enumPrefixes.some((p) => t.startsWith(p));
+      const hard = RE_MSG_FIELD.test(t) || RE_SVC_METHOD.test(t) || prefixedEnumValue;
       const soft = RE_ENUM_VALUE.test(t) || RE_TYPE.test(t);
       if (!hard && !soft) return;
       const sym = symbols[t];
       if (!sym) {
-        // Drift only when the type before the dot is a known proto symbol but the
-        // member is gone; non-proto Type.member shapes are left alone.
         if (hard && !ignore.has(t)) {
-          const owner = symbols[t.slice(0, t.indexOf('.'))];
-          if (owner && (owner.kind === 'message' || owner.kind === 'service' || owner.kind === 'enum')) unresolved.add(t);
+          if (prefixedEnumValue) {
+            unresolved.add(t); // a known-enum-prefixed value that resolves to nothing = renamed/removed
+          } else {
+            // Message.field / Service.Method: drift only when the type before the
+            // dot is a known proto symbol but the member is gone.
+            const owner = symbols[t.slice(0, t.indexOf('.'))];
+            if (owner && (owner.kind === 'message' || owner.kind === 'service' || owner.kind === 'enum')) unresolved.add(t);
+          }
         }
         return;
       }

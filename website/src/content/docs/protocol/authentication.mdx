@@ -33,14 +33,7 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 
 ### RequesterType Enum
 
-| Value | Name | Description |
-|---|---|---|
-| `0` | `REQUESTER_TYPE_UNSPECIFIED` | Not specified |
-| `1` | `REQUESTER_TYPE_AGENT` | Autonomous AI agent (LLM, RAG system, research bot) |
-| `2` | `REQUESTER_TYPE_HUMAN_TOOL` | Human using an AI-powered tool (copilot, assistant) |
-| `3` | `REQUESTER_TYPE_SERVICE` | Enterprise service account (automated pipeline, cron job) |
-| `4` | `REQUESTER_TYPE_DELEGATED` | Agent acting on behalf of a user (delegated identity) |
-| `5` | `REQUESTER_TYPE_RESEARCH` | Research pipeline (batch data collection, model training) |
+::proto-enum{name=RequesterType numbers full}
 
 ### Key Lookup
 

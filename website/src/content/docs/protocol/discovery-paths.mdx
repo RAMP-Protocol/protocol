@@ -257,14 +257,9 @@ The `ResourceResponse` carries an optional `rate_limit` field with the caller's 
 
 ### DiscoveryMethod (v1.0)
 
-Each `OfferGroup` carries a `discovery_method` field indicating how the offers were sourced. Four methods are defined:
+Each `OfferGroup` carries a `discovery_method` field indicating how the offers were sourced. The discovery methods:
 
-| Value | Number | Description |
-|---|---|---|
-| `DISCOVERY_METHOD_EXCHANGE` | 1 | Standard exchange catalog lookup |
-| `DISCOVERY_METHOD_SEARCH` | 2 | Full-text or semantic search across provider inventories |
-| `DISCOVERY_METHOD_RECOMMENDATION` | 3 | Exchange-generated recommendation based on context |
-| `DISCOVERY_METHOD_SYNDICATION` | 4 | Content syndicated from a partner exchange or feed |
+::proto-enum{name=DiscoveryMethod numbers full}
 
 This allows agents and Brokers to understand the provenance of each offer group and apply method-specific ranking or filtering logic.
 

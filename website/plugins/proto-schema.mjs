@@ -58,6 +58,7 @@ export function loadSchema() {
         if (short !== v.name) symbols[short] = { kind: 'enum_value', type: e.name };
         return {
           value: short,
+          full: v.name,
           number: v.number,
           doc: commentAt.get([...pathPrefix, E_VALUE, vi].join(',')) ?? '',
         };

@@ -89,23 +89,11 @@ done
 # assertions fail the build when a live wire value is missing from the doc that
 # claims to enumerate it.
 
-# Every DenialReason value (except UNSPECIFIED) must appear in the event-types
-# "closed enum" table. (R4-9: the table silently lost values across renames.)
-dr_n=0
-while read -r dr; do
-  dr_n=$((dr_n + 1))
-  [ "$dr" = "DENIAL_REASON_UNSPECIFIED" ] && continue
-  if ! grep -q -- "$dr" "$event_types"; then
-    echo "::error::DenialReason '${dr}' is defined in the proto but missing from ${event_types}"
-    status=1
-  fi
-done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
-# Anti-vacuity floor: if extraction finds nothing, this check would pass for the
-# wrong reason. (The Go invariants carry the same `checked == 0` guard.)
-if [ "$dr_n" -eq 0 ]; then
-  echo "::error::doc-conformance: no DENIAL_REASON_* values found in ${proto_ramp} — extraction drifted; this check would pass vacuously"
-  status=1
-fi
+# (The former "every DenialReason value appears in event-types.mdx" check was
+# removed: event-types now renders the enum via `::proto-enum{name=DenialReason}`,
+# which emits every value straight from the proto — coverage is structural, and the
+# remark-proto guard forbids re-introducing a hand-typed copy. The grep here would
+# only have searched the directive source, not the rendered values.)
 
 # Delegation-claim registry guard (R4-7 / R5-8). The registered JWT claims are
 # named `ramp_<field>` where <field> is a Delegation proto field. Self-extending:

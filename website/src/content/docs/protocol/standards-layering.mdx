@@ -233,7 +233,7 @@ RAMP v1.0 supports unit-agnostic pricing via `unit_cost` + `estimated_quantity` 
 
 **Pricing models** are `PRICING_MODEL_FREE`, `PRICING_MODEL_PER_UNIT`, and `PRICING_MODEL_FLAT`. `PER_UNIT` is unit-agnostic — `Pricing.unit` names what is metered (`articles`, `fetches`, `pages`, `minutes`, `records`, `tokens`, …), so legal documents (pages), video/audio (minutes), and database records (records) are all priced through one model. Subscriptions are modeled as `FREE` + a `subscription:` scope on the `LicenseTerm` (settled off-protocol, access scope-gated); revenue settlement is off-protocol and not a pricing model.
 
-**Delivery methods**: `DELIVERY_METHOD_INSTRUCTIONS` (signed URL for static fetch), `DELIVERY_METHOD_INLINE` (content in response), and `DELIVERY_METHOD_STREAMING` (signed URL to a streaming endpoint -- WebSocket, SSE, HLS, Icecast). Streaming is used for live broadcasts, quote feeds, and monitoring feeds.
+**Delivery methods**: `DELIVERY_METHOD_INSTRUCTIONS` (signed URL for static fetch), `DELIVERY_METHOD_DIRECT` (content in response), and `DELIVERY_METHOD_STREAMING` (signed URL to a streaming endpoint -- WebSocket, SSE, HLS, Icecast). Streaming is used for live broadcasts, quote feeds, and monitoring feeds.
 
 ## Scope Boundary
 
