@@ -18,9 +18,19 @@ plugins:
   - remote: buf.build/connectrpc/es
     out: ../gen/ts
     opt: target=ts
+  # Python message types + type stubs (.pyi) — the base Python SDK surface.
+  - remote: buf.build/protocolbuffers/python
+    out: ../gen/python
+  - remote: buf.build/protocolbuffers/pyi
+    out: ../gen/python
+  # Connect-Python service client/handler (Connect protocol — parity with Go/TS).
+  - remote: buf.build/connectrpc/python
+    out: ../gen/python
   # RAMP vocabulary constants — reads (ramp.v1.vocab) field options and
   # (ramp.v1.vocab_enum) enum-value options and emits typed token constants +
-  # IsRegistered per axis (Pricing.unit, Quota.metric, function, geography,
-  # user-type).
+  # membership check per axis (Pricing.unit, Quota.metric, function, geography,
+  # user-type) for EVERY SDK language in one pass: Go, TypeScript, and Python.
+  # out is ../gen (not ../gen/go/vocab) so it writes go/vocab/, ts/vocab/, and
+  # python/vocab/ from the single source — the three cannot drift from each other.
   - local: ["go", "run", "github.com/RAMP-Protocol/protocol/cmd/protoc-gen-rampvocab"]
-    out: ../gen/go/vocab
+    out: ../gen

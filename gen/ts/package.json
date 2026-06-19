@@ -6,7 +6,8 @@
   "exports": {
     "./ramp/v1/ramp_pb": "./ramp/v1/ramp_pb.ts",
     "./ramp/v1/ramp_connect": "./ramp/v1/ramp_connect.ts",
-    "./comp/v1/comp_pb": "./comp/v1/comp_pb.ts"
+    "./comp/v1/comp_pb": "./comp/v1/comp_pb.ts",
+    "./vocab/*": "./vocab/*.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.0.0",
