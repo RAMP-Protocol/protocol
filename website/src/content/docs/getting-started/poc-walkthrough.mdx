@@ -113,7 +113,7 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
           },
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 0.05,
+            "rate": "0.05",
             "currency": "USD",
             "estimated_quantity": 2000,
             "unit": "accesses"
@@ -166,7 +166,7 @@ Response:
   "transaction_id": "txn-1773682700352684307",
   "billing_id": "bill-000002",
   "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307",
-  "cost": { "amount": 0.05, "currency": "USD" },
+  "cost": { "amount": "0.05", "currency": "USD" },
   "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
   "reporting_obligation": {
     "required": true,
@@ -350,9 +350,9 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Disco
 ```
 
 ```json
-{ "uri": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding", "rate": 0.05 }
-{ "uri": "https://cdn.ramp-protocol.org/2024/02/20/cloud-computing-trends", "rate": 0.03 }
-{ "uri": "https://cdn.ramp-protocol.org/2024/03/10/robotics-warehouse", "rate": 0.04 }
+{ "uri": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding", "rate": "0.05" }
+{ "uri": "https://cdn.ramp-protocol.org/2024/02/20/cloud-computing-trends", "rate": "0.03" }
+{ "uri": "https://cdn.ramp-protocol.org/2024/03/10/robotics-warehouse", "rate": "0.04" }
 ```
 
 In a real [Broker](/components/broker/overview) deployment, the [selection engine](/components/broker/selection-engine) would compare offers across multiple Exchanges and select the best combination based on price, quality, and [budget constraints](/components/broker/budget-enforcement).

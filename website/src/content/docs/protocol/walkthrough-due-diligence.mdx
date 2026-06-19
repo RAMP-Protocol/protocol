@@ -56,7 +56,7 @@ POST https://broker.lawfirm.com/ramp/v1
   "constraints": {
     "budget_scope": "deal:acme-acquisition",
     "period_budget": {
-      "amount": 1500.00,
+      "amount": "1500.00",
       "currency": "USD"
     },
     "max_data_age": "604800s",
@@ -206,9 +206,9 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "title": "D&B Comprehensive Business Report — Acme Corp",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 61.99,
+            "rate": "61.99",
             "currency": "USD",
-            "unit_cost": 61.99,
+            "unit_cost": "61.99",
             "estimated_quantity": 1,
             "unit": "records"
           },
@@ -283,9 +283,9 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "title": "Acme Corp v. Widget Inc — Complete Docket",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 0.10,
+            "rate": "0.10",
             "currency": "USD",
-            "unit_cost": 0.10,
+            "unit_cost": "0.10",
             "estimated_quantity": 45,
             "unit": "pages"
           },
@@ -342,7 +342,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "title": "State of CA v. Acme Corp — Environmental Complaint",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 0.10,
+            "rate": "0.10",
             "currency": "USD",
             "estimated_quantity": 32,
             "unit": "pages"
@@ -369,7 +369,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "title": "Acme Corp v. Former CTO — IP Dispute",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 0.10,
+            "rate": "0.10",
             "currency": "USD",
             "estimated_quantity": 28,
             "unit": "pages"
@@ -410,7 +410,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "title": "Acme Corp 10-K Annual Report FY2025",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
-            "rate": 0,
+            "rate": "0",
             "currency": "USD",
             "estimated_quantity": 45000,
             "unit": "tokens"
@@ -445,15 +445,15 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-K-2024.htm",
-      "offers": [{ "offer_id": "offer-sec-10k-2024", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
+      "offers": [{ "offer_id": "offer-sec-10k-2024", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-Q-2025-Q3.htm",
-      "offers": [{ "offer_id": "offer-sec-10q-q3", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
+      "offers": [{ "offer_id": "offer-sec-10q-q3", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     },
     {
       "uri": "https://sec.gov/Archives/edgar/data/0001234567/10-Q-2025-Q2.htm",
-      "offers": [{ "offer_id": "offer-sec-10q-q2", "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
+      "offers": [{ "offer_id": "offer-sec-10q-q2", "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" }, "signature": "...", "signature_algorithm": "EdDSA" }]
     }
   ]
 }
@@ -572,7 +572,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
       "transaction_id": "txn-legal-001",
       "billing_id": "bill-legal-001",
       "retrieval_endpoint": "https://cdn.legaldata.com/pacer/24cv01234.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-001&sig=hmac-sha256-f1e2d3...",
-      "cost": { "amount": 4.50, "currency": "USD" },
+      "cost": { "amount": "4.50", "currency": "USD" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "expires_at": "2026-03-20T14:15:00Z"
     },
@@ -581,7 +581,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
       "transaction_id": "txn-legal-002",
       "billing_id": "bill-legal-002",
       "retrieval_endpoint": "https://cdn.legaldata.com/pacer/25cv05678.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-002&sig=hmac-sha256-a4b5c6...",
-      "cost": { "amount": 3.20, "currency": "USD" },
+      "cost": { "amount": "3.20", "currency": "USD" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "expires_at": "2026-03-20T14:15:00Z"
     },
@@ -590,12 +590,12 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
       "transaction_id": "txn-legal-003",
       "billing_id": "bill-legal-003",
       "retrieval_endpoint": "https://cdn.legaldata.com/pacer/23cv09012.pdf?expires=1742486700&agent_id=3a2b1c0d...&txn_id=txn-legal-003&sig=hmac-sha256-d7e8f9...",
-      "cost": { "amount": 2.80, "currency": "USD" },
+      "cost": { "amount": "2.80", "currency": "USD" },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
       "expires_at": "2026-03-20T14:15:00Z"
     }
   ],
-  "total_cost": { "amount": 10.50, "currency": "USD" },
+  "total_cost": { "amount": "10.50", "currency": "USD" },
   "agent_identity_hash": "3a2b1c0d..."
 }
 ```

@@ -136,9 +136,9 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "title": "Acme Corporation — Basic Credit Summary",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 2.00,
+            "rate": "2.00",
             "currency": "USD",
-            "unit_cost": 2.00,
+            "unit_cost": "2.00",
             "estimated_quantity": 1,
             "unit": "records"
           },
@@ -204,9 +204,9 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "title": "Acme Corporation — Standard Credit Report",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 61.99,
+            "rate": "61.99",
             "currency": "USD",
-            "unit_cost": 61.99,
+            "unit_cost": "61.99",
             "estimated_quantity": 1,
             "unit": "records"
           },
@@ -274,9 +274,9 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "title": "Acme Corporation — Comprehensive Credit Report with Financials",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 150.00,
+            "rate": "150.00",
             "currency": "USD",
-            "unit_cost": 150.00,
+            "unit_cost": "150.00",
             "estimated_quantity": 1,
             "unit": "records"
           },
@@ -427,7 +427,7 @@ Response:
   "billing_id": "bill-dnb-acme-001",
   "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1...",
   "cost": {
-    "amount": 61.99,
+    "amount": "61.99",
     "currency": "USD"
   },
   "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",

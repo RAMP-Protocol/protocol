@@ -112,9 +112,9 @@ The Exchange looks up the article in its catalog and returns an offer. It does n
           },
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
-            "rate": 0.05,
+            "rate": "0.05",
             "currency": "USD",
-            "unit_cost": 0.0000156,
+            "unit_cost": "0.0000156",
             "estimated_quantity": 3200,
             "unit": "accesses"
           },
@@ -210,7 +210,7 @@ Response:
   "billing_id": "bill-tc-001",
   "retrieval_endpoint": "https://cdn.techcrunch.com/premium/ai-agents-commerce.html?expires=1742403900&agent_id=7a3f8c1d...&txn_id=txn-tc-001&sig=hmac-sha256-d4e5f6...",
   "cost": {
-    "amount": 0.05,
+    "amount": "0.05",
     "currency": "USD"
   },
   "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
@@ -404,9 +404,9 @@ The Exchange verifies the JWT chain, confirms `earnings:*` covers the requested 
           },
           "pricing": {
             "model": "PRICING_MODEL_FREE",
-            "rate": 0,
+            "rate": "0",
             "currency": "USD",
-            "unit_cost": 0,
+            "unit_cost": "0",
             "estimated_quantity": 18500,
             "unit": "tokens"
           },
@@ -483,12 +483,12 @@ The remaining steps follow the same pattern as Scenario A, with one key differen
   "billing_id": "bill-bb-sub-001",
   "retrieval_endpoint": "https://cdn.marketdata.example.com/earnings/NVDA/2026-Q1-transcript.html?expires=1742404200&agent_id=8b4f9d2e...&txn_id=txn-bb-001&sig=hmac-sha256-a7b8c9...",
   "cost": {
-    "amount": 0,
+    "amount": "0",
     "currency": "USD"
   },
   "subscription_id": "enterprise-sub-HF-001",
   "subscription_unit_value": {
-    "amount": 0.15,
+    "amount": "0.15",
     "currency": "USD"
   },
   "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
