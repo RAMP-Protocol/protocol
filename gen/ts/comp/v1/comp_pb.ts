@@ -188,6 +188,8 @@ export type Package = Message<"comp.v1.Package"> & {
 
   /**
    * URL for AI system to find the License(s) required to access content.
+   * SSRF/fetch sink: a consumer that dereferences this URL must apply the
+   * countermeasures specified for core License.uri (threat model T-LIC-1).
    *
    * @generated from field: optional string licenseurl = 5;
    */
@@ -202,7 +204,8 @@ export type Package = Message<"comp.v1.Package"> & {
 
   /**
    * URL for AI system to send usage reporting to the Content Owner or
-   * Marketplace.
+   * Marketplace. POST/exfil sink: apply the SSRF countermeasures specified
+   * for core License.uri (threat model T-LIC-1) before dereferencing.
    *
    * @generated from field: optional string reporturl = 7;
    */
@@ -271,7 +274,9 @@ export type Scope = Message<"comp.v1.Scope"> & {
   pricetier?: number | undefined;
 
   /**
-   * Content Owner set unit price at the given basis.
+   * Content Owner set unit price at the given basis. Typed `double` to mirror
+   * the CoMP spec; downstream billing must convert to a decimal / minor-units
+   * representation — do not settle money directly off this float.
    *
    * @generated from field: optional double unitprice = 5;
    */
@@ -439,7 +444,9 @@ export type Text = Message<"comp.v1.Text"> & {
   cat: number[];
 
   /**
-   * Content language using ISO-639-1 alpha-2.
+   * Content language. CoMP declares this `int` (array) though its prose says
+   * ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+   * declared `int` type.
    *
    * @generated from field: repeated int32 language = 12;
    */
@@ -548,7 +555,11 @@ export type Video = Message<"comp.v1.Video"> & {
   cat: number[];
 
   /**
-   * Content language using ISO-639-1 alpha-2.
+   * Content language. CoMP declares this `int` (array) though its prose says
+   * ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+   * declared `int` type.
+   * Tag 16 sits above ext (15) only here: cattax/cat consumed 13/14, and ext is
+   * kept at 15 for cross-message uniformity rather than the usual terminal slot.
    *
    * @generated from field: repeated int32 language = 16;
    */
@@ -631,7 +642,9 @@ export type Image = Message<"comp.v1.Image"> & {
   cat: number[];
 
   /**
-   * Content language using ISO-639-1 alpha-2.
+   * Content language. CoMP declares this `int` (array) though its prose says
+   * ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+   * declared `int` type.
    *
    * @generated from field: repeated int32 language = 11;
    */
@@ -729,7 +742,9 @@ export type Audio = Message<"comp.v1.Audio"> & {
   cat: number[];
 
   /**
-   * Content language using ISO-639-1 alpha-2.
+   * Content language. CoMP declares this `int` (array) though its prose says
+   * ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+   * declared `int` type.
    *
    * @generated from field: repeated int32 language = 14;
    */
@@ -763,7 +778,8 @@ export type Retrieval = Message<"comp.v1.Retrieval"> & {
   auth?: RetrievalAuth | undefined;
 
   /**
-   * Entry point / feed URI.
+   * Entry point / feed URI. SSRF/fetch sink: apply the countermeasures
+   * specified for core License.uri (threat model T-LIC-1) before fetching.
    *
    * @generated from field: optional string endpoint = 2;
    */

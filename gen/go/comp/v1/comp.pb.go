@@ -809,11 +809,14 @@ type Package struct {
 	// Canonical domain of the packager, if different than the seller.
 	Packager *string `protobuf:"bytes,4,opt,name=packager,proto3,oneof" json:"packager,omitempty"`
 	// URL for AI system to find the License(s) required to access content.
+	// SSRF/fetch sink: a consumer that dereferences this URL must apply the
+	// countermeasures specified for core License.uri (threat model T-LIC-1).
 	Licenseurl *string `protobuf:"bytes,5,opt,name=licenseurl,proto3,oneof" json:"licenseurl,omitempty"`
 	// Whether citation of the Content Owner is required. 0=no, 1=yes.
 	Citation *int32 `protobuf:"varint,6,opt,name=citation,proto3,oneof" json:"citation,omitempty"`
 	// URL for AI system to send usage reporting to the Content Owner or
-	// Marketplace.
+	// Marketplace. POST/exfil sink: apply the SSRF countermeasures specified
+	// for core License.uri (threat model T-LIC-1) before dereferencing.
 	Reporturl *string `protobuf:"bytes,7,opt,name=reporturl,proto3,oneof" json:"reporturl,omitempty"`
 	// Scope of content in this package.
 	Scope *Scope `protobuf:"bytes,8,opt,name=scope,proto3,oneof" json:"scope,omitempty"`
@@ -936,7 +939,9 @@ type Scope struct {
 	Pricetype *PriceType `protobuf:"varint,3,opt,name=pricetype,proto3,enum=comp.v1.PriceType,oneof" json:"pricetype,omitempty"`
 	// Tier identifier if pricing is tiered (pricetype = 4).
 	Pricetier *int32 `protobuf:"varint,4,opt,name=pricetier,proto3,oneof" json:"pricetier,omitempty"`
-	// Content Owner set unit price at the given basis.
+	// Content Owner set unit price at the given basis. Typed `double` to mirror
+	// the CoMP spec; downstream billing must convert to a decimal / minor-units
+	// representation — do not settle money directly off this float.
 	Unitprice *float64 `protobuf:"fixed64,5,opt,name=unitprice,proto3,oneof" json:"unitprice,omitempty"`
 	// Bid currency using ISO-4217 alpha codes. Default "USD".
 	Cur *string `protobuf:"bytes,6,opt,name=cur,proto3,oneof" json:"cur,omitempty"`
@@ -1124,7 +1129,9 @@ type Text struct {
 	Cattax *int32 `protobuf:"varint,10,opt,name=cattax,proto3,oneof" json:"cattax,omitempty"`
 	// IAB Tech Lab content category codes (per cattax).
 	Cat []int32 `protobuf:"varint,11,rep,packed,name=cat,proto3" json:"cat,omitempty"`
-	// Content language using ISO-639-1 alpha-2.
+	// Content language. CoMP declares this `int` (array) though its prose says
+	// ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+	// declared `int` type.
 	Language      []int32          `protobuf:"varint,12,rep,packed,name=language,proto3" json:"language,omitempty"`
 	Ext           *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1273,7 +1280,11 @@ type Video struct {
 	Cattax *int32 `protobuf:"varint,13,opt,name=cattax,proto3,oneof" json:"cattax,omitempty"`
 	// IAB Tech Lab content category codes (per cattax).
 	Cat []int32 `protobuf:"varint,14,rep,packed,name=cat,proto3" json:"cat,omitempty"`
-	// Content language using ISO-639-1 alpha-2.
+	// Content language. CoMP declares this `int` (array) though its prose says
+	// ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+	// declared `int` type.
+	// Tag 16 sits above ext (15) only here: cattax/cat consumed 13/14, and ext is
+	// kept at 15 for cross-message uniformity rather than the usual terminal slot.
 	Language      []int32          `protobuf:"varint,16,rep,packed,name=language,proto3" json:"language,omitempty"`
 	Ext           *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1439,7 +1450,9 @@ type Image struct {
 	Cattax *int32 `protobuf:"varint,9,opt,name=cattax,proto3,oneof" json:"cattax,omitempty"`
 	// IAB Tech Lab content category codes (per cattax).
 	Cat []int32 `protobuf:"varint,10,rep,packed,name=cat,proto3" json:"cat,omitempty"`
-	// Content language using ISO-639-1 alpha-2.
+	// Content language. CoMP declares this `int` (array) though its prose says
+	// ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+	// declared `int` type.
 	Language      []int32          `protobuf:"varint,11,rep,packed,name=language,proto3" json:"language,omitempty"`
 	Ext           *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1580,7 +1593,9 @@ type Audio struct {
 	Cattax *int32 `protobuf:"varint,12,opt,name=cattax,proto3,oneof" json:"cattax,omitempty"`
 	// IAB Tech Lab content category codes (per cattax).
 	Cat []int32 `protobuf:"varint,13,rep,packed,name=cat,proto3" json:"cat,omitempty"`
-	// Content language using ISO-639-1 alpha-2.
+	// Content language. CoMP declares this `int` (array) though its prose says
+	// ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+	// declared `int` type.
 	Language      []int32          `protobuf:"varint,14,rep,packed,name=language,proto3" json:"language,omitempty"`
 	Ext           *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1728,7 +1743,8 @@ type Retrieval struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Authorization type.
 	Auth *RetrievalAuth `protobuf:"varint,1,opt,name=auth,proto3,enum=comp.v1.RetrievalAuth,oneof" json:"auth,omitempty"`
-	// Entry point / feed URI.
+	// Entry point / feed URI. SSRF/fetch sink: apply the countermeasures
+	// specified for core License.uri (threat model T-LIC-1) before fetching.
 	Endpoint *string `protobuf:"bytes,2,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
 	// Endpoint type(s).
 	Type          []RetrievalType  `protobuf:"varint,3,rep,packed,name=type,proto3,enum=comp.v1.RetrievalType" json:"type,omitempty"`

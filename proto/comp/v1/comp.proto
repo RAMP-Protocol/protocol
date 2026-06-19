@@ -144,13 +144,16 @@ message Package {
   optional string packager = 4;
 
   // URL for AI system to find the License(s) required to access content.
+  // SSRF/fetch sink: a consumer that dereferences this URL must apply the
+  // countermeasures specified for core License.uri (threat model T-LIC-1).
   optional string licenseurl = 5;
 
   // Whether citation of the Content Owner is required. 0=no, 1=yes.
   optional int32 citation = 6;
 
   // URL for AI system to send usage reporting to the Content Owner or
-  // Marketplace.
+  // Marketplace. POST/exfil sink: apply the SSRF countermeasures specified
+  // for core License.uri (threat model T-LIC-1) before dereferencing.
   optional string reporturl = 7;
 
   // Scope of content in this package.
@@ -177,7 +180,9 @@ message Scope {
   // Tier identifier if pricing is tiered (pricetype = 4).
   optional int32 pricetier = 4;
 
-  // Content Owner set unit price at the given basis.
+  // Content Owner set unit price at the given basis. Typed `double` to mirror
+  // the CoMP spec; downstream billing must convert to a decimal / minor-units
+  // representation — do not settle money directly off this float.
   optional double unitprice = 5;
 
   // Bid currency using ISO-4217 alpha codes. Default "USD".
@@ -282,7 +287,9 @@ message Text {
   // IAB Tech Lab content category codes (per cattax).
   repeated int32 cat = 11;
 
-  // Content language using ISO-639-1 alpha-2.
+  // Content language. CoMP declares this `int` (array) though its prose says
+  // ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+  // declared `int` type.
   repeated int32 language = 12;
 
   google.protobuf.Struct ext = 15;
@@ -311,7 +318,11 @@ message Video {
   // IAB Tech Lab content category codes (per cattax).
   repeated int32 cat = 14;
 
-  // Content language using ISO-639-1 alpha-2.
+  // Content language. CoMP declares this `int` (array) though its prose says
+  // ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+  // declared `int` type.
+  // Tag 16 sits above ext (15) only here: cattax/cat consumed 13/14, and ext is
+  // kept at 15 for cross-message uniformity rather than the usual terminal slot.
   repeated int32 language = 16;
 
   google.protobuf.Struct ext = 15;
@@ -336,7 +347,9 @@ message Image {
   // IAB Tech Lab content category codes (per cattax).
   repeated int32 cat = 10;
 
-  // Content language using ISO-639-1 alpha-2.
+  // Content language. CoMP declares this `int` (array) though its prose says
+  // ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+  // declared `int` type.
   repeated int32 language = 11;
 
   google.protobuf.Struct ext = 15;
@@ -364,7 +377,9 @@ message Audio {
   // IAB Tech Lab content category codes (per cattax).
   repeated int32 cat = 13;
 
-  // Content language using ISO-639-1 alpha-2.
+  // Content language. CoMP declares this `int` (array) though its prose says
+  // ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+  // declared `int` type.
   repeated int32 language = 14;
 
   google.protobuf.Struct ext = 15;
@@ -376,7 +391,8 @@ message Retrieval {
   // Authorization type.
   optional RetrievalAuth auth = 1;
 
-  // Entry point / feed URI.
+  // Entry point / feed URI. SSRF/fetch sink: apply the countermeasures
+  // specified for core License.uri (threat model T-LIC-1) before fetching.
   optional string endpoint = 2;
 
   // Endpoint type(s).

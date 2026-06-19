@@ -5,7 +5,7 @@
 **CoMP re-baseline to canonical V1 (breaking).** `proto/comp/v1/comp.proto` is
 re-aligned to be a 1:1 mirror of IAB Tech Lab Content Monetization Protocols
 **CoMP V1** (finalized 2026-04-28,
-[`CoMP-1.0.md`](https://github.com/IABTechLab/CoMP/blob/main/CoMP-1.0.md)). Our
+[`CoMP-1.0.md`](https://github.com/IABTechLab/CoMP/blob/880238e0100b3d0d67d5afd7357a18fc21a97be5/CoMP-1.0.md)). Our
 prior snapshot mirrored a pre-final draft. Changes:
 
 - **Removed** the `License` message, the `LicenseUse` enum, and `Package.license`

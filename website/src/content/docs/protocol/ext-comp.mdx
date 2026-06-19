@@ -23,6 +23,21 @@ terms live on `Scope`. The keys below mirror the canonical CoMP V1 surface that
 with their labels; the proto enum each maps to is named in the *CoMP field*
 column.
 
+:::note[Keep integer codes in sync with the proto]
+The integer List codes and enum labels in the tables below are hand-mirrored from
+`proto/comp/v1/comp.proto`. There is no generator binding them yet — when a CoMP
+enum changes in the proto, update these tables in the same change.
+:::
+
+:::caution[URL-valued keys are SSRF / fetch sinks]
+`comp.license_url`, `comp.report_url`, and `comp.retrieval_endpoint` are
+publisher-supplied URLs. A consumer that dereferences them (or POSTs usage to
+`comp.report_url`) MUST apply the SSRF countermeasures specified for the core
+`License.uri` in the [threat model (T-LIC-1)](/security/threat-model/#t-lic-1-ssrf--phishing-via-licenseuri):
+scheme allowlist, block loopback/private/metadata addresses (resolve-then-check),
+fetch via an egress proxy, and treat the response as untrusted.
+:::
+
 ### Resource Metadata (on Offer.ext)
 
 | Key | Type | Required | CoMP field | Description |
@@ -51,10 +66,13 @@ column.
 | `comp.scope_max` | integer | No | `Scope.max` | Upper limit on crawl (0=unlimited, 1=has maximum) |
 | `comp.content_types` | integer[] | No | `Scope.ctype` | 0 text, 1 video, 2 image, 3 audio, 4 all, 5 other |
 
+<a id="license-on-offerext"></a>
+
 ### Commercial Terms (on Offer.ext)
 
 Canonical CoMP V1 folds licensing and pricing onto `Scope`; there is no separate
-`License` object.
+`License` object. (This section was previously titled "License on OfferExt"; the
+`#license-on-offerext` anchor is preserved for inbound links.)
 
 | Key | Type | Required | CoMP field | Description |
 |-----|------|----------|------------|-------------|
