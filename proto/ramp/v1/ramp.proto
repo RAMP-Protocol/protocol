@@ -865,7 +865,7 @@ enum ObligationTrigger {
 message License {
   // uri_digest is REQUIRED whenever uri is present — any semantics. Without a
   // pinned digest the referenced document can be swapped after the offer is
-  // signed; the agent must be able to verify the bytes it fetches. (d8y64)
+  // signed; the agent must be able to verify the bytes it fetches.
   option (buf.validate.message).cel = {
     id: "license.digest_required_with_uri"
     message: "uri_digest is required whenever uri is set"
@@ -956,7 +956,7 @@ message License {
 //   GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA
 //   USER_TYPE — RAMP user/organization categories
 message Restriction {
-  // A token cannot be both permitted and prohibited on the same axis. (6z1v3)
+  // A token cannot be both permitted and prohibited on the same axis.
   option (buf.validate.message).cel = {
     id: "restriction.permitted_prohibited_disjoint"
     message: "a token cannot appear in both permitted and prohibited"
@@ -1046,7 +1046,7 @@ message Quota {
     }
   ];
 
-  // Maximum allowed value in the given window. (6z1v3) A quota of 0 grants
+  // Maximum allowed value in the given window. A quota of 0 grants
   // nothing — express "no access" by omitting the term, not a zero quota.
   int64 limit = 2 [(buf.validate.field).int64.gte = 1];
 
@@ -1069,7 +1069,7 @@ message Quota {
 //     must be released under the same license.
 //   Notice on distribution: include the copyright notice when distributing copies.
 message Obligation {
-  // SHARE_ALIKE derivatives must name the license they inherit. (6z1v3)
+  // SHARE_ALIKE derivatives must name the license they inherit.
   option (buf.validate.message).cel = {
     id: "obligation.share_alike.requires_scope_license"
     message: "SHARE_ALIKE requires scope_license to identify a license (id or uri)"
@@ -1099,7 +1099,7 @@ message Obligation {
   // `id` (SPDX short-id, the common copyleft case, often the term's own
   // License.id) and/or `uri`. Because it is a License, a referenced `uri`
   // inherits the uri_digest swap-protection rule: a uri without a digest is
-  // rejected, exactly as for any other license reference. (6z1v3)
+  // rejected, exactly as for any other license reference.
   optional License scope_license = 3;
 
   // Free-form detail: attribution string, notice file URI, etc.
@@ -1135,14 +1135,14 @@ message Obligation {
 //     but do NOT cause rejection (forward-compatible).
 message LicenseTerm {
   // A REFERENCE_ONLY term MUST carry a License with a non-empty uri — a term
-  // that defers to a document but references nothing is rejected. (fc65j)
+  // that defers to a document but references nothing is rejected.
   option (buf.validate.message).cel = {
     id: "license_term.reference_only.requires_uri"
     message: "REFERENCE_ONLY terms must carry a license with a non-empty uri"
     expression: "this.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_REFERENCE_ONLY || (has(this.license) && this.license.uri != '')"
   };
   // At most one Restriction per axis — restrictions on the same kind are
-  // AND-combined, so duplicates are an authoring error. (6z1v3)
+  // AND-combined, so duplicates are an authoring error.
   option (buf.validate.message).cel = {
     id: "license_term.one_restriction_per_kind"
     message: "at most one restriction is allowed per kind"

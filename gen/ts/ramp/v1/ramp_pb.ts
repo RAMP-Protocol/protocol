@@ -1119,7 +1119,7 @@ export type Quota = Message<"ramp.v1.Quota"> & {
   metric: string;
 
   /**
-   * Maximum allowed value in the given window. (6z1v3) A quota of 0 grants
+   * Maximum allowed value in the given window. A quota of 0 grants
    * nothing — express "no access" by omitting the term, not a zero quota.
    *
    * @generated from field: int64 limit = 2;
@@ -1173,7 +1173,7 @@ export type Obligation = Message<"ramp.v1.Obligation"> & {
    * `id` (SPDX short-id, the common copyleft case, often the term's own
    * License.id) and/or `uri`. Because it is a License, a referenced `uri`
    * inherits the uri_digest swap-protection rule: a uri without a digest is
-   * rejected, exactly as for any other license reference. (6z1v3)
+   * rejected, exactly as for any other license reference.
    *
    * @generated from field: optional ramp.v1.License scope_license = 3;
    */

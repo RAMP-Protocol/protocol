@@ -3383,7 +3383,7 @@ type Quota struct {
 	//	copies             Digital or physical copies produced.
 	//	seats              Distinct named users licensed to access the content.
 	Metric string `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
-	// Maximum allowed value in the given window. (6z1v3) A quota of 0 grants
+	// Maximum allowed value in the given window. A quota of 0 grants
 	// nothing — express "no access" by omitting the term, not a zero quota.
 	Limit int64 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	// Time window over which the limit accumulates.
@@ -3462,7 +3462,7 @@ type Obligation struct {
 	// `id` (SPDX short-id, the common copyleft case, often the term's own
 	// License.id) and/or `uri`. Because it is a License, a referenced `uri`
 	// inherits the uri_digest swap-protection rule: a uri without a digest is
-	// rejected, exactly as for any other license reference. (6z1v3)
+	// rejected, exactly as for any other license reference.
 	ScopeLicense *License `protobuf:"bytes,3,opt,name=scope_license,json=scopeLicense,proto3,oneof" json:"scope_license,omitempty"`
 	// Free-form detail: attribution string, notice file URI, etc.
 	// OBLIGATION_KIND_OTHER without it → lint warning.
