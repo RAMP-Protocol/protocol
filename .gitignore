@@ -10,3 +10,4 @@ research-*.md
 # Local agent/review scratch — never ship AI-review artifacts in the protocol repo
 .claude/
 __pycache__/
+.sdk-types-work/

@@ -1,9 +1,13 @@
 {
   "name": "@ramp-protocol/sdk",
   "version": "1.0.0",
-  "description": "RAMP protocol — generated vocabulary constants (TypeScript). Message/validation types are generated as Zod schemas from JSON Schema (added via scripts/gen-sdk-types.sh).",
+  "description": "RAMP protocol — generated TypeScript types export: Zod schemas (./ramp/schemas) + vocabulary constants (./vocab/*), generated from the proto via JSON Schema.",
   "type": "module",
   "exports": {
+    "./ramp/schemas": "./ramp/schemas.ts",
     "./vocab/*": "./vocab/*.ts"
+  },
+  "peerDependencies": {
+    "zod": "^3.23.0 || ^4.0.0"
   }
 }

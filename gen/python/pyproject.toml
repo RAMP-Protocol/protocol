@@ -8,13 +8,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ramp-protocol"
 version = "0.1.0"
-description = "Generated RAMP vocabulary constants for Python. Message/validation types are generated as Pydantic models from JSON Schema (added via scripts/gen-sdk-types.sh)."
+description = "Generated RAMP types export for Python: Pydantic v2 models (ramp.models) + registered vocabulary constants (vocab.*), generated from the proto via JSON Schema."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
-# Vocabulary constants are pure string literals — no runtime dependency. The
-# generated Pydantic models add `pydantic` here when the types export lands.
-dependencies = []
+# Pydantic for the message models; vocabulary constants are pure string literals.
+dependencies = [
+  "pydantic>=2.0",
+]
 
 [project.urls]
 Homepage = "https://ramp-protocol.org"
@@ -25,4 +26,5 @@ where = ["."]
 # PEP 420 namespace packages. Currently the vocabulary constants (vocab.pricingunits
 # etc.); the Pydantic message models (ramp.v1.*) are added by the types-export step.
 namespaces = true
+# Pydantic models at ramp.models; vocabulary constants at vocab.pricingunits (etc.).
 include = ["ramp*", "vocab*"]

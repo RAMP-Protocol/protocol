@@ -1,25 +1,30 @@
-# RAMP — generated Python SDK
+# RAMP — generated Python types export
 
-Generated from [`proto/`](../../proto) by `buf generate`. **Do not edit by hand** —
-regenerate with `cd proto && buf generate` and commit the result (the CI drift gate
-enforces this).
+Generated from [`proto/`](../../proto) via JSON Schema. **Do not edit by hand** —
+regenerate with `scripts/gen-sdk-types.sh` and commit the result.
+
+This is a **types export**, not a full SDK: Pydantic models + registered vocabulary
+constants. Transport (Connect), request signing (RFC 9421), and key management are a
+separate, hand-written SDK layer.
 
 Contents:
-- `ramp/v1/`, `comp/v1/` — protobuf messages/enums (`*_pb2.py`) and type stubs (`*_pb2.pyi`).
-- `ramp/v1/ramp_connect.py` — Connect service client/handler stubs.
+- `ramp/models.py` — Pydantic v2 models for every RAMP message (`License`, `Pricing`,
+  `LicenseTerm`, `Offer`, …). They carry **shape + per-field validation**: enums (with
+  `UNSPECIFIED` excluded where it's a required discriminator), string patterns, length
+  and item bounds. **Cross-field rules are NOT here** — they are enforced
+  server-side by the Exchange/Broker (Go protovalidate); this is the correct trust
+  boundary.
 - `vocab/` — registered vocabulary constants per axis (`pricingunits`, `quotametrics`,
-  `functiontokens`, `geographytokens`, `usertypes`), each with typed constants, an
-  `ALL` tuple, and `is_registered()`. Authored solely from the `(ramp.v1.vocab)` /
-  `(ramp.v1.vocab_enum)` proto options — the same single source as the Go and TS SDKs.
+  `functiontokens`, `geographytokens`, `usertypes`): typed constants, an `ALL` tuple,
+  and `is_registered()`.
 
 ```python
-from ramp.v1 import ramp_pb2
+from ramp.models import LicenseTerm, Pricing
 from vocab import pricingunits
 
-offer = ramp_pb2.Offer()
-assert pricingunits.is_registered("tokens")        # registered bare token
-assert not pricingunits.is_registered("acme:foo")  # vendor:namespaced → not a registered token
+# FastAPI / FastMCP: use the model directly as a request/response type.
+term = LicenseTerm.model_validate(incoming_json)   # raises on shape/per-field violations
+assert pricingunits.is_registered("tokens")
 ```
 
-Install (from this directory): `pip install .` — add the `connect` extra for service
-stubs (`pip install ".[connect]"`) or `validation` for runtime protovalidate checks.
+Install (from this directory): `pip install .`
