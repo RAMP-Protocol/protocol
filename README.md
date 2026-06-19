@@ -35,18 +35,35 @@ A working multi-language stack — Exchange (Go), Broker (Go), Edge (TypeScript)
 
 ## SDKs
 
+All three SDKs are generated from `proto/` by `buf generate`, including **registered
+vocabulary constants** per axis (`pricingunits`, `quotametrics`, `functiontokens`,
+`geographytokens`, `usertypes`) so consumers use typed constants and an
+`IsRegistered`/`isRegistered`/`is_registered` membership check instead of magic
+strings. All three are emitted from the single `(ramp.v1.vocab)` source in one pass,
+so they cannot drift from each other.
+
 ### Go
 
 ```go
 import (
     rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
     "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
+    "github.com/RAMP-Protocol/protocol/gen/go/vocab/pricingunits"
 )
 ```
 
 ### TypeScript
 
-TypeScript message types and a Connect client are generated under [`gen/ts/`](gen/ts) (Protobuf-ES + Connect-ES); the [reference implementation](https://github.com/RAMP-Protocol/reference-implementation) shows them in use.
+TypeScript message types and a Connect client are generated under [`gen/ts/`](gen/ts) (Protobuf-ES + Connect-ES), with vocabulary constants under [`gen/ts/vocab/`](gen/ts/vocab); the [reference implementation](https://github.com/RAMP-Protocol/reference-implementation) shows them in use.
+
+### Python
+
+Python message types, type stubs (`.pyi`), Connect service stubs, and vocabulary constants are generated under [`gen/python/`](gen/python) (`pip install .` from that directory; see its [README](gen/python/README.md)).
+
+```python
+from ramp.v1 import ramp_pb2
+from vocab import pricingunits
+```
 
 ## License
 
