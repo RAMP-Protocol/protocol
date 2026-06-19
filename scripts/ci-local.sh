@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
-# Local mirror of .github/workflows/proto-ci.yml — runs the full gating sequence
-# in ONE command so the "I only ran a subset of the checks" failure mode cannot
-# recur. Keep this in lockstep with proto-ci.yml.
+# The single source of the proto gating sequence — runs the full set in ONE
+# command so the "I only ran a subset of the checks" failure mode cannot recur.
+# .github/workflows/proto-ci.yml invokes THIS script (it does not re-list the
+# steps), so CI and local cannot drift.
 #
 # Non-destructive: it does not modify your git index or working tree (the drift
 # check compares the regenerated output against HEAD rather than `git add -A`).
