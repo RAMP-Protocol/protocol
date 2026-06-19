@@ -91,13 +91,21 @@ done
 
 # Every DenialReason value (except UNSPECIFIED) must appear in the event-types
 # "closed enum" table. (R4-9: the table silently lost values across renames.)
+dr_n=0
 while read -r dr; do
+  dr_n=$((dr_n + 1))
   [ "$dr" = "DENIAL_REASON_UNSPECIFIED" ] && continue
   if ! grep -q -- "$dr" "$event_types"; then
     echo "::error::DenialReason '${dr}' is defined in the proto but missing from ${event_types}"
     status=1
   fi
 done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
+# Anti-vacuity floor: if extraction finds nothing, this check would pass for the
+# wrong reason. (The Go invariants carry the same `checked == 0` guard.)
+if [ "$dr_n" -eq 0 ]; then
+  echo "::error::doc-conformance: no DENIAL_REASON_* values found in ${proto_ramp} — extraction drifted; this check would pass vacuously"
+  status=1
+fi
 
 # Delegation-claim registry guard (R4-7 / R5-8). The registered JWT claims are
 # named `ramp_<field>` where <field> is a Delegation proto field. Self-extending:
@@ -110,8 +118,10 @@ done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
 # proto would falsely accept e.g. `ramp_offer_id` (offer_id exists on
 # TransactionItem, not Delegation).
 deleg_block=$(awk '/^message Delegation \{/,/^\}/' "$proto_ramp")
+claim_n=0
 while read -r claim; do
   [ -z "$claim" ] && continue
+  claim_n=$((claim_n + 1))
   field=${claim#ramp_}
   # Defensive: only [a-z_] field names are expected. Reject anything else rather
   # than interpolate it into the grep pattern below, so a future change to the
@@ -126,6 +136,10 @@ while read -r claim; do
     status=1
   fi
 done < <(grep -oE 'ramp_[a-z][a-z_]*' "$auth" | sort -u)
+if [ "$claim_n" -eq 0 ]; then
+  echo "::error::doc-conformance: no ramp_* delegation claims found in ${auth} — extraction drifted; this check would pass vacuously"
+  status=1
+fi
 
 if [ "$status" -eq 0 ]; then
   echo "doc-conformance: clean"

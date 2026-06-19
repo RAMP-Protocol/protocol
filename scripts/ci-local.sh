@@ -48,6 +48,15 @@ go test ./... || fail=1
 step "doc conformance"
 ./scripts/check-doc-conformance.sh || fail=1
 
+step "docs guards (remark-proto fail-path)"
+# Proves the build-gating doc guard still bites (throws on an unknown proto
+# reference). Skipped only if the docs deps aren't installed locally.
+if [ -d website/node_modules ]; then
+  (cd website && npm test --silent) || fail=1
+else
+  note "skipped — run 'npm install' in website/ to enable"
+fi
+
 step "buf breaking (informational, pre-v1 — non-blocking)"
 # Matches CI: continue-on-error. Never affects the exit status.
 (cd proto && buf breaking \
