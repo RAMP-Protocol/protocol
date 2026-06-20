@@ -11,9 +11,9 @@ on:
       - 'proto/**'
       - 'gen/descriptor.binpb'
       - 'scripts/gen-sdk-types.sh'
+      - 'scripts/check-canonical.sh'
       - 'scripts/sdk-types/**'
-      - 'conformance/requiredgen/**'
-      - 'conformance/corpus/**'
+      - 'conformance/**'
       - 'gen/python/**'
       - 'gen/ts/**'
       - '.github/workflows/sdk-types-ci.yml'
@@ -66,3 +66,10 @@ jobs:
         run: |
           npm install
           npm test
+
+      # Canonical proto-JSON interop: each client re-serializes every valid corpus
+      # instance and the emission, read back through Go protojson, must decode to the
+      # same proto message as the original (incl. Timestamp/Duration). Reuses the
+      # .sdk-types-work venv + zod provisioned by gen-sdk-types.sh above.
+      - name: Canonical proto-JSON round-trip
+        run: ./scripts/check-canonical.sh

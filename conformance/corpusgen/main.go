@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	protovalidate "buf.build/go/protovalidate"
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
@@ -28,8 +29,19 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+)
+
+// Fixed well-known-type values so the canonical proto-JSON round-trip test
+// (TestCanonicalRoundTrip) actually exercises Timestamp (RFC 3339) and Duration
+// encodings — the proto-JSON forms most likely to diverge across languages. Fixed,
+// not time.Now(), so the corpus stays deterministic for the drift gate.
+var (
+	fixedTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	fixedDur  = 90 * time.Second
 )
 
 // Case is one corpus entry. Valid==true is a baseline; Valid==false is a mutant
@@ -127,25 +139,48 @@ func main() {
 // ── baseline construction ────────────────────────────────────────────────────
 
 func baseline(md protoreflect.MessageDescriptor, sd map[string]proto.Message) (protoreflect.Message, error) {
+	var m protoreflect.Message
 	if s, ok := sd[string(md.Name())]; ok {
-		return proto.Clone(s).ProtoReflect(), nil
+		m = proto.Clone(s).ProtoReflect()
+	} else {
+		mt, err := protoregistry.GlobalTypes.FindMessageByName(md.FullName())
+		if err != nil {
+			return nil, err
+		}
+		m = mt.New()
+		for i := 0; i < md.Fields().Len(); i++ {
+			fd := md.Fields().Get(i)
+			fr := rules(fd)
+			if fr == nil || !hasConstraint(fr) {
+				continue
+			}
+			if err := setValid(m, fd, fr, sd); err != nil {
+				return nil, fmt.Errorf("field %s: %w", fd.Name(), err)
+			}
+		}
 	}
-	mt, err := protoregistry.GlobalTypes.FindMessageByName(md.FullName())
-	if err != nil {
-		return nil, err
-	}
-	m := mt.New()
-	for i := 0; i < md.Fields().Len(); i++ {
-		fd := md.Fields().Get(i)
-		fr := rules(fd)
-		if fr == nil || !hasConstraint(fr) {
+	enrichWKT(m)
+	return m, nil
+}
+
+// enrichWKT populates any direct Timestamp/Duration field on the baseline so the
+// canonical round-trip test exercises those proto-JSON encodings. Singular,
+// non-repeated, top-level fields only — enough to cover the corpus messages that
+// carry them; deeper nesting is not currently exercised.
+func enrichWKT(m protoreflect.Message) {
+	fds := m.Descriptor().Fields()
+	for i := 0; i < fds.Len(); i++ {
+		fd := fds.Get(i)
+		if fd.Kind() != protoreflect.MessageKind || fd.IsList() || fd.IsMap() {
 			continue
 		}
-		if err := setValid(m, fd, fr, sd); err != nil {
-			return nil, fmt.Errorf("field %s: %w", fd.Name(), err)
+		switch fd.Message().FullName() {
+		case "google.protobuf.Timestamp":
+			m.Set(fd, protoreflect.ValueOfMessage(timestamppb.New(fixedTime).ProtoReflect()))
+		case "google.protobuf.Duration":
+			m.Set(fd, protoreflect.ValueOfMessage(durationpb.New(fixedDur).ProtoReflect()))
 		}
 	}
-	return m, nil
 }
 
 func setValid(m protoreflect.Message, fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[string]proto.Message) error {

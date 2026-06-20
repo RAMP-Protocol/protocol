@@ -900,6 +900,8 @@
       "string.pattern"
     ],
     "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
       "maxUnitCost": "two words"
     }
   },
@@ -908,6 +910,8 @@
     "message": "RequestConstraints",
     "valid": true,
     "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
       "maxUnitCost": "0"
     }
   },
@@ -1038,6 +1042,7 @@
       "repeated.max_items"
     ],
     "json": {
+      "deadline": "90s",
       "uris": [
         "x",
         "x",
@@ -1304,6 +1309,7 @@
     "message": "ResourceQuery",
     "valid": true,
     "json": {
+      "deadline": "90s",
       "uris": [
         "x"
       ]
@@ -1634,14 +1640,17 @@
     "rules": [
       "string.min_len"
     ],
-    "json": {}
+    "json": {
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
   },
   {
     "id": "UsageReport/valid",
     "message": "UsageReport",
     "valid": true,
     "json": {
-      "idempotencyKey": "x"
+      "idempotencyKey": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
     }
   },
   {
