@@ -4,6 +4,114 @@ import { z } from "zod";
 
 export const AcceptableRestrictionSchema = z.object({ "axis": z.union([z.string().regex(new RegExp("^RESTRICTION_KIND_UNSPECIFIED$")), z.enum(["RESTRICTION_KIND_FUNCTION","RESTRICTION_KIND_GEOGRAPHY","RESTRICTION_KIND_USER_TYPE","RESTRICTION_KIND_OTHER"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("Which axis (same enum as Restriction.kind): FUNCTION / GEOGRAPHY /\n USER_TYPE / OTHER.").default(0), "values": z.array(z.string().regex(new RegExp("^[A-Za-z0-9._:*-]+$")).min(1).max(64)).max(64).describe("The values the query operates within on this axis — same token vocabulary\n as the terms (e.g. FUNCTION [\"ai-train\"], GEOGRAPHY [\"US\", \"EU\"]).").optional() }).strict().describe("AcceptableRestriction — the limits a query operates within on one restriction\n axis, expressed in the same RestrictionKind vocabulary that terms use. The\n Exchange/Broker MAY pre-select offers whose term restrictions fall within\n these as a convenience (see Restriction); it is NOT enforcement — the agent\n self-selects and bears compliance.");
 
+export const AgentAcceptanceSchema = z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("`signature` is a hex-encoded detached Ed25519 signature (NOT a JWS) over the\n deterministic protobuf serialization of `AgentAcceptancePayload` — the same\n hex/Ed25519 convention the SDK uses for Offer.signature. `signature_algorithm`\n is \"EdDSA\".");
+
+export const AgentAcceptancePayloadSchema = z.object({ "idempotencyKey": z.string().describe("The transaction's idempotency key — binds the acceptance to a single\n execute so it cannot be replayed under a different transaction.").default(""), "offerSig": z.string().describe("The accepted Offer's signature (Offer.signature). Anchors the whole signed\n offer without re-serializing its terms/pricing/expiry.").default(""), "requesterDomain": z.string().describe("Requester domain (Requester.domain) the acceptance is bound to.").default(""), "requesterId": z.string().describe("Requester identity (Requester.id) the acceptance is bound to.").default("") }).catchall(z.union([z.string().describe("The transaction's idempotency key — binds the acceptance to a single\n execute so it cannot be replayed under a different transaction.").default(""), z.string().describe("The accepted Offer's signature (Offer.signature). Anchors the whole signed\n offer without re-serializing its terms/pricing/expiry.").default(""), z.string().describe("Requester domain (Requester.domain) the acceptance is bound to.").default(""), z.string().describe("Requester identity (Requester.id) the acceptance is bound to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["idempotencyKey", "offerSig", "requesterDomain", "requesterId"].includes(key)
+if (key.match(new RegExp("^(idempotency_key)$"))) {
+evaluated = true
+const result = z.string().describe("The transaction's idempotency key — binds the acceptance to a single\n execute so it cannot be replayed under a different transaction.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(offer_sig)$"))) {
+evaluated = true
+const result = z.string().describe("The accepted Offer's signature (Offer.signature). Anchors the whole signed\n offer without re-serializing its terms/pricing/expiry.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(requester_domain)$"))) {
+evaluated = true
+const result = z.string().describe("Requester domain (Requester.domain) the acceptance is bound to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(requester_id)$"))) {
+evaluated = true
+const result = z.string().describe("Requester identity (Requester.id) the acceptance is bound to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Field provenance when building the payload for an execute request:\n   - offer_sig         = the accepted Offer.signature (the Exchange's hex\n                         signature; transitively binds pricing, terms,\n                         expires_at, and — via the offer — the issuing Exchange)\n   - requester_id      = TransactionRequest.requester.id\n   - requester_domain  = TransactionRequest.requester.domain\n   - idempotency_key   = TransactionRequest.idempotency_key\n For batch mode, requester_* and idempotency_key come from the ENCLOSING\n TransactionRequest (a TransactionItem carries neither); offer_sig is the\n per-item Offer.signature.");
+
 export const AttributionDetailSchema = z.object({ "displayedUrl": z.string().describe("URL displayed to the user as the attribution link.").optional(), "format": z.enum(["CITATION_FORMAT_LINK","CITATION_FORMAT_FOOTNOTE","CITATION_FORMAT_INLINE"]).describe("How the citation was presented.").optional(), "visibleToUser": z.boolean().describe("Whether the attribution was visible to the end user.").optional() }).catchall(z.union([z.string().describe("URL displayed to the user as the attribution link."), z.boolean().describe("Whether the attribution was visible to the end user."), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
 let evaluated = ["displayedUrl", "format", "visibleToUser"].includes(key)
@@ -11142,7 +11250,38 @@ ctx.addIssue({
 }
 }).describe("TransactionDenial — ExecuteTransaction could not complete. Carries the denial\n reason the response body no longer holds (denial_reason / restriction_mismatches\n move here in the response-shape normalization). Reuses the DenialReason vocab.");
 
-export const TransactionItemSchema = z.object({ "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
+export const TransactionItemSchema = z.object({ "agentAcceptance": z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.").optional(), "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
 let evaluated = ["attestedAt", "claims", "kid", "signature", "uri", "verifier"].includes(key)
 if (key.match(new RegExp("^(attested_at)$"))) {
@@ -12114,9 +12253,164 @@ ctx.addIssue({
 }
 }
 }
-}).describe("The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.") }).strict().describe("TransactionItem — A single offer commitment within a batch transaction.");
+}).describe("The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.") }).catchall(z.union([z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["agentAcceptance", "offer"].includes(key)
+if (key.match(new RegExp("^(agent_acceptance)$"))) {
+evaluated = true
+const result = z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("TransactionItem — A single offer commitment within a batch transaction.");
 
-export const TransactionRequestSchema = z.object({ "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "idempotencyKey": z.string().min(1).describe("Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response."), "items": z.array(z.object({ "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
+export const TransactionRequestSchema = z.object({ "agentAcceptance": z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Single-offer mode: the agent's detached acceptance signature over the\n accepted `offer` (RAMP-102 §1). Optional on the wire (additive,\n backward-compatible); the Exchange enforces presence at the service layer\n for relayed requests. Signed bytes = deterministic AgentAcceptancePayload\n {offer_sig=offer.signature, requester_id=requester.id,\n requester_domain=requester.domain, idempotency_key=idempotency_key}.").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "idempotencyKey": z.string().min(1).describe("Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response."), "items": z.array(z.object({ "agentAcceptance": z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.").optional(), "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
 let evaluated = ["attestedAt", "claims", "kid", "signature", "uri", "verifier"].includes(key)
 if (key.match(new RegExp("^(attested_at)$"))) {
@@ -13088,7 +13382,100 @@ ctx.addIssue({
 }
 }
 }
-}).describe("The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.") }).strict().describe("TransactionItem — A single offer commitment within a batch transaction.")).describe("Batch mode: commit to multiple offers in one request, each carrying its\n own reflected signed Offer. Set this XOR `offer` (see message rule).").optional(), "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
+}).describe("The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.") }).catchall(z.union([z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["agentAcceptance", "offer"].includes(key)
+if (key.match(new RegExp("^(agent_acceptance)$"))) {
+evaluated = true
+const result = z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("TransactionItem — A single offer commitment within a batch transaction.")).describe("Batch mode: commit to multiple offers in one request, each carrying its\n own reflected signed Offer. Set this XOR `offer` (see message rule).").optional(), "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
 let evaluated = ["attestedAt", "claims", "kid", "signature", "uri", "verifier"].includes(key)
 if (key.match(new RegExp("^(attested_at)$"))) {
@@ -14248,9 +14635,85 @@ ctx.addIssue({
 }
 }
 }
-}).describe("Requester identity — forwarded for authorization and audit.").optional(), "ver": z.string().describe("Protocol version").default("") }).catchall(z.union([z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.string().min(1).describe("Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.").default(""), z.string().describe("Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`."), z.never()])).superRefine((value, ctx) => {
+}).describe("Requester identity — forwarded for authorization and audit.").optional(), "ver": z.string().describe("Protocol version").default("") }).catchall(z.union([z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
-let evaluated = ["ext", "extCritical", "idempotencyKey", "items", "offer", "offerId", "requester", "ver"].includes(key)
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Single-offer mode: the agent's detached acceptance signature over the\n accepted `offer` (RAMP-102 §1). Optional on the wire (additive,\n backward-compatible); the Exchange enforces presence at the service layer\n for relayed requests. Signed bytes = deterministic AgentAcceptancePayload\n {offer_sig=offer.signature, requester_id=requester.id,\n requester_domain=requester.domain, idempotency_key=idempotency_key}."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.string().min(1).describe("Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.").default(""), z.string().describe("Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["agentAcceptance", "ext", "extCritical", "idempotencyKey", "items", "offer", "offerId", "requester", "ver"].includes(key)
+if (key.match(new RegExp("^(agent_acceptance)$"))) {
+evaluated = true
+const result = z.object({ "signature": z.string().min(1).describe("Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes."), "signatureAlgorithm": z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("") }).catchall(z.union([z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["signature", "signatureAlgorithm"].includes(key)
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("Signature algorithm; \"EdDSA\" for Ed25519.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Single-offer mode: the agent's detached acceptance signature over the\n accepted `offer` (RAMP-102 §1). Optional on the wire (additive,\n backward-compatible); the Exchange enforces presence at the service layer\n for relayed requests. Signed bytes = deterministic AgentAcceptancePayload\n {offer_sig=offer.signature, requester_id=requester.id,\n requester_domain=requester.domain, idempotency_key=idempotency_key}.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
 if (key.match(new RegExp("^(ext_critical)$"))) {
 evaluated = true
 const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])

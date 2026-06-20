@@ -5,10 +5,44 @@ from __future__ import annotations
 
 from typing import Any
 from pydantic import AwareDatetime, ConfigDict, Field, RootModel, conint, constr
-from enum import Enum
 from wire.base import WireModel
+from enum import Enum
 from decimal import Decimal
 
+
+
+class AgentAcceptance(WireModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    signature: constr(min_length=1) = Field(
+        ...,
+        description='Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes.',
+    )
+    signatureAlgorithm: str | None = Field(
+        '', description='Signature algorithm; "EdDSA" for Ed25519.'
+    )
+
+
+class AgentAcceptancePayload(WireModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    idempotencyKey: str | None = Field(
+        '',
+        description="The transaction's idempotency key — binds the acceptance to a single\n execute so it cannot be replayed under a different transaction.",
+    )
+    offerSig: str | None = Field(
+        '',
+        description="The accepted Offer's signature (Offer.signature). Anchors the whole signed\n offer without re-serializing its terms/pricing/expiry.",
+    )
+    requesterDomain: str | None = Field(
+        '',
+        description='Requester domain (Requester.domain) the acceptance is bound to.',
+    )
+    requesterId: str | None = Field(
+        '', description='Requester identity (Requester.id) the acceptance is bound to.'
+    )
 
 
 class AuthMethod(Enum):
@@ -1832,6 +1866,10 @@ class TransactionItem(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
+    agentAcceptance: AgentAcceptance | None = Field(
+        None,
+        description="The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.",
+    )
     offer: Offer = Field(
         ...,
         description='The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.',
@@ -1841,6 +1879,10 @@ class TransactionItem(WireModel):
 class TransactionRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
+    )
+    agentAcceptance: AgentAcceptance | None = Field(
+        None,
+        description="Single-offer mode: the agent's detached acceptance signature over the\n accepted `offer` (RAMP-102 §1). Optional on the wire (additive,\n backward-compatible); the Exchange enforces presence at the service layer\n for relayed requests. Signed bytes = deterministic AgentAcceptancePayload\n {offer_sig=offer.signature, requester_id=requester.id,\n requester_domain=requester.domain, idempotency_key=idempotency_key}.",
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(

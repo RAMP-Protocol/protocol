@@ -104,6 +104,23 @@
     }
   },
   {
+    "id": "AgentAcceptance/signature/too_short",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {}
+  },
+  {
+    "id": "AgentAcceptance/valid",
+    "message": "AgentAcceptance",
+    "valid": true,
+    "json": {
+      "signature": "x"
+    }
+  },
+  {
     "id": "AuthorizedExchange/relationship/not_in",
     "message": "AuthorizedExchange",
     "valid": false,

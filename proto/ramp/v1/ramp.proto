@@ -1592,6 +1592,59 @@ enum ResourceMutability {
 // Transaction (Steps 4-5)
 // ============================================================================
 
+// AgentAcceptance — the agent's DETACHED acceptance signature over an accepted
+// Offer (RAMP-102 §1). Distinct from the transport (RFC 9421) request signature:
+// it is topology-independent and content-bound, so it stays valid no matter how
+// many brokers relay the request, and binds the agent to THIS specific offer +
+// requester + transaction. It travels in the execute body alongside the
+// reflected Offer; the Exchange verifies it and binds the delivery URL to the
+// agent's key (RFC 7638 thumbprint of the acceptance key).
+//
+// `signature` is a hex-encoded detached Ed25519 signature (NOT a JWS) over the
+// deterministic protobuf serialization of `AgentAcceptancePayload` — the same
+// hex/Ed25519 convention the SDK uses for Offer.signature. `signature_algorithm`
+// is "EdDSA".
+message AgentAcceptance {
+  // Hex-encoded detached Ed25519 signature over the deterministic-marshaled
+  // AgentAcceptancePayload bytes.
+  string signature = 1 [(buf.validate.field).string.min_len = 1];
+
+  // Signature algorithm; "EdDSA" for Ed25519.
+  string signature_algorithm = 2;
+}
+
+// AgentAcceptancePayload — the canonical signing structure for AgentAcceptance.
+// It is NEVER sent on the wire; it exists solely so the signer (SDK) and the
+// verifier (Exchange) derive BYTE-IDENTICAL signed bytes from the same proto
+// schema via `proto.Marshal(Deterministic: true)`. Underspecifying these bytes
+// is the top cross-implementation drift risk, so the field set is fixed here.
+//
+// Field provenance when building the payload for an execute request:
+//   - offer_sig         = the accepted Offer.signature (the Exchange's hex
+//                         signature; transitively binds pricing, terms,
+//                         expires_at, and — via the offer — the issuing Exchange)
+//   - requester_id      = TransactionRequest.requester.id
+//   - requester_domain  = TransactionRequest.requester.domain
+//   - idempotency_key   = TransactionRequest.idempotency_key
+// For batch mode, requester_* and idempotency_key come from the ENCLOSING
+// TransactionRequest (a TransactionItem carries neither); offer_sig is the
+// per-item Offer.signature.
+message AgentAcceptancePayload {
+  // The accepted Offer's signature (Offer.signature). Anchors the whole signed
+  // offer without re-serializing its terms/pricing/expiry.
+  string offer_sig = 1;
+
+  // Requester identity (Requester.id) the acceptance is bound to.
+  string requester_id = 2;
+
+  // Requester domain (Requester.domain) the acceptance is bound to.
+  string requester_domain = 3;
+
+  // The transaction's idempotency key — binds the acceptance to a single
+  // execute so it cannot be replayed under a different transaction.
+  string idempotency_key = 4;
+}
+
 // TransactionRequest — Commit to one or more offers.
 //
 // After selecting offers, the caller commits by sending this to the
@@ -1631,6 +1684,14 @@ message TransactionRequest {
   // reconstruct-from-catalog. Set this XOR `items` (see message rule).
   optional Offer offer = 8;
 
+  // Single-offer mode: the agent's detached acceptance signature over the
+  // accepted `offer` (RAMP-102 §1). Optional on the wire (additive,
+  // backward-compatible); the Exchange enforces presence at the service layer
+  // for relayed requests. Signed bytes = deterministic AgentAcceptancePayload
+  // {offer_sig=offer.signature, requester_id=requester.id,
+  // requester_domain=requester.domain, idempotency_key=idempotency_key}.
+  optional AgentAcceptance agent_acceptance = 9;
+
   // Batch mode: commit to multiple offers in one request, each carrying its
   // own reflected signed Offer. Set this XOR `offer` (see message rule).
   repeated TransactionItem items = 7;
@@ -1652,6 +1713,13 @@ message TransactionItem {
   // presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every
   // batch item carries its offer.
   Offer offer = 3 [(buf.validate.field).required = true];
+
+  // The agent's detached acceptance signature over this item's `offer`
+  // (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per
+  // item at the service layer for relayed batches. Signed bytes =
+  // deterministic AgentAcceptancePayload, with requester_* and idempotency_key
+  // taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.
+  optional AgentAcceptance agent_acceptance = 4;
 }
 
 // TransactionResponse — Exchange confirms the transaction(s).
