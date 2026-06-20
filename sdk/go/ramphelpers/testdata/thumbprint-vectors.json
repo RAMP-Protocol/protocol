@@ -1,0 +1,21 @@
+{
+  "_note": "RFC 7638 JWK Thumbprint vectors for Ed25519 keys (ADR-013 D4). Shared by the Go (internal/rampthumbprint), TS (src/edge/src/thumbprint.ts) and Python (src/mcp/src/ramp_mcp_shim/thumbprint.py) implementations so all three prove byte-identical output. Each entry: a base64url-no-pad raw 32-byte Ed25519 public key and its expected base64url-no-pad thumbprint = base64url(SHA-256(canonical JWK)). Canonical JWK is {\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"<base64url-nopad(pubkey)>\"} with members in lexicographic order, no whitespace. Values are additionally cross-checked against an independent canonical-JWK construction (json.dumps sort_keys; see src/mcp/tests/test_thumbprint.py::test_fixture_thumbprints_match_independent_construction); the last vector uses the RFC 8032 Ed25519 test-vector public key.",
+  "vectors": [
+    {
+      "public_key_b64url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "thumbprint": "ogRZbCR5KTrPFCAfuYmCMwj0w7Yuk3Lr6YWQWfpkbf0"
+    },
+    {
+      "public_key_b64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "thumbprint": "P7IdLIpiTZiFaIoOSqbX3JrSyps3hvZ4Y2SieP96XIY"
+    },
+    {
+      "public_key_b64url": "__________________________________________8",
+      "thumbprint": "5rFvj451YsRwcWuFV5946TD4InhZSbOza0q8jWz8X90"
+    },
+    {
+      "public_key_b64url": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "thumbprint": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
+    }
+  ]
+}
