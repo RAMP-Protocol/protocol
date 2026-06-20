@@ -134,7 +134,7 @@ func (ps *PostgresStore) WriteBatch(events []*TransactionEvent) error {
         "transaction_id", "billing_id", "idempotency_key",
         "buyer_lid", "provider_domain", "exchange_id",
         "cost_amount", "cost_currency",
-        "chain_hash", "offer_signature",
+        "chain_hash", "offer_id",
         "payload",
     ))
     if err != nil {
@@ -148,7 +148,7 @@ func (ps *PostgresStore) WriteBatch(events []*TransactionEvent) error {
             event.TransactionID, event.BillingID, event.IdempotencyKey,
             event.BuyerLID, event.ProviderDomain, event.ExchangeID,
             event.CostAmount, event.CostCurrency,
-            event.ChainHash, event.OfferSignature,
+            event.ChainHash, event.OfferID,
             payload,
         )
         if err != nil {
@@ -204,7 +204,6 @@ type TransactionEvent struct {
     CostUnitCost float64 `json:"cost_unit_cost"           db:"cost_unit_cost"`
 
     ChainHash            string `json:"chain_hash"             db:"chain_hash"`
-    OfferSignature string `json:"offer_signature"  db:"offer_signature"`
 
     // ... additional fields per event type (see Event Types page)
 }

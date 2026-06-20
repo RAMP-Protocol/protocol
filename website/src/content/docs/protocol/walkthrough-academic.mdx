@@ -608,7 +608,7 @@ The Broker also flags the retracted paper to the agent:
 
 ## Step 5 — Batch ExecuteTransaction
 
-The Broker commits to all 49 selected offers in a single batch `TransactionRequest`. Each offer is referenced by its `offer_id` and the Exchange's own `exchange_signature` (stateless verification — the Exchange does not need to store offers).
+The Broker commits to all 49 selected offers in a single batch `TransactionRequest`. Each item carries the full signed `offer`, reflected back exactly as received at discovery (stateless verification — the Exchange does not need to store offers).
 
 ```json
 POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
@@ -634,208 +634,63 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
   },
   "items": [
     {
-      "offer_id": "offer-arxiv-2406-11838",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig..."
+      "offer": {
+        "offer_id": "offer-arxiv-2406-11838",
+        "title": "MedViT: A Robust Vision Transformer for Medical Image Classification",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0",
+          "currency": "USD",
+          "unit_cost": "0",
+          "estimated_quantity": 12800,
+          "unit": "tokens"
+        },
+        "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "identity": {
+          "canonical_url": "https://arxiv.org/abs/2406.11838",
+          "doi": "10.48550/arXiv.2406.11838",
+          "content_hash": "sha256:a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01",
+          "hash_method": "sha256",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+        },
+        "signature": "base64-ed25519-arxiv-offer-sig...",
+        "signature_algorithm": "EdDSA"
+      }
     },
     {
-      "offer_id": "offer-arxiv-2405-09781",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-2..."
-    },
-    {
-      "offer_id": "offer-arxiv-2404-18021",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-3..."
-    },
-    {
-      "offer_id": "offer-arxiv-2403-12590",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-4..."
-    },
-    {
-      "offer_id": "offer-arxiv-2402-08471",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-5..."
-    },
-    {
-      "offer_id": "offer-arxiv-2401-15034",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-6..."
-    },
-    {
-      "offer_id": "offer-arxiv-2312-09250",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-7..."
-    },
-    {
-      "offer_id": "offer-arxiv-2311-14521",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-8..."
-    },
-    {
-      "offer_id": "offer-arxiv-2310-07893",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-9..."
-    },
-    {
-      "offer_id": "offer-arxiv-2309-16588",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-10..."
-    },
-    {
-      "offer_id": "offer-arxiv-2308-13042",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-11..."
-    },
-    {
-      "offer_id": "offer-arxiv-2307-09534",
-      "offer_signature": "base64-ed25519-arxiv-offer-sig-12..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-103250",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-103178",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-2..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-103095",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-3..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-103012",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-4..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102956",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-5..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102891",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-6..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102834",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-7..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102770",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-8..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102689",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-9..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102615",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-10..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102542",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-11..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102478",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-12..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102410",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-13..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102345",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-14..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102287",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-15..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102219",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-16..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-102154",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-17..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-103301",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-18..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-103267",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-19..."
-    },
-    {
-      "offer_id": "offer-elsevier-sub-103189",
-      "offer_signature": "base64-ed25519-elsevier-sub-offer-sig-20..."
-    },
-    {
-      "offer_id": "offer-springer-paid-02401",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig..."
-    },
-    {
-      "offer_id": "offer-springer-paid-02318",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-2..."
-    },
-    {
-      "offer_id": "offer-springer-paid-02245",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-3..."
-    },
-    {
-      "offer_id": "offer-springer-paid-02112",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-4..."
-    },
-    {
-      "offer_id": "offer-springer-paid-02038",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-5..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01975",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-6..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01901",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-7..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01847",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-8..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01789",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-9..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01714",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-10..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01648",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-11..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01581",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-12..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01517",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-13..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01389",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-14..."
-    },
-    {
-      "offer_id": "offer-springer-paid-01312",
-      "offer_signature": "base64-ed25519-springer-paid-offer-sig-15..."
-    },
-    {
-      "offer_id": "offer-elsevier-paid-103145",
-      "offer_signature": "base64-ed25519-elsevier-paid-offer-sig..."
-    },
-    {
-      "offer_id": "offer-elsevier-paid-103078",
-      "offer_signature": "base64-ed25519-elsevier-paid-offer-sig-2..."
+      "offer": {
+        "offer_id": "offer-elsevier-sub-103250",
+        "title": "TransUNet++: Rethinking Multi-Scale Feature Fusion for Medical Image Segmentation",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0",
+          "currency": "USD",
+          "unit_cost": "0",
+          "estimated_quantity": 15200,
+          "unit": "tokens"
+        },
+        "subscription_id": "inst-sub-stanford-2026",
+        "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "identity": {
+          "canonical_url": "https://www.sciencedirect.com/science/article/pii/S1361841524001250",
+          "doi": "10.1016/j.media.2024.103250",
+          "content_hash": "sha256:b2c3d4e5f6a789012345678bcdefa0123456789abcdef0123456789abcdef02",
+          "hash_method": "sha256",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+        },
+        "signature": "base64-ed25519-elsevier-sub-offer-sig...",
+        "signature_algorithm": "EdDSA"
+      }
     }
+    // … 47 more items, each { "offer": { …full signed Offer, reflected back… } } —
+    //    12 arXiv (free), 18 more Elsevier (subscription), 15 Springer + 2 Elsevier (paid) …
   ]
 }
 ```
 
 The Exchange processes all 49 items in a single batch:
 
-1. **Signature verification** — verifies each `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
+1. **Signature verification** — verifies each item's `offer.signature` is its own Ed25519 signature over the reflected Offer (stateless, no stored offers).
 2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in the HTTP headers) against the agent's published public key at `cs.stanford.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
 3. **Delegation verification** — verifies the JWT chain for the 20 subscription items. Confirms `academic:*` scope covers Elsevier content.
 4. **Balance check** — confirms `litrev-agent@cs.stanford.edu` has sufficient balance ($25.50 for 17 paid items).

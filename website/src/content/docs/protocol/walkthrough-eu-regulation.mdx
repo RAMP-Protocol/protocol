@@ -339,7 +339,28 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
   "ver": "1.0",
   "idempotencyKey": "tx-eli-001",
   "offer_id": "offer-eurlex-aiact-001",
-  "offer_signature": "base64-ed25519-eurlex-offer-sig...",
+  "offer": {
+    "offer_id": "offer-eurlex-aiact-001",
+    "title": "Regulation (EU) 2024/1689 — EU AI Act",
+    "pricing": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "currency": "EUR",
+      "unit_cost": "0",
+      "estimated_quantity": 89000,
+      "unit": "tokens"
+    },
+    "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+    "expires_at": "2026-03-20T12:05:00Z",
+    "identity": {
+      "canonical_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/XML/?uri=CELEX:32024R1689",
+      "content_hash": "sha256:b7e23fa1c8d94e6a2f10b5d3c7e89f01234567890abcdef1234567890abcdef",
+      "hash_method": "sha256",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+    },
+    "signature": "base64-ed25519-eurlex-offer-sig...",
+    "signature_algorithm": "EdDSA"
+  },
   "requester": {
     "id": "legal-research-agent",
     "domain": "lawfirm.eu",

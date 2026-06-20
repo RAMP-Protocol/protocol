@@ -142,7 +142,7 @@ Key fields in each offer:
 
 ### Step 4: Execute Transaction ([ExecuteTransaction RPC](/components/exchange/request-flows))
 
-Commit to an offer. Pass the `offer_id` and `offer_signature` from Step 3. The Exchange [verifies the signature](/protocol/authentication), [authorizes billing](/components/exchange/billing-adapter), writes the [transaction log](/components/exchange/storage-model) (WAL — write-before-sign invariant), and returns a **[signed URL](/components/edge-function/signed-url-verification)**.
+Commit to an offer. Pass back the full signed `offer` from Step 3, reflected exactly as received. The Exchange [verifies the offer signature](/protocol/authentication) over the presented bytes (stateless — no reconstruct-from-catalog), [authorizes billing](/components/exchange/billing-adapter), writes the [transaction log](/components/exchange/storage-model) (WAL — write-before-sign invariant), and returns a **[signed URL](/components/edge-function/signed-url-verification)**.
 
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
@@ -150,8 +150,19 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
   -d '{
     "ver": "1.0",
     "idempotencyKey": "demo-txn-001",
-    "offer_id": "<offer_id from Step 3>",
-    "offer_signature": "<signature from Step 3>",
+    "offer": {
+      "offer_id": "offer-cdn.ramp-protocol.org-1773682699693224366",
+      "pricing": {
+        "model": "PRICING_MODEL_PER_UNIT",
+        "rate": "0.05",
+        "currency": "USD",
+        "estimated_quantity": 2000,
+        "unit": "accesses"
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "signature": "ae77b181...32607e08",
+      "signature_algorithm": "EdDSA"
+    },
     "aisystem": {
       "name": "DemoAgent",
       "aisysuse": { "lid": "LIC-DEMO-001" }

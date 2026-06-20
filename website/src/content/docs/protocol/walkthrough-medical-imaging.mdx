@@ -216,7 +216,29 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
   "ver": "1.0",
   "idempotencyKey": "tx-mri-001",
   "offer_id": "offer-tcia-gbm-0152-001",
-  "offer_signature": "base64-ed25519-medimg-offer-sig...",
+  "offer": {
+    "offer_id": "offer-tcia-gbm-0152-001",
+    "title": "Brain MRI — TCGA-GBM Subject TCGA-06-0152",
+    "pricing": {
+      "model": "PRICING_MODEL_PER_UNIT",
+      "rate": "25.00",
+      "currency": "USD",
+      "unit_cost": "0.0295",
+      "estimated_quantity": 847,
+      "unit": "records"
+    },
+    "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+    "expires_at": "2026-03-20T14:00:00Z",
+    "identity": {
+      "canonical_url": "https://imaging.tcia.org/studies/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42",
+      "doi": "10.7937/K9/TCIA.2016.RNYFUYE9",
+      "content_hash": "sha256-merkle:b3a7d2f4e8c1...root-hash-of-847-instances",
+      "hash_method": "sha256-merkle",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+    },
+    "signature": "base64-ed25519-medimg-offer-sig...",
+    "signature_algorithm": "EdDSA"
+  },
   "requester": {
     "id": "neuro-bot",
     "domain": "brainlab.edu",
@@ -236,7 +258,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
 
 **The Exchange performs these checks, in order:**
 
-1. **Signature verification** — verifies `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
+1. **Signature verification** — verifies `offer.signature` is its own Ed25519 signature over the reflected Offer (stateless, no stored offers).
 2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in HTTP headers) against `brainlab.edu/.well-known/ramp.json` (`role=ROLE_AGENT`).
 3. **DUA verification** — looks up `DUA-TCIA-2026-042` in its compliance registry. Verifies the DUA is (a) signed, (b) covers `brainlab.edu`, (c) covers `ai-input` use, (d) has not expired. **If the DUA is invalid, missing, or does not cover the requested use, the transaction is denied.**
 4. **Balance check** — confirms `neuro-bot@brainlab.edu` has sufficient balance ($25.00).

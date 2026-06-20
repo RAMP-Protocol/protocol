@@ -282,11 +282,26 @@ Content-Type: application/json
     "billing_ref": "ACCT-BUYER-001",
     "scopes": ["*"]
   },
-  "offer_signature": "a1b2c3d4e5f6..."
+  "offer": {
+    "offer_id": "offer-tc-4921",
+    "title": "The Future of AI Infrastructure",
+    "pricing": {
+      "model": "PRICING_MODEL_PER_UNIT",
+      "rate": "0.05",
+      "currency": "USD",
+      "unit_cost": "0.00001515",
+      "estimated_quantity": 3300,
+      "unit": "accesses"
+    },
+    "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+    "expires_at": "2026-03-14T02:30:00Z",
+    "signature": "a1b2c3d4e5f6...",
+    "signature_algorithm": "EdDSA"
+  }
 }
 ```
 
-The `offer_signature` is the `exchange_signature` from the selected offer. The Exchange verifies this signature to confirm the offer has not been tampered with. The Exchange is stateless -- it reconstructs the offer data from the signed token rather than storing offers.
+The single-mode `offer` is the full signed Offer reflected back exactly as received at discovery; the optional top-level `offer_id` is a non-authoritative correlation key only. The Exchange verifies `offer.signature` over the presented Offer bytes to confirm the offer has not been tampered with. The Exchange is stateless -- it verifies the self-contained signed Offer rather than storing offers.
 
 ### Response (`TransactionResponse`)
 
@@ -343,12 +358,20 @@ For batch transactions, use the `items` array:
   },
   "items": [
     {
-      "offer_id": "offer-tc-4921",
-      "offer_signature": "a1b2c3..."
+      "offer": {
+        "offer_id": "offer-tc-4921",
+        "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
+        "signature": "a1b2c3...",
+        "signature_algorithm": "EdDSA"
+      }
     },
     {
-      "offer_id": "offer-tc-4922",
-      "offer_signature": "d4e5f6..."
+      "offer": {
+        "offer_id": "offer-tc-4922",
+        "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001200", "unit": "accesses" },
+        "signature": "d4e5f6...",
+        "signature_algorithm": "EdDSA"
+      }
     }
   ]
 }

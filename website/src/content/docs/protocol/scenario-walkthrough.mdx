@@ -621,7 +621,27 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
-  "offer_signature": "base64-ed25519-sig-B..."
+  "offer": {
+    "offer_id": "sub-offer-tc-reg-001",
+    "title": "AI Regulation: What Providers Need to Know",
+    "pricing": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "currency": "USD",
+      "unit_cost": "0",
+      "estimated_quantity": 3300
+    },
+    "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+    "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+    "identity": {
+      "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
+      "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
+      "content_hash": "a1b2c3d4e5f6...",
+      "hash_method": "simhash-v1"
+    },
+    "signature": "base64-ed25519-sig-B...",
+    "signature_algorithm": "EdDSA"
+  }
 }
 ```
 
@@ -641,7 +661,27 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
-  "offer_signature": "base64-ed25519-sig-B..."
+  "offer": {
+    "offer_id": "sub-offer-tc-reg-001",
+    "title": "AI Regulation: What Providers Need to Know",
+    "pricing": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "currency": "USD",
+      "unit_cost": "0",
+      "estimated_quantity": 3300
+    },
+    "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+    "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+    "identity": {
+      "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
+      "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
+      "content_hash": "a1b2c3d4e5f6...",
+      "hash_method": "simhash-v1"
+    },
+    "signature": "base64-ed25519-sig-B...",
+    "signature_algorithm": "EdDSA"
+  }
 }
 ```
 
