@@ -197,13 +197,28 @@ func (r *WellKnownKeyResolver) refresh(ctx context.Context) error {
 // runs the pure VerifyRequest. It is the convenience the server interceptor and a
 // key-resolving client use: the resolver does the IO, VerifyRequest stays pure.
 func VerifyRequestResolved(ctx context.Context, req *http.Request, body []byte, resolver KeyResolver, opts VerifyOptions) (*VerifiedRequest, error) {
-	params, _, err := parseSignatureHeaders(req.Header)
+	allParams, sigMap, err := parseAllSignatures(req.Header)
 	if err != nil {
 		return nil, err
 	}
-	pub, err := resolver.Resolve(ctx, params.KeyID)
-	if err != nil {
-		return nil, err
+	return verifySingleSignature(req, allParams[0], sigMap, body, ctxResolver(ctx, resolver), opts)
+}
+
+// ctxResolver adapts a KeyResolver (ctx-carrying Resolve) to the resolveFunc
+// shape verifySingleSignature uses.
+func ctxResolver(ctx context.Context, resolver KeyResolver) resolveFunc {
+	return func(keyID string) (ed25519.PublicKey, error) {
+		return resolver.Resolve(ctx, keyID)
 	}
-	return VerifyRequest(req, body, pub, opts)
+}
+
+// VerifyMultisigRequestResolved verifies ALL signatures on req, resolving each
+// label's key via resolver, and returns the VerifiedRequest list in sig1..sigN
+// order. It is the multi-hop sibling of VerifyRequestResolved: it enforces the
+// hop bound (opts.MaxSignatures) and the structural forwarding chain before
+// cryptographically verifying every hop, so a stripped, reordered, or
+// substituted predecessor is rejected. A single-signature request is the N=1
+// case and verifies identically.
+func VerifyMultisigRequestResolved(ctx context.Context, req *http.Request, body []byte, resolver KeyResolver, opts VerifyOptions) ([]VerifiedRequest, error) {
+	return VerifyMultisigRequest(req, body, ctxResolver(ctx, resolver), opts)
 }

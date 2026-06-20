@@ -21,19 +21,71 @@ import (
 // cannot be swapped under a signed envelope). x-ramp-entitlement-biscuit is
 // bound additionally whenever it is present.
 
+// ComponentParam is a single RFC 9421 §2.4 parameter on a covered-component
+// identifier — e.g. the key="sig1" on `"signature";key="sig1"`.
+type ComponentParam struct {
+	Key string
+	Val string
+}
+
+// CoveredComponent is one entry in a signature's covered-component set: a
+// component name plus any RFC 9421 component parameters. Plain components
+// (@method, content-digest, …) carry nil Params; a forwarding-chain link carries
+// a single {Key:"key", Val:"sigN-1"} param on Name "signature".
+type CoveredComponent struct {
+	Name   string
+	Params []ComponentParam
+}
+
+// plainComponents builds CoveredComponents with no parameters from names.
+func plainComponents(names ...string) []CoveredComponent {
+	out := make([]CoveredComponent, 0, len(names))
+	for _, n := range names {
+		out = append(out, CoveredComponent{Name: n})
+	}
+	return out
+}
+
+// componentParam returns the value of the named parameter on c, or "" if absent.
+func componentParam(c CoveredComponent, key string) string {
+	for _, p := range c.Params {
+		if p.Key == key {
+			return p.Val
+		}
+	}
+	return ""
+}
+
+// renderComponent serializes a covered-component identifier as it appears in the
+// Signature-Input header and the @signature-params line: `"name";k="v";…`. The
+// name is rendered verbatim (callers supply already-lowercased names) so the
+// header inner list and the signature-base inner list are byte-identical. For a
+// param-less component this yields exactly `"name"` — byte-equal to the old
+// single-label quoted string, preserving the N=1 base.
+func renderComponent(c CoveredComponent) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	b.WriteString(c.Name)
+	b.WriteByte('"')
+	for _, p := range c.Params {
+		fmt.Fprintf(&b, ";%s=%q", p.Key, p.Val)
+	}
+	return b.String()
+}
+
 // sigParams captures the parameters of a single Signature-Input label.
 type sigParams struct {
 	Label   string
-	Covered []string
+	Covered []CoveredComponent
 	KeyID   string
 	Alg     string
 	Created int64
 	Expires int64
 }
 
-// rampCoveredComponents is the minimum covered-component set. The biscuit header
-// is appended conditionally (see coveredFor).
-var rampCoveredComponents = []string{"@method", "@target-uri", "content-digest", "authorization"}
+// requiredCoveredComponents is the minimum covered-component set (by name). The
+// biscuit header is appended conditionally (see coveredFor).
+var requiredCoveredComponents = []string{"@method", "@target-uri", "content-digest", "authorization"}
 
 // entitlementHeader is the canonical entitlement-biscuit header; when present on
 // a request the signature MUST commit to it.
@@ -48,11 +100,28 @@ func ContentDigest(body []byte) string {
 }
 
 // coveredFor returns the covered-component set for a request: the RAMP minimum
-// plus the entitlement-biscuit header when it is populated on req.
-func coveredFor(req *http.Request) []string {
-	covered := append([]string(nil), rampCoveredComponents...)
+// plus the entitlement-biscuit header when it is populated on req. All names are
+// lowercase so the rendered byte output is preserved.
+func coveredFor(req *http.Request) []CoveredComponent {
+	names := append([]string(nil), requiredCoveredComponents...)
 	if req.Header.Get(entitlementHeader) != "" {
-		covered = append(covered, entitlementHeaderLower)
+		names = append(names, entitlementHeaderLower)
+	}
+	return plainComponents(names...)
+}
+
+// rampChainCoveredComponents returns the covered set for an appended signature
+// (sigN, N>1): the base set plus a forwarding-chain link
+// "signature";key="<prevLabel>" so sigN cryptographically commits to its
+// predecessor (RAMP-56, RFC 9421 §2.4). When hasPrev is false it degrades to the
+// plain base set — identical to a sig1 covered set.
+func rampChainCoveredComponents(req *http.Request, prevLabel string, hasPrev bool) []CoveredComponent {
+	covered := coveredFor(req)
+	if hasPrev {
+		covered = append(covered, CoveredComponent{
+			Name:   "signature",
+			Params: []ComponentParam{{Key: "key", Val: prevLabel}},
+		})
 	}
 	return covered
 }
@@ -68,7 +137,7 @@ func buildSignatureBase(req *http.Request, params sigParams) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&b, "\"%s\": %s\n", strings.ToLower(c), v)
+		fmt.Fprintf(&b, "%s: %s\n", renderComponent(c), v)
 	}
 	fmt.Fprintf(&b, "\"@signature-params\": %s", signatureInputInner(params))
 	return b.String(), nil
@@ -81,10 +150,10 @@ func signatureInputInner(p sigParams) string {
 	return "(" + quotedList(p.Covered) + ")" + renderParamsTail(p)
 }
 
-func quotedList(items []string) string {
+func quotedList(items []CoveredComponent) string {
 	parts := make([]string, 0, len(items))
 	for _, it := range items {
-		parts = append(parts, `"`+it+`"`)
+		parts = append(parts, renderComponent(it))
 	}
 	return strings.Join(parts, " ")
 }
@@ -107,9 +176,10 @@ func renderParamsTail(p sigParams) string {
 }
 
 // componentValue yields the canonicalized value for a covered component:
-// @method, @path, @authority, @target-uri, or any literal request header.
-func componentValue(req *http.Request, name string) (string, error) {
-	switch strings.ToLower(name) {
+// @method, @path, @authority, @target-uri, the RFC 9421 §2.4 "signature";key=…
+// forwarding-chain link, or any literal request header.
+func componentValue(req *http.Request, c CoveredComponent) (string, error) {
+	switch strings.ToLower(c.Name) {
 	case "@method":
 		return strings.ToUpper(req.Method), nil
 	case "@path":
@@ -132,15 +202,39 @@ func componentValue(req *http.Request, name string) (string, error) {
 			return "", fmt.Errorf("ramphelpers: request URL unset for @target-uri")
 		}
 		return reconstructTargetURI(req), nil
+	case "signature":
+		return chainLinkValue(req, c)
 	default:
 		// Values (not Get) so an explicitly-set empty header (bound
 		// intentionally) is distinguished from an absent one.
-		values := req.Header.Values(http.CanonicalHeaderKey(name))
+		values := req.Header.Values(http.CanonicalHeaderKey(c.Name))
 		if len(values) == 0 {
-			return "", fmt.Errorf("ramphelpers: header %q missing from request", name)
+			return "", fmt.Errorf("ramphelpers: header %q missing from request", c.Name)
 		}
 		return strings.TrimSpace(strings.Join(values, ", ")), nil
 	}
+}
+
+// chainLinkValue resolves a "signature";key="sigN" component to the canonical
+// RFC 8941 byte-sequence serialization of the referenced Signature dictionary
+// member: :base64(bytes):. It decodes the referenced member to raw bytes and
+// re-encodes canonically (base64.StdEncoding) rather than splicing the raw wire
+// substring, so signer and verifier agree byte-for-byte regardless of incidental
+// whitespace around the member on the wire (RAMP-56, Risk R1).
+func chainLinkValue(req *http.Request, c CoveredComponent) (string, error) {
+	key := componentParam(c, "key")
+	if key == "" {
+		return "", fmt.Errorf("%w: signature component missing key param", ErrMalformedSignatureInput)
+	}
+	rawSig := req.Header.Get("Signature")
+	if rawSig == "" {
+		return "", fmt.Errorf("ramphelpers: resolve chain link %q: %w", key, ErrMissingSignature)
+	}
+	prevBytes, err := parseSignatureField(rawSig, key)
+	if err != nil {
+		return "", fmt.Errorf("ramphelpers: resolve chain link %q: %w", key, err)
+	}
+	return ":" + base64.StdEncoding.EncodeToString(prevBytes) + ":", nil
 }
 
 // reconstructTargetURI builds an absolute-form target URI from either an

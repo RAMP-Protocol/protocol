@@ -73,7 +73,7 @@ func TestSignRequest_bindsAuthorizationAbsence(t *testing.T) {
 	}
 	found := false
 	for _, c := range params.Covered {
-		if c == "authorization" {
+		if c.Name == "authorization" {
 			found = true
 		}
 	}
@@ -88,7 +88,7 @@ func TestSignRequest_bindsBiscuitWhenPresent(t *testing.T) {
 	})
 	found := false
 	for _, c := range params.Covered {
-		if c == entitlementHeaderLower {
+		if c.Name == entitlementHeaderLower {
 			found = true
 		}
 	}

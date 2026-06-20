@@ -34,6 +34,14 @@ var (
 	ErrFutureCreated            = errors.New("ramphelpers: signature created in the future")
 	ErrMissingCreated           = errors.New("ramphelpers: missing created param")
 	ErrMissingExpires           = errors.New("ramphelpers: missing expires param")
+	// ErrBrokenSignatureChain signals a multisig request whose signatures do not
+	// form a valid forwarding chain: labels are non-contiguous, reordered, or a
+	// sigN (N>1) does not cover exactly its predecessor via
+	// "signature";key="sigN-1" (RAMP-56 forwarding chain, RFC 9421 §2.4).
+	ErrBrokenSignatureChain = errors.New("ramphelpers: signature chain broken (gap/reorder/missing link)")
+	// ErrTooManyHops signals that the number of signatures on a request exceeds
+	// the verifier's configured MaxSignatures budget (Exchange hop bound).
+	ErrTooManyHops = errors.New("ramphelpers: signature count exceeds hop budget")
 )
 
 // defaultMaxFutureSkew bounds how far a created timestamp may lead the verifier's
@@ -46,6 +54,12 @@ const defaultMaxFutureSkew = 300 * time.Second
 type VerifyOptions struct {
 	Now           time.Time
 	MaxFutureSkew time.Duration
+	// MaxSignatures bounds the number of signatures accepted on a multisig
+	// request — the Exchange hop bound (RAMP-56). 0 means unbounded; only the
+	// Exchange-terminal consumer sets it (= max_intermediary_hops + 1). A request
+	// carrying more signatures is rejected with ErrTooManyHops before any
+	// signature is cryptographically verified. Ignored by single-sig VerifyRequest.
+	MaxSignatures int
 }
 
 // VerifiedRequest carries the proven signature metadata. PublicKey is the key
@@ -63,8 +77,36 @@ type VerifiedRequest struct {
 }
 
 // VerifyRequest verifies req+body against pub. body MUST be the exact bytes that
-// produced the request payload.
+// produced the request payload. It verifies the FIRST signature label only — for
+// a single-signer request that is the whole request; for a multisig request use
+// VerifyMultisigRequest / VerifyMultisigRequestResolved.
 func VerifyRequest(req *http.Request, body []byte, pub ed25519.PublicKey, opts VerifyOptions) (*VerifiedRequest, error) {
+	if len(pub) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("ramphelpers: public key length %d != %d", len(pub), ed25519.PublicKeySize)
+	}
+	allParams, sigMap, err := parseAllSignatures(req.Header)
+	if err != nil {
+		return nil, err
+	}
+	return verifySingleSignature(req, allParams[0], sigMap, body, staticPub(pub), opts)
+}
+
+// resolveFunc adapts a fixed public key or a KeyResolver to the lookup shape
+// verifySingleSignature needs.
+type resolveFunc func(keyID string) (ed25519.PublicKey, error)
+
+func staticPub(pub ed25519.PublicKey) resolveFunc {
+	return func(string) (ed25519.PublicKey, error) { return pub, nil }
+}
+
+// verifySingleSignature runs the full per-signature validation chain (alg,
+// covered-component policy, entitlement coverage, created/expires window,
+// content-digest, then the Ed25519 check over the signature base). Shared by the
+// single-sig and multisig paths so both judge a signature by identical rules.
+func verifySingleSignature(
+	req *http.Request, params sigParams, sigMap map[string][]byte,
+	body []byte, resolve resolveFunc, opts VerifyOptions,
+) (*VerifiedRequest, error) {
 	now := opts.Now
 	if now.IsZero() {
 		now = time.Now()
@@ -72,14 +114,6 @@ func VerifyRequest(req *http.Request, body []byte, pub ed25519.PublicKey, opts V
 	maxSkew := opts.MaxFutureSkew
 	if maxSkew == 0 {
 		maxSkew = defaultMaxFutureSkew
-	}
-	if len(pub) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("ramphelpers: public key length %d != %d", len(pub), ed25519.PublicKeySize)
-	}
-
-	params, sigBytes, err := parseSignatureHeaders(req.Header)
-	if err != nil {
-		return nil, err
 	}
 	if !strings.EqualFold(params.Alg, AlgEd25519) {
 		return nil, fmt.Errorf("%w: alg=%q", ErrUnsupportedAlgorithm, params.Alg)
@@ -96,9 +130,20 @@ func VerifyRequest(req *http.Request, body []byte, pub ed25519.PublicKey, opts V
 	if err := verifyContentDigest(req.Header, body, params.Covered); err != nil {
 		return nil, err
 	}
+	pub, err := resolve(params.KeyID)
+	if err != nil {
+		return nil, err
+	}
+	if len(pub) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("ramphelpers: public key length %d != %d", len(pub), ed25519.PublicKeySize)
+	}
 	base, err := buildSignatureBase(req, params)
 	if err != nil {
 		return nil, err
+	}
+	sigBytes, ok := sigMap[params.Label]
+	if !ok {
+		return nil, fmt.Errorf("%w: label %q not in Signature", ErrMalformedSignatureInput, params.Label)
 	}
 	if !ed25519.Verify(pub, []byte(base), sigBytes) {
 		return nil, ErrSignatureVerify
@@ -107,19 +152,19 @@ func VerifyRequest(req *http.Request, body []byte, pub ed25519.PublicKey, opts V
 		KeyID:     params.KeyID,
 		Algorithm: params.Alg,
 		Label:     params.Label,
-		Signature: req.Header.Get("Signature"),
+		Signature: base64.StdEncoding.EncodeToString(sigBytes),
 		Created:   params.Created,
 		Expires:   params.Expires,
 		PublicKey: pub,
 	}, nil
 }
 
-func enforceRequiredComponents(covered []string) error {
+func enforceRequiredComponents(covered []CoveredComponent) error {
 	seen := make(map[string]bool, len(covered))
 	for _, c := range covered {
-		seen[strings.ToLower(c)] = true
+		seen[strings.ToLower(c.Name)] = true
 	}
-	for _, need := range rampCoveredComponents {
+	for _, need := range requiredCoveredComponents {
 		if !seen[need] {
 			return fmt.Errorf("%w: %s", ErrMissingRequiredComponent, need)
 		}
@@ -131,12 +176,12 @@ func enforceRequiredComponents(covered []string) error {
 // entitlement-biscuit header iff it is present (absent → no constraint; present
 // without coverage → rejection, so a biscuit cannot be slipped under a valid
 // signature).
-func enforceEntitlementCoverage(h http.Header, covered []string) error {
+func enforceEntitlementCoverage(h http.Header, covered []CoveredComponent) error {
 	if h.Get(entitlementHeader) == "" {
 		return nil
 	}
 	for _, c := range covered {
-		if strings.ToLower(c) == entitlementHeaderLower {
+		if strings.ToLower(c.Name) == entitlementHeaderLower {
 			return nil
 		}
 	}
@@ -160,10 +205,10 @@ func enforceCreatedExpires(p sigParams, now time.Time, maxSkew time.Duration) er
 	return nil
 }
 
-func verifyContentDigest(h http.Header, body []byte, covered []string) error {
+func verifyContentDigest(h http.Header, body []byte, covered []CoveredComponent) error {
 	need := false
 	for _, c := range covered {
-		if strings.EqualFold(c, "content-digest") {
+		if strings.EqualFold(c.Name, "content-digest") {
 			need = true
 			break
 		}
@@ -185,24 +230,81 @@ func verifyContentDigest(h http.Header, body []byte, covered []string) error {
 
 // --- Signature-Input / Signature structured-field parsing (RFC 9421 subset) ---
 
-func parseSignatureHeaders(h http.Header) (sigParams, []byte, error) {
+// parseAllSignatures extracts ALL signature labels from the Signature-Input and
+// Signature headers, returning one sigParams per label (in header order) and a
+// label→signature-bytes map. Handles 1 or N signatures uniformly; a single-sig
+// request is just the N=1 case.
+func parseAllSignatures(h http.Header) ([]sigParams, map[string][]byte, error) {
 	rawInput := h.Get("Signature-Input")
 	if rawInput == "" {
-		return sigParams{}, nil, ErrMissingSignatureInput
+		return nil, nil, ErrMissingSignatureInput
 	}
 	rawSig := h.Get("Signature")
 	if rawSig == "" {
-		return sigParams{}, nil, ErrMissingSignature
+		return nil, nil, ErrMissingSignature
 	}
-	params, err := parseSignatureInput(rawInput)
-	if err != nil {
-		return sigParams{}, nil, err
+	inputLabels := parseMultiLabelInput(rawInput)
+	if len(inputLabels) == 0 {
+		return nil, nil, fmt.Errorf("%w: no labels found", ErrMalformedSignatureInput)
 	}
-	sigBytes, err := parseSignatureField(rawSig, params.Label)
-	if err != nil {
-		return sigParams{}, nil, err
+	allParams := make([]sigParams, 0, len(inputLabels))
+	for _, labelInput := range inputLabels {
+		params, err := parseSignatureInput(labelInput)
+		if err != nil {
+			return nil, nil, err
+		}
+		allParams = append(allParams, params)
 	}
-	return params, sigBytes, nil
+	sigMap := make(map[string][]byte, len(allParams))
+	for _, params := range allParams {
+		sigBytes, err := parseSignatureField(rawSig, params.Label)
+		if err != nil {
+			return nil, nil, err
+		}
+		sigMap[params.Label] = sigBytes
+	}
+	return allParams, sigMap, nil
+}
+
+// parseMultiLabelInput splits a Signature-Input header value on top-level commas
+// (those outside quotes and parentheses), returning individual
+// label=(...);params strings.
+func parseMultiLabelInput(raw string) []string {
+	var out []string
+	var cur strings.Builder
+	inParen := 0
+	inQuote := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if c == '"' && (i == 0 || raw[i-1] != '\\') {
+			inQuote = !inQuote
+			cur.WriteByte(c)
+			continue
+		}
+		if inQuote {
+			cur.WriteByte(c)
+			continue
+		}
+		switch {
+		case c == '(':
+			inParen++
+			cur.WriteByte(c)
+		case c == ')':
+			inParen--
+			cur.WriteByte(c)
+		case c == ',' && inParen == 0:
+			if cur.Len() > 0 {
+				out = append(out, strings.TrimSpace(cur.String()))
+				cur.Reset()
+			}
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	if cur.Len() > 0 {
+		out = append(out, strings.TrimSpace(cur.String()))
+	}
+	return out
 }
 
 func parseSignatureInput(raw string) (sigParams, error) {
@@ -219,16 +321,27 @@ func parseSignatureInput(raw string) (sigParams, error) {
 	}
 	inner := rest[1:rparen]
 	params := sigParams{Label: label}
-	fields, err := parseQuotedList(inner)
+	fields, err := parseComponentList(inner)
 	if err != nil {
 		return sigParams{}, err
 	}
 	params.Covered = fields
-	tail := strings.TrimSpace(rest[rparen+1:])
+	if err := parseInputParamsTail(strings.TrimSpace(rest[rparen+1:]), &params); err != nil {
+		return sigParams{}, err
+	}
+	if params.KeyID == "" {
+		return sigParams{}, fmt.Errorf("%w: keyid required", ErrMalformedSignatureInput)
+	}
+	return params, nil
+}
+
+// parseInputParamsTail consumes the ;keyid="…";alg="…";created=…;expires=… tail
+// of a Signature-Input label into params.
+func parseInputParamsTail(tail string, params *sigParams) error {
 	for _, kv := range splitParams(tail) {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok {
-			return sigParams{}, fmt.Errorf("%w: bad param %q", ErrMalformedSignatureInput, kv)
+			return fmt.Errorf("%w: bad param %q", ErrMalformedSignatureInput, kv)
 		}
 		k = strings.TrimSpace(k)
 		v = strings.TrimSpace(v)
@@ -240,25 +353,26 @@ func parseSignatureInput(raw string) (sigParams, error) {
 		case "created":
 			n, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
-				return sigParams{}, fmt.Errorf("%w: created=%q", ErrMalformedSignatureInput, v)
+				return fmt.Errorf("%w: created=%q", ErrMalformedSignatureInput, v)
 			}
 			params.Created = n
 		case "expires":
 			n, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
-				return sigParams{}, fmt.Errorf("%w: expires=%q", ErrMalformedSignatureInput, v)
+				return fmt.Errorf("%w: expires=%q", ErrMalformedSignatureInput, v)
 			}
 			params.Expires = n
 		}
 	}
-	if params.KeyID == "" {
-		return sigParams{}, fmt.Errorf("%w: keyid required", ErrMalformedSignatureInput)
-	}
-	return params, nil
+	return nil
 }
 
-func parseQuotedList(inner string) ([]string, error) {
-	var out []string
+// parseComponentList parses a space-separated list of RFC 9421 component
+// identifiers, each a quoted name optionally followed by `;param="value"`
+// parameters with no intervening space. Only string-valued parameters are
+// supported (sufficient for the forwarding-chain `"signature";key="sig1"`).
+func parseComponentList(inner string) ([]CoveredComponent, error) {
+	var out []CoveredComponent
 	i := 0
 	for i < len(inner) {
 		for i < len(inner) && (inner[i] == ' ' || inner[i] == '\t') {
@@ -267,20 +381,68 @@ func parseQuotedList(inner string) ([]string, error) {
 		if i >= len(inner) {
 			break
 		}
-		if inner[i] != '"' {
-			return nil, fmt.Errorf("%w: expected quoted identifier at %q", ErrMalformedSignatureInput, inner[i:])
+		comp, next, err := parseOneComponent(inner, i)
+		if err != nil {
+			return nil, err
 		}
-		j := i + 1
-		for j < len(inner) && inner[j] != '"' {
-			j++
-		}
-		if j >= len(inner) {
-			return nil, fmt.Errorf("%w: unterminated quoted string", ErrMalformedSignatureInput)
-		}
-		out = append(out, inner[i+1:j])
-		i = j + 1
+		out = append(out, comp)
+		i = next
 	}
 	return out, nil
+}
+
+// parseOneComponent parses a single component identifier starting at index i
+// (which must point at the opening quote). Returns the component and the index
+// just past it (past any trailing parameters).
+func parseOneComponent(inner string, i int) (CoveredComponent, int, error) {
+	if inner[i] != '"' {
+		return CoveredComponent{}, 0,
+			fmt.Errorf("%w: expected quoted identifier at %q", ErrMalformedSignatureInput, inner[i:])
+	}
+	j := i + 1
+	for j < len(inner) && inner[j] != '"' {
+		j++
+	}
+	if j >= len(inner) {
+		return CoveredComponent{}, 0, fmt.Errorf("%w: unterminated quoted string", ErrMalformedSignatureInput)
+	}
+	comp := CoveredComponent{Name: inner[i+1 : j]}
+	i = j + 1
+	for i < len(inner) && inner[i] == ';' {
+		p, next, err := parseComponentParam(inner, i+1)
+		if err != nil {
+			return CoveredComponent{}, 0, err
+		}
+		comp.Params = append(comp.Params, p)
+		i = next
+	}
+	return comp, i, nil
+}
+
+// parseComponentParam parses a `key="value"` parameter starting at index i (just
+// past the leading semicolon). Returns the param and the index past it.
+func parseComponentParam(inner string, i int) (ComponentParam, int, error) {
+	ks := i
+	for i < len(inner) && inner[i] != '=' {
+		i++
+	}
+	if i >= len(inner) {
+		return ComponentParam{}, 0, fmt.Errorf("%w: component param missing '='", ErrMalformedSignatureInput)
+	}
+	key := strings.TrimSpace(inner[ks:i])
+	i++ // consume '='
+	if i >= len(inner) || inner[i] != '"' {
+		return ComponentParam{}, 0, fmt.Errorf("%w: component param value not quoted", ErrMalformedSignatureInput)
+	}
+	vs := i + 1
+	j := vs
+	for j < len(inner) && inner[j] != '"' {
+		j++
+	}
+	if j >= len(inner) {
+		return ComponentParam{}, 0, fmt.Errorf("%w: unterminated component param value", ErrMalformedSignatureInput)
+	}
+	return ComponentParam{Key: key, Val: inner[vs:j]}, j + 1, nil
 }
 
 func splitParams(s string) []string {
@@ -310,20 +472,123 @@ func splitParams(s string) []string {
 	return out
 }
 
+// parseSignatureField pulls the binary signature bytes for label out of the
+// Signature header. Handles both the single form `sig1=:base64:` and the
+// multi-label form `sig1=:base64:, sig2=:base64:`.
 func parseSignatureField(raw, label string) ([]byte, error) {
 	raw = strings.TrimSpace(raw)
-	prefix := label + "="
-	if !strings.HasPrefix(raw, prefix) {
-		return nil, fmt.Errorf("%w: Signature label %q not present", ErrMalformedSignatureInput, label)
+	for _, part := range parseMultiLabelSignature(raw) {
+		part = strings.TrimSpace(part)
+		prefix := label + "="
+		if !strings.HasPrefix(part, prefix) {
+			continue
+		}
+		body := strings.TrimPrefix(part, prefix)
+		if !strings.HasPrefix(body, ":") || !strings.HasSuffix(body, ":") {
+			return nil, fmt.Errorf("%w: Signature value not byte-sequence", ErrMalformedSignatureInput)
+		}
+		b64 := body[1 : len(body)-1]
+		out, err := base64.StdEncoding.DecodeString(b64)
+		if err != nil {
+			return nil, fmt.Errorf("%w: Signature base64: %w", ErrMalformedSignatureInput, err)
+		}
+		return out, nil
 	}
-	body := strings.TrimPrefix(raw, prefix)
-	if !strings.HasPrefix(body, ":") || !strings.HasSuffix(body, ":") {
-		return nil, fmt.Errorf("%w: Signature value not byte-sequence", ErrMalformedSignatureInput)
+	return nil, fmt.Errorf("%w: Signature label %q not present", ErrMalformedSignatureInput, label)
+}
+
+// parseMultiLabelSignature splits a Signature header value on top-level commas
+// (those outside a `:...:` byte-sequence). Format: `sig1=:b64:, sig2=:b64:`.
+func parseMultiLabelSignature(raw string) []string {
+	var out []string
+	var cur strings.Builder
+	inByteSeq := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch {
+		case c == ':':
+			inByteSeq = !inByteSeq
+			cur.WriteByte(c)
+		case c == ',' && !inByteSeq:
+			if cur.Len() > 0 {
+				out = append(out, strings.TrimSpace(cur.String()))
+				cur.Reset()
+			}
+		default:
+			cur.WriteByte(c)
+		}
 	}
-	b64 := body[1 : len(body)-1]
-	out, err := base64.StdEncoding.DecodeString(b64)
+	if cur.Len() > 0 {
+		out = append(out, strings.TrimSpace(cur.String()))
+	}
+	return out
+}
+
+// VerifyMultisigRequest verifies ALL signatures on req against keys from
+// resolve, returning the VerifiedRequest list in label order (sig1, sig2, …).
+// It rejects a chain exceeding opts.MaxSignatures (when set) before any crypto,
+// enforces the structural forwarding chain, then cryptographically verifies each
+// signature — so a stripped, reordered, or substituted predecessor is rejected.
+func VerifyMultisigRequest(req *http.Request, body []byte, resolve resolveFunc, opts VerifyOptions) ([]VerifiedRequest, error) {
+	allParams, sigMap, err := parseAllSignatures(req.Header)
 	if err != nil {
-		return nil, fmt.Errorf("%w: Signature base64: %w", ErrMalformedSignatureInput, err)
+		return nil, err
 	}
-	return out, nil
+	if opts.MaxSignatures > 0 && len(allParams) > opts.MaxSignatures {
+		return nil, fmt.Errorf("%w: got %d max %d", ErrTooManyHops, len(allParams), opts.MaxSignatures)
+	}
+	if err := enforceSignatureChain(allParams); err != nil {
+		return nil, err
+	}
+	verified := make([]VerifiedRequest, 0, len(allParams))
+	for _, params := range allParams {
+		v, verr := verifySingleSignature(req, params, sigMap, body, resolve, opts)
+		if verr != nil {
+			return nil, verr
+		}
+		verified = append(verified, *v)
+	}
+	return verified, nil
+}
+
+// enforceSignatureChain checks that allParams form a valid forwarding chain
+// (RAMP-56): labels are exactly sig1..sigN contiguous in Signature-Input order,
+// sig1 carries no "signature" component, and every sigK (K>1) covers exactly one
+// "signature";key="sig(K-1)" link to its immediate predecessor. This is the
+// STRUCTURAL gate only; the cryptographic binding is enforced by the per-sig
+// verify (each sigK's base resolves its chain link to the live bytes of
+// sig(K-1)). A single signature trivially satisfies the chain.
+func enforceSignatureChain(allParams []sigParams) error {
+	for i, p := range allParams {
+		wantLabel := fmt.Sprintf("sig%d", i+1)
+		if p.Label != wantLabel {
+			return fmt.Errorf("%w: label %q at position %d, want %q", ErrBrokenSignatureChain, p.Label, i+1, wantLabel)
+		}
+		link, count := chainLink(p.Covered)
+		if i == 0 {
+			if count != 0 {
+				return fmt.Errorf("%w: sig1 must not carry a signature component", ErrBrokenSignatureChain)
+			}
+			continue
+		}
+		wantPrev := fmt.Sprintf("sig%d", i)
+		if count != 1 || link != wantPrev {
+			return fmt.Errorf("%w: %s must cover exactly \"signature\";key=%q (got %d links, key=%q)",
+				ErrBrokenSignatureChain, wantLabel, wantPrev, count, link)
+		}
+	}
+	return nil
+}
+
+// chainLink returns the key parameter of the single "signature" covered
+// component and the number of "signature" components present. A well-formed link
+// has count == 1; count == 0 means no link, count > 1 is malformed.
+func chainLink(covered []CoveredComponent) (key string, count int) {
+	for _, c := range covered {
+		if strings.EqualFold(c.Name, "signature") {
+			count++
+			key = componentParam(c, "key")
+		}
+	}
+	return key, count
 }
