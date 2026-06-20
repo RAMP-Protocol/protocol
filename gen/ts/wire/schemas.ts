@@ -11142,26 +11142,12 @@ ctx.addIssue({
 }
 }).describe("TransactionDenial — ExecuteTransaction could not complete. Carries the denial\n reason the response body no longer holds (denial_reason / restriction_mismatches\n move here in the response-shape normalization). Reuses the DenialReason vocab.");
 
-export const TransactionItemSchema = z.object({ "offerId": z.string().describe("The offer_id from the selected Offer.").default(""), "offerSignature": z.string().describe("The selected Offer's `signature` (informally, the exchange signature).").default("") }).catchall(z.union([z.string().describe("The offer_id from the selected Offer.").default(""), z.string().describe("The selected Offer's `signature` (informally, the exchange signature).").default(""), z.never()])).superRefine((value, ctx) => {
+export const TransactionItemSchema = z.object({ "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
-let evaluated = ["offerId", "offerSignature"].includes(key)
-if (key.match(new RegExp("^(offer_id)$"))) {
+let evaluated = ["attestedAt", "claims", "kid", "signature", "uri", "verifier"].includes(key)
+if (key.match(new RegExp("^(attested_at)$"))) {
 evaluated = true
-const result = z.string().describe("The offer_id from the selected Offer.").default("").safeParse(value[key])
-if (!result.success) {
-ctx.addIssue({
-          path: [key],
-          code: 'custom',
-          message: `Invalid input: Key matching regex /${key}/ must match schema`,
-          params: {
-            issues: result.error.issues
-          }
-        })
-}
-}
-if (key.match(new RegExp("^(offer_signature)$"))) {
-evaluated = true
-const result = z.string().describe("The selected Offer's `signature` (informally, the exchange signature).").default("").safeParse(value[key])
+const result = z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").safeParse(value[key])
 if (!result.success) {
 ctx.addIssue({
           path: [key],
@@ -11187,28 +11173,955 @@ ctx.addIssue({
 }
 }
 }
-}).describe("TransactionItem — A single offer commitment within a batch transaction.");
+}).describe("A provider or third-party verification vendor (GumGum, DoubleVerify, IAS)\n attests to properties of the resource at a specific URI at a specific time.\n The signature covers all fields, proving origin and integrity of the claims.\n\n Verification levels (determined by who the verifier is):\n   Level 0: No attestation present. Resource may carry identifiers\n     (DOI, IPTC GUID via ResourceIdentity) but nothing is cryptographically\n     verifiable. Only CDN delivery failure is auto-disputable.\n   Level 1 (self-attested): verifier == provider domain. Provider signs\n     own claims with their Ed25519 key. Agent can independently verify\n     content_hash by re-computing it from delivered bytes. Requires the\n     provider to serve deterministic content at the delivery endpoint.\n   Level 2 (third-party attested): verifier == verification vendor domain.\n     Vendor independently crawled the resource and attested to its properties.\n     Agent trusts the attestation — does NOT re-verify the content hash\n     (agent lacks the vendor's extraction algorithm). The Ed25519 signature\n     proves the vendor made the attestation; trust is binary (\"do I trust\n     this vendor?\").\n\n Claims are limited to 4KB. Attestations are carried in-memory in the\n Exchange catalog and in Offer responses — strict size limits protect\n against payload poisoning and ensure catalog performance at scale.\n\n Verifiers MUST publish their keys at:\n   https://{verifier-domain}/.well-known/ramp.json\n Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or\n ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema\n structure at WellKnownManifest.ext[\"ramp.attestation.claims_schema\"].")).describe("Three verification levels determine what is independently verifiable:\n   Level 0 (no attestations): Resource may carry identifiers (DOI, IPTC GUID)\n     for identification, but nothing is cryptographically verifiable.\n     Only CDN delivery failure is auto-disputable.\n   Level 1 (self-attested): Provider signs own claims with Ed25519 key.\n     Agent can independently verify content hash and token count.\n     CDN delivery failure + content hash mismatch are auto-disputable.\n   Level 2 (third-party attested): Independent verification vendor crawled\n     the resource and attested to its properties. Agent trusts the attestation\n     (does not re-verify hash). Token count discrepancy is auto-disputable\n     when corroborated by CDN response size.\n\n Multiple attestations may be present (e.g., provider self-attestation\n plus a third-party verification). Agents choose which to trust.").optional(), "dataAsOf": z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days.").optional(), "deliveryMethod": z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0), "expiresAt": z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601).").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "iabCategories": z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes.").optional(), "identity": z.object({ "c2paManifest": z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...").optional(), "c2paStatus": z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.").optional(), "canonicalUrl": z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content.").optional(), "contentHash": z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing.").optional(), "doi": z.string().describe("Digital Object Identifier — persistent, never changes.").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "hashMethod": z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\"").optional(), "iptcGuid": z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters).").optional(), "isni": z.string().describe("International Standard Name Identifier for the creator.").optional(), "resourceMutability": z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds)."), "softBinding": z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier).").optional(), "softBindingMethod": z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint).").optional() }).catchall(z.union([z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=..."), z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile."), z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content."), z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\""), z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters)."), z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds)."), z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier)."), z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["c2paManifest", "c2paStatus", "canonicalUrl", "contentHash", "doi", "ext", "extCritical", "hashMethod", "iptcGuid", "isni", "resourceMutability", "softBinding", "softBindingMethod"].includes(key)
+if (key.match(new RegExp("^(c2pa_manifest)$"))) {
+evaluated = true
+const result = z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(c2pa_status)$"))) {
+evaluated = true
+const result = z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(canonical_url)$"))) {
+evaluated = true
+const result = z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(content_hash)$"))) {
+evaluated = true
+const result = z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(hash_method)$"))) {
+evaluated = true
+const result = z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\"").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(iptc_guid)$"))) {
+evaluated = true
+const result = z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resource_mutability)$"))) {
+evaluated = true
+const result = z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(soft_binding)$"))) {
+evaluated = true
+const result = z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(soft_binding_method)$"))) {
+evaluated = true
+const result = z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Resource identity for cross-exchange deduplication.\n Enables Brokers to recognize the same resource offered by\n different Exchanges and compare pricing.").optional(), "offerId": z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default(""), "previews": z.array(z.object({ "duration": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Duration in seconds (for audio and video clips).").optional(), "height": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Height in pixels (images and video)").optional(), "mediaType": z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default(""), "size": z.string().describe("Size category hint. Agents use this to select the right preview\n without fetching all of them.\n Standard values:\n   \"thumbnail\"  — smallest useful preview (100–150px or 5–10s)\n   \"preview\"    — mid-size for evaluation (300–500px or 15–30s)\n   \"sample\"     — larger / more detailed (for data: 1–3 sample records)").optional(), "url": z.string().describe("URL to a preview asset (thumbnail, clip, snippet, sample).\n Served by the provider's CDN, not by the Exchange.").default(""), "width": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Dimensions in pixels (for images and video).").optional() }).catchall(z.union([z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["duration", "height", "mediaType", "size", "url", "width"].includes(key)
+if (key.match(new RegExp("^(media_type)$"))) {
+evaluated = true
+const result = z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The Exchange holds URLs (50–200 bytes per preview); the provider's\n CDN serves the actual bytes. This follows the universal pattern:\n Shutterstock (multi-size thumbnail URLs), Spotify (preview_url to\n 30s clip), IIIF (parameterized image URLs), OpenRTB (img.url + dims).\n\n Previews are free to fetch — no RAMP transaction required. They are\n the equivalent of looking at a book cover before buying. Providers\n MAY watermark visual previews or truncate text/audio previews.\n\n The Exchange populates preview URLs during catalog ingestion. Preview\n URLs MAY be signed with a short TTL to prevent hotlinking, or public\n (provider's choice). Agents fetch previews only when evaluating\n offers, not on every discovery query.")).describe("Per content type:\n   Image:  watermarked thumbnail (150–450px JPEG)\n   Video:  short clip (10–30s MP4, watermarked)\n   Audio:  short clip (15–30s MP3, low-bitrate or watermarked)\n   Text:   snippet or abstract (first 200 words as text/plain)\n   Data:   sample records (1–3 rows as application/json)\n   Stream: optional frame capture or none (streams are priced by time)\n\n Modeled after Shutterstock (multi-size thumbnail URLs),\n Spotify (preview_url to 30s clip), IIIF (parameterized image URLs),\n and OpenRTB native (img.url + dimensions).").optional(), "pricing": z.object({ "currency": z.string().describe("ISO 4217 currency code (e.g. \"USD\", \"EUR\").").default(""), "estimatedQuantity": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").optional(), "licenseDurationMonths": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").optional(), "metering": z.enum(["PRICING_METERING_ONLINE","PRICING_METERING_NONE","PRICING_METERING_OFFLINE_SELF_REPORTED"]).describe("How usage is tracked for billing reconciliation.\n Absent = PRICING_METERING_ONLINE (default real-time tracking).\n NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.\n OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.").optional(), "model": z.enum(["PRICING_MODEL_FREE","PRICING_MODEL_PER_UNIT","PRICING_MODEL_FLAT"]).describe("Provider's pricing model."), "rate": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Price in the provider's model, as an exact decimal string — e.g. \"0.05\" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. \"0.0001234\"). Denominated in `currency`.").default(""), "unit": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.").optional(), "unitCost": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid."), z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["currency", "estimatedQuantity", "licenseDurationMonths", "metering", "model", "rate", "unit", "unitCost"].includes(key)
+if (key.match(new RegExp("^(estimated_quantity)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(license_duration_months)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(unit_cost)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Pricing for this offer. An offer represents a single licensing\n arrangement: each projected LicenseTerm yields its own offer, so this is\n that term's pricing (the authoritative copy lives in `terms[].pricing`).\n Used for cross-exchange comparison and Broker ranking. A resource with\n multiple alternative terms (e.g. dual-licensed) produces multiple separate\n offers, one per term — never one offer with a \"headline\" picked among them.").optional(), "reporting": z.object({ "endpoint": z.string().describe("URL to submit the usage report to (if different from Exchange).").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "required": z.boolean().describe("Whether post-usage reporting is required.").default(false), "requiredFields": z.array(z.string()).describe("Field names that must be present in the report.").optional(), "window": z.string().describe("Duration within which the report must be submitted (e.g. 24h).").optional() }).catchall(z.union([z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.array(z.string()).describe("Field names that must be present in the report."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["endpoint", "ext", "extCritical", "required", "requiredFields", "window"].includes(key)
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(required_fields)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Field names that must be present in the report.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Post-usage reporting requirements for this offer.").optional(), "signature": z.string().describe("Because the signature covers `terms`, `pricing`, and `expires_at`, an\n intermediary (Broker) cannot tamper with price, restrictions, quotas,\n obligations, the expiry, or any licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.").default(""), "signatureAlgorithm": z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default(""), "subscriptionId": z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.").optional(), "subscriptionQuota": z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap).").optional(), "terms": z.array(z.object({ "license": z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Governing license document. Authoritative for REFERENCE_ONLY terms, which\n MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that\n references nothing is rejected at ingest.").optional(), "obligations": z.array(z.object({ "detail": z.string().describe("Free-form detail: attribution string, notice file URI, etc.\n OBLIGATION_KIND_OTHER without it → lint warning.").optional(), "kind": z.enum(["OBLIGATION_KIND_ATTRIBUTION","OBLIGATION_KIND_CONTRIBUTION","OBLIGATION_KIND_SHARE_ALIKE","OBLIGATION_KIND_NETWORK_COPYLEFT","OBLIGATION_KIND_NOTICE","OBLIGATION_KIND_OTHER"]).describe("What the agent must do."), "scopeLicense": z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference.").optional(), "trigger": z.enum(["OBLIGATION_TRIGGER_ON_USE","OBLIGATION_TRIGGER_ON_DISTRIBUTION","OBLIGATION_TRIGGER_ON_NETWORK_SERVICE","OBLIGATION_TRIGGER_ON_DERIVATIVE"]).describe("When the obligation activates.") }).catchall(z.union([z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["detail", "kind", "scopeLicense", "trigger"].includes(key)
+if (key.match(new RegExp("^(scope_license)$"))) {
+evaluated = true
+const result = z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Examples:\n   Attribution on display: cite the author whenever content is shown to a user.\n   Share-alike on derivative: AI-generated content that incorporates this work\n     must be released under the same license.\n   Notice on distribution: include the copyright notice when distributing copies.")).describe("Post-use behavioral requirements.").optional(), "partLabel": z.string().describe("Informational human-readable name for this sub-part (sub-part terms).").optional(), "pricing": z.object({ "currency": z.string().describe("ISO 4217 currency code (e.g. \"USD\", \"EUR\").").default(""), "estimatedQuantity": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").optional(), "licenseDurationMonths": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").optional(), "metering": z.enum(["PRICING_METERING_ONLINE","PRICING_METERING_NONE","PRICING_METERING_OFFLINE_SELF_REPORTED"]).describe("How usage is tracked for billing reconciliation.\n Absent = PRICING_METERING_ONLINE (default real-time tracking).\n NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.\n OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.").optional(), "model": z.enum(["PRICING_MODEL_FREE","PRICING_MODEL_PER_UNIT","PRICING_MODEL_FLAT"]).describe("Provider's pricing model."), "rate": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Price in the provider's model, as an exact decimal string — e.g. \"0.05\" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. \"0.0001234\"). Denominated in `currency`.").default(""), "unit": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.").optional(), "unitCost": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid."), z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["currency", "estimatedQuantity", "licenseDurationMonths", "metering", "model", "rate", "unit", "unitCost"].includes(key)
+if (key.match(new RegExp("^(estimated_quantity)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(license_duration_months)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(unit_cost)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Pricing for this term. REQUIRED for every term regardless of semantics —\n an agent cannot act on a priceless term, so absent Pricing is a validation\n error at ingest. model = FREE must be stated explicitly (absent Pricing is\n not free). A REFERENCE_ONLY term states its price here too; its License\n governs the human-readable terms but does not replace the machine-readable\n price."), "quotas": z.array(z.object({ "limit": z.coerce.number().int().gte(1).describe("Maximum allowed value in the given window. A quota of 0 grants\n nothing — express \"no access\" by omitting the term, not a zero quota."), "metric": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare metric tokens. A buf plugin reads them structurally and\n emits the quotametrics constants + IsRegistered; ingest enforces membership\n from those. The CEL is STRUCTURE ONLY (non-empty bare token or\n vendor:namespaced) — it never lists the tokens, so it cannot drift.\n\n Token meanings:\n   display-words      Words of content text rendered to an end user.\n   impressions        Times the content is displayed to an end user.\n   tokens             LLM output tokens generated using this content.\n   input-tokens       LLM input tokens consumed from this content.\n   units-manufactured Physical units manufactured from this design/pattern.\n   accesses           Distinct content access / retrieval events.\n   copies             Digital or physical copies produced.\n   seats              Distinct named users licensed to access the content."), "window": z.enum(["QUOTA_WINDOW_HOURLY","QUOTA_WINDOW_DAILY","QUOTA_WINDOW_MONTHLY","QUOTA_WINDOW_TOTAL"]).describe("Time window over which the limit accumulates.") }).strict().describe("Quotas limit how much a licensee may consume before the term expires or\n must be renegotiated. They are NOT billing quantities — billing is in Pricing.\n\n The metric vocabulary is authored ONLY in the (ramp.v1.vocab) entries on\n Quota.metric below; the quotametrics constants + IsRegistered derive from it.")).describe("Usage caps. The agent must not exceed any individual Quota.").optional(), "restrictions": z.array(z.object({ "advisory": z.boolean().describe("Fail-closed by default. When false (the default), this restriction is\n BINDING: an agent that cannot evaluate every token in it — including an\n unknown vendor token — MUST decline the term. Set advisory = true to\n downgrade an unverifiable restriction to non-blocking. This deliberately\n inverts the COSE-`crit` opt-in default: a license restriction a consumer\n does not understand should stop it, not be silently ignored.").default(false), "kind": z.enum(["RESTRICTION_KIND_FUNCTION","RESTRICTION_KIND_GEOGRAPHY","RESTRICTION_KIND_USER_TYPE","RESTRICTION_KIND_OTHER"]).describe("Which dimension this restriction applies to."), "permitted": z.array(z.string().regex(new RegExp("^[A-Za-z0-9._:*-]+$")).min(1).max(64)).max(64).describe("Tokens allowed on this axis. Empty = all permitted.\n For FUNCTION: \"ai-input\", \"ai-train\", \"search\", \"editorial\", \"commercial\", …\n For GEOGRAPHY: \"US\", \"DE\", \"EU\", \"EEA\", \"*\", …\n For USER_TYPE: \"individual\", \"academic\", \"commercial_entity\", …").optional(), "prohibited": z.array(z.string().regex(new RegExp("^[A-Za-z0-9._:*-]+$")).min(1).max(64)).max(64).describe("Tokens blocked on this axis. Takes precedence over permitted[].").optional() }).strict().describe("Restrictions model allowed and prohibited values on one axis (function,\n geography, or user-type). They are validated and normalized at ingest and\n RIDE ON THE OFFER: the AGENT is the responsible party — it self-selects the\n term whose restrictions it can honour and bears compliance, and enforcement\n happens downstream at accept → report → reconcile. Restrictions are NOT an\n Exchange-side gate the requester must pass to see a term.\n\n An Exchange or Broker MAY, purely as a CONVENIENCE, pre-filter the offers it\n returns against the limits the query states in ResourceQuery.acceptable_restrictions\n (the same RestrictionKind axes/vocabulary the terms use) — e.g. an agent that\n only wants US-eligible content can ask the Exchange to skip the rest so it\n doesn't pay to discover offers it would never accept. That filter is advisory and\n optional: a different Broker may not apply it, and it is a recommendation\n matched to the request, never an enforcement verdict. When an Exchange does\n drop offers this way it MAY signal it via OfferAbsenceReason.RESTRICTION_FILTERED\n (with the axes in OfferGroup.restriction_filters). Term visibility is otherwise\n gated only by resource_id/URI and delegation scope coverage — see\n LicenseTerm.scopes.\n\n Reading a restriction:\n   A value is in-scope when it matches at least one permitted[] token\n   AND matches none of the prohibited[] tokens.\n   Empty permitted[] = any value is permitted on this axis.\n   Empty prohibited[] = nothing is explicitly prohibited.\n\n Vocabulary sources (authored on the RestrictionKind enum values via\n (ramp.v1.vocab_enum); the functiontokens / geographytokens / usertypes\n constants + IsRegistered derive from them):\n   FUNCTION  — RSL 1.0 AI-use vocabulary + established IP/copyright terms\n   GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA\n   USER_TYPE — RAMP user/organization categories")).describe("Usage restrictions (function, geography, user-type).\n Multiple restrictions are AND-combined — the agent must satisfy all of them.").optional(), "scopes": z.array(z.string()).max(64).describe("Coverage uses the SAME matching rule as Requester/delegation scopes:\n segment-wise (\":\" separated), each granted segment must equal the\n corresponding required segment or be \"*\", a terminal \"*\" matches all\n remaining segments, and there is NO implicit prefix match (a grant\n narrower than the requirement does not cover it). \"dist:*\" covers\n \"dist:US\" and \"dist:US:CA\"; \"dist\" covers only \"dist\". There is exactly\n one scope-matching algorithm across the protocol.").optional(), "semantics": z.enum(["TERM_SEMANTICS_ENUMERATED","TERM_SEMANTICS_REFERENCE_ONLY"]).describe("How to interpret the machine fields.") }).catchall(z.union([z.string().describe("Informational human-readable name for this sub-part (sub-part terms)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["license", "obligations", "partLabel", "pricing", "quotas", "restrictions", "scopes", "semantics"].includes(key)
+if (key.match(new RegExp("^(part_label)$"))) {
+evaluated = true
+const result = z.string().describe("Informational human-readable name for this sub-part (sub-part terms).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("One LicenseTerm describes one complete access arrangement for a resource.\n A resource carries zero or more terms; having multiple terms is the normal\n case (one per use category, user type, or commercial arrangement).\n\n The same LicenseTerm shape appears at ingestion (ResourceEntry.terms) and\n at emission (Offer.terms). The Exchange stores what the publisher pushed\n and surfaces it on discovery, so agents see the same terms the publisher\n declared — no translation or reformulation.\n\n Validation rules:\n   - Pricing MUST be present on EVERY term, regardless of semantics.\n     Absent Pricing → reject at ingest: an agent cannot act on a term with\n     no price. This holds for REFERENCE_ONLY too — its License governs the\n     human-readable terms, but the machine-readable price is still stated\n     here, not deferred to the document.\n   - model=FREE must be explicit. Absent Pricing ≠ free. A term may be FREE\n     under an arbitrary license; the agent still needs the price stated so it\n     knows the access is free rather than unpriced.\n   - REFERENCE_ONLY terms MUST carry a License with a non-empty uri. A\n     REFERENCE_ONLY term that references no document is meaningless → reject\n     at ingest.\n   - Restriction tokens are validated against the vocab registry.\n     Unknown tokens produce a PushResourcesResponse.warnings[] entry\n     but do NOT cause rejection (forward-compatible).")).describe("Licensing terms for this offer, sourced from the publisher's ResourceEntry.\n Multiple terms when the resource has different arrangements by use case.\n See: Universal Licensing Core section.").optional() }).catchall(z.union([z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days."), z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0), z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601)."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes."), z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default(""), z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default(""), z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available."), z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["attestations", "dataAsOf", "deliveryMethod", "expiresAt", "ext", "extCritical", "iabCategories", "identity", "offerId", "previews", "pricing", "reporting", "signature", "signatureAlgorithm", "subscriptionId", "subscriptionQuota", "terms"].includes(key)
+if (key.match(new RegExp("^(data_as_of)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(delivery_method)$"))) {
+evaluated = true
+const result = z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0).safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(expires_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(iab_categories)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(offer_id)$"))) {
+evaluated = true
+const result = z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_quota)$"))) {
+evaluated = true
+const result = z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.") }).strict().describe("TransactionItem — A single offer commitment within a batch transaction.");
 
-export const TransactionRequestSchema = z.object({ "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "idempotencyKey": z.string().min(1).describe("Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response."), "items": z.array(z.object({ "offerId": z.string().describe("The offer_id from the selected Offer.").default(""), "offerSignature": z.string().describe("The selected Offer's `signature` (informally, the exchange signature).").default("") }).catchall(z.union([z.string().describe("The offer_id from the selected Offer.").default(""), z.string().describe("The selected Offer's `signature` (informally, the exchange signature).").default(""), z.never()])).superRefine((value, ctx) => {
+export const TransactionRequestSchema = z.object({ "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "idempotencyKey": z.string().min(1).describe("Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response."), "items": z.array(z.object({ "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
-let evaluated = ["offerId", "offerSignature"].includes(key)
-if (key.match(new RegExp("^(offer_id)$"))) {
+let evaluated = ["attestedAt", "claims", "kid", "signature", "uri", "verifier"].includes(key)
+if (key.match(new RegExp("^(attested_at)$"))) {
 evaluated = true
-const result = z.string().describe("The offer_id from the selected Offer.").default("").safeParse(value[key])
-if (!result.success) {
-ctx.addIssue({
-          path: [key],
-          code: 'custom',
-          message: `Invalid input: Key matching regex /${key}/ must match schema`,
-          params: {
-            issues: result.error.issues
-          }
-        })
-}
-}
-if (key.match(new RegExp("^(offer_signature)$"))) {
-evaluated = true
-const result = z.string().describe("The selected Offer's `signature` (informally, the exchange signature).").default("").safeParse(value[key])
+const result = z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").safeParse(value[key])
 if (!result.success) {
 ctx.addIssue({
           path: [key],
@@ -11234,7 +12147,1920 @@ ctx.addIssue({
 }
 }
 }
-}).describe("TransactionItem — A single offer commitment within a batch transaction.")).describe("Batch mode: commit to multiple offers in one request.\n When populated, `offer_id` and `offer_signature` SHOULD be empty.").optional(), "offerId": z.string().describe("Single-offer mode. Use `items` for batch mode; `offer_id` +\n `offer_signature` for single.").optional(), "offerSignature": z.string().describe("Single-offer signature.").optional(), "requester": z.object({ "billingRef": z.string().describe("Opaque billing reference linking this requester to the Exchange's (and,\n through the Exchange, the publisher's) billing/accounting systems — e.g. a\n billing account, PO number, or cost center. NOT an entitlement or\n subscription credential: access is governed by scopes and delegation, and\n identity by the request signature. The Exchange uses it only for invoicing\n and cost attribution.").optional(), "delegation": z.object({ "expiresAt": z.string().datetime({ offset: true }).describe("When this delegation expires. Exchange MUST reject expired tokens.").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "issuer": z.string().describe("Token issuer. OIDC issuer URL or GNAP grant server URL.\n Exchange uses this for JWT validation (OIDC discovery → JWKS)\n or GNAP token introspection.").optional(), "maxAccesses": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Maximum number of accesses allowed under this delegation.\n Exchange tracks cumulative access count against this cap.\n Deny with DENIAL_REASON_QUOTA_EXCEEDED when count >= limit.\n For subscriptions with \"10,000 accesses/month\", this carries the ceiling.").optional(), "maxSpendCents": z.coerce.number().int().describe("Maximum spend in currency minor units (e.g., cents for USD).\n Exchange tracks cumulative spend against this cap.").optional(), "principalDomain": z.string().describe("Who granted this delegation (domain for public key lookup).").default(""), "principalId": z.string().describe("Principal's identifier (e.g., \"user@acme.com\", \"marketdata.example.com\").").default(""), "quotaPeriod": z.string().describe("Quota reset period. How often the access/spend counters reset.\n Example: 720h (30 days) for monthly subscriptions.\n When absent, the quota is lifetime (bounded only by expires_at).").optional(), "revocationUri": z.string().describe("Optional: URI for real-time revocation checking.\n Exchange MAY check this for high-value transactions.\n Not checked for routine low-value access (performance tradeoff).").optional(), "scopes": z.array(z.string()).describe("Scopes granted by this delegation. MUST be a subset of the\n principal's own scopes (attenuation — can only narrow, not widen).").optional(), "token": z.string().regex(new RegExp("^[A-Za-z0-9+/]*={0,2}$")).describe("Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,\n base64-encoded) when token_format is \"biscuit-v3\".").default(null), "tokenFormat": z.string().describe("Token format: \"jwt\" (default) or \"biscuit-v3\" (optional, for deep\n multi-hop offline attenuation). Empty is treated as \"jwt\".").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this delegation expires. Exchange MUST reject expired tokens."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Maximum number of accesses allowed under this delegation.\n Exchange tracks cumulative access count against this cap.\n Deny with DENIAL_REASON_QUOTA_EXCEEDED when count >= limit.\n For subscriptions with \"10,000 accesses/month\", this carries the ceiling."), z.coerce.number().int().describe("Maximum spend in currency minor units (e.g., cents for USD).\n Exchange tracks cumulative spend against this cap."), z.string().describe("Who granted this delegation (domain for public key lookup).").default(""), z.string().describe("Principal's identifier (e.g., \"user@acme.com\", \"marketdata.example.com\").").default(""), z.string().describe("Quota reset period. How often the access/spend counters reset.\n Example: 720h (30 days) for monthly subscriptions.\n When absent, the quota is lifetime (bounded only by expires_at)."), z.string().describe("Optional: URI for real-time revocation checking.\n Exchange MAY check this for high-value transactions.\n Not checked for routine low-value access (performance tradeoff)."), z.string().describe("Token format: \"jwt\" (default) or \"biscuit-v3\" (optional, for deep\n multi-hop offline attenuation). Empty is treated as \"jwt\".").default(""), z.never()])).superRefine((value, ctx) => {
+}).describe("A provider or third-party verification vendor (GumGum, DoubleVerify, IAS)\n attests to properties of the resource at a specific URI at a specific time.\n The signature covers all fields, proving origin and integrity of the claims.\n\n Verification levels (determined by who the verifier is):\n   Level 0: No attestation present. Resource may carry identifiers\n     (DOI, IPTC GUID via ResourceIdentity) but nothing is cryptographically\n     verifiable. Only CDN delivery failure is auto-disputable.\n   Level 1 (self-attested): verifier == provider domain. Provider signs\n     own claims with their Ed25519 key. Agent can independently verify\n     content_hash by re-computing it from delivered bytes. Requires the\n     provider to serve deterministic content at the delivery endpoint.\n   Level 2 (third-party attested): verifier == verification vendor domain.\n     Vendor independently crawled the resource and attested to its properties.\n     Agent trusts the attestation — does NOT re-verify the content hash\n     (agent lacks the vendor's extraction algorithm). The Ed25519 signature\n     proves the vendor made the attestation; trust is binary (\"do I trust\n     this vendor?\").\n\n Claims are limited to 4KB. Attestations are carried in-memory in the\n Exchange catalog and in Offer responses — strict size limits protect\n against payload poisoning and ensure catalog performance at scale.\n\n Verifiers MUST publish their keys at:\n   https://{verifier-domain}/.well-known/ramp.json\n Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or\n ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema\n structure at WellKnownManifest.ext[\"ramp.attestation.claims_schema\"].")).describe("Three verification levels determine what is independently verifiable:\n   Level 0 (no attestations): Resource may carry identifiers (DOI, IPTC GUID)\n     for identification, but nothing is cryptographically verifiable.\n     Only CDN delivery failure is auto-disputable.\n   Level 1 (self-attested): Provider signs own claims with Ed25519 key.\n     Agent can independently verify content hash and token count.\n     CDN delivery failure + content hash mismatch are auto-disputable.\n   Level 2 (third-party attested): Independent verification vendor crawled\n     the resource and attested to its properties. Agent trusts the attestation\n     (does not re-verify hash). Token count discrepancy is auto-disputable\n     when corroborated by CDN response size.\n\n Multiple attestations may be present (e.g., provider self-attestation\n plus a third-party verification). Agents choose which to trust.").optional(), "dataAsOf": z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days.").optional(), "deliveryMethod": z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0), "expiresAt": z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601).").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "iabCategories": z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes.").optional(), "identity": z.object({ "c2paManifest": z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...").optional(), "c2paStatus": z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.").optional(), "canonicalUrl": z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content.").optional(), "contentHash": z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing.").optional(), "doi": z.string().describe("Digital Object Identifier — persistent, never changes.").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "hashMethod": z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\"").optional(), "iptcGuid": z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters).").optional(), "isni": z.string().describe("International Standard Name Identifier for the creator.").optional(), "resourceMutability": z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds)."), "softBinding": z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier).").optional(), "softBindingMethod": z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint).").optional() }).catchall(z.union([z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=..."), z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile."), z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content."), z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\""), z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters)."), z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds)."), z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier)."), z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["c2paManifest", "c2paStatus", "canonicalUrl", "contentHash", "doi", "ext", "extCritical", "hashMethod", "iptcGuid", "isni", "resourceMutability", "softBinding", "softBindingMethod"].includes(key)
+if (key.match(new RegExp("^(c2pa_manifest)$"))) {
+evaluated = true
+const result = z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(c2pa_status)$"))) {
+evaluated = true
+const result = z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(canonical_url)$"))) {
+evaluated = true
+const result = z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(content_hash)$"))) {
+evaluated = true
+const result = z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(hash_method)$"))) {
+evaluated = true
+const result = z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\"").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(iptc_guid)$"))) {
+evaluated = true
+const result = z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resource_mutability)$"))) {
+evaluated = true
+const result = z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(soft_binding)$"))) {
+evaluated = true
+const result = z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(soft_binding_method)$"))) {
+evaluated = true
+const result = z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Resource identity for cross-exchange deduplication.\n Enables Brokers to recognize the same resource offered by\n different Exchanges and compare pricing.").optional(), "offerId": z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default(""), "previews": z.array(z.object({ "duration": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Duration in seconds (for audio and video clips).").optional(), "height": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Height in pixels (images and video)").optional(), "mediaType": z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default(""), "size": z.string().describe("Size category hint. Agents use this to select the right preview\n without fetching all of them.\n Standard values:\n   \"thumbnail\"  — smallest useful preview (100–150px or 5–10s)\n   \"preview\"    — mid-size for evaluation (300–500px or 15–30s)\n   \"sample\"     — larger / more detailed (for data: 1–3 sample records)").optional(), "url": z.string().describe("URL to a preview asset (thumbnail, clip, snippet, sample).\n Served by the provider's CDN, not by the Exchange.").default(""), "width": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Dimensions in pixels (for images and video).").optional() }).catchall(z.union([z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["duration", "height", "mediaType", "size", "url", "width"].includes(key)
+if (key.match(new RegExp("^(media_type)$"))) {
+evaluated = true
+const result = z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The Exchange holds URLs (50–200 bytes per preview); the provider's\n CDN serves the actual bytes. This follows the universal pattern:\n Shutterstock (multi-size thumbnail URLs), Spotify (preview_url to\n 30s clip), IIIF (parameterized image URLs), OpenRTB (img.url + dims).\n\n Previews are free to fetch — no RAMP transaction required. They are\n the equivalent of looking at a book cover before buying. Providers\n MAY watermark visual previews or truncate text/audio previews.\n\n The Exchange populates preview URLs during catalog ingestion. Preview\n URLs MAY be signed with a short TTL to prevent hotlinking, or public\n (provider's choice). Agents fetch previews only when evaluating\n offers, not on every discovery query.")).describe("Per content type:\n   Image:  watermarked thumbnail (150–450px JPEG)\n   Video:  short clip (10–30s MP4, watermarked)\n   Audio:  short clip (15–30s MP3, low-bitrate or watermarked)\n   Text:   snippet or abstract (first 200 words as text/plain)\n   Data:   sample records (1–3 rows as application/json)\n   Stream: optional frame capture or none (streams are priced by time)\n\n Modeled after Shutterstock (multi-size thumbnail URLs),\n Spotify (preview_url to 30s clip), IIIF (parameterized image URLs),\n and OpenRTB native (img.url + dimensions).").optional(), "pricing": z.object({ "currency": z.string().describe("ISO 4217 currency code (e.g. \"USD\", \"EUR\").").default(""), "estimatedQuantity": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").optional(), "licenseDurationMonths": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").optional(), "metering": z.enum(["PRICING_METERING_ONLINE","PRICING_METERING_NONE","PRICING_METERING_OFFLINE_SELF_REPORTED"]).describe("How usage is tracked for billing reconciliation.\n Absent = PRICING_METERING_ONLINE (default real-time tracking).\n NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.\n OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.").optional(), "model": z.enum(["PRICING_MODEL_FREE","PRICING_MODEL_PER_UNIT","PRICING_MODEL_FLAT"]).describe("Provider's pricing model."), "rate": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Price in the provider's model, as an exact decimal string — e.g. \"0.05\" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. \"0.0001234\"). Denominated in `currency`.").default(""), "unit": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.").optional(), "unitCost": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid."), z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["currency", "estimatedQuantity", "licenseDurationMonths", "metering", "model", "rate", "unit", "unitCost"].includes(key)
+if (key.match(new RegExp("^(estimated_quantity)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(license_duration_months)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(unit_cost)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Pricing for this offer. An offer represents a single licensing\n arrangement: each projected LicenseTerm yields its own offer, so this is\n that term's pricing (the authoritative copy lives in `terms[].pricing`).\n Used for cross-exchange comparison and Broker ranking. A resource with\n multiple alternative terms (e.g. dual-licensed) produces multiple separate\n offers, one per term — never one offer with a \"headline\" picked among them.").optional(), "reporting": z.object({ "endpoint": z.string().describe("URL to submit the usage report to (if different from Exchange).").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "required": z.boolean().describe("Whether post-usage reporting is required.").default(false), "requiredFields": z.array(z.string()).describe("Field names that must be present in the report.").optional(), "window": z.string().describe("Duration within which the report must be submitted (e.g. 24h).").optional() }).catchall(z.union([z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.array(z.string()).describe("Field names that must be present in the report."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["endpoint", "ext", "extCritical", "required", "requiredFields", "window"].includes(key)
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(required_fields)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Field names that must be present in the report.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Post-usage reporting requirements for this offer.").optional(), "signature": z.string().describe("Because the signature covers `terms`, `pricing`, and `expires_at`, an\n intermediary (Broker) cannot tamper with price, restrictions, quotas,\n obligations, the expiry, or any licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.").default(""), "signatureAlgorithm": z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default(""), "subscriptionId": z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.").optional(), "subscriptionQuota": z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap).").optional(), "terms": z.array(z.object({ "license": z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Governing license document. Authoritative for REFERENCE_ONLY terms, which\n MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that\n references nothing is rejected at ingest.").optional(), "obligations": z.array(z.object({ "detail": z.string().describe("Free-form detail: attribution string, notice file URI, etc.\n OBLIGATION_KIND_OTHER without it → lint warning.").optional(), "kind": z.enum(["OBLIGATION_KIND_ATTRIBUTION","OBLIGATION_KIND_CONTRIBUTION","OBLIGATION_KIND_SHARE_ALIKE","OBLIGATION_KIND_NETWORK_COPYLEFT","OBLIGATION_KIND_NOTICE","OBLIGATION_KIND_OTHER"]).describe("What the agent must do."), "scopeLicense": z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference.").optional(), "trigger": z.enum(["OBLIGATION_TRIGGER_ON_USE","OBLIGATION_TRIGGER_ON_DISTRIBUTION","OBLIGATION_TRIGGER_ON_NETWORK_SERVICE","OBLIGATION_TRIGGER_ON_DERIVATIVE"]).describe("When the obligation activates.") }).catchall(z.union([z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["detail", "kind", "scopeLicense", "trigger"].includes(key)
+if (key.match(new RegExp("^(scope_license)$"))) {
+evaluated = true
+const result = z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Examples:\n   Attribution on display: cite the author whenever content is shown to a user.\n   Share-alike on derivative: AI-generated content that incorporates this work\n     must be released under the same license.\n   Notice on distribution: include the copyright notice when distributing copies.")).describe("Post-use behavioral requirements.").optional(), "partLabel": z.string().describe("Informational human-readable name for this sub-part (sub-part terms).").optional(), "pricing": z.object({ "currency": z.string().describe("ISO 4217 currency code (e.g. \"USD\", \"EUR\").").default(""), "estimatedQuantity": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").optional(), "licenseDurationMonths": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").optional(), "metering": z.enum(["PRICING_METERING_ONLINE","PRICING_METERING_NONE","PRICING_METERING_OFFLINE_SELF_REPORTED"]).describe("How usage is tracked for billing reconciliation.\n Absent = PRICING_METERING_ONLINE (default real-time tracking).\n NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.\n OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.").optional(), "model": z.enum(["PRICING_MODEL_FREE","PRICING_MODEL_PER_UNIT","PRICING_MODEL_FLAT"]).describe("Provider's pricing model."), "rate": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Price in the provider's model, as an exact decimal string — e.g. \"0.05\" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. \"0.0001234\"). Denominated in `currency`.").default(""), "unit": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.").optional(), "unitCost": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid."), z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["currency", "estimatedQuantity", "licenseDurationMonths", "metering", "model", "rate", "unit", "unitCost"].includes(key)
+if (key.match(new RegExp("^(estimated_quantity)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(license_duration_months)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(unit_cost)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Pricing for this term. REQUIRED for every term regardless of semantics —\n an agent cannot act on a priceless term, so absent Pricing is a validation\n error at ingest. model = FREE must be stated explicitly (absent Pricing is\n not free). A REFERENCE_ONLY term states its price here too; its License\n governs the human-readable terms but does not replace the machine-readable\n price."), "quotas": z.array(z.object({ "limit": z.coerce.number().int().gte(1).describe("Maximum allowed value in the given window. A quota of 0 grants\n nothing — express \"no access\" by omitting the term, not a zero quota."), "metric": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare metric tokens. A buf plugin reads them structurally and\n emits the quotametrics constants + IsRegistered; ingest enforces membership\n from those. The CEL is STRUCTURE ONLY (non-empty bare token or\n vendor:namespaced) — it never lists the tokens, so it cannot drift.\n\n Token meanings:\n   display-words      Words of content text rendered to an end user.\n   impressions        Times the content is displayed to an end user.\n   tokens             LLM output tokens generated using this content.\n   input-tokens       LLM input tokens consumed from this content.\n   units-manufactured Physical units manufactured from this design/pattern.\n   accesses           Distinct content access / retrieval events.\n   copies             Digital or physical copies produced.\n   seats              Distinct named users licensed to access the content."), "window": z.enum(["QUOTA_WINDOW_HOURLY","QUOTA_WINDOW_DAILY","QUOTA_WINDOW_MONTHLY","QUOTA_WINDOW_TOTAL"]).describe("Time window over which the limit accumulates.") }).strict().describe("Quotas limit how much a licensee may consume before the term expires or\n must be renegotiated. They are NOT billing quantities — billing is in Pricing.\n\n The metric vocabulary is authored ONLY in the (ramp.v1.vocab) entries on\n Quota.metric below; the quotametrics constants + IsRegistered derive from it.")).describe("Usage caps. The agent must not exceed any individual Quota.").optional(), "restrictions": z.array(z.object({ "advisory": z.boolean().describe("Fail-closed by default. When false (the default), this restriction is\n BINDING: an agent that cannot evaluate every token in it — including an\n unknown vendor token — MUST decline the term. Set advisory = true to\n downgrade an unverifiable restriction to non-blocking. This deliberately\n inverts the COSE-`crit` opt-in default: a license restriction a consumer\n does not understand should stop it, not be silently ignored.").default(false), "kind": z.enum(["RESTRICTION_KIND_FUNCTION","RESTRICTION_KIND_GEOGRAPHY","RESTRICTION_KIND_USER_TYPE","RESTRICTION_KIND_OTHER"]).describe("Which dimension this restriction applies to."), "permitted": z.array(z.string().regex(new RegExp("^[A-Za-z0-9._:*-]+$")).min(1).max(64)).max(64).describe("Tokens allowed on this axis. Empty = all permitted.\n For FUNCTION: \"ai-input\", \"ai-train\", \"search\", \"editorial\", \"commercial\", …\n For GEOGRAPHY: \"US\", \"DE\", \"EU\", \"EEA\", \"*\", …\n For USER_TYPE: \"individual\", \"academic\", \"commercial_entity\", …").optional(), "prohibited": z.array(z.string().regex(new RegExp("^[A-Za-z0-9._:*-]+$")).min(1).max(64)).max(64).describe("Tokens blocked on this axis. Takes precedence over permitted[].").optional() }).strict().describe("Restrictions model allowed and prohibited values on one axis (function,\n geography, or user-type). They are validated and normalized at ingest and\n RIDE ON THE OFFER: the AGENT is the responsible party — it self-selects the\n term whose restrictions it can honour and bears compliance, and enforcement\n happens downstream at accept → report → reconcile. Restrictions are NOT an\n Exchange-side gate the requester must pass to see a term.\n\n An Exchange or Broker MAY, purely as a CONVENIENCE, pre-filter the offers it\n returns against the limits the query states in ResourceQuery.acceptable_restrictions\n (the same RestrictionKind axes/vocabulary the terms use) — e.g. an agent that\n only wants US-eligible content can ask the Exchange to skip the rest so it\n doesn't pay to discover offers it would never accept. That filter is advisory and\n optional: a different Broker may not apply it, and it is a recommendation\n matched to the request, never an enforcement verdict. When an Exchange does\n drop offers this way it MAY signal it via OfferAbsenceReason.RESTRICTION_FILTERED\n (with the axes in OfferGroup.restriction_filters). Term visibility is otherwise\n gated only by resource_id/URI and delegation scope coverage — see\n LicenseTerm.scopes.\n\n Reading a restriction:\n   A value is in-scope when it matches at least one permitted[] token\n   AND matches none of the prohibited[] tokens.\n   Empty permitted[] = any value is permitted on this axis.\n   Empty prohibited[] = nothing is explicitly prohibited.\n\n Vocabulary sources (authored on the RestrictionKind enum values via\n (ramp.v1.vocab_enum); the functiontokens / geographytokens / usertypes\n constants + IsRegistered derive from them):\n   FUNCTION  — RSL 1.0 AI-use vocabulary + established IP/copyright terms\n   GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA\n   USER_TYPE — RAMP user/organization categories")).describe("Usage restrictions (function, geography, user-type).\n Multiple restrictions are AND-combined — the agent must satisfy all of them.").optional(), "scopes": z.array(z.string()).max(64).describe("Coverage uses the SAME matching rule as Requester/delegation scopes:\n segment-wise (\":\" separated), each granted segment must equal the\n corresponding required segment or be \"*\", a terminal \"*\" matches all\n remaining segments, and there is NO implicit prefix match (a grant\n narrower than the requirement does not cover it). \"dist:*\" covers\n \"dist:US\" and \"dist:US:CA\"; \"dist\" covers only \"dist\". There is exactly\n one scope-matching algorithm across the protocol.").optional(), "semantics": z.enum(["TERM_SEMANTICS_ENUMERATED","TERM_SEMANTICS_REFERENCE_ONLY"]).describe("How to interpret the machine fields.") }).catchall(z.union([z.string().describe("Informational human-readable name for this sub-part (sub-part terms)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["license", "obligations", "partLabel", "pricing", "quotas", "restrictions", "scopes", "semantics"].includes(key)
+if (key.match(new RegExp("^(part_label)$"))) {
+evaluated = true
+const result = z.string().describe("Informational human-readable name for this sub-part (sub-part terms).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("One LicenseTerm describes one complete access arrangement for a resource.\n A resource carries zero or more terms; having multiple terms is the normal\n case (one per use category, user type, or commercial arrangement).\n\n The same LicenseTerm shape appears at ingestion (ResourceEntry.terms) and\n at emission (Offer.terms). The Exchange stores what the publisher pushed\n and surfaces it on discovery, so agents see the same terms the publisher\n declared — no translation or reformulation.\n\n Validation rules:\n   - Pricing MUST be present on EVERY term, regardless of semantics.\n     Absent Pricing → reject at ingest: an agent cannot act on a term with\n     no price. This holds for REFERENCE_ONLY too — its License governs the\n     human-readable terms, but the machine-readable price is still stated\n     here, not deferred to the document.\n   - model=FREE must be explicit. Absent Pricing ≠ free. A term may be FREE\n     under an arbitrary license; the agent still needs the price stated so it\n     knows the access is free rather than unpriced.\n   - REFERENCE_ONLY terms MUST carry a License with a non-empty uri. A\n     REFERENCE_ONLY term that references no document is meaningless → reject\n     at ingest.\n   - Restriction tokens are validated against the vocab registry.\n     Unknown tokens produce a PushResourcesResponse.warnings[] entry\n     but do NOT cause rejection (forward-compatible).")).describe("Licensing terms for this offer, sourced from the publisher's ResourceEntry.\n Multiple terms when the resource has different arrangements by use case.\n See: Universal Licensing Core section.").optional() }).catchall(z.union([z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days."), z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0), z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601)."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes."), z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default(""), z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default(""), z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available."), z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["attestations", "dataAsOf", "deliveryMethod", "expiresAt", "ext", "extCritical", "iabCategories", "identity", "offerId", "previews", "pricing", "reporting", "signature", "signatureAlgorithm", "subscriptionId", "subscriptionQuota", "terms"].includes(key)
+if (key.match(new RegExp("^(data_as_of)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(delivery_method)$"))) {
+evaluated = true
+const result = z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0).safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(expires_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(iab_categories)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(offer_id)$"))) {
+evaluated = true
+const result = z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_quota)$"))) {
+evaluated = true
+const result = z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.") }).strict().describe("TransactionItem — A single offer commitment within a batch transaction.")).describe("Batch mode: commit to multiple offers in one request, each carrying its\n own reflected signed Offer. Set this XOR `offer` (see message rule).").optional(), "offer": z.object({ "attestations": z.array(z.object({ "attestedAt": z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").optional(), "claims": z.record(z.string(), z.any()).describe("Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in \"method:hexdigest\" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define \"quality score\" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext[\"ramp.attestation.claims_schema\"].").optional(), "kid": z.string().describe("Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.").default(""), "signature": z.string().describe("Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.").default(""), "uri": z.string().describe("The resource URI this attestation covers. Must match the URI in the\n Offer or ResourceEntry this attestation is attached to.").default(""), "verifier": z.string().describe("Canonical domain of the attesting party (e.g., \"nytimes.com\" for\n self-attestation, \"doubleverify.com\" for third-party attestation).\n Used to look up the verifier's public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\")."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["attestedAt", "claims", "kid", "signature", "uri", "verifier"].includes(key)
+if (key.match(new RegExp("^(attested_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When this attestation was created. Agents use this to assess freshness\n (e.g., \"I accept attestations up to N hours old for breaking news\").").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("A provider or third-party verification vendor (GumGum, DoubleVerify, IAS)\n attests to properties of the resource at a specific URI at a specific time.\n The signature covers all fields, proving origin and integrity of the claims.\n\n Verification levels (determined by who the verifier is):\n   Level 0: No attestation present. Resource may carry identifiers\n     (DOI, IPTC GUID via ResourceIdentity) but nothing is cryptographically\n     verifiable. Only CDN delivery failure is auto-disputable.\n   Level 1 (self-attested): verifier == provider domain. Provider signs\n     own claims with their Ed25519 key. Agent can independently verify\n     content_hash by re-computing it from delivered bytes. Requires the\n     provider to serve deterministic content at the delivery endpoint.\n   Level 2 (third-party attested): verifier == verification vendor domain.\n     Vendor independently crawled the resource and attested to its properties.\n     Agent trusts the attestation — does NOT re-verify the content hash\n     (agent lacks the vendor's extraction algorithm). The Ed25519 signature\n     proves the vendor made the attestation; trust is binary (\"do I trust\n     this vendor?\").\n\n Claims are limited to 4KB. Attestations are carried in-memory in the\n Exchange catalog and in Offer responses — strict size limits protect\n against payload poisoning and ensure catalog performance at scale.\n\n Verifiers MUST publish their keys at:\n   https://{verifier-domain}/.well-known/ramp.json\n Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or\n ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema\n structure at WellKnownManifest.ext[\"ramp.attestation.claims_schema\"].")).describe("Three verification levels determine what is independently verifiable:\n   Level 0 (no attestations): Resource may carry identifiers (DOI, IPTC GUID)\n     for identification, but nothing is cryptographically verifiable.\n     Only CDN delivery failure is auto-disputable.\n   Level 1 (self-attested): Provider signs own claims with Ed25519 key.\n     Agent can independently verify content hash and token count.\n     CDN delivery failure + content hash mismatch are auto-disputable.\n   Level 2 (third-party attested): Independent verification vendor crawled\n     the resource and attested to its properties. Agent trusts the attestation\n     (does not re-verify hash). Token count discrepancy is auto-disputable\n     when corroborated by CDN response size.\n\n Multiple attestations may be present (e.g., provider self-attestation\n plus a third-party verification). Agents choose which to trust.").optional(), "dataAsOf": z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days.").optional(), "deliveryMethod": z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0), "expiresAt": z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601).").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "iabCategories": z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes.").optional(), "identity": z.object({ "c2paManifest": z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...").optional(), "c2paStatus": z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.").optional(), "canonicalUrl": z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content.").optional(), "contentHash": z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing.").optional(), "doi": z.string().describe("Digital Object Identifier — persistent, never changes.").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "hashMethod": z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\"").optional(), "iptcGuid": z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters).").optional(), "isni": z.string().describe("International Standard Name Identifier for the creator.").optional(), "resourceMutability": z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds)."), "softBinding": z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier).").optional(), "softBindingMethod": z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint).").optional() }).catchall(z.union([z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=..."), z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile."), z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content."), z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\""), z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters)."), z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds)."), z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier)."), z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["c2paManifest", "c2paStatus", "canonicalUrl", "contentHash", "doi", "ext", "extCritical", "hashMethod", "iptcGuid", "isni", "resourceMutability", "softBinding", "softBindingMethod"].includes(key)
+if (key.match(new RegExp("^(c2pa_manifest)$"))) {
+evaluated = true
+const result = z.string().describe("Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(c2pa_status)$"))) {
+evaluated = true
+const result = z.enum(["C2PA_STATUS_TRUSTED","C2PA_STATUS_VALID","C2PA_STATUS_INVALID","C2PA_STATUS_ABSENT"]).describe("The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(canonical_url)$"))) {
+evaluated = true
+const result = z.string().describe("Provider's authoritative URL for this resource (rel=\"canonical\").\n Always available. Different per provider for syndicated content.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(content_hash)$"))) {
+evaluated = true
+const result = z.string().describe("Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is \"substantially similar.\"\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(hash_method)$"))) {
+evaluated = true
+const result = z.string().describe("Hash algorithm and verification level.\n Examples: \"simhash-v1\", \"minhash-v1\", \"sha256\", \"sha384\"").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(iptc_guid)$"))) {
+evaluated = true
+const result = z.string().describe("IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resource_mutability)$"))) {
+evaluated = true
+const result = z.enum(["RESOURCE_MUTABILITY_STATIC","RESOURCE_MUTABILITY_DYNAMIC","RESOURCE_MUTABILITY_LIVE"]).describe("Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The \"resource\" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(soft_binding)$"))) {
+evaluated = true
+const result = z.string().describe("Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(soft_binding_method)$"))) {
+evaluated = true
+const result = z.string().describe("Algorithm used for soft_binding.\n Examples: \"phash-v1\" (perceptual hash), \"c2pa-watermark\" (C2PA invisible\n watermark), \"chromaprint\" (audio fingerprint).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Resource identity for cross-exchange deduplication.\n Enables Brokers to recognize the same resource offered by\n different Exchanges and compare pricing.").optional(), "offerId": z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default(""), "previews": z.array(z.object({ "duration": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Duration in seconds (for audio and video clips).").optional(), "height": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Height in pixels (images and video)").optional(), "mediaType": z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default(""), "size": z.string().describe("Size category hint. Agents use this to select the right preview\n without fetching all of them.\n Standard values:\n   \"thumbnail\"  — smallest useful preview (100–150px or 5–10s)\n   \"preview\"    — mid-size for evaluation (300–500px or 15–30s)\n   \"sample\"     — larger / more detailed (for data: 1–3 sample records)").optional(), "url": z.string().describe("URL to a preview asset (thumbnail, clip, snippet, sample).\n Served by the provider's CDN, not by the Exchange.").default(""), "width": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Dimensions in pixels (for images and video).").optional() }).catchall(z.union([z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["duration", "height", "mediaType", "size", "url", "width"].includes(key)
+if (key.match(new RegExp("^(media_type)$"))) {
+evaluated = true
+const result = z.string().describe("MIME type of the preview.\n Examples: \"image/jpeg\", \"image/webp\", \"audio/mpeg\", \"video/mp4\",\n           \"text/plain\", \"application/json\"").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The Exchange holds URLs (50–200 bytes per preview); the provider's\n CDN serves the actual bytes. This follows the universal pattern:\n Shutterstock (multi-size thumbnail URLs), Spotify (preview_url to\n 30s clip), IIIF (parameterized image URLs), OpenRTB (img.url + dims).\n\n Previews are free to fetch — no RAMP transaction required. They are\n the equivalent of looking at a book cover before buying. Providers\n MAY watermark visual previews or truncate text/audio previews.\n\n The Exchange populates preview URLs during catalog ingestion. Preview\n URLs MAY be signed with a short TTL to prevent hotlinking, or public\n (provider's choice). Agents fetch previews only when evaluating\n offers, not on every discovery query.")).describe("Per content type:\n   Image:  watermarked thumbnail (150–450px JPEG)\n   Video:  short clip (10–30s MP4, watermarked)\n   Audio:  short clip (15–30s MP3, low-bitrate or watermarked)\n   Text:   snippet or abstract (first 200 words as text/plain)\n   Data:   sample records (1–3 rows as application/json)\n   Stream: optional frame capture or none (streams are priced by time)\n\n Modeled after Shutterstock (multi-size thumbnail URLs),\n Spotify (preview_url to 30s clip), IIIF (parameterized image URLs),\n and OpenRTB native (img.url + dimensions).").optional(), "pricing": z.object({ "currency": z.string().describe("ISO 4217 currency code (e.g. \"USD\", \"EUR\").").default(""), "estimatedQuantity": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").optional(), "licenseDurationMonths": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").optional(), "metering": z.enum(["PRICING_METERING_ONLINE","PRICING_METERING_NONE","PRICING_METERING_OFFLINE_SELF_REPORTED"]).describe("How usage is tracked for billing reconciliation.\n Absent = PRICING_METERING_ONLINE (default real-time tracking).\n NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.\n OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.").optional(), "model": z.enum(["PRICING_MODEL_FREE","PRICING_MODEL_PER_UNIT","PRICING_MODEL_FLAT"]).describe("Provider's pricing model."), "rate": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Price in the provider's model, as an exact decimal string — e.g. \"0.05\" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. \"0.0001234\"). Denominated in `currency`.").default(""), "unit": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.").optional(), "unitCost": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid."), z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["currency", "estimatedQuantity", "licenseDurationMonths", "metering", "model", "rate", "unit", "unitCost"].includes(key)
+if (key.match(new RegExp("^(estimated_quantity)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(license_duration_months)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(unit_cost)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Pricing for this offer. An offer represents a single licensing\n arrangement: each projected LicenseTerm yields its own offer, so this is\n that term's pricing (the authoritative copy lives in `terms[].pricing`).\n Used for cross-exchange comparison and Broker ranking. A resource with\n multiple alternative terms (e.g. dual-licensed) produces multiple separate\n offers, one per term — never one offer with a \"headline\" picked among them.").optional(), "reporting": z.object({ "endpoint": z.string().describe("URL to submit the usage report to (if different from Exchange).").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "required": z.boolean().describe("Whether post-usage reporting is required.").default(false), "requiredFields": z.array(z.string()).describe("Field names that must be present in the report.").optional(), "window": z.string().describe("Duration within which the report must be submitted (e.g. 24h).").optional() }).catchall(z.union([z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.array(z.string()).describe("Field names that must be present in the report."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["endpoint", "ext", "extCritical", "required", "requiredFields", "window"].includes(key)
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(required_fields)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Field names that must be present in the report.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Post-usage reporting requirements for this offer.").optional(), "signature": z.string().describe("Because the signature covers `terms`, `pricing`, and `expires_at`, an\n intermediary (Broker) cannot tamper with price, restrictions, quotas,\n obligations, the expiry, or any licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.").default(""), "signatureAlgorithm": z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default(""), "subscriptionId": z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.").optional(), "subscriptionQuota": z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap).").optional(), "terms": z.array(z.object({ "license": z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Governing license document. Authoritative for REFERENCE_ONLY terms, which\n MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that\n references nothing is rejected at ingest.").optional(), "obligations": z.array(z.object({ "detail": z.string().describe("Free-form detail: attribution string, notice file URI, etc.\n OBLIGATION_KIND_OTHER without it → lint warning.").optional(), "kind": z.enum(["OBLIGATION_KIND_ATTRIBUTION","OBLIGATION_KIND_CONTRIBUTION","OBLIGATION_KIND_SHARE_ALIKE","OBLIGATION_KIND_NETWORK_COPYLEFT","OBLIGATION_KIND_NOTICE","OBLIGATION_KIND_OTHER"]).describe("What the agent must do."), "scopeLicense": z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference.").optional(), "trigger": z.enum(["OBLIGATION_TRIGGER_ON_USE","OBLIGATION_TRIGGER_ON_DISTRIBUTION","OBLIGATION_TRIGGER_ON_NETWORK_SERVICE","OBLIGATION_TRIGGER_ON_DERIVATIVE"]).describe("When the obligation activates.") }).catchall(z.union([z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["detail", "kind", "scopeLicense", "trigger"].includes(key)
+if (key.match(new RegExp("^(scope_license)$"))) {
+evaluated = true
+const result = z.object({ "id": z.string().describe("Stable short identifier: SPDX short-id (\"GPL-3.0-only\"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.").optional(), "immutable": z.boolean().describe("Data-labels TDL: the document at uri is versioned and will not change.").optional(), "name": z.string().describe("Human-readable name (licenseType, schema.org node name).").optional(), "uri": z.string().describe("\"MUST NOT URL-validate\" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.").optional(), "uriDigest": z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").optional() }).catchall(z.union([z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "immutable", "name", "uri", "uriDigest"].includes(key)
+if (key.match(new RegExp("^(uri_digest)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$")).describe("The method MUST be a collision-resistant hash — sha256, sha384, or sha512.\n Legacy md5/sha1 are rejected on the wire: a forgeable digest would defeat\n the swap-protection this field exists for. The CEL is STRUCTURE ONLY\n (allowlisted prefix + matching hex length); presence (digest-when-uri) is\n enforced at ingest.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Examples:\n   Attribution on display: cite the author whenever content is shown to a user.\n   Share-alike on derivative: AI-generated content that incorporates this work\n     must be released under the same license.\n   Notice on distribution: include the copyright notice when distributing copies.")).describe("Post-use behavioral requirements.").optional(), "partLabel": z.string().describe("Informational human-readable name for this sub-part (sub-part terms).").optional(), "pricing": z.object({ "currency": z.string().describe("ISO 4217 currency code (e.g. \"USD\", \"EUR\").").default(""), "estimatedQuantity": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").optional(), "licenseDurationMonths": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").optional(), "metering": z.enum(["PRICING_METERING_ONLINE","PRICING_METERING_NONE","PRICING_METERING_OFFLINE_SELF_REPORTED"]).describe("How usage is tracked for billing reconciliation.\n Absent = PRICING_METERING_ONLINE (default real-time tracking).\n NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.\n OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.").optional(), "model": z.enum(["PRICING_MODEL_FREE","PRICING_MODEL_PER_UNIT","PRICING_MODEL_FLAT"]).describe("Provider's pricing model."), "rate": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Price in the provider's model, as an exact decimal string — e.g. \"0.05\" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. \"0.0001234\"). Denominated in `currency`.").default(""), "unit": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.").optional(), "unitCost": z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid."), z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["currency", "estimatedQuantity", "licenseDurationMonths", "metering", "model", "rate", "unit", "unitCost"].includes(key)
+if (key.match(new RegExp("^(estimated_quantity)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(license_duration_months)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("License duration in months. How long the granted access remains valid.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(unit_cost)$"))) {
+evaluated = true
+const result = z.string().regex(new RegExp("^([0-9]+([.][0-9]+)?)?$")).describe("Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Pricing for this term. REQUIRED for every term regardless of semantics —\n an agent cannot act on a priceless term, so absent Pricing is a validation\n error at ingest. model = FREE must be stated explicitly (absent Pricing is\n not free). A REFERENCE_ONLY term states its price here too; its License\n governs the human-readable terms but does not replace the machine-readable\n price."), "quotas": z.array(z.object({ "limit": z.coerce.number().int().gte(1).describe("Maximum allowed value in the given window. A quota of 0 grants\n nothing — express \"no access\" by omitting the term, not a zero quota."), "metric": z.string().regex(new RegExp("^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$")).max(64).describe("The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare metric tokens. A buf plugin reads them structurally and\n emits the quotametrics constants + IsRegistered; ingest enforces membership\n from those. The CEL is STRUCTURE ONLY (non-empty bare token or\n vendor:namespaced) — it never lists the tokens, so it cannot drift.\n\n Token meanings:\n   display-words      Words of content text rendered to an end user.\n   impressions        Times the content is displayed to an end user.\n   tokens             LLM output tokens generated using this content.\n   input-tokens       LLM input tokens consumed from this content.\n   units-manufactured Physical units manufactured from this design/pattern.\n   accesses           Distinct content access / retrieval events.\n   copies             Digital or physical copies produced.\n   seats              Distinct named users licensed to access the content."), "window": z.enum(["QUOTA_WINDOW_HOURLY","QUOTA_WINDOW_DAILY","QUOTA_WINDOW_MONTHLY","QUOTA_WINDOW_TOTAL"]).describe("Time window over which the limit accumulates.") }).strict().describe("Quotas limit how much a licensee may consume before the term expires or\n must be renegotiated. They are NOT billing quantities — billing is in Pricing.\n\n The metric vocabulary is authored ONLY in the (ramp.v1.vocab) entries on\n Quota.metric below; the quotametrics constants + IsRegistered derive from it.")).describe("Usage caps. The agent must not exceed any individual Quota.").optional(), "restrictions": z.array(z.object({ "advisory": z.boolean().describe("Fail-closed by default. When false (the default), this restriction is\n BINDING: an agent that cannot evaluate every token in it — including an\n unknown vendor token — MUST decline the term. Set advisory = true to\n downgrade an unverifiable restriction to non-blocking. This deliberately\n inverts the COSE-`crit` opt-in default: a license restriction a consumer\n does not understand should stop it, not be silently ignored.").default(false), "kind": z.enum(["RESTRICTION_KIND_FUNCTION","RESTRICTION_KIND_GEOGRAPHY","RESTRICTION_KIND_USER_TYPE","RESTRICTION_KIND_OTHER"]).describe("Which dimension this restriction applies to."), "permitted": z.array(z.string().regex(new RegExp("^[A-Za-z0-9._:*-]+$")).min(1).max(64)).max(64).describe("Tokens allowed on this axis. Empty = all permitted.\n For FUNCTION: \"ai-input\", \"ai-train\", \"search\", \"editorial\", \"commercial\", …\n For GEOGRAPHY: \"US\", \"DE\", \"EU\", \"EEA\", \"*\", …\n For USER_TYPE: \"individual\", \"academic\", \"commercial_entity\", …").optional(), "prohibited": z.array(z.string().regex(new RegExp("^[A-Za-z0-9._:*-]+$")).min(1).max(64)).max(64).describe("Tokens blocked on this axis. Takes precedence over permitted[].").optional() }).strict().describe("Restrictions model allowed and prohibited values on one axis (function,\n geography, or user-type). They are validated and normalized at ingest and\n RIDE ON THE OFFER: the AGENT is the responsible party — it self-selects the\n term whose restrictions it can honour and bears compliance, and enforcement\n happens downstream at accept → report → reconcile. Restrictions are NOT an\n Exchange-side gate the requester must pass to see a term.\n\n An Exchange or Broker MAY, purely as a CONVENIENCE, pre-filter the offers it\n returns against the limits the query states in ResourceQuery.acceptable_restrictions\n (the same RestrictionKind axes/vocabulary the terms use) — e.g. an agent that\n only wants US-eligible content can ask the Exchange to skip the rest so it\n doesn't pay to discover offers it would never accept. That filter is advisory and\n optional: a different Broker may not apply it, and it is a recommendation\n matched to the request, never an enforcement verdict. When an Exchange does\n drop offers this way it MAY signal it via OfferAbsenceReason.RESTRICTION_FILTERED\n (with the axes in OfferGroup.restriction_filters). Term visibility is otherwise\n gated only by resource_id/URI and delegation scope coverage — see\n LicenseTerm.scopes.\n\n Reading a restriction:\n   A value is in-scope when it matches at least one permitted[] token\n   AND matches none of the prohibited[] tokens.\n   Empty permitted[] = any value is permitted on this axis.\n   Empty prohibited[] = nothing is explicitly prohibited.\n\n Vocabulary sources (authored on the RestrictionKind enum values via\n (ramp.v1.vocab_enum); the functiontokens / geographytokens / usertypes\n constants + IsRegistered derive from them):\n   FUNCTION  — RSL 1.0 AI-use vocabulary + established IP/copyright terms\n   GEOGRAPHY — ISO 3166-1 alpha-2 (structural) + the specials *, EU, EEA\n   USER_TYPE — RAMP user/organization categories")).describe("Usage restrictions (function, geography, user-type).\n Multiple restrictions are AND-combined — the agent must satisfy all of them.").optional(), "scopes": z.array(z.string()).max(64).describe("Coverage uses the SAME matching rule as Requester/delegation scopes:\n segment-wise (\":\" separated), each granted segment must equal the\n corresponding required segment or be \"*\", a terminal \"*\" matches all\n remaining segments, and there is NO implicit prefix match (a grant\n narrower than the requirement does not cover it). \"dist:*\" covers\n \"dist:US\" and \"dist:US:CA\"; \"dist\" covers only \"dist\". There is exactly\n one scope-matching algorithm across the protocol.").optional(), "semantics": z.enum(["TERM_SEMANTICS_ENUMERATED","TERM_SEMANTICS_REFERENCE_ONLY"]).describe("How to interpret the machine fields.") }).catchall(z.union([z.string().describe("Informational human-readable name for this sub-part (sub-part terms)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["license", "obligations", "partLabel", "pricing", "quotas", "restrictions", "scopes", "semantics"].includes(key)
+if (key.match(new RegExp("^(part_label)$"))) {
+evaluated = true
+const result = z.string().describe("Informational human-readable name for this sub-part (sub-part terms).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("One LicenseTerm describes one complete access arrangement for a resource.\n A resource carries zero or more terms; having multiple terms is the normal\n case (one per use category, user type, or commercial arrangement).\n\n The same LicenseTerm shape appears at ingestion (ResourceEntry.terms) and\n at emission (Offer.terms). The Exchange stores what the publisher pushed\n and surfaces it on discovery, so agents see the same terms the publisher\n declared — no translation or reformulation.\n\n Validation rules:\n   - Pricing MUST be present on EVERY term, regardless of semantics.\n     Absent Pricing → reject at ingest: an agent cannot act on a term with\n     no price. This holds for REFERENCE_ONLY too — its License governs the\n     human-readable terms, but the machine-readable price is still stated\n     here, not deferred to the document.\n   - model=FREE must be explicit. Absent Pricing ≠ free. A term may be FREE\n     under an arbitrary license; the agent still needs the price stated so it\n     knows the access is free rather than unpriced.\n   - REFERENCE_ONLY terms MUST carry a License with a non-empty uri. A\n     REFERENCE_ONLY term that references no document is meaningless → reject\n     at ingest.\n   - Restriction tokens are validated against the vocab registry.\n     Unknown tokens produce a PushResourcesResponse.warnings[] entry\n     but do NOT cause rejection (forward-compatible).")).describe("Licensing terms for this offer, sourced from the publisher's ResourceEntry.\n Multiple terms when the resource has different arrangements by use case.\n See: Universal Licensing Core section.").optional() }).catchall(z.union([z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days."), z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0), z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601)."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes."), z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default(""), z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default(""), z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available."), z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap)."), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["attestations", "dataAsOf", "deliveryMethod", "expiresAt", "ext", "extCritical", "iabCategories", "identity", "offerId", "previews", "pricing", "reporting", "signature", "signatureAlgorithm", "subscriptionId", "subscriptionQuota", "terms"].includes(key)
+if (key.match(new RegExp("^(data_as_of)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(delivery_method)$"))) {
+evaluated = true
+const result = z.union([z.string().regex(new RegExp("^DELIVERY_METHOD_UNSPECIFIED$")), z.enum(["DELIVERY_METHOD_DIRECT","DELIVERY_METHOD_INSTRUCTIONS","DELIVERY_METHOD_STREAMING"]), z.coerce.number().int().gte(-2147483648).lte(2147483647)]).describe("How resource will be delivered.").default(0).safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(expires_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When this offer expires (ISO 8601).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(ext_critical)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(iab_categories)$"))) {
+evaluated = true
+const result = z.array(z.string()).describe("IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., \"only finance resources\").\n Uses IAB Content Taxonomy 3.1 codes.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(offer_id)$"))) {
+evaluated = true
+const result = z.string().describe("Unique identifier for this offer, assigned by the Exchange.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(signature_algorithm)$"))) {
+evaluated = true
+const result = z.string().describe("JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_quota)$"))) {
+evaluated = true
+const result = z.array(z.object({ "quotaLimit": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").optional(), "quotaRemaining": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").optional(), "quotaUsed": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").optional(), "resetsAt": z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").optional(), "subscriptionId": z.string().describe("Subscription this quota applies to.").default(""), "unit": z.string().describe("What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: \"accesses\", \"tokens\", \"spend_cents\", \"burst\"").optional() }).catchall(z.union([z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period."), z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC)."), z.string().describe("Subscription this quota applies to.").default(""), z.never()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["quotaLimit", "quotaRemaining", "quotaUsed", "resetsAt", "subscriptionId", "unit"].includes(key)
+if (key.match(new RegExp("^(quota_limit)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Total allowed in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_remaining)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Remaining in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(quota_used)$"))) {
+evaluated = true
+const result = z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Used so far in the current period.").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(resets_at)$"))) {
+evaluated = true
+const result = z.string().datetime({ offset: true }).describe("When the quota counter resets (UTC).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^(subscription_id)$"))) {
+evaluated = true
+const result = z.string().describe("Subscription this quota applies to.").default("").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Analogous to RateLimitInfo (which signals API request rate limits), this\n signals subscription consumption quotas. Enables agents to throttle\n proactively instead of discovering exhaustion via denial.\n\n Returned on Offer (per-offer quota visibility) and TransactionResponse\n (post-transaction remaining quota). A subscription may have multiple\n independent quotas (access count + spend cap + burst limit), so this\n message is used as a repeated field.\n\n Quota decrement timing: the counter increments at ExecuteTransaction\n (optimistic decrement, before delivery). If delivery fails, the agent\n files a DisputeTransaction which may reverse the decrement. This is\n consistent with the billing model (billing_id created at transaction time).")).describe("Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap).").safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: Key matching regex /${key}/ must match schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.never().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [key],
+          code: 'custom',
+          message: `Invalid input: must match catchall schema`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Single-offer mode: the FULL signed Offer, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` (which\n covers pricing, terms, and expires_at) over these presented bytes against\n its own key — a stateless, self-contained bearer token, with no\n reconstruct-from-catalog. Set this XOR `items` (see message rule).").optional(), "offerId": z.string().describe("Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.").optional(), "requester": z.object({ "billingRef": z.string().describe("Opaque billing reference linking this requester to the Exchange's (and,\n through the Exchange, the publisher's) billing/accounting systems — e.g. a\n billing account, PO number, or cost center. NOT an entitlement or\n subscription credential: access is governed by scopes and delegation, and\n identity by the request signature. The Exchange uses it only for invoicing\n and cost attribution.").optional(), "delegation": z.object({ "expiresAt": z.string().datetime({ offset: true }).describe("When this delegation expires. Exchange MUST reject expired tokens.").optional(), "ext": z.record(z.string(), z.any()).describe("Extension point").optional(), "extCritical": z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").optional(), "issuer": z.string().describe("Token issuer. OIDC issuer URL or GNAP grant server URL.\n Exchange uses this for JWT validation (OIDC discovery → JWKS)\n or GNAP token introspection.").optional(), "maxAccesses": z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Maximum number of accesses allowed under this delegation.\n Exchange tracks cumulative access count against this cap.\n Deny with DENIAL_REASON_QUOTA_EXCEEDED when count >= limit.\n For subscriptions with \"10,000 accesses/month\", this carries the ceiling.").optional(), "maxSpendCents": z.coerce.number().int().describe("Maximum spend in currency minor units (e.g., cents for USD).\n Exchange tracks cumulative spend against this cap.").optional(), "principalDomain": z.string().describe("Who granted this delegation (domain for public key lookup).").default(""), "principalId": z.string().describe("Principal's identifier (e.g., \"user@acme.com\", \"marketdata.example.com\").").default(""), "quotaPeriod": z.string().describe("Quota reset period. How often the access/spend counters reset.\n Example: 720h (30 days) for monthly subscriptions.\n When absent, the quota is lifetime (bounded only by expires_at).").optional(), "revocationUri": z.string().describe("Optional: URI for real-time revocation checking.\n Exchange MAY check this for high-value transactions.\n Not checked for routine low-value access (performance tradeoff).").optional(), "scopes": z.array(z.string()).describe("Scopes granted by this delegation. MUST be a subset of the\n principal's own scopes (attenuation — can only narrow, not widen).").optional(), "token": z.string().regex(new RegExp("^[A-Za-z0-9+/]*={0,2}$")).describe("Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,\n base64-encoded) when token_format is \"biscuit-v3\".").default(null), "tokenFormat": z.string().describe("Token format: \"jwt\" (default) or \"biscuit-v3\" (optional, for deep\n multi-hop offline attenuation). Empty is treated as \"jwt\".").default("") }).catchall(z.union([z.string().datetime({ offset: true }).describe("When this delegation expires. Exchange MUST reject expired tokens."), z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.coerce.number().int().gte(-2147483648).lte(2147483647).describe("Maximum number of accesses allowed under this delegation.\n Exchange tracks cumulative access count against this cap.\n Deny with DENIAL_REASON_QUOTA_EXCEEDED when count >= limit.\n For subscriptions with \"10,000 accesses/month\", this carries the ceiling."), z.coerce.number().int().describe("Maximum spend in currency minor units (e.g., cents for USD).\n Exchange tracks cumulative spend against this cap."), z.string().describe("Who granted this delegation (domain for public key lookup).").default(""), z.string().describe("Principal's identifier (e.g., \"user@acme.com\", \"marketdata.example.com\").").default(""), z.string().describe("Quota reset period. How often the access/spend counters reset.\n Example: 720h (30 days) for monthly subscriptions.\n When absent, the quota is lifetime (bounded only by expires_at)."), z.string().describe("Optional: URI for real-time revocation checking.\n Exchange MAY check this for high-value transactions.\n Not checked for routine low-value access (performance tradeoff)."), z.string().describe("Token format: \"jwt\" (default) or \"biscuit-v3\" (optional, for deep\n multi-hop offline attenuation). Empty is treated as \"jwt\".").default(""), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
 let evaluated = ["expiresAt", "ext", "extCritical", "issuer", "maxAccesses", "maxSpendCents", "principalDomain", "principalId", "quotaPeriod", "revocationUri", "scopes", "token", "tokenFormat"].includes(key)
 if (key.match(new RegExp("^(expires_at)$"))) {
@@ -11422,9 +14248,9 @@ ctx.addIssue({
 }
 }
 }
-}).describe("Requester identity — forwarded for authorization and audit.").optional(), "ver": z.string().describe("Protocol version").default("") }).catchall(z.union([z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.string().min(1).describe("Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.").default(""), z.string().describe("Single-offer mode. Use `items` for batch mode; `offer_id` +\n `offer_signature` for single."), z.string().describe("Single-offer signature."), z.never()])).superRefine((value, ctx) => {
+}).describe("Requester identity — forwarded for authorization and audit.").optional(), "ver": z.string().describe("Protocol version").default("") }).catchall(z.union([z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore."), z.string().min(1).describe("Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.").default(""), z.string().describe("Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`."), z.never()])).superRefine((value, ctx) => {
 for (const key in value) {
-let evaluated = ["ext", "extCritical", "idempotencyKey", "items", "offerId", "offerSignature", "requester", "ver"].includes(key)
+let evaluated = ["ext", "extCritical", "idempotencyKey", "items", "offer", "offerId", "requester", "ver"].includes(key)
 if (key.match(new RegExp("^(ext_critical)$"))) {
 evaluated = true
 const result = z.array(z.string()).describe("Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.").safeParse(value[key])
@@ -11455,21 +14281,7 @@ ctx.addIssue({
 }
 if (key.match(new RegExp("^(offer_id)$"))) {
 evaluated = true
-const result = z.string().describe("Single-offer mode. Use `items` for batch mode; `offer_id` +\n `offer_signature` for single.").safeParse(value[key])
-if (!result.success) {
-ctx.addIssue({
-          path: [key],
-          code: 'custom',
-          message: `Invalid input: Key matching regex /${key}/ must match schema`,
-          params: {
-            issues: result.error.issues
-          }
-        })
-}
-}
-if (key.match(new RegExp("^(offer_signature)$"))) {
-evaluated = true
-const result = z.string().describe("Single-offer signature.").safeParse(value[key])
+const result = z.string().describe("Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.").safeParse(value[key])
 if (!result.success) {
 ctx.addIssue({
           path: [key],

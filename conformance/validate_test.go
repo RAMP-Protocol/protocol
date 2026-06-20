@@ -191,7 +191,8 @@ func TestIdempotencyKeyRequired(t *testing.T) {
 func idempotencyCases() []validationCase {
 	return []validationCase{
 		{"transaction empty key rejected", &rampv1.TransactionRequest{IdempotencyKey: ""}, false, "string.min_len"},
-		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1"}, true, ""},
+		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1", Offer: &rampv1.Offer{OfferId: "of_1", Pricing: freePricing()}}, true, ""},
+		{"transaction neither offer nor items rejected", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-xor"}, false, "transaction_request.offer_xor_items"},
 		{"usage report empty key rejected", &rampv1.UsageReport{IdempotencyKey: ""}, false, "string.min_len"},
 		{"usage report key ok", &rampv1.UsageReport{IdempotencyKey: "idem-ur-1"}, true, ""},
 		{"dispute empty key rejected", &rampv1.DisputeRequest{IdempotencyKey: "", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, false, "string.min_len"},

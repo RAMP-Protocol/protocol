@@ -1599,6 +1599,14 @@ enum ResourceMutability {
 // The Exchange validates eligibility, authorizes billing, creates
 // delivery, and logs each transaction.
 message TransactionRequest {
+  // Exactly one mode: single (offer set, items empty) XOR batch (items
+  // non-empty, offer absent). Neither or both → reject.
+  option (buf.validate.message).cel = {
+    id: "transaction_request.offer_xor_items"
+    message: "set exactly one of `offer` (single mode) or `items` (batch mode)"
+    expression: "(has(this.offer) && this.items.size() == 0) || (!has(this.offer) && this.items.size() > 0)"
+  };
+
   // Protocol version
   string ver = 1;
 
@@ -1607,18 +1615,24 @@ message TransactionRequest {
   // identity is the Exchange-assigned transaction_id in the response.
   string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
 
-  // Single-offer mode. Use `items` for batch mode; `offer_id` +
-  // `offer_signature` for single.
+  // Optional, non-authoritative correlation/audit key — the human-readable id
+  // of the committed offer. NOT used for verification: the Exchange verifies
+  // the reflected `offer.signature` over the presented Offer bytes, never this
+  // scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.
   optional string offer_id = 3;
 
   // Requester identity — forwarded for authorization and audit.
   Requester requester = 4;
 
-  // Single-offer signature.
-  optional string offer_signature = 6;
+  // Single-offer mode: the FULL signed Offer, reflected back exactly as
+  // received at discovery. The Exchange verifies `offer.signature` (which
+  // covers pricing, terms, and expires_at) over these presented bytes against
+  // its own key — a stateless, self-contained bearer token, with no
+  // reconstruct-from-catalog. Set this XOR `items` (see message rule).
+  optional Offer offer = 8;
 
-  // Batch mode: commit to multiple offers in one request.
-  // When populated, `offer_id` and `offer_signature` SHOULD be empty.
+  // Batch mode: commit to multiple offers in one request, each carrying its
+  // own reflected signed Offer. Set this XOR `offer` (see message rule).
   repeated TransactionItem items = 7;
 
   // Extension point
@@ -1633,11 +1647,11 @@ message TransactionRequest {
 
 // TransactionItem — A single offer commitment within a batch transaction.
 message TransactionItem {
-  // The offer_id from the selected Offer.
-  string offer_id = 1;
-
-  // The selected Offer's `signature` (informally, the exchange signature).
-  string offer_signature = 2;
+  // The FULL signed Offer for this batch entry, reflected back exactly as
+  // received at discovery. The Exchange verifies `offer.signature` over these
+  // presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every
+  // batch item carries its offer.
+  Offer offer = 3 [(buf.validate.field).required = true];
 }
 
 // TransactionResponse — Exchange confirms the transaction(s).

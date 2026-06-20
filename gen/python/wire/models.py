@@ -816,17 +816,6 @@ class TransactionDenial(WireModel):
     )
 
 
-class TransactionItem(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    offerId: str | None = Field('', description='The offer_id from the selected Offer.')
-    offerSignature: str | None = Field(
-        '',
-        description="The selected Offer's `signature` (informally, the exchange signature).",
-    )
-
-
 class TransactionResultItem(WireModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -1313,34 +1302,6 @@ class RetrievalAuthFailure(WireModel):
     reason: RetrievalAuthFailureReason = Field(
         ..., description='The failure reason (defined-only, non-zero)'
     )
-
-
-class TransactionRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
-        None,
-        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
-    )
-    idempotencyKey: constr(min_length=1) = Field(
-        ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.",
-    )
-    items: list[TransactionItem] | None = Field(
-        None,
-        description='Batch mode: commit to multiple offers in one request.\n When populated, `offer_id` and `offer_signature` SHOULD be empty.',
-    )
-    offerId: str | None = Field(
-        None,
-        description='Single-offer mode. Use `items` for batch mode; `offer_id` +\n `offer_signature` for single.',
-    )
-    offerSignature: str | None = Field(None, description='Single-offer signature.')
-    requester: Requester | None = Field(
-        None, description='Requester identity — forwarded for authorization and audit.'
-    )
-    ver: str | None = Field('', description='Protocol version')
 
 
 class TransactionResponse(WireModel):
@@ -1863,6 +1824,47 @@ class ResourceResponse(WireModel):
     rateLimit: RateLimitInfo | None = Field(
         None,
         description='Rate limit status for this caller.\n Present when the Exchange enforces per-caller rate limits on discovery.\n Enables agents/Brokers to throttle proactively rather than hitting\n hard limits. Particularly important when a Broker fans out the\n same batch query to multiple Exchanges — mid-batch rate limiting\n can cause partial results if not signaled early.',
+    )
+    ver: str | None = Field('', description='Protocol version')
+
+
+class TransactionItem(WireModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    offer: Offer = Field(
+        ...,
+        description='The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.',
+    )
+
+
+class TransactionRequest(WireModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    extCritical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
+    idempotencyKey: constr(min_length=1) = Field(
+        ...,
+        description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.",
+    )
+    items: list[TransactionItem] | None = Field(
+        None,
+        description='Batch mode: commit to multiple offers in one request, each carrying its\n own reflected signed Offer. Set this XOR `offer` (see message rule).',
+    )
+    offer: Offer | None = Field(
+        None,
+        description='Single-offer mode: the FULL signed Offer, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` (which\n covers pricing, terms, and expires_at) over these presented bytes against\n its own key — a stateless, self-contained bearer token, with no\n reconstruct-from-catalog. Set this XOR `items` (see message rule).',
+    )
+    offerId: str | None = Field(
+        None,
+        description='Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.',
+    )
+    requester: Requester | None = Field(
+        None, description='Requester identity — forwarded for authorization and audit.'
     )
     ver: str | None = Field('', description='Protocol version')
 

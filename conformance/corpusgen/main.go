@@ -62,6 +62,9 @@ func seeds() map[string]proto.Message {
 	pricing := func() *rampv1.Pricing {
 		return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 	}
+	offer := func() *rampv1.Offer {
+		return &rampv1.Offer{OfferId: "offer-seed", Pricing: pricing()}
+	}
 	return map[string]proto.Message{
 		"Pricing":     pricing(),
 		"License":     &rampv1.License{Id: proto.String("CC-BY-4.0")},
@@ -74,6 +77,12 @@ func seeds() map[string]proto.Message {
 		"LicenseTerm":           &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: pricing()},
 		"AcceptableRestriction": &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train"}},
 		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
+		// Reflected-Offer execute contract (RAMP-103): Offer is the required
+		// sub-message of TransactionItem (auto-fill needs its seed), and
+		// TransactionRequest needs a valid single-mode baseline because its
+		// offer_xor_items message-CEL rejects the empty auto-fill baseline.
+		"Offer":              offer(),
+		"TransactionRequest": &rampv1.TransactionRequest{IdempotencyKey: "idem-tx", Offer: offer()},
 	}
 }
 
@@ -182,6 +191,9 @@ func writeCrossField(v protovalidate.Validator) {
 				},
 			},
 			"license_term.one_restriction_per_kind"},
+		{"TransactionRequest/cel/offer_xor_items",
+			&rampv1.TransactionRequest{IdempotencyKey: "idem-tx"},
+			"transaction_request.offer_xor_items"},
 	}
 
 	var cases []Case

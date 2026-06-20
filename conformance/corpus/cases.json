@@ -1587,20 +1587,58 @@
     }
   },
   {
+    "id": "TransactionItem/offer/missing",
+    "message": "TransactionItem",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {}
+  },
+  {
+    "id": "TransactionItem/valid",
+    "message": "TransactionItem",
+    "valid": true,
+    "json": {
+      "offer": {
+        "offerId": "offer-seed",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        }
+      }
+    }
+  },
+  {
     "id": "TransactionRequest/idempotency_key/too_short",
     "message": "TransactionRequest",
     "valid": false,
     "rules": [
       "string.min_len"
     ],
-    "json": {}
+    "json": {
+      "offer": {
+        "offerId": "offer-seed",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        }
+      }
+    }
   },
   {
     "id": "TransactionRequest/valid",
     "message": "TransactionRequest",
     "valid": true,
     "json": {
-      "idempotencyKey": "x"
+      "idempotencyKey": "idem-tx",
+      "offer": {
+        "offerId": "offer-seed",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        }
+      }
     }
   },
   {
