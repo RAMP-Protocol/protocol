@@ -1624,6 +1624,10 @@ class Offer(WireModel):
         | conint(ge=-2147483648, le=2147483647)
         | None
     ) = Field(0, description='How resource will be delivered.')
+    exchange: str | None = Field(
+        '',
+        description='Canonical domain of the Exchange that issued this offer (e.g.\n "exchange.example.com"). This is the execute-routing target: the agent (or\n a relaying Broker) sends the ExecuteTransaction call for this offer to this\n Exchange. Because it is an ordinary Offer field it falls inside the signed\n bytes (see `signature` below — the signature covers every field except\n `signature` / `signature_algorithm`), so an intermediary cannot redirect\n the execute call to a different Exchange without invalidating the offer.\n (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,\n retiring the X-RAMP-Exchange-Endpoint transport header.)',
+    )
     expiresAt: AwareDatetime | None = Field(
         None, description='When this offer expires (ISO 8601).'
     )

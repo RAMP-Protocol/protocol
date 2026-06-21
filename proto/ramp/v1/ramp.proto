@@ -410,6 +410,17 @@ message Offer {
   // different Exchanges and compare pricing.
   optional ResourceIdentity identity = 7;
 
+  // Canonical domain of the Exchange that issued this offer (e.g.
+  // "exchange.example.com"). This is the execute-routing target: the agent (or
+  // a relaying Broker) sends the ExecuteTransaction call for this offer to this
+  // Exchange. Because it is an ordinary Offer field it falls inside the signed
+  // bytes (see `signature` below — the signature covers every field except
+  // `signature` / `signature_algorithm`), so an intermediary cannot redirect
+  // the execute call to a different Exchange without invalidating the offer.
+  // (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,
+  // retiring the X-RAMP-Exchange-Endpoint transport header.)
+  string exchange = 8;
+
   // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
   // Offer — every field, including `pricing`, `terms` (the full licensing
   // payload), and `expires_at`. Canonicalization is deterministic protobuf

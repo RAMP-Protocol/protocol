@@ -2498,6 +2498,16 @@ type Offer struct {
 	// Enables Brokers to recognize the same resource offered by
 	// different Exchanges and compare pricing.
 	Identity *ResourceIdentity `protobuf:"bytes,7,opt,name=identity,proto3,oneof" json:"identity,omitempty"`
+	// Canonical domain of the Exchange that issued this offer (e.g.
+	// "exchange.example.com"). This is the execute-routing target: the agent (or
+	// a relaying Broker) sends the ExecuteTransaction call for this offer to this
+	// Exchange. Because it is an ordinary Offer field it falls inside the signed
+	// bytes (see `signature` below — the signature covers every field except
+	// `signature` / `signature_algorithm`), so an intermediary cannot redirect
+	// the execute call to a different Exchange without invalidating the offer.
+	// (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,
+	// retiring the X-RAMP-Exchange-Endpoint transport header.)
+	Exchange string `protobuf:"bytes,8,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
 	// Offer — every field, including `pricing`, `terms` (the full licensing
 	// payload), and `expires_at`. Canonicalization is deterministic protobuf
@@ -2672,6 +2682,13 @@ func (x *Offer) GetIdentity() *ResourceIdentity {
 		return x.Identity
 	}
 	return nil
+}
+
+func (x *Offer) GetExchange() string {
+	if x != nil {
+		return x.Exchange
+	}
+	return ""
 }
 
 func (x *Offer) GetSignature() string {
@@ -8672,7 +8689,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x04unit\x18\x06 \x01(\tH\x01R\x04unit\x88\x01\x01B\f\n" +
 	"\n" +
 	"_resets_atB\a\n" +
-	"\x05_unit\"\xdb\a\n" +
+	"\x05_unit\"\xf7\a\n" +
 	"\x05Offer\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12\x19\n" +
 	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12*\n" +
@@ -8681,7 +8698,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\treporting\x18\x05 \x01(\v2\x1c.ramp.v1.ReportingObligationH\x01R\treporting\x88\x01\x01\x12>\n" +
 	"\n" +
 	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampH\x02R\texpiresAt\x88\x01\x01\x12:\n" +
-	"\bidentity\x18\a \x01(\v2\x19.ramp.v1.ResourceIdentityH\x03R\bidentity\x88\x01\x01\x12\x1c\n" +
+	"\bidentity\x18\a \x01(\v2\x19.ramp.v1.ResourceIdentityH\x03R\bidentity\x88\x01\x01\x12\x1a\n" +
+	"\bexchange\x18\b \x01(\tR\bexchange\x12\x1c\n" +
 	"\tsignature\x18\t \x01(\tR\tsignature\x12/\n" +
 	"\x13signature_algorithm\x18\n" +
 	" \x01(\tR\x12signatureAlgorithm\x12,\n" +
