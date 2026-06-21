@@ -225,7 +225,7 @@ RAMP uses a three-layer governance model to prevent fragmentation (the "USB-C pr
 
 **Layer 3**: domain-specific vocabularies. Each profile is a standalone specification defining ext field keys, attestation claim names, and behavioral conventions. Exchanges declare conformance via `supported_profiles` in their manifest.
 
-Three proto fields create a complete declaration chain: `RAMPRequest.supported_profiles` (agent to Broker), `ResourceQuery.supported_profiles` (Broker to Exchange), and `WellKnownManifest.supported_profiles` (Exchange self-description published at `/.well-known/ramp.json` with `role=ROLE_EXCHANGE`).
+Three proto fields create a complete declaration chain: `DiscoveryRequest.supported_profiles` (agent to Broker), `ResourceQuery.supported_profiles` (Broker to Exchange), and `WellKnownManifest.supported_profiles` (Exchange self-description published at `/.well-known/ramp.json` with `role=ROLE_EXCHANGE`).
 
 ## Pricing Models and Delivery Methods
 

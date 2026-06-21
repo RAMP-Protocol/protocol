@@ -1369,7 +1369,7 @@ enum DeliveryMethod {
 // what they are entitled to (scopes, delegation), and how to bill them
 // (billing_ref). What they are asking for (uris) and the limits they will
 // operate within (acceptable_restrictions) belong to the ask, not the identity,
-// and live on ResourceQuery / RAMPRequest. The Exchange verifies identity via
+// and live on ResourceQuery / DiscoveryRequest. The Exchange verifies identity via
 // the RFC 9421 request signature, then filters its catalog by the requester's
 // scopes.
 message Requester {
@@ -1920,19 +1920,19 @@ service CatalogService {
 
 // BrokerService is the agent-facing gateway: it runs the full RAMP flow
 // (discover → select → license → deliver) across one or more Exchanges on the
-// caller's behalf and returns a single canonical RAMPResponse.
+// caller's behalf and returns a single canonical DiscoveryResponse.
 service BrokerService {
   // Resolve runs the end-to-end flow for the requested URIs/query.
   //
   // A licensed result returns OK with the delivery fields populated on
-  // RAMPResponse (retrieval_endpoint, transaction_id, …). A request that ran
+  // DiscoveryResponse (retrieval_endpoint, transaction_id, …). A request that ran
   // but yielded nothing licensable (not in catalog, no offers, budget/authz
   // refusal, upstream temporarily unavailable) returns OK with
-  // RAMPResponse.absence_reason set and no retrieval_endpoint — "no result" is
+  // DiscoveryResponse.absence_reason set and no retrieval_endpoint — "no result" is
   // a successful answer, mirroring DiscoverResources (ADR-019 §2). Malformed
   // requests, auth failures, and internal faults are non-OK transport errors
   // carrying an ErrorDetail.
-  rpc Resolve(RAMPRequest) returns (RAMPResponse);
+  rpc Resolve(DiscoveryRequest) returns (DiscoveryResponse);
 }
 
 message PushResourcesRequest {
@@ -2233,8 +2233,8 @@ message UsageReportResponse {
 // ResourceQuery/TransactionRequest directly instead.
 // ============================================================================
 
-// RAMPRequest — Agent sends to Broker (Step 1).
-message RAMPRequest {
+// DiscoveryRequest — Agent sends to Broker (Step 1).
+message DiscoveryRequest {
   // RAMP protocol version
   string ver = 1;
 
@@ -2280,7 +2280,7 @@ message RAMPRequest {
   // to find matching resources across Exchanges.
   // When present, the Broker interprets the query and discovers resources
   // across Exchanges on the agent's behalf. Results returned as Offers
-  // in RAMPResponse, same as for specific URI requests.
+  // in DiscoveryResponse, same as for specific URI requests.
   // Can be used alongside uris (specific URIs + search in one request).
   optional string query = 6;
 
@@ -2626,8 +2626,8 @@ enum AuthMethod {
   AUTH_METHOD_OAUTH_MTLS = 4;
 }
 
-// RAMPResponse — Broker returns to Agent (Step 6).
-message RAMPResponse {
+// DiscoveryResponse — Broker returns to Agent (Step 6).
+message DiscoveryResponse {
   // Protocol version
   string ver = 1;
 

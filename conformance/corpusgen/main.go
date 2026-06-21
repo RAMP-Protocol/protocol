@@ -152,7 +152,7 @@ func main() {
 // verdict. This is kept SEPARATE from cases.json on purpose — cases.json is the
 // FIELD-level corpus the generated Pydantic/Zod clients are tested against today,
 // and those clients do not yet enforce cross-field CEL (the symmetric gap noted
-// in ramp-sdk-api.md). The SDK L1 validator (ramphelpers.Validate) is tested
+// in ramp-sdk-api.md). The SDK L1 validator (helpers.Validate) is tested
 // against THIS file, and a future TS/Python L1 that authors the cross-field rules
 // by hand consumes it as their oracle — without breaking the field-level parity.
 func writeCrossField(v protovalidate.Validator) {

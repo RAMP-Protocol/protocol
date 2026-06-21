@@ -33,7 +33,7 @@ The agent does not know individual document URIs — it knows a company name and
 
 ---
 
-## Step 1 — Agent Request (RAMPRequest)
+## Step 1 — Agent Request (DiscoveryRequest)
 
 The agent sends a single high-level request to its Broker. The key field is `budget_scope` — it ties all costs across every Exchange to a single deal identifier:
 
@@ -77,7 +77,7 @@ POST https://broker.lawfirm.com/ramp/v1
 }
 ```
 
-**Key design point**: The `RAMPRequest.uris` field is empty. The agent knows a company, not document URIs. The Broker's job is to decompose this entity-based intent into specific resource queries. This is the two-phase model: **discover** (Broker's domain-specific logic) then **access** (RAMP protocol).
+**Key design point**: The `DiscoveryRequest.uris` field is empty. The agent knows a company, not document URIs. The Broker's job is to decompose this entity-based intent into specific resource queries. This is the two-phase model: **discover** (Broker's domain-specific logic) then **access** (RAMP protocol).
 
 The `ext` field carries domain-specific metadata (entity identifiers, requested resource types). The core protocol doesn't need to understand these — the Broker does.
 

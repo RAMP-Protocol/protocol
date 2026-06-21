@@ -157,7 +157,7 @@ RAMP v1.0 introduces a three-layer extension architecture to prevent fragmentati
 
 Three proto fields create a complete declaration chain from agent to Exchange:
 
-- **`RAMPRequest.supported_profiles`** -- Agent declares profiles to Broker
+- **`DiscoveryRequest.supported_profiles`** -- Agent declares profiles to Broker
 - **`ResourceQuery.supported_profiles`** -- Broker forwards to Exchange
 - **`WellKnownManifest.supported_profiles`** -- Exchange declares conformance in `/.well-known/ramp.json` (`role=ROLE_EXCHANGE`)
 

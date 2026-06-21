@@ -3968,7 +3968,7 @@ func (x *Pricing) GetMetering() PricingMetering {
 // what they are entitled to (scopes, delegation), and how to bill them
 // (billing_ref). What they are asking for (uris) and the limits they will
 // operate within (acceptable_restrictions) belong to the ask, not the identity,
-// and live on ResourceQuery / RAMPRequest. The Exchange verifies identity via
+// and live on ResourceQuery / DiscoveryRequest. The Exchange verifies identity via
 // the RFC 9421 request signature, then filters its catalog by the requester's
 // scopes.
 type Requester struct {
@@ -6270,8 +6270,8 @@ func (x *UsageReportResponse) GetExtCritical() []string {
 	return nil
 }
 
-// RAMPRequest — Agent sends to Broker (Step 1).
-type RAMPRequest struct {
+// DiscoveryRequest — Agent sends to Broker (Step 1).
+type DiscoveryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// RAMP protocol version
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
@@ -6310,7 +6310,7 @@ type RAMPRequest struct {
 	// to find matching resources across Exchanges.
 	// When present, the Broker interprets the query and discovers resources
 	// across Exchanges on the agent's behalf. Results returned as Offers
-	// in RAMPResponse, same as for specific URI requests.
+	// in DiscoveryResponse, same as for specific URI requests.
 	// Can be used alongside uris (specific URIs + search in one request).
 	Query *string `protobuf:"bytes,6,opt,name=query,proto3,oneof" json:"query,omitempty"`
 	// Structured search filters (optional, alongside or instead of query).
@@ -6329,20 +6329,20 @@ type RAMPRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RAMPRequest) Reset() {
-	*x = RAMPRequest{}
+func (x *DiscoveryRequest) Reset() {
+	*x = DiscoveryRequest{}
 	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RAMPRequest) String() string {
+func (x *DiscoveryRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RAMPRequest) ProtoMessage() {}
+func (*DiscoveryRequest) ProtoMessage() {}
 
-func (x *RAMPRequest) ProtoReflect() protoreflect.Message {
+func (x *DiscoveryRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_ramp_v1_ramp_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -6354,89 +6354,89 @@ func (x *RAMPRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RAMPRequest.ProtoReflect.Descriptor instead.
-func (*RAMPRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use DiscoveryRequest.ProtoReflect.Descriptor instead.
+func (*DiscoveryRequest) Descriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{38}
 }
 
-func (x *RAMPRequest) GetVer() string {
+func (x *DiscoveryRequest) GetVer() string {
 	if x != nil {
 		return x.Ver
 	}
 	return ""
 }
 
-func (x *RAMPRequest) GetId() string {
+func (x *DiscoveryRequest) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *RAMPRequest) GetIdempotencyKey() string {
+func (x *DiscoveryRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
 	}
 	return ""
 }
 
-func (x *RAMPRequest) GetRequester() *Requester {
+func (x *DiscoveryRequest) GetRequester() *Requester {
 	if x != nil {
 		return x.Requester
 	}
 	return nil
 }
 
-func (x *RAMPRequest) GetUris() []string {
+func (x *DiscoveryRequest) GetUris() []string {
 	if x != nil {
 		return x.Uris
 	}
 	return nil
 }
 
-func (x *RAMPRequest) GetAcceptableRestrictions() []*AcceptableRestriction {
+func (x *DiscoveryRequest) GetAcceptableRestrictions() []*AcceptableRestriction {
 	if x != nil {
 		return x.AcceptableRestrictions
 	}
 	return nil
 }
 
-func (x *RAMPRequest) GetConstraints() *RequestConstraints {
+func (x *DiscoveryRequest) GetConstraints() *RequestConstraints {
 	if x != nil {
 		return x.Constraints
 	}
 	return nil
 }
 
-func (x *RAMPRequest) GetSupportedProfiles() []string {
+func (x *DiscoveryRequest) GetSupportedProfiles() []string {
 	if x != nil {
 		return x.SupportedProfiles
 	}
 	return nil
 }
 
-func (x *RAMPRequest) GetQuery() string {
+func (x *DiscoveryRequest) GetQuery() string {
 	if x != nil && x.Query != nil {
 		return *x.Query
 	}
 	return ""
 }
 
-func (x *RAMPRequest) GetSearchFilters() *structpb.Struct {
+func (x *DiscoveryRequest) GetSearchFilters() *structpb.Struct {
 	if x != nil {
 		return x.SearchFilters
 	}
 	return nil
 }
 
-func (x *RAMPRequest) GetExt() *structpb.Struct {
+func (x *DiscoveryRequest) GetExt() *structpb.Struct {
 	if x != nil {
 		return x.Ext
 	}
 	return nil
 }
 
-func (x *RAMPRequest) GetExtCritical() []string {
+func (x *DiscoveryRequest) GetExtCritical() []string {
 	if x != nil {
 		return x.ExtCritical
 	}
@@ -7248,8 +7248,8 @@ func (x *AuthorizedExchange) GetExtCritical() []string {
 	return nil
 }
 
-// RAMPResponse — Broker returns to Agent (Step 6).
-type RAMPResponse struct {
+// DiscoveryResponse — Broker returns to Agent (Step 6).
+type DiscoveryResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Protocol version
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
@@ -7306,20 +7306,20 @@ type RAMPResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RAMPResponse) Reset() {
-	*x = RAMPResponse{}
+func (x *DiscoveryResponse) Reset() {
+	*x = DiscoveryResponse{}
 	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RAMPResponse) String() string {
+func (x *DiscoveryResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RAMPResponse) ProtoMessage() {}
+func (*DiscoveryResponse) ProtoMessage() {}
 
-func (x *RAMPResponse) ProtoReflect() protoreflect.Message {
+func (x *DiscoveryResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_ramp_v1_ramp_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -7331,117 +7331,117 @@ func (x *RAMPResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RAMPResponse.ProtoReflect.Descriptor instead.
-func (*RAMPResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use DiscoveryResponse.ProtoReflect.Descriptor instead.
+func (*DiscoveryResponse) Descriptor() ([]byte, []int) {
 	return file_ramp_v1_ramp_proto_rawDescGZIP(), []int{45}
 }
 
-func (x *RAMPResponse) GetVer() string {
+func (x *DiscoveryResponse) GetVer() string {
 	if x != nil {
 		return x.Ver
 	}
 	return ""
 }
 
-func (x *RAMPResponse) GetOfferGroups() []*OfferGroup {
+func (x *DiscoveryResponse) GetOfferGroups() []*OfferGroup {
 	if x != nil {
 		return x.OfferGroups
 	}
 	return nil
 }
 
-func (x *RAMPResponse) GetTransactionId() string {
+func (x *DiscoveryResponse) GetTransactionId() string {
 	if x != nil {
 		return x.TransactionId
 	}
 	return ""
 }
 
-func (x *RAMPResponse) GetBillingId() string {
+func (x *DiscoveryResponse) GetBillingId() string {
 	if x != nil {
 		return x.BillingId
 	}
 	return ""
 }
 
-func (x *RAMPResponse) GetExchange() string {
+func (x *DiscoveryResponse) GetExchange() string {
 	if x != nil {
 		return x.Exchange
 	}
 	return ""
 }
 
-func (x *RAMPResponse) GetResourceTitle() string {
+func (x *DiscoveryResponse) GetResourceTitle() string {
 	if x != nil && x.ResourceTitle != nil {
 		return *x.ResourceTitle
 	}
 	return ""
 }
 
-func (x *RAMPResponse) GetCost() *Cost {
+func (x *DiscoveryResponse) GetCost() *Cost {
 	if x != nil {
 		return x.Cost
 	}
 	return nil
 }
 
-func (x *RAMPResponse) GetDeliveryMethod() DeliveryMethod {
+func (x *DiscoveryResponse) GetDeliveryMethod() DeliveryMethod {
 	if x != nil {
 		return x.DeliveryMethod
 	}
 	return DeliveryMethod_DELIVERY_METHOD_UNSPECIFIED
 }
 
-func (x *RAMPResponse) GetReportingObligation() *ReportingObligation {
+func (x *DiscoveryResponse) GetReportingObligation() *ReportingObligation {
 	if x != nil {
 		return x.ReportingObligation
 	}
 	return nil
 }
 
-func (x *RAMPResponse) GetExpiresAt() *timestamppb.Timestamp {
+func (x *DiscoveryResponse) GetExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpiresAt
 	}
 	return nil
 }
 
-func (x *RAMPResponse) GetRetrievalEndpoint() string {
+func (x *DiscoveryResponse) GetRetrievalEndpoint() string {
 	if x != nil && x.RetrievalEndpoint != nil {
 		return *x.RetrievalEndpoint
 	}
 	return ""
 }
 
-func (x *RAMPResponse) GetAgentIdentityHash() string {
+func (x *DiscoveryResponse) GetAgentIdentityHash() string {
 	if x != nil && x.AgentIdentityHash != nil {
 		return *x.AgentIdentityHash
 	}
 	return ""
 }
 
-func (x *RAMPResponse) GetBrokerFee() *Cost {
+func (x *DiscoveryResponse) GetBrokerFee() *Cost {
 	if x != nil {
 		return x.BrokerFee
 	}
 	return nil
 }
 
-func (x *RAMPResponse) GetAbsenceReason() OfferAbsenceReason {
+func (x *DiscoveryResponse) GetAbsenceReason() OfferAbsenceReason {
 	if x != nil && x.AbsenceReason != nil {
 		return *x.AbsenceReason
 	}
 	return OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED
 }
 
-func (x *RAMPResponse) GetExt() *structpb.Struct {
+func (x *DiscoveryResponse) GetExt() *structpb.Struct {
 	if x != nil {
 		return x.Ext
 	}
 	return nil
 }
 
-func (x *RAMPResponse) GetExtCritical() []string {
+func (x *DiscoveryResponse) GetExtCritical() []string {
 	if x != nil {
 		return x.ExtCritical
 	}
@@ -9072,8 +9072,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
 	"\treport_id\x18\x03 \x01(\tR\breportId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xd9\x04\n" +
-	"\vRAMPRequest\x12\x10\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xde\x04\n" +
+	"\x10DiscoveryRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
 	"\x0fidempotency_key\x18\n" +
@@ -9186,8 +9186,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12K\n" +
 	"\frelationship\x18\x03 \x01(\x0e2\x1d.ramp.v1.ProviderRelationshipB\b\xbaH\x05\x82\x01\x02 \x00R\frelationship\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa0\a\n" +
-	"\fRAMPResponse\x12\x10\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa5\a\n" +
+	"\x11DiscoveryResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x126\n" +
 	"\foffer_groups\x18\x02 \x03(\v2\x13.ramp.v1.OfferGroupR\vofferGroups\x12%\n" +
 	"\x0etransaction_id\x18\x04 \x01(\tR\rtransactionId\x12\x1d\n" +
@@ -9544,9 +9544,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0eCatalogService\x12N\n" +
 	"\rPushResources\x12\x1d.ramp.v1.PushResourcesRequest\x1a\x1e.ramp.v1.PushResourcesResponse\x12T\n" +
 	"\x0fRemoveResources\x12\x1f.ramp.v1.RemoveResourcesRequest\x1a .ramp.v1.RemoveResourcesResponse\x12Q\n" +
-	"\x0eRefreshCatalog\x12\x1e.ramp.v1.RefreshCatalogRequest\x1a\x1f.ramp.v1.RefreshCatalogResponse2G\n" +
-	"\rBrokerService\x126\n" +
-	"\aResolve\x12\x14.ramp.v1.RAMPRequest\x1a\x15.ramp.v1.RAMPResponseB\x8e\x01\n" +
+	"\x0eRefreshCatalog\x12\x1e.ramp.v1.RefreshCatalogRequest\x1a\x1f.ramp.v1.RefreshCatalogResponse2Q\n" +
+	"\rBrokerService\x12@\n" +
+	"\aResolve\x12\x19.ramp.v1.DiscoveryRequest\x1a\x1a.ramp.v1.DiscoveryResponseB\x8e\x01\n" +
 	"\vcom.ramp.v1B\tRampProtoP\x01Z7github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1\xa2\x02\x03RXX\xaa\x02\aRamp.V1\xca\x02\aRamp\\V1\xe2\x02\x13Ramp\\V1\\GPBMetadata\xea\x02\bRamp::V1b\x06proto3"
 
 var (
@@ -9630,14 +9630,14 @@ var file_ramp_v1_ramp_proto_goTypes = []any{
 	(*Usage)(nil),                          // 63: ramp.v1.Usage
 	(*UsageAsset)(nil),                     // 64: ramp.v1.UsageAsset
 	(*UsageReportResponse)(nil),            // 65: ramp.v1.UsageReportResponse
-	(*RAMPRequest)(nil),                    // 66: ramp.v1.RAMPRequest
+	(*DiscoveryRequest)(nil),               // 66: ramp.v1.DiscoveryRequest
 	(*RequestConstraints)(nil),             // 67: ramp.v1.RequestConstraints
 	(*JsonWebKey)(nil),                     // 68: ramp.v1.JsonWebKey
 	(*WellKnownManifest)(nil),              // 69: ramp.v1.WellKnownManifest
 	(*KeyInvalidationList)(nil),            // 70: ramp.v1.KeyInvalidationList
 	(*CatalogContributor)(nil),             // 71: ramp.v1.CatalogContributor
 	(*AuthorizedExchange)(nil),             // 72: ramp.v1.AuthorizedExchange
-	(*RAMPResponse)(nil),                   // 73: ramp.v1.RAMPResponse
+	(*DiscoveryResponse)(nil),              // 73: ramp.v1.DiscoveryResponse
 	(*DisputeRequest)(nil),                 // 74: ramp.v1.DisputeRequest
 	(*DisputeResponse)(nil),                // 75: ramp.v1.DisputeResponse
 	(*DomainVerificationRequest)(nil),      // 76: ramp.v1.DomainVerificationRequest
@@ -9749,11 +9749,11 @@ var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	15,  // 88: ramp.v1.AttributionDetail.format:type_name -> ramp.v1.CitationFormat
 	62,  // 89: ramp.v1.Usage.attribution:type_name -> ramp.v1.AttributionDetail
 	90,  // 90: ramp.v1.UsageReportResponse.ext:type_name -> google.protobuf.Struct
-	44,  // 91: ramp.v1.RAMPRequest.requester:type_name -> ramp.v1.Requester
-	28,  // 92: ramp.v1.RAMPRequest.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
-	67,  // 93: ramp.v1.RAMPRequest.constraints:type_name -> ramp.v1.RequestConstraints
-	90,  // 94: ramp.v1.RAMPRequest.search_filters:type_name -> google.protobuf.Struct
-	90,  // 95: ramp.v1.RAMPRequest.ext:type_name -> google.protobuf.Struct
+	44,  // 91: ramp.v1.DiscoveryRequest.requester:type_name -> ramp.v1.Requester
+	28,  // 92: ramp.v1.DiscoveryRequest.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
+	67,  // 93: ramp.v1.DiscoveryRequest.constraints:type_name -> ramp.v1.RequestConstraints
+	90,  // 94: ramp.v1.DiscoveryRequest.search_filters:type_name -> google.protobuf.Struct
+	90,  // 95: ramp.v1.DiscoveryRequest.ext:type_name -> google.protobuf.Struct
 	52,  // 96: ramp.v1.RequestConstraints.max_price:type_name -> ramp.v1.Cost
 	9,   // 97: ramp.v1.RequestConstraints.delivery_preference:type_name -> ramp.v1.DeliveryMethod
 	52,  // 98: ramp.v1.RequestConstraints.period_budget:type_name -> ramp.v1.Cost
@@ -9770,14 +9770,14 @@ var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	91,  // 109: ramp.v1.KeyInvalidationList.as_of:type_name -> google.protobuf.Timestamp
 	17,  // 110: ramp.v1.AuthorizedExchange.relationship:type_name -> ramp.v1.ProviderRelationship
 	90,  // 111: ramp.v1.AuthorizedExchange.ext:type_name -> google.protobuf.Struct
-	31,  // 112: ramp.v1.RAMPResponse.offer_groups:type_name -> ramp.v1.OfferGroup
-	52,  // 113: ramp.v1.RAMPResponse.cost:type_name -> ramp.v1.Cost
-	9,   // 114: ramp.v1.RAMPResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	60,  // 115: ramp.v1.RAMPResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	91,  // 116: ramp.v1.RAMPResponse.expires_at:type_name -> google.protobuf.Timestamp
-	52,  // 117: ramp.v1.RAMPResponse.broker_fee:type_name -> ramp.v1.Cost
-	1,   // 118: ramp.v1.RAMPResponse.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
-	90,  // 119: ramp.v1.RAMPResponse.ext:type_name -> google.protobuf.Struct
+	31,  // 112: ramp.v1.DiscoveryResponse.offer_groups:type_name -> ramp.v1.OfferGroup
+	52,  // 113: ramp.v1.DiscoveryResponse.cost:type_name -> ramp.v1.Cost
+	9,   // 114: ramp.v1.DiscoveryResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	60,  // 115: ramp.v1.DiscoveryResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
+	91,  // 116: ramp.v1.DiscoveryResponse.expires_at:type_name -> google.protobuf.Timestamp
+	52,  // 117: ramp.v1.DiscoveryResponse.broker_fee:type_name -> ramp.v1.Cost
+	1,   // 118: ramp.v1.DiscoveryResponse.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
+	90,  // 119: ramp.v1.DiscoveryResponse.ext:type_name -> google.protobuf.Struct
 	19,  // 120: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
 	90,  // 121: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
 	89,  // 122: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
@@ -9815,7 +9815,7 @@ var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	53,  // 154: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
 	56,  // 155: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
 	58,  // 156: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
-	66,  // 157: ramp.v1.BrokerService.Resolve:input_type -> ramp.v1.RAMPRequest
+	66,  // 157: ramp.v1.BrokerService.Resolve:input_type -> ramp.v1.DiscoveryRequest
 	30,  // 158: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
 	50,  // 159: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
 	65,  // 160: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
@@ -9825,7 +9825,7 @@ var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	55,  // 164: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
 	57,  // 165: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
 	59,  // 166: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
-	73,  // 167: ramp.v1.BrokerService.Resolve:output_type -> ramp.v1.RAMPResponse
+	73,  // 167: ramp.v1.BrokerService.Resolve:output_type -> ramp.v1.DiscoveryResponse
 	158, // [158:168] is the sub-list for method output_type
 	148, // [148:158] is the sub-list for method input_type
 	148, // [148:148] is the sub-list for extension type_name

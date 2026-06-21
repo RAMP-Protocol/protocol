@@ -15,7 +15,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 
 - **ExchangeService** — `DiscoverResources`, `ExecuteTransaction`, `ReportUsage`, `DisputeTransaction`, and domain-verification RPCs. Agents and Brokers are interchangeable clients.
 - **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers.
-- **RAMPRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
+- **DiscoveryRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
 - **Requester** — universal actor identity (AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH).
 - **Delegation** — holder-bound JWT by default (RFC 7800 `cnf`/`jkt` + RFC 9421 proof-of-possession; chain of `cnf`-linked JWTs), with `token_format: "biscuit-v3"` as an optional alternative. Scoped, time-limited, spend-capped, narrowable offline.
 - **Scope-based access control** — the Exchange filters its catalog by the requester's scopes; subscriptions are scopes.

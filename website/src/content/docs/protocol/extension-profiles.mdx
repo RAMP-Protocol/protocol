@@ -45,7 +45,7 @@ Three proto fields create a complete declaration chain from agent to Exchange:
 ```
 Agent                    Broker                 Exchange
   │                          │                            │
-  │  RAMPRequest             │                            │
+  │  DiscoveryRequest             │                            │
   │  supported_profiles:     │  ResourceQuery               │
   │  ["ramp-academic-v1"]    │  supported_profiles:       │  WellKnownManifest
   │ ─────────────────────►   │  ["ramp-academic-v1"]      │  supported_profiles:
@@ -76,7 +76,7 @@ The caller (Broker or direct agent) declares which profiles it understands. The 
 
 Absence means "send all available metadata" -- the Exchange MUST NOT withhold `ext` fields solely because the caller omitted this field.
 
-### RAMPRequest.supported_profiles (field 5)
+### DiscoveryRequest.supported_profiles (field 5)
 
 The agent declares profiles to the Broker. The Broker uses this for:
 

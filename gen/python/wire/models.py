@@ -1530,6 +1530,53 @@ class WellKnownManifest(WireModel):
     )
 
 
+class DiscoveryRequest(WireModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    acceptableRestrictions: list[AcceptableRestriction] | None = Field(
+        None,
+        description='The limits the agent will operate within, per restriction axis — see\n AcceptableRestriction. The Broker forwards these to Exchanges in\n ResourceQuery.acceptable_restrictions. Advisory selection inputs, not\n enforcement.',
+    )
+    constraints: RequestConstraints | None = Field(
+        None, description='Constraints for exchange filtering and offer selection.'
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    extCritical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
+    id: str | None = Field(
+        '', description='Unique request identifier, assigned by the Requesting Party.'
+    )
+    idempotencyKey: constr(min_length=1) = Field(
+        ...,
+        description='Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a\n retried request carrying the same key MUST NOT re-charge — the Broker returns\n the original result. Distinct from `id` (an opaque correlation tag): this is\n the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.',
+    )
+    query: str | None = Field(
+        None,
+        description="Search query for Broker-side resource discovery.\n Used when the agent doesn't know specific URIs but wants the Broker\n to find matching resources across Exchanges.\n When present, the Broker interprets the query and discovers resources\n across Exchanges on the agent's behalf. Results returned as Offers\n in DiscoveryResponse, same as for specific URI requests.\n Can be used alongside uris (specific URIs + search in one request).",
+    )
+    requester: Requester | None = Field(
+        None,
+        description='Requester identity — who is making this request, what scopes they have.\n The Broker forwards this to Exchanges in ResourceQuery.requester.',
+    )
+    searchFilters: dict[str, Any] | None = Field(
+        None,
+        description='Structured search filters (optional, alongside or instead of query).\n Keys are profile-specific: "academic.topic", "news.category",\n "legal.jurisdiction", etc. The Broker maps these to Exchange-specific\n query parameters.',
+    )
+    supportedProfiles: list[str] | None = Field(
+        None,
+        description='The Broker uses this to:\n   1. Route queries to Exchanges that support these profiles\n   2. Forward the profiles in ResourceQuery.supported_profiles\n   3. Include profile-specific ext fields when returning results\n\n Examples: ["ramp-academic-v1"] — agent working on literature review',
+    )
+    uris: list[str] | None = Field(
+        None,
+        description='Resource URIs the agent wants. The Broker forwards these to Exchanges in\n ResourceQuery.uris. Optional when `query` / `search_filters` drive\n Broker-side discovery instead.',
+        max_length=256,
+    )
+    ver: str | None = Field('', description='RAMP protocol version')
+
+
 class ErrorDetail(WireModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -1706,104 +1753,6 @@ class OfferGroup(WireModel):
     )
 
 
-class RAMPRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    acceptableRestrictions: list[AcceptableRestriction] | None = Field(
-        None,
-        description='The limits the agent will operate within, per restriction axis — see\n AcceptableRestriction. The Broker forwards these to Exchanges in\n ResourceQuery.acceptable_restrictions. Advisory selection inputs, not\n enforcement.',
-    )
-    constraints: RequestConstraints | None = Field(
-        None, description='Constraints for exchange filtering and offer selection.'
-    )
-    ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
-        None,
-        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
-    )
-    id: str | None = Field(
-        '', description='Unique request identifier, assigned by the Requesting Party.'
-    )
-    idempotencyKey: constr(min_length=1) = Field(
-        ...,
-        description='Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a\n retried request carrying the same key MUST NOT re-charge — the Broker returns\n the original result. Distinct from `id` (an opaque correlation tag): this is\n the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.',
-    )
-    query: str | None = Field(
-        None,
-        description="Search query for Broker-side resource discovery.\n Used when the agent doesn't know specific URIs but wants the Broker\n to find matching resources across Exchanges.\n When present, the Broker interprets the query and discovers resources\n across Exchanges on the agent's behalf. Results returned as Offers\n in RAMPResponse, same as for specific URI requests.\n Can be used alongside uris (specific URIs + search in one request).",
-    )
-    requester: Requester | None = Field(
-        None,
-        description='Requester identity — who is making this request, what scopes they have.\n The Broker forwards this to Exchanges in ResourceQuery.requester.',
-    )
-    searchFilters: dict[str, Any] | None = Field(
-        None,
-        description='Structured search filters (optional, alongside or instead of query).\n Keys are profile-specific: "academic.topic", "news.category",\n "legal.jurisdiction", etc. The Broker maps these to Exchange-specific\n query parameters.',
-    )
-    supportedProfiles: list[str] | None = Field(
-        None,
-        description='The Broker uses this to:\n   1. Route queries to Exchanges that support these profiles\n   2. Forward the profiles in ResourceQuery.supported_profiles\n   3. Include profile-specific ext fields when returning results\n\n Examples: ["ramp-academic-v1"] — agent working on literature review',
-    )
-    uris: list[str] | None = Field(
-        None,
-        description='Resource URIs the agent wants. The Broker forwards these to Exchanges in\n ResourceQuery.uris. Optional when `query` / `search_filters` drive\n Broker-side discovery instead.',
-        max_length=256,
-    )
-    ver: str | None = Field('', description='RAMP protocol version')
-
-
-class RAMPResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    absenceReason: OfferAbsenceReason | None = Field(
-        None,
-        description='Why the resolve produced no licensed delivery. Set (and retrieval_endpoint\n unset) on a successful "no result" answer; unset on the licensed path. Same\n vocabulary DiscoverResources uses for OfferGroup.absence_reason.',
-    )
-    agentIdentityHash: str | None = Field(
-        None,
-        description='Identity that retrieval_endpoint is bound to. Same value and computation as\n TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.',
-    )
-    billingId: str | None = Field('', description='Billing reference')
-    brokerFee: Cost | None = Field(
-        None,
-        description="Broker's fee for this transaction, if any.\n Absent = no per-transaction fee (governed by external agreement).\n Present = explicit fee the agent can see and audit.\n Broker MUST disclose fees when charging per-transaction.",
-    )
-    cost: Cost | None = Field(None, description='Transaction cost.')
-    deliveryMethod: (
-        constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
-        | DeliveryMethod
-        | conint(ge=-2147483648, le=2147483647)
-        | None
-    ) = Field(0, description='How resource is delivered.')
-    exchange: str | None = Field('', description='Which Exchange won the selection.')
-    expiresAt: AwareDatetime | None = Field(
-        None, description='When retrieval_endpoint expires.'
-    )
-    ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
-        None,
-        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
-    )
-    offerGroups: list[OfferGroup] | None = Field(
-        None,
-        description='Discovery result (RAMP-56 discovery-only Resolve): the ranked, Exchange-\n signed Offers the Broker discovered for this request, in the Broker\'s\n ranking order (best first). On the modern two-phase flow the Broker\n DISCOVERS and ranks here but does NOT execute — the agent originates the\n execute itself (signing the accepted offer) through the Broker\'s relay\n route. Empty on a "no result" answer (see absence_reason). The execute-\n shaped fields below (transaction_id, retrieval_endpoint, …) are not\n populated by a discovery-only Resolve.',
-    )
-    reportingObligation: ReportingObligation | None = Field(
-        None, description='Reporting obligations the agent must fulfill.'
-    )
-    resourceTitle: str | None = Field(
-        None, description='Resource title for the disputed resource.'
-    )
-    retrievalEndpoint: str | None = Field(
-        None,
-        description='Signed retrieval URL returned by the Exchange and forwarded unchanged by the\n Broker, together with agent_identity_hash. Bound to agent_identity_hash;\n expires at expires_at. Absent on denial and when delivery_method is not\n signed-URL-based.',
-    )
-    transactionId: str | None = Field('', description='Exchange-assigned identifiers.')
-    ver: str | None = Field('', description='Protocol version')
-
-
 class ResourceEntry(WireModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -1916,6 +1865,57 @@ class TransactionRequest(WireModel):
     requester: Requester | None = Field(
         None, description='Requester identity — forwarded for authorization and audit.'
     )
+    ver: str | None = Field('', description='Protocol version')
+
+
+class DiscoveryResponse(WireModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    absenceReason: OfferAbsenceReason | None = Field(
+        None,
+        description='Why the resolve produced no licensed delivery. Set (and retrieval_endpoint\n unset) on a successful "no result" answer; unset on the licensed path. Same\n vocabulary DiscoverResources uses for OfferGroup.absence_reason.',
+    )
+    agentIdentityHash: str | None = Field(
+        None,
+        description='Identity that retrieval_endpoint is bound to. Same value and computation as\n TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.',
+    )
+    billingId: str | None = Field('', description='Billing reference')
+    brokerFee: Cost | None = Field(
+        None,
+        description="Broker's fee for this transaction, if any.\n Absent = no per-transaction fee (governed by external agreement).\n Present = explicit fee the agent can see and audit.\n Broker MUST disclose fees when charging per-transaction.",
+    )
+    cost: Cost | None = Field(None, description='Transaction cost.')
+    deliveryMethod: (
+        constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
+        | DeliveryMethod
+        | conint(ge=-2147483648, le=2147483647)
+        | None
+    ) = Field(0, description='How resource is delivered.')
+    exchange: str | None = Field('', description='Which Exchange won the selection.')
+    expiresAt: AwareDatetime | None = Field(
+        None, description='When retrieval_endpoint expires.'
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    extCritical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
+    offerGroups: list[OfferGroup] | None = Field(
+        None,
+        description='Discovery result (RAMP-56 discovery-only Resolve): the ranked, Exchange-\n signed Offers the Broker discovered for this request, in the Broker\'s\n ranking order (best first). On the modern two-phase flow the Broker\n DISCOVERS and ranks here but does NOT execute — the agent originates the\n execute itself (signing the accepted offer) through the Broker\'s relay\n route. Empty on a "no result" answer (see absence_reason). The execute-\n shaped fields below (transaction_id, retrieval_endpoint, …) are not\n populated by a discovery-only Resolve.',
+    )
+    reportingObligation: ReportingObligation | None = Field(
+        None, description='Reporting obligations the agent must fulfill.'
+    )
+    resourceTitle: str | None = Field(
+        None, description='Resource title for the disputed resource.'
+    )
+    retrievalEndpoint: str | None = Field(
+        None,
+        description='Signed retrieval URL returned by the Exchange and forwarded unchanged by the\n Broker, together with agent_identity_hash. Bound to agent_identity_hash;\n expires at expires_at. Absent on denial and when delivery_method is not\n signed-URL-based.',
+    )
+    transactionId: str | None = Field('', description='Exchange-assigned identifiers.')
     ver: str | None = Field('', description='Protocol version')
 
 

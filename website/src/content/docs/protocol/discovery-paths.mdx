@@ -73,7 +73,7 @@ sequenceDiagram
     participant MPB as Exchange B
     participant CDN as Provider CDN
 
-    Agent->>Orch: RAMPRequest (requester + constraints)
+    Agent->>Orch: DiscoveryRequest (requester + constraints)
 
     par Parallel supply discovery
         Orch->>MPA: DiscoverResources
@@ -88,7 +88,7 @@ sequenceDiagram
     Orch->>MPA: ExecuteTransaction (winning offer)
     MPA-->>Orch: TransactionResponse (signed URL)
 
-    Orch-->>Agent: RAMPResponse (signed URL + cost + reporting obligation)
+    Orch-->>Agent: DiscoveryResponse (signed URL + cost + reporting obligation)
 
     Agent->>CDN: GET signed URL
     CDN-->>Agent: 200 OK + content
@@ -101,12 +101,12 @@ sequenceDiagram
 
 | Step | Message | Standard |
 |---|---|---|
-| Agent to Broker | `RAMPRequest` with `RequestConstraints` | **RAMP** (budget, authorized exchanges) |
+| Agent to Broker | `DiscoveryRequest` with `RequestConstraints` | **RAMP** (budget, authorized exchanges) |
 | Broker to Exchanges | `ResourceQuery` (parallel fanout) | **RAMP** wrapping **RAMP Requester** |
 | Offer comparison | `Offer.pricing.unit_cost` | **RAMP** unit cost normalization |
 | Content dedup | `Offer.identity` (canonical_url, content_hash) | **RAMP** ResourceIdentity extension |
 | Content attestations | `Offer.attestations` | **RAMP** v1.0 `ResourceAttestation` |
-| Broker to Agent | `RAMPResponse` | **RAMP** |
+| Broker to Agent | `DiscoveryResponse` | **RAMP** |
 | Usage reporting | `UsageReport` forwarded to winning Exchange | **RAMP** |
 
 ## Path C: Accidental Discovery via Edge Function (403)
@@ -198,7 +198,7 @@ sequenceDiagram
     participant MPB as Exchange B
     participant CDN as Provider CDN
 
-    Agent->>Orch: RAMPRequest (3 URIs + constraints)
+    Agent->>Orch: DiscoveryRequest (3 URIs + constraints)
 
     par Parallel supply discovery (multi-URI)
         Orch->>MPA: DiscoverResources (ResourceQuery with 3 URIs)
@@ -216,7 +216,7 @@ sequenceDiagram
     Orch->>MPB: ExecuteTransaction (batch: items[] with 1 offer)
     MPB-->>Orch: TransactionResponse (items[] + total_cost)
 
-    Orch-->>Agent: RAMPResponse (3 signed URLs + costs)
+    Orch-->>Agent: DiscoveryResponse (3 signed URLs + costs)
 
     par Parallel content fetch
         Agent->>CDN: GET signed URL 1
@@ -238,7 +238,7 @@ sequenceDiagram
 
 | Step | Message | Standard |
 |---|---|---|
-| Agent sends multi-URI request | `RAMPRequest` with multiple URIs | **RAMP** |
+| Agent sends multi-URI request | `DiscoveryRequest` with multiple URIs | **RAMP** |
 | Broker fans out | `ResourceQuery` with multiple URIs (one query per Exchange) | **RAMP** wrapping **RAMP Requester** |
 | Exchange returns grouped offers | `ResourceResponse.offer_groups[]` with `OfferGroup` per URI | **RAMP** OfferGroup extension |
 | Empty OfferGroup diagnostic | `OfferGroup.absence_reason` (`OfferAbsenceReason` enum) | **RAMP** v1.0 -- per-URI diagnostic when no offers available |

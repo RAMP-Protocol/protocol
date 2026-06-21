@@ -426,7 +426,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 ## Phase 2b: Cross-Provider via Broker (Header Signature Chain, OfferGroups, SimHash)
 
-If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `RAMPRequest` to the Broker with multiple URIs:
+If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `DiscoveryRequest` to the Broker with multiple URIs:
 
 ```json
 // Agent -> Broker

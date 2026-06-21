@@ -40,7 +40,7 @@ The Broker entry point. A client sends the URIs/query it wants resolved and rece
 
 ### AcceptableRestriction
 
-The limits a query operates within on one restriction axis, in the same `RestrictionKind` vocabulary the terms use. The Exchange/Broker MAY pre-select offers whose term restrictions fall within these (convenience, not enforcement). Used in `ResourceQuery` and `RAMPRequest`.
+The limits a query operates within on one restriction axis, in the same `RestrictionKind` vocabulary the terms use. The Exchange/Broker MAY pre-select offers whose term restrictions fall within these (convenience, not enforcement). Used in `ResourceQuery` and `DiscoveryRequest`.
 
 ::proto-message{name=AcceptableRestriction}
 
@@ -62,7 +62,7 @@ Rate limit status modeled after IETF RateLimit header fields.
 
 ### Requester
 
-Identity and entitlements only — who is asking and what they're entitled to. What they're asking for (`uris`) and the limits they'll accept (`acceptable_restrictions`) live on the ask (`ResourceQuery` / `RAMPRequest`), not here. Used in `ResourceQuery` and `RAMPRequest`.
+Identity and entitlements only — who is asking and what they're entitled to. What they're asking for (`uris`) and the limits they'll accept (`acceptable_restrictions`) live on the ask (`ResourceQuery` / `DiscoveryRequest`), not here. Used in `ResourceQuery` and `DiscoveryRequest`.
 
 ::proto-message{name=Requester}
 
@@ -284,11 +284,11 @@ A Exchange authorized to sell this provider's content.
 
 Messages for the Agent-to-Broker path (Steps 1 and 6). When an agent talks directly to an Exchange, it uses ResourceQuery/TransactionRequest instead.
 
-### RAMPRequest
+### DiscoveryRequest
 
 Agent sends to Broker (Step 1).
 
-::proto-message{name=RAMPRequest}
+::proto-message{name=DiscoveryRequest}
 
 ### RequestConstraints
 
@@ -296,11 +296,11 @@ Budget and preference constraints for exchange filtering and offer selection.
 
 ::proto-message{name=RequestConstraints}
 
-### RAMPResponse
+### DiscoveryResponse
 
 Broker returns to Agent (Step 6).
 
-::proto-message{name=RAMPResponse}
+::proto-message{name=DiscoveryResponse}
 
 ## Messages -- CatalogService
 
