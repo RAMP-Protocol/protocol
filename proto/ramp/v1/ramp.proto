@@ -2620,6 +2620,16 @@ message RAMPResponse {
   // Protocol version
   string ver = 1;
 
+  // Discovery result (RAMP-56 discovery-only Resolve): the ranked, Exchange-
+  // signed Offers the Broker discovered for this request, in the Broker's
+  // ranking order (best first). On the modern two-phase flow the Broker
+  // DISCOVERS and ranks here but does NOT execute — the agent originates the
+  // execute itself (signing the accepted offer) through the Broker's relay
+  // route. Empty on a "no result" answer (see absence_reason). The execute-
+  // shaped fields below (transaction_id, retrieval_endpoint, …) are not
+  // populated by a discovery-only Resolve.
+  repeated OfferGroup offer_groups = 2;
+
   // Exchange-assigned identifiers.
   string transaction_id = 4;
   // Billing reference

@@ -1124,53 +1124,6 @@ class Quota(WireModel):
     )
 
 
-class RAMPResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    absenceReason: OfferAbsenceReason | None = Field(
-        None,
-        description='Why the resolve produced no licensed delivery. Set (and retrieval_endpoint\n unset) on a successful "no result" answer; unset on the licensed path. Same\n vocabulary DiscoverResources uses for OfferGroup.absence_reason.',
-    )
-    agentIdentityHash: str | None = Field(
-        None,
-        description='Identity that retrieval_endpoint is bound to. Same value and computation as\n TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.',
-    )
-    billingId: str | None = Field('', description='Billing reference')
-    brokerFee: Cost | None = Field(
-        None,
-        description="Broker's fee for this transaction, if any.\n Absent = no per-transaction fee (governed by external agreement).\n Present = explicit fee the agent can see and audit.\n Broker MUST disclose fees when charging per-transaction.",
-    )
-    cost: Cost | None = Field(None, description='Transaction cost.')
-    deliveryMethod: (
-        constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
-        | DeliveryMethod
-        | conint(ge=-2147483648, le=2147483647)
-        | None
-    ) = Field(0, description='How resource is delivered.')
-    exchange: str | None = Field('', description='Which Exchange won the selection.')
-    expiresAt: AwareDatetime | None = Field(
-        None, description='When retrieval_endpoint expires.'
-    )
-    ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
-        None,
-        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
-    )
-    reportingObligation: ReportingObligation | None = Field(
-        None, description='Reporting obligations the agent must fulfill.'
-    )
-    resourceTitle: str | None = Field(
-        None, description='Resource title for the disputed resource.'
-    )
-    retrievalEndpoint: str | None = Field(
-        None,
-        description='Signed retrieval URL returned by the Exchange and forwarded unchanged by the\n Broker, together with agent_identity_hash. Bound to agent_identity_hash;\n expires at expires_at. Absent on denial and when delivery_method is not\n signed-URL-based.',
-    )
-    transactionId: str | None = Field('', description='Exchange-assigned identifiers.')
-    ver: str | None = Field('', description='Protocol version')
-
-
 class RegistrationFailure(WireModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -1794,6 +1747,57 @@ class RAMPRequest(WireModel):
         max_length=256,
     )
     ver: str | None = Field('', description='RAMP protocol version')
+
+
+class RAMPResponse(WireModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    absenceReason: OfferAbsenceReason | None = Field(
+        None,
+        description='Why the resolve produced no licensed delivery. Set (and retrieval_endpoint\n unset) on a successful "no result" answer; unset on the licensed path. Same\n vocabulary DiscoverResources uses for OfferGroup.absence_reason.',
+    )
+    agentIdentityHash: str | None = Field(
+        None,
+        description='Identity that retrieval_endpoint is bound to. Same value and computation as\n TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.',
+    )
+    billingId: str | None = Field('', description='Billing reference')
+    brokerFee: Cost | None = Field(
+        None,
+        description="Broker's fee for this transaction, if any.\n Absent = no per-transaction fee (governed by external agreement).\n Present = explicit fee the agent can see and audit.\n Broker MUST disclose fees when charging per-transaction.",
+    )
+    cost: Cost | None = Field(None, description='Transaction cost.')
+    deliveryMethod: (
+        constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
+        | DeliveryMethod
+        | conint(ge=-2147483648, le=2147483647)
+        | None
+    ) = Field(0, description='How resource is delivered.')
+    exchange: str | None = Field('', description='Which Exchange won the selection.')
+    expiresAt: AwareDatetime | None = Field(
+        None, description='When retrieval_endpoint expires.'
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    extCritical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
+    offerGroups: list[OfferGroup] | None = Field(
+        None,
+        description='Discovery result (RAMP-56 discovery-only Resolve): the ranked, Exchange-\n signed Offers the Broker discovered for this request, in the Broker\'s\n ranking order (best first). On the modern two-phase flow the Broker\n DISCOVERS and ranks here but does NOT execute — the agent originates the\n execute itself (signing the accepted offer) through the Broker\'s relay\n route. Empty on a "no result" answer (see absence_reason). The execute-\n shaped fields below (transaction_id, retrieval_endpoint, …) are not\n populated by a discovery-only Resolve.',
+    )
+    reportingObligation: ReportingObligation | None = Field(
+        None, description='Reporting obligations the agent must fulfill.'
+    )
+    resourceTitle: str | None = Field(
+        None, description='Resource title for the disputed resource.'
+    )
+    retrievalEndpoint: str | None = Field(
+        None,
+        description='Signed retrieval URL returned by the Exchange and forwarded unchanged by the\n Broker, together with agent_identity_hash. Bound to agent_identity_hash;\n expires at expires_at. Absent on denial and when delivery_method is not\n signed-URL-based.',
+    )
+    transactionId: str | None = Field('', description='Exchange-assigned identifiers.')
+    ver: str | None = Field('', description='Protocol version')
 
 
 class ResourceEntry(WireModel):

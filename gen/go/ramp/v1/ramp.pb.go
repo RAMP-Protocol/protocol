@@ -7236,6 +7236,15 @@ type RAMPResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Protocol version
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// Discovery result (RAMP-56 discovery-only Resolve): the ranked, Exchange-
+	// signed Offers the Broker discovered for this request, in the Broker's
+	// ranking order (best first). On the modern two-phase flow the Broker
+	// DISCOVERS and ranks here but does NOT execute — the agent originates the
+	// execute itself (signing the accepted offer) through the Broker's relay
+	// route. Empty on a "no result" answer (see absence_reason). The execute-
+	// shaped fields below (transaction_id, retrieval_endpoint, …) are not
+	// populated by a discovery-only Resolve.
+	OfferGroups []*OfferGroup `protobuf:"bytes,2,rep,name=offer_groups,json=offerGroups,proto3" json:"offer_groups,omitempty"`
 	// Exchange-assigned identifiers.
 	TransactionId string `protobuf:"bytes,4,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// Billing reference
@@ -7315,6 +7324,13 @@ func (x *RAMPResponse) GetVer() string {
 		return x.Ver
 	}
 	return ""
+}
+
+func (x *RAMPResponse) GetOfferGroups() []*OfferGroup {
+	if x != nil {
+		return x.OfferGroups
+	}
+	return nil
 }
 
 func (x *RAMPResponse) GetTransactionId() string {
@@ -9152,9 +9168,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12K\n" +
 	"\frelationship\x18\x03 \x01(\x0e2\x1d.ramp.v1.ProviderRelationshipB\b\xbaH\x05\x82\x01\x02 \x00R\frelationship\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe8\x06\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa0\a\n" +
 	"\fRAMPResponse\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12%\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x126\n" +
+	"\foffer_groups\x18\x02 \x03(\v2\x13.ramp.v1.OfferGroupR\vofferGroups\x12%\n" +
 	"\x0etransaction_id\x18\x04 \x01(\tR\rtransactionId\x12\x1d\n" +
 	"\n" +
 	"billing_id\x18\x05 \x01(\tR\tbillingId\x12\x1a\n" +
@@ -9735,66 +9752,67 @@ var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	91,  // 109: ramp.v1.KeyInvalidationList.as_of:type_name -> google.protobuf.Timestamp
 	17,  // 110: ramp.v1.AuthorizedExchange.relationship:type_name -> ramp.v1.ProviderRelationship
 	90,  // 111: ramp.v1.AuthorizedExchange.ext:type_name -> google.protobuf.Struct
-	52,  // 112: ramp.v1.RAMPResponse.cost:type_name -> ramp.v1.Cost
-	9,   // 113: ramp.v1.RAMPResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	60,  // 114: ramp.v1.RAMPResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	91,  // 115: ramp.v1.RAMPResponse.expires_at:type_name -> google.protobuf.Timestamp
-	52,  // 116: ramp.v1.RAMPResponse.broker_fee:type_name -> ramp.v1.Cost
-	1,   // 117: ramp.v1.RAMPResponse.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
-	90,  // 118: ramp.v1.RAMPResponse.ext:type_name -> google.protobuf.Struct
-	19,  // 119: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
-	90,  // 120: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
-	89,  // 121: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
-	20,  // 122: ramp.v1.DisputeResponse.status:type_name -> ramp.v1.DisputeStatus
-	21,  // 123: ramp.v1.DisputeResponse.resolution:type_name -> ramp.v1.ResolutionType
-	90,  // 124: ramp.v1.DisputeResponse.ext:type_name -> google.protobuf.Struct
-	90,  // 125: ramp.v1.DomainVerificationRequest.ext:type_name -> google.protobuf.Struct
-	91,  // 126: ramp.v1.DomainVerificationChallenge.expires_at:type_name -> google.protobuf.Timestamp
-	90,  // 127: ramp.v1.DomainVerificationChallenge.ext:type_name -> google.protobuf.Struct
-	90,  // 128: ramp.v1.DomainVerificationConfirmation.ext:type_name -> google.protobuf.Struct
-	91,  // 129: ramp.v1.DomainVerificationResult.valid_until:type_name -> google.protobuf.Timestamp
-	90,  // 130: ramp.v1.DomainVerificationResult.ext:type_name -> google.protobuf.Struct
-	88,  // 131: ramp.v1.ErrorDetail.metadata:type_name -> ramp.v1.ErrorDetail.MetadataEntry
-	81,  // 132: ramp.v1.ErrorDetail.transaction_denial:type_name -> ramp.v1.TransactionDenial
-	82,  // 133: ramp.v1.ErrorDetail.catalog_rejection:type_name -> ramp.v1.CatalogRejection
-	83,  // 134: ramp.v1.ErrorDetail.registration_failure:type_name -> ramp.v1.RegistrationFailure
-	84,  // 135: ramp.v1.ErrorDetail.dispute_failure:type_name -> ramp.v1.DisputeFailure
-	85,  // 136: ramp.v1.ErrorDetail.domain_verification_failure:type_name -> ramp.v1.DomainVerificationFailure
-	86,  // 137: ramp.v1.ErrorDetail.retrieval_auth_failure:type_name -> ramp.v1.RetrievalAuthFailure
-	87,  // 138: ramp.v1.ErrorDetail.usage_report_rejection:type_name -> ramp.v1.UsageReportRejection
-	13,  // 139: ramp.v1.TransactionDenial.reason:type_name -> ramp.v1.DenialReason
-	3,   // 140: ramp.v1.TransactionDenial.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
-	22,  // 141: ramp.v1.CatalogRejection.reason:type_name -> ramp.v1.CatalogRejectionReason
-	23,  // 142: ramp.v1.RegistrationFailure.reason:type_name -> ramp.v1.RegistrationFailureReason
-	24,  // 143: ramp.v1.DisputeFailure.reason:type_name -> ramp.v1.DisputeFailureReason
-	25,  // 144: ramp.v1.DomainVerificationFailure.reason:type_name -> ramp.v1.DomainVerificationFailureReason
-	26,  // 145: ramp.v1.RetrievalAuthFailure.reason:type_name -> ramp.v1.RetrievalAuthFailureReason
-	27,  // 146: ramp.v1.UsageReportRejection.reason:type_name -> ramp.v1.UsageReportRejectionReason
-	29,  // 147: ramp.v1.ExchangeService.DiscoverResources:input_type -> ramp.v1.ResourceQuery
-	48,  // 148: ramp.v1.ExchangeService.ExecuteTransaction:input_type -> ramp.v1.TransactionRequest
-	61,  // 149: ramp.v1.ExchangeService.ReportUsage:input_type -> ramp.v1.UsageReport
-	74,  // 150: ramp.v1.ExchangeService.DisputeTransaction:input_type -> ramp.v1.DisputeRequest
-	76,  // 151: ramp.v1.ExchangeService.RequestDomainVerification:input_type -> ramp.v1.DomainVerificationRequest
-	78,  // 152: ramp.v1.ExchangeService.ConfirmDomainVerification:input_type -> ramp.v1.DomainVerificationConfirmation
-	53,  // 153: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
-	56,  // 154: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
-	58,  // 155: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
-	66,  // 156: ramp.v1.BrokerService.Resolve:input_type -> ramp.v1.RAMPRequest
-	30,  // 157: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
-	50,  // 158: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
-	65,  // 159: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
-	75,  // 160: ramp.v1.ExchangeService.DisputeTransaction:output_type -> ramp.v1.DisputeResponse
-	77,  // 161: ramp.v1.ExchangeService.RequestDomainVerification:output_type -> ramp.v1.DomainVerificationChallenge
-	79,  // 162: ramp.v1.ExchangeService.ConfirmDomainVerification:output_type -> ramp.v1.DomainVerificationResult
-	55,  // 163: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
-	57,  // 164: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
-	59,  // 165: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
-	73,  // 166: ramp.v1.BrokerService.Resolve:output_type -> ramp.v1.RAMPResponse
-	157, // [157:167] is the sub-list for method output_type
-	147, // [147:157] is the sub-list for method input_type
-	147, // [147:147] is the sub-list for extension type_name
-	147, // [147:147] is the sub-list for extension extendee
-	0,   // [0:147] is the sub-list for field type_name
+	31,  // 112: ramp.v1.RAMPResponse.offer_groups:type_name -> ramp.v1.OfferGroup
+	52,  // 113: ramp.v1.RAMPResponse.cost:type_name -> ramp.v1.Cost
+	9,   // 114: ramp.v1.RAMPResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	60,  // 115: ramp.v1.RAMPResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
+	91,  // 116: ramp.v1.RAMPResponse.expires_at:type_name -> google.protobuf.Timestamp
+	52,  // 117: ramp.v1.RAMPResponse.broker_fee:type_name -> ramp.v1.Cost
+	1,   // 118: ramp.v1.RAMPResponse.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
+	90,  // 119: ramp.v1.RAMPResponse.ext:type_name -> google.protobuf.Struct
+	19,  // 120: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
+	90,  // 121: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
+	89,  // 122: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
+	20,  // 123: ramp.v1.DisputeResponse.status:type_name -> ramp.v1.DisputeStatus
+	21,  // 124: ramp.v1.DisputeResponse.resolution:type_name -> ramp.v1.ResolutionType
+	90,  // 125: ramp.v1.DisputeResponse.ext:type_name -> google.protobuf.Struct
+	90,  // 126: ramp.v1.DomainVerificationRequest.ext:type_name -> google.protobuf.Struct
+	91,  // 127: ramp.v1.DomainVerificationChallenge.expires_at:type_name -> google.protobuf.Timestamp
+	90,  // 128: ramp.v1.DomainVerificationChallenge.ext:type_name -> google.protobuf.Struct
+	90,  // 129: ramp.v1.DomainVerificationConfirmation.ext:type_name -> google.protobuf.Struct
+	91,  // 130: ramp.v1.DomainVerificationResult.valid_until:type_name -> google.protobuf.Timestamp
+	90,  // 131: ramp.v1.DomainVerificationResult.ext:type_name -> google.protobuf.Struct
+	88,  // 132: ramp.v1.ErrorDetail.metadata:type_name -> ramp.v1.ErrorDetail.MetadataEntry
+	81,  // 133: ramp.v1.ErrorDetail.transaction_denial:type_name -> ramp.v1.TransactionDenial
+	82,  // 134: ramp.v1.ErrorDetail.catalog_rejection:type_name -> ramp.v1.CatalogRejection
+	83,  // 135: ramp.v1.ErrorDetail.registration_failure:type_name -> ramp.v1.RegistrationFailure
+	84,  // 136: ramp.v1.ErrorDetail.dispute_failure:type_name -> ramp.v1.DisputeFailure
+	85,  // 137: ramp.v1.ErrorDetail.domain_verification_failure:type_name -> ramp.v1.DomainVerificationFailure
+	86,  // 138: ramp.v1.ErrorDetail.retrieval_auth_failure:type_name -> ramp.v1.RetrievalAuthFailure
+	87,  // 139: ramp.v1.ErrorDetail.usage_report_rejection:type_name -> ramp.v1.UsageReportRejection
+	13,  // 140: ramp.v1.TransactionDenial.reason:type_name -> ramp.v1.DenialReason
+	3,   // 141: ramp.v1.TransactionDenial.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
+	22,  // 142: ramp.v1.CatalogRejection.reason:type_name -> ramp.v1.CatalogRejectionReason
+	23,  // 143: ramp.v1.RegistrationFailure.reason:type_name -> ramp.v1.RegistrationFailureReason
+	24,  // 144: ramp.v1.DisputeFailure.reason:type_name -> ramp.v1.DisputeFailureReason
+	25,  // 145: ramp.v1.DomainVerificationFailure.reason:type_name -> ramp.v1.DomainVerificationFailureReason
+	26,  // 146: ramp.v1.RetrievalAuthFailure.reason:type_name -> ramp.v1.RetrievalAuthFailureReason
+	27,  // 147: ramp.v1.UsageReportRejection.reason:type_name -> ramp.v1.UsageReportRejectionReason
+	29,  // 148: ramp.v1.ExchangeService.DiscoverResources:input_type -> ramp.v1.ResourceQuery
+	48,  // 149: ramp.v1.ExchangeService.ExecuteTransaction:input_type -> ramp.v1.TransactionRequest
+	61,  // 150: ramp.v1.ExchangeService.ReportUsage:input_type -> ramp.v1.UsageReport
+	74,  // 151: ramp.v1.ExchangeService.DisputeTransaction:input_type -> ramp.v1.DisputeRequest
+	76,  // 152: ramp.v1.ExchangeService.RequestDomainVerification:input_type -> ramp.v1.DomainVerificationRequest
+	78,  // 153: ramp.v1.ExchangeService.ConfirmDomainVerification:input_type -> ramp.v1.DomainVerificationConfirmation
+	53,  // 154: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
+	56,  // 155: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
+	58,  // 156: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
+	66,  // 157: ramp.v1.BrokerService.Resolve:input_type -> ramp.v1.RAMPRequest
+	30,  // 158: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
+	50,  // 159: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
+	65,  // 160: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
+	75,  // 161: ramp.v1.ExchangeService.DisputeTransaction:output_type -> ramp.v1.DisputeResponse
+	77,  // 162: ramp.v1.ExchangeService.RequestDomainVerification:output_type -> ramp.v1.DomainVerificationChallenge
+	79,  // 163: ramp.v1.ExchangeService.ConfirmDomainVerification:output_type -> ramp.v1.DomainVerificationResult
+	55,  // 164: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
+	57,  // 165: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
+	59,  // 166: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
+	73,  // 167: ramp.v1.BrokerService.Resolve:output_type -> ramp.v1.RAMPResponse
+	158, // [158:168] is the sub-list for method output_type
+	148, // [148:158] is the sub-list for method input_type
+	148, // [148:148] is the sub-list for extension type_name
+	148, // [148:148] is the sub-list for extension extendee
+	0,   // [0:148] is the sub-list for field type_name
 }
 
 func init() { file_ramp_v1_ramp_proto_init() }
