@@ -1,0 +1,16 @@
+{
+  "name": "open-learner-ai.org",
+  "ua": "OpenLearnerBot/2.1",
+  "id": "TL-REG-445566",
+  "aisysuse": {
+    "lid": "PENDING_REVIEW",
+    "aiauth": 0,
+    "uri": [
+      "https://primary-publisher.com"
+    ],
+    "scope": 0,
+    "function": [2],
+    "subfn": [0],
+    "resdis": 0
+  }
+}

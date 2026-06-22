@@ -1,0 +1,12 @@
+{
+  "name": "vision-agent.ai",
+  "ua": "VisionAgentBot/1.2",
+  "aisysuse": {
+    "lid": "LIC-CURATED-777",
+    "aiauth": 2,
+    "scope": 5,
+    "function": [1],
+    "subfn": [4],
+    "resdis": 1
+  }
+}

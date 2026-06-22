@@ -1,0 +1,60 @@
+{
+  "id": "PKG-MEDIA-PREMIUM",
+  "title": "Verified Travel Selection 2026",
+  "seller": "premium-travel-pics.com",
+  "licenseurl": "https://premium-travel-pics.com/license",
+  "reporturl": "https://premium-travel-pics.com/reporting/ai-usage",
+  "citation": 1,
+  "scope": {
+    "scope": 5,
+    "ctype": [
+      1,
+      2
+    ],
+    "image": [
+      {
+        "title": [
+          "Grand Canyon Sunset"
+        ],
+        "cattax": 9,
+        "cat": [
+          653, 655, 660
+        ],
+        "pubdate": "2026-01-10T18:00:00Z",
+        "published": 1,
+        "author": [
+          "Jane Photographer"
+        ],
+        "sourcetype": 0,
+        "provenance": 1,
+        "provent": "c2pa.org"
+      }
+    ],
+    "video": [
+      {
+        "title": [
+          "Grand Canyon South Rim Walkthrough"
+        ],
+        "cattax": 9,
+        "cat": [
+          653, 655, 660
+        ],
+        "dur": [
+          45
+        ],
+        "clip": 1,
+        "transcript": 0,
+        "sourcetype": 0,
+        "provenance": 1,
+        "provent": "c2pa.org"
+      }
+    ]
+  },
+  "retrieval": {
+    "auth": 1,
+    "endpoint": "https://media-api.premium-travel.com/v1/download",
+    "type": [
+      2
+    ]
+  }
+}
