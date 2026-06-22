@@ -1,14 +1,18 @@
-// CoMP v1.0 — IAB Tech Lab Content Monetization Protocol
+// CoMP V1 — IAB Tech Lab Content Monetization Protocols (finalized 2026-04-28).
 //
-// 1:1 mapping from the official CoMP WG specification.
-// Source: https://github.com/IABTechLab/CoMP/blob/dev/CoMP-1.0.md
+// 1:1 mapping from the canonical CoMP V1 specification.
+// Source (immutable pin): https://github.com/IABTechLab/CoMP/blob/880238e0100b3d0d67d5afd7357a18fc21a97be5/CoMP-1.0.md
+// Spec-file content blob SHA (content-addressed): aa8c796be7a9bcfa1189a1cf6c1ec50aa67a0f5f
+// NOTE: the 1.0-202604 release tag does NOT contain the spec; main carries it.
 //
 // Enum alignment: proto3 enum values map directly to CoMP integer values
 // (first real CoMP value = 0). No UNSPECIFIED sentinels — proto3 default
 // zero is a valid CoMP value, not a sentinel.
 //
 // This file preserves CoMP field names, enum values, and semantics exactly.
-// RAMP extensions live in ramp/v1/ramp.proto, never here.
+// Canonical V1 has no separate License object: all commercial/licensing terms
+// live on Scope (ause, pricetype, pricetier, unitprice, cur, country,
+// licensedur). RAMP extensions live in ramp/v1/ramp.proto, never here.
 
 syntax = "proto3";
 
@@ -91,7 +95,13 @@ enum ScopeType {
 }
 
 // Function — What the AI system will use the content for.
-// CoMP §aisystemuse.function
+// CoMP §aisystemuse.function — Function Definitions:
+//   0 all       — All functions (no restriction on use).
+//   1 ai-all     — All AI functions (training, input, indexing).
+//   2 ai-train   — Use as AI/ML training data.
+//   3 ai-input   — Use as runtime input/grounding (e.g. RAG, agent view).
+//   4 ai-index   — Use to build a search/retrieval index.
+//   5 search     — Use for traditional search indexing.
 enum Function {
   FUNCTION_ALL = 0;             // CoMP 0
   FUNCTION_AI_ALL = 1;          // CoMP 1
@@ -102,7 +112,13 @@ enum Function {
 }
 
 // SubFunction — Specific sub-function for content use.
-// CoMP §aisystemuse.subfn
+// CoMP §aisystemuse.subfn — SubFunction Definitions:
+//   0 training       — Model training.
+//   1 rag            — Retrieval-augmented generation.
+//   2 grounding      — Grounding/citation at inference time.
+//   3 agent-view     — Agent reads content on a user's behalf.
+//   4 agent-actions  — Agent acts on content on a user's behalf.
+//   5 other          — Any other sub-function.
 enum SubFunction {
   SUB_FUNCTION_TRAINING = 0;      // CoMP 0
   SUB_FUNCTION_RAG = 1;           // CoMP 1
@@ -115,7 +131,7 @@ enum SubFunction {
 // Package — A package of content inventory.
 // CoMP §package.json
 message Package {
-  // Unique package identifier defined by the Content Owner or Exchange.
+  // Unique package identifier defined by the Content Owner or Marketplace.
   string id = 1;
 
   // Title of the package.
@@ -127,76 +143,101 @@ message Package {
   // Canonical domain of the packager, if different than the seller.
   optional string packager = 4;
 
-  // URL for the license terms.
+  // URL for AI system to find the License(s) required to access content.
+  // SSRF/fetch sink: a consumer that dereferences this URL must apply the
+  // countermeasures specified for core License.uri (threat model T-LIC-1).
   optional string licenseurl = 5;
 
   // Whether citation of the Content Owner is required. 0=no, 1=yes.
   optional int32 citation = 6;
 
+  // URL for AI system to send usage reporting to the Content Owner or
+  // Marketplace. POST/exfil sink: apply the SSRF countermeasures specified
+  // for core License.uri (threat model T-LIC-1) before dereferencing.
+  optional string reporturl = 7;
+
   // Scope of content in this package.
-  optional Scope scope = 7;
+  optional Scope scope = 8;
 
   // How to retrieve the content.
-  optional Retrieval retrieval = 8;
-
-  // Licensing terms for this package.
-  repeated License license = 9;
+  optional Retrieval retrieval = 9;
 
   google.protobuf.Struct ext = 15;
 }
 
-// License — Licensing terms for a content package.
-// CoMP §license.json
-message License {
-  optional string id = 1;
-  optional string turl = 2;
-  repeated LicenseUse use = 3;
-  repeated string country = 4;
-  optional int32 maxword = 5;
-  optional int32 citation = 6;  // 0=required, 1=not required
-  optional double price = 7;
-  optional double revshare = 8;
-  optional string cur = 9;
-  optional int32 dur = 10;
-  google.protobuf.Struct ext = 15;
-}
-
-// LicenseUse — Permitted use categories under a license.
-// CoMP §license.use
-enum LicenseUse {
-  LICENSE_USE_TRAINING_DISPLAY = 0;
-  LICENSE_USE_RAG_DISPLAY_UNRESTRICTED = 1;
-  LICENSE_USE_RAG_DISPLAY_MAX_WORDS = 2;
-  LICENSE_USE_RAG_DISPLAY_ATTRIBUTION = 3;
-  LICENSE_USE_RAG_NO_DISPLAY = 4;
-  LICENSE_USE_AGENT_VIEW = 5;
-  LICENSE_USE_AGENT_ACTIONS = 6;
-}
-
-// Scope — What content is included in the package.
-// CoMP §scope.json
+// Scope — What content is included in the package, plus its commercial terms.
+// CoMP §scope.json — canonical V1 folds licensing/pricing into Scope.
 message Scope {
+  // How much of the Content Owner's corpus is available in this package.
   optional ScopeType scope = 1;
 
+  // Kind of use that is allowed for this package.
+  optional AllowedUse ause = 2;
+
+  // How the package is priced.
+  optional PriceType pricetype = 3;
+
+  // Tier identifier if pricing is tiered (pricetype = 4).
+  optional int32 pricetier = 4;
+
+  // Content Owner set unit price at the given basis. Typed `double` to mirror
+  // the CoMP spec; downstream billing must convert to a decimal / minor-units
+  // representation — do not settle money directly off this float.
+  optional double unitprice = 5;
+
+  // Bid currency using ISO-4217 alpha codes. Default "USD".
+  optional string cur = 6;
+
+  // Country code(s) where this package may be used, expressed by
+  // ISO-3166-1 numeric codes.
+  repeated int32 country = 7;
+
+  // Number of days the license is active, once the content package has been
+  // delivered to the AI System.
+  optional int32 licensedur = 8;
+
   // Upper limit on crawl. 0=unlimited, 1=has maximum.
-  optional int32 max = 2;
+  optional int32 max = 9;
 
   // Content type(s) included.
-  repeated ContentType ctype = 3;
+  repeated ContentType ctype = 10;
 
   // Text assets.
-  repeated Text text = 4;
+  repeated Text text = 11;
 
   // Video assets.
-  repeated Video video = 5;
+  repeated Video video = 12;
 
   // Image assets.
-  repeated Image image = 6;
+  repeated Image image = 13;
 
   // Audio assets.
-  repeated Audio audio = 7;
+  repeated Audio audio = 14;
 
   google.protobuf.Struct ext = 15;
+}
+
+// AllowedUse — Kind of use allowed for a package.
+// CoMP §scope.ause — List: Allowed Use
+enum AllowedUse {
+  ALLOWED_USE_COMMERCIAL = 0;      // CoMP 0
+  ALLOWED_USE_NON_COMMERCIAL = 1;  // CoMP 1
+  ALLOWED_USE_EDUCATIONAL = 2;     // CoMP 2
+  ALLOWED_USE_GOVERNMENT = 3;      // CoMP 3
+  ALLOWED_USE_PERSONAL = 4;        // CoMP 4
+  ALLOWED_USE_BYO_LICENSE = 5;     // CoMP 5 (refer to terms in licenseurl)
+  ALLOWED_USE_OTHER = 6;           // CoMP 6
+}
+
+// PriceType — How a package is priced.
+// CoMP §scope.pricetype — List: Price Type
+enum PriceType {
+  PRICE_TYPE_PER_USE = 0;     // CoMP 0
+  PRICE_TYPE_PER_QUERY = 1;   // CoMP 1
+  PRICE_TYPE_PER_TOKEN = 2;   // CoMP 2
+  PRICE_TYPE_FLAT = 3;        // CoMP 3
+  PRICE_TYPE_TIERED = 4;      // CoMP 4 (Tiered Rate)
+  PRICE_TYPE_OTHER = 5;       // CoMP 5
 }
 
 // ContentType — Type of content in the package.
@@ -215,13 +256,13 @@ enum ContentType {
 message Text {
   optional string title = 1;
 
-  // Word count(s) of main body.
+  // Count of whitespace-delimited words in main body.
   repeated int32 wordcount = 2;
 
   // Original publication date (ISO 8601).
   optional string pubdate = 3;
 
-  // Publication status. 0=not specified, 1=published, 2=unpublished/archival.
+  // Denotes if the content is publicly available. Default 1 for Text.
   optional int32 published = 4;
 
   // Most recent substantive update (ISO 8601).
@@ -237,13 +278,19 @@ message Text {
   optional int32 provenance = 8;
 
   // Canonical domain of the provenance entity (e.g. c2pa.org).
+  // Required if provenance = 1.
   optional string provent = 9;
 
-  // Authority score (0.0–1.0). Publisher/verifier-assessed domain authority.
-  optional double authority = 10;
+  // IAB category taxonomy in use. Default 9 (IAB Content Category Taxonomy 3.1).
+  optional int32 cattax = 10;
 
-  // Originality score (0.0–1.0). Degree of original vs. syndicated content.
-  optional double originality = 11;
+  // IAB Tech Lab content category codes (per cattax).
+  repeated int32 cat = 11;
+
+  // Content language. CoMP declares this `int` (array) though its prose says
+  // ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+  // declared `int` type.
+  repeated int32 language = 12;
 
   google.protobuf.Struct ext = 15;
 }
@@ -257,14 +304,27 @@ message Video {
   repeated int32 wordcount = 4;
   optional int32 transcript = 5;    // 0=no, 1=yes.
   optional string pubdate = 6;
+  // Denotes if the content is publicly available. Default 0 for Video.
   optional int32 published = 7;
   optional string update = 8;
   repeated string author = 9;
   optional int32 sourcetype = 10;
   optional int32 provenance = 11;
   optional string provent = 12;
-  // C2PA content credentials manifest URI.
-  optional string c2pa = 13;
+
+  // IAB category taxonomy in use. Default 9 (IAB Content Category Taxonomy 3.1).
+  optional int32 cattax = 13;
+
+  // IAB Tech Lab content category codes (per cattax).
+  repeated int32 cat = 14;
+
+  // Content language. CoMP declares this `int` (array) though its prose says
+  // ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+  // declared `int` type.
+  // Tag 16 sits above ext (15) only here: cattax/cat consumed 13/14, and ext is
+  // kept at 15 for cross-message uniformity rather than the usual terminal slot.
+  repeated int32 language = 16;
+
   google.protobuf.Struct ext = 15;
 }
 
@@ -273,18 +333,25 @@ message Video {
 message Image {
   repeated string title = 1;
   optional string pubdate = 2;
+  // Denotes if the content is publicly available. Default 0 for Image.
   optional int32 published = 3;
   optional string update = 4;
   repeated string author = 5;
   optional int32 sourcetype = 6;
   optional int32 provenance = 7;
   optional string provent = 8;
-  // Alt text for the image.
-  optional string alt = 9;
-  // Caption for the image.
-  optional string caption = 10;
-  // C2PA content credentials manifest URI.
-  optional string c2pa = 11;
+
+  // IAB category taxonomy in use. Default 9 (IAB Content Category Taxonomy 3.1).
+  optional int32 cattax = 9;
+
+  // IAB Tech Lab content category codes (per cattax).
+  repeated int32 cat = 10;
+
+  // Content language. CoMP declares this `int` (array) though its prose says
+  // ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+  // declared `int` type.
+  repeated int32 language = 11;
+
   google.protobuf.Struct ext = 15;
 }
 
@@ -296,14 +363,25 @@ message Audio {
   repeated int32 wordcount = 3;
   optional int32 transcript = 4;
   optional string pubdate = 5;
+  // Denotes if the content is publicly available. Default 0 for Audio.
   optional int32 published = 6;
   optional string update = 7;
   repeated string author = 8;
   optional int32 sourcetype = 9;
   optional int32 provenance = 10;
   optional string provent = 11;
-  // C2PA content credentials manifest URI.
-  optional string c2pa = 12;
+
+  // IAB category taxonomy in use. Default 9 (IAB Content Category Taxonomy 3.1).
+  optional int32 cattax = 12;
+
+  // IAB Tech Lab content category codes (per cattax).
+  repeated int32 cat = 13;
+
+  // Content language. CoMP declares this `int` (array) though its prose says
+  // ISO-639-1 (alpha-2) — an upstream inconsistency; the proto follows the
+  // declared `int` type.
+  repeated int32 language = 14;
+
   google.protobuf.Struct ext = 15;
 }
 
@@ -313,25 +391,24 @@ message Retrieval {
   // Authorization type.
   optional RetrievalAuth auth = 1;
 
-  // Entry point / feed URI.
+  // Entry point / feed URI. SSRF/fetch sink: apply the countermeasures
+  // specified for core License.uri (threat model T-LIC-1) before fetching.
   optional string endpoint = 2;
 
   // Endpoint type(s).
   repeated RetrievalType type = 3;
 
-  // Rate limit (requests per minute) for this retrieval endpoint.
-  optional int32 ratelmt = 4;
-
   google.protobuf.Struct ext = 15;
 }
 
 // RetrievalAuth — Authorization method for content access.
-// CoMP §retrieval.auth
+// CoMP §retrieval.auth — List: Authorization Type
 enum RetrievalAuth {
   RETRIEVAL_AUTH_NONE = 0;       // CoMP 0
-  RETRIEVAL_AUTH_API_KEY = 1;    // CoMP 1
-  RETRIEVAL_AUTH_OAUTH2 = 2;     // CoMP 2
-  RETRIEVAL_AUTH_SSL = 3;        // CoMP 3
+  RETRIEVAL_AUTH_API_KEY = 1;    // CoMP 1 (api_key)
+  RETRIEVAL_AUTH_OAUTH2 = 2;     // CoMP 2 (oauth2)
+  RETRIEVAL_AUTH_SSL = 3;        // CoMP 3 (SSL)
+  RETRIEVAL_AUTH_OTHER = 4;      // CoMP 4 (Other)
 }
 
 // RetrievalType — Endpoint type for content retrieval.

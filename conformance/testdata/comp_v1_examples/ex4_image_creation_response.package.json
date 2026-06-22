@@ -1,0 +1,57 @@
+{
+  "id": "PKG-ARTIST-COLLECTION-02",
+  "title": "Impressionist Style Reference Set - Mixed Provenance",
+  "seller": "digital-archive-museum.org",
+  "licenseurl": "https://digital-archive-museum.org/licensing/style-transfer",
+  "reporturl": "https://digital-archive-museum.org/reporting/ai-usage",
+  "citation": 1,
+  "scope": {
+    "scope": 5,
+    "max": 1,
+    "ctype": [
+      2
+    ],
+    "image": [
+      {
+        "title": [
+          "Starry Night Interpretation"
+        ],
+        "cattax": 9,
+        "cat": [
+          43
+        ],
+        "pubdate": "2026-01-05T12:00:00Z",
+        "published": 1,
+        "author": [
+          "Original Artist Name"
+        ],
+        "sourcetype": 0,
+        "provenance": 1,
+        "provent": "c2pa.org"
+      },
+      {
+        "title": [
+          "Abstract Study in Blue"
+        ],
+        "cattax": 9,
+        "cat": [
+          43
+        ],
+        "pubdate": "2026-01-10T14:20:00Z",
+        "published": 1,
+        "author": [
+          "Unknown Artist"
+        ],
+        "sourcetype": 0,
+        "provenance": 0
+      }
+    ]
+  },
+  "retrieval": {
+    "auth": 2,
+    "endpoint": "https://api.digital-archive-museum.org/v1/assets",
+    "type": [
+      2
+    ]
+  }
+}

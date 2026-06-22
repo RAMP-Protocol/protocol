@@ -1,0 +1,16 @@
+{
+  "name": "creative-gen.ai",
+  "ua": "CreativeGenBot/2.0",
+  "id": "TL-REG-554433",
+  "aisysuse": {
+    "lid": "LIC-TOPIC-SP-2026",
+    "aiauth": 2,
+    "uri": [
+      "https://video-archive.com/steampunk-search"
+    ],
+    "scope": 4,
+    "function": [3],
+    "subfn": [1, 2],
+    "resdis": 1
+  }
+}

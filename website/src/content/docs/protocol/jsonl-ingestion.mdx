@@ -1,0 +1,88 @@
+---
+title: "JSONL Ingestion Feed"
+description: "The line-oriented push feed publishers use to submit a catalog of resources and their licensing terms into a RAMP Exchange."
+---
+
+## Overview
+
+The [discovery paths](/protocol/discovery-paths/) (RSL, sitemap, well-known, crawl, …) let an Exchange *pull* a publisher's licensing signals. The **JSONL feed** is the *push* counterpart: a publisher hands the Exchange a JSON-Lines file — **one resource per line** — and each line maps 1:1 onto a `ResourceEntry` and is submitted via `CatalogService.PushResources`. The reference client is the `ramp-ingest` binary.
+
+```
+publisher feed (.jsonl, one resource/line)
+  └─► ramp-ingest   parse (typed, strict) · canonicalize tokens · sign (RFC 9421)
+        └─► CatalogService.PushResources           ── ALL-OR-NOTHING ──
+              │  trust:    caller key fetched from /.well-known/ramp.json; tenant derived from the publisher domain
+              │  validate: protovalidate CEL owns term shape / presence / coherence; vocab membership is a warning
+              └─► catalog (per-tenant, URI-namespaced)  ─►  DiscoverResources ─► signed Offer
+```
+
+The feed is a **transport convenience**, not a third licensing model: every line is just a `ResourceEntry`, the same shape every other discovery path converges to. Parsing is **strict** — unknown keys are rejected, never silently dropped — so a typo is a loud error, not lost data.
+
+## Record schema (one line = one resource)
+
+| Field | Type | Required | Maps to | Why it exists |
+|---|---|---|---|---|
+| `domain` | string | yes | `ResourceEntry.domain` | resource origin; with `path` forms the canonical URI |
+| `path` | string | yes | `ResourceEntry.path` | URL path of the resource |
+| `title` | string | no | `ResourceEntry.title` | human label |
+| `content_id` | string | no | `ResourceEntry.content_id` | publisher's stable id; keys the resource id so a re-push upserts in place |
+| `word_count` | int | no | `ResourceEntry.word_count` | content metric; informs token estimation |
+| `estimated_quantity` | int | no | `ResourceEntry.estimated_quantity` | pre-computed metering quantity (e.g. `word_count × 1.32`) |
+| `content_hash` | string | no | `ResourceEntry.content_hash` | integrity pin of the content bytes |
+| `hash_method` | string | no | `ResourceEntry.hash_method` | algorithm for `content_hash` (e.g. `sha256`) |
+| `source` | string | no | `ResourceEntry.source` (`IngestionSource`) | provenance of the metadata (`INGESTION_SOURCE_CMS_API`, …) |
+| `provenance_source` | string | no | `ResourceEntry.provenance_source` | who supplied the metadata (audit trail) |
+| `provenance_timestamp` | RFC3339 | no | `ResourceEntry.provenance_timestamp` | when it was collected / generated |
+| `license` | object | no (yes for any REFERENCE_ONLY term) | `LicenseTerm.license` | governing license document `{id, uri, uri_digest, name}` |
+| `terms` | array (≥1) | yes | `ResourceEntry.terms[]` | the licensing offers on this resource (see below) |
+| `ext` | object | no | `ResourceEntry.ext` | free-form extension metadata; carries fields with no typed slot (e.g. `resource_mutability`, `previews[]`) and domain-profile data |
+| `ext_critical` | string[] | no | `ResourceEntry.ext_critical` | keys in `ext` a consumer MUST understand (COSE `crit` pattern) |
+| `attestations` | array | no | `ResourceEntry.attestations[]` | signed attestations `{verifier, kid, attested_at, uri, claims, signature}` |
+
+`resource_mutability` and `previews[]` have no typed field on `ResourceEntry` — they ride inside `ext` and are promoted to typed fields on the Offer at discovery (`Offer.identity.resource_mutability`, `Offer.previews[]`).
+
+## Term schema (one element = one `LicenseTerm`)
+
+| Field | Type | Maps to |
+|---|---|---|
+| `semantics` | `"enumerated"` \| `"reference_only"` | `LicenseTerm.semantics` |
+| `functions` | string[] | `Restriction{kind=FUNCTION}.permitted[]` |
+| `prohibited_functions` | string[] | `Restriction{kind=FUNCTION}.prohibited[]` |
+| `user_types` | string[] | `Restriction{kind=USER_TYPE}.permitted[]` |
+| `geos` | string[] | `Restriction{kind=GEOGRAPHY}.permitted[]` |
+| `pricing` | `{model, unit, rate, currency}` | `LicenseTerm.pricing` (`model` ∈ `free` \| `per_unit` \| `flat`) |
+| `quotas` | `[{metric, limit, window}]` | `LicenseTerm.Quota[]` |
+| `obligations` | `[{kind, trigger, scope_license, detail}]` | `LicenseTerm.Obligation[]` |
+| `scopes` | string[] | `LicenseTerm.scopes` (Biscuit-gated, e.g. `subscription:premium`) |
+
+Rules (enforced by protovalidate at the RPC boundary):
+
+- Every term MUST carry `pricing` — absence is not "free", it is rejected. Use `model: "free"` explicitly (`rate` 0).
+- `per_unit` REQUIRES `pricing.unit`; `flat` / `free` carry none.
+- A `reference_only` term MUST carry `license.uri`; any `license.uri` REQUIRES `license.uri_digest`.
+- Tokens are canonical registry values or `vendor:namespaced`; unregistered bare tokens are a **warning**, not a reject.
+
+## All-or-nothing
+
+`PushResources` is atomic: if any entry fails a hard validation rule, the **whole submission is rejected** (`InvalidArgument`, naming the offending entry) and **nothing is persisted**. The publisher fixes and resubmits the full set. Membership / lint issues are returned in `PushResourcesResponse.warnings[]` and do not block.
+
+## Extension profiles in the feed
+
+A publisher MAY place domain-profile data (e.g. [CoMP](/protocol/ext-comp/)) under `ext`. Profiles are *recommendations* for what keys to use, validated and rendered at discovery — see [Extension Profiles](/protocol/extension-profiles/). The licensing term is authoritative: for any field an offer owns (pricing above all), the Exchange renders from the selected term and shadows a conflicting `ext` value. So do not state pricing inside a profile `ext` payload; if you do, the offer carries the term's price.
+
+## Worked example
+
+```json
+{"domain":"example.com","path":"/articles/42","title":"…","content_id":"22392",
+ "word_count":359,"estimated_quantity":474,"content_hash":"sha256:…","hash_method":"sha256",
+ "source":"INGESTION_SOURCE_CMS_API","provenance_source":"example.com",
+ "provenance_timestamp":"2026-06-18T09:23:45Z",
+ "ext":{"resource_mutability":"RESOURCE_MUTABILITY_STATIC"},
+ "terms":[
+   {"semantics":"enumerated","functions":["ai-input"],
+    "pricing":{"model":"per_unit","unit":"accesses","rate":0.05,"currency":"USD"},
+    "obligations":[{"kind":"attribution","trigger":"on_use"}]}
+ ]}
+```
+
+One resource, one priced term: an AI-input license at $0.05/access with an attribution obligation, plus content-integrity and mutability metadata that surface on the discovered Offer.

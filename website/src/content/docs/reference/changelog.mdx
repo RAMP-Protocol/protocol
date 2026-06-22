@@ -3,6 +3,31 @@ title: "Changelog"
 description: "RAMP protocol changelog"
 ---
 
+## Unreleased
+
+**CoMP re-baseline to canonical V1 (breaking).** `proto/comp/v1/comp.proto` is
+re-aligned to be a 1:1 mirror of IAB Tech Lab Content Monetization Protocols
+**CoMP V1** (finalized 2026-04-28,
+[`CoMP-1.0.md`](https://github.com/IABTechLab/CoMP/blob/880238e0100b3d0d67d5afd7357a18fc21a97be5/CoMP-1.0.md)).
+The prior snapshot mirrored a pre-final draft. This breaks the `comp.v1`
+generated types (accepted pre-v1 of the CoMP profile; `buf breaking` reports the
+deltas as expected). Changes:
+
+- **Removed** the `License` message, the `LicenseUse` enum, and `Package.license`
+  — canonical V1 has no separate `License` object.
+- **Folded licensing into `Scope`**: added `ause` (`AllowedUse`), `pricetype`
+  (`PriceType`), `pricetier`, `unitprice`, `cur` (default `"USD"`), `country`
+  (ISO-3166 numeric), and `licensedur` (days).
+- **Added** `Package.reporturl` (usage-reporting URL).
+- **Added** per-media taxonomy `cattax` (default 9), `cat`, and `language` to
+  `Text`, `Video`, `Image`, and `Audio`.
+- **Removed** the RAMP-invented non-CoMP fields: `Text.authority`/`originality`,
+  `Image.alt`/`caption`, `Video`/`Image`/`Audio.c2pa`, and `Retrieval.ratelmt`.
+- **Added** `RETRIEVAL_AUTH_OTHER = 4`.
+
+The request-side model (`AISystem`/`AISystemUse`, `Function`, `SubFunction`,
+`AuthMethod`, `ScopeType`, `ContentType`) is unchanged.
+
 ## v1.0.0 — Initial release
 
 First public release of the RAMP Protocol (Resource Access Metering Protocol):
@@ -71,7 +96,7 @@ Domain-specific metadata carried in `ext` fields:
 - **ramp-news-v1** — articles, podcasts, broadcasting (IPTC NewsML-G2, Podcasting 2.0)
 - **ramp-academic-v1** — scholarly articles, preprints (CrossRef, OpenAlex, COUNTER 5.1)
 - **ramp-legal-v1** — legislation, case law, patents (ELI, ECLI, Akoma Ntoso)
-- **ramp-comp-v1** — IAB CoMP metadata (Package, Function, Scope) as optional ext fields
+- **ramp-comp-v1** — IAB CoMP V1 metadata (Package, Scope with folded licensing, Retrieval, per-media taxonomy) as optional ext fields
 
 ### Licensing terms
 
