@@ -1,0 +1,41 @@
+{
+  "id": "PKG-FIN-COMM-001",
+  "title": "Commodities Market Deep-Dive",
+  "seller": "fin-times.com",
+  "licenseurl": "https://fin-times.com/legal/terms/LIC-998",
+  "reporturl": "https://fin-times.com/reporting/ai-usage",
+  "citation": 1,
+  "scope": {
+    "scope": 1,
+    "max": 0,
+    "ctype": [
+      0
+    ],
+    "text": [
+      {
+        "title": "Gold Prices Surge Amid Volatility",
+        "cattax": 9,
+        "cat": [
+          272
+        ],
+        "wordcount": [
+          1200
+        ],
+        "pubdate": "2026-02-26T14:30:00Z",
+        "author": [
+          "Alex Sterling"
+        ],
+        "sourcetype": 0,
+        "provenance": 1,
+        "provent": "c2pa.org"
+      }
+    ]
+  },
+  "retrieval": {
+    "auth": 0,
+    "endpoint": "https://newsml.fin-times.com/v3/commodities",
+    "type": [
+      6
+    ]
+  }
+}

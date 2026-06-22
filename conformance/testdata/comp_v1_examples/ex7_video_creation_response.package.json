@@ -1,0 +1,65 @@
+{
+  "id": "PKG-STEAMPUNK-001",
+  "title": "Steampunk Visual Archives",
+  "seller": "video-archive.com",
+  "licenseurl": "https://video-archive.com/legal/ai-terms",
+  "reporturl": "https://video-archive.com/reporting/ai-usage",
+  "citation": 1,
+  "scope": {
+    "scope": 4,
+    "max": 1,
+    "ctype": [
+      1
+    ],
+    "video": [
+      {
+        "title": [
+          "History of Steampunk Aesthetics"
+        ],
+        "cattax": 9,
+        "cat": [
+          205
+        ],
+        "dur": [
+          600
+        ],
+        "clip": 0,
+        "transcript": 1,
+        "pubdate": "2026-01-20T10:00:00Z",
+        "author": [
+          "Gearheart Media"
+        ],
+        "sourcetype": 0,
+        "provenance": 1,
+        "provent": "c2pa.org"
+      },
+      {
+        "title": [
+          "AI-Generated Steampunk Landscape"
+        ],
+        "cattax": 9,
+        "cat": [
+          205
+        ],
+        "dur": [
+          60
+        ],
+        "clip": 1,
+        "transcript": 0,
+        "pubdate": "2026-02-15T14:30:00Z",
+        "author": [
+          "StyleBot-V1"
+        ],
+        "sourcetype": 1,
+        "provenance": 0
+      }
+    ]
+  },
+  "retrieval": {
+    "auth": 2,
+    "endpoint": "https://api.video-archive.com/v1/media",
+    "type": [
+      2
+    ]
+  }
+}

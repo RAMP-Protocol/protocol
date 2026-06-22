@@ -1,0 +1,120 @@
+{
+  "id": "RAMP-SYNTH-MEDIA-01",
+  "title": "RAMP synthetic fixture — media assets, retrieval, and ext coverage",
+  "seller": "publisher.example",
+  "scope": {
+    "scope": 0,
+    "ctype": [
+      1,
+      2,
+      3
+    ],
+    "video": [
+      {
+        "title": [
+          "Documentary Clip"
+        ],
+        "dur": [
+          120
+        ],
+        "clip": 1,
+        "wordcount": [
+          340
+        ],
+        "transcript": 1,
+        "pubdate": "2026-01-02T00:00:00Z",
+        "published": 0,
+        "update": "2026-02-02T00:00:00Z",
+        "author": [
+          "Studio Example"
+        ],
+        "sourcetype": 2,
+        "provenance": 1,
+        "provent": "c2pa.org",
+        "cattax": 9,
+        "cat": [
+          386
+        ],
+        "language": [
+          1
+        ],
+        "ext": {
+          "vendor.shotlist": "v1"
+        }
+      }
+    ],
+    "image": [
+      {
+        "title": [
+          "Cover Image"
+        ],
+        "pubdate": "2026-01-03T00:00:00Z",
+        "published": 0,
+        "update": "2026-02-03T00:00:00Z",
+        "author": [
+          "Photographer Example"
+        ],
+        "sourcetype": 0,
+        "provenance": 0,
+        "cattax": 9,
+        "cat": [
+          43
+        ],
+        "language": [
+          1
+        ]
+      }
+    ],
+    "audio": [
+      {
+        "title": [
+          "Podcast Episode 12"
+        ],
+        "dur": [
+          1800
+        ],
+        "wordcount": [
+          4200
+        ],
+        "transcript": 1,
+        "pubdate": "2026-01-04T00:00:00Z",
+        "published": 0,
+        "update": "2026-02-04T00:00:00Z",
+        "author": [
+          "Host Example"
+        ],
+        "sourcetype": 0,
+        "provenance": 0,
+        "cattax": 9,
+        "cat": [
+          261
+        ],
+        "language": [
+          1,
+          2
+        ],
+        "ext": {
+          "vendor.show": "s12"
+        }
+      }
+    ],
+    "ext": {
+      "vendor.scopenote": "mixed-media"
+    }
+  },
+  "retrieval": {
+    "auth": 3,
+    "endpoint": "https://api.publisher.example/v1/media",
+    "type": [
+      2,
+      3,
+      5
+    ],
+    "ext": {
+      "vendor.region": "eu"
+    }
+  },
+  "ext": {
+    "vendor.packagenote": "synthetic"
+  }
+}

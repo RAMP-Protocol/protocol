@@ -1,0 +1,16 @@
+{
+  "name": "current-events-agent.ai",
+  "ua": "CurrentEventsBot/1.5",
+  "id": "TL-REG-112233",
+  "aisysuse": {
+    "lid": "LIC-RAG-2026-X",
+    "aiauth": 2,
+    "uri": [
+      "https://news-podcasts.com/daily-brief"
+    ],
+    "scope": 2,
+    "function": [3],
+    "subfn": [1],
+    "resdis": 1
+  }
+}

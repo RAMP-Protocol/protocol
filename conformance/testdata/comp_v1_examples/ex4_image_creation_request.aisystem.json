@@ -1,0 +1,16 @@
+{
+  "name": "creative-gen.ai",
+  "ua": "CreativeGenBot/2.0",
+  "id": "TL-REG-554433",
+  "aisysuse": {
+    "lid": "TOKEN-STYLE-99-ALPHA",
+    "aiauth": 2,
+    "uri": [
+      "https://digital-archive-museum.org/collections/artist-style-ref"
+    ],
+    "scope": 4,
+    "function": [3],
+    "subfn": [5],
+    "resdis": 1
+  }
+}
