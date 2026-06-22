@@ -105,16 +105,5 @@
         "ai-train"
       ]
     }
-  },
-  {
-    "id": "TransactionRequest/cel/offer_xor_items",
-    "message": "TransactionRequest",
-    "valid": false,
-    "rules": [
-      "transaction_request.offer_xor_items"
-    ],
-    "json": {
-      "idempotencyKey": "idem-tx"
-    }
   }
 ]

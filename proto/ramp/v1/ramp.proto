@@ -1663,13 +1663,13 @@ message AgentAcceptancePayload {
 // The Exchange validates eligibility, authorizes billing, creates
 // delivery, and logs each transaction.
 message TransactionRequest {
-  // Exactly one mode: single (offer set, items empty) XOR batch (items
-  // non-empty, offer absent). Neither or both → reject.
-  option (buf.validate.message).cel = {
-    id: "transaction_request.offer_xor_items"
-    message: "set exactly one of `offer` (single mode) or `items` (batch mode)"
-    expression: "(has(this.offer) && this.items.size() == 0) || (!has(this.offer) && this.items.size() > 0)"
-  };
+  // A transaction carries one or more items (items-only, RAMP-102 / epic 6afpc):
+  // single-offer mode was removed — a single offer is the degenerate 1-element
+  // `items` list.
+
+  // Reserved: the removed single-offer fields `offer` and `agent_acceptance`.
+  // Never reuse these numbers.
+  reserved 8, 9;
 
   // Protocol version
   string ver = 1;
@@ -1679,33 +1679,22 @@ message TransactionRequest {
   // identity is the Exchange-assigned transaction_id in the response.
   string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
 
-  // Optional, non-authoritative correlation/audit key — the human-readable id
-  // of the committed offer. NOT used for verification: the Exchange verifies
-  // the reflected `offer.signature` over the presented Offer bytes, never this
-  // scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.
+  // Optional, non-authoritative correlation/audit key — a human-readable offer
+  // id. NOT used for verification: the Exchange verifies each item's reflected
+  // `offer.signature` over the presented Offer bytes, never this scalar. May be
+  // omitted; if set, it SHOULD match an item's `offer.offer_id`.
   optional string offer_id = 3;
 
   // Requester identity — forwarded for authorization and audit.
   Requester requester = 4;
 
-  // Single-offer mode: the FULL signed Offer, reflected back exactly as
-  // received at discovery. The Exchange verifies `offer.signature` (which
-  // covers pricing, terms, and expires_at) over these presented bytes against
-  // its own key — a stateless, self-contained bearer token, with no
-  // reconstruct-from-catalog. Set this XOR `items` (see message rule).
-  optional Offer offer = 8;
-
-  // Single-offer mode: the agent's detached acceptance signature over the
-  // accepted `offer` (RAMP-102 §1). Optional on the wire (additive,
-  // backward-compatible); the Exchange enforces presence at the service layer
-  // for relayed requests. Signed bytes = deterministic AgentAcceptancePayload
-  // {offer_sig=offer.signature, requester_id=requester.id,
-  // requester_domain=requester.domain, idempotency_key=idempotency_key}.
-  optional AgentAcceptance agent_acceptance = 9;
-
-  // Batch mode: commit to multiple offers in one request, each carrying its
-  // own reflected signed Offer. Set this XOR `offer` (see message rule).
-  repeated TransactionItem items = 7;
+  // The offers committed in this request (REQUIRED, min 1), each carrying its
+  // own reflected signed Offer + detached acceptance. A single offer is the
+  // degenerate 1-element list. The Exchange verifies each item's
+  // `offer.signature` (which covers pricing, terms, and expires_at) over the
+  // presented bytes against its own key — stateless, self-contained bearer
+  // tokens, with no reconstruct-from-catalog.
+  repeated TransactionItem items = 7 [(buf.validate.field).repeated.min_items = 1];
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -1735,61 +1724,27 @@ message TransactionItem {
 
 // TransactionResponse — Exchange confirms the transaction(s).
 //
-// For single-offer mode, the top-level fields are populated.
-// For batch mode, `items` contains per-offer results and `total_cost`
-// summarizes the aggregate cost.
+// Items-only (RAMP-102 / epic 6afpc): every per-result datum lives in `items`
+// (one TransactionResultItem per committed offer, in original order); the
+// top-level fields carry only the shared aggregate state. A single offer is the
+// degenerate 1-element `items`. The per-item denials remain in-body on
+// TransactionResultItem as partial results of a successful request.
 message TransactionResponse {
+  // Reserved: the removed single-offer result fields. Never reuse these numbers.
+  reserved 3, 4, 5, 6, 7, 8, 9, 12, 16, 18;
+
   // Protocol version
   string ver = 1;
 
-  // Single-offer result.
-  // For batch mode, these may be empty — check `items` instead.
-  optional string transaction_id = 3;
-  // Billing reference
-  optional string billing_id = 4;
-  // Resource title echoed from the Offer (for logging/display).
-  optional string resource_title = 5;
-  // Transaction cost
-  optional Cost cost = 6;
-
-  // How resource is delivered in this transaction.
-  DeliveryMethod delivery_method = 7;
-
-  // Reporting requirements attached to this delivery.
-  optional ReportingObligation reporting_obligation = 8;
-
-  // When retrieval_endpoint expires.
-  optional google.protobuf.Timestamp expires_at = 9;
-
-  // Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of
-  // the agent's Ed25519 request-signing key (see "Retrieval-URL identity binding"
-  // above). Empty string when absent; non-empty iff a signed retrieval_endpoint
-  // is present. Delivery-endpoint enforcement of the binding is OPTIONAL.
+  // Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK
+  // Thumbprint of the agent's Ed25519 request-signing key (see "Retrieval-URL
+  // identity binding" above). Shared across the request; set once.
   string agent_identity_hash = 10;
 
-  // Signed retrieval URL the agent uses to fetch the purchased resource.
-  // Bound to agent_identity_hash; expires at expires_at. Absent on denial
-  // and on transactions whose delivery_method is not signed-URL-based.
-  optional string retrieval_endpoint = 18;
-
-  // A denied single transaction is not a success body: it travels as a non-OK
-  // transport error carrying ErrorDetail.transaction_denial (DenialReason +
-  // restriction_mismatches). Batch per-item denials remain in-body on
-  // TransactionResultItem, as partial results of a successful batch.
-
-  // If set, this transaction was fulfilled under a subscription/deal.
-  // No per-request charge — usage tracked against subscription quota.
-  optional string subscription_id = 12;
-
-  // Computed per-unit cost for financial attribution on subscription transactions.
-  // Even when cost.amount=0 (subscription), this field carries the value
-  // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
-  optional Cost subscription_unit_value = 16;
-
-  // Batch mode: per-offer results.
+  // Per-offer results (one entry per committed item, in original order).
   repeated TransactionResultItem items = 13;
 
-  // Batch mode: aggregate cost across all items.
+  // Aggregate cost across all items.
   optional Cost total_cost = 14;
 
   // Post-transaction quota state. Tells the agent how much quota remains

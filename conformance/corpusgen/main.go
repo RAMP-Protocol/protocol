@@ -77,12 +77,12 @@ func seeds() map[string]proto.Message {
 		"LicenseTerm":           &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: pricing()},
 		"AcceptableRestriction": &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train"}},
 		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
-		// Reflected-Offer execute contract (RAMP-103): Offer is the required
-		// sub-message of TransactionItem (auto-fill needs its seed), and
-		// TransactionRequest needs a valid single-mode baseline because its
-		// offer_xor_items message-CEL rejects the empty auto-fill baseline.
+		// Reflected-Offer execute contract (RAMP-103 / items-only 6afpc): Offer is
+		// the required sub-message of TransactionItem (auto-fill needs its seed),
+		// and TransactionRequest needs a valid 1-item items[] baseline because its
+		// items field is now repeated.min_items=1 (single-offer mode removed).
 		"Offer":              offer(),
-		"TransactionRequest": &rampv1.TransactionRequest{IdempotencyKey: "idem-tx", Offer: offer()},
+		"TransactionRequest": &rampv1.TransactionRequest{IdempotencyKey: "idem-tx", Items: []*rampv1.TransactionItem{{Offer: offer()}}},
 	}
 }
 
@@ -191,9 +191,6 @@ func writeCrossField(v protovalidate.Validator) {
 				},
 			},
 			"license_term.one_restriction_per_kind"},
-		{"TransactionRequest/cel/offer_xor_items",
-			&rampv1.TransactionRequest{IdempotencyKey: "idem-tx"},
-			"transaction_request.offer_xor_items"},
 	}
 
 	var cases []Case

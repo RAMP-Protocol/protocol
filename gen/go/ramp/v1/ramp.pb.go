@@ -4500,28 +4500,19 @@ type TransactionRequest struct {
 	// the original result rather than re-executing. The transaction's durable
 	// identity is the Exchange-assigned transaction_id in the response.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// Optional, non-authoritative correlation/audit key — the human-readable id
-	// of the committed offer. NOT used for verification: the Exchange verifies
-	// the reflected `offer.signature` over the presented Offer bytes, never this
-	// scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.
+	// Optional, non-authoritative correlation/audit key — a human-readable offer
+	// id. NOT used for verification: the Exchange verifies each item's reflected
+	// `offer.signature` over the presented Offer bytes, never this scalar. May be
+	// omitted; if set, it SHOULD match an item's `offer.offer_id`.
 	OfferId *string `protobuf:"bytes,3,opt,name=offer_id,json=offerId,proto3,oneof" json:"offer_id,omitempty"`
 	// Requester identity — forwarded for authorization and audit.
 	Requester *Requester `protobuf:"bytes,4,opt,name=requester,proto3" json:"requester,omitempty"`
-	// Single-offer mode: the FULL signed Offer, reflected back exactly as
-	// received at discovery. The Exchange verifies `offer.signature` (which
-	// covers pricing, terms, and expires_at) over these presented bytes against
-	// its own key — a stateless, self-contained bearer token, with no
-	// reconstruct-from-catalog. Set this XOR `items` (see message rule).
-	Offer *Offer `protobuf:"bytes,8,opt,name=offer,proto3,oneof" json:"offer,omitempty"`
-	// Single-offer mode: the agent's detached acceptance signature over the
-	// accepted `offer` (RAMP-102 §1). Optional on the wire (additive,
-	// backward-compatible); the Exchange enforces presence at the service layer
-	// for relayed requests. Signed bytes = deterministic AgentAcceptancePayload
-	// {offer_sig=offer.signature, requester_id=requester.id,
-	// requester_domain=requester.domain, idempotency_key=idempotency_key}.
-	AgentAcceptance *AgentAcceptance `protobuf:"bytes,9,opt,name=agent_acceptance,json=agentAcceptance,proto3,oneof" json:"agent_acceptance,omitempty"`
-	// Batch mode: commit to multiple offers in one request, each carrying its
-	// own reflected signed Offer. Set this XOR `offer` (see message rule).
+	// The offers committed in this request (REQUIRED, min 1), each carrying its
+	// own reflected signed Offer + detached acceptance. A single offer is the
+	// degenerate 1-element list. The Exchange verifies each item's
+	// `offer.signature` (which covers pricing, terms, and expires_at) over the
+	// presented bytes against its own key — stateless, self-contained bearer
+	// tokens, with no reconstruct-from-catalog.
 	Items []*TransactionItem `protobuf:"bytes,7,rep,name=items,proto3" json:"items,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -4588,20 +4579,6 @@ func (x *TransactionRequest) GetOfferId() string {
 func (x *TransactionRequest) GetRequester() *Requester {
 	if x != nil {
 		return x.Requester
-	}
-	return nil
-}
-
-func (x *TransactionRequest) GetOffer() *Offer {
-	if x != nil {
-		return x.Offer
-	}
-	return nil
-}
-
-func (x *TransactionRequest) GetAgentAcceptance() *AgentAcceptance {
-	if x != nil {
-		return x.AgentAcceptance
 	}
 	return nil
 }
@@ -4691,47 +4668,22 @@ func (x *TransactionItem) GetAgentAcceptance() *AgentAcceptance {
 
 // TransactionResponse — Exchange confirms the transaction(s).
 //
-// For single-offer mode, the top-level fields are populated.
-// For batch mode, `items` contains per-offer results and `total_cost`
-// summarizes the aggregate cost.
+// Items-only (RAMP-102 / epic 6afpc): every per-result datum lives in `items`
+// (one TransactionResultItem per committed offer, in original order); the
+// top-level fields carry only the shared aggregate state. A single offer is the
+// degenerate 1-element `items`. The per-item denials remain in-body on
+// TransactionResultItem as partial results of a successful request.
 type TransactionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Protocol version
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// Single-offer result.
-	// For batch mode, these may be empty — check `items` instead.
-	TransactionId *string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3,oneof" json:"transaction_id,omitempty"`
-	// Billing reference
-	BillingId *string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3,oneof" json:"billing_id,omitempty"`
-	// Resource title echoed from the Offer (for logging/display).
-	ResourceTitle *string `protobuf:"bytes,5,opt,name=resource_title,json=resourceTitle,proto3,oneof" json:"resource_title,omitempty"`
-	// Transaction cost
-	Cost *Cost `protobuf:"bytes,6,opt,name=cost,proto3,oneof" json:"cost,omitempty"`
-	// How resource is delivered in this transaction.
-	DeliveryMethod DeliveryMethod `protobuf:"varint,7,opt,name=delivery_method,json=deliveryMethod,proto3,enum=ramp.v1.DeliveryMethod" json:"delivery_method,omitempty"`
-	// Reporting requirements attached to this delivery.
-	ReportingObligation *ReportingObligation `protobuf:"bytes,8,opt,name=reporting_obligation,json=reportingObligation,proto3,oneof" json:"reporting_obligation,omitempty"`
-	// When retrieval_endpoint expires.
-	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	// Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of
-	// the agent's Ed25519 request-signing key (see "Retrieval-URL identity binding"
-	// above). Empty string when absent; non-empty iff a signed retrieval_endpoint
-	// is present. Delivery-endpoint enforcement of the binding is OPTIONAL.
+	// Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK
+	// Thumbprint of the agent's Ed25519 request-signing key (see "Retrieval-URL
+	// identity binding" above). Shared across the request; set once.
 	AgentIdentityHash string `protobuf:"bytes,10,opt,name=agent_identity_hash,json=agentIdentityHash,proto3" json:"agent_identity_hash,omitempty"`
-	// Signed retrieval URL the agent uses to fetch the purchased resource.
-	// Bound to agent_identity_hash; expires at expires_at. Absent on denial
-	// and on transactions whose delivery_method is not signed-URL-based.
-	RetrievalEndpoint *string `protobuf:"bytes,18,opt,name=retrieval_endpoint,json=retrievalEndpoint,proto3,oneof" json:"retrieval_endpoint,omitempty"`
-	// If set, this transaction was fulfilled under a subscription/deal.
-	// No per-request charge — usage tracked against subscription quota.
-	SubscriptionId *string `protobuf:"bytes,12,opt,name=subscription_id,json=subscriptionId,proto3,oneof" json:"subscription_id,omitempty"`
-	// Computed per-unit cost for financial attribution on subscription transactions.
-	// Even when cost.amount=0 (subscription), this field carries the value
-	// of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
-	SubscriptionUnitValue *Cost `protobuf:"bytes,16,opt,name=subscription_unit_value,json=subscriptionUnitValue,proto3,oneof" json:"subscription_unit_value,omitempty"`
-	// Batch mode: per-offer results.
+	// Per-offer results (one entry per committed item, in original order).
 	Items []*TransactionResultItem `protobuf:"bytes,13,rep,name=items,proto3" json:"items,omitempty"`
-	// Batch mode: aggregate cost across all items.
+	// Aggregate cost across all items.
 	TotalCost *Cost `protobuf:"bytes,14,opt,name=total_cost,json=totalCost,proto3,oneof" json:"total_cost,omitempty"`
 	// Post-transaction quota state. Tells the agent how much quota remains
 	// after this transaction. Enables proactive throttling ("1 access left").
@@ -4785,81 +4737,11 @@ func (x *TransactionResponse) GetVer() string {
 	return ""
 }
 
-func (x *TransactionResponse) GetTransactionId() string {
-	if x != nil && x.TransactionId != nil {
-		return *x.TransactionId
-	}
-	return ""
-}
-
-func (x *TransactionResponse) GetBillingId() string {
-	if x != nil && x.BillingId != nil {
-		return *x.BillingId
-	}
-	return ""
-}
-
-func (x *TransactionResponse) GetResourceTitle() string {
-	if x != nil && x.ResourceTitle != nil {
-		return *x.ResourceTitle
-	}
-	return ""
-}
-
-func (x *TransactionResponse) GetCost() *Cost {
-	if x != nil {
-		return x.Cost
-	}
-	return nil
-}
-
-func (x *TransactionResponse) GetDeliveryMethod() DeliveryMethod {
-	if x != nil {
-		return x.DeliveryMethod
-	}
-	return DeliveryMethod_DELIVERY_METHOD_UNSPECIFIED
-}
-
-func (x *TransactionResponse) GetReportingObligation() *ReportingObligation {
-	if x != nil {
-		return x.ReportingObligation
-	}
-	return nil
-}
-
-func (x *TransactionResponse) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
 func (x *TransactionResponse) GetAgentIdentityHash() string {
 	if x != nil {
 		return x.AgentIdentityHash
 	}
 	return ""
-}
-
-func (x *TransactionResponse) GetRetrievalEndpoint() string {
-	if x != nil && x.RetrievalEndpoint != nil {
-		return *x.RetrievalEndpoint
-	}
-	return ""
-}
-
-func (x *TransactionResponse) GetSubscriptionId() string {
-	if x != nil && x.SubscriptionId != nil {
-		return *x.SubscriptionId
-	}
-	return ""
-}
-
-func (x *TransactionResponse) GetSubscriptionUnitValue() *Cost {
-	if x != nil {
-		return x.SubscriptionUnitValue
-	}
-	return nil
 }
 
 func (x *TransactionResponse) GetItems() []*TransactionResultItem {
@@ -8883,57 +8765,33 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\toffer_sig\x18\x01 \x01(\tR\bofferSig\x12!\n" +
 	"\frequester_id\x18\x02 \x01(\tR\vrequesterId\x12)\n" +
 	"\x10requester_domain\x18\x03 \x01(\tR\x0frequesterDomain\x12'\n" +
-	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\x96\x05\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\xcb\x02\n" +
 	"\x12TransactionRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x120\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12\x1e\n" +
 	"\boffer_id\x18\x03 \x01(\tH\x00R\aofferId\x88\x01\x01\x120\n" +
-	"\trequester\x18\x04 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12)\n" +
-	"\x05offer\x18\b \x01(\v2\x0e.ramp.v1.OfferH\x01R\x05offer\x88\x01\x01\x12H\n" +
-	"\x10agent_acceptance\x18\t \x01(\v2\x18.ramp.v1.AgentAcceptanceH\x02R\x0fagentAcceptance\x88\x01\x01\x12.\n" +
-	"\x05items\x18\a \x03(\v2\x18.ramp.v1.TransactionItemR\x05items\x12)\n" +
+	"\trequester\x18\x04 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x128\n" +
+	"\x05items\x18\a \x03(\v2\x18.ramp.v1.TransactionItemB\b\xbaH\x05\x92\x01\x02\b\x01R\x05items\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical:\xca\x01\xbaH\xc6\x01\x1a\xc3\x01\n" +
-	"#transaction_request.offer_xor_items\x12@set exactly one of `offer` (single mode) or `items` (batch mode)\x1aZ(has(this.offer) && this.items.size() == 0) || (!has(this.offer) && this.items.size() > 0)B\v\n" +
-	"\t_offer_idB\b\n" +
-	"\x06_offerB\x13\n" +
-	"\x11_agent_acceptance\"\x9e\x01\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCriticalB\v\n" +
+	"\t_offer_idJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\"\x9e\x01\n" +
 	"\x0fTransactionItem\x12,\n" +
 	"\x05offer\x18\x03 \x01(\v2\x0e.ramp.v1.OfferB\x06\xbaH\x03\xc8\x01\x01R\x05offer\x12H\n" +
 	"\x10agent_acceptance\x18\x04 \x01(\v2\x18.ramp.v1.AgentAcceptanceH\x00R\x0fagentAcceptance\x88\x01\x01B\x13\n" +
-	"\x11_agent_acceptance\"\xc3\b\n" +
+	"\x11_agent_acceptance\"\xa8\x03\n" +
 	"\x13TransactionResponse\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12*\n" +
-	"\x0etransaction_id\x18\x03 \x01(\tH\x00R\rtransactionId\x88\x01\x01\x12\"\n" +
-	"\n" +
-	"billing_id\x18\x04 \x01(\tH\x01R\tbillingId\x88\x01\x01\x12*\n" +
-	"\x0eresource_title\x18\x05 \x01(\tH\x02R\rresourceTitle\x88\x01\x01\x12&\n" +
-	"\x04cost\x18\x06 \x01(\v2\r.ramp.v1.CostH\x03R\x04cost\x88\x01\x01\x12@\n" +
-	"\x0fdelivery_method\x18\a \x01(\x0e2\x17.ramp.v1.DeliveryMethodR\x0edeliveryMethod\x12T\n" +
-	"\x14reporting_obligation\x18\b \x01(\v2\x1c.ramp.v1.ReportingObligationH\x04R\x13reportingObligation\x88\x01\x01\x12>\n" +
-	"\n" +
-	"expires_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampH\x05R\texpiresAt\x88\x01\x01\x12.\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x12.\n" +
 	"\x13agent_identity_hash\x18\n" +
-	" \x01(\tR\x11agentIdentityHash\x122\n" +
-	"\x12retrieval_endpoint\x18\x12 \x01(\tH\x06R\x11retrievalEndpoint\x88\x01\x01\x12,\n" +
-	"\x0fsubscription_id\x18\f \x01(\tH\aR\x0esubscriptionId\x88\x01\x01\x12J\n" +
-	"\x17subscription_unit_value\x18\x10 \x01(\v2\r.ramp.v1.CostH\bR\x15subscriptionUnitValue\x88\x01\x01\x124\n" +
+	" \x01(\tR\x11agentIdentityHash\x124\n" +
 	"\x05items\x18\r \x03(\v2\x1e.ramp.v1.TransactionResultItemR\x05items\x121\n" +
 	"\n" +
-	"total_cost\x18\x0e \x01(\v2\r.ramp.v1.CostH\tR\ttotalCost\x88\x01\x01\x12M\n" +
+	"total_cost\x18\x0e \x01(\v2\r.ramp.v1.CostH\x00R\ttotalCost\x88\x01\x01\x12M\n" +
 	"\x12subscription_quota\x18\x11 \x03(\v2\x1e.ramp.v1.SubscriptionQuotaInfoR\x11subscriptionQuota\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x11\n" +
-	"\x0f_transaction_idB\r\n" +
-	"\v_billing_idB\x11\n" +
-	"\x0f_resource_titleB\a\n" +
-	"\x05_costB\x17\n" +
-	"\x15_reporting_obligationB\r\n" +
-	"\v_expires_atB\x15\n" +
-	"\x13_retrieval_endpointB\x12\n" +
-	"\x10_subscription_idB\x1a\n" +
-	"\x18_subscription_unit_valueB\r\n" +
-	"\v_total_cost\"\xf3\x06\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
+	"\v_total_costJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"J\x04\b\f\x10\rJ\x04\b\x10\x10\x11J\x04\b\x12\x10\x13\"\xf3\x06\n" +
 	"\x15TransactionResultItem\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12\x1d\n" +
@@ -9710,127 +9568,120 @@ var file_ramp_v1_ramp_proto_depIdxs = []int32{
 	89,  // 49: ramp.v1.Delegation.quota_period:type_name -> google.protobuf.Duration
 	90,  // 50: ramp.v1.Delegation.ext:type_name -> google.protobuf.Struct
 	44,  // 51: ramp.v1.TransactionRequest.requester:type_name -> ramp.v1.Requester
-	34,  // 52: ramp.v1.TransactionRequest.offer:type_name -> ramp.v1.Offer
-	46,  // 53: ramp.v1.TransactionRequest.agent_acceptance:type_name -> ramp.v1.AgentAcceptance
-	49,  // 54: ramp.v1.TransactionRequest.items:type_name -> ramp.v1.TransactionItem
-	90,  // 55: ramp.v1.TransactionRequest.ext:type_name -> google.protobuf.Struct
-	34,  // 56: ramp.v1.TransactionItem.offer:type_name -> ramp.v1.Offer
-	46,  // 57: ramp.v1.TransactionItem.agent_acceptance:type_name -> ramp.v1.AgentAcceptance
-	52,  // 58: ramp.v1.TransactionResponse.cost:type_name -> ramp.v1.Cost
-	9,   // 59: ramp.v1.TransactionResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	60,  // 60: ramp.v1.TransactionResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	91,  // 61: ramp.v1.TransactionResponse.expires_at:type_name -> google.protobuf.Timestamp
-	52,  // 62: ramp.v1.TransactionResponse.subscription_unit_value:type_name -> ramp.v1.Cost
-	51,  // 63: ramp.v1.TransactionResponse.items:type_name -> ramp.v1.TransactionResultItem
-	52,  // 64: ramp.v1.TransactionResponse.total_cost:type_name -> ramp.v1.Cost
-	33,  // 65: ramp.v1.TransactionResponse.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
-	90,  // 66: ramp.v1.TransactionResponse.ext:type_name -> google.protobuf.Struct
-	52,  // 67: ramp.v1.TransactionResultItem.cost:type_name -> ramp.v1.Cost
-	52,  // 68: ramp.v1.TransactionResultItem.subscription_unit_value:type_name -> ramp.v1.Cost
-	13,  // 69: ramp.v1.TransactionResultItem.denial_reason:type_name -> ramp.v1.DenialReason
-	3,   // 70: ramp.v1.TransactionResultItem.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
-	91,  // 71: ramp.v1.TransactionResultItem.expires_at:type_name -> google.protobuf.Timestamp
-	9,   // 72: ramp.v1.TransactionResultItem.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	60,  // 73: ramp.v1.TransactionResultItem.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	54,  // 74: ramp.v1.PushResourcesRequest.entries:type_name -> ramp.v1.ResourceEntry
-	90,  // 75: ramp.v1.PushResourcesRequest.ext:type_name -> google.protobuf.Struct
-	14,  // 76: ramp.v1.ResourceEntry.source:type_name -> ramp.v1.IngestionSource
-	91,  // 77: ramp.v1.ResourceEntry.provenance_timestamp:type_name -> google.protobuf.Timestamp
-	36,  // 78: ramp.v1.ResourceEntry.attestations:type_name -> ramp.v1.ResourceAttestation
-	41,  // 79: ramp.v1.ResourceEntry.terms:type_name -> ramp.v1.LicenseTerm
-	90,  // 80: ramp.v1.ResourceEntry.ext:type_name -> google.protobuf.Struct
-	90,  // 81: ramp.v1.PushResourcesResponse.ext:type_name -> google.protobuf.Struct
-	89,  // 82: ramp.v1.ReportingObligation.window:type_name -> google.protobuf.Duration
-	90,  // 83: ramp.v1.ReportingObligation.ext:type_name -> google.protobuf.Struct
-	63,  // 84: ramp.v1.UsageReport.usage:type_name -> ramp.v1.Usage
-	91,  // 85: ramp.v1.UsageReport.timestamp:type_name -> google.protobuf.Timestamp
-	64,  // 86: ramp.v1.UsageReport.assets:type_name -> ramp.v1.UsageAsset
-	90,  // 87: ramp.v1.UsageReport.ext:type_name -> google.protobuf.Struct
-	15,  // 88: ramp.v1.AttributionDetail.format:type_name -> ramp.v1.CitationFormat
-	62,  // 89: ramp.v1.Usage.attribution:type_name -> ramp.v1.AttributionDetail
-	90,  // 90: ramp.v1.UsageReportResponse.ext:type_name -> google.protobuf.Struct
-	44,  // 91: ramp.v1.DiscoveryRequest.requester:type_name -> ramp.v1.Requester
-	28,  // 92: ramp.v1.DiscoveryRequest.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
-	67,  // 93: ramp.v1.DiscoveryRequest.constraints:type_name -> ramp.v1.RequestConstraints
-	90,  // 94: ramp.v1.DiscoveryRequest.search_filters:type_name -> google.protobuf.Struct
-	90,  // 95: ramp.v1.DiscoveryRequest.ext:type_name -> google.protobuf.Struct
-	52,  // 96: ramp.v1.RequestConstraints.max_price:type_name -> ramp.v1.Cost
-	9,   // 97: ramp.v1.RequestConstraints.delivery_preference:type_name -> ramp.v1.DeliveryMethod
-	52,  // 98: ramp.v1.RequestConstraints.period_budget:type_name -> ramp.v1.Cost
-	89,  // 99: ramp.v1.RequestConstraints.budget_period:type_name -> google.protobuf.Duration
-	89,  // 100: ramp.v1.RequestConstraints.max_data_age:type_name -> google.protobuf.Duration
-	16,  // 101: ramp.v1.WellKnownManifest.role:type_name -> ramp.v1.Role
-	68,  // 102: ramp.v1.WellKnownManifest.public_keys:type_name -> ramp.v1.JsonWebKey
-	72,  // 103: ramp.v1.WellKnownManifest.exchanges:type_name -> ramp.v1.AuthorizedExchange
-	71,  // 104: ramp.v1.WellKnownManifest.catalog_contributors:type_name -> ramp.v1.CatalogContributor
-	7,   // 105: ramp.v1.WellKnownManifest.pricing_models_supported:type_name -> ramp.v1.PricingModel
-	9,   // 106: ramp.v1.WellKnownManifest.delivery_methods_supported:type_name -> ramp.v1.DeliveryMethod
-	18,  // 107: ramp.v1.WellKnownManifest.supported_auth_methods:type_name -> ramp.v1.AuthMethod
-	90,  // 108: ramp.v1.WellKnownManifest.ext:type_name -> google.protobuf.Struct
-	91,  // 109: ramp.v1.KeyInvalidationList.as_of:type_name -> google.protobuf.Timestamp
-	17,  // 110: ramp.v1.AuthorizedExchange.relationship:type_name -> ramp.v1.ProviderRelationship
-	90,  // 111: ramp.v1.AuthorizedExchange.ext:type_name -> google.protobuf.Struct
-	31,  // 112: ramp.v1.DiscoveryResponse.offer_groups:type_name -> ramp.v1.OfferGroup
-	52,  // 113: ramp.v1.DiscoveryResponse.cost:type_name -> ramp.v1.Cost
-	9,   // 114: ramp.v1.DiscoveryResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
-	60,  // 115: ramp.v1.DiscoveryResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
-	91,  // 116: ramp.v1.DiscoveryResponse.expires_at:type_name -> google.protobuf.Timestamp
-	52,  // 117: ramp.v1.DiscoveryResponse.broker_fee:type_name -> ramp.v1.Cost
-	1,   // 118: ramp.v1.DiscoveryResponse.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
-	90,  // 119: ramp.v1.DiscoveryResponse.ext:type_name -> google.protobuf.Struct
-	19,  // 120: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
-	90,  // 121: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
-	89,  // 122: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
-	20,  // 123: ramp.v1.DisputeResponse.status:type_name -> ramp.v1.DisputeStatus
-	21,  // 124: ramp.v1.DisputeResponse.resolution:type_name -> ramp.v1.ResolutionType
-	90,  // 125: ramp.v1.DisputeResponse.ext:type_name -> google.protobuf.Struct
-	90,  // 126: ramp.v1.DomainVerificationRequest.ext:type_name -> google.protobuf.Struct
-	91,  // 127: ramp.v1.DomainVerificationChallenge.expires_at:type_name -> google.protobuf.Timestamp
-	90,  // 128: ramp.v1.DomainVerificationChallenge.ext:type_name -> google.protobuf.Struct
-	90,  // 129: ramp.v1.DomainVerificationConfirmation.ext:type_name -> google.protobuf.Struct
-	91,  // 130: ramp.v1.DomainVerificationResult.valid_until:type_name -> google.protobuf.Timestamp
-	90,  // 131: ramp.v1.DomainVerificationResult.ext:type_name -> google.protobuf.Struct
-	88,  // 132: ramp.v1.ErrorDetail.metadata:type_name -> ramp.v1.ErrorDetail.MetadataEntry
-	81,  // 133: ramp.v1.ErrorDetail.transaction_denial:type_name -> ramp.v1.TransactionDenial
-	82,  // 134: ramp.v1.ErrorDetail.catalog_rejection:type_name -> ramp.v1.CatalogRejection
-	83,  // 135: ramp.v1.ErrorDetail.registration_failure:type_name -> ramp.v1.RegistrationFailure
-	84,  // 136: ramp.v1.ErrorDetail.dispute_failure:type_name -> ramp.v1.DisputeFailure
-	85,  // 137: ramp.v1.ErrorDetail.domain_verification_failure:type_name -> ramp.v1.DomainVerificationFailure
-	86,  // 138: ramp.v1.ErrorDetail.retrieval_auth_failure:type_name -> ramp.v1.RetrievalAuthFailure
-	87,  // 139: ramp.v1.ErrorDetail.usage_report_rejection:type_name -> ramp.v1.UsageReportRejection
-	13,  // 140: ramp.v1.TransactionDenial.reason:type_name -> ramp.v1.DenialReason
-	3,   // 141: ramp.v1.TransactionDenial.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
-	22,  // 142: ramp.v1.CatalogRejection.reason:type_name -> ramp.v1.CatalogRejectionReason
-	23,  // 143: ramp.v1.RegistrationFailure.reason:type_name -> ramp.v1.RegistrationFailureReason
-	24,  // 144: ramp.v1.DisputeFailure.reason:type_name -> ramp.v1.DisputeFailureReason
-	25,  // 145: ramp.v1.DomainVerificationFailure.reason:type_name -> ramp.v1.DomainVerificationFailureReason
-	26,  // 146: ramp.v1.RetrievalAuthFailure.reason:type_name -> ramp.v1.RetrievalAuthFailureReason
-	27,  // 147: ramp.v1.UsageReportRejection.reason:type_name -> ramp.v1.UsageReportRejectionReason
-	29,  // 148: ramp.v1.ExchangeService.DiscoverResources:input_type -> ramp.v1.ResourceQuery
-	48,  // 149: ramp.v1.ExchangeService.ExecuteTransaction:input_type -> ramp.v1.TransactionRequest
-	61,  // 150: ramp.v1.ExchangeService.ReportUsage:input_type -> ramp.v1.UsageReport
-	74,  // 151: ramp.v1.ExchangeService.DisputeTransaction:input_type -> ramp.v1.DisputeRequest
-	76,  // 152: ramp.v1.ExchangeService.RequestDomainVerification:input_type -> ramp.v1.DomainVerificationRequest
-	78,  // 153: ramp.v1.ExchangeService.ConfirmDomainVerification:input_type -> ramp.v1.DomainVerificationConfirmation
-	53,  // 154: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
-	56,  // 155: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
-	58,  // 156: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
-	66,  // 157: ramp.v1.BrokerService.Resolve:input_type -> ramp.v1.DiscoveryRequest
-	30,  // 158: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
-	50,  // 159: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
-	65,  // 160: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
-	75,  // 161: ramp.v1.ExchangeService.DisputeTransaction:output_type -> ramp.v1.DisputeResponse
-	77,  // 162: ramp.v1.ExchangeService.RequestDomainVerification:output_type -> ramp.v1.DomainVerificationChallenge
-	79,  // 163: ramp.v1.ExchangeService.ConfirmDomainVerification:output_type -> ramp.v1.DomainVerificationResult
-	55,  // 164: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
-	57,  // 165: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
-	59,  // 166: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
-	73,  // 167: ramp.v1.BrokerService.Resolve:output_type -> ramp.v1.DiscoveryResponse
-	158, // [158:168] is the sub-list for method output_type
-	148, // [148:158] is the sub-list for method input_type
-	148, // [148:148] is the sub-list for extension type_name
-	148, // [148:148] is the sub-list for extension extendee
-	0,   // [0:148] is the sub-list for field type_name
+	49,  // 52: ramp.v1.TransactionRequest.items:type_name -> ramp.v1.TransactionItem
+	90,  // 53: ramp.v1.TransactionRequest.ext:type_name -> google.protobuf.Struct
+	34,  // 54: ramp.v1.TransactionItem.offer:type_name -> ramp.v1.Offer
+	46,  // 55: ramp.v1.TransactionItem.agent_acceptance:type_name -> ramp.v1.AgentAcceptance
+	51,  // 56: ramp.v1.TransactionResponse.items:type_name -> ramp.v1.TransactionResultItem
+	52,  // 57: ramp.v1.TransactionResponse.total_cost:type_name -> ramp.v1.Cost
+	33,  // 58: ramp.v1.TransactionResponse.subscription_quota:type_name -> ramp.v1.SubscriptionQuotaInfo
+	90,  // 59: ramp.v1.TransactionResponse.ext:type_name -> google.protobuf.Struct
+	52,  // 60: ramp.v1.TransactionResultItem.cost:type_name -> ramp.v1.Cost
+	52,  // 61: ramp.v1.TransactionResultItem.subscription_unit_value:type_name -> ramp.v1.Cost
+	13,  // 62: ramp.v1.TransactionResultItem.denial_reason:type_name -> ramp.v1.DenialReason
+	3,   // 63: ramp.v1.TransactionResultItem.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
+	91,  // 64: ramp.v1.TransactionResultItem.expires_at:type_name -> google.protobuf.Timestamp
+	9,   // 65: ramp.v1.TransactionResultItem.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	60,  // 66: ramp.v1.TransactionResultItem.reporting_obligation:type_name -> ramp.v1.ReportingObligation
+	54,  // 67: ramp.v1.PushResourcesRequest.entries:type_name -> ramp.v1.ResourceEntry
+	90,  // 68: ramp.v1.PushResourcesRequest.ext:type_name -> google.protobuf.Struct
+	14,  // 69: ramp.v1.ResourceEntry.source:type_name -> ramp.v1.IngestionSource
+	91,  // 70: ramp.v1.ResourceEntry.provenance_timestamp:type_name -> google.protobuf.Timestamp
+	36,  // 71: ramp.v1.ResourceEntry.attestations:type_name -> ramp.v1.ResourceAttestation
+	41,  // 72: ramp.v1.ResourceEntry.terms:type_name -> ramp.v1.LicenseTerm
+	90,  // 73: ramp.v1.ResourceEntry.ext:type_name -> google.protobuf.Struct
+	90,  // 74: ramp.v1.PushResourcesResponse.ext:type_name -> google.protobuf.Struct
+	89,  // 75: ramp.v1.ReportingObligation.window:type_name -> google.protobuf.Duration
+	90,  // 76: ramp.v1.ReportingObligation.ext:type_name -> google.protobuf.Struct
+	63,  // 77: ramp.v1.UsageReport.usage:type_name -> ramp.v1.Usage
+	91,  // 78: ramp.v1.UsageReport.timestamp:type_name -> google.protobuf.Timestamp
+	64,  // 79: ramp.v1.UsageReport.assets:type_name -> ramp.v1.UsageAsset
+	90,  // 80: ramp.v1.UsageReport.ext:type_name -> google.protobuf.Struct
+	15,  // 81: ramp.v1.AttributionDetail.format:type_name -> ramp.v1.CitationFormat
+	62,  // 82: ramp.v1.Usage.attribution:type_name -> ramp.v1.AttributionDetail
+	90,  // 83: ramp.v1.UsageReportResponse.ext:type_name -> google.protobuf.Struct
+	44,  // 84: ramp.v1.DiscoveryRequest.requester:type_name -> ramp.v1.Requester
+	28,  // 85: ramp.v1.DiscoveryRequest.acceptable_restrictions:type_name -> ramp.v1.AcceptableRestriction
+	67,  // 86: ramp.v1.DiscoveryRequest.constraints:type_name -> ramp.v1.RequestConstraints
+	90,  // 87: ramp.v1.DiscoveryRequest.search_filters:type_name -> google.protobuf.Struct
+	90,  // 88: ramp.v1.DiscoveryRequest.ext:type_name -> google.protobuf.Struct
+	52,  // 89: ramp.v1.RequestConstraints.max_price:type_name -> ramp.v1.Cost
+	9,   // 90: ramp.v1.RequestConstraints.delivery_preference:type_name -> ramp.v1.DeliveryMethod
+	52,  // 91: ramp.v1.RequestConstraints.period_budget:type_name -> ramp.v1.Cost
+	89,  // 92: ramp.v1.RequestConstraints.budget_period:type_name -> google.protobuf.Duration
+	89,  // 93: ramp.v1.RequestConstraints.max_data_age:type_name -> google.protobuf.Duration
+	16,  // 94: ramp.v1.WellKnownManifest.role:type_name -> ramp.v1.Role
+	68,  // 95: ramp.v1.WellKnownManifest.public_keys:type_name -> ramp.v1.JsonWebKey
+	72,  // 96: ramp.v1.WellKnownManifest.exchanges:type_name -> ramp.v1.AuthorizedExchange
+	71,  // 97: ramp.v1.WellKnownManifest.catalog_contributors:type_name -> ramp.v1.CatalogContributor
+	7,   // 98: ramp.v1.WellKnownManifest.pricing_models_supported:type_name -> ramp.v1.PricingModel
+	9,   // 99: ramp.v1.WellKnownManifest.delivery_methods_supported:type_name -> ramp.v1.DeliveryMethod
+	18,  // 100: ramp.v1.WellKnownManifest.supported_auth_methods:type_name -> ramp.v1.AuthMethod
+	90,  // 101: ramp.v1.WellKnownManifest.ext:type_name -> google.protobuf.Struct
+	91,  // 102: ramp.v1.KeyInvalidationList.as_of:type_name -> google.protobuf.Timestamp
+	17,  // 103: ramp.v1.AuthorizedExchange.relationship:type_name -> ramp.v1.ProviderRelationship
+	90,  // 104: ramp.v1.AuthorizedExchange.ext:type_name -> google.protobuf.Struct
+	31,  // 105: ramp.v1.DiscoveryResponse.offer_groups:type_name -> ramp.v1.OfferGroup
+	52,  // 106: ramp.v1.DiscoveryResponse.cost:type_name -> ramp.v1.Cost
+	9,   // 107: ramp.v1.DiscoveryResponse.delivery_method:type_name -> ramp.v1.DeliveryMethod
+	60,  // 108: ramp.v1.DiscoveryResponse.reporting_obligation:type_name -> ramp.v1.ReportingObligation
+	91,  // 109: ramp.v1.DiscoveryResponse.expires_at:type_name -> google.protobuf.Timestamp
+	52,  // 110: ramp.v1.DiscoveryResponse.broker_fee:type_name -> ramp.v1.Cost
+	1,   // 111: ramp.v1.DiscoveryResponse.absence_reason:type_name -> ramp.v1.OfferAbsenceReason
+	90,  // 112: ramp.v1.DiscoveryResponse.ext:type_name -> google.protobuf.Struct
+	19,  // 113: ramp.v1.DisputeRequest.reason:type_name -> ramp.v1.DisputeReason
+	90,  // 114: ramp.v1.DisputeRequest.ext:type_name -> google.protobuf.Struct
+	89,  // 115: ramp.v1.DisputeResponse.estimated_resolution:type_name -> google.protobuf.Duration
+	20,  // 116: ramp.v1.DisputeResponse.status:type_name -> ramp.v1.DisputeStatus
+	21,  // 117: ramp.v1.DisputeResponse.resolution:type_name -> ramp.v1.ResolutionType
+	90,  // 118: ramp.v1.DisputeResponse.ext:type_name -> google.protobuf.Struct
+	90,  // 119: ramp.v1.DomainVerificationRequest.ext:type_name -> google.protobuf.Struct
+	91,  // 120: ramp.v1.DomainVerificationChallenge.expires_at:type_name -> google.protobuf.Timestamp
+	90,  // 121: ramp.v1.DomainVerificationChallenge.ext:type_name -> google.protobuf.Struct
+	90,  // 122: ramp.v1.DomainVerificationConfirmation.ext:type_name -> google.protobuf.Struct
+	91,  // 123: ramp.v1.DomainVerificationResult.valid_until:type_name -> google.protobuf.Timestamp
+	90,  // 124: ramp.v1.DomainVerificationResult.ext:type_name -> google.protobuf.Struct
+	88,  // 125: ramp.v1.ErrorDetail.metadata:type_name -> ramp.v1.ErrorDetail.MetadataEntry
+	81,  // 126: ramp.v1.ErrorDetail.transaction_denial:type_name -> ramp.v1.TransactionDenial
+	82,  // 127: ramp.v1.ErrorDetail.catalog_rejection:type_name -> ramp.v1.CatalogRejection
+	83,  // 128: ramp.v1.ErrorDetail.registration_failure:type_name -> ramp.v1.RegistrationFailure
+	84,  // 129: ramp.v1.ErrorDetail.dispute_failure:type_name -> ramp.v1.DisputeFailure
+	85,  // 130: ramp.v1.ErrorDetail.domain_verification_failure:type_name -> ramp.v1.DomainVerificationFailure
+	86,  // 131: ramp.v1.ErrorDetail.retrieval_auth_failure:type_name -> ramp.v1.RetrievalAuthFailure
+	87,  // 132: ramp.v1.ErrorDetail.usage_report_rejection:type_name -> ramp.v1.UsageReportRejection
+	13,  // 133: ramp.v1.TransactionDenial.reason:type_name -> ramp.v1.DenialReason
+	3,   // 134: ramp.v1.TransactionDenial.restriction_mismatches:type_name -> ramp.v1.RestrictionKind
+	22,  // 135: ramp.v1.CatalogRejection.reason:type_name -> ramp.v1.CatalogRejectionReason
+	23,  // 136: ramp.v1.RegistrationFailure.reason:type_name -> ramp.v1.RegistrationFailureReason
+	24,  // 137: ramp.v1.DisputeFailure.reason:type_name -> ramp.v1.DisputeFailureReason
+	25,  // 138: ramp.v1.DomainVerificationFailure.reason:type_name -> ramp.v1.DomainVerificationFailureReason
+	26,  // 139: ramp.v1.RetrievalAuthFailure.reason:type_name -> ramp.v1.RetrievalAuthFailureReason
+	27,  // 140: ramp.v1.UsageReportRejection.reason:type_name -> ramp.v1.UsageReportRejectionReason
+	29,  // 141: ramp.v1.ExchangeService.DiscoverResources:input_type -> ramp.v1.ResourceQuery
+	48,  // 142: ramp.v1.ExchangeService.ExecuteTransaction:input_type -> ramp.v1.TransactionRequest
+	61,  // 143: ramp.v1.ExchangeService.ReportUsage:input_type -> ramp.v1.UsageReport
+	74,  // 144: ramp.v1.ExchangeService.DisputeTransaction:input_type -> ramp.v1.DisputeRequest
+	76,  // 145: ramp.v1.ExchangeService.RequestDomainVerification:input_type -> ramp.v1.DomainVerificationRequest
+	78,  // 146: ramp.v1.ExchangeService.ConfirmDomainVerification:input_type -> ramp.v1.DomainVerificationConfirmation
+	53,  // 147: ramp.v1.CatalogService.PushResources:input_type -> ramp.v1.PushResourcesRequest
+	56,  // 148: ramp.v1.CatalogService.RemoveResources:input_type -> ramp.v1.RemoveResourcesRequest
+	58,  // 149: ramp.v1.CatalogService.RefreshCatalog:input_type -> ramp.v1.RefreshCatalogRequest
+	66,  // 150: ramp.v1.BrokerService.Resolve:input_type -> ramp.v1.DiscoveryRequest
+	30,  // 151: ramp.v1.ExchangeService.DiscoverResources:output_type -> ramp.v1.ResourceResponse
+	50,  // 152: ramp.v1.ExchangeService.ExecuteTransaction:output_type -> ramp.v1.TransactionResponse
+	65,  // 153: ramp.v1.ExchangeService.ReportUsage:output_type -> ramp.v1.UsageReportResponse
+	75,  // 154: ramp.v1.ExchangeService.DisputeTransaction:output_type -> ramp.v1.DisputeResponse
+	77,  // 155: ramp.v1.ExchangeService.RequestDomainVerification:output_type -> ramp.v1.DomainVerificationChallenge
+	79,  // 156: ramp.v1.ExchangeService.ConfirmDomainVerification:output_type -> ramp.v1.DomainVerificationResult
+	55,  // 157: ramp.v1.CatalogService.PushResources:output_type -> ramp.v1.PushResourcesResponse
+	57,  // 158: ramp.v1.CatalogService.RemoveResources:output_type -> ramp.v1.RemoveResourcesResponse
+	59,  // 159: ramp.v1.CatalogService.RefreshCatalog:output_type -> ramp.v1.RefreshCatalogResponse
+	73,  // 160: ramp.v1.BrokerService.Resolve:output_type -> ramp.v1.DiscoveryResponse
+	151, // [151:161] is the sub-list for method output_type
+	141, // [141:151] is the sub-list for method input_type
+	141, // [141:141] is the sub-list for extension type_name
+	141, // [141:141] is the sub-list for extension extendee
+	0,   // [0:141] is the sub-list for field type_name
 }
 
 func init() { file_ramp_v1_ramp_proto_init() }

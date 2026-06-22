@@ -18,23 +18,17 @@ func TestAgentAcceptance_wireFieldsExist(t *testing.T) {
 		SignatureAlgorithm: "EdDSA",
 	}
 
-	// Single-offer mode carries the acceptance alongside the reflected Offer.
-	single := &rampv1.TransactionRequest{
-		IdempotencyKey:  "idem-1",
-		Offer:           &rampv1.Offer{OfferId: "of_1"},
-		AgentAcceptance: acc,
-	}
-	if got := single.GetAgentAcceptance().GetSignature(); got != "deadbeef" {
-		t.Fatalf("single-mode agent_acceptance.signature = %q, want deadbeef", got)
-	}
-
-	// Batch mode carries a per-item acceptance alongside each reflected Offer.
+	// Items-only (6afpc): each item carries a per-item acceptance alongside its
+	// reflected Offer (single-offer mode removed — a single offer is a 1-item list).
 	item := &rampv1.TransactionItem{
 		Offer:           &rampv1.Offer{OfferId: "of_2"},
 		AgentAcceptance: acc,
 	}
+	if got := item.GetAgentAcceptance().GetSignature(); got != "deadbeef" {
+		t.Fatalf("item agent_acceptance.signature = %q, want deadbeef", got)
+	}
 	if got := item.GetAgentAcceptance().GetSignatureAlgorithm(); got != "EdDSA" {
-		t.Fatalf("batch item agent_acceptance.signature_algorithm = %q, want EdDSA", got)
+		t.Fatalf("item agent_acceptance.signature_algorithm = %q, want EdDSA", got)
 	}
 }
 

@@ -7,29 +7,23 @@ import (
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
-// Regression test for agentic-content-access-0d0jk.1 / RAMP-103.
+// Regression test for the items-only collapse (epic 6afpc / RAMP-102).
 //
 // Core Invariant: a redeemed offer is a self-contained bearer token — the agent
-// presents the WHOLE signed Offer in the execute request (TransactionRequest in
-// single mode, TransactionItem in batch mode), so the verifier checks
-// Offer.signature over the exact reflected bytes rather than reconstructing them
-// from the catalog.
+// presents the WHOLE signed Offer in each TransactionItem, so the verifier
+// checks Offer.signature over the exact reflected bytes rather than
+// reconstructing them from the catalog. Single-offer mode was removed: a single
+// offer is the degenerate 1-element `items` list.
 //
-// The proto contract change this test pins:
-//   - TransactionRequest gains `Offer offer` (single mode), NOT field-required.
-//   - TransactionItem gains `Offer offer` (batch mode), field-required.
-//   - A message-level CEL on TransactionRequest enforces exactly-one-mode:
-//     `offer` set XOR `items` non-empty (rule id transaction_request.offer_xor_items).
+// The proto contract this test pins:
+//   - TransactionRequest carries `repeated TransactionItem items` with
+//     repeated.min_items=1 (no top-level offer; the offer_xor_items CEL is gone).
+//   - TransactionItem.offer is field-required.
 //
-// TDD-red note: until 0d0jk.1 regenerates gen/, TransactionRequest.Offer and
-// TransactionItem.Offer do not exist on the generated Go types, so this file
-// will NOT COMPILE. That compile failure is the valid red for a schema addition.
-//
-// xorRuleID is the stable message-CEL rule id the implementation plan assigns to
-// the single-vs-batch XOR (Implementation Plan step 3). Asserted when the error
-// carries rule ids; absence of the id is reported but does not by itself pass the
-// case — the rejection (err != nil) is the load-bearing assertion.
-const xorRuleID = "transaction_request.offer_xor_items"
+// minItemsRuleID is the protovalidate rule id for the items min_items=1
+// constraint. Asserted when the error carries rule ids; absence is reported but
+// does not by itself pass the case — the rejection (err != nil) is load-bearing.
+const minItemsRuleID = "repeated.min_items"
 
 // validOffer returns a minimal Offer that passes protovalidate. While the Offer
 // message itself carries no field-level buf.validate rules, its nested Pricing
@@ -47,52 +41,36 @@ func validOffer() *rampv1.Offer {
 	}
 }
 
-// TestTransactionRequest_singleMode_valid pins case 1: a single-mode request
-// (offer populated, no items) passes validation.
-func TestTransactionRequest_singleMode_valid(t *testing.T) {
+// TestTransactionRequest_items_valid pins the happy path: a request whose items
+// each carry a valid offer passes validation (a single offer is a 1-item list).
+func TestTransactionRequest_items_valid(t *testing.T) {
 	req := &rampv1.TransactionRequest{
-		IdempotencyKey: "idem-single-1",
-		Offer:          validOffer(),
-	}
-	if err := helpers.Validate(req); err != nil {
-		t.Fatalf("single-mode TransactionRequest (offer set, no items) must validate; got %v", err)
-	}
-}
-
-// TestTransactionRequest_neitherMode_rejected pins case 2: neither offer nor
-// items violates the XOR rule (exactly-one-mode).
-func TestTransactionRequest_neitherMode_rejected(t *testing.T) {
-	req := &rampv1.TransactionRequest{
-		IdempotencyKey: "idem-neither-1",
-	}
-	err := helpers.Validate(req)
-	if err == nil {
-		t.Fatalf("TransactionRequest with NEITHER offer nor items must be rejected by the XOR rule")
-	}
-	assertRuleIfPresent(t, err, xorRuleID)
-}
-
-// TestTransactionRequest_bothModes_rejected pins case 3: both offer and items
-// set violates the XOR rule.
-func TestTransactionRequest_bothModes_rejected(t *testing.T) {
-	req := &rampv1.TransactionRequest{
-		IdempotencyKey: "idem-both-1",
-		Offer:          validOffer(),
+		IdempotencyKey: "idem-items-1",
 		Items: []*rampv1.TransactionItem{
 			{Offer: validOffer()},
 		},
 	}
-	err := helpers.Validate(req)
-	if err == nil {
-		t.Fatalf("TransactionRequest with BOTH offer and items must be rejected by the XOR rule")
+	if err := helpers.Validate(req); err != nil {
+		t.Fatalf("items-only TransactionRequest (one item with an offer) must validate; got %v", err)
 	}
-	assertRuleIfPresent(t, err, xorRuleID)
 }
 
-// TestTransactionItem_missingOffer_rejected pins case 4: a TransactionItem with
+// TestTransactionRequest_emptyItems_rejected pins the items-min-1 rule: a request
+// with no items is rejected (single-offer mode is gone — there is no other way to
+// commit an offer).
+func TestTransactionRequest_emptyItems_rejected(t *testing.T) {
+	req := &rampv1.TransactionRequest{
+		IdempotencyKey: "idem-empty-1",
+	}
+	err := helpers.Validate(req)
+	if err == nil {
+		t.Fatalf("TransactionRequest with empty items must be rejected by repeated.min_items=1")
+	}
+	assertRuleIfPresent(t, err, minItemsRuleID)
+}
+
+// TestTransactionItem_missingOffer_rejected pins case: a TransactionItem with
 // no offer violates the field-level `required` rule on TransactionItem.offer.
-// Driven through a batch-mode TransactionRequest so the item is reachable by the
-// validator (items must be non-empty for the request itself to be in batch mode).
 func TestTransactionItem_missingOffer_rejected(t *testing.T) {
 	req := &rampv1.TransactionRequest{
 		IdempotencyKey: "idem-item-missing-1",
@@ -106,19 +84,18 @@ func TestTransactionItem_missingOffer_rejected(t *testing.T) {
 	}
 }
 
-// TestTransactionRequest_batchMode_valid lightly guards the Core Invariant
-// (case 5): a batch-mode request — each item carries a valid offer, no top-level
-// offer — passes validation, proving batch mode stays representable under the XOR.
-func TestTransactionRequest_batchMode_valid(t *testing.T) {
+// TestTransactionRequest_multiItem_valid guards the Core Invariant: a multi-item
+// request — each item carries a valid offer — passes validation.
+func TestTransactionRequest_multiItem_valid(t *testing.T) {
 	req := &rampv1.TransactionRequest{
-		IdempotencyKey: "idem-batch-1",
+		IdempotencyKey: "idem-multi-1",
 		Items: []*rampv1.TransactionItem{
 			{Offer: validOffer()},
 			{Offer: validOffer()},
 		},
 	}
 	if err := helpers.Validate(req); err != nil {
-		t.Fatalf("batch-mode TransactionRequest (items each with an offer, no top-level offer) must validate; got %v", err)
+		t.Fatalf("multi-item TransactionRequest (each item with an offer) must validate; got %v", err)
 	}
 }
 

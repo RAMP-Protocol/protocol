@@ -1634,13 +1634,17 @@
       "string.min_len"
     ],
     "json": {
-      "offer": {
-        "offerId": "offer-seed",
-        "pricing": {
-          "model": "PRICING_MODEL_FREE",
-          "rate": "0"
+      "items": [
+        {
+          "offer": {
+            "offerId": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
         }
-      }
+      ]
     }
   },
   {
@@ -1649,13 +1653,17 @@
     "valid": true,
     "json": {
       "idempotencyKey": "idem-tx",
-      "offer": {
-        "offerId": "offer-seed",
-        "pricing": {
-          "model": "PRICING_MODEL_FREE",
-          "rate": "0"
+      "items": [
+        {
+          "offer": {
+            "offerId": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
         }
-      }
+      ]
     }
   },
   {
