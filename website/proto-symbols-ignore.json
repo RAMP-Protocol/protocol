@@ -5,6 +5,13 @@
     "Offer.restrictions",
     "ResourceQuery.intermediaries",
     "PRICING_MODEL_ATTRIBUTION",
-    "PRICING_MODEL_CONTRIBUTION"
+    "PRICING_MODEL_CONTRIBUTION",
+    "Video.c2pa",
+    "Image.c2pa",
+    "Audio.c2pa",
+    "Image.alt",
+    "Text.authority",
+    "Retrieval.ratelmt",
+    "Package.license"
   ]
 }
