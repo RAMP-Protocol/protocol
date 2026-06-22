@@ -1,0 +1,16 @@
+{
+  "name": "concierge-bot.ai",
+  "ua": "ConciergeBot/1.0",
+  "id": "TL-REG-889900",
+  "aisysuse": {
+    "lid": "LIC-AGENT-ACT-2026",
+    "aiauth": 2,
+    "uri": [
+      "https://bistro-reserve.com/api/availability"
+    ],
+    "scope": 5,
+    "function": [1],
+    "subfn": [3, 4],
+    "resdis": 1
+  }
+}

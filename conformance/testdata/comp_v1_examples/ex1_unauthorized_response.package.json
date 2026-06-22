@@ -1,0 +1,22 @@
+{
+  "id": "PKG-REF-99-PENDING",
+  "title": "Full Corpus Access - Licensing Required",
+  "seller": "primary-publisher.com",
+  "licenseurl": "https://primary-publisher.com/licensing/ai-terms",
+  "reporturl": "https://primary-publisher.com/reporting/ai-usage",
+  "citation": 1,
+  "scope": {
+    "scope": 0,
+    "max": 1,
+    "ctype": [
+      4
+    ]
+  },
+  "retrieval": {
+    "auth": 0,
+    "endpoint": "https://api.primary-publisher.com/v1/unauthorized",
+    "type": [
+      2
+    ]
+  }
+}

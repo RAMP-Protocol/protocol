@@ -1,0 +1,16 @@
+{
+  "name": "global-news-aggregator.com",
+  "ua": "GlobalNewsBot/5.0",
+  "id": "TL-REG-882211",
+  "aisysuse": {
+    "lid": "LIC-998-ALPHA-2026",
+    "aiauth": 1,
+    "uri": [
+      "https://fin-times.com/markets/commodities"
+    ],
+    "scope": 1,
+    "function": [3],
+    "subfn": [1, 2],
+    "resdis": 1
+  }
+}

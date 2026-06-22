@@ -1,0 +1,47 @@
+{
+  "id": "PKG-POD-2026-Q1",
+  "title": "Daily Brief - 2026 Post-Jan Archive",
+  "seller": "news-podcasts.com",
+  "licenseurl": "https://news-podcasts.com/licensing/rag-terms",
+  "reporturl": "https://news-podcasts.com/reporting/ai-usage",
+  "citation": 1,
+  "scope": {
+    "scope": 2,
+    "max": 0,
+    "ctype": [
+      3
+    ],
+    "audio": [
+      {
+        "title": [
+          "Economic Outlook: February 2026"
+        ],
+        "cattax": 9,
+        "cat": [
+          392
+        ],
+        "dur": [
+          1500
+        ],
+        "wordcount": [
+          3800
+        ],
+        "transcript": 1,
+        "pubdate": "2026-02-15T08:00:00Z",
+        "published": 1,
+        "author": [
+          "Casey Jordan"
+        ],
+        "sourcetype": 0,
+        "provenance": 0
+      }
+    ]
+  },
+  "retrieval": {
+    "auth": 2,
+    "endpoint": "https://api.news-podcasts.com/v1/feed",
+    "type": [
+      2
+    ]
+  }
+}

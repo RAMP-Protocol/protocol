@@ -1,0 +1,16 @@
+{
+  "name": "audio-intel.ai",
+  "ua": "AudioIntelBot/3.0",
+  "id": "TL-REG-223344",
+  "aisysuse": {
+    "lid": "LIC-POD-PRO-2026",
+    "aiauth": 2,
+    "uri": [
+      "https://news-podcasts.com/daily-brief"
+    ],
+    "scope": 0,
+    "function": [2, 3],
+    "subfn": [0, 2],
+    "resdis": 0
+  }
+}
