@@ -3028,7 +3028,17 @@ enum CatalogRejectionReason {
   CATALOG_REJECTION_REASON_SIGNATURE_INVALID = 4;       // request signature missing or invalid
   CATALOG_REJECTION_REASON_MALFORMED_ENTRY = 5;         // a resource entry failed schema/validation
   CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN = 6;     // an unregistered vocab token in a restriction/term
-  CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 7;          // contributor push quota exceeded
+  CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 7;          // contributor push quota exceeded (per-caller)
+  CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED = 8;    // a single entry carries more license terms than allowed (per-entry cap)
+  // The URI cannot be claimed by this caller's entries. Named from the caller's
+  // own perspective ON PURPOSE: it MUST NOT disclose that another resource/
+  // contributor already owns the URI. Within one publisher, mutually-untrusting
+  // contributors share a catalog, so an "owned by another" reason would be a
+  // confirmed-existence oracle a contributor could use to map a competitor's
+  // catalog. The conflict is resolvable only by the publisher (who is authorized
+  // to see full ownership); the human-readable message routes the caller there
+  // without confirming who, if anyone, holds the URI.
+  CATALOG_REJECTION_REASON_URI_UNAVAILABLE = 9;
 }
 
 // CatalogRejection — a CatalogService call could not be applied.

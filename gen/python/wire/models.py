@@ -93,6 +93,12 @@ class CatalogRejectionReason(Enum):
         'CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN'
     )
     CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 'CATALOG_REJECTION_REASON_QUOTA_EXCEEDED'
+    CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED = (
+        'CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED'
+    )
+    CATALOG_REJECTION_REASON_URI_UNAVAILABLE = (
+        'CATALOG_REJECTION_REASON_URI_UNAVAILABLE'
+    )
 
 
 class CitationFormat(Enum):
@@ -1297,18 +1303,7 @@ class TransactionResponse(WireModel):
     )
     agentIdentityHash: str | None = Field(
         '',
-        description='Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of\n the agent\'s Ed25519 request-signing key (see "Retrieval-URL identity binding"\n above). Empty string when absent; non-empty iff a signed retrieval_endpoint\n is present. Delivery-endpoint enforcement of the binding is OPTIONAL.',
-    )
-    billingId: str | None = Field(None, description='Billing reference')
-    cost: Cost | None = Field(None, description='Transaction cost')
-    deliveryMethod: (
-        constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
-        | DeliveryMethod
-        | conint(ge=-2147483648, le=2147483647)
-        | None
-    ) = Field(0, description='How resource is delivered in this transaction.')
-    expiresAt: AwareDatetime | None = Field(
-        None, description='When retrieval_endpoint expires.'
+        description='Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK\n Thumbprint of the agent\'s Ed25519 request-signing key (see "Retrieval-URL\n identity binding" above). Shared across the request; set once.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
@@ -1316,37 +1311,14 @@ class TransactionResponse(WireModel):
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
     items: list[TransactionResultItem] | None = Field(
-        None, description='Batch mode: per-offer results.'
-    )
-    reportingObligation: ReportingObligation | None = Field(
-        None, description='Reporting requirements attached to this delivery.'
-    )
-    resourceTitle: str | None = Field(
-        None, description='Resource title echoed from the Offer (for logging/display).'
-    )
-    retrievalEndpoint: str | None = Field(
         None,
-        description='Signed retrieval URL the agent uses to fetch the purchased resource.\n Bound to agent_identity_hash; expires at expires_at. Absent on denial\n and on transactions whose delivery_method is not signed-URL-based.',
-    )
-    subscriptionId: str | None = Field(
-        None,
-        description='If set, this transaction was fulfilled under a subscription/deal.\n No per-request charge — usage tracked against subscription quota.',
+        description='Per-offer results (one entry per committed item, in original order).',
     )
     subscriptionQuota: list[SubscriptionQuotaInfo] | None = Field(
         None,
         description='Post-transaction quota state. Tells the agent how much quota remains\n after this transaction. Enables proactive throttling ("1 access left").\n Multiple entries for multi-dimensional quotas.',
     )
-    subscriptionUnitValue: Cost | None = Field(
-        None,
-        description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount=0 (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
-    )
-    totalCost: Cost | None = Field(
-        None, description='Batch mode: aggregate cost across all items.'
-    )
-    transactionId: str | None = Field(
-        None,
-        description='Single-offer result.\n For batch mode, these may be empty — check `items` instead.',
-    )
+    totalCost: Cost | None = Field(None, description='Aggregate cost across all items.')
     ver: str | None = Field('', description='Protocol version')
 
 
@@ -1837,10 +1809,6 @@ class TransactionRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    agentAcceptance: AgentAcceptance | None = Field(
-        None,
-        description="Single-offer mode: the agent's detached acceptance signature over the\n accepted `offer` (RAMP-102 §1). Optional on the wire (additive,\n backward-compatible); the Exchange enforces presence at the service layer\n for relayed requests. Signed bytes = deterministic AgentAcceptancePayload\n {offer_sig=offer.signature, requester_id=requester.id,\n requester_domain=requester.domain, idempotency_key=idempotency_key}.",
-    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
@@ -1852,15 +1820,12 @@ class TransactionRequest(WireModel):
     )
     items: list[TransactionItem] | None = Field(
         None,
-        description='Batch mode: commit to multiple offers in one request, each carrying its\n own reflected signed Offer. Set this XOR `offer` (see message rule).',
-    )
-    offer: Offer | None = Field(
-        None,
-        description='Single-offer mode: the FULL signed Offer, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` (which\n covers pricing, terms, and expires_at) over these presented bytes against\n its own key — a stateless, self-contained bearer token, with no\n reconstruct-from-catalog. Set this XOR `items` (see message rule).',
+        description="The offers committed in this request (REQUIRED, min 1), each carrying its\n own reflected signed Offer + detached acceptance. A single offer is the\n degenerate 1-element list. The Exchange verifies each item's\n `offer.signature` (which covers pricing, terms, and expires_at) over the\n presented bytes against its own key — stateless, self-contained bearer\n tokens, with no reconstruct-from-catalog.",
+        min_length=1,
     )
     offerId: str | None = Field(
         None,
-        description='Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.',
+        description="Optional, non-authoritative correlation/audit key — a human-readable offer\n id. NOT used for verification: the Exchange verifies each item's reflected\n `offer.signature` over the presented Offer bytes, never this scalar. May be\n omitted; if set, it SHOULD match an item's `offer.offer_id`.",
     )
     requester: Requester | None = Field(
         None, description='Requester identity — forwarded for authorization and audit.'

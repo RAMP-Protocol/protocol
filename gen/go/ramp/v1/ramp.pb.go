@@ -1493,7 +1493,17 @@ const (
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_SIGNATURE_INVALID       CatalogRejectionReason = 4 // request signature missing or invalid
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_MALFORMED_ENTRY         CatalogRejectionReason = 5 // a resource entry failed schema/validation
 	CatalogRejectionReason_CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN     CatalogRejectionReason = 6 // an unregistered vocab token in a restriction/term
-	CatalogRejectionReason_CATALOG_REJECTION_REASON_QUOTA_EXCEEDED          CatalogRejectionReason = 7 // contributor push quota exceeded
+	CatalogRejectionReason_CATALOG_REJECTION_REASON_QUOTA_EXCEEDED          CatalogRejectionReason = 7 // contributor push quota exceeded (per-caller)
+	CatalogRejectionReason_CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED    CatalogRejectionReason = 8 // a single entry carries more license terms than allowed (per-entry cap)
+	// The URI cannot be claimed by this caller's entries. Named from the caller's
+	// own perspective ON PURPOSE: it MUST NOT disclose that another resource/
+	// contributor already owns the URI. Within one publisher, mutually-untrusting
+	// contributors share a catalog, so an "owned by another" reason would be a
+	// confirmed-existence oracle a contributor could use to map a competitor's
+	// catalog. The conflict is resolvable only by the publisher (who is authorized
+	// to see full ownership); the human-readable message routes the caller there
+	// without confirming who, if anyone, holds the URI.
+	CatalogRejectionReason_CATALOG_REJECTION_REASON_URI_UNAVAILABLE CatalogRejectionReason = 9
 )
 
 // Enum value maps for CatalogRejectionReason.
@@ -1507,6 +1517,8 @@ var (
 		5: "CATALOG_REJECTION_REASON_MALFORMED_ENTRY",
 		6: "CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN",
 		7: "CATALOG_REJECTION_REASON_QUOTA_EXCEEDED",
+		8: "CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED",
+		9: "CATALOG_REJECTION_REASON_URI_UNAVAILABLE",
 	}
 	CatalogRejectionReason_value = map[string]int32{
 		"CATALOG_REJECTION_REASON_UNSPECIFIED":             0,
@@ -1517,6 +1529,8 @@ var (
 		"CATALOG_REJECTION_REASON_MALFORMED_ENTRY":         5,
 		"CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN":     6,
 		"CATALOG_REJECTION_REASON_QUOTA_EXCEEDED":          7,
+		"CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED":    8,
+		"CATALOG_REJECTION_REASON_URI_UNAVAILABLE":         9,
 	}
 )
 
@@ -9338,7 +9352,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x16RESOLUTION_TYPE_CREDIT\x10\x01\x12\x1e\n" +
 	"\x1aRESOLUTION_TYPE_REDELIVERY\x10\x02\x12\x1c\n" +
 	"\x18RESOLUTION_TYPE_REJECTED\x10\x03\x12!\n" +
-	"\x1dRESOLUTION_TYPE_INVESTIGATION\x10\x04*\x95\x03\n" +
+	"\x1dRESOLUTION_TYPE_INVESTIGATION\x10\x04*\xf6\x03\n" +
 	"\x16CatalogRejectionReason\x12(\n" +
 	"$CATALOG_REJECTION_REASON_UNSPECIFIED\x10\x00\x124\n" +
 	"0CATALOG_REJECTION_REASON_NOT_CATALOG_CONTRIBUTOR\x10\x01\x12,\n" +
@@ -9347,7 +9361,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"*CATALOG_REJECTION_REASON_SIGNATURE_INVALID\x10\x04\x12,\n" +
 	"(CATALOG_REJECTION_REASON_MALFORMED_ENTRY\x10\x05\x120\n" +
 	",CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN\x10\x06\x12+\n" +
-	"'CATALOG_REJECTION_REASON_QUOTA_EXCEEDED\x10\a*\xc1\x02\n" +
+	"'CATALOG_REJECTION_REASON_QUOTA_EXCEEDED\x10\a\x121\n" +
+	"-CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED\x10\b\x12,\n" +
+	"(CATALOG_REJECTION_REASON_URI_UNAVAILABLE\x10\t*\xc1\x02\n" +
 	"\x19RegistrationFailureReason\x12+\n" +
 	"'REGISTRATION_FAILURE_REASON_UNSPECIFIED\x10\x00\x123\n" +
 	"/REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED\x10\x01\x12+\n" +
