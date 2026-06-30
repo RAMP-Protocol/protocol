@@ -273,7 +273,7 @@ Providers get read-only access to all signed Offers issued for their content. Th
 - `timestamp` — when the transaction was executed
 
 **Verification capabilities**:
-- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (fetch the Exchange's `/.well-known/ramp.json` and read `public_keys`)
+- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (fetch the Exchange's WBA directory, the JWK Set at `/.well-known/http-message-signatures-directory`, and read its `keys`)
 - RSL pricing, when present, serves as the **price ceiling** — Offers exceeding the RSL-declared rate are detectable by comparing `offer_snapshot.pricing.rate` against the RSL terms
 - Private floor pricing is contractual between provider and Exchange, not protocol-enforced — the protocol provides the audit data, the contract governs the terms
 

@@ -254,13 +254,13 @@ CatalogService is NOT how Exchange operators push their own inventory. Exchange 
 
 `PushResources` requests must be signed. The `caller_id` field (field 3) identifies the registered CatalogService client, and the request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) carried in the HTTP headers (`Signature` / `Signature-Input`, with a `Content-Digest` over the body) — there is no in-message caller signature field.
 
-The Exchange verifies the RFC 9421 signature against the caller's published Ed25519 key at `{caller domain}/.well-known/ramp.json` (selected by `kid`), and confirms that `caller_id` is authorized to push content for the specified `tenant_id`.
+The Exchange verifies the RFC 9421 signature against the caller's published Ed25519 key in its WBA directory (the JWK Set at `{caller domain}/.well-known/http-message-signatures-directory`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`), and confirms that `caller_id` is authorized to push content for the specified `tenant_id`.
 
 ### Third-Party Content Intelligence and Verification Vendors (v1.0)
 
 Companies like GumGum, Peer39, and DoubleVerify already index the web for contextual ad targeting. They can implement `CatalogService.PushResources` to feed enriched content metadata (topic, token estimates, content categorization) and signed `ResourceAttestation` entries to Exchanges.
 
-**Verification vendors as attestation sources**: In v1.0, third-party vendors push `ResourceAttestation` entries alongside catalog metadata. Each attestation is a signed envelope of claims (token count, language, content hash) from a trusted party. The Exchange verifies the attestation signature against the vendor's public key published in `public_keys` at `https://{vendor-domain}/.well-known/ramp.json`.
+**Verification vendors as attestation sources**: In v1.0, third-party vendors push `ResourceAttestation` entries alongside catalog metadata. Each attestation is a signed envelope of claims (token count, language, content hash) from a trusted party. The Exchange verifies the attestation signature against the vendor's public key published in its WBA directory (the JWK Set at `https://{vendor-domain}/.well-known/http-message-signatures-directory`).
 
 **Authorization**: A verification vendor must be listed in the provider's `catalog_contributors` (declared in `/.well-known/ramp.json`) to push attestations for that provider's content. The Exchange checks this authorization on every `PushResources` call.
 

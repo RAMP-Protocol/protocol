@@ -133,7 +133,7 @@ Scoped, time-limited, spend-capped credential. The credential itself is opaque b
 
 ### Multi-hop forwarding (no message — HTTP layer)
 
-There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → … → Exchange) is a **stack of RFC 9421 HTTP Message Signatures**: each forwarding party adds one labeled signature, and each signature covers the request plus the prior hop's signature, so the ordered set of signatures is the chain (tamper-evident, order-bound). The Exchange resolves each `keyid` at `{domain}/.well-known/ramp.json`, verifies every signature, and enforces `RequestConstraints.max_hops` / `WellKnownManifest.max_intermediary_hops` by counting them. Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent (bound by `agent_identity_hash`).
+There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → … → Exchange) is a **stack of RFC 9421 HTTP Message Signatures**: each forwarding party adds one labeled signature, and each signature covers the request plus the prior hop's signature, so the ordered set of signatures is the chain (tamper-evident, order-bound). The Exchange resolves each `keyid` (an RFC 7638 thumbprint) in the signer's WBA directory at `{domain}/.well-known/http-message-signatures-directory`, verifies every signature, and enforces `RequestConstraints.max_hops` / `WellKnownManifest.max_intermediary_hops` by counting them. Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent (bound by `agent_identity_hash`).
 
 ## Messages -- Offers and Pricing
 
@@ -170,8 +170,8 @@ Signed envelope of claims from a trusted party (provider or verification vendor)
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `verifier` | string | 1 | Domain of the attesting party. Keys at `https://{verifier}/.well-known/ramp.json` (`WellKnownManifest.public_keys`; `role=ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor) |
-| `kid` | string | 2 | Key ID from the verifier's `public_keys` |
+| `verifier` | string | 1 | Domain of the attesting party. Keys in the verifier's WBA directory (the JWK Set at `https://{verifier}/.well-known/http-message-signatures-directory`; `role=ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor) |
+| `keyid` | string | 2 | RFC 7638 thumbprint of the verifier's signing key (the RFC 9421 `keyid`) |
 | `attested_at` | Timestamp | 3 | When this attestation was created |
 | `uri` | string | 4 | Content URI this attestation covers |
 | `claims` | Struct | 5 | Signed claims about the content (max 4KB) |
@@ -463,7 +463,7 @@ Confirm domain verification and register a signing key.
 
 ### WellKnownManifest
 
-Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Carries inline keys (`JsonWebKey`) with explicit time bounds and an optional emergency-revocation pointer. Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
+Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Signing keys are **not** carried here — each participant publishes them in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`, modeled by [`WBAFile`](#wbafile)). Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
@@ -471,8 +471,6 @@ Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchang
 | `role` | Role | 2 | Which participant this manifest describes |
 | `domain` | string | 3 | Canonical domain serving this manifest |
 | `contact` | optional string | 4 | Contact email |
-| `public_keys` | repeated JsonWebKey | 5 | Signature-verification keys; ≥1 valid at serve time |
-| `invalidation_url` | optional string | 6 | Emergency key-revocation list URL (`KeyInvalidationList`) |
 | `exchanges` | repeated AuthorizedExchange | 7 | Publisher-only. Authorized Exchanges (declares who may sell, like ads.txt) |
 | `catalog_contributors` | repeated CatalogContributor | 8 | Publisher-only. Authorized third-party catalog pushers |
 | `name` | optional string | 9 | Exchange-only. Human-readable Exchange name |
@@ -497,13 +495,21 @@ Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchang
 | `max_intermediary_hops` | optional int32 | 28 | Exchange-only. Max intermediary hops tolerated in an inbound request chain; longer chains SHOULD be rejected |
 | `ext_critical` | repeated string | 90 | Critical extension keys (COSE `crit`, RFC 9052) |
 
-### JsonWebKey
+### WBAFile
 
-Inline RFC 7517 JWK. RAMP v1.0 supports Ed25519 only. Time bounds are RFC3339 strings; the validity window is half-open `[not_before, not_after)`.
+The pure WBA directory, served at `/.well-known/http-message-signatures-directory` (`Content-Type: application/jwk-set+json`). Holds each participant's inline signing keys and an optional emergency-revocation pointer. Keys are identified by their RFC 7638 thumbprint (the RFC 9421 `keyid`).
 
 | Field | Type | Number | Description |
 |---|---|---|---|
-| `kid` | string | 1 | Key ID, unique within `public_keys` |
+| `keys` | repeated JsonWebKey | 1 | Signature-verification keys; ≥1 valid at serve time |
+| `revocation_url` | optional string | 2 | Emergency key-revocation list URL (`KeyRevocationList`) |
+
+### JsonWebKey
+
+Inline RFC 7517 JWK. RAMP v1.0 supports Ed25519 only. Time bounds are RFC3339 strings; the validity window is half-open `[not_before, not_after)`. Keys carry no `kid` label — a key is identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
 | `kty` | string | 2 | Key type — MUST be `"OKP"` |
 | `crv` | string | 3 | Curve — MUST be `"Ed25519"` |
 | `use` | string | 4 | Intended use — MUST be `"sig"` |
@@ -512,14 +518,14 @@ Inline RFC 7517 JWK. RAMP v1.0 supports Ed25519 only. Time bounds are RFC3339 st
 | `not_before` | string | 7 | RFC3339; key invalid before this instant |
 | `not_after` | string | 8 | RFC3339; key invalid **at and after** this instant (strict upper bound) |
 
-### KeyInvalidationList
+### KeyRevocationList
 
-Body served at `WellKnownManifest.invalidation_url`. Snapshot semantics: `revoked` is the complete set of revoked `kid`s at `as_of`; consumers replace their local revocation set on each successful poll.
+Body served at `WBAFile.revocation_url`. Snapshot semantics: `revoked` is the complete set of revoked key thumbprints at `as_of`; consumers replace their local revocation set on each successful poll.
 
 | Field | Type | Number | Description |
 |---|---|---|---|
 | `as_of` | Timestamp | 1 | Server response time (RFC3339, UTC) |
-| `revoked` | repeated string | 2 | Complete list of revoked `kid`s at `as_of` |
+| `revoked` | repeated string | 2 | Complete list of revoked key thumbprints (RFC 7638) at `as_of` |
 
 ### CatalogContributor
 

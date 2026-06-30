@@ -43,6 +43,11 @@ patterns=(
   'ai_input' 'ai_train' 'ai_index'
   # real-company example names that must stay generic
   '[Bb]loomberg'
+  # Identity split: keys moved out of the manifest into the WBA directory, and
+  # the kid label was replaced by the RFC 7638 thumbprint (the keyid). The
+  # `"kid"` pattern is anchored to the JSON key form so it does not collide with
+  # the live `keyid` identifier.
+  'public_keys' 'invalidation_url' 'KeyInvalidationList' '"kid"[[:space:]]*:'
 )
 
 # Files where naming a removed identifier is legitimate (they record history).
