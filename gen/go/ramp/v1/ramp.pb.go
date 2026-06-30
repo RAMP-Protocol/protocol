@@ -4322,6 +4322,9 @@ type TransactionRequest struct {
 	// Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns
 	// the original result rather than re-executing. The transaction's durable
 	// identity is the Exchange-assigned transaction_id in the response.
+	// Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
+	// (authenticated caller, key), never globally, so a key chosen by one caller
+	// cannot collide with another's cached result.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Single-offer mode. Use `items` for batch mode; `offer_id` +
 	// `offer_signature` for single.
@@ -5625,6 +5628,9 @@ type UsageReport struct {
 	// Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
 	// report does not double-count usage. The report's durable identity is the
 	// Exchange-assigned report_id in UsageReportResponse.
+	// Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
+	// (authenticated caller, key), never globally, so a key chosen by one caller
+	// cannot collide with another's cached result.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction ID from the delivery.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
@@ -6077,6 +6083,9 @@ type RAMPRequest struct {
 	// retried request carrying the same key MUST NOT re-charge — the Broker returns
 	// the original result. Distinct from `id` (an opaque correlation tag): this is
 	// the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.
+	// Uniqueness is scoped to the verified RFC 9421 signer: the Broker dedupes per
+	// (authenticated caller, key), never globally, so a key chosen by one caller
+	// cannot collide with another's cached result.
 	IdempotencyKey string `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Requester identity — who is making this request, what scopes they have.
 	// The Broker forwards this to Exchanges in ResourceQuery.requester.
@@ -7081,6 +7090,9 @@ type RAMPResponse struct {
 	// Why the resolve produced no licensed delivery. Set (and retrieval_endpoint
 	// unset) on a successful "no result" answer; unset on the licensed path. Same
 	// vocabulary DiscoverResources uses for OfferGroup.absence_reason.
+	// RESTRICTION_FILTERED may appear here, but Resolve does not surface the
+	// per-axis detail: RAMPResponse has no restriction_filters companion (unlike
+	// OfferGroup). A consumer needing the filtered axes calls DiscoverResources.
 	AbsenceReason *OfferAbsenceReason `protobuf:"varint,16,opt,name=absence_reason,json=absenceReason,proto3,enum=ramp.v1.OfferAbsenceReason,oneof" json:"absence_reason,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -7236,6 +7248,9 @@ type DisputeRequest struct {
 	// Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
 	// filing does not open a duplicate case. The dispute's durable identity is the
 	// Exchange-assigned dispute_id in DisputeResponse.
+	// Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
+	// (authenticated caller, key), never globally, so a key chosen by one caller
+	// cannot collide with another's cached result.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction being disputed.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
@@ -8668,10 +8683,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\r_max_accessesB\x0f\n" +
 	"\r_quota_periodB\x11\n" +
 	"\x0f_revocation_uriB\t\n" +
-	"\a_issuer\"\xf7\x02\n" +
+	"\a_issuer\"\xfa\x02\n" +
 	"\x12TransactionRequest\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x120\n" +
-	"\x0fidempotency_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12\x1e\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x12\x1e\n" +
 	"\boffer_id\x18\x03 \x01(\tH\x00R\aofferId\x88\x01\x01\x120\n" +
 	"\trequester\x18\x04 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12,\n" +
 	"\x0foffer_signature\x18\x06 \x01(\tH\x01R\x0eofferSignature\x88\x01\x01\x12.\n" +
@@ -8809,10 +8825,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\t\n" +
 	"\a_windowB\v\n" +
-	"\t_endpoint\"\xa0\x03\n" +
+	"\t_endpoint\"\xa3\x03\n" +
 	"\vUsageReport\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x120\n" +
-	"\x0fidempotency_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12%\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x12%\n" +
 	"\x0etransaction_id\x18\x03 \x01(\tR\rtransactionId\x12\x1d\n" +
 	"\n" +
 	"billing_id\x18\x04 \x01(\tR\tbillingId\x12$\n" +
@@ -8854,12 +8871,13 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
 	"\treport_id\x18\x03 \x01(\tR\breportId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xd9\x04\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xdc\x04\n" +
 	"\vRAMPRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x123\n" +
 	"\x0fidempotency_key\x18\n" +
-	" \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x120\n" +
+	" \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x120\n" +
 	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
 	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
 	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12B\n" +
@@ -8997,10 +9015,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13_retrieval_endpointB\x16\n" +
 	"\x14_agent_identity_hashB\r\n" +
 	"\v_broker_feeB\x11\n" +
-	"\x0f_absence_reason\"\xab\x05\n" +
+	"\x0f_absence_reason\"\xae\x05\n" +
 	"\x0eDisputeRequest\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x120\n" +
-	"\x0fidempotency_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12%\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x12%\n" +
 	"\x0etransaction_id\x18\x03 \x01(\tR\rtransactionId\x12\x1d\n" +
 	"\n" +
 	"billing_id\x18\x04 \x01(\tR\tbillingId\x12.\n" +
