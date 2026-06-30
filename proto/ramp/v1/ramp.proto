@@ -1664,7 +1664,12 @@ message TransactionRequest {
   // Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns
   // the original result rather than re-executing. The transaction's durable
   // identity is the Exchange-assigned transaction_id in the response.
-  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
+  // Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
+  // (authenticated caller, key), never globally, so a key chosen by one caller
+  // cannot collide with another's cached result.
+  string idempotency_key = 2 [
+    (buf.validate.field).string = {min_len: 1, max_len: 255}
+  ];
 
   // Single-offer mode. Use `items` for batch mode; `offer_id` +
   // `offer_signature` for single.
@@ -2072,7 +2077,12 @@ message UsageReport {
   // Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
   // report does not double-count usage. The report's durable identity is the
   // Exchange-assigned report_id in UsageReportResponse.
-  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
+  // Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
+  // (authenticated caller, key), never globally, so a key chosen by one caller
+  // cannot collide with another's cached result.
+  string idempotency_key = 2 [
+    (buf.validate.field).string = {min_len: 1, max_len: 255}
+  ];
 
   // Transaction ID from the delivery.
   string transaction_id = 3;
@@ -2215,7 +2225,12 @@ message RAMPRequest {
   // retried request carrying the same key MUST NOT re-charge — the Broker returns
   // the original result. Distinct from `id` (an opaque correlation tag): this is
   // the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.
-  string idempotency_key = 10 [(buf.validate.field).string.min_len = 1];
+  // Uniqueness is scoped to the verified RFC 9421 signer: the Broker dedupes per
+  // (authenticated caller, key), never globally, so a key chosen by one caller
+  // cannot collide with another's cached result.
+  string idempotency_key = 10 [
+    (buf.validate.field).string = {min_len: 1, max_len: 255}
+  ];
 
   // Requester identity — who is making this request, what scopes they have.
   // The Broker forwards this to Exchanges in ResourceQuery.requester.
@@ -2655,6 +2670,9 @@ message RAMPResponse {
   // Why the resolve produced no licensed delivery. Set (and retrieval_endpoint
   // unset) on a successful "no result" answer; unset on the licensed path. Same
   // vocabulary DiscoverResources uses for OfferGroup.absence_reason.
+  // RESTRICTION_FILTERED may appear here, but Resolve does not surface the
+  // per-axis detail: RAMPResponse has no restriction_filters companion (unlike
+  // OfferGroup). A consumer needing the filtered axes calls DiscoverResources.
   optional OfferAbsenceReason absence_reason = 16;
 
   // Extension point
@@ -2689,7 +2707,12 @@ message DisputeRequest {
   // Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
   // filing does not open a duplicate case. The dispute's durable identity is the
   // Exchange-assigned dispute_id in DisputeResponse.
-  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
+  // Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
+  // (authenticated caller, key), never globally, so a key chosen by one caller
+  // cannot collide with another's cached result.
+  string idempotency_key = 2 [
+    (buf.validate.field).string = {min_len: 1, max_len: 255}
+  ];
 
   // Transaction being disputed.
   string transaction_id = 3;
