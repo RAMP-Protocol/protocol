@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+**Protocol standardization — unified error/response contract + a Connect RPC for
+every role (breaking).** Three threads land together:
+
+- **Unified error model.** A typed `ErrorDetail` (plus its detail messages and
+  `DenialReason`/`OfferAbsenceReason` reason enums) is carried out-of-band in the
+  transport error; a failed action returns a transport error while a successful
+  query — including a "no result" answer — returns in-body. Response messages are
+  standardized: `ver` is field 1 on every request and response.
+- **A Connect RPC for every role.** Added `BrokerService` with
+  `Resolve(RAMPRequest) → RAMPResponse`, and `RAMPResponse.absence_reason`
+  (field 16) for "the resolve ran but produced nothing licensable".
+- **Idempotency.** A required `idempotency_key` (`min_len: 1`, `max_len: 255`,
+  deduped per verified RFC 9421 signer) is added to every mutating RPC:
+  `TransactionRequest`, `UsageReport`, `DisputeRequest`, and `RAMPRequest`.
+
+Also: renamed `PushContent` → `PushResources`; removed `AccessPolicy` /
+`ResourceAccessPolicy` and `DELIVERY_METHOD_INLINE`; removed in-body correlation
+(`request_id`) in favor of an `X-Request-ID` header; extended `DenialReason` with
+values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
+breaking change; `buf breaking` reports the deltas as expected.
+
 **CoMP re-baseline to canonical V1 (breaking).** `proto/comp/v1/comp.proto` is
 re-aligned to be a 1:1 mirror of IAB Tech Lab Content Monetization Protocols
 **CoMP V1** (finalized 2026-04-28,

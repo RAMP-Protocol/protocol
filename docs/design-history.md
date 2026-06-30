@@ -340,8 +340,13 @@ that success bodies now carry only the payload-when-it-worked.
 With the failure fields gone, the response messages were standardized. Every RPC
 request and response now carries `ver` at field 1 — version belongs on every
 message, consistently positioned — and the external-contract messages all carry
-`ext` / `ext_critical` so any of them is forward-extensible (the trivial internal
-catalog-admin messages get `ver` only; extension slots there would be noise).
+`ext` / `ext_critical` so any of them is forward-extensible. This includes the
+resource-bearing catalog messages `PushResourcesRequest`/`PushResourcesResponse`:
+a publisher pushes protocol-specific extension fields (e.g. CoMP members not
+already projected from the licensing data) through `ext`/`ext_critical` so they
+surface on the resulting offer. The purely-administrative catalog messages
+(`RemoveResources*`, `RefreshCatalog*`) carry `ver` only — they move no resource
+payload, so extension slots there would be noise.
 
 Correlation, by contrast, was removed from the proto entirely. Earlier drafts
 carried a `request_id` ("originating RAMP request id, for traceability") on

@@ -128,7 +128,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T24: Transaction replay
 **Attack**: Attacker captures valid TransactionRequest and replays it.
-**Countermeasure (protocol)**: **Idempotency keys.** TransactionRequest.idempotency_key is unique. Exchange rejects duplicates.
+**Countermeasure (protocol)**: **Idempotency keys.** Every mutating call carries a required `idempotency_key` — `TransactionRequest`, `UsageReport`, `DisputeRequest`, and `RAMPRequest` (Broker `Resolve`, which executes a transaction and so has the same replay exposure). Servers dedupe per (verified RFC 9421 signer, key), so a replay returns the original result instead of re-charging or re-filing.
 
 ### T25: Billing_id forgery in usage reports
 **Attack**: Attacker fabricates billing_ids in usage reports.

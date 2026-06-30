@@ -82,13 +82,13 @@ func main() {
     http.ListenAndServe(":443", mux)
 }
 
-func (m *multiTenantBroker) HandleRequest(
+func (m *multiTenantBroker) Resolve(
     ctx context.Context,
     req *connect.Request[rampv1.RAMPRequest],
 ) (*connect.Response[rampv1.RAMPResponse], error) {
     tenantID := tenantFromContext(ctx)
     orch := m.tenants.GetBroker(tenantID)
-    return orch.HandleRequest(ctx, req)
+    return orch.Resolve(ctx, req)
 }
 ```
 
