@@ -3,7 +3,7 @@ title: "ramp.json Example"
 description: "Complete example of a provider's /.well-known/ramp.json manifest file"
 ---
 
-The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKnownManifest`. **Every** RAMP participant serves one — the `role` field says which (`ROLE_PUBLISHER`, `ROLE_EXCHANGE`, `ROLE_AGENT`, `ROLE_BROKER`). The example below is a **publisher** manifest (`role=ROLE_PUBLISHER`): it carries the provider's signing keys and declares which Exchanges are authorized to sell its resources -- like `ads.txt` for AI resource access.
+The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKnownManifest`. **Every** RAMP participant serves one — the `role` field says which (`ROLE_PUBLISHER`, `ROLE_EXCHANGE`, `ROLE_AGENT`, `ROLE_BROKER`). The example below is a **publisher** manifest (`role=ROLE_PUBLISHER`): it declares which Exchanges are authorized to sell its resources -- like `ads.txt` for AI resource access. Signing keys no longer live in `ramp.json`; they live in the provider's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`, introduced [below](#the-wba-directory)).
 
 ## Complete Example
 
@@ -13,19 +13,6 @@ The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKn
   "role": "ROLE_PUBLISHER",
   "domain": "techprovider.com",
   "contact": "licensing@techprovider.com",
-  "public_keys": [
-    {
-      "kid": "techprovider-2026-q2",
-      "kty": "OKP",
-      "crv": "Ed25519",
-      "use": "sig",
-      "alg": "EdDSA",
-      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-      "not_before": "2026-04-01T00:00:00Z",
-      "not_after": "2026-10-01T00:00:00Z"
-    }
-  ],
-  "invalidation_url": "https://techprovider.com/.well-known/ramp-invalidations.json",
   "catalog_contributors": [
     {
       "domain": "doubleverify.com",
@@ -51,6 +38,29 @@ The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKn
 }
 ```
 
+## The WBA Directory
+
+Signing keys are **not** carried in `ramp.json`. Each participant publishes its keys in a separate, pure WBA directory — a JWK Set served at `/.well-known/http-message-signatures-directory` with `Content-Type: application/jwk-set+json`. Keys are identified by their RFC 7638 thumbprint (the RFC 9421 `keyid`), not by a `kid` label, and the optional emergency revocation list now lives here as `revocation_url`:
+
+```json
+// GET /.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
+{
+  "keys": [
+    {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "not_before": "2026-04-01T00:00:00Z",
+      "not_after": "2026-10-01T00:00:00Z"
+    }
+  ],
+  "revocation_url": "https://techprovider.com/.well-known/ramp-invalidations.json"
+}
+```
+
 ## Field Reference
 
 | Field | Type | Required | Description |
@@ -59,10 +69,7 @@ The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKn
 | `role` | string | Yes | Participant role — `ROLE_PUBLISHER` for a provider's manifest |
 | `domain` | string | Yes | Canonical domain serving this manifest |
 | `contact` | string | No | Contact email for licensing inquiries |
-| `public_keys` | array | Yes | Inline RFC 7517 JWKs (Ed25519) for signature verification; ≥1 valid at serve time |
-| `public_keys[].kid` | string | Yes | Key ID, referenced by `kid` in request/offer signatures |
-| `public_keys[].not_before` / `[].not_after` | string | Yes | RFC3339 validity window (half-open `[not_before, not_after)`) |
-| `invalidation_url` | string | No | Emergency key-revocation list URL (`KeyInvalidationList`); serve short/`no-store` |
+| (signing keys) | — | — | Not in `ramp.json`. See the [WBA directory](#the-wba-directory) at `/.well-known/http-message-signatures-directory` |
 | `catalog_contributors` | array | No | Authorized third-party catalog pushers |
 | `catalog_contributors[].domain` | string | Yes | Canonical domain of the contributor (e.g., `doubleverify.com`) |
 | `catalog_contributors[].relationship` | string | Yes | Relationship type: `verifier`, `exchange`, etc. |
@@ -118,16 +125,19 @@ message WellKnownManifest {
   Role role = 2;                                  // ROLE_PUBLISHER here
   string domain = 3;
   optional string contact = 4;
-  repeated JsonWebKey public_keys = 5;            // inline Ed25519 JWKs
-  optional string invalidation_url = 6;           // emergency revocation list
   repeated AuthorizedExchange exchanges = 7;      // publisher-only
   repeated CatalogContributor catalog_contributors = 8;
   // ... exchange-only capability fields (9-27) omitted ...
   google.protobuf.Struct ext = 15;
 }
 
+// Pure WBA directory, served at /.well-known/http-message-signatures-directory
+message WBAFile {
+  repeated JsonWebKey keys = 1;
+  optional string revocation_url = 2;   // KeyRevocationList URL
+}
+
 message JsonWebKey {
-  string kid = 1;
   string kty = 2;          // "OKP"
   string crv = 3;          // "Ed25519"
   string use = 4;          // "sig"

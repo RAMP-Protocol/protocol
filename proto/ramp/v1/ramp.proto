@@ -37,15 +37,15 @@ import "ramp/v1/vocab.proto";
 // Delegation message is format-agnostic.
 //
 // Key announcement endpoint (RFC 7517 JWKs, inline) — unified across roles:
-//   Agent:      {domain}/.well-known/ramp.json
-//   Broker:     {domain}/.well-known/ramp.json
-//   Exchange:   {domain}/.well-known/ramp.json
-//   Publisher:  {domain}/.well-known/ramp.json (keys + authorization)
+//   Commercial overlay (all roles): {domain}/.well-known/ramp.json
+//   Identity (WBA directory, all):  {domain}/.well-known/http-message-signatures-directory
 //
-// Keys appear inline as JsonWebKey objects with not_before/not_after
-// time bounds. Optional invalidation_url publishes a kid-list of
+// Identity keys appear as JsonWebKey objects (with not_before/not_after time
+// bounds) in the WBA directory (WBAFile.keys), NOT in ramp.json. Each key is
+// identified by its RFC 7638 thumbprint (the RFC 9421 keyid); there is no kid.
+// Optional WBAFile.revocation_url publishes a thumbprint-list of
 // emergency-revoked keys; consumers poll on a 300s cadence (±10% jitter)
-// and sync-fetch on unknown-kid.
+// and sync-fetch on an unknown thumbprint.
 //
 // Request authentication via RFC 9421 HTTP Message Signatures:
 //   Agent → Exchange:  Signature header (alg=ed25519)
@@ -673,25 +673,26 @@ message ResourceIdentity {
 // Exchange catalog and in Offer responses — strict size limits protect
 // against payload poisoning and ensure catalog performance at scale.
 //
-// Verifiers MUST publish their keys at:
-//   https://{verifier-domain}/.well-known/ramp.json
-// Verifier domain serves keys via WellKnownManifest (role=ROLE_EXCHANGE or
-// ROLE_PUBLISHER depending on operator). Verifiers publish the claims-schema
+// Verifiers MUST publish their attestation-signing keys in their WBA directory
+// (WBAFile.keys) at:
+//   https://{verifier-domain}/.well-known/http-message-signatures-directory
+// identified by RFC 7638 thumbprint. Verifiers publish the claims-schema
 // structure at WellKnownManifest.ext["ramp.attestation.claims_schema"].
 message ResourceAttestation {
   // Canonical domain of the attesting party (e.g., "nytimes.com" for
   // self-attestation, "doubleverify.com" for third-party attestation).
-  // Used to look up the verifier's public keys at:
-  //   https://{verifier}/.well-known/ramp.json (WellKnownManifest,
-  //   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).
+  // Used to look up the verifier's attestation-signing keys in its WBA
+  // directory (WBAFile.keys) at
+  //   https://{verifier}/.well-known/http-message-signatures-directory
   string verifier = 1;
 
-  // Key ID from the verifier's WellKnownManifest.public_keys list
-  // (/.well-known/ramp.json). Identifies which Ed25519 key was used to
-  // sign this attestation. Enables key rotation: new keys are added with
-  // overlapping validity, new attestations use the new key, old attestations
-  // remain verifiable as long as the old key is published.
-  string kid = 2;
+  // RFC 7638 JWK Thumbprint (the RFC 9421 keyid) of the verifier's
+  // attestation-signing key, resolved against the verifier's WBA directory
+  // (WBAFile.keys). Identifies which Ed25519 key signed this attestation.
+  // Enables key rotation: new keys are published with overlapping validity,
+  // new attestations use the new key's thumbprint, old attestations remain
+  // verifiable while the old key is still published.
+  string keyid = 2;
 
   // When this attestation was created. Agents use this to assess freshness
   // (e.g., "I accept attestations up to N hours old for breaking news").
@@ -717,7 +718,7 @@ message ResourceAttestation {
   google.protobuf.Struct claims = 5;
 
   // Ed25519 signature over JCS-canonicalized (RFC 8785) representation of
-  // {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization
+  // {verifier, keyid, attested_at, uri, claims}. JCS (JSON Canonicalization
   // Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,
   // ECMAScript number serialization, strict string escaping, no whitespace.
   // Each attestation is self-contained — new claim fields do not invalidate
@@ -2222,18 +2223,22 @@ message RequestConstraints {
 }
 
 // ============================================================================
-// Well-Known Discovery (/.well-known/ramp.json)
+// Well-Known Discovery — two files:
+//   /.well-known/ramp.json                            (RAMP commercial overlay)
+//   /.well-known/http-message-signatures-directory    (pure WBA key directory)
 //
-// /.well-known/ramp.json is served by every RAMP participant. For publishers
-// it carries both authorization data (exchanges[], catalog_contributors[]) and
-// the keys used to sign provider-issued attestations. For exchanges it carries
-// capability fields (pricing, delivery, auth methods). For agents and brokers it
-// carries their public keys. See WellKnownManifest below.
+// /.well-known/ramp.json is the RAMP commercial overlay, served by every RAMP
+// participant. For publishers it carries authorization data (exchanges[],
+// catalog_contributors[]); for exchanges, capability fields (pricing, delivery,
+// auth methods). Identity keys are NOT here — every participant serves them in
+// the pure WBA directory (WBAFile) at
+// /.well-known/http-message-signatures-directory, referenced by RFC 7638
+// thumbprint. See WellKnownManifest and WBAFile below.
 //
 // Caching contract:
 //   /.well-known/ramp.json MAY be cached by consumers and CDNs for routine
 //   periods (minutes to hours) — keys rotate slowly and carry explicit
-//   not_before / not_after bounds. The invalidation_url body, by contrast,
+//   not_before / not_after bounds. The WBAFile.revocation_url body, by contrast,
 //   SHOULD be served with a short or zero freshness lifetime (e.g.
 //   Cache-Control: max-age=60, or no-store) so the 300s consumer poll is not
 //   defeated by an intermediary cache. Emergency-revocation latency is bounded
@@ -2269,13 +2274,14 @@ enum Role {
 // Additional curves are a later concern.
 //
 // Time bounds are RFC3339 strings (sortable, ops-debuggable, avoids the
-// JWT nbf/exp collision). At least one key in WellKnownManifest.public_keys
+// JWT nbf/exp collision). At least one key in the served key set (WBAFile.keys)
 // MUST have `not_before <= now < not_after`. Verification MUST reject
 // signatures whose key falls outside its window.
+//
+// Keys carry no `kid`: the RFC 9421 keyid is the RFC 7638 JWK Thumbprint,
+// computed locally by the verifier. Carrying a kid alongside the thumbprint
+// created a drift surface and is removed.
 message JsonWebKey {
-  // Key ID. Unique within a single WellKnownManifest.public_keys list.
-  string kid = 1;
-
   // Key type. RAMP v1.0: MUST be "OKP".
   string kty = 2;
 
@@ -2299,11 +2305,13 @@ message JsonWebKey {
   string not_after = 8;
 }
 
-// WellKnownManifest — Served at /.well-known/ramp.json by every RAMP
-// participant (agent, exchange, broker, publisher).
+// WellKnownManifest — RAMP commercial overlay, served at /.well-known/ramp.json
+// by every RAMP participant (agent, exchange, broker, publisher).
 //
-// Single canonical document. Carries inline keys (RFC 7517 JWKs) with
-// explicit time bounds and an optional emergency-revocation pointer.
+// Commercial graph only: role, authorized exchanges/contributors, and exchange
+// capability fields. Identity keys are NOT here — they live in the WBA directory
+// (WBAFile) served at /.well-known/http-message-signatures-directory and are
+// referenced by RFC 7638 thumbprint, never republished here.
 // Per-role fields are populated only when that role applies; consumers
 // MUST ignore non-applicable fields based on `role`.
 message WellKnownManifest {
@@ -2319,19 +2327,6 @@ message WellKnownManifest {
 
   // Contact email (licensing, integration, security).
   optional string contact = 4;
-
-  // Public keys for signature verification.
-  // MUST contain at least one entry whose [not_before, not_after) window
-  // covers current time at serve time.
-  repeated JsonWebKey public_keys = 5;
-
-  // Optional emergency revocation channel. When set, consumers poll this
-  // URL on a 300s cadence (±10% jitter) and replace their local revoked
-  // set with the response. When unset, consumers rely on routine rotation
-  // and not_after expiry.
-  // This list's freshness bounds revocation latency — see the caching
-  // contract in the Well-Known Discovery section above.
-  optional string invalidation_url = 6;
 
   // Publisher-only. Authorized exchanges for this publisher's resources.
   // Like ads.txt — declares who may sell. MUST be empty for non-publisher
@@ -2417,20 +2412,38 @@ message WellKnownManifest {
   repeated string ext_critical = 90;
 }
 
-// KeyInvalidationList — Body served at WellKnownManifest.invalidation_url.
+// WBAFile — Pure Web Bot Auth directory served at the WBA-canonical well-known
+// path (/.well-known/http-message-signatures-directory). A JOSE JWK Set per
+// RFC 7517 §5 plus a directory-level revocation pointer. JWKs carry no kid; the
+// RFC 9421 keyid is the RFC 7638 JWK Thumbprint. Off-the-shelf WBA verifiers
+// read the `keys` array and ignore RAMP's extra members (per-key
+// not_before/not_after, and revocation_url) per RFC 7517 §5.
+message WBAFile {
+  // RFC 7517 JWK Set "keys" member. RAMP v1: Ed25519 (OKP) keys, each with
+  // not_before/not_after RAMP extension members.
+  repeated JsonWebKey keys = 1;
+
+  // Directory-level emergency revocation channel. One per directory; the list
+  // it points to enumerates revoked key thumbprints. Consumers poll on a 300s
+  // cadence (±10% jitter) and replace their local revoked set with the response.
+  optional string revocation_url = 2;
+}
+
+// KeyRevocationList — Body served at WBAFile.revocation_url.
 //
-// Snapshot semantics: `revoked` is the complete list of revoked kids at
-// `as_of`. Consumers replace their local revocation set on each successful
-// poll (no diff protocol). A revoked kid stays revoked permanently; once
-// dropped from the list, consumers MAY drop it from their local set but
-// the corresponding key SHOULD NOT be re-introduced into
-// WellKnownManifest.public_keys.
-message KeyInvalidationList {
+// Snapshot semantics: `revoked` is the complete list of revoked key thumbprints
+// (RFC 7638, base64url-no-pad) at `as_of`. Consumers replace their local
+// revocation set on each successful poll (no diff protocol). A revoked
+// thumbprint stays revoked permanently; once dropped from the list, consumers
+// MAY drop it from their local set but the corresponding key SHOULD NOT be
+// re-introduced into WBAFile.keys.
+message KeyRevocationList {
   // Server's response time (RFC3339, UTC). Consumers use this to detect
   // clock skew.
   google.protobuf.Timestamp as_of = 1;
 
-  // Complete list of revoked kids at `as_of`.
+  // Complete list of revoked key thumbprints (RFC 7638, base64url-no-pad) at
+  // `as_of`.
   repeated string revoked = 2;
 }
 

@@ -161,16 +161,14 @@ The `catalog_contributors` field authorizes third parties to push attestations a
 
 ## Self-Attestation Keys (Optional)
 
-If you want to self-attest resources (Level 1 verification), publish your Ed25519 signing keys in your `WellKnownManifest` at `/.well-known/ramp.json` (the same file as the previous step, `role=ROLE_PUBLISHER`). Keys go in `public_keys`; the claims schema goes under `ext["ramp.attestation.claims_schema"]`:
+If you want to self-attest resources (Level 1 verification), publish your Ed25519 signing keys in your WBA directory — a JWK Set served at `/.well-known/http-message-signatures-directory`. Keys live here, not in `ramp.json`, and each is identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`) rather than a label:
 
 ```json
+// GET /.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
 {
-  "ver": "1.0",
-  "role": "ROLE_PUBLISHER",
-  "domain": "nytimes.com",
-  "public_keys": [
+  "keys": [
     {
-      "kid": "nyt-2026-Q1",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -179,7 +177,17 @@ If you want to self-attest resources (Level 1 verification), publish your Ed2551
       "not_before": "2026-01-01T00:00:00Z",
       "not_after": "2026-12-31T23:59:59Z"
     }
-  ],
+  ]
+}
+```
+
+The claims schema stays in your `ramp.json` (`role=ROLE_PUBLISHER`, the same file as the previous step) under `ext["ramp.attestation.claims_schema"]`:
+
+```json
+{
+  "ver": "1.0",
+  "role": "ROLE_PUBLISHER",
+  "domain": "nytimes.com",
   "ext": {
     "ramp.attestation.claims_schema": {
       "content_hash": {
@@ -216,7 +224,7 @@ CloudFront's asymmetric model provides the strongest security separation: the Ex
 | 2 | Configure `ramp.json` with authorized Exchange(s) | 5 min |
 | 3 | Generate and push signing key (or grant CDN access) | 5--10 min |
 | 4 | (Optional) Add `catalog_contributors` to `ramp.json` | 5 min |
-| 5 | (Optional) Add self-attestation keys to `ramp.json` | 10 min |
+| 5 | (Optional) Publish self-attestation keys in your WBA directory | 10 min |
 | **Total** | | **~30--45 min** |
 
 ## Next Steps

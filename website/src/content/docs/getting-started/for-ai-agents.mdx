@@ -125,7 +125,7 @@ The `Requester` message is the identity envelope on every `ResourceQuery` and `T
 | `type` | What kind of entity you are (see below) | `REQUESTER_TYPE_AGENT` |
 | `scopes` | What you can access | `["academic:*", "credit:read"]` |
 
-The `Requester` carries **no** signature field. The SDK signs every request with your Ed25519 private key as an RFC 9421 HTTP Message Signature (in the HTTP headers, covering the whole request). The Exchange verifies it against the public key published at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`), selected by `keyid` from the manifest's `public_keys`.
+The `Requester` carries **no** signature field. The SDK signs every request with your Ed25519 private key as an RFC 9421 HTTP Message Signature (in the HTTP headers, covering the whole request). The Exchange verifies it against the public key published in your WBA directory (the JWK Set at `{domain}/.well-known/http-message-signatures-directory`, `role=ROLE_AGENT`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
 
 ### RequesterType
 

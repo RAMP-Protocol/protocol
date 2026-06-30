@@ -243,7 +243,7 @@ Requester authentication uses an RFC 9421 HTTP Message Signature in the HTTP hea
 
 1. **Enterprise (out-of-band key exchange)**: During contract signing, the Exchange operator registers the requester's public key via an internal admin API: `POST /admin/requesters { requester_id, domain, public_key, subscription }`. The public key is exchanged out-of-band (email, portal, API) as part of the commercial agreement.
 
-2. **Self-signup (domain verification)**: The requester registers via the public API: `POST /exchange/v1/requesters/register { requester_id, domain }`. The Exchange fetches `/.well-known/ramp.json` from the domain, reads the matching key from `public_keys` (selected by `kid`), and verifies that `requester_id` matches. No subscription is created — self-signup requesters use per-request billing only.
+2. **Self-signup (domain verification)**: The requester registers via the public API: `POST /exchange/v1/requesters/register { requester_id, domain }`. The Exchange fetches the requester's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`) from the domain, reads the matching key (identified by its RFC 7638 thumbprint, the RFC 9421 `keyid`), and verifies that `requester_id` matches. No subscription is created — self-signup requesters use per-request billing only.
 
 **Requester public key storage:**
 
@@ -814,7 +814,7 @@ sequenceDiagram
     participant Caller as Provider / Verifier
     participant Handler as CatalogHandler
     participant Manifest as WellKnownManifest Cache
-    participant Verifier as ramp.json Cache
+    participant Verifier as WBA Directory Cache
 
     Caller->>Handler: PushResources(PushResourcesRequest)
 
@@ -832,9 +832,9 @@ sequenceDiagram
         end
 
         Handler->>Verifier: Fetch verifier keys (cached, TTL-based)
-        Verifier-->>Handler: ramp.json (public_keys)
+        Verifier-->>Handler: WBA directory (keys)
 
-        Note over Handler: Look up attestation.kid in keys array
+        Note over Handler: Look up attestation key by RFC 7638 thumbprint (keyid)
         Note over Handler: Verify attestation.signature (Ed25519)
         Note over Handler: Check claims size <= 4KB
     end

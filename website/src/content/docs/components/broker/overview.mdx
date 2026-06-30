@@ -113,7 +113,7 @@ Multi-hop forwarding is carried entirely in the HTTP headers, not in the message
 
 Each labeled signature, via its RFC 9421 signature parameters, effectively records:
 
-- **`keyid`** -- the intermediary's canonical domain / `kid` (for public key lookup)
+- **`keyid`** -- the intermediary's RFC 7638 thumbprint, resolved against its canonical domain (for public key lookup)
 - **`created`** -- timestamp of when the intermediary forwarded the request
 - the covered components -- the request plus the preceding hop's `Signature` value, chaining the hops together
 
@@ -125,7 +125,7 @@ func (o *Broker) signHop(req *http.Request, priorSig string) {
     // Covers the request line/headers AND the prior hop's Signature value,
     // chaining this hop to the one before it.
     label := o.domain // e.g., "broker.example.com"
-    sigInput, sig := o.rfc9421Sign(req, priorSig, label) // Ed25519, keyid=o.kid, created=now
+    sigInput, sig := o.rfc9421Sign(req, priorSig, label) // Ed25519, keyid=o.thumbprint, created=now
     req.Header.Add("Signature-Input", sigInput)
     req.Header.Add("Signature", sig)
 }
@@ -140,7 +140,7 @@ The Exchange verifies both layers:
 
 All signatures must pass. The Exchange counts the number of forwarding hops in the stack against `max_hops` / `max_intermediary_hops` and rejects requests that exceed the limit.
 
-The Broker publishes its keys in `public_keys` (inline RFC 7517 Ed25519 JWKs, selected by `kid`) at `{domain}/.well-known/ramp.json` (same manifest format as agents, `role=ROLE_AGENT`). This allows any Exchange to verify the Broker's identity without prior registration.
+The Broker publishes its keys in its WBA directory (the JWK Set at `{domain}/.well-known/http-message-signatures-directory`) — RFC 7517 Ed25519 JWKs, each identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`). Its `ramp.json` manifest uses the same format as agents (`role=ROLE_AGENT`). This allows any Exchange to verify the Broker's identity without prior registration.
 
 ## Profile-Based Routing
 
@@ -331,7 +331,7 @@ sequenceDiagram
 | **Same protocol, transparent proxy** | The Exchange cannot distinguish Broker-mediated requests from direct agent requests. No special Exchange support needed. |
 | **Signed offer pass-through** | Exchange signatures cover pricing fields. The Broker cannot inflate prices without invalidating the signature. |
 | **Advisory budget enforcement** | The Broker pre-filters transactions by budget, but the Exchange is the authoritative enforcement point. No overspend occurs because the Exchange is the gatekeeper. |
-| **Ed25519 + forwarding signature stack** | Requester signs the HTTP request with an RFC 9421 HTTP Message Signature (covering `@method`/`@target-uri`/`content-digest`); Broker adds one labeled RFC 9421 HTTP Message Signature (covering the request plus the prior hop's signature) to the header stack. Exchange verifies both layers and counts hops against `max_hops` / `max_intermediary_hops`. Public keys discoverable via `public_keys` in `.well-known/ramp.json`. |
+| **Ed25519 + forwarding signature stack** | Requester signs the HTTP request with an RFC 9421 HTTP Message Signature (covering `@method`/`@target-uri`/`content-digest`); Broker adds one labeled RFC 9421 HTTP Message Signature (covering the request plus the prior hop's signature) to the header stack. Exchange verifies both layers and counts hops against `max_hops` / `max_intermediary_hops`. Public keys discoverable via the WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`). |
 | **Partial results are normal** | If 3 of 5 Exchanges respond within the deadline, the Broker proceeds with 3 responses. Availability of any individual Exchange does not block the system. |
 
 ## Go Module Structure
