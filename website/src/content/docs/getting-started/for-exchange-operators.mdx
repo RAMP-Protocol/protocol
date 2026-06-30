@@ -140,7 +140,7 @@ Every incoming request carries a `Requester` message with an Ed25519 signature. 
 ### Signature Verification
 
 1. Extract the `domain` from the `Requester` message
-2. Fetch the requester's public key from `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`), selected by `keyid` from `public_keys`
+2. Fetch the requester's public key from their WBA directory (the JWK Set at `{domain}/.well-known/http-message-signatures-directory`, `role=ROLE_AGENT`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`)
 3. Verify the RFC 9421 HTTP Message Signature (alg=ed25519) on the request — it covers the HTTP request components (`@method`, `@target-uri`, `content-digest`, and the signature parameters), so the request body (the serialized `Requester`/query) is bound via `content-digest`. There is no in-message body-tuple signature.
 4. Reject the request if verification fails — no fallback, no degraded mode
 
@@ -151,7 +151,7 @@ Key caching is recommended. Fetch keys with a TTL and re-fetch periodically to h
 When a request includes a `Delegation` message (nested inside `Requester`), your Exchange verifies the JWT chain:
 
 1. Verify the JWT chain from the base64url `token` in the `Delegation` message
-2. Verify the authority JWT is signed by the Ed25519 key published at `{principal_domain}/.well-known/ramp.json` (`role=ROLE_AGENT`)
+2. Verify the authority JWT is signed by the Ed25519 key published in the principal's WBA directory (the JWK Set at `{principal_domain}/.well-known/http-message-signatures-directory`, `role=ROLE_AGENT`)
 3. Verify each child delegation JWT's signature (each signed by the key its parent named in `cnf`)
 4. **Verify holder binding** — the key that signed the request (RFC 9421) MUST equal the key named in `cnf` (`cnf.jkt`); reject with `DENIAL_REASON_DELEGATION_INVALID` if they differ. This is mandatory: it is what makes a stolen token unusable, so a token possessed without its signing key grants nothing.
 5. Evaluate the grant's registered claims — scope restrictions, spend caps (`max_spend_cents`), access caps (`max_accesses`) — and confirm they cover the request (URI access is gated through scopes). For the optional `biscuit-v3` profile, this is evaluating the token's check blocks; for the default JWT, it is checking the registered claims along the `cnf` chain.
@@ -164,7 +164,7 @@ This verification is entirely offline — no callback to the principal is requir
 
 When the request carries more than one RFC 9421 HTTP Message Signature, it has passed through one or more intermediaries (e.g., agent to broker to your Exchange). Each forwarding party adds its own labeled signature to the request, covering the request plus the prior hop's signature; the ordered stack of signatures in the HTTP headers is the forwarding chain. Verify every signature on the request:
 
-1. For each signature, fetch the signer's public key from `{signer-domain}/.well-known/ramp.json` (`role=ROLE_AGENT`), selected by `keyid`
+1. For each signature, fetch the signer's public key from their WBA directory (the JWK Set at `{signer-domain}/.well-known/http-message-signatures-directory`, `role=ROLE_AGENT`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`)
 2. Verify each RFC 9421 signature, proving the intermediary handled the request and the chain was not reordered, dropped from, or inserted into (any such tampering breaks a downstream signature)
 3. Enforce `max_intermediary_hops` by signature count — reject requests whose forwarding-signature count exceeds your published limit
 
@@ -197,7 +197,7 @@ For the full identity model specification — Requester fields, the JWT chain, s
 
 Your Exchange verifies `ResourceAttestation` signatures at catalog push time. When a provider or verification vendor pushes resource metadata via `CatalogService.PushResources`, your Exchange:
 
-1. Fetches the signer's public key from `https://{verifier}/.well-known/ramp.json` (`public_keys`, selected by `kid`)
+1. Fetches the signer's public key from their WBA directory (the JWK Set at `https://{verifier}/.well-known/http-message-signatures-directory`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`)
 2. Verifies the Ed25519 signature over JCS-canonicalized claims
 3. Checks that the `verifier` is either the provider domain (Level 1 self-attestation) or a vendor listed in the provider's `catalog_contributors` (Level 2 third-party attestation)
 4. Rejects attestations from unauthorized contributors
@@ -222,7 +222,7 @@ Delivery logs are the authoritative evidence source. They cannot be fabricated b
 
 As an Exchange operator, you are responsible for two additional capabilities:
 
-**Exchange Manifest** -- Your Exchange serves a machine-readable self-description at `/.well-known/ramp.json` (`role=ROLE_EXCHANGE`). This tells Brokers and agents what your Exchange supports (pricing models, delivery methods, accepted verifiers, endpoints) without trial-and-error, and publishes your offer-signing keys inline in `public_keys`. The manifest includes:
+**Exchange Manifest** -- Your Exchange serves a machine-readable self-description at `/.well-known/ramp.json` (`role=ROLE_EXCHANGE`). This tells Brokers and agents what your Exchange supports (pricing models, delivery methods, accepted verifiers, endpoints) without trial-and-error. Your offer-signing keys are published separately in your WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), not in `ramp.json`. The manifest includes:
 
 - **`base_currency`** (ISO 4217 code) -- the currency for all `unit_cost` values. Enables cross-exchange price comparison by the Broker. A legal exchange quoting in EUR and a media exchange quoting in USD can be compared when both declare their currency.
 - **`supported_profiles`** -- domain extension profiles your Exchange conforms to.

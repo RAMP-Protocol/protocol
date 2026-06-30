@@ -64,7 +64,7 @@ test('proto-enum on an unknown enum fails the build', () => {
 });
 
 test('proto-message directive expands to a field table', () => {
-  const tree = run(directive('proto-message', { name: 'RAMPResponse' }));
+  const tree = run(directive('proto-message', { name: 'DiscoveryResponse' }));
   assert.ok(has(tree, (n) => n.type === 'table'), 'directive should inject a table');
   assert.ok(has(tree, (n) => n.type === 'inlineCode' && n.value === 'absence_reason'), 'table should carry the field names');
 });

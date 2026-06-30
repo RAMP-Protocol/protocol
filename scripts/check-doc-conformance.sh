@@ -50,6 +50,13 @@ patterns=(
   # banned word does not appear verbatim anywhere in the repo (the runtime pattern
   # is still [Bb]loomberg).
   '[Bb]loom''berg'
+  # Identity split (#16): keys moved out of the manifest (WellKnownManifest.
+  # public_keys / invalidation_url) into the WBA directory (WBAFile.keys /
+  # revocation_url), and the per-key `kid` label was dropped in favour of the
+  # RFC 7638 thumbprint (the RFC 9421 keyid). The `"kid"` pattern is anchored to
+  # the JSON-key form so it does NOT collide with the live `keyid` identifier or
+  # with legitimate "keys carry no kid" prose.
+  'public_keys' 'invalidation_url' 'KeyInvalidationList' '"kid"[[:space:]]*:'
 )
 
 # Files where naming a removed identifier is legitimate (they record history).

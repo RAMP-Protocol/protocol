@@ -12,7 +12,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisputeRequest, DisputeResponse, DomainVerificationChallenge, DomainVerificationConfirmation, DomainVerificationRequest, DomainVerificationResult, PushResourcesRequest, PushResourcesResponse, RAMPRequest, RAMPResponse, RefreshCatalogRequest, RefreshCatalogResponse, RemoveResourcesRequest, RemoveResourcesResponse, ResourceQuery, ResourceResponse, TransactionRequest, TransactionResponse, UsageReport, UsageReportResponse } from "./ramp_pb.js";
+import { DiscoveryRequest, DiscoveryResponse, DisputeRequest, DisputeResponse, DomainVerificationChallenge, DomainVerificationConfirmation, DomainVerificationRequest, DomainVerificationResult, PushResourcesRequest, PushResourcesResponse, RefreshCatalogRequest, RefreshCatalogResponse, RemoveResourcesRequest, RemoveResourcesResponse, ResourceQuery, ResourceResponse, TransactionRequest, TransactionResponse, UsageReport, UsageReportResponse } from "./ramp_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -147,9 +147,9 @@ export const CatalogService = {
 } as const;
 
 /**
- * BrokerService is the agent-facing gateway: it runs the full RAMP flow
- * (discover → select → license → deliver) across one or more Exchanges on the
- * caller's behalf and returns a single canonical RAMPResponse.
+ * BrokerService is the agent-facing gateway: it runs the broker discovery flow
+ * (discover → select offers) across one or more Exchanges on the caller's
+ * behalf and returns a single canonical DiscoveryResponse.
  *
  * @generated from service ramp.v1.BrokerService
  */
@@ -157,23 +157,22 @@ export const BrokerService = {
   typeName: "ramp.v1.BrokerService",
   methods: {
     /**
-     * Resolve runs the end-to-end flow for the requested URIs/query.
+     * Resolve runs the end-to-end discovery flow for the requested URIs/query.
      *
-     * A licensed result returns OK with the delivery fields populated on
-     * RAMPResponse (retrieval_endpoint, transaction_id, …). A request that ran
-     * but yielded nothing licensable (not in catalog, no offers, budget/authz
-     * refusal, upstream temporarily unavailable) returns OK with
-     * RAMPResponse.absence_reason set and no retrieval_endpoint — "no result" is
-     * a successful answer, mirroring DiscoverResources (ADR-019 §2). Malformed
-     * requests, auth failures, and internal faults are non-OK transport errors
-     * carrying an ErrorDetail.
+     * A result returns OK with offers populated on DiscoveryResponse.offer_groups
+     * (one OfferGroup per requested URI). A request that ran but yielded nothing
+     * licensable (not in catalog, no offers, budget/authz refusal, upstream
+     * temporarily unavailable) returns OK with DiscoveryResponse.absence_reason
+     * set and empty offer_groups — "no result" is a successful answer, mirroring
+     * DiscoverResources (ADR-019 §2). Malformed requests, auth failures, and
+     * internal faults are non-OK transport errors carrying an ErrorDetail.
      *
      * @generated from rpc ramp.v1.BrokerService.Resolve
      */
     resolve: {
       name: "Resolve",
-      I: RAMPRequest,
-      O: RAMPResponse,
+      I: DiscoveryRequest,
+      O: DiscoveryResponse,
       kind: MethodKind.Unary,
     },
   }

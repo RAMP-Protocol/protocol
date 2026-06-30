@@ -50,20 +50,17 @@ curl -s https://exchange.ramp-protocol.org/health | jq
 
 ### Step 2: Retrieve Exchange Public Key
 
-The Exchange announces its [Ed25519](/protocol/authentication) public keys inline in its `/.well-known/ramp.json` manifest under `public_keys`. Agents and Brokers fetch this and read `public_keys` to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication).
+The Exchange announces its [Ed25519](/protocol/authentication) public keys in its WBA directory — a JWK Set served at `/.well-known/http-message-signatures-directory`. Agents and Brokers fetch this and read `keys` to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication). Keys no longer live in `ramp.json`; each key is identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
 
 ```bash
-curl -s https://exchange.ramp-protocol.org/.well-known/ramp.json | jq
+curl -s https://exchange.ramp-protocol.org/.well-known/http-message-signatures-directory | jq
 ```
 
 ```json
+// Content-Type: application/jwk-set+json
 {
-  "ver": "1.0",
-  "role": "ROLE_EXCHANGE",
-  "domain": "exchange.ramp-protocol.org",
-  "public_keys": [
+  "keys": [
     {
-      "kid": "exchange-2026-Q1",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",

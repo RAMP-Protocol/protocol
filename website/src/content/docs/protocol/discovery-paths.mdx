@@ -73,7 +73,7 @@ sequenceDiagram
     participant MPB as Exchange B
     participant CDN as Provider CDN
 
-    Agent->>Orch: RAMPRequest (requester + constraints)
+    Agent->>Orch: DiscoveryRequest (requester + constraints)
 
     par Parallel supply discovery
         Orch->>MPA: DiscoverResources
@@ -83,31 +83,33 @@ sequenceDiagram
         MPB-->>Orch: ResourceResponse (offers)
     end
 
-    Note over Orch: Compare offers by unit_cost<br/>Deduplicate by ResourceIdentity<br/>Apply budget constraints<br/>Select best offer
+    Note over Orch: Compare offers by unit_cost<br/>Deduplicate by ResourceIdentity<br/>Apply budget constraints<br/>Rank offers per URI
 
-    Orch->>MPA: ExecuteTransaction (winning offer)
-    MPA-->>Orch: TransactionResponse (signed URL)
+    Orch-->>Agent: DiscoveryResponse (offer_groups: signed offers per URI)
 
-    Orch-->>Agent: RAMPResponse (signed URL + cost + reporting obligation)
+    Note over Agent: Select best offer<br/>(each Offer carries Offer.exchange,<br/>the execute-routing target)
+
+    Agent->>MPA: ExecuteTransaction (winning offer)
+    MPA-->>Agent: TransactionResponse (signed URL + cost + billing_id)
 
     Agent->>CDN: GET signed URL
     CDN-->>Agent: 200 OK + content
 
-    Agent->>Orch: UsageReport
-    Orch->>MPA: Forward UsageReport
+    Agent->>MPA: ReportUsage (UsageReport)
 ```
 
 **Standards mapping:**
 
 | Step | Message | Standard |
 |---|---|---|
-| Agent to Broker | `RAMPRequest` with `RequestConstraints` | **RAMP** (budget, authorized exchanges) |
+| Agent to Broker | `DiscoveryRequest` with `RequestConstraints` | **RAMP** (budget, authorized exchanges) |
 | Broker to Exchanges | `ResourceQuery` (parallel fanout) | **RAMP** wrapping **RAMP Requester** |
 | Offer comparison | `Offer.pricing.unit_cost` | **RAMP** unit cost normalization |
 | Content dedup | `Offer.identity` (canonical_url, content_hash) | **RAMP** ResourceIdentity extension |
 | Content attestations | `Offer.attestations` | **RAMP** v1.0 `ResourceAttestation` |
-| Broker to Agent | `RAMPResponse` | **RAMP** |
-| Usage reporting | `UsageReport` forwarded to winning Exchange | **RAMP** |
+| Broker to Agent | `DiscoveryResponse` (offer_groups: signed offers per URI) | **RAMP** -- discovery only, no delivery |
+| Execute winning offer | `ExecuteTransaction` / `TransactionResponse` (signed URL + cost + billing_id) | **RAMP** (separate execute step, routed via `Offer.exchange`) |
+| Usage reporting | `UsageReport` to the winning Exchange | **RAMP** |
 
 ## Path C: Accidental Discovery via Edge Function (403)
 
@@ -188,7 +190,7 @@ sequenceDiagram
 
 ## Path E: Batch Multi-URL Acquisition
 
-The agent needs multiple resources in a single request (e.g., RAG grounding across several sources). The Broker sends all URIs in one `ResourceQuery` to each Exchange, receives `OfferGroups`, selects the best offer per URI, and commits all selections in a single batch `TransactionRequest`.
+The agent needs multiple resources in a single request (e.g., RAG grounding across several sources). The Broker sends all URIs in one `ResourceQuery` to each Exchange, receives `OfferGroups`, and returns the ranked signed offers per URI in a single `DiscoveryResponse`. Discovery stops there: the agent selects the best offer per URI and commits the selections itself via batch `ExecuteTransaction` calls (one per Exchange, routed by `Offer.exchange`), each returning a `TransactionResponse`.
 
 ```mermaid
 sequenceDiagram
@@ -198,7 +200,7 @@ sequenceDiagram
     participant MPB as Exchange B
     participant CDN as Provider CDN
 
-    Agent->>Orch: RAMPRequest (3 URIs + constraints)
+    Agent->>Orch: DiscoveryRequest (3 URIs + constraints)
 
     par Parallel supply discovery (multi-URI)
         Orch->>MPA: DiscoverResources (ResourceQuery with 3 URIs)
@@ -208,15 +210,17 @@ sequenceDiagram
         MPB-->>Orch: ResourceResponse (3 OfferGroups)
     end
 
-    Note over Orch: Per URI: merge offers across MPs,<br/>deduplicate, rank, select best<br/>Sum costs across URIs -> check budget
+    Note over Orch: Per URI: merge offers across MPs,<br/>deduplicate, rank
 
-    Orch->>MPA: ExecuteTransaction (batch: items[] with 2 offers)
-    MPA-->>Orch: TransactionResponse (items[] + total_cost)
+    Orch-->>Agent: DiscoveryResponse (offer_groups: signed offers per URI)
 
-    Orch->>MPB: ExecuteTransaction (batch: items[] with 1 offer)
-    MPB-->>Orch: TransactionResponse (items[] + total_cost)
+    Note over Agent: Select best offer per URI<br/>Sum costs across URIs -> check budget<br/>Group selections by Offer.exchange
 
-    Orch-->>Agent: RAMPResponse (3 signed URLs + costs)
+    Agent->>MPA: ExecuteTransaction (batch: items[] with 2 offers)
+    MPA-->>Agent: TransactionResponse (items[] + total_cost)
+
+    Agent->>MPB: ExecuteTransaction (batch: items[] with 1 offer)
+    MPB-->>Agent: TransactionResponse (items[] + total_cost)
 
     par Parallel content fetch
         Agent->>CDN: GET signed URL 1
@@ -229,18 +233,18 @@ sequenceDiagram
         CDN-->>Agent: 200 OK + content 3
     end
 
-    Agent->>Orch: UsageReport (per resource, 3 reports)
-    Orch->>MPA: Forward UsageReports (2)
-    Orch->>MPB: Forward UsageReport (1)
+    Agent->>MPA: ReportUsage (per resource, 2 reports)
+    Agent->>MPB: ReportUsage (1 report)
 ```
 
 **Standards mapping:**
 
 | Step | Message | Standard |
 |---|---|---|
-| Agent sends multi-URI request | `RAMPRequest` with multiple URIs | **RAMP** |
+| Agent sends multi-URI request | `DiscoveryRequest` with multiple URIs | **RAMP** |
 | Broker fans out | `ResourceQuery` with multiple URIs (one query per Exchange) | **RAMP** wrapping **RAMP Requester** |
 | Exchange returns grouped offers | `ResourceResponse.offer_groups[]` with `OfferGroup` per URI | **RAMP** OfferGroup extension |
+| Broker returns offers to Agent | `DiscoveryResponse.offer_groups[]` (signed offers per URI) | **RAMP** -- discovery only, no delivery |
 | Empty OfferGroup diagnostic | `OfferGroup.absence_reason` (`OfferAbsenceReason` enum) | **RAMP** v1.0 -- per-URI diagnostic when no offers available |
 | Rate limit signaling | `ResourceResponse.rate_limit` (`RateLimitInfo`) | **RAMP** v1.0 -- proactive throttling for Broker fanout |
 | Batch transaction | `TransactionRequest.items[]` with `TransactionItem` per offer | **RAMP** batch extension |

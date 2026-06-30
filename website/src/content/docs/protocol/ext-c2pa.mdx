@@ -124,7 +124,7 @@ When a C2PA verification vendor validates a manifest, it publishes results as a 
 ```json
 {
   "verifier": "truepic.com",
-  "kid": "truepic-2026-Q1",
+  "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
   "attested_at": "2026-03-20T14:00:00Z",
   "uri": "https://reuters.com/photos/2026/03/20/climate-summit.jpg",
   "claims": {
@@ -214,7 +214,7 @@ JUMBF manifest          bridges     ResourceAttestation.claims
 RFC 3161 TSA                        attested_at timestamp
 ```
 
-The vendor's Ed25519 key (published in `public_keys` at `/.well-known/ramp.json`) attests to the results of X.509/COSE validation. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor). RAMP participants trust the vendor; the vendor trusts the C2PA Trust List. One-way bridge, clean separation.
+The vendor's Ed25519 key (published in its WBA directory, the JWK Set at `/.well-known/http-message-signatures-directory`, and referenced by the attestation's RFC 7638 thumbprint `keyid`) attests to the results of X.509/COSE validation. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor). RAMP participants trust the vendor; the vendor trusts the C2PA Trust List. One-way bridge, clean separation.
 
 ---
 

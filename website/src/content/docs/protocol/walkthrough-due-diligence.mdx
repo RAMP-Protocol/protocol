@@ -33,7 +33,7 @@ The agent does not know individual document URIs — it knows a company name and
 
 ---
 
-## Step 1 — Agent Request (RAMPRequest)
+## Step 1 — Agent Request (DiscoveryRequest)
 
 The agent sends a single high-level request to its Broker. The key field is `budget_scope` — it ties all costs across every Exchange to a single deal identifier:
 
@@ -77,7 +77,7 @@ POST https://broker.lawfirm.com/ramp/v1
 }
 ```
 
-**Key design point**: The `RAMPRequest.uris` field is empty. The agent knows a company, not document URIs. The Broker's job is to decompose this entity-based intent into specific resource queries. This is the two-phase model: **discover** (Broker's domain-specific logic) then **access** (RAMP protocol).
+**Key design point**: The `DiscoveryRequest.uris` field is empty. The agent knows a company, not document URIs. The Broker's job is to decompose this entity-based intent into specific resource queries. This is the two-phase model: **discover** (Broker's domain-specific logic) then **access** (RAMP protocol).
 
 The `ext` field carries domain-specific metadata (entity identifiers, requested resource types). The core protocol doesn't need to understand these — the Broker does.
 
@@ -226,7 +226,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "attestations": [
             {
               "verifier": "dnb.com",
-              "kid": "dnb-key-2026-q1",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-20T06:00:00Z",
               "uri": "https://creditdata.com/reports/duns/123456789",
               "claims": {
@@ -299,7 +299,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "attestations": [
             {
               "verifier": "pacer.uscourts.gov",
-              "kid": "pacer-key-2026",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-15T09:00:00Z",
               "uri": "https://pacer.uscourts.gov/case/2:24-cv-01234",
               "claims": {

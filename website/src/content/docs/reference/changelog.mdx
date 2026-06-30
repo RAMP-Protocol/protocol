@@ -14,17 +14,45 @@ every role (breaking).** Three threads land together:
   query — including a "no result" answer — returns in-body. Response messages are
   standardized: `ver` is field 1 on every request and response.
 - **A Connect RPC for every role.** Added `BrokerService` with
-  `Resolve(RAMPRequest) → RAMPResponse`, and `RAMPResponse.absence_reason`
-  (field 16) for "the resolve ran but produced nothing licensable".
+  `Resolve(DiscoveryRequest) → DiscoveryResponse`, and
+  `DiscoveryResponse.absence_reason` (field 16) for "the resolve ran but produced
+  nothing licensable".
 - **Idempotency.** A required `idempotency_key` (`min_len: 1`, `max_len: 255`,
   deduped per verified RFC 9421 signer) is added to every mutating RPC:
-  `TransactionRequest`, `UsageReport`, `DisputeRequest`, and `RAMPRequest`.
+  `TransactionRequest`, `UsageReport`, `DisputeRequest`, and `DiscoveryRequest`.
 
 Also: renamed `PushContent` → `PushResources`; removed `AccessPolicy` /
 `ResourceAccessPolicy` and `DELIVERY_METHOD_INLINE`; removed in-body correlation
 (`request_id`) in favor of an `X-Request-ID` header; extended `DenialReason` with
 values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
 breaking change; `buf breaking` reports the deltas as expected.
+
+**Discovery/offer response model (breaking).** The Agent-to-Broker discovery
+messages are renamed and the response re-modeled to carry offers rather than a
+single transaction result:
+
+- **Renamed** `RAMPRequest` → `DiscoveryRequest` and `RAMPResponse` →
+  `DiscoveryResponse` — the Agent-to-Broker pair (Steps 1 and 6), the same pair
+  carried by `BrokerService.Resolve`.
+- **Re-modeled** `DiscoveryResponse` as discovery-only: removed the
+  per-transaction fields (now carried solely by `TransactionResponse`) and added
+  `repeated OfferGroup offer_groups`, one group per requested URI. A group with no
+  offers carries its `absence_reason`.
+- **Added** `Offer.exchange` (field 8): the issuing Exchange's canonical domain
+  and the execute target, inside the signed Offer bytes so a relaying Broker
+  cannot redirect execution without invalidating the signature.
+
+**WBA identity split — keys move to the WBA directory (breaking).** Identity keys
+are split out of `ramp.json` (`WellKnownManifest`) into a pure WBA key directory
+served at `{domain}/.well-known/http-message-signatures-directory`:
+
+- **Added** `WBAFile` (the directory body) carrying the role's JWKs and an
+  optional `revocation_url`; removed the manifest's inline key fields.
+- **Keyed by thumbprint, no `kid`.** The RFC 9421 `keyid` is the key's RFC 7638
+  JWK Thumbprint, computed locally; the attestation `keyid` now holds the
+  verifier key's thumbprint, resolved against `WBAFile.keys`.
+- **Added** `KeyRevocationList` (served at `WBAFile.revocation_url`) — the
+  complete set of revoked thumbprints, polled on a 300s cadence.
 
 **CoMP re-baseline to canonical V1 (breaking).** `proto/comp/v1/comp.proto` is
 re-aligned to be a 1:1 mirror of IAB Tech Lab Content Monetization Protocols
@@ -61,7 +89,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 
 - **ExchangeService** — `DiscoverResources`, `ExecuteTransaction`, `ReportUsage`, `DisputeTransaction`, and domain-verification RPCs. Agents and Brokers are interchangeable clients.
 - **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers.
-- **RAMPRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
+- **DiscoveryRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
 - **Requester** — universal actor identity (AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH).
 - **Delegation** — holder-bound JWT by default (RFC 7800 `cnf`/`jkt` + RFC 9421 proof-of-possession; chain of `cnf`-linked JWTs), with `token_format: "biscuit-v3"` as an optional alternative. Scoped, time-limited, spend-capped, narrowable offline.
 - **Scope-based access control** — the Exchange filters its catalog by the requester's scopes; subscriptions are scopes.
