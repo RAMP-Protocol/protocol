@@ -181,18 +181,19 @@ Both endpoints return `404 Not Found` if the domain is not associated with any t
 
 ### Public Key Exchange
 
-Brokers and agents fetch the Exchange's `/.well-known/ramp.json` and read `public_keys` to verify `exchange_signature` on Offers without manual key exchange. The Exchange's offer-signing Ed25519 public keys are inline in that manifest as RFC 7517 JWKs, selected by `kid`.
+Brokers and agents fetch the Exchange's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`) and read its `keys` to verify `exchange_signature` on Offers without manual key exchange. The Exchange's offer-signing Ed25519 public keys are inline in that directory as RFC 7517 JWKs, each identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
 
-**Note:** The Exchange's `ramp.json` `public_keys` serve the Exchange's offer-signing keys. Agent keys are separate — they are fetched from the agent's `/.well-known/ramp.json` manifest (self-signup) or stored from enterprise registration (out-of-band key exchange).
+**Note:** The Exchange's WBA directory keys serve the Exchange's offer-signing keys. Agent keys are separate — they are fetched from the agent's own WBA directory (self-signup) or stored from enterprise registration (out-of-band key exchange).
 
-Since the default offer signature algorithm is Ed25519, these are **public keys** — `ramp.json` does NOT require authentication. Public keys are safe to expose; they can only verify signatures, not create them.
+Since the default offer signature algorithm is Ed25519, these are **public keys** — the WBA directory does NOT require authentication. Public keys are safe to expose; they can only verify signatures, not create them.
 
-**`public_keys` entries (in the Exchange's `ramp.json`):**
+**WBA directory entries (the Exchange's `keys`):**
 ```json
+// GET /.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
 {
-  "public_keys": [
+  "keys": [
     {
-      "kid": "mk-2026-03",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -202,7 +203,6 @@ Since the default offer signature algorithm is Ed25519, these are **public keys*
       "not_after": "2026-06-01T00:00:00Z"
     },
     {
-      "kid": "mk-2026-01",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -227,13 +227,13 @@ Since the default offer signature algorithm is Ed25519, these are **public keys*
 
 The Exchange exposes `CatalogService` (PushResources, RemoveResources, RefreshCatalog) for external parties to push resource metadata. Every CatalogService request is authenticated:
 
-1. **Verify the RFC 9421 HTTP Message Signature**: The `caller_id` field identifies the pusher, and the request is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) carried in the HTTP headers (`Signature` / `Signature-Input`, with a `Content-Digest` over the body) — there is no in-message caller signature field. The Exchange verifies it against the caller's published Ed25519 key at `{caller domain}/.well-known/ramp.json` (selected by `kid`). Invalid signatures are rejected with `CodeUnauthenticated`.
+1. **Verify the RFC 9421 HTTP Message Signature**: The `caller_id` field identifies the pusher, and the request is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) carried in the HTTP headers (`Signature` / `Signature-Input`, with a `Content-Digest` over the body) — there is no in-message caller signature field. The Exchange verifies it against the caller's published Ed25519 key in the caller's WBA directory (the JWK Set at `{caller domain}/.well-known/http-message-signatures-directory`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`). Invalid signatures are rejected with `CodeUnauthenticated`.
 
 2. **Check `caller_id` authorization**: The Exchange verifies that `caller_id` is registered and authorized to push resources for the specified `tenant_id`. Unauthorized tenant access is rejected with `CodePermissionDenied`.
 
 3. **Caller registration**: CatalogService callers are registered out-of-band (admin API or configuration). Registration includes:
    - `caller_id` — unique identifier for the caller
-   - Caller domain — where the Ed25519 signing key is published (`{domain}/.well-known/ramp.json`)
+   - Caller domain — where the Ed25519 signing key is published (the WBA directory at `{domain}/.well-known/http-message-signatures-directory`)
    - Authorized `tenant_id` set — which providers this caller can push for
    - Caller type — "cms_plugin", "intelligence_provider", "syndicator"
 

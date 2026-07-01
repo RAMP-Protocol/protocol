@@ -197,8 +197,6 @@ func idempotencyCases() []validationCase {
 		{"usage report key ok", &rampv1.UsageReport{IdempotencyKey: "idem-ur-1"}, true, ""},
 		{"dispute empty key rejected", &rampv1.DisputeRequest{IdempotencyKey: "", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, false, "string.min_len"},
 		{"dispute key ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-1", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
-		{"resolve empty key rejected", &rampv1.DiscoveryRequest{IdempotencyKey: ""}, false, "string.min_len"},
-		{"resolve key ok", &rampv1.DiscoveryRequest{IdempotencyKey: "idem-rq-1"}, true, ""},
 	}
 }
 

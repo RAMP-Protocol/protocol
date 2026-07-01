@@ -13,7 +13,7 @@ RAMP does not replace RSL or CoMP. The three standards work together, each handl
 | **CoMP v2.0** | Defines content metadata objects | (Used internally by Exchange) | -- |
 | **C2PA 2.x** | Content provenance and authenticity | Embed Content Credentials in assets | (In-asset or sidecar manifest) |
 | **RAMP** | Transaction protocol + discovery | Drop `ramp.json` on domain | `/.well-known/ramp.json` |
-| **Content Attestation** | Cryptographic content verification | Publish keys in `public_keys` at `ramp.json` | `/.well-known/ramp.json` |
+| **Content Attestation** | Cryptographic content verification | Publish keys in the WBA directory | `/.well-known/http-message-signatures-directory` |
 | **MCP Interface** | Convenience tool layer for MCP agents | Deploy MCP server | (MCP server binary) |
 
 In plain terms:
@@ -260,11 +260,10 @@ ramp.json              -> role-tagged WellKnownManifest (RAMP, all participants)
 - Which third parties are authorized to push catalog metadata (`catalog_contributors`, v1.0)
 
 A verification vendor serves its `ramp.json` (typically `role=ROLE_PUBLISHER`, or `role=ROLE_EXCHANGE` for a standalone vendor) declaring:
-- Ed25519 public keys in `public_keys` (inline RFC 7517 JWKs) for attestation signature verification
-- Supported claims schema in `ext["ramp.attestation.claims_schema"]` (what claim fields the verifier attests to)
+- Supported claims schema in `ext["ramp.attestation.claims_schema"]` (what claim fields the verifier attests to). Its Ed25519 attestation-signing keys live in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), referenced by RFC 7638 thumbprint (the attestation `keyid`)
 
 An Exchange serves its `ramp.json` (`role=ROLE_EXCHANGE`) declaring:
-- ExchangeService endpoint URL and its offer-signing keys inline in `public_keys`
+- ExchangeService endpoint URL; its offer-signing keys live in its WBA directory at `/.well-known/http-message-signatures-directory`
 - Supported protocol versions, pricing models, and delivery methods
 - Accepted verification vendors and hash methods
 - See [Exchange Manifest](/protocol/exchange-manifest/) for details

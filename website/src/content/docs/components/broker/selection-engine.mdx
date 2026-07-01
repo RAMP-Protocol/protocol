@@ -497,10 +497,9 @@ Every selection decision is logged with full rationale for audit:
 
 ```go
 type SelectionLog struct {
-    // The agent's DiscoveryRequest.id this decision was made for (Broker-internal
-    // audit key). Cross-service request/response correlation rides the
-    // X-Request-ID HTTP header, not a message field.
-    DiscoveryRequestID       string              `json:"ramp_request_id"`
+    // Broker-internal audit key correlating this decision to the inbound request.
+    // Request/response correlation rides the X-Request-ID HTTP header, not a message field.
+    RAMPRequestID       string              `json:"ramp_request_id"`
     Timestamp           time.Time           `json:"timestamp"`
     ExchangesQueried []string            `json:"exchanges_queried"`
     ExchangesResponded []string          `json:"exchanges_responded"`
@@ -539,18 +538,7 @@ sequenceDiagram
 
 ### Fee Disclosure
 
-`DiscoveryResponse` includes an optional `broker_fee` field. The Broker MUST disclose fees when present.
-
-```json
-{
-  "broker_fee": {
-    "amount": "0.001",
-    "currency": "USD"
-  }
-}
-```
-
-The fee is additive and disclosed, never hidden in the offer price. The agent sees: Exchange price + Broker fee = total cost.
+`DiscoveryResponse` carries the signed Offers unchanged (one `OfferGroup` per requested URI); it has no `broker_fee` field, so the Broker cannot fold a fee into the discovery result. Any Broker fee is additive and disclosed out of band, never hidden in the offer price — the Exchange's signature over the Offer's pricing fields makes silent inflation detectable. The agent sees: Exchange price + Broker fee = total cost.
 
 ### Audit Trail
 

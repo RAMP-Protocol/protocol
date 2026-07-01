@@ -441,15 +441,21 @@ func (UnimplementedCatalogServiceHandler) RefreshCatalog(context.Context, *conne
 
 // BrokerServiceClient is a client for the ramp.v1.BrokerService service.
 type BrokerServiceClient interface {
-	// Resolve runs the end-to-end flow for the requested URIs/query.
+	// Resolve runs the broker discovery flow for the requested URIs/query: it
+	// fans out to one or more Exchanges and returns the merged offers. It is pure
+	// discovery — it selects and returns offers, never executes a transaction, so
+	// it neither charges nor produces transaction denials. A denial is raised only
+	// when the agent later calls ExchangeService.ExecuteTransaction on a selected
+	// offer, and rides there on TransactionResponse.DenialReason.
 	//
-	// A licensed result returns OK with the delivery fields populated on
-	// DiscoveryResponse (retrieval_endpoint, transaction_id, …). A request that ran
-	// but yielded nothing licensable (not in catalog, no offers, budget/authz
-	// refusal, upstream temporarily unavailable) returns OK with
-	// DiscoveryResponse.absence_reason set and no retrieval_endpoint — "no result" is
-	// a successful answer, mirroring DiscoverResources (ADR-019 §2). Malformed
-	// requests, auth failures, and internal faults are non-OK transport errors
+	// A result returns OK with offers populated on DiscoveryResponse.offer_groups
+	// (one OfferGroup per requested URI). A request that ran but yielded nothing
+	// licensable (not in catalog, no offers, entitlement/budget absence, upstream
+	// temporarily unavailable) returns OK with DiscoveryResponse.absence_reason
+	// set and empty offer_groups — "no result" is a successful answer, mirroring
+	// DiscoverResources (ADR-019 §2). Here "authz" means resource entitlement
+	// (→ OK + absence); transport authentication failures are a different axis and,
+	// like malformed requests and internal faults, are non-OK transport errors
 	// carrying an ErrorDetail.
 	Resolve(context.Context, *connect.Request[v1.DiscoveryRequest]) (*connect.Response[v1.DiscoveryResponse], error)
 }
@@ -486,15 +492,21 @@ func (c *brokerServiceClient) Resolve(ctx context.Context, req *connect.Request[
 
 // BrokerServiceHandler is an implementation of the ramp.v1.BrokerService service.
 type BrokerServiceHandler interface {
-	// Resolve runs the end-to-end flow for the requested URIs/query.
+	// Resolve runs the broker discovery flow for the requested URIs/query: it
+	// fans out to one or more Exchanges and returns the merged offers. It is pure
+	// discovery — it selects and returns offers, never executes a transaction, so
+	// it neither charges nor produces transaction denials. A denial is raised only
+	// when the agent later calls ExchangeService.ExecuteTransaction on a selected
+	// offer, and rides there on TransactionResponse.DenialReason.
 	//
-	// A licensed result returns OK with the delivery fields populated on
-	// DiscoveryResponse (retrieval_endpoint, transaction_id, …). A request that ran
-	// but yielded nothing licensable (not in catalog, no offers, budget/authz
-	// refusal, upstream temporarily unavailable) returns OK with
-	// DiscoveryResponse.absence_reason set and no retrieval_endpoint — "no result" is
-	// a successful answer, mirroring DiscoverResources (ADR-019 §2). Malformed
-	// requests, auth failures, and internal faults are non-OK transport errors
+	// A result returns OK with offers populated on DiscoveryResponse.offer_groups
+	// (one OfferGroup per requested URI). A request that ran but yielded nothing
+	// licensable (not in catalog, no offers, entitlement/budget absence, upstream
+	// temporarily unavailable) returns OK with DiscoveryResponse.absence_reason
+	// set and empty offer_groups — "no result" is a successful answer, mirroring
+	// DiscoverResources (ADR-019 §2). Here "authz" means resource entitlement
+	// (→ OK + absence); transport authentication failures are a different axis and,
+	// like malformed requests and internal faults, are non-OK transport errors
 	// carrying an ErrorDetail.
 	Resolve(context.Context, *connect.Request[v1.DiscoveryRequest]) (*connect.Response[v1.DiscoveryResponse], error)
 }
