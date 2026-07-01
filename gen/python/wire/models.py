@@ -236,9 +236,9 @@ class DisputeRequest(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1) = Field(
+    idempotencyKey: constr(min_length=1, max_length=255) = Field(
         ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n filing does not open a duplicate case. The dispute's durable identity is the\n Exchange-assigned dispute_id in DisputeResponse.",
+        description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n filing does not open a duplicate case. The dispute's durable identity is the\n Exchange-assigned dispute_id in DisputeResponse.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
     )
     reason: DisputeReason = Field(..., description='Reason for the dispute.')
     receivedContentHash: str | None = Field(
@@ -389,10 +389,6 @@ class JsonWebKey(WireModel):
         '', description='Signing algorithm. RAMP v1.0: MUST be "EdDSA".'
     )
     crv: str | None = Field('', description='Curve. RAMP v1.0: MUST be "Ed25519".')
-    kid: str | None = Field(
-        '',
-        description='Key ID. Unique within a single WellKnownManifest.public_keys list.',
-    )
     kty: str | None = Field('', description='Key type. RAMP v1.0: MUST be "OKP".')
     notAfter: str | None = Field(
         '',
@@ -409,7 +405,7 @@ class JsonWebKey(WireModel):
     )
 
 
-class KeyInvalidationList(WireModel):
+class KeyRevocationList(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -418,7 +414,8 @@ class KeyInvalidationList(WireModel):
         description="Server's response time (RFC3339, UTC). Consumers use this to detect\n clock skew.",
     )
     revoked: list[str] | None = Field(
-        None, description='Complete list of revoked kids at `as_of`.'
+        None,
+        description='Complete list of revoked key thumbprints (RFC 7638, base64url-no-pad) at\n `as_of`.',
     )
 
 
@@ -727,13 +724,13 @@ class ResourceAttestation(WireModel):
         None,
         description='Signed claims about the resource (max 4KB). A JSON object containing\n whatever properties the attesting party can determine about the resource.\n Recommended claim names for interoperability:\n   estimated_quantity (integer): estimated consumption quantity (e.g., token count for text)\n   word_count (integer): word count (estimated_quantity ~ word_count * 1.32 for text)\n   language (string): ISO 639-1 language code\n   iab_categories (string[]): IAB Content Taxonomy 3.1 codes\n   content_hash (string): hash of content in "method:hexdigest" format\n   hash_method (string): algorithm used for content_hash\n Vendors MAY add vendor-specific claims (e.g., brand_safety, sentiment).\n The protocol does NOT define "quality score" — it is inherently subjective.\n If a vendor provides a proprietary score, the vendor defines what it means\n via their WellKnownManifest ext["ramp.attestation.claims_schema"].',
     )
-    kid: str | None = Field(
+    keyid: str | None = Field(
         '',
-        description="Key ID from the verifier's WellKnownManifest.public_keys list\n (/.well-known/ramp.json). Identifies which Ed25519 key was used to\n sign this attestation. Enables key rotation: new keys are added with\n overlapping validity, new attestations use the new key, old attestations\n remain verifiable as long as the old key is published.",
+        description="RFC 7638 JWK Thumbprint (the RFC 9421 keyid) of the verifier's\n attestation-signing key, resolved against the verifier's WBA directory\n (WBAFile.keys). Identifies which Ed25519 key signed this attestation.\n Enables key rotation: new keys are published with overlapping validity,\n new attestations use the new key's thumbprint, old attestations remain\n verifiable while the old key is still published.",
     )
     signature: str | None = Field(
         '',
-        description='Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, kid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.',
+        description='Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, keyid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.',
     )
     uri: str | None = Field(
         '',
@@ -741,7 +738,7 @@ class ResourceAttestation(WireModel):
     )
     verifier: str | None = Field(
         '',
-        description='Canonical domain of the attesting party (e.g., "nytimes.com" for\n self-attestation, "doubleverify.com" for third-party attestation).\n Used to look up the verifier\'s public keys at:\n   https://{verifier}/.well-known/ramp.json (WellKnownManifest,\n   role=ROLE_EXCHANGE or ROLE_PUBLISHER depending on operator).',
+        description='Canonical domain of the attesting party (e.g., "nytimes.com" for\n self-attestation, "doubleverify.com" for third-party attestation).\n Used to look up the verifier\'s attestation-signing keys in its WBA\n directory (WBAFile.keys) at\n   https://{verifier}/.well-known/http-message-signatures-directory',
     )
 
 
@@ -931,6 +928,20 @@ class UsageReportResponse(WireModel):
         description='Exchange-assigned report identifier. Required for the dispute chain —\n the agent must reference this report_id in DisputeRequest to prove that\n a usage report was filed before disputing. The complete evidence chain:\n   Offer → Transaction (transaction_id, billing_id)\n        → UsageReport → UsageReportResponse (report_id)\n        → DisputeRequest (transaction_id + report_id)',
     )
     ver: str | None = Field('', description='Protocol version')
+
+
+class WBAFile(WireModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    keys: list[JsonWebKey] | None = Field(
+        None,
+        description='RFC 7517 JWK Set "keys" member. RAMP v1: Ed25519 (OKP) keys, each with\n not_before/not_after RAMP extension members.',
+    )
+    revocationUrl: str | None = Field(
+        None,
+        description='Directory-level emergency revocation channel. One per directory; the list\n it points to enumerates revoked key thumbprints. Consumers poll on a 300s\n cadence (±10% jitter) and replace their local revoked set with the response.',
+    )
 
 
 class AcceptableRestriction(WireModel):
@@ -1240,7 +1251,6 @@ class ResourceQuery(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    id: str | None = Field('', description='Unique query identifier.')
     requester: Requester | None = Field(
         None,
         description='Requester identity — who is making this request, what scopes they have,\n and optional delegation chain.',
@@ -1297,18 +1307,7 @@ class TransactionResponse(WireModel):
     )
     agentIdentityHash: str | None = Field(
         '',
-        description='Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of\n the agent\'s Ed25519 request-signing key (see "Retrieval-URL identity binding"\n above). Empty string when absent; non-empty iff a signed retrieval_endpoint\n is present. Delivery-endpoint enforcement of the binding is OPTIONAL.',
-    )
-    billingId: str | None = Field(None, description='Billing reference')
-    cost: Cost | None = Field(None, description='Transaction cost')
-    deliveryMethod: (
-        constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
-        | DeliveryMethod
-        | conint(ge=-2147483648, le=2147483647)
-        | None
-    ) = Field(0, description='How resource is delivered in this transaction.')
-    expiresAt: AwareDatetime | None = Field(
-        None, description='When retrieval_endpoint expires.'
+        description='Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK\n Thumbprint of the agent\'s Ed25519 request-signing key (see "Retrieval-URL\n identity binding" above). Shared across the request; set once.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
@@ -1316,37 +1315,14 @@ class TransactionResponse(WireModel):
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
     items: list[TransactionResultItem] | None = Field(
-        None, description='Batch mode: per-offer results.'
-    )
-    reportingObligation: ReportingObligation | None = Field(
-        None, description='Reporting requirements attached to this delivery.'
-    )
-    resourceTitle: str | None = Field(
-        None, description='Resource title echoed from the Offer (for logging/display).'
-    )
-    retrievalEndpoint: str | None = Field(
         None,
-        description='Signed retrieval URL the agent uses to fetch the purchased resource.\n Bound to agent_identity_hash; expires at expires_at. Absent on denial\n and on transactions whose delivery_method is not signed-URL-based.',
-    )
-    subscriptionId: str | None = Field(
-        None,
-        description='If set, this transaction was fulfilled under a subscription/deal.\n No per-request charge — usage tracked against subscription quota.',
+        description='Per-offer results (one entry per committed item, in original order).',
     )
     subscriptionQuota: list[SubscriptionQuotaInfo] | None = Field(
         None,
         description='Post-transaction quota state. Tells the agent how much quota remains\n after this transaction. Enables proactive throttling ("1 access left").\n Multiple entries for multi-dimensional quotas.',
     )
-    subscriptionUnitValue: Cost | None = Field(
-        None,
-        description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount=0 (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
-    )
-    totalCost: Cost | None = Field(
-        None, description='Batch mode: aggregate cost across all items.'
-    )
-    transactionId: str | None = Field(
-        None,
-        description='Single-offer result.\n For batch mode, these may be empty — check `items` instead.',
-    )
+    totalCost: Cost | None = Field(None, description='Aggregate cost across all items.')
     ver: str | None = Field('', description='Protocol version')
 
 
@@ -1403,9 +1379,9 @@ class UsageReport(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1) = Field(
+    idempotencyKey: constr(min_length=1, max_length=255) = Field(
         ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n report does not double-count usage. The report's durable identity is the\n Exchange-assigned report_id in UsageReportResponse.",
+        description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n report does not double-count usage. The report's durable identity is the\n Exchange-assigned report_id in UsageReportResponse.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
     )
     timestamp: AwareDatetime | None = Field(
         None, description='When the resource was used (ISO 8601).'
@@ -1476,10 +1452,6 @@ class WellKnownManifest(WireModel):
     healthEndpoint: str | None = Field(
         None, description='Exchange-only. Health check endpoint URL.'
     )
-    invalidationUrl: str | None = Field(
-        None,
-        description="Optional emergency revocation channel. When set, consumers poll this\n URL on a 300s cadence (±10% jitter) and replace their local revoked\n set with the response. When unset, consumers rely on routine rotation\n and not_after expiry.\n This list's freshness bounds revocation latency — see the caching\n contract in the Well-Known Discovery section above.",
-    )
     maxIntermediaryHops: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='Exchange-only. Maximum forwarding hops this Exchange tolerates on an inbound\n request (Agent → Broker → … → Exchange), counted as RFC 9421 HTTP Message\n Signatures. A request carrying more SHOULD be rejected. Lets Exchanges\n publish their chain-depth tolerance so Brokers prune before forwarding.\n Absent = no published limit (Exchange applies its own default policy).',
@@ -1507,10 +1479,6 @@ class WellKnownManifest(WireModel):
     protocolVersionsSupported: list[str] | None = Field(
         None,
         description='Exchange-only. Supported RAMP protocol versions (e.g. ["1.0"]).',
-    )
-    publicKeys: list[JsonWebKey] | None = Field(
-        None,
-        description='Public keys for signature verification.\n MUST contain at least one entry whose [not_before, not_after) window\n covers current time at serve time.',
     )
     role: Role = Field(..., description='Role this manifest describes.')
     supportedAuthMethods: list[AuthMethod] | None = Field(
@@ -1545,13 +1513,6 @@ class DiscoveryRequest(WireModel):
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
-    )
-    id: str | None = Field(
-        '', description='Unique request identifier, assigned by the Requesting Party.'
-    )
-    idempotencyKey: constr(min_length=1) = Field(
-        ...,
-        description='Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a\n retried request carrying the same key MUST NOT re-charge — the Broker returns\n the original result. Distinct from `id` (an opaque correlation tag): this is\n the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.',
     )
     query: str | None = Field(
         None,
@@ -1596,11 +1557,11 @@ class ErrorDetail(WireModel):
     )
     message: str | None = Field(
         '',
-        description='Developer-facing, NON-authoritative human message. Clients MUST branch on\n the typed reason below, never on this text.',
+        description='Developer-facing, NON-authoritative human message. Clients MUST branch on\n the typed reason below, never on this text. Servers SHOULD NOT place secrets,\n PII, or existence/authorization detail here that the closed typed reason\n deliberately withholds: unlike the enum, this free text is unbounded and\n easily becomes an existence oracle or leak channel (see `metadata`).',
     )
     metadata: dict[str, str] | None = Field(
         None,
-        description='Dynamic key/value context that also appears in `message` (ids, limits,\n axes). Mirrors google.rpc.ErrorInfo.metadata. Strongly-typed context rides\n in the per-domain reason block below instead.',
+        description='Dynamic key/value context that also appears in `message` (ids, limits,\n axes). Mirrors google.rpc.ErrorInfo.metadata. Strongly-typed context rides\n in the per-domain reason block below instead. Same leakage rule as `message`:\n servers SHOULD NOT put secrets, PII, or withheld existence/authorization\n detail here — it is the same potential side channel as the absence oracle.',
     )
     registrationFailure: RegistrationFailure | None = Field(
         None, description='`reason` oneof — agent/provider registration refused'
@@ -1707,7 +1668,7 @@ class Offer(WireModel):
     )
     signature: str | None = Field(
         '',
-        description="Because the signature covers `terms`, `pricing`, and `expires_at`, an\n intermediary (Broker) cannot tamper with price, restrictions, quotas,\n obligations, the expiry, or any licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.",
+        description="Because the signature covers `terms`, `pricing`, `expires_at`, and\n `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,\n quotas, obligations, the expiry, the execute-routing target, or any\n licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.",
     )
     signatureAlgorithm: str | None = Field(
         '',
@@ -1837,30 +1798,23 @@ class TransactionRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    agentAcceptance: AgentAcceptance | None = Field(
-        None,
-        description="Single-offer mode: the agent's detached acceptance signature over the\n accepted `offer` (RAMP-102 §1). Optional on the wire (additive,\n backward-compatible); the Exchange enforces presence at the service layer\n for relayed requests. Signed bytes = deterministic AgentAcceptancePayload\n {offer_sig=offer.signature, requester_id=requester.id,\n requester_domain=requester.domain, idempotency_key=idempotency_key}.",
-    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1) = Field(
+    idempotencyKey: constr(min_length=1, max_length=255) = Field(
         ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.",
+        description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
     )
     items: list[TransactionItem] | None = Field(
         None,
-        description='Batch mode: commit to multiple offers in one request, each carrying its\n own reflected signed Offer. Set this XOR `offer` (see message rule).',
-    )
-    offer: Offer | None = Field(
-        None,
-        description='Single-offer mode: the FULL signed Offer, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` (which\n covers pricing, terms, and expires_at) over these presented bytes against\n its own key — a stateless, self-contained bearer token, with no\n reconstruct-from-catalog. Set this XOR `items` (see message rule).',
+        description="The offers committed in this request (REQUIRED, min 1), each carrying its\n own reflected signed Offer + detached acceptance. A single offer is the\n degenerate 1-element list. The Exchange verifies each item's\n `offer.signature` (which covers pricing, terms, and expires_at) over the\n presented bytes against its own key — stateless, self-contained bearer\n tokens, with no reconstruct-from-catalog.",
+        min_length=1,
     )
     offerId: str | None = Field(
         None,
-        description='Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.',
+        description="Optional, non-authoritative correlation/audit key — a human-readable offer\n id. NOT used for verification: the Exchange verifies each item's reflected\n `offer.signature` over the presented Offer bytes, never this scalar. May be\n omitted; if set, it SHOULD match an item's `offer.offer_id`.",
     )
     requester: Requester | None = Field(
         None, description='Requester identity — forwarded for authorization and audit.'
@@ -1874,27 +1828,7 @@ class DiscoveryResponse(WireModel):
     )
     absenceReason: OfferAbsenceReason | None = Field(
         None,
-        description='Why the resolve produced no licensed delivery. Set (and retrieval_endpoint\n unset) on a successful "no result" answer; unset on the licensed path. Same\n vocabulary DiscoverResources uses for OfferGroup.absence_reason.',
-    )
-    agentIdentityHash: str | None = Field(
-        None,
-        description='Identity that retrieval_endpoint is bound to. Same value and computation as\n TransactionResponse.agent_identity_hash. Present iff retrieval_endpoint is.',
-    )
-    billingId: str | None = Field('', description='Billing reference')
-    brokerFee: Cost | None = Field(
-        None,
-        description="Broker's fee for this transaction, if any.\n Absent = no per-transaction fee (governed by external agreement).\n Present = explicit fee the agent can see and audit.\n Broker MUST disclose fees when charging per-transaction.",
-    )
-    cost: Cost | None = Field(None, description='Transaction cost.')
-    deliveryMethod: (
-        constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
-        | DeliveryMethod
-        | conint(ge=-2147483648, le=2147483647)
-        | None
-    ) = Field(0, description='How resource is delivered.')
-    exchange: str | None = Field('', description='Which Exchange won the selection.')
-    expiresAt: AwareDatetime | None = Field(
-        None, description='When retrieval_endpoint expires.'
+        description='Existence-oracle note: an authorization-flavored reason (SCOPE_INSUFFICIENT,\n NOT_AUTHORIZED, NOT_IN_CATALOG, CONTENT_BLOCKED) confirms a resource exists\n and why access was refused. Resolve surfaces the same oracle at the broker\n that OfferGroup.absence_reason does at the Exchange, so the same mitigation\n applies: where existence itself must stay hidden, the Broker MAY omit the\n reason (leave this unset) rather than reveal it. See the threat model.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
@@ -1903,20 +1837,9 @@ class DiscoveryResponse(WireModel):
     )
     offerGroups: list[OfferGroup] | None = Field(
         None,
-        description='Discovery result (RAMP-56 discovery-only Resolve): the ranked, Exchange-\n signed Offers the Broker discovered for this request, in the Broker\'s\n ranking order (best first). On the modern two-phase flow the Broker\n DISCOVERS and ranks here but does NOT execute — the agent originates the\n execute itself (signing the accepted offer) through the Broker\'s relay\n route. Empty on a "no result" answer (see absence_reason). The execute-\n shaped fields below (transaction_id, retrieval_endpoint, …) are not\n populated by a discovery-only Resolve.',
+        description='Offers grouped by requested URI — the sole offer representation in this\n response. One OfferGroup per URI the agent asked for (echoed in\n OfferGroup.uri); a group with no offers carries OfferGroup.absence_reason\n explaining why. Each contained Offer is the full signed Offer the Exchange\n issued (including Offer.exchange, the execute-routing target), forwarded by\n the Broker unchanged so the agent can verify the signature end to end.',
     )
-    reportingObligation: ReportingObligation | None = Field(
-        None, description='Reporting obligations the agent must fulfill.'
-    )
-    resourceTitle: str | None = Field(
-        None, description='Resource title for the disputed resource.'
-    )
-    retrievalEndpoint: str | None = Field(
-        None,
-        description='Signed retrieval URL returned by the Exchange and forwarded unchanged by the\n Broker, together with agent_identity_hash. Bound to agent_identity_hash;\n expires at expires_at. Absent on denial and when delivery_method is not\n signed-URL-based.',
-    )
-    transactionId: str | None = Field('', description='Exchange-assigned identifiers.')
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = ''
 
 
 class PushResourcesRequest(WireModel):

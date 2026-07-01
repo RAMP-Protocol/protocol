@@ -123,7 +123,7 @@ Two enforcement layers prevent overspend, mirroring how OpenRTB prevents adverti
 - **Agent/Broker-side**: `RequestConstraints.max_unit_cost` -- the agent will not accept offers above this threshold. The Broker tracks cumulative spend across a session and enforces the agent's budget cap.
 - **Exchange-side**: The Exchange operator's Billing Adapter checks the requester's balance or credit before authorizing each transaction. Returns a denial if the requester is over their limit.
 
-Each Exchange independently tracks per-buyer balance. The Broker maintains its own cumulative view for budget enforcement, but the Exchange is authoritative for "can this requester afford this transaction."
+Each Exchange independently tracks per-requester balance. The Broker maintains its own cumulative view for budget enforcement, but the Exchange is authoritative for "can this requester afford this transaction."
 
 ## Example Transaction: End to End
 

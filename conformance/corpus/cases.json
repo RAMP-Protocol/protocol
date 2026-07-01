@@ -199,19 +199,6 @@
     }
   },
   {
-    "id": "DiscoveryRequest/idempotency_key/too_short",
-    "message": "DiscoveryRequest",
-    "valid": false,
-    "rules": [
-      "string.min_len"
-    ],
-    "json": {
-      "uris": [
-        "x"
-      ]
-    }
-  },
-  {
     "id": "DiscoveryRequest/uris/too_many",
     "message": "DiscoveryRequest",
     "valid": false,
@@ -219,7 +206,6 @@
       "repeated.max_items"
     ],
     "json": {
-      "idempotencyKey": "x",
       "uris": [
         "x",
         "x",
@@ -486,7 +472,6 @@
     "message": "DiscoveryRequest",
     "valid": true,
     "json": {
-      "idempotencyKey": "x",
       "uris": [
         "x"
       ]
@@ -518,6 +503,18 @@
     "valid": true,
     "json": {
       "reason": "DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND"
+    }
+  },
+  {
+    "id": "DisputeRequest/idempotency_key/too_long",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
     }
   },
   {
@@ -1627,6 +1624,28 @@
     }
   },
   {
+    "id": "TransactionRequest/idempotency_key/too_long",
+    "message": "TransactionRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "items": [
+        {
+          "offer": {
+            "offerId": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
     "id": "TransactionRequest/idempotency_key/too_short",
     "message": "TransactionRequest",
     "valid": false,
@@ -1694,6 +1713,18 @@
     "valid": true,
     "json": {
       "consumedUnit": "x"
+    }
+  },
+  {
+    "id": "UsageReport/idempotency_key/too_long",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp": "2026-01-02T03:04:05Z"
     }
   },
   {

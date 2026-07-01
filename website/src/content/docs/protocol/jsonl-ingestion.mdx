@@ -37,7 +37,7 @@ The feed is a **transport convenience**, not a third licensing model: every line
 | `terms` | array (≥1) | yes | `ResourceEntry.terms[]` | the licensing offers on this resource (see below) |
 | `ext` | object | no | `ResourceEntry.ext` | free-form extension metadata; carries fields with no typed slot (e.g. `resource_mutability`, `previews[]`) and domain-profile data |
 | `ext_critical` | string[] | no | `ResourceEntry.ext_critical` | keys in `ext` a consumer MUST understand (COSE `crit` pattern) |
-| `attestations` | array | no | `ResourceEntry.attestations[]` | signed attestations `{verifier, kid, attested_at, uri, claims, signature}` |
+| `attestations` | array | no | `ResourceEntry.attestations[]` | signed attestations `{verifier, keyid, attested_at, uri, claims, signature}` |
 
 `resource_mutability` and `previews[]` have no typed field on `ResourceEntry` — they ride inside `ext` and are promoted to typed fields on the Offer at discovery (`Offer.identity.resource_mutability`, `Offer.previews[]`).
 

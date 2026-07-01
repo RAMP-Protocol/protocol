@@ -77,8 +77,7 @@ var zeroAllowed = map[string]string{
 	// "not applicable", never an unvalidated input crossing a trust boundary.
 	"OfferGroup.absence_reason":                    "output — set only when a group yields no offers",
 	"OfferGroup.discovery_method":                  "output — informational; how the group was discovered",
-	"DiscoveryResponse.absence_reason":                  "output — set only when the broker yields no licensable result; absent on success",
-	"DiscoveryResponse.delivery_method":                 "output — populated on a licensed result",
+	"DiscoveryResponse.absence_reason":             "output — set only when the broker yields no offers; absent on success",
 	"TransactionResultItem.delivery_method":        "output — per-item delivery on a completed batch item",
 	"TransactionResultItem.denial_reason":          "output — set only on a denied batch item",
 	"TransactionResultItem.restriction_mismatches": "output — axes a denied batch item failed",

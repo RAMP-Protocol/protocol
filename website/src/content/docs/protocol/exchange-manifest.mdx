@@ -7,7 +7,7 @@ description: "Machine-readable self-description of a RAMP Exchange, served as a 
 
 An Exchange describes itself with a `WellKnownManifest` carrying `role=ROLE_EXCHANGE`. Analogous to OIDC Discovery (`/.well-known/openid-configuration`), it enables automated discovery and capability negotiation by Brokers and agents.
 
-The manifest answers: "What can this Exchange do, where are its endpoints, which keys sign its offers, and what capabilities does it support?"
+The manifest answers: "What can this Exchange do, where are its endpoints, and what capabilities does it support?" The keys that sign its offers live in the Exchange's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), introduced [below](#the-wba-directory).
 
 **Endpoint**: `https://{domain}/.well-known/ramp.json` — the single canonical file every RAMP participant serves, differentiated by `role`.
 
@@ -15,7 +15,7 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
 |---|---|
 | Transport | TLS required (HTTPS) |
 | Authentication | None (public endpoint) |
-| Cache-Control | `max-age=3600, must-revalidate` — keys carry their own `not_before`/`not_after`; use the `invalidation_url` channel for emergency revocation |
+| Cache-Control | `max-age=3600, must-revalidate` — keys carry their own `not_before`/`not_after`; use the WBA directory's `revocation_url` channel for emergency revocation |
 | Content-Type | `application/json` |
 | Generation | Static JSON from config at startup |
 
@@ -30,19 +30,6 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
   "operator": "Example Media Corp",
   "operator_domain": "examplemedia.com",
   "endpoint": "https://exchange.example.com/exchange/v1",
-  "public_keys": [
-    {
-      "kid": "exchange-2026-q2",
-      "kty": "OKP",
-      "crv": "Ed25519",
-      "use": "sig",
-      "alg": "EdDSA",
-      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-      "not_before": "2026-04-01T00:00:00Z",
-      "not_after": "2026-10-01T00:00:00Z"
-    }
-  ],
-  "invalidation_url": "https://exchange.example.com/.well-known/ramp-invalidations.json",
   "health_endpoint": "https://exchange.example.com/healthz",
   "catalog_endpoint": "https://exchange.example.com/catalog/v1",
   "protocol_versions_supported": ["1.0"],
@@ -77,6 +64,29 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
 }
 ```
 
+## The WBA Directory
+
+The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live in a separate, pure WBA directory — a JWK Set served at `/.well-known/http-message-signatures-directory` with `Content-Type: application/jwk-set+json`. Keys are identified by their RFC 7638 thumbprint (the RFC 9421 `keyid`), not by a `kid` label, and the optional emergency revocation list now lives here as `revocation_url`:
+
+```json
+// GET /.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
+{
+  "keys": [
+    {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "use": "sig",
+      "alg": "EdDSA",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "not_before": "2026-04-01T00:00:00Z",
+      "not_after": "2026-10-01T00:00:00Z"
+    }
+  ],
+  "revocation_url": "https://exchange.example.com/.well-known/ramp-invalidations.json"
+}
+```
+
 ## Field Reference
 
 | Field | Type | Required | Description |
@@ -88,8 +98,7 @@ The manifest answers: "What can this Exchange do, where are its endpoints, which
 | `operator` | string | No | Organization operating this Exchange |
 | `operator_domain` | string | No | Operator's corporate domain |
 | `endpoint` | string | No | ExchangeService endpoint URL |
-| `public_keys` | object[] | Yes | Inline RFC 7517 JWKs (Ed25519) that sign this Exchange's offers; ≥1 valid at serve time |
-| `invalidation_url` | string | No | Emergency key-revocation list URL (`KeyInvalidationList`); serve short/`no-store` |
+| (offer-signing keys) | — | — | Not in `ramp.json`. See the [WBA directory](#the-wba-directory) at `/.well-known/http-message-signatures-directory` |
 | `health_endpoint` | string | No | Health check endpoint URL |
 | `catalog_endpoint` | string | No | CatalogService endpoint URL |
 | `protocol_versions_supported` | string[] | No | Supported RAMP protocol versions |
@@ -113,11 +122,11 @@ RAMP defines **one** well-known file. Every participant serves a `WellKnownManif
 
 | Role | Served By | Purpose |
 |---|---|---|
-| `ROLE_PUBLISHER` | Provider | Who is authorized to sell my content; my signing keys |
-| `ROLE_EXCHANGE` | Exchange | My endpoints, capabilities, accepted verifiers, and offer-signing keys |
-| `ROLE_AGENT` | Agent / Broker | My Ed25519 public key for request signing |
+| `ROLE_PUBLISHER` | Provider | Who is authorized to sell my content (signing keys live in my WBA directory) |
+| `ROLE_EXCHANGE` | Exchange | My endpoints, capabilities, and accepted verifiers (offer-signing keys live in my WBA directory) |
+| `ROLE_AGENT` | Agent / Broker | My role marker (my Ed25519 request-signing key lives in my WBA directory) |
 
-A verification vendor has no dedicated role — it publishes under its operator's role (`ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor); its keys go in `public_keys` and its claims schema in `ext["ramp.attestation.claims_schema"]`.
+A verification vendor has no dedicated role — it publishes under its operator's role (`ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor); its keys go in its WBA directory and its claims schema in the manifest's `ext["ramp.attestation.claims_schema"]`.
 
 ### Discovery Chain
 
@@ -126,15 +135,17 @@ The manifests form a discovery chain that a Broker follows:
 ```
 1. Agent requests content from provider.example.com
 2. Fetch provider.example.com/.well-known/ramp.json
-   --> role=ROLE_PUBLISHER; discovers authorized Exchange + provider keys
+   --> role=ROLE_PUBLISHER; discovers authorized Exchange (keys via the
+       publisher's WBA directory)
 3. Fetch exchange.example.com/.well-known/ramp.json
-   --> role=ROLE_EXCHANGE; discovers endpoints, capabilities, and inline
-       public_keys for offer signature verification (no separate keys fetch)
-4. (If attestation required) Fetch doubleverify.com/.well-known/ramp.json
-   --> verifier's public_keys for attestation signature verification
+   --> role=ROLE_EXCHANGE; discovers endpoints and capabilities, then fetch
+       exchange.example.com/.well-known/http-message-signatures-directory
+       for the offer-signing keys
+4. (If attestation required) Fetch doubleverify.com/.well-known/http-message-signatures-directory
+   --> verifier's keys for attestation signature verification
 ```
 
-Each step narrows the information needed: a publisher manifest tells you WHERE to go, and an exchange manifest tells you WHAT the Exchange can do and HOW to verify its signatures (keys are inline).
+Each step narrows the information needed: a publisher manifest tells you WHERE to go, and an exchange manifest tells you WHAT the Exchange can do; the signing keys are resolved from each party's WBA directory.
 
 ## Broker Capability Negotiation
 
@@ -146,7 +157,7 @@ The Broker uses the manifest to filter Exchanges **before** sending any RPCs. Th
 | Can this Exchange deliver via signed URL? | `delivery_methods_supported` |
 | Does this Exchange trust DoubleVerify? | `accepted_verifiers` |
 | Does this Exchange speak protocol v1.0? | `protocol_versions_supported` |
-| Where do I verify offer signatures? | `public_keys` (inline JWKs) |
+| Where do I verify offer signatures? | the Exchange's WBA directory (`/.well-known/http-message-signatures-directory`) |
 
 Without the manifest, the Broker discovers these answers only after sending requests and observing responses -- wasting latency and bandwidth on Exchanges that will reject the request.
 
@@ -155,15 +166,16 @@ Without the manifest, the Broker discovers these answers only after sending requ
 ```
 1. Agent requests URI for domain "provider.example.com"
 2. Broker fetches provider's ramp.json --> finds authorized Exchange
-3. Broker fetches exchange's ramp.json (role=ROLE_EXCHANGE) --> capabilities + inline keys
-4. Broker caches manifest with 1-hour TTL (emergency revocation via invalidation_url)
+3. Broker fetches exchange's ramp.json (role=ROLE_EXCHANGE) --> capabilities;
+   keys come from the Exchange's WBA directory
+4. Broker caches manifest with 1-hour TTL (emergency revocation via the WBA directory's revocation_url)
 5. Broker registers Exchange in its registry with capabilities populated
 6. Subsequent requests skip steps 2-4 (cache hit)
 ```
 
 ## Proto Message
 
-The Exchange manifest is a `WellKnownManifest` with `role=ROLE_EXCHANGE`, defined in [`ramp.proto`](/reference/proto-ramp/). Keys are inline `public_keys` (no separate `keys_uri` fetch). Exchange-relevant fields:
+The Exchange manifest is a `WellKnownManifest` with `role=ROLE_EXCHANGE`, defined in [`ramp.proto`](/reference/proto-ramp/). Offer-signing keys are not carried here; they live in the Exchange's WBA directory (the `WBAFile` JWK Set at `/.well-known/http-message-signatures-directory`). Exchange-relevant fields:
 
 ```protobuf
 message WellKnownManifest {
@@ -171,8 +183,6 @@ message WellKnownManifest {
   Role role = 2;                                   // ROLE_EXCHANGE here
   string domain = 3;
   optional string contact = 4;
-  repeated JsonWebKey public_keys = 5;             // inline Ed25519 offer-signing keys
-  optional string invalidation_url = 6;            // emergency revocation list
   optional string name = 9;
   optional string operator = 10;
   optional string operator_domain = 11;

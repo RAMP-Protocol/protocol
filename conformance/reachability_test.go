@@ -30,9 +30,10 @@ import (
 // already reachable from an RPC body — so an entry that becomes RPC-reachable is
 // flagged as stale instead of silently masking an orphan beneath it.
 var outOfBandRoots = map[string]string{
-	"WellKnownManifest": "served at /.well-known/ramp.json by every participant (keys, capabilities, role)",
+	"WellKnownManifest": "served at /.well-known/ramp.json by every participant (capabilities, role; identity keys moved to WBAFile)",
+	"WBAFile":           "served at /.well-known/http-message-signatures-directory — the pure WBA JWK Set (identity keys + revocation_url)",
 	"ErrorDetail":       "the transport-error envelope; carries the seven typed failure reasons",
-	"KeyInvalidationList": "served key-revocation document, fetched out of band from the manifest",
+	"KeyRevocationList": "served key-revocation document (thumbprint list), fetched out of band from WBAFile.revocation_url",
 	"AgentAcceptancePayload": "canonical signing structure for AgentAcceptance (RAMP-102 §1); never sent on the wire — the signer and verifier deterministically marshal it to derive byte-identical signed bytes",
 }
 
