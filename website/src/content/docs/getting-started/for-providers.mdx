@@ -132,11 +132,11 @@ You can also publish an `rsl.txt` file on your domain to declare pricing and ter
 
 | Today | With RAMP |
 |---|---|
-| Build custom API integrations per consumer | One protocol handles all AI buyers |
+| Build custom API integrations per consumer | One protocol handles all AI requesters |
 | No standard discovery mechanism | Agents find your resources through Exchange queries |
 | No usage visibility | See exactly which agents access what, when, and how much |
 | Block AI bots or give content away free | Sell metered access at your price |
-| Each AI company wants a separate deal | One Exchange relationship handles all buyers |
+| Each AI company wants a separate deal | One Exchange relationship handles all requesters |
 | No way to verify delivered content | Cryptographic attestation proves content integrity |
 
 ## Content Mutability
@@ -159,7 +159,7 @@ As a provider, you can sign claims about your own resources — Level 1 self-att
 
 1. You compute a SHA-256 hash of the resource content at publish time (or catalog push time)
 2. You sign a `ResourceAttestation` with your Ed25519 key, covering the content hash, quantity estimates, and other claims
-3. The attestation is pushed to the Exchange via `CatalogService.PushContent`
+3. The attestation is pushed to the Exchange via `CatalogService.PushResources`
 4. When an agent fetches your resource, it can recompute the hash and verify the match
 
 <Aside type="note">
@@ -175,7 +175,7 @@ Attestation is most useful for STATIC resources where the hash remains stable. F
 4. Key is provisioned   -> ready to sign attestations
 ```
 
-**`ramp.json`**: Your domain hosts a `/.well-known/ramp.json` file with your public keys in `public_keys` (inline RFC 7517 Ed25519 JWKs, selected by `kid`). Agents and Exchanges fetch this to verify your attestation signatures. RAMP has no dedicated verifier role; a verifier publishes under its operator's role — here `ROLE_PUBLISHER` for self-attestation.
+**Key publication**: Your domain hosts a WBA directory — a JWK Set at `/.well-known/http-message-signatures-directory` — carrying your public keys (inline RFC 7517 Ed25519 JWKs, each identified by its RFC 7638 thumbprint). Agents and Exchanges fetch this to verify your attestation signatures; keys no longer live in `ramp.json`. RAMP has no dedicated verifier role; a verifier publishes under its operator's role — here `ROLE_PUBLISHER` for self-attestation.
 
 **`catalog_contributors`**: You can authorize third-party verification vendors to push attestations on your behalf. Declare authorized contributors in your provider manifest. Only contributors listed in `catalog_contributors` can push resource metadata to the Exchange for your domain.
 
@@ -199,15 +199,16 @@ Every provider with a web presence can host a `ramp.json` file at their domain r
 
 - Which Exchange(s) are authorized to sell your resources
 - Which extension profiles your resources support
-- Your public verification keys (in `public_keys`)
 - Authorized catalog contributors
+
+Your public verification keys are published separately in your WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), not in `ramp.json`.
 
 AI agents and Brokers read `ramp.json` to discover how to access your resources through RAMP.
 
 ## FAQ
 
 **Do I need to negotiate with OpenAI, Anthropic, etc. individually?**
-No. Your Exchange handles all buyer relationships. AI companies buy from the Exchange, not from you directly.
+No. Your Exchange handles all requester relationships. AI companies buy from the Exchange, not from you directly.
 
 **What if I already have deals with some AI companies?**
 Those continue as subscription deals within RAMP. The agent gets access at $0/request under the subscription, and the Exchange tracks usage against the deal terms.

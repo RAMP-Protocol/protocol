@@ -136,7 +136,7 @@ func (h *ExchangeHandler) DiscoverResources(
     }
 
     // 5b. Check for active subscription.
-    //     If the buyer has an active subscription with this tenant, include a
+    //     If the requester has an active subscription with this tenant, include a
     //     subscription offer variant (rate=0) for each catalog offer with
     //     SubscriptionQuotaInfo attached. Quota enforcement is deferred to
     //     ExecuteTransaction time — DiscoverResources checks subscription status
@@ -216,15 +216,15 @@ func (h *ExchangeHandler) DiscoverResources(
         }
         return connect.NewResponse(&rampv1.ResourceResponse{
             Ver:         "1.0",
-            Id:          req.Msg.Id,
             Exchange: h.exchangeDomain,
             OfferGroups: groups,
         }), nil
+        // Correlation is not echoed in the body: it rides the X-Request-ID
+        // HTTP header, propagated across the request/response round-trip.
     }
 
     return connect.NewResponse(&rampv1.ResourceResponse{
         Ver:         "1.0",
-        Id:          req.Msg.Id,
         Exchange: h.exchangeDomain,
         Offers:      offers,
     }), nil
@@ -243,7 +243,7 @@ Requester authentication uses an RFC 9421 HTTP Message Signature in the HTTP hea
 
 1. **Enterprise (out-of-band key exchange)**: During contract signing, the Exchange operator registers the requester's public key via an internal admin API: `POST /admin/requesters { requester_id, domain, public_key, subscription }`. The public key is exchanged out-of-band (email, portal, API) as part of the commercial agreement.
 
-2. **Self-signup (domain verification)**: The requester registers via the public API: `POST /exchange/v1/requesters/register { requester_id, domain }`. The Exchange fetches `/.well-known/ramp.json` from the domain, reads the matching key from `public_keys` (selected by `kid`), and verifies that `requester_id` matches. No subscription is created — self-signup requesters use per-request billing only.
+2. **Self-signup (domain verification)**: The requester registers via the public API: `POST /exchange/v1/requesters/register { requester_id, domain }`. The Exchange fetches the requester's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`) from the domain, reads the matching key (identified by its RFC 7638 thumbprint, the RFC 9421 `keyid`), and verifies that `requester_id` matches. No subscription is created — self-signup requesters use per-request billing only.
 
 **Requester public key storage:**
 
@@ -333,7 +333,7 @@ sequenceDiagram
     Note over Handler: Verify offer signature (Ed25519 default)
     Note over Handler: Extract tenant via domain→tenant lookup
 
-    Handler->>Idemp: Check(req.Id)
+    Handler->>Idemp: Check(req.IdempotencyKey)
     alt Already processed
         Idemp-->>Handler: cached TransactionResponse
         Handler-->>Agent: TransactionResponse (replay)
@@ -342,7 +342,7 @@ sequenceDiagram
     Note over Handler: Reconstruct offer data from signed token<br/>(no offer storage, no re-resolution)
 
     Handler->>BA: Authorize(ctx, AuthorizeRequest)
-    Note over BA: Check buyer balance/credit<br/>Resolve billing reference<br/>Reserve funds
+    Note over BA: Check requester balance/credit<br/>Resolve billing reference<br/>Reserve funds
 
     alt Authorization failed
         BA-->>Handler: AuthorizeResponse{Approved: false}
@@ -364,7 +364,7 @@ sequenceDiagram
     Handler->>BA: Record(ctx, RecordRequest)
     Note over BA: Confirm transaction in billing system
 
-    Handler->>Idemp: Store(req.Id, response)
+    Handler->>Idemp: Store(req.IdempotencyKey, response)
 
     Handler-->>Agent: TransactionResponse
 ```
@@ -399,8 +399,8 @@ func (h *ExchangeHandler) ExecuteTransaction(
         return nil, connect.NewError(connect.CodeUnauthenticated, err)
     }
 
-    // 3. Idempotency check
-    if cached, ok := h.idempotency.Get(req.Msg.Id); ok {
+    // 3. Idempotency check (TransactionRequest.idempotency_key — REQUIRED)
+    if cached, ok := h.idempotency.Get(req.Msg.IdempotencyKey); ok {
         return connect.NewResponse(cached), nil
     }
 
@@ -410,21 +410,19 @@ func (h *ExchangeHandler) ExecuteTransaction(
     }
 
     // 4. Verify offer signature and reconstruct offer data (stateless — no offer storage)
+    //    A denied single transaction is NOT a success body: it travels as a
+    //    non-OK transport error carrying ErrorDetail.transaction_denial (a typed
+    //    DenialReason plus restriction_mismatches). The transport code is the
+    //    error CLASS; the ErrorDetail is the typed reason.
     offer, err := h.offerSigner.VerifyAndDecode(req.Msg.OfferId, req.Msg.OfferSignature, req.Msg.OfferSignatureAlgorithm)
     if err != nil {
-        denial := rampv1.DenialReason_DENIAL_REASON_SIGNATURE_INVALID
-        return connect.NewResponse(&rampv1.TransactionResponse{
-            Ver: "1.0", Id: req.Msg.Id, DenialReason: &denial,
-        }), nil
+        return nil, transactionDenied(rampv1.DenialReason_DENIAL_REASON_SIGNATURE_INVALID)
     }
 
     // Resolve tenant from offer's domain (domain→tenant lookup, not prefix parsing)
     tenantCfg, err := h.tenants.ResolveFromDomain(offer.Domain)
     if err != nil {
-        denial := rampv1.DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE
-        return connect.NewResponse(&rampv1.TransactionResponse{
-            Ver: "1.0", Id: req.Msg.Id, DenialReason: &denial,
-        }), nil
+        return nil, transactionDenied(rampv1.DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE)
     }
 
     // 4a. Check reporting obligations (reject if requester has overdue reports)
@@ -434,10 +432,7 @@ func (h *ExchangeHandler) ExecuteTransaction(
             slog.String("domain", requester.Domain),
             slog.String("reason", reason),
         )
-        denial := rampv1.DenialReason_DENIAL_REASON_REPORTING_OVERDUE
-        return connect.NewResponse(&rampv1.TransactionResponse{
-            Ver: "1.0", Id: req.Msg.Id, DenialReason: &denial,
-        }), nil
+        return nil, transactionDenied(rampv1.DenialReason_DENIAL_REASON_REPORTING_OVERDUE)
     }
 
     // 5. Authorize billing.
@@ -474,9 +469,7 @@ func (h *ExchangeHandler) ExecuteTransaction(
             slog.String("reason", authResp.Reason),
         )
         denial := txnErrToDenialReason(fmt.Errorf("%w: %s", ErrBillingDenied, authResp.Reason))
-        return connect.NewResponse(&rampv1.TransactionResponse{
-            Ver: "1.0", Id: req.Msg.Id, DenialReason: &denial,
-        }), nil
+        return nil, transactionDenied(denial)
     }
 
     // 6. Generate transaction ID and compute requester identity hash
@@ -497,7 +490,7 @@ func (h *ExchangeHandler) ExecuteTransaction(
         OfferSnapshotJSON:  marshalOfferSnapshot(offer),
         DeliveryMethod:    offer.DeliveryMethod,
         ReportingRequired: tenantCfg.ReportingPolicy.GetRequired(),
-        RequestID:         req.Msg.Id,
+        IdempotencyKey:    req.Msg.IdempotencyKey, // request's idempotency key
         CreatedAt:         time.Now().UTC(),
     }
     if err := h.txLog.Write(ctx, record); err != nil {
@@ -550,10 +543,10 @@ func (h *ExchangeHandler) ExecuteTransaction(
         )
     }
 
-    // 11. Build response
+    // 11. Build response (correlation is not in the body — it rides the
+    //     X-Request-ID HTTP header across the request/response round-trip)
     resp := &rampv1.TransactionResponse{
         Ver:           "1.0",
-        Id:            req.Msg.Id,
         TransactionId:     txnID,
         BillingId:         authResp.BillingID,
         ResourceTitle:     offer.Title, // human-readable title echoed from the Offer
@@ -579,10 +572,31 @@ func (h *ExchangeHandler) ExecuteTransaction(
         }
     }
 
-    // 12. Cache for idempotency
-    h.idempotency.Set(req.Msg.Id, resp, 10*time.Minute)
+    // 12. Cache for idempotency (keyed by TransactionRequest.idempotency_key)
+    h.idempotency.Set(req.Msg.IdempotencyKey, resp, 10*time.Minute)
 
     return connect.NewResponse(resp), nil
+}
+
+// transactionDenied maps a typed DenialReason to a non-OK transport error
+// carrying ErrorDetail.transaction_denial. A denied single transaction is an
+// error, not a success body — the transport code is the error class, the
+// attached ErrorDetail carries the typed reason (and restriction_mismatches
+// when the reason is RESTRICTION_NOT_SATISFIED).
+func transactionDenied(reason rampv1.DenialReason, mismatches ...rampv1.RestrictionKind) error {
+    detail := &rampv1.ErrorDetail{
+        Reason: &rampv1.ErrorDetail_TransactionDenial{
+            TransactionDenial: &rampv1.TransactionDenial{
+                Reason:               reason,
+                RestrictionMismatches: mismatches,
+            },
+        },
+    }
+    err := connect.NewError(connect.CodePermissionDenied, errors.New("transaction denied"))
+    if d, derr := connect.NewErrorDetail(detail); derr == nil {
+        err.AddDetail(d)
+    }
+    return err
 }
 ```
 
@@ -590,7 +604,7 @@ func (h *ExchangeHandler) ExecuteTransaction(
 
 ### Batch ExecuteTransaction
 
-When `TransactionRequest.items` is populated, the Exchange processes each item independently. Batch transactions are **NOT atomic** — individual items can fail (signature invalid, resource unavailable, billing denied) while others succeed. Each `TransactionResultItem` carries its own `denial_reason`.
+When `TransactionRequest.items` is populated, the Exchange processes each item independently. Batch transactions are **NOT atomic** — individual items can fail (signature invalid, resource unavailable, billing denied) while others succeed. Each `TransactionResultItem` carries its own `denial_reason` (and `restriction_mismatches`). Per-item denials stay **in-body** as partial results of a successful batch — unlike a denied *single* transaction, which is returned as a non-OK transport error carrying `ErrorDetail.transaction_denial`.
 
 ```go
 func (h *ExchangeHandler) executeBatchTransaction(
@@ -704,13 +718,12 @@ func (h *ExchangeHandler) executeBatchTransaction(
 
     resp := &rampv1.TransactionResponse{
         Ver:               "1.0",
-        Id:                req.Msg.Id,
         Items:             resultItems,
         TotalCost:         &rampv1.Cost{Amount: totalAmount, Currency: currency},
         AgentIdentityHash: agentHash,
     }
 
-    h.idempotency.Set(req.Msg.Id, resp, 10*time.Minute)
+    h.idempotency.Set(req.Msg.IdempotencyKey, resp, 10*time.Minute)
     return connect.NewResponse(resp), nil
 }
 ```
@@ -762,9 +775,13 @@ sequenceDiagram
 
     RT->>TxLog: WriteUsageReport(ctx, UsageReportRecord)
 
-    RT-->>Handler: accepted=true / rejection reason
-
-    Handler-->>Agent: UsageReportResponse
+    alt Accepted
+        RT-->>Handler: report_id
+        Handler-->>Agent: UsageReportResponse (success)
+    else Rejected
+        RT-->>Handler: typed UsageReportRejectionReason
+        Handler-->>Agent: Error (ErrorDetail.usage_report_rejection)
+    end
 ```
 
 ```go
@@ -788,15 +805,21 @@ func (h *ExchangeHandler) ReportUsage(
             fmt.Errorf("billing_id mismatch"))
     }
 
-    // 3. Submit to reporting tracker
+    // 3. Submit to reporting tracker. A rejection is NOT a success body: it
+    //    travels as a non-OK transport error carrying a typed
+    //    ErrorDetail.usage_report_rejection (UsageReportRejectionReason).
+    //    Success returns the Exchange-assigned report_id, required to anchor
+    //    the dispute chain.
     result, err := h.reporting.SubmitReport(ctx, req.Msg, txn)
     if err != nil {
         return nil, connect.NewError(connect.CodeInternal, err)
     }
+    if !result.Accepted {
+        return nil, usageReportRejected(result.Reason) // ErrorDetail.usage_report_rejection
+    }
 
     return connect.NewResponse(&rampv1.UsageReportResponse{
-        Accepted:        result.Accepted,
-        RejectionReason: result.Reason,
+        ReportId: result.ReportID,
     }), nil
 }
 ```
@@ -814,7 +837,7 @@ sequenceDiagram
     participant Caller as Provider / Verifier
     participant Handler as CatalogHandler
     participant Manifest as WellKnownManifest Cache
-    participant Verifier as ramp.json Cache
+    participant Verifier as WBA Directory Cache
 
     Caller->>Handler: PushResources(PushResourcesRequest)
 
@@ -832,9 +855,9 @@ sequenceDiagram
         end
 
         Handler->>Verifier: Fetch verifier keys (cached, TTL-based)
-        Verifier-->>Handler: ramp.json (public_keys)
+        Verifier-->>Handler: WBA directory (keys)
 
-        Note over Handler: Look up attestation.kid in keys array
+        Note over Handler: Look up attestation key by RFC 7638 thumbprint (keyid)
         Note over Handler: Verify attestation.signature (Ed25519)
         Note over Handler: Check claims size <= 4KB
     end
@@ -889,6 +912,8 @@ sequenceDiagram
 
     Handler-->>Agent: DisputeResponse
 ```
+
+A `DisputeResponse` is only returned when the dispute is **accepted for processing**. A refusal to file (transaction unknown, no preceding usage report, window expired, duplicate, ineligible) is a non-OK transport error carrying a typed `ErrorDetail.dispute_failure` (`DisputeFailureReason`) — not a `DisputeResponse` with a rejection field.
 
 **Tier 1 resolution** completes in under 1 second using CDN access logs as the authoritative evidence source. CDN logs are infrastructure-level records that neither party controls, making them the most trustworthy evidence in the hierarchy.
 

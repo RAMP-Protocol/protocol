@@ -71,7 +71,6 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Discov
 
 {
   "ver": "1.0",
-  "id": "sq-mri-001",
   "requester": {
     "id": "neuro-bot",
     "domain": "brainlab.edu",
@@ -103,7 +102,6 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
 ```json
 {
   "ver": "1.0",
-  "id": "sq-mri-001",
   "exchange": "exchange.medimg-exchange.com",
   "offer_groups": [
     {
@@ -136,7 +134,7 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
           "attestations": [
             {
               "verifier": "imaging.tcia.org",
-              "kid": "tcia-key-2026-01",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-02-15T09:00:00Z",
               "uri": "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42",
               "claims": {
@@ -215,7 +213,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
 
 {
   "ver": "1.0",
-  "id": "tx-mri-001",
+  "idempotencyKey": "tx-mri-001",
   "offer_id": "offer-tcia-gbm-0152-001",
   "offer_signature": "base64-ed25519-medimg-offer-sig...",
   "requester": {
@@ -246,29 +244,30 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
 
 **What happens without a valid DUA:**
 
+A denied transaction is not a 200 success body — it travels as a non-OK transport error carrying an `ErrorDetail`. The compliance gate failure surfaces as `transactionDenial` with `DENIAL_REASON_RESTRICTION_NOT_SATISFIED` and the unsatisfied axis:
+
 ```json
 {
-  "ver": "1.0",
-  "id": "tx-mri-001",
-  "error": {
-    "code": "COMPLIANCE_GATE_FAILED",
-    "message": "DUA-TCIA-2026-042 not found or does not cover brainlab.edu for ai-input",
-    "details": {
-      "required_dua_type": "TCIA-Standard-v3",
-      "apply_url": "https://imaging.tcia.org/access/dua-application"
-    }
+  "message": "DUA-TCIA-2026-042 not found or does not cover brainlab.edu for ai-input",
+  "domain": "ramp.v1.ExchangeService",
+  "metadata": {
+    "required_dua_type": "TCIA-Standard-v3",
+    "apply_url": "https://imaging.tcia.org/access/dua-application"
+  },
+  "transactionDenial": {
+    "reason": "DENIAL_REASON_RESTRICTION_NOT_SATISFIED",
+    "restrictionMismatches": ["RESTRICTION_KIND_FUNCTION"]
   }
 }
 ```
 
-The error includes an actionable URL where the institution can apply for a DUA. The agent or Broker can surface this to the human researcher.
+The error includes an actionable URL (in `metadata`) where the institution can apply for a DUA. The agent or Broker can surface this to the human researcher. Correlation back to the request rides on the `X-Request-ID` response header.
 
 **Successful response:**
 
 ```json
 {
   "ver": "1.0",
-  "id": "tx-mri-001",
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",
   "retrieval_endpoint": "https://cdn.medimg-exchange.com/delivery/manifest/txn-mri-gbm-0152-001.json?expires=1742410800&agent_id=c4d5e6f7...&sig=hmac-sha256-9a8b7c...",
@@ -423,7 +422,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Report
 
 {
   "ver": "1.0",
-  "id": "ur-mri-001",
+  "idempotencyKey": "ur-mri-001",
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",
   "usage": {
@@ -454,7 +453,6 @@ Response:
 
 ```json
 {
-  "accepted": true,
   "report_id": "rpt-mri-001"
 }
 ```
@@ -479,7 +477,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Disput
 
 {
   "ver": "1.0",
-  "id": "disp-mri-001",
+  "idempotencyKey": "disp-mri-001",
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",
   "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
@@ -521,7 +519,6 @@ The `ext.medimg.dispute_type: "REGULATORY_INCIDENT"` field (marked `ext_critical
 ```json
 {
   "ver": "1.0",
-  "id": "disp-mri-001",
   "dispute_id": "dispute-mri-001",
   "status": "DISPUTE_STATUS_FILED",
   "resolution": null,

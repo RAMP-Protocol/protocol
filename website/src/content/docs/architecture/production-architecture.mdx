@@ -54,12 +54,12 @@ Every party in the protocol authenticates via Ed25519 key pairs. Each party anno
 |---|---|---|---|
 | **Requester** (Agent or other client) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) | RFC 9421 HTTP Message Signature (Ed25519) over the HTTP request (`@method`, `@target-uri`, `content-digest` — request body bound via `content-digest`) | Exchange |
 | **Intermediary** (e.g. Broker) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, same format) | each intermediary adds its own RFC 9421 HTTP Message Signature (Ed25519) to the request — the forwarding chain is the stack of signatures, each covering the request plus the prior hop's signature | Exchange |
-| **Exchange** | `{domain}/.well-known/ramp.json` (`role=ROLE_EXCHANGE`, offer-signing keys inline in `public_keys`) | `exchange_signature` on every Offer | Agent, Broker |
+| **Exchange** | `{domain}/.well-known/ramp.json` (`role=ROLE_EXCHANGE`); offer-signing keys in the WBA directory at `{domain}/.well-known/http-message-signatures-directory` | `exchange_signature` on every Offer | Agent, Broker |
 | **Provider** | `{domain}/.well-known/ramp.json` (`role=ROLE_PUBLISHER`) | Authorization declaration (not signatures) | Agent, Exchange |
-| **Verification Vendor** | `{domain}/.well-known/ramp.json` (`public_keys`) | `ResourceAttestation.signature` on catalog content (v1.0) | Exchange, Agent |
+| **Verification Vendor** | WBA directory at `{domain}/.well-known/http-message-signatures-directory` | `ResourceAttestation.signature` on catalog content (v1.0) | Exchange, Agent |
 
 **Verification at Exchange:**
-- **Requester signature** — Exchange verifies the RFC 9421 HTTP Message Signature on the request (carried in HTTP headers, not a message field) against the requester's published Ed25519 key at `/.well-known/ramp.json` (`role=ROLE_AGENT`, selected by `keyid` from `public_keys`)
+- **Requester signature** — Exchange verifies the RFC 9421 HTTP Message Signature on the request (carried in HTTP headers, not a message field) against the requester's published Ed25519 key in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), the key identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`)
 - **Forwarding chain** — when the request passed through intermediaries, Exchange verifies every RFC 9421 HTTP Message Signature on the request (carried as a stack of labeled signatures in HTTP headers, each covering the request plus the prior hop's signature), proving the forwarding path is legitimate and tamper-evident
 - **Delegation JWT** — when a `Delegation` token is attached, Exchange verifies the authority JWT signature against the principal's published Ed25519 key (`principal_domain`)
 - **Scope-based access control** — Exchange filters its catalog by the requester's `scopes`. Resources outside the requester's scopes are not returned (the requester never learns they exist)
@@ -70,13 +70,13 @@ The protocol supports three transaction patterns:
 
 1. **Single-offer transactions** (default): one URI, one offer, one signed URL
 2. **Batch multi-URL transactions**: multiple URIs in a single `ResourceQuery`, `OfferGroups` in the response, batch `TransactionRequest` with `items[]`
-3. **Subscription-based transactions**: when the buyer has a subscription deal with an Exchange, offers come with `rate=0` and `subscription_id`
+3. **Subscription-based transactions**: when the requester has a subscription deal with an Exchange, offers come with `rate=0` and `subscription_id`
 
 ### Content Attestation Verification (v1.0)
 
 The Exchange is responsible for attestation verification at two points:
 
-1. **At catalog push time**: when a verification vendor (e.g., GumGum, DoubleVerify) pushes content metadata via `CatalogService.PushContent`, the Exchange validates that the vendor is in the provider's `catalog_contributors` list and verifies the attestation signature against the vendor's public key from `/.well-known/ramp.json` (`public_keys`, selected by `kid`).
+1. **At catalog push time**: when a verification vendor (e.g., GumGum, DoubleVerify) pushes content metadata via `CatalogService.PushResources`, the Exchange validates that the vendor is in the provider's `catalog_contributors` list and verifies the attestation signature against the vendor's public key from its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), the key identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
 2. **At offer construction time**: attestations from the catalog are attached to `Offer.attestations` so agents can evaluate content trust level (Level 0/1/2) during selection.
 
 ### Dispute Resolution Handler (v1.0)
@@ -91,7 +91,7 @@ Dispute lifecycle: `FILED` -> `AUTO_RESOLVED` / `EVIDENCE_NEEDED` -> `UNDER_REVI
 
 ### Provider Domain Verification (v1.0)
 
-The `RequestDomainVerification` and `ConfirmDomainVerification` RPCs provide ACME HTTP-01 style domain verification for provider onboarding. Providers prove domain control before the Exchange accepts signing keys or configuration changes. The unified `/.well-known/ramp.json` endpoint enables verification vendors to publish their Ed25519 keys (in `public_keys`) for attestation validation. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor).
+The `RequestDomainVerification` and `ConfirmDomainVerification` RPCs provide ACME HTTP-01 style domain verification for provider onboarding. Providers prove domain control before the Exchange accepts signing keys or configuration changes. The WBA directory at `/.well-known/http-message-signatures-directory` enables verification vendors to publish their Ed25519 keys (in its `keys`) for attestation validation. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor).
 
 ### Discovery: Three Complementary Standards
 
@@ -130,6 +130,8 @@ The `TransactionResponse` carries a `DeliveryMethod` hint and a `retrieval_endpo
 
 The protocol does not specify signed URL formats, CDN verification logic, or content transfer mechanisms. These are defined by each Exchange and Edge Function implementation.
 
+RAMP does, however, standardize the **failure vocabulary** for this step, not its mechanism: `RetrievalAuthFailureReason` gives a common enum for *why* a signed-URL or proof-of-possession check failed (expired, signature invalid, replay, …), so tooling can classify retrieval failures uniformly across implementations. It is never emitted by a RAMP RPC — it travels only as an out-of-band `ErrorDetail` (its `retrieval_auth_failure` reason block) from the edge — and naming the failure categories does not mandate how any Exchange or CDN performs the check. An edge returning a bare `403` is still conformant; the enum is the interoperable vocabulary available to those that choose to report a reason.
+
 ### Streaming Delivery (v1.0)
 
 RAMP supports `DELIVERY_METHOD_STREAMING` for real-time resource access via WebSocket, SSE, HLS, or Icecast endpoints. The signed URL points to a streaming endpoint rather than a static resource.
@@ -157,7 +159,7 @@ RAMP v1.0 introduces a three-layer extension architecture to prevent fragmentati
 
 Three proto fields create a complete declaration chain from agent to Exchange:
 
-- **`RAMPRequest.supported_profiles`** -- Agent declares profiles to Broker
+- **`DiscoveryRequest.supported_profiles`** -- Agent declares profiles to Broker
 - **`ResourceQuery.supported_profiles`** -- Broker forwards to Exchange
 - **`WellKnownManifest.supported_profiles`** -- Exchange declares conformance in `/.well-known/ramp.json` (`role=ROLE_EXCHANGE`)
 

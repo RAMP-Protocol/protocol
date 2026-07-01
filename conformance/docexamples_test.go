@@ -101,22 +101,20 @@ func TestDocUnitsRegistered(t *testing.T) {
 	}
 }
 
-// TestDocSignatureAlgorithm enforces the two-name algorithm convention, which a
-// single `signature_algorithm`-field grep could not (R6-1/R6-7a):
-//   - ed25519 : RFC 9421 HTTP Message Signature (request authentication)
-//   - EdDSA   : JOSE/JWS (the Offer signature, delegation JWTs, JWKs)
-// It checks three forms — the `signature_algorithm` JSON field, the PascalCase
-// Go `SignatureAlgorithm = "…"` (the Offer field, always JOSE ⇒ EdDSA), and any
-// `alg=…`/`alg: "…"` token — and for the bare `alg` token it decides the
-// expected value from the surrounding context on the same line. Lines whose
-// context is ambiguous (both or neither family of keywords) are skipped rather
-// than guessed.
+// TestDocSignatureAlgorithm checks the two DETERMINISTIC forms of the Offer
+// signature algorithm in doc examples — the `signature_algorithm` JSON field and
+// the PascalCase Go `SignatureAlgorithm = "…"` — both of which are JOSE/JWS and
+// must be "EdDSA".
+//
+// An earlier version also tried to classify bare `alg=…` tokens (ed25519 for RFC
+// 9421 request signatures vs EdDSA for JOSE) by sniffing same-line context for
+// keyword families, and "skipped ambiguous lines rather than guess" — i.e. it
+// could silently NOT check the very tokens it existed for, giving false
+// confidence. That heuristic branch was removed; only the two unambiguous,
+// field-anchored checks remain.
 func TestDocSignatureAlgorithm(t *testing.T) {
 	jsonField := regexp.MustCompile(`"?signature_algorithm"?\s*:\s*"([^"]+)"`)
 	goField := regexp.MustCompile(`\bSignatureAlgorithm\s*[:=]+\s*"([^"]+)"`)
-	algToken := regexp.MustCompile(`\balg\s*[:=]+\s*"?(ed25519|EdDSA)\b`)
-	rfc9421 := regexp.MustCompile(`(?i)RFC[ -]?9421|HTTP Message Signature|Signature-Input|@method|@target-uri|Signature header`)
-	jose := regexp.MustCompile(`(?i)\bJWS\b|\bJOSE\b|RFC[ -]?7515|RFC[ -]?7517|\bJWK\b|Compact Serialization|offer signature|canonical Offer|delegation JWT|content signature`)
 
 	checked := 0
 	var bad []string
@@ -138,23 +136,6 @@ func TestDocSignatureAlgorithm(t *testing.T) {
 				checked++
 				if m[1] != "EdDSA" {
 					flag(path, n, "SignatureAlgorithm = \""+m[1]+"\" should be \"EdDSA\" (Offer signature is JOSE/JWS)")
-				}
-			}
-			// Bare alg=… token — decide expected value from same-line context.
-			if m := algToken.FindStringSubmatch(line); m != nil {
-				isReq := rfc9421.MatchString(line)
-				isJose := jose.MatchString(line)
-				switch {
-				case isReq && !isJose:
-					checked++
-					if m[1] != "ed25519" {
-						flag(path, n, "alg \""+m[1]+"\" in an RFC 9421 context should be \"ed25519\"")
-					}
-				case isJose && !isReq:
-					checked++
-					if m[1] != "EdDSA" {
-						flag(path, n, "alg \""+m[1]+"\" in a JOSE/JWS context should be \"EdDSA\"")
-					}
 				}
 			}
 		}

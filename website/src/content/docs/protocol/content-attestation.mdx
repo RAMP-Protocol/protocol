@@ -24,7 +24,7 @@ Content identifiers (DOI, ISBN, IPTC GUID) are orthogonal to attestation level. 
 ```proto
 message ResourceAttestation {
   string verifier = 1;
-  string kid = 2;
+  string keyid = 2;
   google.protobuf.Timestamp attested_at = 3;
   string uri = 4;
   google.protobuf.Struct claims = 5;
@@ -34,8 +34,8 @@ message ResourceAttestation {
 
 | Field | Description |
 |---|---|
-| `verifier` | Domain of the attesting party. Keys published at `https://{verifier}/.well-known/ramp.json` (`WellKnownManifest.public_keys`; `role=ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor) |
-| `kid` | Key ID from the verifier's `public_keys`. Enables key rotation |
+| `verifier` | Domain of the attesting party. Its attestation-signing key lives in the verifier's WBA directory (the JWK Set at `https://{verifier}/.well-known/http-message-signatures-directory`); `role=ROLE_PUBLISHER` when self-attesting, `ROLE_EXCHANGE` for a standalone vendor |
+| `keyid` | RFC 7638 thumbprint of the verifier's attestation-signing key in its WBA directory. Enables key rotation |
 | `attested_at` | When the attester measured the content. Agents use this for freshness checks |
 | `uri` | Content URI this attestation covers. Must match the Offer URI |
 | `claims` | JSON claims about the content (max 4KB). See [Claims Vocabulary](#claims-vocabulary) |
@@ -46,7 +46,7 @@ message ResourceAttestation {
 ```json
 {
   "verifier": "nytimes.com",
-  "kid": "nyt-2026-Q1",
+  "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
   "attested_at": "2026-03-18T09:00:00Z",
   "uri": "https://nytimes.com/2026/03/18/tech/ai-content-licensing.html",
   "claims": {
@@ -65,7 +65,7 @@ message ResourceAttestation {
 ```json
 {
   "verifier": "doubleverify.com",
-  "kid": "dv-2026-Q1",
+  "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
   "attested_at": "2026-03-18T08:45:00Z",
   "uri": "https://example-news.com/article/breaking-story",
   "claims": {
@@ -81,26 +81,26 @@ message ResourceAttestation {
 
 ## Verifier Infrastructure
 
-Every party that signs attestations publishes its keys in its `WellKnownManifest` at:
+Attestation signing keys do not live in `ramp.json`. Every party that signs attestations publishes its keys in its **WBA directory** — the JWK Set served at:
 
 ```
-https://{verifier-domain}/.well-known/ramp.json
+https://{verifier-domain}/.well-known/http-message-signatures-directory
 ```
 
-RAMP has no dedicated verifier role: a verifier publishes under its operator's role — `ROLE_PUBLISHER` when a publisher self-attests, `ROLE_EXCHANGE` for a standalone verification vendor. Signing keys go in `public_keys`; the claims schema (what claim fields the verifier attests to) moves into `ext["ramp.attestation.claims_schema"]`.
+This is the same WebBotAuth directory endpoint RAMP uses for request-signing keys. An attestation's `keyid` is the RFC 7638 thumbprint of the key in this directory; a verifier rotates keys by adding new entries to the directory, and the thumbprint in `keyid` selects which one signed a given attestation. The `ramp.json` manifest still carries role and routing metadata, and the claims schema (what claim fields the verifier attests to) lives in `ext["ramp.attestation.claims_schema"]` — but the keys themselves are in the WBA directory.
 
-### Manifest Format (verifier)
+RAMP has no dedicated verifier role: a verifier publishes under its operator's role — `ROLE_PUBLISHER` when a publisher self-attests, `ROLE_EXCHANGE` for a standalone verification vendor.
 
-A self-attesting publisher's `/.well-known/ramp.json` (`role=ROLE_PUBLISHER`):
+### WBA Directory (verifier keys)
+
+A self-attesting publisher's attestation-signing key, served from its WBA directory. The attestation's `keyid` is this key's RFC 7638 thumbprint (`kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k`):
 
 ```json
+// GET https://nytimes.com/.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
 {
-  "ver": "1.0",
-  "role": "ROLE_PUBLISHER",
-  "domain": "nytimes.com",
-  "public_keys": [
+  "keys": [
     {
-      "kid": "nyt-2026-Q1",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -110,6 +110,19 @@ A self-attesting publisher's `/.well-known/ramp.json` (`role=ROLE_PUBLISHER`):
       "not_after": "2026-12-31T23:59:59Z"
     }
   ],
+  "revocation_url": "https://nytimes.com/.well-known/ramp-invalidations.json"
+}
+```
+
+### Manifest Format (verifier)
+
+A self-attesting publisher's `/.well-known/ramp.json` (`role=ROLE_PUBLISHER`) carries role, domain, and the claims schema — but no keys:
+
+```json
+{
+  "ver": "1.0",
+  "role": "ROLE_PUBLISHER",
+  "domain": "nytimes.com",
   "ext": {
     "ramp.attestation.claims_schema": {
       "content_hash": {
@@ -129,7 +142,7 @@ A self-attesting publisher's `/.well-known/ramp.json` (`role=ROLE_PUBLISHER`):
 }
 ```
 
-Key rotation follows the JWKS pattern: new keys are added with overlapping `not_before`/`not_after` windows (half-open `[not_before, not_after)`); old keys are retained for verification until all signed attestations using them have expired from catalogs.
+Key rotation follows the JWKS pattern: new keys are added to the WBA directory with overlapping `not_before`/`not_after` windows (half-open `[not_before, not_after)`); old keys are retained for verification until all signed attestations using them have expired from catalogs.
 
 ## Claims Vocabulary
 
@@ -147,7 +160,7 @@ Only `estimated_quantity` and `content_hash` are auto-disputable -- they are obj
 
 ## Signature Computation
 
-1. Build a JSON object with the five signed fields: `verifier`, `kid`, `attested_at`, `uri`, `claims`
+1. Build a JSON object with the five signed fields: `verifier`, `keyid`, `attested_at`, `uri`, `claims`
 2. Apply JCS canonicalization (RFC 8785) -- lexicographic key sorting, no whitespace, ECMAScript number format
 3. Sign the canonical bytes with Ed25519
 

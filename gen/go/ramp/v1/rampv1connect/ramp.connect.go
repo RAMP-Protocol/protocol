@@ -34,6 +34,8 @@ const (
 	ExchangeServiceName = "ramp.v1.ExchangeService"
 	// CatalogServiceName is the fully-qualified name of the CatalogService service.
 	CatalogServiceName = "ramp.v1.CatalogService"
+	// BrokerServiceName is the fully-qualified name of the BrokerService service.
+	BrokerServiceName = "ramp.v1.BrokerService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -71,6 +73,8 @@ const (
 	// CatalogServiceRefreshCatalogProcedure is the fully-qualified name of the CatalogService's
 	// RefreshCatalog RPC.
 	CatalogServiceRefreshCatalogProcedure = "/ramp.v1.CatalogService/RefreshCatalog"
+	// BrokerServiceResolveProcedure is the fully-qualified name of the BrokerService's Resolve RPC.
+	BrokerServiceResolveProcedure = "/ramp.v1.BrokerService/Resolve"
 )
 
 // ExchangeServiceClient is a client for the ramp.v1.ExchangeService service.
@@ -433,4 +437,106 @@ func (UnimplementedCatalogServiceHandler) RemoveResources(context.Context, *conn
 
 func (UnimplementedCatalogServiceHandler) RefreshCatalog(context.Context, *connect.Request[v1.RefreshCatalogRequest]) (*connect.Response[v1.RefreshCatalogResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ramp.v1.CatalogService.RefreshCatalog is not implemented"))
+}
+
+// BrokerServiceClient is a client for the ramp.v1.BrokerService service.
+type BrokerServiceClient interface {
+	// Resolve runs the broker discovery flow for the requested URIs/query: it
+	// fans out to one or more Exchanges and returns the merged offers. It is pure
+	// discovery — it selects and returns offers, never executes a transaction, so
+	// it neither charges nor produces transaction denials. A denial is raised only
+	// when the agent later calls ExchangeService.ExecuteTransaction on a selected
+	// offer, and rides there on TransactionResponse.DenialReason.
+	//
+	// A result returns OK with offers populated on DiscoveryResponse.offer_groups
+	// (one OfferGroup per requested URI). A request that ran but yielded nothing
+	// licensable (not in catalog, no offers, entitlement/budget absence, upstream
+	// temporarily unavailable) returns OK with DiscoveryResponse.absence_reason
+	// set and empty offer_groups — "no result" is a successful answer, mirroring
+	// DiscoverResources (ADR-019 §2). Here "authz" means resource entitlement
+	// (→ OK + absence); transport authentication failures are a different axis and,
+	// like malformed requests and internal faults, are non-OK transport errors
+	// carrying an ErrorDetail.
+	Resolve(context.Context, *connect.Request[v1.DiscoveryRequest]) (*connect.Response[v1.DiscoveryResponse], error)
+}
+
+// NewBrokerServiceClient constructs a client for the ramp.v1.BrokerService service. By default, it
+// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
+// connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewBrokerServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BrokerServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	brokerServiceMethods := v1.File_ramp_v1_ramp_proto.Services().ByName("BrokerService").Methods()
+	return &brokerServiceClient{
+		resolve: connect.NewClient[v1.DiscoveryRequest, v1.DiscoveryResponse](
+			httpClient,
+			baseURL+BrokerServiceResolveProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("Resolve")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// brokerServiceClient implements BrokerServiceClient.
+type brokerServiceClient struct {
+	resolve *connect.Client[v1.DiscoveryRequest, v1.DiscoveryResponse]
+}
+
+// Resolve calls ramp.v1.BrokerService.Resolve.
+func (c *brokerServiceClient) Resolve(ctx context.Context, req *connect.Request[v1.DiscoveryRequest]) (*connect.Response[v1.DiscoveryResponse], error) {
+	return c.resolve.CallUnary(ctx, req)
+}
+
+// BrokerServiceHandler is an implementation of the ramp.v1.BrokerService service.
+type BrokerServiceHandler interface {
+	// Resolve runs the broker discovery flow for the requested URIs/query: it
+	// fans out to one or more Exchanges and returns the merged offers. It is pure
+	// discovery — it selects and returns offers, never executes a transaction, so
+	// it neither charges nor produces transaction denials. A denial is raised only
+	// when the agent later calls ExchangeService.ExecuteTransaction on a selected
+	// offer, and rides there on TransactionResponse.DenialReason.
+	//
+	// A result returns OK with offers populated on DiscoveryResponse.offer_groups
+	// (one OfferGroup per requested URI). A request that ran but yielded nothing
+	// licensable (not in catalog, no offers, entitlement/budget absence, upstream
+	// temporarily unavailable) returns OK with DiscoveryResponse.absence_reason
+	// set and empty offer_groups — "no result" is a successful answer, mirroring
+	// DiscoverResources (ADR-019 §2). Here "authz" means resource entitlement
+	// (→ OK + absence); transport authentication failures are a different axis and,
+	// like malformed requests and internal faults, are non-OK transport errors
+	// carrying an ErrorDetail.
+	Resolve(context.Context, *connect.Request[v1.DiscoveryRequest]) (*connect.Response[v1.DiscoveryResponse], error)
+}
+
+// NewBrokerServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewBrokerServiceHandler(svc BrokerServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	brokerServiceMethods := v1.File_ramp_v1_ramp_proto.Services().ByName("BrokerService").Methods()
+	brokerServiceResolveHandler := connect.NewUnaryHandler(
+		BrokerServiceResolveProcedure,
+		svc.Resolve,
+		connect.WithSchema(brokerServiceMethods.ByName("Resolve")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/ramp.v1.BrokerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case BrokerServiceResolveProcedure:
+			brokerServiceResolveHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedBrokerServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedBrokerServiceHandler struct{}
+
+func (UnimplementedBrokerServiceHandler) Resolve(context.Context, *connect.Request[v1.DiscoveryRequest]) (*connect.Response[v1.DiscoveryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ramp.v1.BrokerService.Resolve is not implemented"))
 }

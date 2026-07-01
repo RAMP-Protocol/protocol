@@ -7,12 +7,24 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "test": "node --test plugins/*.test.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.38.1",
+    "@bufbuild/protobuf": "^2.12.0",
     "@pasqal-io/starlight-client-mermaid": "^0.1.0",
     "astro": "^6.0.1",
-    "sharp": "^0.34.2"
+    "github-slugger": "^2.0.0",
+    "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-gfm-table": "^2.0.0",
+    "micromark-extension-gfm-table": "^2.1.1",
+    "remark-directive": "^4.0.0",
+    "sharp": "^0.34.2",
+    "unist-util-visit": "^5.1.0",
+    "unist-util-visit-parents": "^6.0.2"
+  },
+  "devDependencies": {
+    "starlight-links-validator": "^0.24.1"
   }
 }

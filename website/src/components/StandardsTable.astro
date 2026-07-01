@@ -1,0 +1,24 @@
+---
+// Renders the references registry (src/data/standards.mjs) as the bibliography on the
+// References page. The same registry drives remark-standards' inline links, so the
+// catalog and the inline links can never disagree. To add/repoint a standard, edit
+// the one registry entry.
+import { STANDARDS } from '../data/standards.mjs';
+
+const rows = [...STANDARDS].sort((a, b) =>
+  a.name.localeCompare(b.name, undefined, { numeric: true }),
+);
+---
+<table>
+  <thead>
+    <tr><th>Standard</th><th>What it is</th></tr>
+  </thead>
+  <tbody>
+    {rows.map((s) => (
+      <tr>
+        <td><a href={s.url}><code>{s.name}</code></a></td>
+        <td>{s.title}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>

@@ -19,8 +19,13 @@ patterns=(
   # request signatures live in HTTP headers (RFC 9421), not message fields
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   'offer_signature_algorithm'
-  # token / vocabulary
-  'biscuit-v2'
+  # token / vocabulary — both the hyphenated token form and the prose spelling;
+  # the canonical optional delegation format is biscuit-v3 (NEVER v2), and
+  # entitlement denials are format-neutral ("entitlement token", not "biscuit").
+  # The banned v2 spellings are split string literals so they don't appear
+  # verbatim in the repo; the runtime patterns still match both the hyphenated
+  # token and the spaced prose form.
+  'biscuit-''v2' 'Biscuit ''v2'
   # 'revshare' is intentionally NOT denylisted: it is a live CoMP ext identifier
   # (comp.license[].revshare) and scope prefix (revshare:...). The retired RAMP
   # *pricing model* is guarded via the enum-constant patterns below instead.
@@ -41,8 +46,17 @@ patterns=(
   # (ai-input/ai-train/ai-index). Lowercase underscore forms are wrong; CoMP's
   # uppercase AI_INPUT enum is unaffected (case-sensitive). (CON-05)
   'ai_input' 'ai_train' 'ai_index'
-  # real-company example names that must stay generic
-  '[Bb]loomberg'
+  # real-company example names that must stay generic. Split string literal so the
+  # banned word does not appear verbatim anywhere in the repo (the runtime pattern
+  # is still [Bb]loomberg).
+  '[Bb]loom''berg'
+  # Identity split (#16): keys moved out of the manifest (WellKnownManifest.
+  # public_keys / invalidation_url) into the WBA directory (WBAFile.keys /
+  # revocation_url), and the per-key `kid` label was dropped in favour of the
+  # RFC 7638 thumbprint (the RFC 9421 keyid). The `"kid"` pattern is anchored to
+  # the JSON-key form so it does NOT collide with the live `keyid` identifier or
+  # with legitimate "keys carry no kid" prose.
+  'public_keys' 'invalidation_url' 'KeyInvalidationList' '"kid"[[:space:]]*:'
 )
 
 # Files where naming a removed identifier is legitimate (they record history).
@@ -54,9 +68,21 @@ exclude_re='(reference/changelog\.mdx|docs/design-history\.md|proto/CHANGELOG\.m
 # `proto/comp` — because comp.proto mirrors the external CoMP standard, which
 # has its own vocabulary (e.g. a legitimate `revshare` field) that the RAMP
 # removal denylist must not police.
-roots=(website/src docs proto/ramp)
+# Authored documentation prose only — NOT website/src/data (data modules such as
+# standards.mjs, not authored prose) and NOT website/src/components (code).
+roots=(website/src/content docs proto/ramp)
 
 status=0
+
+# Hard-coded paths the positive-fact checks below depend on. Assert up front so a
+# rename fails loudly here instead of silently skipping a check — a grep against a
+# missing file just yields no matches and would false-pass. (LR-02)
+proto_ramp='proto/ramp/v1/ramp.proto'
+event_types='website/src/content/docs/components/transaction-log/event-types.mdx'
+auth='website/src/content/docs/protocol/authentication.mdx'
+for f in "$proto_ramp" "$event_types" "$auth"; do
+  [ -f "$f" ] || { echo "::error::check-doc-conformance: required file missing (renamed? update this script): $f"; status=1; }
+done
 
 # --- 1. Denylist: removed/renamed identifiers must not reappear -------------
 for p in "${patterns[@]}"; do
@@ -68,24 +94,62 @@ for p in "${patterns[@]}"; do
   fi
 done
 
+# --- 1b. Banned vocabulary: non-canonical role synonyms ---------------------
+# The contract's two roles are Requester (the AI/demand side) and Provider (the
+# content/supply side). "Buyer"/"Seller" are pre-standardization synonyms; left
+# in PROSE they drift the vocabulary the proto and the rest of the docs
+# standardize on (the M2 "Buyer's balance" class).
+#
+# This bans the PROSE word only. The boundary `(^|[^A-Za-z0-9._/-])…([^…]|$)`
+# (ERE, so it also works under BSD grep in ci-local) deliberately does NOT match
+# identifiers/URLs/tokens where the word is glued to `. _ / -`: the live CoMP
+# field `comp.seller`, code like `buyer_lid` / `QueryByBuyer`, `buyer.example.com`,
+# the `ramp-ai-buyer` user-agent, or the ordinary word "re·seller". Those are
+# protocol facts, not synonym drift. Each entry is "pattern#canonical" (`#`
+# delimiter, since the pattern itself contains `|`).
+bound_l='(^|[^A-Za-z0-9._/-])'
+bound_r='([^A-Za-z0-9._/-]|$)'
+vocab=(
+  "${bound_l}[Bb]uyers?${bound_r}#Requester"
+  "${bound_l}[Ss]ellers?${bound_r}#Provider"
+)
+for entry in "${vocab[@]}"; do
+  p=${entry%%#*}; canon=${entry#*#}
+  hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
+  if [ -n "$hits" ]; then
+    echo "::error::non-canonical role vocabulary (prose) — use '${canon}' (Requester/Provider are the standard role terms):"
+    echo "$hits"
+    status=1
+  fi
+done
+
+# --- 1c. Enum wire numbers must not appear in prose ------------------------
+# Docs cite an enum by its named constant, never its wire integer: nobody sends
+# the number, they send the name, and a hand-typed number is the one thing that
+# can silently drift from the proto (the M-5 "value 9" vs proto's 7 class). The
+# named constant is autolinked / directive-rendered and cannot drift; the number
+# adds nothing a reader needs. Ban `SOME_CONSTANT (value N)` outright so the
+# generator's guarantees aren't bypassed by a parenthesised integer in a
+# sentence. Matches an ALL_CAPS constant (optionally back-ticked) directly
+# followed by a "(value N)" annotation.
+num_hits=$(grep -rEn -- '[A-Z][A-Z0-9_]{4,}`?[[:space:]]*\(value[[:space:]]*[0-9]+\)' "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
+if [ -n "$num_hits" ]; then
+  echo "::error::enum wire number hand-typed in prose — cite the named constant only, drop the '(value N)':"
+  echo "$num_hits"
+  status=1
+fi
+
 # --- 2. Positive facts: required identifiers MUST be documented -------------
 # A denylist is necessary but not sufficient: it cannot catch a value that was
 # silently dropped from a "closed enum" table or a registry that drifted. These
 # assertions fail the build when a live wire value is missing from the doc that
 # claims to enumerate it.
 
-proto_ramp='proto/ramp/v1/ramp.proto'
-event_types='website/src/content/docs/components/transaction-log/event-types.mdx'
-
-# Every DenialReason value (except UNSPECIFIED) must appear in the event-types
-# "closed enum" table. (R4-9: the table silently lost values across renames.)
-while read -r dr; do
-  [ "$dr" = "DENIAL_REASON_UNSPECIFIED" ] && continue
-  if ! grep -q -- "$dr" "$event_types"; then
-    echo "::error::DenialReason '${dr}' is defined in the proto but missing from ${event_types}"
-    status=1
-  fi
-done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
+# (The former "every DenialReason value appears in event-types.mdx" check was
+# removed: event-types now renders the enum via `::proto-enum{name=DenialReason}`,
+# which emits every value straight from the proto — coverage is structural, and the
+# remark-proto guard forbids re-introducing a hand-typed copy. The grep here would
+# only have searched the directive source, not the rendered values.)
 
 # Delegation-claim registry guard (R4-7 / R5-8). The registered JWT claims are
 # named `ramp_<field>` where <field> is a Delegation proto field. Self-extending:
@@ -94,13 +158,14 @@ done < <(grep -oE 'DENIAL_REASON_[A-Z_]+' "$proto_ramp" | sort -u)
 # field on the Delegation proto message — so a typo'd or orphaned registry claim
 # fails the build, and a newly-registered claim is checked automatically with no
 # hardcoded list to drift.
-auth='website/src/content/docs/protocol/authentication.mdx'
 # Scope the field lookup to the Delegation message body only — grepping the whole
 # proto would falsely accept e.g. `ramp_offer_id` (offer_id exists on
 # TransactionItem, not Delegation).
 deleg_block=$(awk '/^message Delegation \{/,/^\}/' "$proto_ramp")
+claim_n=0
 while read -r claim; do
   [ -z "$claim" ] && continue
+  claim_n=$((claim_n + 1))
   field=${claim#ramp_}
   # Defensive: only [a-z_] field names are expected. Reject anything else rather
   # than interpolate it into the grep pattern below, so a future change to the
@@ -115,6 +180,23 @@ while read -r claim; do
     status=1
   fi
 done < <(grep -oE 'ramp_[a-z][a-z_]*' "$auth" | sort -u)
+if [ "$claim_n" -eq 0 ]; then
+  echo "::error::doc-conformance: no ramp_* delegation claims found in ${auth} — extraction drifted; this check would pass vacuously"
+  status=1
+fi
+
+# --- 3. Wrong-org references -----------------------------------------------
+# The project lives at github.com/RAMP-Protocol. The pre-rename org literal must not
+# appear anywhere — code, docs, config, copyright. The literal is built from two
+# pieces below so this script does not contain it verbatim, and therefore scans its
+# own file too (no self-exclusion blind spot).
+old_org='postin''dustria'
+org_hits=$(git grep -niF "$old_org" -- . 2>/dev/null || true)
+if [ -n "$org_hits" ]; then
+  echo "::error::stale '${old_org}' org reference (the project is github.com/RAMP-Protocol):"
+  echo "$org_hits"
+  status=1
+fi
 
 if [ "$status" -eq 0 ]; then
   echo "doc-conformance: clean"

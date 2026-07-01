@@ -31,7 +31,7 @@ The `claims` field is a flexible `Struct` — it carries whatever your domain ne
 ```json
 {
   "verifier": "doubleverify.com",
-  "kid": "dv-2026-Q1",
+  "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
   "attested_at": "2026-03-18T08:45:00Z",
   "uri": "https://example-news.com/article/breaking-story",
   "claims": {
@@ -52,7 +52,7 @@ The `claims` field is a flexible `Struct` — it carries whatever your domain ne
 ```json
 {
   "verifier": "deid-audit.example.com",
-  "kid": "deid-2026-Q1",
+  "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
   "attested_at": "2026-03-17T14:22:00Z",
   "uri": "https://pacs.hospital.example/wado-rs/studies/1.2.840.113619.2.55",
   "claims": {
@@ -108,7 +108,7 @@ Profile-specific claims use a namespaced format. Any Exchange that declares conf
 You push signed `ResourceAttestation` entries to Exchanges via the **CatalogService API**:
 
 ```
-POST /ramp.v1.CatalogService/PushContent
+POST /ramp.v1.CatalogService/PushResources
 
 {
   "tenant_id": "hearst-media",
@@ -122,7 +122,7 @@ POST /ramp.v1.CatalogService/PushContent
       "attestations": [
         {
           "verifier": "gumgum.com",
-          "kid": "gg-2026-Q1",
+          "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
           "attested_at": "2026-03-14T10:00:00Z",
           "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "claims": {
@@ -145,9 +145,9 @@ POST /ramp.v1.CatalogService/PushContent
 
 The request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) in the HTTP headers (not an in-message field); `caller_id` identifies the pusher.
 
-The same `PushContent` API works regardless of domain. A de-identification auditor pushing HIPAA compliance attestations for medical imaging uses the same endpoint — only the `claims` content differs.
+The same `PushResources` API works regardless of domain. A de-identification auditor pushing HIPAA compliance attestations for medical imaging uses the same endpoint — only the `claims` content differs.
 
-The Exchange verifies your signature using your public key from `/.well-known/ramp.json` (`public_keys`, selected by `kid`), confirms you are listed in the provider's `catalog_contributors`, and attaches your attestation to the catalog entry.
+The Exchange verifies your signature using your public key from your WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`), confirms you are listed in the provider's `catalog_contributors`, and attaches your attestation to the catalog entry.
 
 ## What You Can Verify
 
@@ -184,9 +184,9 @@ Your Analysis Pipeline (crawlers, APIs, audit tools, QA systems)
        |
   Sign ResourceAttestation with your Ed25519 key (JCS canonicalization)
        |
-  CatalogService.PushContent() → Exchange A
-  CatalogService.PushContent() → Exchange B
-  CatalogService.PushContent() → Exchange C
+  CatalogService.PushResources() → Exchange A
+  CatalogService.PushResources() → Exchange B
+  CatalogService.PushResources() → Exchange C
        |
   Exchanges verify signature, check catalog_contributors, attach attestation
        |
@@ -195,18 +195,18 @@ Your Analysis Pipeline (crawlers, APIs, audit tools, QA systems)
 
 **Prerequisites:**
 
-1. **Publish `ramp.json`**: Host your Ed25519 public keys at `https://yourcompany.com/.well-known/ramp.json` in `public_keys` (inline RFC 7517 JWKs, selected by `kid`). Exchanges fetch this to verify your attestation signatures. RAMP has no dedicated verifier role; a verifier publishes under its operator's role — a standalone verification vendor uses `ROLE_EXCHANGE`, and a self-attesting publisher uses `ROLE_PUBLISHER`. Expose your attestation claims schema via `ext["ramp.attestation.claims_schema"]`.
+1. **Publish your keys**: Host your Ed25519 public keys in your WBA directory — a JWK Set at `https://yourcompany.com/.well-known/http-message-signatures-directory` (inline RFC 7517 JWKs, each identified by its RFC 7638 thumbprint). Exchanges fetch this to verify your attestation signatures; keys no longer live in `ramp.json`. RAMP has no dedicated verifier role; a verifier publishes under its operator's role — a standalone verification vendor uses `ROLE_EXCHANGE`, and a self-attesting publisher uses `ROLE_PUBLISHER`. Expose your attestation claims schema in your `ramp.json` via `ext["ramp.attestation.claims_schema"]`.
 2. **Be listed in `catalog_contributors`**: Each provider must list your domain in their `catalog_contributors` before you can push attestations for their content. The Exchange rejects pushes from unlisted contributors.
 3. **Register with Exchanges**: Ed25519 key exchange, then push data on whatever schedule makes sense — real-time on content publish, daily batch, triggered by provider CMS webhooks, or on regulatory audit cycles.
 
 ## Authentication
 
-Every `PushContent` request is signed with your Ed25519 private key. Each `ResourceAttestation` also carries its own Ed25519 signature over JCS-canonicalized claims. The Exchange verifies both:
+Every `PushResources` request is signed with your Ed25519 private key. Each `ResourceAttestation` also carries its own Ed25519 signature over JCS-canonicalized claims. The Exchange verifies both:
 
 1. **Request-level**: The request carries `caller_id` and is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) in the HTTP headers (not an in-message field), proving the request came from your domain
-2. **Attestation-level**: The `signature` field on each `ResourceAttestation` proves the claims were signed by the key identified by `kid`
+2. **Attestation-level**: The `signature` field on each `ResourceAttestation` proves the claims were signed by the key identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`)
 
-The Exchange fetches your public keys from `https://yourcompany.com/.well-known/ramp.json` (`public_keys`) — no shared secrets.
+The Exchange fetches your public keys from your WBA directory (the JWK Set at `https://yourcompany.com/.well-known/http-message-signatures-directory`) — no shared secrets.
 
 ## Business Model
 

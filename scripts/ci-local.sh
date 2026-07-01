@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
-# Local mirror of .github/workflows/proto-ci.yml — runs the full gating sequence
-# in ONE command so the "I only ran a subset of the checks" failure mode cannot
-# recur. Keep this in lockstep with proto-ci.yml.
+# The single source of the proto gating sequence — runs the full set in ONE
+# command so the "I only ran a subset of the checks" failure mode cannot recur.
+# .github/workflows/proto-ci.yml invokes THIS script (it does not re-list the
+# steps), so CI and local cannot drift.
 #
 # Non-destructive: it does not modify your git index or working tree (the drift
 # check compares the regenerated output against HEAD rather than `git add -A`).
@@ -17,11 +18,26 @@ fail=0
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 note() { printf '    %s\n' "$1"; }
 
+# Pin buf so the committed gen/descriptor.binpb (a byte-exact, drift-gated
+# artifact) is reproducible. A newer buf re-encodes the descriptor with no
+# schema change and fails the drift gate (the H1 class). CI pins the same
+# version in proto-ci.yml; keep the two in lockstep.
+want_buf=1.66.1
+have_buf=$(buf --version 2>/dev/null || echo 'not-found')
+if [ "$have_buf" != "$want_buf" ]; then
+  echo "::error:: buf ${have_buf} != pinned ${want_buf} — the committed gen/ is built with ${want_buf}; install it (the drift gate compares bytes, so a different buf fails)."
+  fail=1
+fi
+
 step "buf lint"
 (cd proto && buf lint) || fail=1
 
 step "buf generate"
 (cd proto && buf generate) || fail=1
+# The docs site reads the schema from the compiler's descriptor (comments + custom
+# options included), not from hand-written tables. Emit it as a committed, drift-gated
+# artifact so the Amplify build needs only the file, never buf. See docs/design-history.md.
+(cd proto && buf build -o ../gen/descriptor.binpb) || fail=1
 
 step "assert no generated drift"
 # gen/ is generated output; after `buf generate` it MUST match the committed
@@ -29,7 +45,7 @@ step "assert no generated drift"
 # against HEAD and also flag untracked generated files (e.g. a new vocab axis
 # whose gen/.../<axis>/ was generated but never committed).
 if ! git diff --quiet HEAD -- gen/ || [ -n "$(git ls-files --others --exclude-standard -- gen/)" ]; then
-  echo "::error:: generated code is out of sync with the proto/plugin. Run 'cd proto && buf generate' and commit gen/."
+  echo "::error:: generated code is out of sync with the proto/plugin. Run 'cd proto && buf generate && buf build -o ../gen/descriptor.binpb' (descriptor.binpb comes from buf build, not buf generate) and commit gen/."
   git status --short -- gen/
   fail=1
 else
@@ -43,6 +59,15 @@ go test ./... || fail=1
 
 step "doc conformance"
 ./scripts/check-doc-conformance.sh || fail=1
+
+step "docs guards (remark-proto fail-path)"
+# Proves the build-gating doc guard still bites (throws on an unknown proto
+# reference). Skipped only if the docs deps aren't installed locally.
+if [ -d website/node_modules ]; then
+  (cd website && npm test --silent) || fail=1
+else
+  note "skipped — run 'npm install' in website/ to enable"
+fi
 
 step "buf breaking (informational, pre-v1 — non-blocking)"
 # Matches CI: continue-on-error. Never affects the exit status.

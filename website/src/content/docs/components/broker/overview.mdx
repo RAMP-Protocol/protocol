@@ -33,7 +33,7 @@ graph TB
         RR[Reporting Relay]
     end
 
-    Agent[AI Agent] -->|RAMPRequest| SD
+    Agent[AI Agent] -->|DiscoveryRequest| SD
     SD -->|DiscoverResources| MPA[Exchange A]
     SD -->|DiscoverResources| MPB[Exchange B]
     SD -->|DiscoverResources| MPC[Exchange C]
@@ -41,9 +41,8 @@ graph TB
     MR -.->|endpoint list| SD
     SD -->|[]ResourceResponse| SE
     BT -.->|budget check| SE
-    SE -->|winning Offer| SD
-    SD -->|ExecuteTransaction| MPA
-    SD -->|RAMPResponse| Agent
+    SE -->|selected Offers| SD
+    SD -->|DiscoveryResponse| Agent
 
     Agent -->|UsageReport| RR
     RR -->|forward| MPA
@@ -61,39 +60,65 @@ graph TB
 
 ## Internal Call Flow
 
+`Resolve` is **discovery-only**. It gathers offers across Exchanges, selects the best per URI, and returns them as a `DiscoveryResponse` (one `OfferGroup` per requested URI). It does **not** execute or deliver — committing to an offer is a separate `ExecuteTransaction` call on the Exchange (see [Execution](#execution-separate-step) below).
+
 ```go
-func (o *Broker) HandleRequest(ctx context.Context, req *rampv1.RAMPRequest) (*rampv1.RAMPResponse, error) {
+func (o *Broker) Resolve(ctx context.Context, req *rampv1.DiscoveryRequest) (*rampv1.DiscoveryResponse, error) {
     // 1. Resolve which Exchanges to query
     exchanges := o.registry.Resolve(req.Constraints)
 
     // 2. Fan out DiscoverResources to all Exchanges (multi-URI: all URIs in one query per MP)
     responses := o.discovery.FanOut(ctx, exchanges, req)
 
-    // 3. Select best offer(s).
-    //    Single-URI: select one winning offer.
-    //    Multi-URI (batch): select best offer per URI, check total against budget.
-    uris := req.Uris
-    if len(uris) > 1 {
-        return o.handleBatchRequest(ctx, req, responses)
+    // 3. Build one OfferGroup per requested URI: dedup, rank, and budget-filter
+    //    the gathered offers for that URI. A URI with no viable offer is not an
+    //    error — its group carries absence_reason and an empty offers list
+    //    (mirrors OfferGroup from DiscoverResources). Non-OK errors are reserved
+    //    for malformed requests, auth failures, and internal faults.
+    groups := make([]*rampv1.OfferGroup, 0, len(req.Uris))
+    for _, uri := range req.Uris {
+        selection, err := o.selector.SelectForURI(ctx, uri, responses, req.Constraints, o.budget)
+        if err != nil {
+            groups = append(groups, &rampv1.OfferGroup{
+                Uri:            uri,
+                AbsenceReason:  o.absenceReason(err).Enum(),
+            })
+            continue
+        }
+        groups = append(groups, &rampv1.OfferGroup{
+            Uri:    uri,
+            Offers: selection.Offers, // full signed Offers, forwarded unchanged
+        })
     }
 
-    selection, err := o.selector.Select(ctx, responses, req.Constraints, o.budget)
-    if err != nil {
-        return nil, err // no viable offer
-    }
+    // 4. Return the offers to the agent. The agent (or the Broker, on the agent's
+    //    behalf) commits separately via ExecuteTransaction — see below.
+    return &rampv1.DiscoveryResponse{
+        OfferGroups: groups,
+    }, nil
+}
+```
 
-    // 4. Execute transaction with winning Exchange
-    txn, err := o.discovery.Execute(ctx, selection.Exchange, selection.Offer, req)
+### Execution (separate step)
+
+After the agent picks an offer from the `DiscoveryResponse`, committing to it is a distinct exchange on the execute path. The execute target is `Offer.exchange` — the canonical Exchange domain carried inside the signed Offer bytes, so a relaying Broker cannot redirect execution without invalidating the signature.
+
+```go
+// Execute commits to a chosen offer. Called by the agent directly, or by the
+// Broker on the agent's behalf. The per-transaction result — transaction_id,
+// billing_id, delivery_method, retrieval_endpoint, agent_identity_hash,
+// expires_at — is carried by TransactionResponse, not by DiscoveryResponse.
+func (o *Broker) Execute(ctx context.Context, offer *rampv1.Offer, req *rampv1.DiscoveryRequest) (*rampv1.TransactionResponse, error) {
+    txn, err := o.discovery.Execute(ctx, offer.Exchange, offer, req) // routes to Offer.exchange
     if err != nil {
         return nil, err
     }
 
-    // 5. Track budget and reporting obligation
+    // Track budget and reporting obligation off the transaction result.
     o.budget.Record(ctx, req.SessionID(), txn.Cost)
     o.reporter.Track(txn)
 
-    // 6. Return RAMPResponse to agent
-    return toRAMPResponse(req, txn, selection), nil
+    return txn, nil
 }
 ```
 
@@ -113,7 +138,7 @@ Multi-hop forwarding is carried entirely in the HTTP headers, not in the message
 
 Each labeled signature, via its RFC 9421 signature parameters, effectively records:
 
-- **`keyid`** -- the intermediary's canonical domain / `kid` (for public key lookup)
+- **`keyid`** -- the intermediary's RFC 7638 thumbprint, resolved against its canonical domain (for public key lookup)
 - **`created`** -- timestamp of when the intermediary forwarded the request
 - the covered components -- the request plus the preceding hop's `Signature` value, chaining the hops together
 
@@ -125,7 +150,7 @@ func (o *Broker) signHop(req *http.Request, priorSig string) {
     // Covers the request line/headers AND the prior hop's Signature value,
     // chaining this hop to the one before it.
     label := o.domain // e.g., "broker.example.com"
-    sigInput, sig := o.rfc9421Sign(req, priorSig, label) // Ed25519, keyid=o.kid, created=now
+    sigInput, sig := o.rfc9421Sign(req, priorSig, label) // Ed25519, keyid=o.thumbprint, created=now
     req.Header.Add("Signature-Input", sigInput)
     req.Header.Add("Signature", sig)
 }
@@ -140,7 +165,7 @@ The Exchange verifies both layers:
 
 All signatures must pass. The Exchange counts the number of forwarding hops in the stack against `max_hops` / `max_intermediary_hops` and rejects requests that exceed the limit.
 
-The Broker publishes its keys in `public_keys` (inline RFC 7517 Ed25519 JWKs, selected by `kid`) at `{domain}/.well-known/ramp.json` (same manifest format as agents, `role=ROLE_AGENT`). This allows any Exchange to verify the Broker's identity without prior registration.
+The Broker publishes its keys in its WBA directory (the JWK Set at `{domain}/.well-known/http-message-signatures-directory`) — RFC 7517 Ed25519 JWKs, each identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`). Its `ramp.json` manifest uses the same format as agents (`role=ROLE_AGENT`). This allows any Exchange to verify the Broker's identity without prior registration.
 
 ## Profile-Based Routing
 
@@ -148,7 +173,7 @@ The Broker uses domain profiles to route queries to the right Exchanges.
 
 ### How It Works
 
-1. **Agent declares profiles** -- `RAMPRequest.supported_profiles` lists which domain extension profiles the agent understands (e.g., `["ramp-academic-v1"]`)
+1. **Agent declares profiles** -- `DiscoveryRequest.supported_profiles` lists which domain extension profiles the agent understands (e.g., `["ramp-academic-v1"]`)
 2. **Broker filters Exchanges** -- the Exchange Registry checks each Exchange's `WellKnownManifest.supported_profiles` and routes queries only to Exchanges that support at least one of the requested profiles
 3. **Broker forwards profiles** -- the declared profiles are forwarded in `ResourceQuery.supported_profiles`, so the Exchange knows which profile-specific `ext` fields to include in offers
 4. **Exchange responds with profile data** -- the Exchange includes profile-specific metadata (e.g., retraction status, citation counts for academic content) only when the caller declares support
@@ -197,7 +222,7 @@ Agents can discover content through the Broker in three ways, depending on how m
 
 ### 1. Specific URIs
 
-The agent already knows which resources it wants. It sends `RAMPRequest.uris` with one or more specific content identifiers (DOIs, URLs, etc.). The Broker forwards these as a `ResourceQuery` to each Exchange and collects offers.
+The agent already knows which resources it wants. It sends `DiscoveryRequest.uris` with one or more specific content identifiers (DOIs, URLs, etc.). The Broker forwards these as a `ResourceQuery` to each Exchange and collects offers.
 
 ```json
 {
@@ -209,7 +234,7 @@ This is the simplest mode -- the agent has exact references and wants the best p
 
 ### 2. Structured Search
 
-The agent knows what kind of content it needs but not the exact URIs. It sends `RAMPRequest.search_filters` with profile-specific key-value pairs. The Broker maps these to Exchange-specific query parameters and discovers matching resources.
+The agent knows what kind of content it needs but not the exact URIs. It sends `DiscoveryRequest.search_filters` with profile-specific key-value pairs. The Broker maps these to Exchange-specific query parameters and discovers matching resources.
 
 ```json
 {
@@ -225,7 +250,7 @@ Filter keys are profile-specific: `academic.topic`, `news.category`, `legal.juri
 
 ### 3. Natural Language
 
-The agent describes what it needs in free text. It sends `RAMPRequest.query` with a natural-language description. The Broker interprets the query and searches across Exchanges on the agent's behalf.
+The agent describes what it needs in free text. It sends `DiscoveryRequest.query` with a natural-language description. The Broker interprets the query and searches across Exchanges on the agent's behalf.
 
 ```json
 {
@@ -273,7 +298,7 @@ type SupplySource interface {
 
 The flow: search/recommendation produces URIs, the Broker looks up an Exchange for each URI's domain (via ramp.json), the Exchange provides pricing/offers, and the standard transaction flow continues. Discovery is upstream of transactions -- it produces URIs, not offers. The `OfferGroup.discovery_method` field tells the agent how each URI was found.
 
-This positions the Broker as the natural integration point for agentic search -- agents that need content don't just request known URLs, they ask "find me articles about X" and the Broker discovers, prices, and delivers.
+This positions the Broker as the natural integration point for agentic search -- agents that need content don't just request known URLs, they ask "find me articles about X" and the Broker discovers and prices the matching offers, returning them for the agent to commit to via a separate `ExecuteTransaction` call.
 
 ## Request Lifecycle (End-to-End)
 
@@ -288,7 +313,7 @@ sequenceDiagram
     participant MPB as Exchange B
     participant CDN as Provider CDN
 
-    Agent->>Orch: RAMPRequest (aisystem + constraints)
+    Agent->>Orch: DiscoveryRequest (requester + constraints)
 
     Orch->>Reg: Resolve(constraints)
     Reg-->>Orch: [Exchange A, Exchange B]
@@ -301,18 +326,20 @@ sequenceDiagram
         MPB-->>Orch: ResourceResponse (2 offers)
     end
 
-    Note over Orch: Selection Engine:<br/>5 offers received<br/>4 expose a term the agent can honour (Offer.terms[].restrictions)<br/>3 pass RequestConstraints<br/>2 after dedup (1 AP article from both)<br/>Rank by unit_cost: MP-A offer wins
+    Note over Orch: Selection Engine:<br/>5 offers received<br/>4 expose a term the agent can honour (Offer.terms[].restrictions)<br/>3 pass RequestConstraints<br/>2 after dedup (1 AP article from both)<br/>Rank by unit_cost: MP-A offer leads
 
-    Note over Orch: Budget Tracker:<br/>Session spent $0.12 of $1.00<br/>This offer: $0.05<br/>Approved
+    Note over Orch: Budget Tracker (advisory):<br/>Session spent $0.12 of $1.00<br/>Best offer: $0.05<br/>Within budget
 
-    Orch->>MPA: ExecuteTransaction(winning offer_id)
-    MPA-->>Orch: TransactionResponse(signed URL + billing_id)
+    Orch-->>Agent: DiscoveryResponse (offer_groups: best Offer per URI)
 
-    Note over Orch: Track reporting obligation<br/>Record spend: $0.05
+    Note over Agent: Agent picks an Offer.<br/>Execute target = Offer.exchange (signed)
 
-    Orch-->>Agent: RAMPResponse(signed URL + cost + reporting obligation)
+    Agent->>MPA: ExecuteTransaction(chosen offer_id)
+    MPA-->>Agent: TransactionResponse(retrieval_endpoint + billing_id)
 
-    Agent->>CDN: GET signed URL
+    Note over Agent: Track reporting obligation<br/>Record spend: $0.05
+
+    Agent->>CDN: GET retrieval_endpoint
     CDN-->>Agent: 200 OK + content
 
     Note over Agent: Use content (RAG, grounding)
@@ -331,7 +358,7 @@ sequenceDiagram
 | **Same protocol, transparent proxy** | The Exchange cannot distinguish Broker-mediated requests from direct agent requests. No special Exchange support needed. |
 | **Signed offer pass-through** | Exchange signatures cover pricing fields. The Broker cannot inflate prices without invalidating the signature. |
 | **Advisory budget enforcement** | The Broker pre-filters transactions by budget, but the Exchange is the authoritative enforcement point. No overspend occurs because the Exchange is the gatekeeper. |
-| **Ed25519 + forwarding signature stack** | Requester signs the HTTP request with an RFC 9421 HTTP Message Signature (covering `@method`/`@target-uri`/`content-digest`); Broker adds one labeled RFC 9421 HTTP Message Signature (covering the request plus the prior hop's signature) to the header stack. Exchange verifies both layers and counts hops against `max_hops` / `max_intermediary_hops`. Public keys discoverable via `public_keys` in `.well-known/ramp.json`. |
+| **Ed25519 + forwarding signature stack** | Requester signs the HTTP request with an RFC 9421 HTTP Message Signature (covering `@method`/`@target-uri`/`content-digest`); Broker adds one labeled RFC 9421 HTTP Message Signature (covering the request plus the prior hop's signature) to the header stack. Exchange verifies both layers and counts hops against `max_hops` / `max_intermediary_hops`. Public keys discoverable via the WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`). |
 | **Partial results are normal** | If 3 of 5 Exchanges respond within the deadline, the Broker proceeds with 3 responses. Availability of any individual Exchange does not block the system. |
 
 ## Go Module Structure
@@ -343,7 +370,7 @@ github.com/RAMP-Protocol/protocol/broker/
             main.go
     pkg/
         broker/           # Core broker logic (used by all deployment modes)
-            broker.go     # Broker struct + HandleRequest
+            broker.go     # Broker struct + Resolve
             config.go           # Configuration loading
         registry/               # Exchange Registry
             registry.go         # ExchangeRegistry interface + in-memory impl

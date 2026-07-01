@@ -765,7 +765,7 @@ An agent requested the German version of an EU directive but received French:
 ```json
 {
   "ver": "1.0",
-  "id": "disp-lang-001",
+  "idempotency_key": "disp-lang-001",
   "transaction_id": "txn-eurlex-dir-2024",
   "billing_id": "bill-eurlex-dir-2024",
   "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
@@ -785,7 +785,7 @@ An agent requested legislation consolidated as of 2024-01-15 but received a vers
 ```json
 {
   "ver": "1.0",
-  "id": "disp-version-002",
+  "idempotency_key": "disp-version-002",
   "transaction_id": "txn-wk-reg-2024",
   "billing_id": "bill-wk-reg-2024",
   "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
@@ -819,7 +819,7 @@ An agent requested legislation consolidated as of 2024-01-15 but received a vers
 - [ELI Ontology](https://op.europa.eu/en/web/eu-vocabularies/eli) -- European Legislation Identifier
 - [CELEX Numbers](https://eur-lex.europa.eu/content/help/eurlex-content/celex-number.html) -- EUR-Lex document identifiers
 - [ECLI](https://e-justice.europa.eu/topics/legislation-and-case-law/european-case-law-identifier-ecli_en) -- European Case Law Identifier
-- [URN:LEX (RFC 9676)](https://www.rfc-editor.org/rfc/rfc9676.html) -- Persistent legal resource URN namespace
+- [URN:LEX (RFC 9676)](https://www.rfc-editor.org/rfc/rfc9676) -- Persistent legal resource URN namespace
 - [Akoma Ntoso v1.0](https://docs.oasis-open.org/legaldocml/akn-core/v1.0/akn-core-v1.0-part1-vocabulary.html) -- OASIS LegalDocML vocabulary
 - [AKN Naming Convention](https://docs.oasis-open.org/legaldocml/akn-nc/v1.0/akn-nc-v1.0.html) -- AKN IRI structure
 - [WIPO ST.3](https://www.wipo.int/standards/en/pdf/03-03-01.pdf) -- Country codes for patent offices

@@ -59,8 +59,10 @@ interface EdgeConfig {
   /** RSL text content for /rsl.txt serving. */
   rslTxt: string;
 
-  /** Content path policies (which paths are protected). */
-  contentPolicy: AccessPolicy;
+  /** Glob patterns that require a license (carry RAMP terms); all other paths
+   * are open. Compiled from RSL/catalog entries — a local edge type, not a wire
+   * message. */
+  protectedPatterns: string[];
 
   /** Exchange info endpoint URL for X-Content-Rules header. */
   exchangeInfoUrl: string;

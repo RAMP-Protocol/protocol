@@ -2,13 +2,26 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightMermaid from '@pasqal-io/starlight-client-mermaid';
+import starlightLinksValidator from 'starlight-links-validator';
+import remarkDirective from 'remark-directive';
+import remarkProto from './plugins/remark-proto.mjs';
+import remarkStandards from './plugins/remark-standards.mjs';
 
 export default defineConfig({
+	markdown: {
+		// remarkProto: render proto-derived tables (::proto-enum / ::proto-vocab) from the
+		//   descriptor AND autolink/validate every proto reference in one mdast pass — so a
+		//   reference in a rendered table links like one in prose, and an unknown reference
+		//   fails the build. See plugins/remark-proto.mjs + proto-schema.mjs.
+		// remarkStandards: link the first mention of each external standard (RFC NNNN, C2PA,
+		//   …) to its canonical source. Runs after remarkProto so generated tables link too.
+		remarkPlugins: [remarkDirective, remarkProto, remarkStandards],
+	},
 	integrations: [
 		starlight({
 			title: 'RAMP Protocol',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/RAMP-Protocol/protocol' }],
-			plugins: [starlightMermaid()],
+			plugins: [starlightMermaid(), starlightLinksValidator()],
 			components: {
 				Footer: './src/components/Footer.astro',
 			},
@@ -63,6 +76,7 @@ export default defineConfig({
 					label: 'Reference',
 					items: [
 						{ label: 'Proto: RAMP v1', slug: 'reference/proto-ramp' },
+						{ label: 'Standards & References', slug: 'reference/standards' },
 						{ label: 'ramp.json Example', slug: 'reference/ramp-json-example' },
 						{ label: 'Changelog', slug: 'reference/changelog' },
 					],

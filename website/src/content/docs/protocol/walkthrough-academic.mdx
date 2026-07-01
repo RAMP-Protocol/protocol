@@ -103,7 +103,6 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverR
 
 {
   "ver": "1.0",
-  "id": "sq-litrev-001",
   "requester": {
     "id": "litrev-agent",
     "domain": "cs.stanford.edu",
@@ -206,7 +205,6 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
 ```json
 {
   "ver": "1.0",
-  "id": "sq-litrev-001",
   "exchange": "exchange.scholarsgate.com",
   "offer_groups": [
     {
@@ -239,7 +237,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
           "attestations": [
             {
               "verifier": "arxiv.org",
-              "kid": "arxiv-key-2026-03",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-15T08:00:00Z",
               "uri": "doi:10.48550/arXiv.2406.11838",
               "claims": {
@@ -314,7 +312,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
           "attestations": [
             {
               "verifier": "elsevier.com",
-              "kid": "elsevier-key-2026-q1",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-10T06:00:00Z",
               "uri": "doi:10.1016/j.media.2024.103250",
               "claims": {
@@ -398,7 +396,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
           "attestations": [
             {
               "verifier": "springer.com",
-              "kid": "springer-key-2026-q1",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-12T09:00:00Z",
               "uri": "doi:10.1038/s41592-024-02401-5",
               "claims": {
@@ -471,7 +469,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
           "attestations": [
             {
               "verifier": "springer.com",
-              "kid": "springer-key-2026-q1",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-01T12:00:00Z",
               "uri": "doi:10.1038/s41592-024-02467-x",
               "claims": {
@@ -616,7 +614,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
 
 {
   "ver": "1.0",
-  "id": "tx-litrev-001",
+  "idempotencyKey": "tx-litrev-001",
   "requester": {
     "id": "litrev-agent",
     "domain": "cs.stanford.edu",
@@ -849,7 +847,6 @@ Response (abbreviated — showing one item from each category):
 ```json
 {
   "ver": "1.0",
-  "id": "tx-litrev-001",
   "items": [
     {
       "offer_id": "offer-arxiv-2406-11838",
@@ -946,7 +943,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ReportUsa
 
 {
   "ver": "1.0",
-  "id": "ur-litrev-001",
+  "idempotencyKey": "ur-litrev-001",
   "transaction_id": "txn-litrev-batch-001",
   "billing_id": "bill-litrev-batch-001",
   "usage": {
@@ -986,7 +983,6 @@ Response:
 
 ```json
 {
-  "accepted": true,
   "report_id": "rpt-litrev-001"
 }
 ```

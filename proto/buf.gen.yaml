@@ -2,20 +2,26 @@ version: v2
 managed:
   enabled: true
 plugins:
+  # Remote plugin versions are PINNED. gen/ (incl. gen/descriptor.binpb) is a
+  # byte-exact, drift-gated artifact; an unpinned plugin lets an upstream bump
+  # change the output with no schema change, false-positiving the drift gate
+  # (the M-7 class — commit b1baa4f was exactly a protoc-gen-es 2.12.0→2.12.1
+  # no-op regen). Bump deliberately, then regenerate and commit gen/ in the
+  # same change. Keep versions in step with go.mod's runtime deps.
   # Go code generation
-  - remote: buf.build/protocolbuffers/go
+  - remote: buf.build/protocolbuffers/go:v1.36.11
     out: ../gen/go
     opt: paths=source_relative
   # Connect-Go (HTTP/JSON + gRPC)
-  - remote: buf.build/connectrpc/go
+  - remote: buf.build/connectrpc/go:v1.19.1
     out: ../gen/go
     opt: paths=source_relative
   # TypeScript message types (protobuf-es)
-  - remote: buf.build/bufbuild/es
+  - remote: buf.build/bufbuild/es:v2.12.1
     out: ../gen/ts
     opt: target=ts
   # TypeScript Connect service client/handler
-  - remote: buf.build/connectrpc/es
+  - remote: buf.build/connectrpc/es:v1.6.1
     out: ../gen/ts
     opt: target=ts
   # RAMP vocabulary constants — reads (ramp.v1.vocab) field options and

@@ -2,6 +2,75 @@
 
 ## Unreleased
 
+**Protocol standardization — unified error/response contract + a Connect RPC for
+every role (breaking).** Three threads land together:
+
+- **Unified error model.** A typed `ErrorDetail` (plus its detail messages and
+  `DenialReason`/`OfferAbsenceReason` reason enums) is carried out-of-band in the
+  transport error; a failed action returns a transport error while a successful
+  query — including a "no result" answer — returns in-body. Response messages are
+  standardized: `ver` is field 1 on every request and response.
+- **A Connect RPC for every role.** Added `BrokerService` with
+  `Resolve(DiscoveryRequest) → DiscoveryResponse`, and
+  `DiscoveryResponse.absence_reason` (field 16) for "the resolve ran but produced
+  nothing licensable".
+- **Idempotency.** A required `idempotency_key` (`min_len: 1`, `max_len: 255`,
+  deduped per verified RFC 9421 signer) is added to every state-mutating RPC:
+  `TransactionRequest`, `UsageReport`, and `DisputeRequest`. Broker `Resolve`
+  (`DiscoveryRequest`) is pure discovery — it executes no transaction and takes
+  no key.
+
+Also: renamed `PushContent` → `PushResources`; removed `AccessPolicy` /
+`ResourceAccessPolicy` and `DELIVERY_METHOD_INLINE`; removed in-body correlation
+— the `request_id` fields and the residual `id` fields on
+`ResourceQuery`/`DiscoveryRequest` — in favor of an `X-Request-ID` header;
+extended `DenialReason` with
+values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
+breaking change; `buf breaking` reports the deltas as expected.
+
+**Discovery/offer response model (breaking).** The Agent-to-Broker discovery
+messages are renamed and the response is re-modeled to carry offers rather than
+a single transaction result:
+
+- **Renamed** `RAMPRequest` to `DiscoveryRequest` and `RAMPResponse` to
+  `DiscoveryResponse` — the Agent-to-Broker request/response pair (Steps 1 and 6),
+  the same pair carried by `BrokerService.Resolve`.
+- **Re-modeled** `DiscoveryResponse` as discovery-only. Removed the
+  per-transaction fields (`transaction_id`, `billing_id`, `exchange`,
+  `resource_title`, `cost`, `delivery_method`, `reporting_obligation`,
+  `expires_at`, `broker_fee`, `retrieval_endpoint`, `agent_identity_hash`) —
+  these are carried solely by `TransactionResponse` — and added
+  `repeated OfferGroup offer_groups`, one group per requested URI, as the sole
+  offer representation. A group with no offers carries its `absence_reason`.
+- **Added** `Offer.exchange` (field 8): the canonical domain of the issuing
+  Exchange and the target for the execute call. It sits inside the signed Offer
+  bytes, so a relaying Broker cannot redirect execution to a different Exchange
+  without invalidating the signature.
+
+This is an accepted breaking change pre-v1 freeze; `buf breaking` reports the
+deltas as expected.
+
+**WBA identity split — keys move to the WBA directory (breaking).** Identity keys
+are split out of `ramp.json` (`WellKnownManifest`) and into a pure WBA key
+directory served at `{domain}/.well-known/http-message-signatures-directory`:
+
+- **Added** `WBAFile` (the WBA directory body) carrying the role's
+  attestation/identity JWKs (with their `not_before`/`not_after` bounds per
+  RFC 7517 §5) and an optional `revocation_url`; removed `WellKnownManifest`'s
+  `public_keys` and `invalidation_url`.
+- **Keyed by thumbprint, no `kid`.** The RFC 9421 `keyid` is the key's RFC 7638
+  JWK Thumbprint, computed locally; carrying a separate `kid` is gone. The
+  attestation `keyid` field now holds the verifier key's thumbprint, resolved
+  against the verifier's `WBAFile.keys`.
+- **Added** `KeyRevocationList`, the snapshot body served at
+  `WBAFile.revocation_url` — the complete set of revoked key thumbprints
+  (RFC 7638, base64url-no-pad), polled on a 300s cadence — and the
+  `RETRIEVAL_AUTH_FAILURE_REASON_KEYID_MISMATCH` / `_THUMBPRINT_MISMATCH`
+  failure reasons.
+
+This is an accepted breaking change pre-v1 freeze; `buf breaking` reports the
+deltas as expected.
+
 **CoMP re-baseline to canonical V1 (breaking).** `proto/comp/v1/comp.proto` is
 re-aligned to be a 1:1 mirror of IAB Tech Lab Content Monetization Protocols
 **CoMP V1** (finalized 2026-04-28,
@@ -92,7 +161,7 @@ entitlement is scopes plus `Delegation`, so access is never gated on
 **DenialReason consolidation.** `INVALID_LICENSE` and `EXPIRED_LICENSE` collapse
 into a single `DENIAL_REASON_BILLING_REF_INACTIVE`, and `DELEGATION_EXPIRED`
 broadens to `DENIAL_REASON_DELEGATION_INVALID` (expiry is one of several ways a
-token fails to authorize). The enum is contiguous 0–11.
+token fails to authorize). The enum is contiguous, with no reused numbers.
 
 **Delegation-claims profile.** The delegation token stays opaque on the wire;
 `token_format` only selects the verifier. RAMP defines a small registered

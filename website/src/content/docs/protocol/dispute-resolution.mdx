@@ -22,7 +22,7 @@ Offer
           -> DisputeResponse (dispute_id, status, resolution)
 ```
 
-`DisputeRequest.report_id` is **required** -- the Exchange rejects any dispute without a prior usage report. This prevents fire-and-forget disputes and fabricated usage data.
+`DisputeRequest.report_id` is **required** -- the Exchange refuses to file any dispute without a prior usage report. A refusal to file is not a `DisputeResponse` with a rejection field; it is a non-OK transport error carrying a typed `ErrorDetail.dispute_failure` (e.g. `DISPUTE_FAILURE_REASON_REPORT_NOT_FILED`). This prevents fire-and-forget disputes and fabricated usage data. `DisputeRequest.idempotency_key` (required) dedupes retried filings.
 
 ## What Is Auto-Disputable
 
@@ -117,7 +117,7 @@ Terminal state is `FINAL`. The `resolution` field is populated at `RESOLVED`, `S
 |---|---|
 | **CREDIT** | CDN failure confirmed, hash mismatch, CDN size corroborates discrepancy, timing issues |
 | **REDELIVERY** | Transient CDN error, content still available, new signed URL issued |
-| **REJECTED** | Agent claim not corroborated, duplicate dispute, missing report_id |
+| **REJECTED** | An accepted dispute, once reviewed, is not corroborated (`RESOLUTION_TYPE_REJECTED`). A dispute that never qualifies to be filed -- duplicate, missing/unknown `report_id`, window expired, ineligible -- is refused before filing and returns a typed `ErrorDetail.dispute_failure`, not a REJECTED resolution |
 | **INVESTIGATION** | Escalated to Tier 3 pattern analysis |
 
 ## Resource Mutability and Dispute Rules (v1.0)

@@ -18,7 +18,7 @@ graph TD
         TRIE["RadixTrie<br/>keyed by URI path"]
         GLOBS["GlobMatchers[]<br/>compiled glob patterns"]
         OFFERS["AllOffers []*OfferTemplate"]
-        DP["DefaultPolicy"]
+        DP["BlockUnmatched"]
     end
 
     subgraph "Trie Node"
@@ -45,7 +45,7 @@ Each `CatalogEntry` maps to a protocol `OfferTemplate`. The content identity is 
 |---|---|---|---|
 | `TenantID` + `Path` | `comp.Package` | `id` | Generated: `PKG-{tenant}-{path-hash}` |
 | `Title` | `comp.Package` | `title` | Also `comp.Text.title` |
-| `Domain` | `comp.Package` | `seller` | Provider's canonical domain |
+| `Domain` | `comp.Package` | `provider` | Provider's canonical domain |
 | `WordCount` | `comp.Text` | `wordcount` | Array (single element) |
 | `PubDate` | `comp.Text` | `pubdate` | ISO 8601 |
 | `Authors` | `comp.Text` | `author` | String array |
@@ -95,7 +95,7 @@ Exchange config DB has pricing for this path/tenant?
 
 Content attestations pushed via `CatalogService.PushResources` are attached to catalog entries during compilation. Each `CatalogEntry` may carry zero or more `ResourceAttestation` entries, which propagate to `OfferTemplate` and ultimately to `Offer.attestations` in `DiscoverResources` responses.
 
-The Exchange verifies attestation signatures at push time (not at compilation time) using keys fetched from the verifier's `/.well-known/ramp.json` `public_keys`. Only valid, unexpired attestations with verified signatures are stored in the catalog.
+The Exchange verifies attestation signatures at push time (not at compilation time) using keys fetched from the verifier's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`). Only valid, unexpired attestations with verified signatures are stored in the catalog.
 
 When a catalog entry has attestations from multiple verifiers (e.g., a provider self-attestation and a DoubleVerify third-party attestation), all are carried on the offer. The agent decides which to trust.
 
@@ -123,7 +123,7 @@ func (c *CatalogCompiler) buildTenantCatalog(
         URIIndex:      radixtree.New[*OfferTemplate](),
         GlobMatchers:  make([]GlobMatcher, 0),
         AllOffers:     make([]*OfferTemplate, 0, len(entries)),
-        DefaultPolicy: tenantCfg.DefaultAccessPolicy,
+        BlockUnmatched: tenantCfg.BlockUnmatched,
     }
 
     for _, entry := range entries {

@@ -16,7 +16,7 @@ The Billing Adapter is the pluggable boundary between the open-source Exchange a
 // Implementations must be safe for concurrent use by multiple goroutines.
 // All methods accept a context for timeout/cancellation propagation.
 type BillingAdapter interface {
-    // Authorize checks whether the buyer can afford this transaction.
+    // Authorize checks whether the requester can afford this transaction.
     // Called synchronously during ExecuteTransaction, before signing.
     //
     // Must be fast (< 30ms p99). If the billing system is slow,
@@ -37,19 +37,19 @@ type BillingAdapter interface {
     // Called when a transaction fails after Authorize() but before completion.
     Release(ctx context.Context, billingID string) error
 
-    // GetBalance returns the buyer's remaining balance or credit.
+    // GetBalance returns the requester's remaining balance or credit.
     // Optional — used for informational purposes only.
     // Return ErrNotSupported if the billing system doesn't support balance queries.
     GetBalance(ctx context.Context, billingRef string) (*BillingBalance, error)
 
-    // CheckSubscription checks whether the buyer has an active subscription with the tenant.
+    // CheckSubscription checks whether the requester has an active subscription with the tenant.
     // Returns subscription status including quota and unit value for financial attribution.
     // Used by DiscoverResources to include zero-cost subscription offers and by ExecuteTransaction
     // to skip per-request billing authorization for subscription-based access.
     CheckSubscription(ctx context.Context, billingRef string, tenantID string) (*SubscriptionStatus, error)
 }
 
-// SubscriptionStatus describes the state of a buyer's subscription with a tenant.
+// SubscriptionStatus describes the state of a requester's subscription with a tenant.
 type SubscriptionStatus struct {
     SubscriptionID string
     Active         bool
@@ -58,7 +58,7 @@ type SubscriptionStatus struct {
 }
 
 type BillingAuthorizeRequest struct {
-    BillingRef     string  // The buyer's billing reference (handle into the operator's billing system)
+    BillingRef     string  // The requester's billing reference (handle into the operator's billing system)
     Amount         float64 // Transaction amount
     Currency       string  // ISO 4217
     OfferID        string  // For audit trail
@@ -126,7 +126,7 @@ func (a *InMemoryBillingAdapter) Authorize(
     if !ok {
         return &BillingAuthorizeResponse{
             Approved: false,
-            Reason:   "unknown buyer",
+            Reason:   "unknown requester",
         }, nil
     }
     if balance < req.Amount {
@@ -158,7 +158,7 @@ For AWS deployments, wrapping DynamoDB with consistent reads:
 // Table schema:
 //   PK: "BUYER#<billing_ref>"  SK: "BALANCE"     → {available, currency, credit_limit}
 //   PK: "BUYER#<billing_ref>"  SK: "TXN#<ulid>"  → {billing_id, amount, ...}
-//   PK: "HOLD#<billing_id>"   SK: "HOLD"        → {amount, buyer, created_at}
+//   PK: "HOLD#<billing_id>"   SK: "HOLD"        → {amount, requester, created_at}
 //
 // Uses DynamoDB transactions for atomic balance deduction + hold creation.
 type DynamoDBBillingAdapter struct {
@@ -212,7 +212,7 @@ This is where the consulting value lives: building custom `BillingAdapter` imple
 
 When the Exchange's dispute resolution engine resolves a dispute in the agent's favor (`RESOLUTION_TYPE_CREDIT`), the billing adapter must process a credit. The `BillingAdapter` interface does not include an explicit `Credit` method -- credits are applied through the existing `Record` flow with a negative amount, or through operator-specific credit mechanisms.
 
-For in-memory and DynamoDB implementations, credits are applied by adding the disputed amount back to the buyer's balance. For production integrations, credits follow the operator's standard credit/refund workflow.
+For in-memory and DynamoDB implementations, credits are applied by adding the disputed amount back to the requester's balance. For production integrations, credits follow the operator's standard credit/refund workflow.
 
 ---
 
@@ -281,7 +281,7 @@ For subscription-based access (RSL payment type="subscription"), unit_cost is co
 
 ## Subscription Handling
 
-When a buyer has an active subscription with a tenant:
+When a requester has an active subscription with a tenant:
 
 1. **DiscoverResources** includes subscription offer variants (rate=0) alongside regular offers for each catalog entry. Quota enforcement is deferred to ExecuteTransaction time.
 2. **ExecuteTransaction** skips billing authorization for subscription offers. The transaction log, signed URL, and reporting obligation are still created (subscription offers still require mandatory usage reporting).
@@ -304,7 +304,7 @@ type ExchangeConfig struct {
 
 **Rationale**: Cross-currency support adds exchange rate management, settlement timing risk, and display complexity. None of this is needed for v1, where the Exchange operator sets a single operating currency.
 
-**v2 scope**: Cross-currency conversion (buyer pays in EUR, provider settles in USD) is a v2 feature. It requires exchange rate feeds, conversion at transaction time, and currency-aware reconciliation.
+**v2 scope**: Cross-currency conversion (requester pays in EUR, provider settles in USD) is a v2 feature. It requires exchange rate feeds, conversion at transaction time, and currency-aware reconciliation.
 
 ---
 
@@ -372,7 +372,7 @@ All billing errors MUST be logged via `slog.Error` with structured key-value pai
 | Policy | Behavior | Risk | When to Use |
 |---|---|---|---|
 | **Reject** (default) | Return `CodeUnavailable` to agent | Lost revenue | High-value content, strict accounting |
-| **Deferred** | Authorize optimistically, record for later settlement | Potential bad debt | Low-value content, trusted buyers |
+| **Deferred** | Authorize optimistically, record for later settlement | Potential bad debt | Low-value content, trusted requesters |
 
 ```go
 // BillingTimeoutPolicy determines behavior when billing adapter times out.

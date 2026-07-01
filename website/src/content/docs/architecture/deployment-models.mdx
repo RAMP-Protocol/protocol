@@ -32,7 +32,7 @@ Providers can authorize third parties (verification vendors, enrichment services
 }
 ```
 
-The Exchange validates incoming `CatalogService.PushContent` requests against this list -- unauthorized pushers are rejected.
+The Exchange validates incoming `CatalogService.PushResources` requests against this list -- unauthorized pushers are rejected.
 
 ## Model 1: Exchange-Managed (Recommended, Enterprise)
 
@@ -106,7 +106,7 @@ A CMS plugin (WordPress, Drupal, Ghost, Django) that integrates with the RAMP pr
 ### What the Plugin Does
 
 1. **Auto-generates `rsl.txt`** from the CMS content structure
-2. **Pushes content metadata to the Exchange** via `CatalogService.PushContent`
+2. **Pushes content metadata to the Exchange** via `CatalogService.PushResources`
 3. **Adds `/.well-known/ramp.json` response** via CMS routing
 
 ### What the Plugin Does NOT Do
@@ -135,8 +135,8 @@ Content published in WordPress
   -> Plugin hook fires (publish_post)
   -> Extract: title, word count, URL path, categories
   -> Compute: estimated_quantity = word_count * 1.32
-  -> Build PushContentRequest (caller_id), signed with an RFC 9421 HTTP Message Signature
-  -> POST to Exchange CatalogService.PushContent
+  -> Build PushResourcesRequest (caller_id), signed with an RFC 9421 HTTP Message Signature
+  -> POST to Exchange CatalogService.PushResources
   -> Exchange adds/updates catalog entry
 ```
 

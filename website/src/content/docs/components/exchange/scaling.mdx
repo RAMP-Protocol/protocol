@@ -166,7 +166,8 @@ At 10K RPS with 50ms flush interval, each batch contains ~500 records. One fdata
 The idempotency cache uses a concurrent LRU with sharded locks to avoid contention:
 
 ```go
-// IdempotencyCache stores recent TransactionResponse values keyed by request ID.
+// IdempotencyCache stores recent TransactionResponse values keyed by the
+// request's idempotency key (TransactionRequest.idempotency_key).
 // Sharded by hash of key to reduce lock contention.
 type IdempotencyCache struct {
     shards    [256]*idempotencyShard
@@ -217,25 +218,27 @@ Result: Two signed URLs issued for one billing event. CDN redeems one. No financ
 **Scale Tier**: At 10K+ RPS, use Redis for distributed idempotency:
 
 ```go
-// Distributed idempotency check via Redis.
-func (h *ExchangeHandler) checkIdempotency(ctx context.Context, requestID string) (*rampv1.TransactionResponse, error) {
+// Distributed idempotency check via Redis. The key is the request's
+// idempotency key (TransactionRequest.idempotency_key), not the wire
+// correlation id (which rides the X-Request-ID HTTP header).
+func (h *ExchangeHandler) checkIdempotency(ctx context.Context, idempotencyKey string) (*rampv1.TransactionResponse, error) {
     // 1. Local LRU (fast path, no network)
-    if cached, ok := h.localCache.Get(requestID); ok {
+    if cached, ok := h.localCache.Get(idempotencyKey); ok {
         return cached, nil
     }
     // 2. Redis SETNX with TTL (distributed lock)
-    acquired, err := h.redis.SetNX(ctx, "idemp:"+requestID, "processing", 10*time.Minute).Result()
+    acquired, err := h.redis.SetNX(ctx, "idemp:"+idempotencyKey, "processing", 10*time.Minute).Result()
     if err != nil {
         // Redis down — fall back to Growth tier behavior (accept the risk)
         slog.Warn("redis idempotency check failed, proceeding without distributed lock",
-            slog.String("request_id", requestID),
+            slog.String("idempotency_key", idempotencyKey),
             slog.Any("error", err),
         )
         return nil, nil
     }
     if !acquired {
         // Another node is processing — wait briefly, then read result
-        return h.waitForResult(ctx, requestID)
+        return h.waitForResult(ctx, idempotencyKey)
     }
     return nil, nil // Proceed with new transaction
 }
@@ -271,8 +274,8 @@ For the Scale tier (10K RPS) and beyond, shard by **provider tenant**:
 - A misbehaving tenant (RSL changes, traffic spikes) only affects its shard.
 - Load balancer can route based on the URI domain in the ResourceQuery.
 
-**Why not shard by buyer or content path?**
-- Buyer sharding requires the load balancer to inspect the request body (billing reference), which is slower and more complex.
+**Why not shard by requester or content path?**
+- Requester sharding requires the load balancer to inspect the request body (billing reference), which is slower and more complex.
 - Content path sharding fragments a tenant's catalog across shards, complicating RSL ingestion and offer resolution.
 
 **Load balancing**: Layer 7 (HTTP) load balancer. Use consistent hashing on the target domain extracted from the request URI for sticky routing. Fallback to round-robin for requests without a resolvable domain.
@@ -298,7 +301,7 @@ For the Scale tier (10K RPS) and beyond, shard by **provider tenant**:
 | Policy | Behavior | Risk | When to Use |
 |---|---|---|---|
 | **Reject** (default) | Return `CodeUnavailable` to agent | Lost revenue | High-value content, strict accounting |
-| **Deferred** | Authorize optimistically, record for later settlement | Potential bad debt | Low-value content, trusted buyers |
+| **Deferred** | Authorize optimistically, record for later settlement | Potential bad debt | Low-value content, trusted requesters |
 
 For deferred mode, the transaction is logged with `billing_status: "deferred"` and a background reconciliation goroutine retries authorization when the billing system recovers.
 
@@ -476,7 +479,7 @@ All metrics are exposed via Prometheus (OpenMetrics format) on `/metrics`.
 | `reporting_obligations_total` | Gauge | `tenant_id`, `state` | Obligations by state |
 | `reporting_compliance_rate` | Gauge | `tenant_id` | % of obligations fulfilled on time |
 | `reporting_token_deviation` | Histogram | `tenant_id` | Deviation between reported and estimated tokens |
-| `reporting_token_deviation_cumulative` | Gauge | `tenant_id`, `billing_ref` | Cumulative token deviation per buyer |
+| `reporting_token_deviation_cumulative` | Gauge | `tenant_id`, `billing_ref` | Cumulative token deviation per requester |
 
 ### Health Check Endpoint
 

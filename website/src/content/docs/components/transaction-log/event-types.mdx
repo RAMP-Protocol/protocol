@@ -29,7 +29,7 @@ Loss is acceptable -- this is telemetry, not financial data.
 | `event_id` | `string` | yes | UUIDv7, monotonically ordered |
 | `event_type` | `EventType` | yes | `EVENT_SUPPLY_QUERY_RECEIVED` |
 | `timestamp` | `time.Time` | yes | Server receipt time (UTC, nanosecond precision) |
-| `query_id` | `string` | yes | `ResourceQuery.id` |
+| `query_id` | `string` | yes | The supply query's `X-Request-ID` header (correlation left the proto body) |
 | `buyer_lid` | `string` | yes | CoMP's `aisystem.aisysuse.lid`, mapped to `Requester.billing_ref` |
 | `buyer_name` | `string` | yes | `aisystem.name` (e.g. "claude.ai") |
 | `requested_uris` | `[]string` | yes | `aisystem.aisysuse.uri` |
@@ -49,7 +49,7 @@ Rebuildable from supply query + catalog state.
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_OFFERS_PRESENTED` |
 | `timestamp` | `time.Time` | yes | Server response time |
-| `query_id` | `string` | yes | Corresponding `ResourceQuery.id` |
+| `query_id` | `string` | yes | Correlates to the supply query's `X-Request-ID` |
 | `buyer_lid` | `string` | yes | Billing reference of the requester (`Requester.billing_ref`) |
 | `offer_count` | `int32` | yes | Number of offers returned |
 | `offers` | `[]OfferSummary` | yes | Summarized offer data |
@@ -78,7 +78,7 @@ Logged when an `ExecuteTransaction` RPC is received, before billing authorizatio
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_TRANSACTION_REQUESTED` |
 | `timestamp` | `time.Time` | yes | Server receipt time |
-| `request_id` | `string` | yes | `TransactionRequest.id` (idempotency key) |
+| `idempotency_key` | `string` | yes | `TransactionRequest.idempotency_key` (the request's idempotency key) |
 | `offer_id` | `string` | yes | `TransactionRequest.offer_id` |
 | `buyer_lid` | `string` | yes | `aisystem.aisysuse.lid` |
 | `buyer_name` | `string` | yes | `aisystem.name` |
@@ -97,7 +97,7 @@ Logged after the Billing Adapter returns its authorization decision. Captures bo
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_BILLING_AUTHORIZATION` |
 | `timestamp` | `time.Time` | yes | Authorization decision time |
-| `request_id` | `string` | yes | Corresponding `TransactionRequest.id` |
+| `idempotency_key` | `string` | yes | Corresponding `TransactionRequest.idempotency_key` |
 | `offer_id` | `string` | yes | The offer being authorized |
 | `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
 | `authorized` | `bool` | yes | Whether billing was approved |
@@ -114,19 +114,7 @@ Logged after the Billing Adapter returns its authorization decision. Captures bo
 
 Authorization denials use a closed enum:
 
-| Enum Value | Description |
-|---|---|
-| `DENIAL_REASON_BILLING_REF_INACTIVE` | `billing_ref` not active / not recognized by the billing adapter |
-| `DENIAL_REASON_INSUFFICIENT_BALANCE` | Buyer's prepaid balance or credit limit exhausted |
-| `DENIAL_REASON_RATE_LIMITED` | Buyer exceeded per-period transaction rate limit |
-| `DENIAL_REASON_CONTENT_UNAVAILABLE` | Provider has withdrawn or paused the content |
-| `DENIAL_REASON_RESTRICTION_NOT_SATISFIED` | Accepted term's restriction (function / geography / user-type axis) not satisfied by the request |
-| `DENIAL_REASON_REPORTING_OVERDUE` | Buyer blocked due to overdue usage reports |
-| `DENIAL_REASON_OFFER_EXPIRED` | The referenced offer has expired since presentation |
-| `DENIAL_REASON_SIGNATURE_INVALID` | Request signature verification failed |
-| `DENIAL_REASON_QUOTA_EXCEEDED` | Subscription access/spend count exhausted for the current period |
-| `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (broken chain linkage or holder-binding mismatch), expired, or it widens scope beyond its parent |
-| `DENIAL_REASON_SCOPE_INSUFFICIENT` | Requester scopes do not cover the resource |
+::proto-enum{name=DenialReason full label="Enum Value"}
 
 ## SignedURLIssued
 
@@ -141,7 +129,7 @@ The Exchange MUST NOT return the `TransactionResponse` until this event is durab
 | `timestamp` | `time.Time` | yes | URL generation time |
 | `transaction_id` | `string` | yes | `TransactionResponse.transaction_id` |
 | `billing_id` | `string` | yes | `TransactionResponse.billing_id` |
-| `request_id` | `string` | yes | `TransactionRequest.id` (idempotency key) |
+| `idempotency_key` | `string` | yes | `TransactionRequest.idempotency_key` (the request's idempotency key) |
 | `offer_id` | `string` | yes | Selected offer |
 | `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
 | `buyer_name` | `string` | yes | AI system name |
@@ -190,7 +178,8 @@ Logged when a `ReportUsage` RPC is received. Completes the transaction lifecycle
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_USAGE_REPORT_RECEIVED` |
 | `timestamp` | `time.Time` | yes | Server receipt time |
-| `report_id` | `string` | yes | `UsageReport.id` |
+| `report_id` | `string` | yes | Exchange-assigned report id (`UsageReportResponse.report_id`) |
+| `idempotency_key` | `string` | yes | `UsageReport.idempotency_key` (the report's idempotency key) |
 | `transaction_id` | `string` | yes | `UsageReport.transaction_id` |
 | `billing_id` | `string` | yes | `UsageReport.billing_id` |
 | `buyer_lid` | `string` | yes | Extracted from transaction record |
@@ -200,8 +189,8 @@ Logged when a `ReportUsage` RPC is received. Completes the transaction lifecycle
 | `citation_included` | `bool` | no | `Usage.citation_included` |
 | `report_latency_sec` | `int64` | yes | Seconds between URL issuance and report receipt |
 | `within_window` | `bool` | yes | Whether report arrived within reporting_deadline |
-| `accepted` | `bool` | yes | Whether the report was accepted |
-| `rejection_reason` | `string` | no | Reason if rejected |
+| `accepted` | `bool` | yes | Whether the report was accepted. On the wire, acceptance is implied by a successful `UsageReportResponse`; a rejection is a non-OK transport error carrying `ErrorDetail.usage_report_rejection` (this log field records that outcome) |
+| `rejection_reason` | `UsageReportRejectionReason` | cond | Typed reason when `accepted=false`; mirrors `ErrorDetail.usage_report_rejection.reason` |
 | `exchange_id` | `string` | yes | This Exchange's identity |
 
 ## DisputeRequested (v1.0)

@@ -90,7 +90,6 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
 
 {
   "ver": "1.0",
-  "id": "sq-dnb-001",
   "requester": {
     "id": "due-diligence-bot",
     "domain": "legalcorp.com",
@@ -126,7 +125,6 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
 ```json
 {
   "ver": "1.0",
-  "id": "sq-dnb-001",
   "exchange": "exchange.dnb.com",
   "offer_groups": [
     {
@@ -164,7 +162,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "attestations": [
             {
               "verifier": "dnb.com",
-              "kid": "dnb-key-2026-q1",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-18T23:59:59Z",
               "uri": "duns:123456789",
               "claims": {
@@ -232,7 +230,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "attestations": [
             {
               "verifier": "dnb.com",
-              "kid": "dnb-key-2026-q1",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-18T23:59:59Z",
               "uri": "duns:123456789",
               "claims": {
@@ -302,7 +300,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
           "attestations": [
             {
               "verifier": "dnb.com",
-              "kid": "dnb-key-2026-q1",
+              "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
               "attested_at": "2026-03-18T23:59:59Z",
               "uri": "duns:123456789",
               "claims": {
@@ -400,7 +398,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
 
 {
   "ver": "1.0",
-  "id": "tx-dnb-001",
+  "idempotencyKey": "tx-dnb-001",
   "offer_id": "offer-dnb-acme-standard",
   "offer_signature": "base64-ed25519-dnb-offer-std-sig...",
   "requester": {
@@ -424,7 +422,6 @@ Response:
 ```json
 {
   "ver": "1.0",
-  "id": "tx-dnb-001",
   "transaction_id": "txn-dnb-acme-001",
   "billing_id": "bill-dnb-acme-001",
   "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1...",
@@ -500,7 +497,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 
 {
   "ver": "1.0",
-  "id": "ur-dnb-001",
+  "idempotencyKey": "ur-dnb-001",
   "transaction_id": "txn-dnb-acme-001",
   "billing_id": "bill-dnb-acme-001",
   "usage": {
@@ -525,7 +522,6 @@ Response:
 
 ```json
 {
-  "accepted": true,
   "report_id": "rpt-dnb-acme-001"
 }
 ```

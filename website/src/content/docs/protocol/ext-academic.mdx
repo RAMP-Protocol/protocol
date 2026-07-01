@@ -323,7 +323,7 @@ An agent queries for a Nature article. No institutional subscription is availabl
   "attestations": [
     {
       "verifier": "crossref.org",
-      "kid": "crossref-2024-key-1",
+      "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
       "attested_at": "2024-12-01T00:00:00Z",
       "uri": "https://www.nature.com/articles/s41586-024-07234-5",
       "claims": {
@@ -466,7 +466,6 @@ A Broker sends a batch query for 50 DOIs. This example shows two of the resultin
 ```json
 {
   "ver": "1.0",
-  "id": "sq_litreview_batch_001",
   "aisystem": {
     "name": "research-agent",
     "aisysuse": {
@@ -490,7 +489,6 @@ A Broker sends a batch query for 50 DOIs. This example shows two of the resultin
 ```json
 {
   "ver": "1.0",
-  "id": "sq_litreview_batch_001",
   "exchange": "academic-exchange.example.com",
   "offer_groups": [
     {
@@ -571,7 +569,7 @@ An agent discovers post-transaction that a paper was retracted but the Exchange 
 ```json
 {
   "ver": "1.0",
-  "id": "dispute_retraction_001",
+  "idempotency_key": "dispute_retraction_001",
   "transaction_id": "tx_abc123",
   "billing_id": "bill_abc123",
   "reason": "DISPUTE_REASON_WRONG_CONTENT",

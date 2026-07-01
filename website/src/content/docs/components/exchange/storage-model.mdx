@@ -52,8 +52,10 @@ type TenantCatalog struct {
     // All offer templates for enumeration (e.g., broad DiscoverResources queries).
     AllOffers []*OfferTemplate
 
-    // Default access policy for paths not in the trie.
-    DefaultPolicy rampv1.ResourceAccessPolicy
+    // Default for paths matching no entry: whether the tenant serves them
+    // openly or blocks AI access. Tenant-local config, NOT a wire type — a path
+    // is "licensed" exactly when it has a catalog entry carrying LicenseTerms.
+    BlockUnmatched bool
 }
 
 // OfferTemplate is the pre-computed offer skeleton. Pricing and identity
@@ -109,8 +111,11 @@ type TransactionRecord struct {
     Currency string  `json:"currency"`
     UnitCost float64 `json:"unit_cost,omitempty"`
 
-    // Traceability.
-    RequestID    string `json:"request_id"`
+    // Idempotency. Stores the request's idempotency key
+    // (TransactionRequest.idempotency_key) so a replay returns the original
+    // record. This is the durable dedupe key, NOT the wire correlation id —
+    // request/response correlation rides the X-Request-ID HTTP header.
+    IdempotencyKey string `json:"idempotency_key"`
     Broker string `json:"broker,omitempty"`
 
     // Offer snapshot (serialized JSON of the offer at transaction time).
@@ -241,7 +246,7 @@ type Obligation struct {
 
 **Storage**: Obligations are stored in the same durable store as transactions. The Reporting Tracker loads recent obligations (last 48h) into memory at startup for fast lookup. A background goroutine sweeps expired obligations every minute and transitions them to `Expired`.
 
-**Enforcement**: When ExecuteTransaction resolves the buyer's billing reference, it queries the Reporting Tracker for any `Expired` obligations. If found, the transaction is rejected with a `CodePermissionDenied` error indicating outstanding reporting obligations. This is the enforcement mechanism described in the RAMP protocol specification.
+**Enforcement**: When ExecuteTransaction resolves the requester's billing reference, it queries the Reporting Tracker for any `Expired` obligations. If found, the transaction is rejected with a `CodePermissionDenied` error indicating outstanding reporting obligations. This is the enforcement mechanism described in the RAMP protocol specification.
 
 ### Two Independent Metrics: Compliance Rate vs Token Accuracy
 
@@ -273,7 +278,7 @@ Providers get read-only access to all signed Offers issued for their content. Th
 - `timestamp` — when the transaction was executed
 
 **Verification capabilities**:
-- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (fetch the Exchange's `/.well-known/ramp.json` and read `public_keys`)
+- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (fetch the Exchange's WBA directory, the JWK Set at `/.well-known/http-message-signatures-directory`, and read its `keys`)
 - RSL pricing, when present, serves as the **price ceiling** — Offers exceeding the RSL-declared rate are detectable by comparing `offer_snapshot.pricing.rate` against the RSL terms
 - Private floor pricing is contractual between provider and Exchange, not protocol-enforced — the protocol provides the audit data, the contract governs the terms
 
@@ -349,8 +354,7 @@ type DisputeRecord struct {
     Reason          DisputeReason `json:"reason"`
     Description     string        `json:"description"`
     Status          DisputeStatus `json:"status"`
-    Resolution      ResolutionType `json:"resolution,omitempty"`
-    RejectionReason string        `json:"rejection_reason,omitempty"`
+    Resolution      ResolutionType `json:"resolution,omitempty"` // RESOLUTION_TYPE_REJECTED when reviewed and denied
     CreditAmount    float64       `json:"credit_amount,omitempty"`
     Currency        string        `json:"currency,omitempty"`
     FiledAt         time.Time     `json:"filed_at"`
@@ -359,7 +363,7 @@ type DisputeRecord struct {
 }
 ```
 
-The `report_id` linkage is critical -- it connects the dispute to the agent's prior usage report, establishing the evidence chain: `Offer -> Transaction -> UsageReport -> Dispute`. Disputes without a valid `report_id` are rejected.
+The `report_id` linkage is critical -- it connects the dispute to the agent's prior usage report, establishing the evidence chain: `Offer -> Transaction -> UsageReport -> Dispute`. A dispute filed without a valid `report_id` is refused at filing time — that refusal is a non-OK transport error carrying a typed `ErrorDetail.dispute_failure` (`DISPUTE_FAILURE_REASON_REPORT_NOT_FILED`), and no `DisputeRecord` is created. A `DisputeRecord` exists only for disputes accepted for processing; one that is later reviewed and denied carries `Resolution = RESOLUTION_TYPE_REJECTED`.
 
 **Storage**: Dispute records share the same durable store as transaction records (PostgreSQL for Growth tier, ClickHouse for Scale tier). They are indexed by `dispute_id`, `transaction_id`, and `(billing_ref, filed_at)` for compliance queries.
 

@@ -28,7 +28,7 @@ sequenceDiagram
     Note over Provider,MP: Provider sets terms via RSL<br/>Exchange operator configures private pricing
 
     Agent->>MP: ExecuteTransaction (offer_id)
-    MP->>MP: BillingAdapter.Authorize(buyer, amount)
+    MP->>MP: BillingAdapter.Authorize(requester, amount)
     MP->>MP: BillingAdapter.Record(transaction)
     MP-->>Agent: TransactionResponse (signed URL + billing_id)
 
@@ -101,7 +101,7 @@ The protocol supports two billing patterns:
 The default model. Each transaction is independently authorized and billed:
 
 1. Agent sends `ExecuteTransaction` with a selected offer
-2. Exchange calls `BillingAdapter.Authorize(buyer, amount)` -- checks the buyer's balance/credit
+2. Exchange calls `BillingAdapter.Authorize(requester, amount)` -- checks the requester's balance/credit
 3. If authorized, Exchange issues a signed URL and records the transaction
 4. The AI company is invoiced for the sum of all transactions
 
@@ -109,7 +109,7 @@ The default model. Each transaction is independently authorized and billed:
 
 When an AI company has a subscription deal with an Exchange:
 
-1. During `DiscoverResources`, the Exchange detects the buyer's subscription and includes a subscription offer with `rate=0` and `subscription_id`
+1. During `DiscoverResources`, the Exchange detects the requester's subscription and includes a subscription offer with `rate=0` and `subscription_id`
 2. The Broker prefers subscription offers (zero marginal cost)
 3. During `ExecuteTransaction`, the Exchange skips `BillingAdapter.Authorize` (already paid under subscription) but checks quota
 4. Usage reporting is still mandatory -- providers need consumption data for subscription renewals
@@ -121,9 +121,9 @@ Subscription transactions include a `subscription_unit_value` field that carries
 Two enforcement layers prevent overspend, mirroring how OpenRTB prevents advertiser overspend:
 
 - **Agent/Broker-side**: `RequestConstraints.max_unit_cost` -- the agent will not accept offers above this threshold. The Broker tracks cumulative spend across a session and enforces the agent's budget cap.
-- **Exchange-side**: The Exchange operator's Billing Adapter checks the buyer's balance or credit before authorizing each transaction. Returns a denial if the buyer is over their limit.
+- **Exchange-side**: The Exchange operator's Billing Adapter checks the requester's balance or credit before authorizing each transaction. Returns a denial if the requester is over their limit.
 
-Each Exchange independently tracks per-buyer balance. The Broker maintains its own cumulative view for budget enforcement, but the Exchange is authoritative for "can this buyer afford this transaction."
+Each Exchange independently tracks per-requester balance. The Broker maintains its own cumulative view for budget enforcement, but the Exchange is authoritative for "can this requester afford this transaction."
 
 ## Example Transaction: End to End
 
@@ -134,7 +134,7 @@ Here is a concrete transaction with dollar amounts.
 - Article: "AI Regulation: What Providers Need to Know" (2,500 words, ~3,300 tokens)
 - RSL price ceiling: $0.08 per crawl
 - SSP-Alpha private pricing: $0.05 per article (below RSL ceiling)
-- Buyer: Anthropic (Claude), billing reference `billing_ref` `ANTHROPIC-COST-CENTER-001`
+- Requester: Anthropic (Claude), billing reference `billing_ref` `ANTHROPIC-COST-CENTER-001`
 - Anthropic has an annual subscription with Hearst via SSP-Alpha
 
 **What happens:**
@@ -180,7 +180,7 @@ Two fields provide cost transparency even when the per-request charge is zero:
 Three independent records ensure transaction integrity:
 
 1. **CDN access logs** (provider controls): every signed URL access with transaction ID, agent ID, timestamp
-2. **Exchange transaction log** (Exchange operator controls): every `billing_id` issued with cost, buyer, offer snapshot (including Ed25519 exchange signature for non-repudiation)
+2. **Exchange transaction log** (Exchange operator controls): every `billing_id` issued with cost, requester, offer snapshot (including Ed25519 exchange signature for non-repudiation)
 3. **Usage reports** (agent files): what the agent actually did with the resource (token count, function, citation)
 
 All three records must agree. Discrepancies are resolved offline, like ad-tech billing discrepancy resolution (~5-10% tolerance).

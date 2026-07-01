@@ -50,20 +50,17 @@ curl -s https://exchange.ramp-protocol.org/health | jq
 
 ### Step 2: Retrieve Exchange Public Key
 
-The Exchange announces its [Ed25519](/protocol/authentication) public keys inline in its `/.well-known/ramp.json` manifest under `public_keys`. Agents and Brokers fetch this and read `public_keys` to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication).
+The Exchange announces its [Ed25519](/protocol/authentication) public keys in its WBA directory — a JWK Set served at `/.well-known/http-message-signatures-directory`. Agents and Brokers fetch this and read `keys` to verify offer signatures — see [how authentication works across all RAMP boundaries](/protocol/authentication). Keys no longer live in `ramp.json`; each key is identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
 
 ```bash
-curl -s https://exchange.ramp-protocol.org/.well-known/ramp.json | jq
+curl -s https://exchange.ramp-protocol.org/.well-known/http-message-signatures-directory | jq
 ```
 
 ```json
+// Content-Type: application/jwk-set+json
 {
-  "ver": "1.0",
-  "role": "ROLE_EXCHANGE",
-  "domain": "exchange.ramp-protocol.org",
-  "public_keys": [
+  "keys": [
     {
-      "kid": "exchange-2026-Q1",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -96,12 +93,11 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Disco
   }' | jq
 ```
 
-The response contains **OfferGroups** — one per requested URI — each with Ed25519-signed offers:
+The response contains **OfferGroups** — one per requested URI — each with Ed25519-signed offers (correlation rides on the `X-Request-ID` response header, echoing the value you sent):
 
 ```json
 {
   "ver": "1.0",
-  "id": "demo-query-001",
   "exchange": "ramp-exchange-v1.0",
   "offer_groups": [
     {
@@ -150,7 +146,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
   -H "Content-Type: application/json" \
   -d '{
     "ver": "1.0",
-    "id": "demo-txn-001",
+    "idempotencyKey": "demo-txn-001",
     "offer_id": "<offer_id from Step 3>",
     "offer_signature": "<signature from Step 3>",
     "aisystem": {
@@ -164,7 +160,6 @@ Response:
 ```json
 {
   "ver": "1.0",
-  "id": "demo-txn-001",
   "transaction_id": "txn-1773682700352684307",
   "billing_id": "bill-000002",
   "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307",
@@ -207,7 +202,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Repor
   -H "Content-Type: application/json" \
   -d '{
     "ver": "1.0",
-    "id": "demo-report-001",
+    "idempotencyKey": "demo-report-001",
     "transaction_id": "<transaction_id from Step 4>",
     "billing_id": "<billing_id from Step 4>",
     "usage": { "consumed_quantity": 1500 }
@@ -215,26 +210,49 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Repor
 ```
 
 ```json
-{ "accepted": true }
+{ "report_id": "rpt-demo-001" }
 ```
+
+A successful `UsageReportResponse` just carries the Exchange-assigned `report_id`. A rejected report is not a success body — it travels as a non-OK transport error carrying `ErrorDetail.usageReportRejection` (see Step 7).
 
 ### Step 7: Verify Denial Conditions
 
 The Exchange enforces [11 denial reasons](/protocol/transaction-flow) defined in the protocol:
 
+A denied single transaction is **not** a 200 success body — it travels as a non-OK transport error whose `ErrorDetail` carries a `transactionDenial` block (the `denial_reason` field is no longer in `TransactionResponse`).
+
 **Missing offer signature → DENIAL_REASON_SIGNATURE_INVALID:**
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
   -H "Content-Type: application/json" \
-  -d '{"ver":"0.2","id":"deny-001","offer_id":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq .denial_reason
+  -d '{"ver":"0.2","idempotencyKey":"deny-001","offer_id":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq
 ```
+The Exchange returns a non-OK status (Connect maps this to HTTP 400 / `failed_precondition`) with an `ErrorDetail`:
 ```json
-"DENIAL_REASON_SIGNATURE_INVALID"
+{
+  "code": "failed_precondition",
+  "message": "offer signature invalid",
+  "details": [
+    {
+      "transactionDenial": { "reason": "DENIAL_REASON_SIGNATURE_INVALID" }
+    }
+  ]
+}
 ```
 
-**Zero token count → rejection:**
+**Zero token count → usage report rejection:**
+
+A rejected `ReportUsage` is likewise a non-OK transport error carrying `ErrorDetail.usageReportRejection`:
 ```json
-{ "accepted": false, "rejection_reason": "consumed_quantity is required and must be > 0" }
+{
+  "code": "invalid_argument",
+  "message": "consumed_quantity is required and must be > 0",
+  "details": [
+    {
+      "usageReportRejection": { "reason": "USAGE_REPORT_REJECTION_REASON_MALFORMED" }
+    }
+  ]
+}
 ```
 
 See the full [threat model](/security/threat-model) for how these protections defend against replay attacks, URL sharing, billing fraud, and reporting evasion.
@@ -343,16 +361,13 @@ In a real [Broker](/components/broker/overview) deployment, the [selection engin
 The reference implementation is open source. See the [Exchange component docs](/components/exchange/overview) for architecture details, or run it locally:
 
 ```bash
-git clone https://github.com/postindustria-tech/agentic-content-access.git
-cd agentic-content-access/v0.2-poc/exchange
+git clone https://github.com/RAMP-Protocol/reference-implementation.git
+cd reference-implementation
 
-# Run directly (requires Go 1.23+)
-go run ./cmd/server
+# Build and run the Exchange locally — follow the repo README for the current
+# commands (Go 1.23+, with a Docker Compose option).
 
-# Or with Docker
-docker compose up
-
-# Test
+# Once it's up, the Exchange answers:
 curl http://localhost:3000/health
 curl http://localhost:3000/.well-known/ramp.json
 ```
