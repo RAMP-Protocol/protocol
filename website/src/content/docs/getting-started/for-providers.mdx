@@ -175,7 +175,7 @@ Attestation is most useful for STATIC resources where the hash remains stable. F
 4. Key is provisioned   -> ready to sign attestations
 ```
 
-**`ramp.json`**: Your domain hosts a `/.well-known/ramp.json` file with your public keys in `public_keys` (inline RFC 7517 Ed25519 JWKs, selected by `kid`). Agents and Exchanges fetch this to verify your attestation signatures. RAMP has no dedicated verifier role; a verifier publishes under its operator's role — here `ROLE_PUBLISHER` for self-attestation.
+**Key publication**: Your domain hosts a WBA directory — a JWK Set at `/.well-known/http-message-signatures-directory` — carrying your public keys (inline RFC 7517 Ed25519 JWKs, each identified by its RFC 7638 thumbprint). Agents and Exchanges fetch this to verify your attestation signatures; keys no longer live in `ramp.json`. RAMP has no dedicated verifier role; a verifier publishes under its operator's role — here `ROLE_PUBLISHER` for self-attestation.
 
 **`catalog_contributors`**: You can authorize third-party verification vendors to push attestations on your behalf. Declare authorized contributors in your provider manifest. Only contributors listed in `catalog_contributors` can push resource metadata to the Exchange for your domain.
 
@@ -199,8 +199,9 @@ Every provider with a web presence can host a `ramp.json` file at their domain r
 
 - Which Exchange(s) are authorized to sell your resources
 - Which extension profiles your resources support
-- Your public verification keys (in `public_keys`)
 - Authorized catalog contributors
+
+Your public verification keys are published separately in your WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`), not in `ramp.json`.
 
 AI agents and Brokers read `ramp.json` to discover how to access your resources through RAMP.
 
