@@ -94,7 +94,6 @@ func (o *Broker) Resolve(ctx context.Context, req *rampv1.DiscoveryRequest) (*ra
     // 4. Return the offers to the agent. The agent (or the Broker, on the agent's
     //    behalf) commits separately via ExecuteTransaction — see below.
     return &rampv1.DiscoveryResponse{
-        RequestId:   req.Id,
         OfferGroups: groups,
     }, nil
 }

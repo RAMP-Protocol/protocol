@@ -497,9 +497,8 @@ Every selection decision is logged with full rationale for audit:
 
 ```go
 type SelectionLog struct {
-    // The agent's DiscoveryRequest.id this decision was made for (Broker-internal
-    // audit key). Cross-service request/response correlation rides the
-    // X-Request-ID HTTP header, not a message field.
+    // Broker-internal audit key correlating this decision to the inbound request.
+    // Request/response correlation rides the X-Request-ID HTTP header, not a message field.
     RAMPRequestID       string              `json:"ramp_request_id"`
     Timestamp           time.Time           `json:"timestamp"`
     ExchangesQueried []string            `json:"exchanges_queried"`
