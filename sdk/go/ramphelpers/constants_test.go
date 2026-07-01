@@ -22,7 +22,7 @@ func TestWireConstants(t *testing.T) {
 	}
 
 	// L0 reachability: construct a generated message from L1's module.
-	if _, ok := any(&rampv1.RAMPRequest{}).(interface{ Reset() }); !ok {
-		t.Fatal("expected generated RAMPRequest to be reachable from sdk/go")
+	if _, ok := any(&rampv1.DiscoveryRequest{}).(interface{ Reset() }); !ok {
+		t.Fatal("expected generated DiscoveryRequest to be reachable from sdk/go")
 	}
 }

@@ -29,7 +29,7 @@ Loss is acceptable -- this is telemetry, not financial data.
 | `event_id` | `string` | yes | UUIDv7, monotonically ordered |
 | `event_type` | `EventType` | yes | `EVENT_SUPPLY_QUERY_RECEIVED` |
 | `timestamp` | `time.Time` | yes | Server receipt time (UTC, nanosecond precision) |
-| `query_id` | `string` | yes | `ResourceQuery.id` |
+| `query_id` | `string` | yes | The supply query's `X-Request-ID` header (correlation left the proto body) |
 | `buyer_lid` | `string` | yes | CoMP's `aisystem.aisysuse.lid`, mapped to `Requester.billing_ref` |
 | `buyer_name` | `string` | yes | `aisystem.name` (e.g. "claude.ai") |
 | `requested_uris` | `[]string` | yes | `aisystem.aisysuse.uri` |
@@ -49,7 +49,7 @@ Rebuildable from supply query + catalog state.
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_OFFERS_PRESENTED` |
 | `timestamp` | `time.Time` | yes | Server response time |
-| `query_id` | `string` | yes | Corresponding `ResourceQuery.id` |
+| `query_id` | `string` | yes | Correlates to the supply query's `X-Request-ID` |
 | `buyer_lid` | `string` | yes | Billing reference of the requester (`Requester.billing_ref`) |
 | `offer_count` | `int32` | yes | Number of offers returned |
 | `offers` | `[]OfferSummary` | yes | Summarized offer data |

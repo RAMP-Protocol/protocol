@@ -28,7 +28,7 @@ Optional RPC for providers/CMS/third-party intelligence providers to push conten
 
 ### BrokerService
 
-The Broker entry point. A client sends the URIs/query it wants resolved and receives a licensed result (or a typed reason none was available).
+The Broker entry point. `Resolve(DiscoveryRequest) → DiscoveryResponse` is discovery-only: a client sends the URIs/query it wants resolved and receives `offer_groups` (one `OfferGroup` per URI, each carrying the full signed `Offer`) or a typed `absence_reason` with empty `offer_groups` when nothing licensable was found. "No result" is a successful answer; malformed requests, auth failures, and internal faults are non-OK transport errors carrying an `ErrorDetail`. Resolve does **not** deliver inline — the per-transaction result (transaction id, billing id, retrieval endpoint, …) is returned on `TransactionResponse` via the separate execute path, routed by `Offer.exchange`.
 
 ::proto-service{name=BrokerService}
 
@@ -40,7 +40,7 @@ The Broker entry point. A client sends the URIs/query it wants resolved and rece
 
 ### AcceptableRestriction
 
-The limits a query operates within on one restriction axis, in the same `RestrictionKind` vocabulary the terms use. The Exchange/Broker MAY pre-select offers whose term restrictions fall within these (convenience, not enforcement). Used in `ResourceQuery` and `RAMPRequest`.
+The limits a query operates within on one restriction axis, in the same `RestrictionKind` vocabulary the terms use. The Exchange/Broker MAY pre-select offers whose term restrictions fall within these (convenience, not enforcement). Used in `ResourceQuery` and `DiscoveryRequest`.
 
 ::proto-message{name=AcceptableRestriction}
 
@@ -62,7 +62,7 @@ Rate limit status modeled after IETF RateLimit header fields.
 
 ### Requester
 
-Identity and entitlements only — who is asking and what they're entitled to. What they're asking for (`uris`) and the limits they'll accept (`acceptable_restrictions`) live on the ask (`ResourceQuery` / `RAMPRequest`), not here. Used in `ResourceQuery` and `RAMPRequest`.
+Identity and entitlements only — who is asking and what they're entitled to. What they're asking for (`uris`) and the limits they'll accept (`acceptable_restrictions`) live on the ask (`ResourceQuery` / `DiscoveryRequest`), not here. Used in `ResourceQuery` and `DiscoveryRequest`.
 
 ::proto-message{name=Requester}
 
@@ -80,7 +80,7 @@ Scoped, time-limited, spend-capped credential. The credential itself is opaque b
 
 ### Multi-hop forwarding (no message — HTTP layer)
 
-There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → … → Exchange) is a **stack of RFC 9421 HTTP Message Signatures**: each forwarding party adds one labeled signature, and each signature covers the request plus the prior hop's signature, so the ordered set of signatures is the chain (tamper-evident, order-bound). The Exchange resolves each `keyid` at `{domain}/.well-known/ramp.json`, verifies every signature, and enforces `RequestConstraints.max_hops` / `WellKnownManifest.max_intermediary_hops` by counting them. Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent (bound by `agent_identity_hash`).
+There is no in-message hop chain. Multi-hop forwarding (Agent → Broker → … → Exchange) is a **stack of RFC 9421 HTTP Message Signatures**: each forwarding party adds one labeled signature, and each signature covers the request plus the prior hop's signature, so the ordered set of signatures is the chain (tamper-evident, order-bound). The Exchange resolves each `keyid` (an RFC 7638 thumbprint) in the signer's WBA directory at `{domain}/.well-known/http-message-signatures-directory`, verifies every signature, and enforces `RequestConstraints.max_hops` / `WellKnownManifest.max_intermediary_hops` by counting them. Responses do not retrace the chain — the terminal Exchange returns directly to the originating agent (bound by `agent_identity_hash`).
 
 ## Messages -- Offers and Pricing
 
@@ -240,21 +240,30 @@ A successful response means verification succeeded; a failure travels as a non-O
 
 ### WellKnownManifest
 
-Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Carries inline keys (`JsonWebKey`) with explicit time bounds and an optional emergency-revocation pointer. Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
+Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Signing keys are **not** carried here — each participant publishes them in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`, modeled by [`WBAFile`](#wbafile)). Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
 
 ::proto-message{name=WellKnownManifest}
 
+### WBAFile
+
+The pure WBA directory, served at `/.well-known/http-message-signatures-directory` (`Content-Type: application/jwk-set+json`). Holds each participant's inline signing keys and an optional emergency-revocation pointer. Keys are identified by their RFC 7638 thumbprint (the RFC 9421 `keyid`).
+
+| Field | Type | Number | Description |
+|---|---|---|---|
+| `keys` | repeated JsonWebKey | 1 | Signature-verification keys; ≥1 valid at serve time |
+| `revocation_url` | optional string | 2 | Emergency key-revocation list URL (`KeyRevocationList`) |
+
 ### JsonWebKey
 
-Inline RFC 7517 JWK. RAMP v1.0 supports Ed25519 only. Time bounds are RFC3339 strings; the validity window is half-open `[not_before, not_after)`.
+Inline RFC 7517 JWK. RAMP v1.0 supports Ed25519 only. Time bounds are RFC3339 strings; the validity window is half-open `[not_before, not_after)`. Keys carry no `kid` label — a key is identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
 
 ::proto-message{name=JsonWebKey}
 
-### KeyInvalidationList
+### KeyRevocationList
 
-Body served at `WellKnownManifest.invalidation_url`. Snapshot semantics: `revoked` is the complete set of revoked `kid`s at `as_of`; consumers replace their local revocation set on each successful poll.
+Body served at `WBAFile.revocation_url`. Snapshot semantics: `revoked` is the complete set of revoked key thumbprints at `as_of`; consumers replace their local revocation set on each successful poll.
 
-::proto-message{name=KeyInvalidationList}
+::proto-message{name=KeyRevocationList}
 
 ### CatalogContributor
 
@@ -272,11 +281,11 @@ A Exchange authorized to sell this provider's content.
 
 Messages for the Agent-to-Broker path (Steps 1 and 6). When an agent talks directly to an Exchange, it uses ResourceQuery/TransactionRequest instead.
 
-### RAMPRequest
+### DiscoveryRequest
 
-Agent sends to Broker (Step 1).
+Agent sends to Broker (Step 1), carried by `BrokerService.Resolve`. Pure discovery: it returns offers, executes no transaction, and so carries no `idempotency_key` (retrying is naturally safe). Correlation rides on the `X-Request-ID` header, not the body.
 
-::proto-message{name=RAMPRequest}
+::proto-message{name=DiscoveryRequest}
 
 ### RequestConstraints
 
@@ -284,11 +293,11 @@ Budget and preference constraints for exchange filtering and offer selection.
 
 ::proto-message{name=RequestConstraints}
 
-### RAMPResponse
+### DiscoveryResponse
 
-Broker returns to Agent (Step 6).
+Broker returns to Agent (Step 6). Discovery-only: `offer_groups` (field 4, one `OfferGroup` per requested URI, each carrying the full signed `Offer` with `Offer.exchange` as the execute-routing target) or `absence_reason` (field 16) with empty `offer_groups`. There are no inline delivery fields — the per-transaction result rides on `TransactionResponse` via the separate execute path.
 
-::proto-message{name=RAMPResponse}
+::proto-message{name=DiscoveryResponse}
 
 ## Messages -- CatalogService
 

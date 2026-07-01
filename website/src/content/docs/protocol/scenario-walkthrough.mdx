@@ -55,18 +55,14 @@ Before any agent request, providers configure their domains and Exchanges ingest
 
 ### 0b. Agent Key Announcement
 
-Anthropic publishes its agent's Ed25519 public key at a well-known endpoint:
+Anthropic publishes its agent's Ed25519 public key in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`):
 
 ```json
-// GET https://claude.ai/.well-known/ramp.json
+// GET https://claude.ai/.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
 {
-  "ver": "1.0",
-  "role": "ROLE_AGENT",
-  "domain": "claude.ai",
-  "contact": "legal@anthropic.com",
-  "public_keys": [
+  "keys": [
     {
-      "kid": "claude-2026-01",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -75,22 +71,31 @@ Anthropic publishes its agent's Ed25519 public key at a well-known endpoint:
       "not_before": "2026-01-01T00:00:00Z",
       "not_after": "2026-12-31T23:59:59Z"
     }
-  ]
+  ],
+  "revocation_url": "https://claude.ai/.well-known/ramp-invalidations.json"
 }
 ```
 
-The Broker announces its key at the same path format:
+The `ramp.json` manifest still declares the role and contact, but the keys live in the WBA directory:
 
 ```json
-// GET https://broker.anthropic.com/.well-known/ramp.json
+// GET https://claude.ai/.well-known/ramp.json
 {
   "ver": "1.0",
   "role": "ROLE_AGENT",
-  "domain": "broker.anthropic.com",
-  "contact": "legal@anthropic.com",
-  "public_keys": [
+  "domain": "claude.ai",
+  "contact": "legal@anthropic.com"
+}
+```
+
+The Broker announces its key in its own WBA directory the same way:
+
+```json
+// GET https://broker.anthropic.com/.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
+{
+  "keys": [
     {
-      "kid": "broker-2026-01",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -99,7 +104,8 @@ The Broker announces its key at the same path format:
       "not_before": "2026-01-01T00:00:00Z",
       "not_after": "2026-12-31T23:59:59Z"
     }
-  ]
+  ],
+  "revocation_url": "https://broker.anthropic.com/.well-known/ramp-invalidations.json"
 }
 ```
 
@@ -118,7 +124,9 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
    { verifier: "gumgum.com", claims: { estimated_quantity: 3300, word_count: 2500,
      language: "en", iab_categories: ["IAB19-6"] }, signature: "..." }
    Exchange validates: gumgum.com is in techcrunch.com's catalog_contributors,
-   verifies signature against public_keys in gumgum.com/.well-known/ramp.json
+   verifies signature against the key in gumgum.com's WBA directory
+   (the JWK Set at gumgum.com/.well-known/http-message-signatures-directory),
+   selected by the attestation's keyid (RFC 7638 thumbprint)
 6. Build catalog entry:
    {
      domain: "techcrunch.com",
@@ -135,7 +143,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
        resource_mutability: RESOURCE_MUTABILITY_STATIC
      },
      attestations: [
-       { verifier: "gumgum.com", kid: "gumgum-key-2026-03",
+       { verifier: "gumgum.com", keyid: "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
          attested_at: "2026-03-14T09:00:00Z",
          uri: "https://techcrunch.com/premium/ai-regulation-2026.html",
          claims: { estimated_quantity: 3300, word_count: 2500, language: "en" },
@@ -240,7 +248,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 {
   "ver": "1.0",
-  "id": "sq-claude-001",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
@@ -282,7 +289,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
                  iptc_guid: "urn:newsml:techcrunch:20260315:ai-reg-001",
                  content_hash: "a1b2c3d4e5f6...", hash_method: "simhash-v1" }
      attestations: [
-       { verifier: "gumgum.com", kid: "gumgum-key-2026-03",
+       { verifier: "gumgum.com", keyid: "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
          claims: { estimated_quantity: 3300, word_count: 2500, language: "en" },
          signature: "base64-ed25519-gumgum..." }
      ]
@@ -347,7 +354,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
       "attestations": [
         {
           "verifier": "gumgum.com",
-          "kid": "gumgum-key-2026-03",
+          "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
           "attested_at": "2026-03-14T09:00:00Z",
           "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "claims": { "estimated_quantity": 3300, "word_count": 2500, "language": "en" },
@@ -395,7 +402,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
       "attestations": [
         {
           "verifier": "gumgum.com",
-          "kid": "gumgum-key-2026-03",
+          "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
           "attested_at": "2026-03-14T09:00:00Z",
           "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "claims": { "estimated_quantity": 3300, "word_count": 2500, "language": "en" },
@@ -426,13 +433,12 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 ## Phase 2b: Cross-Provider via Broker (Header Signature Chain, OfferGroups, SimHash)
 
-If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `RAMPRequest` to the Broker with multiple URIs:
+If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `DiscoveryRequest` to the Broker with multiple URIs (`BrokerService.Resolve` is discovery-only — it returns offers grouped by URI; execution happens later via a separate `ExecuteTransaction` call):
 
 ```json
 // Agent -> Broker
 {
   "ver": "1.0",
-  "id": "pr-claude-001",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
@@ -469,7 +475,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 {
   "ver": "1.0",
-  "id": "sq-orch-alpha-001",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
@@ -922,7 +927,7 @@ Response includes signed Offer snapshots for every transaction:
 
 **What Hearst can verify**:
 
-1. **Offer authenticity**: Hearst verifies the `exchange_signature` on each `offer_snapshot` using SSP-Alpha's published Ed25519 public key (fetch `exchange.ssp-alpha.com/.well-known/ramp.json` and read `public_keys`). This proves the Exchange actually issued this Offer -- it cannot deny having offered these terms.
+1. **Offer authenticity**: Hearst verifies the `exchange_signature` on each `offer_snapshot` using SSP-Alpha's published Ed25519 public key (fetch SSP-Alpha's WBA directory at `exchange.ssp-alpha.com/.well-known/http-message-signatures-directory` and read its `keys`). This proves the Exchange actually issued this Offer -- it cannot deny having offered these terms.
 
 2. **RSL price ceiling compliance**: Hearst's RSL declares a maximum rate of $0.08/crawl. The subscription's `subscription_unit_value` of $0.05 is below this ceiling. If any per-request Offer exceeded $0.08, Hearst would detect it by comparing `offer_snapshot.pricing.rate` against their RSL terms.
 
