@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	jose "github.com/go-jose/go-jose/v4"
 )
 
 // ErrNoEndpoint signals that an Exchange's /.well-known/ramp.json was fetched and
@@ -23,13 +25,14 @@ var ErrNoEndpoint = errors.New("helpers: well-known manifest has no endpoint")
 // ExchangeService endpoint (field 12). One fetch decodes the whole document so a
 // single body serves both the key face (WellKnownKeyResolver) and the endpoint
 // face (WellKnownEndpointResolver).
+//
+// The embedded jose.JSONWebKeySet promotes the "keys" member, so go-jose (the
+// canonical JOSE library) parses each JWK — decoding the OKP/Ed25519 `x` member
+// into an ed25519.PublicKey on JSONWebKey.Key — rather than the SDK hand-rolling
+// the kty/crv match and the base64url `x` decode. The endpoint face still reads
+// the promoted-alongside Endpoint field from the same body.
 type wellKnownDoc struct {
-	Keys []struct {
-		Kid string `json:"kid"`
-		Kty string `json:"kty"`
-		Crv string `json:"crv"`
-		X   string `json:"x"`
-	} `json:"keys"`
+	jose.JSONWebKeySet
 	Endpoint string `json:"endpoint"`
 }
 

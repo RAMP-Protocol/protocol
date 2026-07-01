@@ -228,11 +228,7 @@ func chainLinkValue(req *http.Request, c CoveredComponent) (string, error) {
 	if key == "" {
 		return "", fmt.Errorf("%w: signature component missing key param", ErrMalformedSignatureInput)
 	}
-	rawSig := req.Header.Get("Signature")
-	if rawSig == "" {
-		return "", fmt.Errorf("helpers: resolve chain link %q: %w", key, ErrMissingSignature)
-	}
-	prevBytes, err := parseSignatureField(rawSig, key)
+	prevBytes, err := signatureBytesForLabel(req.Header, key)
 	if err != nil {
 		return "", fmt.Errorf("helpers: resolve chain link %q: %w", key, err)
 	}

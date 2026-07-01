@@ -1,10 +1,12 @@
 package helpers
 
 import (
+	"crypto"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+
+	jose "github.com/go-jose/go-jose/v4"
 )
 
 // RFC 7638 JWK Thumbprint of an Ed25519 public key, base64url-no-pad encoded.
@@ -47,10 +49,15 @@ func ThumbprintBytes(pub ed25519.PublicKey) ([32]byte, error) {
 	if len(pub) != ed25519.PublicKeySize {
 		return [32]byte{}, fmt.Errorf("%w: got %d", ErrInvalidKeyLength, len(pub))
 	}
-	x := base64.RawURLEncoding.EncodeToString(pub)
-	// Canonical JWK: members lexicographically ordered (crv, kty, x), no
-	// whitespace. Hand-built rather than json.Marshal so member order and spacing
-	// are guaranteed independent of encoder behaviour.
-	canonical := fmt.Sprintf(`{"crv":"Ed25519","kty":"OKP","x":%q}`, x)
-	return sha256.Sum256([]byte(canonical)), nil
+	// go-jose builds the canonical RFC 7638 OKP JWK (crv, kty, x in lexicographic
+	// order, no whitespace) and SHA-256s it. Byte-parity with the prior hand-built
+	// form — and with the TS edge and Python shim — is enforced by the
+	// shared-vectors test (testdata/thumbprint-vectors.json).
+	sum, err := (&jose.JSONWebKey{Key: pub}).Thumbprint(crypto.SHA256)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("helpers: jwk thumbprint: %w", err)
+	}
+	var out [32]byte
+	copy(out[:], sum)
+	return out, nil
 }

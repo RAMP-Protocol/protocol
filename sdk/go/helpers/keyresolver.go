@@ -3,13 +3,13 @@ package helpers
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
+
+	jose "github.com/go-jose/go-jose/v4"
 )
 
 // KeyResolver is the injection point for verifying-key lookup (ADR-020 §4). The
@@ -163,22 +163,33 @@ func (r *WellKnownKeyResolver) refresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	next := make(map[string]ed25519.PublicKey, len(doc.Keys))
-	for _, k := range doc.Keys {
-		if !strings.EqualFold(k.Kty, "OKP") || !strings.EqualFold(k.Crv, "Ed25519") {
-			continue
-		}
-		raw, decErr := base64.RawURLEncoding.DecodeString(k.X)
-		if decErr != nil || len(raw) != ed25519.PublicKeySize {
-			continue
-		}
-		next[k.Kid] = ed25519.PublicKey(raw)
-	}
+	next := ed25519KeysFromJWKS(doc.JSONWebKeySet)
 	r.mu.Lock()
 	r.cache = next
 	r.cacheExp = r.now().Add(r.ttl)
 	r.mu.Unlock()
 	return nil
+}
+
+// ed25519KeysFromJWKS extracts the Ed25519 (OKP/crv=Ed25519) public keys from a
+// go-jose-parsed JWK Set, keyed by kid. go-jose decodes the JWK `x` member into
+// an ed25519.PublicKey on the JSONWebKey.Key field when kty=OKP and
+// crv=Ed25519; any other key type (or a missing kid) is skipped, preserving the
+// resolver's accept-only-Ed25519-keyed-by-kid behavior.
+func ed25519KeysFromJWKS(set jose.JSONWebKeySet) map[string]ed25519.PublicKey {
+	out := make(map[string]ed25519.PublicKey, len(set.Keys))
+	for i := range set.Keys {
+		k := set.Keys[i]
+		if k.KeyID == "" {
+			continue
+		}
+		pub, ok := k.Key.(ed25519.PublicKey)
+		if !ok || len(pub) != ed25519.PublicKeySize {
+			continue
+		}
+		out[k.KeyID] = pub
+	}
+	return out
 }
 
 // VerifyRequestResolved resolves the request's signing key via resolver, then

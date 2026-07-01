@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/dunglas/httpsfv"
 )
 
 // AlgEd25519 is the RFC 9421 alg value for Ed25519 signatures.
@@ -175,17 +177,16 @@ func signWithParams(ctx context.Context, req *http.Request, params sigParams, si
 // maxSignatureLabelN scans Signature-Input for the highest sigN label and
 // returns N (0 when none). Shared by findNextLabel and findPrevLabel.
 func maxSignatureLabelN(h http.Header) int {
-	rawInput := h.Get("Signature-Input")
-	if rawInput == "" {
+	inputValues := h.Values("Signature-Input")
+	if len(inputValues) == 0 {
+		return 0
+	}
+	dict, err := httpsfv.UnmarshalDictionary(inputValues)
+	if err != nil {
 		return 0
 	}
 	maxN := 0
-	for _, labelInput := range parseMultiLabelInput(rawInput) {
-		eq := strings.Index(labelInput, "=")
-		if eq <= 0 {
-			continue
-		}
-		label := strings.TrimSpace(labelInput[:eq])
+	for _, label := range dict.Names() {
 		if !strings.HasPrefix(label, "sig") {
 			continue
 		}

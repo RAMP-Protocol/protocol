@@ -20,7 +20,18 @@ func jwksHandler(keys map[string]ed25519.PublicKey, hits *int) http.Handler {
 		if hits != nil {
 			*hits++
 		}
-		type jwk struct{ Kid, Kty, Crv, X string }
+		// RFC 7517 member names are lowercase (kty/crv/x/kid). The json tags are
+		// required: go-jose parses JWK members case-sensitively, so a tag-less
+		// struct (capitalized "Kty"/"Crv"/"X") produces a non-RFC document that a
+		// spec-conformant parser rejects. The prior hand-rolled decoder accepted it
+		// via Go's case-insensitive struct-tag matching — a leniency bug, not a
+		// contract; a real well-known endpoint emits lowercase members.
+		type jwk struct {
+			Kid string `json:"kid"`
+			Kty string `json:"kty"`
+			Crv string `json:"crv"`
+			X   string `json:"x"`
+		}
 		doc := struct {
 			Keys []jwk `json:"keys"`
 		}{}
