@@ -9,7 +9,7 @@ The Selection Engine compares offers across Exchanges, deduplicates by content i
 
 ### Discovery-Mode Agnostic
 
-The Selection Engine operates on offers, not on how those offers were discovered. Whether the agent sent specific URIs (`RAMPRequest.uris`), structured search filters (`RAMPRequest.search_filters`), or a natural-language query (`RAMPRequest.query`), the Broker resolves all three into a set of offers from Exchanges. The Selection Engine then applies the same pipeline -- filter, deduplicate, rank, verify -- to every offer identically.
+The Selection Engine operates on offers, not on how those offers were discovered. Whether the agent sent specific URIs (`DiscoveryRequest.uris`), structured search filters (`DiscoveryRequest.search_filters`), or a natural-language query (`DiscoveryRequest.query`), the Broker resolves all three into a set of offers from Exchanges. The Selection Engine then applies the same pipeline -- filter, deduplicate, rank, verify -- to every offer identically.
 
 This means the selection logic does not need to know or care about discovery mode. An offer discovered via structured search competes on equal footing with an offer from a specific URI request. The `OfferGroup.discovery_method` field records how each offer was found (for transparency and logging), but it does not influence ranking.
 
@@ -19,13 +19,13 @@ The core value proposition of the Broker is parallel supply discovery. The Broke
 
 ### Concurrency Model
 
-Uses `errgroup.Group` with a semaphore for bounded concurrency and `context.WithTimeout` for per-Exchange deadlines. When the `RAMPRequest` contains multiple URIs, the Broker sends all URIs in a single `ResourceQuery` to each Exchange (not one query per URI). The Exchange returns `OfferGroups` -- one per URI -- so the Broker knows which offers map to which content.
+Uses `errgroup.Group` with a semaphore for bounded concurrency and `context.WithTimeout` for per-Exchange deadlines. When the `DiscoveryRequest` contains multiple URIs, the Broker sends all URIs in a single `ResourceQuery` to each Exchange (not one query per URI). The Exchange returns `OfferGroups` -- one per URI -- so the Broker knows which offers map to which content.
 
 ```go
 func (d *Discovery) FanOut(
     ctx context.Context,
     exchanges []ExchangeEntry,
-    req *rampv1.RAMPRequest,
+    req *rampv1.DiscoveryRequest,
 ) []FanOutResult {
 
     // Hard deadline: don't wait longer than this for any Exchange.
@@ -86,7 +86,7 @@ graph TD
     subgraph "Timeout Layers"
         T1["Layer 1: Per-Exchange<br/>context.WithTimeout per goroutine<br/>default: 50ms"]
         T2["Layer 2: Fanout deadline<br/>context.WithTimeout on errgroup<br/>default: 60ms"]
-        T3["Layer 3: Request deadline<br/>agent's context deadline<br/>forwarded from RAMPRequest"]
+        T3["Layer 3: Request deadline<br/>agent's context deadline<br/>forwarded from DiscoveryRequest"]
     end
 
     T3 -->|cancels| T2
@@ -280,7 +280,7 @@ func restrictionsHonoured(restrictions []*rampv1.Restriction, declaredFunction s
 
 ## Stage 2: Filter by RequestConstraints
 
-The agent's `RAMPRequest.constraints` specifies budget and preference limits.
+The agent's `DiscoveryRequest.constraints` specifies budget and preference limits.
 
 ```go
 func filterByConstraints(offers []rankedOffer, c *rampv1.RequestConstraints, budget BudgetTracker) []rankedOffer {
@@ -497,9 +497,8 @@ Every selection decision is logged with full rationale for audit:
 
 ```go
 type SelectionLog struct {
-    // The agent's RAMPRequest.id this decision was made for (Broker-internal
-    // audit key). Cross-service request/response correlation rides the
-    // X-Request-ID HTTP header, not a message field.
+    // Broker-internal audit key correlating this decision to the inbound request.
+    // Request/response correlation rides the X-Request-ID HTTP header, not a message field.
     RAMPRequestID       string              `json:"ramp_request_id"`
     Timestamp           time.Time           `json:"timestamp"`
     ExchangesQueried []string            `json:"exchanges_queried"`
@@ -533,29 +532,18 @@ sequenceDiagram
 
     MP->>Orch: ResourceResponse (Offer with exchange_signature)
     Note over Orch: Broker CANNOT modify<br/>offer fields without<br/>invalidating signature
-    Orch->>Agent: RAMPResponse (includes original signed Offer)
+    Orch->>Agent: DiscoveryResponse (includes original signed Offer)
     Note over Agent: Agent verifies exchange_signature<br/>against MP's public key.<br/>Price tampering detected.
 ```
 
 ### Fee Disclosure
 
-`RAMPResponse` includes an optional `broker_fee` field. The Broker MUST disclose fees when present.
-
-```json
-{
-  "broker_fee": {
-    "amount": "0.001",
-    "currency": "USD"
-  }
-}
-```
-
-The fee is additive and disclosed, never hidden in the offer price. The agent sees: Exchange price + Broker fee = total cost.
+`DiscoveryResponse` carries the signed Offers unchanged (one `OfferGroup` per requested URI); it has no `broker_fee` field, so the Broker cannot fold a fee into the discovery result. Any Broker fee is additive and disclosed out of band, never hidden in the offer price — the Exchange's signature over the Offer's pricing fields makes silent inflation detectable. The agent sees: Exchange price + Broker fee = total cost.
 
 ### Audit Trail
 
 For full auditability, the agent operator should:
 
-1. **Verify offer signatures** on every RAMPResponse
+1. **Verify offer signatures** on every DiscoveryResponse
 2. **Retain selection logs** to prove the Broker selected the cheapest offer
 3. **Spot-check by going direct** -- query Exchanges directly to verify the Broker isn't hiding better offers

@@ -128,7 +128,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T24: Transaction replay
 **Attack**: Attacker captures valid TransactionRequest and replays it.
-**Countermeasure (protocol)**: **Idempotency keys.** TransactionRequest.idempotency_key is unique. Exchange rejects duplicates.
+**Countermeasure (protocol)**: **Idempotency keys.** Every state-mutating call carries a required `idempotency_key` — `TransactionRequest`, `UsageReport`, and `DisputeRequest`. Servers dedupe per (verified RFC 9421 signer, key), so a replay returns the original result instead of re-charging or re-filing. Broker `Resolve` (`DiscoveryRequest`) is pure discovery — it executes no transaction, has no replay exposure, and carries no key.
 
 ### T25: Billing_id forgery in usage reports
 **Attack**: Attacker fabricates billing_ids in usage reports.
@@ -155,6 +155,10 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 ### T30: License tier arbitrage
 **Attack**: Buy at grounding rate, use for training. Collapses pricing model at scale.
 **Countermeasure**: Black box problem. Legal/contractual enforcement only.
+
+### T31: Absence-reason existence oracle
+**Attack**: An unauthorized caller probes for a resource and reads the `absence_reason`. Authorization-flavored values (`SCOPE_INSUFFICIENT`, `NOT_AUTHORIZED`, `NOT_IN_CATALOG`, `CONTENT_BLOCKED`) distinguish "no such resource" from "it exists but you may not have it" — confirming existence and the reason for refusal. Broker `Resolve` (`DiscoveryResponse.absence_reason`) exposes the same oracle at the broker that `DiscoverResources` (`OfferGroup.absence_reason`) does at the Exchange, so hiding it on one surface but not the other still leaks.
+**Countermeasure (protocol)**: The reason is a hint, not a guarantee. Where existence itself must stay hidden, the Exchange/Broker **MAY omit** `absence_reason` (leave it unset) rather than reveal an authorization-flavored value — the same permissive hedge documented on `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT`, and it applies equally to `OfferGroup.absence_reason` and `DiscoveryResponse.absence_reason`. `ErrorDetail.message`/`metadata` are held to the same rule (T-LIC-adjacent leakage): servers SHOULD NOT restore the withheld detail there as free text.
 
 ## Prevention Taxonomy
 
@@ -187,7 +191,7 @@ Line 3: Legal/contractual enforcement
 ### T-ATT-1: Forged attestation injection
 
 **Attack**: Attacker crafts a fake `ResourceAttestation` with a fabricated `verifier` domain and pushes it via `CatalogService.PushResources`.
-**Countermeasure (protocol)**: Exchange verifies `caller_id` is listed in the provider's `catalog_contributors` (from `ramp.json`). Exchange verifies the attestation `signature` against the verifier's public key in `public_keys` from its `/.well-known/ramp.json`. RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor). Both checks must pass.
+**Countermeasure (protocol)**: Exchange verifies `caller_id` is listed in the provider's `catalog_contributors` (from `ramp.json`). Exchange verifies the attestation `signature` against the verifier's public key in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`). RAMP has no dedicated verifier role; a verifier publishes under its operator's role (`ROLE_PUBLISHER` for a self-attesting publisher, `ROLE_EXCHANGE` for a standalone vendor). Both checks must pass.
 
 ### T-ATT-2: Stale attestation exploitation
 
@@ -198,7 +202,7 @@ Line 3: Legal/contractual enforcement
 ### T-ATT-3: Verification vendor compromise
 
 **Attack**: Attacker compromises a third-party verifier's Ed25519 private key and signs fraudulent attestations for arbitrary content.
-**Countermeasure (protocol)**: Key rotation via JWKS pattern -- keys have `not_before` / `not_after` windows. Exchange caches the verifier's `ramp.json` with TTL-based refresh (1 hour default). Compromised key can be revoked by removing it from the verifier's `ramp.json` `public_keys`.
+**Countermeasure (protocol)**: Key rotation via JWKS pattern -- keys have `not_before` / `not_after` windows. Exchange caches the verifier's WBA directory with TTL-based refresh (1 hour default). Compromised key can be revoked by removing it from the verifier's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`).
 **Countermeasure (operational)**: Exchange monitors attestation patterns per verifier. Sudden changes in claim distributions trigger investigation.
 
 ### T-ATT-4: Claims inflation attack
@@ -210,7 +214,7 @@ Line 3: Legal/contractual enforcement
 ### T-ATT-5: Catalog contributor spoofing
 
 **Attack**: Unauthorized party registers a domain similar to a legitimate verifier (e.g., `doub1everify.com`) and pushes attestations claiming to be a trusted vendor.
-**Countermeasure (protocol)**: `catalog_contributors` in `ramp.json` uses exact domain matching. The provider must explicitly list the contributor's domain. The Exchange fetches `ramp.json` from the exact `verifier` domain in the attestation and verifies the signature against that domain's `public_keys`.
+**Countermeasure (protocol)**: `catalog_contributors` in `ramp.json` uses exact domain matching. The provider must explicitly list the contributor's domain. The Exchange fetches the WBA directory from the exact `verifier` domain in the attestation and verifies the signature against that domain's `keys` (the JWK Set at `/.well-known/http-message-signatures-directory`).
 
 ## 8. Delegation and Authorization Threats
 
@@ -232,7 +236,7 @@ Line 3: Legal/contractual enforcement
 ### T-DEL-4: Forwarding chain forgery
 
 **Attack**: Attacker inserts a fake hop into the forwarding chain, claiming to be a trusted Broker to gain access or inject misleading provenance — or reorders or drops an existing hop.
-**Countermeasure (protocol)**: **The forwarding chain is a stack of RFC 9421 HTTP Message Signatures (Ed25519).** Each forwarding party adds one labeled signature covering the request plus the prior hop's signature, so the chain is tamper-evident. Exchange verifies every signature on the request against the signer's published public key at `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, selected by `keyid`) and verifies the whole stack. A forged, reordered, dropped, or inserted hop breaks a downstream signature, causing the entire request to be rejected.
+**Countermeasure (protocol)**: **The forwarding chain is a stack of RFC 9421 HTTP Message Signatures (Ed25519).** Each forwarding party adds one labeled signature covering the request plus the prior hop's signature, so the chain is tamper-evident. Exchange verifies every signature on the request against the signer's published public key in its WBA directory (the JWK Set at `{domain}/.well-known/http-message-signatures-directory`), the key identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`), and verifies the whole stack. A forged, reordered, dropped, or inserted hop breaks a downstream signature, causing the entire request to be rejected.
 
 ### T-DEL-5: Scope pollution
 

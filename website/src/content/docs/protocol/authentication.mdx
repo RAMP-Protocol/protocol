@@ -37,18 +37,14 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 
 ### Key Lookup
 
-The Exchange resolves a requester's public key by fetching `{domain}/.well-known/ramp.json` (a `WellKnownManifest` with `role=ROLE_AGENT`) and selecting the `JsonWebKey` in `public_keys` whose `kid` matches the request signature:
+The Exchange resolves a requester's public key by fetching its WBA directory — the JWK Set at `{domain}/.well-known/http-message-signatures-directory` — and selecting the `JsonWebKey` whose RFC 7638 thumbprint matches the request signature's `keyid`. (The `{domain}` is the one announced in the requester's `WellKnownManifest` at `/.well-known/ramp.json` with `role=ROLE_AGENT`.)
 
 ```json
-// GET https://research.acme.com/.well-known/ramp.json
+// GET https://research.acme.com/.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
 {
-  "ver": "1.0",
-  "role": "ROLE_AGENT",
-  "domain": "research.acme.com",
-  "contact": "platform@acme.com",
-  "public_keys": [
+  "keys": [
     {
-      "kid": "research-acme-2026-q2",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -57,11 +53,16 @@ The Exchange resolves a requester's public key by fetching `{domain}/.well-known
       "not_before": "2026-04-01T00:00:00Z",
       "not_after": "2026-10-01T00:00:00Z"
     }
-  ]
+  ],
+  "revocation_url": "https://research.acme.com/.well-known/ramp-invalidations.json"
 }
 ```
 
 This ties cryptographic identity to DNS ownership — if you control the domain, you control the key.
+
+### The WBA Directory Endpoint
+
+Signing keys are published in a dedicated WBA directory at `/.well-known/http-message-signatures-directory`, separate from the role manifest at `/.well-known/ramp.json`. It is a pure JWK Set (`Content-Type: application/jwk-set+json`): a `keys` array of Ed25519 JWKs plus an optional `revocation_url`. Each key is identified by its RFC 7638 thumbprint (the value carried as the RFC 9421 `keyid`), so the directory carries no `kid` labels. Every RAMP participant — agent, exchange, broker, publisher — serves one.
 
 ### WebBotAuth Compatibility (IETF)
 
@@ -80,7 +81,7 @@ WebBotAuth solves identity ("this bot is who it claims to be"). RAMP adds the tr
 The `Requester` message carries identity semantics only — it has **no** signature field. Request authentication is an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) over the HTTP request itself (covering `@method`, `@target-uri`, and a `Content-Digest` of the body), carried in the `Signature` / `Signature-Input` HTTP headers rather than in the protobuf body. This separates identity semantics (the `Requester` message) from cryptographic proof (the HTTP signature). The Exchange verifies it by:
 
 1. Reading the `keyid` and covered components from the request's `Signature-Input` header
-2. Extracting `domain` from the `Requester` message and fetching `{domain}/.well-known/ramp.json`, selecting the `JsonWebKey` in `public_keys` whose `kid` matches the `keyid` (and whose `[not_before, not_after)` window covers now)
+2. Extracting `domain` from the `Requester` message and fetching its WBA directory at `{domain}/.well-known/http-message-signatures-directory`, selecting the `JsonWebKey` whose RFC 7638 thumbprint matches the `keyid` (and whose `[not_before, not_after)` window covers now)
 3. Reconstructing the signed content from the declared components and verifying the Ed25519 signature in the `Signature` header against that key
 4. Confirming the `Content-Digest` matches the request body, and that the manifest `domain` matches the requester's `domain` with `role=ROLE_AGENT`
 
@@ -291,7 +292,7 @@ Because every signature commits to the signature before it, the ordered set of s
 The Exchange verifies the full chain by:
 
 1. Reading each labeled signature and its `keyid` from `Signature` / `Signature-Input`
-2. Resolving each `keyid` at `{domain}/.well-known/ramp.json` (by `kid`)
+2. Resolving each `keyid` (an RFC 7638 thumbprint) in the signer's WBA directory at `{domain}/.well-known/http-message-signatures-directory`
 3. Verifying every signature, confirming each later hop covers the prior hop's signature
 4. Enforcing depth caps — `RequestConstraints.max_hops` and `WellKnownManifest.max_intermediary_hops` — by **counting the signatures** in the stack
 
@@ -315,7 +316,7 @@ RFC 9421 defines a standard way to sign HTTP messages. Three headers work togeth
 | `Signature-Input` | Declares which components are signed, the key ID, and the algorithm |
 | `Signature` | The actual cryptographic signature |
 
-The Exchange verifies the signature by reconstructing the signed content from the declared components, fetching the signer's public key via `{domain}/.well-known/ramp.json` (selected by `kid`), and verifying the Ed25519 signature.
+The Exchange verifies the signature by reconstructing the signed content from the declared components, fetching the signer's public key from its WBA directory at `{domain}/.well-known/http-message-signatures-directory` (selected by the `keyid` thumbprint), and verifying the Ed25519 signature.
 
 ### Single-Hop Example
 
@@ -325,14 +326,14 @@ An agent sends a signed request directly to the Exchange:
 POST /ramp.v1.ExchangeService/DiscoverResources HTTP/1.1
 Content-Type: application/json
 Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
-Signature-Input: agent=("@method" "@target-uri" "content-digest");keyid="agent-key";alg="ed25519"
+Signature-Input: agent=("@method" "@target-uri" "content-digest");keyid="kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k";alg="ed25519"
 Signature: agent=:dGVzdC1zaWduYXR1cmUtYWdlbnQ=:
 ```
 
 The `Signature-Input` header declares:
 - **Label**: `agent` — identifies this signature in multi-signature scenarios
 - **Covered components**: `@method` (POST), `@target-uri` (the RPC path), `content-digest` (body hash)
-- **keyid**: `agent-key` — resolved via the agent's `.well-known/ramp.json` (`public_keys[].kid`)
+- **keyid**: the RFC 7638 thumbprint of the agent's key — resolved in the agent's WBA directory at `.well-known/http-message-signatures-directory`
 - **alg**: `ed25519` — same key type used throughout RAMP
 
 ### Multi-Hop Example (Broker)
@@ -343,7 +344,7 @@ When a request passes through a Broker, each hop adds its own signature. The Bro
 POST /ramp.v1.ExchangeService/DiscoverResources HTTP/1.1
 Content-Type: application/json
 Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
-Signature-Input: agent=("@method" "@target-uri" "content-digest");keyid="agent-key";alg="ed25519", broker=("@method" "@target-uri" "content-digest");keyid="broker-key";alg="ed25519"
+Signature-Input: agent=("@method" "@target-uri" "content-digest");keyid="kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k";alg="ed25519", broker=("@method" "@target-uri" "content-digest");keyid="broker-key";alg="ed25519"
 Signature: agent=:dGVzdC1zaWduYXR1cmUtYWdlbnQ=:, broker=:dGVzdC1zaWduYXR1cmUtYnJva2Vy:
 ```
 
@@ -357,7 +358,7 @@ RFC 9421 is the **only** request-authentication mechanism. A request without a v
 
 A signed `retrieval_endpoint` returned by a transaction is, by default, a bearer token: anyone holding it before `expires_at` can fetch. RAMP **optionally** binds the URL to the purchasing agent, DPoP-style ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449)):
 
-- The Exchange embeds `agent_identity_hash` — the [RFC 7638](https://www.rfc-editor.org/rfc/rfc7638) JWK Thumbprint (SHA-256) of the agent's Ed25519 request-signing key — inside the HMAC-signed URL, and echoes it on the response (`TransactionResponse.agent_identity_hash`, forwarded unchanged by the Broker on `RAMPResponse.agent_identity_hash`).
+- The Exchange embeds `agent_identity_hash` — the [RFC 7638](https://www.rfc-editor.org/rfc/rfc7638) JWK Thumbprint (SHA-256) of the agent's Ed25519 request-signing key — inside the HMAC-signed URL, and echoes it on the execute-path response (`TransactionResponse.agent_identity_hash`, produced directly by the Exchange — the Broker is not in the execute response path for this field).
 - A capable delivery endpoint (edge function) verifies the binding **fully offline**: confirm the URL HMAC (proves the hash is Exchange-issued and untampered), then require the fetcher to present its public key and an RFC 9421 signature over the retrieval request, and check `thumbprint(presented key) == agent_identity_hash`. No JWKS fetch required.
 - Bound to the agent's request-signing key, never to the principal/delegation — the agent is the fetcher, and is exactly one key per transaction.
 - Enforcement is **NOT mandatory**: a bearer-only signed-URL CDN that cannot run code falls back to HMAC + short TTL + TLS. RAMP reference implementations run on edge functions and **do** enforce it.
@@ -373,7 +374,6 @@ A research bot queries a public Exchange. No delegation token, no special scopes
 ```json
 {
   "ver": "1.0",
-  "id": "sq-research-001",
   "requester": {
     "id": "research-bot-42",
     "domain": "research.acme.com",
@@ -399,7 +399,6 @@ A financial analysis agent carries a MarketData-issued delegation JWT that grant
 ```json
 {
   "ver": "1.0",
-  "id": "sq-finance-001",
   "requester": {
     "id": "finbot-alpha",
     "domain": "fintech.example.com",
@@ -444,7 +443,6 @@ An internal agent at a law firm carries a delegation JWT issued by the firm's IA
 ```json
 {
   "ver": "1.0",
-  "id": "sq-legal-001",
   "requester": {
     "id": "legal-research-agent",
     "domain": "agents.kirkland.com",
@@ -484,7 +482,6 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
 ```json
 {
   "ver": "1.0",
-  "id": "sq-credit-001",
   "requester": {
     "id": "credit-checker-sub",
     "domain": "agents.kirkland.com",
@@ -527,27 +524,23 @@ The Exchange verifies the full JWT chain: IAM signed the authority JWT; the pare
 
 ### Where Keys Are Published
 
-Every party publishes its keys in **one** place — `{domain}/.well-known/ramp.json` (`WellKnownManifest.public_keys`, role-tagged). There are no per-role key files and no separate keys endpoint; keys are inline JWKs.
+Every party publishes its keys in **one** place — its WBA directory at `{domain}/.well-known/http-message-signatures-directory`, a pure JWK Set. The role manifest at `{domain}/.well-known/ramp.json` (role-tagged) announces *which* party the `{domain}` is; the WBA directory holds its keys. There are no per-role key files; keys are inline JWKs identified by their RFC 7638 thumbprint.
 
-| Party | Endpoint | Role |
+| Party | Key Endpoint (WBA directory) | Role (in `ramp.json`) |
 |---|---|---|
-| Agent / Requester | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` |
-| Intermediary | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` |
-| Exchange | `{domain}/.well-known/ramp.json` | `ROLE_EXCHANGE` |
-| Delegation Issuer (principal / resource owner) | `{domain}/.well-known/ramp.json` | `ROLE_AGENT` (key signing delegation JWTs) |
+| Agent / Requester | `{domain}/.well-known/http-message-signatures-directory` | `ROLE_AGENT` |
+| Intermediary | `{domain}/.well-known/http-message-signatures-directory` | `ROLE_AGENT` |
+| Exchange | `{domain}/.well-known/http-message-signatures-directory` | `ROLE_EXCHANGE` |
+| Delegation Issuer (principal / resource owner) | `{domain}/.well-known/http-message-signatures-directory` | `ROLE_AGENT` (key signing delegation JWTs) |
 
 ### Key Announcement Format
 
 ```json
-// GET https://agents.kirkland.com/.well-known/ramp.json
+// GET https://agents.kirkland.com/.well-known/http-message-signatures-directory
+// Content-Type: application/jwk-set+json
 {
-  "ver": "1.0",
-  "role": "ROLE_AGENT",
-  "domain": "agents.kirkland.com",
-  "contact": "platform@kirkland.com",
-  "public_keys": [
+  "keys": [
     {
-      "kid": "kirkland-2026-q2",
       "kty": "OKP",
       "crv": "Ed25519",
       "use": "sig",
@@ -556,7 +549,8 @@ Every party publishes its keys in **one** place — `{domain}/.well-known/ramp.j
       "not_before": "2026-04-01T00:00:00Z",
       "not_after": "2026-10-01T00:00:00Z"
     }
-  ]
+  ],
+  "revocation_url": "https://agents.kirkland.com/.well-known/ramp-invalidations.json"
 }
 ```
 
@@ -573,17 +567,17 @@ For delegation JWTs, key rotation at the issuer does not invalidate existing tok
 
 ### Key Validity Windows
 
-Each `JsonWebKey` carries RFC3339 `not_before` / `not_after` bounds. The window is **half-open** `[not_before, not_after)` — a key is valid at `not_before` and invalid **at and after** `not_after`. At least one key in `public_keys` MUST be valid at serve time, and verifiers MUST reject signatures whose key falls outside its window.
+Each `JsonWebKey` carries RFC3339 `not_before` / `not_after` bounds. The window is **half-open** `[not_before, not_after)` — a key is valid at `not_before` and invalid **at and after** `not_after`. At least one key in the WBA directory's `keys` MUST be valid at serve time, and verifiers MUST reject signatures whose key falls outside its window.
 
 ### Caching Contract
 
-`/.well-known/ramp.json` MAY be cached by consumers and CDNs for routine periods (minutes to hours) — keys rotate slowly and carry explicit bounds. The `invalidation_url` body, by contrast, SHOULD be served with a short or zero freshness lifetime (e.g. `Cache-Control: max-age=60`, or `no-store`) so the 300s revocation poll is not defeated by an intermediary cache.
+The WBA directory (`/.well-known/http-message-signatures-directory`) and `/.well-known/ramp.json` MAY be cached by consumers and CDNs for routine periods (minutes to hours) — keys rotate slowly and carry explicit bounds. The `revocation_url` body, by contrast, SHOULD be served with a short or zero freshness lifetime (e.g. `Cache-Control: max-age=60`, or `no-store`) so the 300s revocation poll is not defeated by an intermediary cache.
 
 Enforcement is operational, not protocol-guaranteed: a consumer that grants access against a stale revocation set bears that as its own business risk — it is not a protocol deficiency.
 
 ### Emergency Revocation
 
-When a manifest sets `invalidation_url`, consumers poll it on a 300s cadence (±10% jitter) and replace their local revoked set with the response — a `KeyInvalidationList` (kid-only snapshot: `as_of` + `revoked[]`). A revoked `kid` stays revoked; reject any signature whose `kid` is in the set. When `invalidation_url` is unset, consumers rely on routine rotation and `not_after` expiry.
+When a WBA directory sets `revocation_url`, consumers poll it on a 300s cadence (±10% jitter) and replace their local revoked set with the response — a `KeyRevocationList` (thumbprint-only snapshot: `as_of` + `revoked[]`). A revoked thumbprint stays revoked; reject any signature whose key thumbprint is in the set. When `revocation_url` is unset, consumers rely on routine rotation and `not_after` expiry.
 
 ### Domainless Agents
 
