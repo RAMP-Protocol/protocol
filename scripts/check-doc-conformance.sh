@@ -123,6 +123,22 @@ for entry in "${vocab[@]}"; do
   fi
 done
 
+# --- 1c. Enum wire numbers must not appear in prose ------------------------
+# Docs cite an enum by its named constant, never its wire integer: nobody sends
+# the number, they send the name, and a hand-typed number is the one thing that
+# can silently drift from the proto (the M-5 "value 9" vs proto's 7 class). The
+# named constant is autolinked / directive-rendered and cannot drift; the number
+# adds nothing a reader needs. Ban `SOME_CONSTANT (value N)` outright so the
+# generator's guarantees aren't bypassed by a parenthesised integer in a
+# sentence. Matches an ALL_CAPS constant (optionally back-ticked) directly
+# followed by a "(value N)" annotation.
+num_hits=$(grep -rEn -- '[A-Z][A-Z0-9_]{4,}`?[[:space:]]*\(value[[:space:]]*[0-9]+\)' "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
+if [ -n "$num_hits" ]; then
+  echo "::error::enum wire number hand-typed in prose — cite the named constant only, drop the '(value N)':"
+  echo "$num_hits"
+  status=1
+fi
+
 # --- 2. Positive facts: required identifiers MUST be documented -------------
 # A denylist is necessary but not sufficient: it cannot catch a value that was
 # silently dropped from a "closed enum" table or a registry that drifted. These

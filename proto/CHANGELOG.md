@@ -15,12 +15,16 @@ every role (breaking).** Three threads land together:
   `DiscoveryResponse.absence_reason` (field 16) for "the resolve ran but produced
   nothing licensable".
 - **Idempotency.** A required `idempotency_key` (`min_len: 1`, `max_len: 255`,
-  deduped per verified RFC 9421 signer) is added to every mutating RPC:
-  `TransactionRequest`, `UsageReport`, `DisputeRequest`, and `DiscoveryRequest`.
+  deduped per verified RFC 9421 signer) is added to every state-mutating RPC:
+  `TransactionRequest`, `UsageReport`, and `DisputeRequest`. Broker `Resolve`
+  (`DiscoveryRequest`) is pure discovery — it executes no transaction and takes
+  no key.
 
 Also: renamed `PushContent` → `PushResources`; removed `AccessPolicy` /
 `ResourceAccessPolicy` and `DELIVERY_METHOD_INLINE`; removed in-body correlation
-(`request_id`) in favor of an `X-Request-ID` header; extended `DenialReason` with
+— the `request_id` fields and the residual `id` fields on
+`ResourceQuery`/`DiscoveryRequest` — in favor of an `X-Request-ID` header;
+extended `DenialReason` with
 values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
 breaking change; `buf breaking` reports the deltas as expected.
 

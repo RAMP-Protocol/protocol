@@ -1944,8 +1944,6 @@ type ResourceQuery struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// RAMP protocol version.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// Unique query identifier.
-	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	// Requester identity — who is making this request, what scopes they have,
 	// and optional delegation chain.
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
@@ -2018,13 +2016,6 @@ func (*ResourceQuery) Descriptor() ([]byte, []int) {
 func (x *ResourceQuery) GetVer() string {
 	if x != nil {
 		return x.Ver
-	}
-	return ""
-}
-
-func (x *ResourceQuery) GetId() string {
-	if x != nil {
-		return x.Id
 	}
 	return ""
 }
@@ -6094,16 +6085,6 @@ type DiscoveryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// RAMP protocol version
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// Unique request identifier, assigned by the Requesting Party.
-	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	// Idempotency key for retry-safe Resolve. Resolve executes a transaction, so a
-	// retried request carrying the same key MUST NOT re-charge — the Broker returns
-	// the original result. Distinct from `id` (an opaque correlation tag): this is
-	// the dedup anchor, matching TransactionRequest/UsageReport/DisputeRequest.
-	// Uniqueness is scoped to the verified RFC 9421 signer: the Broker dedupes per
-	// (authenticated caller, key), never globally, so a key chosen by one caller
-	// cannot collide with another's cached result.
-	IdempotencyKey string `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Requester identity — who is making this request, what scopes they have.
 	// The Broker forwards this to Exchanges in ResourceQuery.requester.
 	Requester *Requester `protobuf:"bytes,3,opt,name=requester,proto3" json:"requester,omitempty"`
@@ -6184,20 +6165,6 @@ func (*DiscoveryRequest) Descriptor() ([]byte, []int) {
 func (x *DiscoveryRequest) GetVer() string {
 	if x != nil {
 		return x.Ver
-	}
-	return ""
-}
-
-func (x *DiscoveryRequest) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *DiscoveryRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -7130,6 +7097,13 @@ type DiscoveryResponse struct {
 	// per-axis detail: DiscoveryResponse has no restriction_filters companion
 	// (unlike OfferGroup). A consumer needing the filtered axes calls
 	// DiscoverResources.
+	//
+	// Existence-oracle note: an authorization-flavored reason (SCOPE_INSUFFICIENT,
+	// NOT_AUTHORIZED, NOT_IN_CATALOG, CONTENT_BLOCKED) confirms a resource exists
+	// and why access was refused. Resolve surfaces the same oracle at the broker
+	// that OfferGroup.absence_reason does at the Exchange, so the same mitigation
+	// applies: where existence itself must stay hidden, the Broker MAY omit the
+	// reason (leave this unset) rather than reveal it. See the threat model.
 	AbsenceReason *OfferAbsenceReason `protobuf:"varint,16,opt,name=absence_reason,json=absenceReason,proto3,enum=ramp.v1.OfferAbsenceReason,oneof" json:"absence_reason,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -7843,14 +7817,19 @@ func (x *DomainVerificationResult) GetExtCritical() []string {
 type ErrorDetail struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Developer-facing, NON-authoritative human message. Clients MUST branch on
-	// the typed reason below, never on this text.
+	// the typed reason below, never on this text. Servers SHOULD NOT place secrets,
+	// PII, or existence/authorization detail here that the closed typed reason
+	// deliberately withholds: unlike the enum, this free text is unbounded and
+	// easily becomes an existence oracle or leak channel (see `metadata`).
 	Message string `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	// Stable grouping for the failing surface, e.g. "ramp.v1.ExchangeService".
 	// Mirrors google.rpc.ErrorInfo.domain so generic tooling can group errors.
 	Domain string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	// Dynamic key/value context that also appears in `message` (ids, limits,
 	// axes). Mirrors google.rpc.ErrorInfo.metadata. Strongly-typed context rides
-	// in the per-domain reason block below instead.
+	// in the per-domain reason block below instead. Same leakage rule as `message`:
+	// servers SHOULD NOT put secrets, PII, or withheld existence/authorization
+	// detail here — it is the same potential side channel as the absence oracle.
 	Metadata map[string]string `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Exactly one typed reason block, selected by the failing method. Absent for
 	// generic transport-class failures (e.g. INVALID_ARGUMENT, INTERNAL) that
@@ -8404,10 +8383,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x15AcceptableRestriction\x12,\n" +
 	"\x04axis\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04axis\x12\xed\x01\n" +
 	"\x06values\x18\x02 \x03(\tB\xd4\x01\xbaH\xd0\x01\xba\x01\xc7\x01\n" +
-	"$acceptable_restriction.values.format\x12Meach value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\x06values\"\xa1\x03\n" +
+	"$acceptable_restriction.values.format\x12Meach value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)\x1aPthis.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))\x92\x01\x02\x10@R\x06values\"\x91\x03\n" +
 	"\rResourceQuery\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\x120\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x120\n" +
 	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
 	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
 	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12:\n" +
@@ -8839,13 +8817,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
 	"\treport_id\x18\x03 \x01(\tR\breportId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe1\x04\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\x9c\x04\n" +
 	"\x10DiscoveryRequest\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\x123\n" +
-	"\x0fidempotency_key\x18\n" +
-	" \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x120\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x120\n" +
 	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
 	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
 	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12B\n" +

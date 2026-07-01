@@ -128,7 +128,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T24: Transaction replay
 **Attack**: Attacker captures valid TransactionRequest and replays it.
-**Countermeasure (protocol)**: **Idempotency keys.** Every mutating call carries a required `idempotency_key` — `TransactionRequest`, `UsageReport`, `DisputeRequest`, and `DiscoveryRequest` (Broker `Resolve`, which executes a transaction and so has the same replay exposure). Servers dedupe per (verified RFC 9421 signer, key), so a replay returns the original result instead of re-charging or re-filing.
+**Countermeasure (protocol)**: **Idempotency keys.** Every state-mutating call carries a required `idempotency_key` — `TransactionRequest`, `UsageReport`, and `DisputeRequest`. Servers dedupe per (verified RFC 9421 signer, key), so a replay returns the original result instead of re-charging or re-filing. Broker `Resolve` (`DiscoveryRequest`) is pure discovery — it executes no transaction, has no replay exposure, and carries no key.
 
 ### T25: Billing_id forgery in usage reports
 **Attack**: Attacker fabricates billing_ids in usage reports.
@@ -155,6 +155,10 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 ### T30: License tier arbitrage
 **Attack**: Buy at grounding rate, use for training. Collapses pricing model at scale.
 **Countermeasure**: Black box problem. Legal/contractual enforcement only.
+
+### T31: Absence-reason existence oracle
+**Attack**: An unauthorized caller probes for a resource and reads the `absence_reason`. Authorization-flavored values (`SCOPE_INSUFFICIENT`, `NOT_AUTHORIZED`, `NOT_IN_CATALOG`, `CONTENT_BLOCKED`) distinguish "no such resource" from "it exists but you may not have it" — confirming existence and the reason for refusal. Broker `Resolve` (`DiscoveryResponse.absence_reason`) exposes the same oracle at the broker that `DiscoverResources` (`OfferGroup.absence_reason`) does at the Exchange, so hiding it on one surface but not the other still leaks.
+**Countermeasure (protocol)**: The reason is a hint, not a guarantee. Where existence itself must stay hidden, the Exchange/Broker **MAY omit** `absence_reason` (leave it unset) rather than reveal an authorization-flavored value — the same permissive hedge documented on `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT`, and it applies equally to `OfferGroup.absence_reason` and `DiscoveryResponse.absence_reason`. `ErrorDetail.message`/`metadata` are held to the same rule (T-LIC-adjacent leakage): servers SHOULD NOT restore the withheld detail there as free text.
 
 ## Prevention Taxonomy
 

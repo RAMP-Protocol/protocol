@@ -157,15 +157,22 @@ export const BrokerService = {
   typeName: "ramp.v1.BrokerService",
   methods: {
     /**
-     * Resolve runs the end-to-end discovery flow for the requested URIs/query.
+     * Resolve runs the broker discovery flow for the requested URIs/query: it
+     * fans out to one or more Exchanges and returns the merged offers. It is pure
+     * discovery — it selects and returns offers, never executes a transaction, so
+     * it neither charges nor produces transaction denials. A denial is raised only
+     * when the agent later calls ExchangeService.ExecuteTransaction on a selected
+     * offer, and rides there on TransactionResponse.DenialReason.
      *
      * A result returns OK with offers populated on DiscoveryResponse.offer_groups
      * (one OfferGroup per requested URI). A request that ran but yielded nothing
-     * licensable (not in catalog, no offers, budget/authz refusal, upstream
+     * licensable (not in catalog, no offers, entitlement/budget absence, upstream
      * temporarily unavailable) returns OK with DiscoveryResponse.absence_reason
      * set and empty offer_groups — "no result" is a successful answer, mirroring
-     * DiscoverResources (ADR-019 §2). Malformed requests, auth failures, and
-     * internal faults are non-OK transport errors carrying an ErrorDetail.
+     * DiscoverResources (ADR-019 §2). Here "authz" means resource entitlement
+     * (→ OK + absence); transport authentication failures are a different axis and,
+     * like malformed requests and internal faults, are non-OK transport errors
+     * carrying an ErrorDetail.
      *
      * @generated from rpc ramp.v1.BrokerService.Resolve
      */

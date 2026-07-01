@@ -104,7 +104,7 @@ RAMP adopts the COSE enumeration approach: the sender lists which ext keys are c
 ### Behavior
 
 - **Regular ext keys** (not listed in `ext_critical`): safely ignored per the robustness principle. A consumer that does not recognize `analytics.view_count` simply skips it.
-- **Keys listed in `ext_critical`**: the consumer **MUST** understand the key's semantics or reject the message. Rejection uses `OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION` (value 9).
+- **Keys listed in `ext_critical`**: the consumer **MUST** understand the key's semantics or reject the message. Rejection uses `OFFER_ABSENCE_REASON_UNKNOWN_CRITICAL_EXTENSION`.
 
 ### Example
 

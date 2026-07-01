@@ -183,7 +183,7 @@ When the requester holds a subscription (identifiable via the requester's `deleg
 
 ### New Denial Reasons to Implement
 
-RAMP defines three identity-related denial reasons your Exchange MUST return when appropriate:
+RAMP defines identity- and entitlement-related denial reasons your Exchange MUST return when appropriate. The delegation/scope reasons:
 
 | Denial Reason | When to Return |
 |---|---|
@@ -191,7 +191,19 @@ RAMP defines three identity-related denial reasons your Exchange MUST return whe
 | `DENIAL_REASON_DELEGATION_INVALID` | Delegation token missing, unverifiable (broken chain linkage or holder-binding mismatch), expired (`expires_at` in the past), or it widens scope beyond its parent |
 | `DENIAL_REASON_SCOPE_INSUFFICIENT` | Requester's scopes do not cover the requested resource (transaction-time denial) |
 
-For the full identity model specification — Requester fields, the JWT chain, scope format, and key management — see [Authentication](/protocol/authentication/).
+And the entitlement/subscription family, for subscription-gated offers:
+
+| Denial Reason | When to Return |
+|---|---|
+| `DENIAL_REASON_ENTITLEMENT_MISSING` | No entitlement token presented for a subscription-only offer |
+| `DENIAL_REASON_ENTITLEMENT_MALFORMED` | Entitlement token failed to decode |
+| `DENIAL_REASON_ENTITLEMENT_EXPIRED` | Entitlement token's validity window has passed |
+| `DENIAL_REASON_ENTITLEMENT_WRONG_BUYER` | Token's `subscriber_org` does not match the asserted requester |
+| `DENIAL_REASON_SUBSCRIPTION_LAPSED` | The covering subscription contract has lapsed |
+| `DENIAL_REASON_ENTITLEMENT_NOT_GRANTED` | Subscription exists but no buyer-side grant ties this caller to it |
+| `DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION` | Token authority sound but the per-request attenuation is missing/stale |
+
+This is the identity/entitlement subset with operator guidance; the complete, authoritative `DenialReason` enum is rendered from the proto on the [proto reference](/reference/proto-ramp/). For the full identity model specification — Requester fields, the JWT chain, scope format, and key management — see [Authentication](/protocol/authentication/).
 
 ## Attestation Verification
 

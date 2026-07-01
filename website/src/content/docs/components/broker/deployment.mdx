@@ -304,7 +304,7 @@ func transactionRequestID(requestID string, offerID string) string {
 }
 ```
 
-If the agent retries the same `DiscoveryRequest.id`, the Broker generates the same `TransactionRequest.idempotency_key`, which the Exchange recognizes as a duplicate.
+If the agent retries the same request (same `X-Request-ID` and offer), the Broker regenerates the same `TransactionRequest.idempotency_key`, which the Exchange recognizes as a duplicate.
 
 ## Scaling Considerations
 

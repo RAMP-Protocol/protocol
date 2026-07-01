@@ -283,7 +283,7 @@ Messages for the Agent-to-Broker path (Steps 1 and 6). When an agent talks direc
 
 ### DiscoveryRequest
 
-Agent sends to Broker (Step 1), carried by `BrokerService.Resolve`. Carries an `idempotency_key` (field 10, `min_len:1`/`max_len:255`, deduped per verified RFC 9421 signer) so a retried Resolve returns the original result rather than re-charging.
+Agent sends to Broker (Step 1), carried by `BrokerService.Resolve`. Pure discovery: it returns offers, executes no transaction, and so carries no `idempotency_key` (retrying is naturally safe). Correlation rides on the `X-Request-ID` header, not the body.
 
 ::proto-message{name=DiscoveryRequest}
 

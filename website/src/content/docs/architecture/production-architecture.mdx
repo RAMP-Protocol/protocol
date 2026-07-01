@@ -130,6 +130,8 @@ The `TransactionResponse` carries a `DeliveryMethod` hint and a `retrieval_endpo
 
 The protocol does not specify signed URL formats, CDN verification logic, or content transfer mechanisms. These are defined by each Exchange and Edge Function implementation.
 
+RAMP does, however, standardize the **failure vocabulary** for this step, not its mechanism: `RetrievalAuthFailureReason` gives a common enum for *why* a signed-URL or proof-of-possession check failed (expired, signature invalid, replay, …), so tooling can classify retrieval failures uniformly across implementations. It is never emitted by a RAMP RPC — it travels only as an out-of-band `ErrorDetail.reason` from the edge — and naming the failure categories does not mandate how any Exchange or CDN performs the check. An edge returning a bare `403` is still conformant; the enum is the interoperable vocabulary available to those that choose to report a reason.
+
 ### Streaming Delivery (v1.0)
 
 RAMP supports `DELIVERY_METHOD_STREAMING` for real-time resource access via WebSocket, SSE, HLS, or Icecast endpoints. The signed URL points to a streaming endpoint rather than a static resource.
