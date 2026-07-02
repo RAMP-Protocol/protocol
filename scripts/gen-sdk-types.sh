@@ -28,9 +28,13 @@ echo "==> 1/4 JSON Schema from proto (bufbuild/protoschema)"
 
 echo "==> 2/4 tools + merge (clean names; enums named from the descriptor)"
 python3 -m venv "$WORK/venv"
-# Pinned: generated output is byte-compared in CI, so the generator versions must be
-# fixed (an unpinned datamodel-code-generator drifts the models in CI).
-"$WORK/venv/bin/pip" install -q --disable-pip-version-check "datamodel-code-generator==0.64.0" protobuf
+# Pinned: generated output is byte-compared in CI, so EVERY tool that shapes it must be
+# fixed. datamodel-code-generator emits the models; black formats them; isort orders
+# their imports; protobuf parses the descriptor. An unpinned black/isort reflows the
+# byte-compared output and fails the drift gate on an unrelated day (bumping any of
+# these is a deliberate regenerate-and-review step).
+"$WORK/venv/bin/pip" install -q --disable-pip-version-check \
+  "datamodel-code-generator==0.64.0" "black==26.5.1" "isort==8.0.1" "protobuf==7.35.1"
 # required_fields.json: the authoritative protovalidate view of which fields are
 # required on the wire (their zero value is rejected). merge_schema marks those
 # `required` so the generated clients reject omission, matching the Go server.
@@ -55,8 +59,11 @@ open(p, "w").write(s)
 PYEOF
 
 echo "==> 4/4 Zod (json-schema-to-zod)"
-printf '{"name":"ramp-sdk-types-work","private":true,"type":"module"}\n' > "$WORK/package.json"
-(cd "$WORK" && npm install --no-save json-schema-to-zod@2.8.1 zod)
+# Pinned via a committed manifest + lockfile so `npm ci` installs the exact same
+# json-schema-to-zod/zod (and transitive) tree every run — the byte-compared
+# schemas.ts cannot drift on a transparent dependency bump.
+cp scripts/sdk-types/package.json scripts/sdk-types/package-lock.json "$WORK/"
+(cd "$WORK" && npm ci --no-audit --no-fund)
 cp scripts/sdk-types/gen_zod.mjs "$WORK/gen_zod.mjs"
 node "$WORK/gen_zod.mjs" "$COMBINED" gen/ts/wire/schemas.ts
 
