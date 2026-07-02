@@ -22,14 +22,18 @@ package helpers
 // verifier reconstructs.
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
 // signedURLVector mirrors the SignedUrlVector shape the TS/py parity tests read.
@@ -209,6 +213,224 @@ func buildPopVectors(t *testing.T) []popVector {
 	}
 }
 
+// signRequestVector mirrors the SignRequestVector shape the py parity test reads.
+// It records the exact bytes the Go SignRequest emits (signature base,
+// Signature-Input, Signature) plus everything the port needs to reproduce them
+// (method, absolute URL, body, authorization, created/expires, seed) and to
+// round-trip verify (pubkey, content-digest).
+type signRequestVector struct {
+	Name           string `json:"name"`
+	Method         string `json:"method"`
+	URL            string `json:"url"`
+	BodyHex        string `json:"body_hex"`
+	Authorization  string `json:"authorization"`
+	KeyID          string `json:"keyid"`
+	Created        int64  `json:"created"`
+	Expires        int64  `json:"expires"`
+	SignerSeedHex  string `json:"signer_seed_hex"`
+	PubkeyB64URL   string `json:"pubkey_b64url"`
+	ContentDigest  string `json:"content_digest"`
+	SignatureBase  string `json:"signature_base"`
+	SignatureInput string `json:"signature_input"`
+	Signature      string `json:"signature"`
+}
+
+// acceptanceVector mirrors the AcceptanceVector shape the py parity test reads.
+// Seeded 0102..1f20 — the SAME seed the app fixture (testdata/acceptance-vectors.json)
+// uses — so the emitted canonical bytes + signature cross-check byte-for-byte
+// against the app.
+type acceptanceVector struct {
+	Name              string `json:"name"`
+	OfferSig          string `json:"offer_sig"`
+	RequesterID       string `json:"requester_id"`
+	RequesterDomain   string `json:"requester_domain"`
+	IdempotencyKey    string `json:"idempotency_key"`
+	CanonicalBytesHex string `json:"canonical_bytes_hex"`
+	SignatureHex      string `json:"signature_hex"`
+	PubkeyB64         string `json:"pubkey_b64"`
+	SeedHex           string `json:"seed_hex"`
+}
+
+// acceptanceSeedHex is the fixed seed shared with the app's committed
+// testdata/acceptance-vectors.json (BINDING amendment); its raw bytes are the
+// signer seed for every acceptance vector.
+const acceptanceSeedHex = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+
+// buildSignRequestVectors signs a fixed set of requests with the REAL Go
+// SignRequest and records the exact bytes it emits. Covered set is exactly
+// @method @target-uri content-digest authorization (no biscuit header present, so
+// coveredFor never appends the conditional 5th component). created/expires are the
+// non-zero pinned window (reused from the pop emitter) so renderParamsTail never
+// drops them. One vector carries an empty-authorization bound value.
+func buildSignRequestVectors(t *testing.T) []signRequestVector {
+	t.Helper()
+	const (
+		keyid   = "mcp.v1"
+		created = int64(1_700_000_000)
+		expires = int64(1_700_000_600)
+	)
+	seed := fixedSeed(0x55)
+	priv := ed25519.NewKeyFromSeed(seed)
+	pub := priv.Public().(ed25519.PublicKey)
+
+	type spec struct {
+		name          string
+		method        string
+		url           string
+		body          []byte
+		authorization string
+	}
+	specs := []spec{
+		{
+			name:          "post_with_authorization",
+			method:        "POST",
+			url:           "https://broker.example/ramp.v1.BrokerService/Fetch",
+			body:          []byte(`{"uri":"https://cdn.example/doc"}`),
+			authorization: "Bearer token-123",
+		},
+		{
+			name:          "post_empty_authorization_bound",
+			method:        "POST",
+			url:           "https://broker.example/ramp.v1.BrokerService/Fetch?trace=1",
+			body:          []byte(`{"uri":"https://cdn.example/other"}`),
+			authorization: "",
+		},
+	}
+
+	out := make([]signRequestVector, 0, len(specs))
+	for _, s := range specs {
+		req, err := http.NewRequest(s.method, s.url, nil)
+		if err != nil {
+			t.Fatalf("%s: new request: %v", s.name, err)
+		}
+		if s.authorization != "" {
+			req.Header.Set("Authorization", s.authorization)
+		}
+		signer, err := NewEd25519SignerFromSeed(keyid, seed)
+		if err != nil {
+			t.Fatalf("%s: signer: %v", s.name, err)
+		}
+		params := sigParams{
+			Label:   "sig1",
+			Covered: coveredFor(req),
+			KeyID:   keyid,
+			Alg:     AlgEd25519,
+			Created: created,
+			Expires: expires,
+		}
+		// SignRequest sets Content-Digest + binds Authorization + writes headers;
+		// buildSignatureBase over the same params reproduces the exact base bytes.
+		if err := SignRequest(context.Background(), req, s.body, signer, SignOptions{Created: created, Expires: expires}); err != nil {
+			t.Fatalf("%s: sign: %v", s.name, err)
+		}
+		base, err := buildSignatureBase(req, params)
+		if err != nil {
+			t.Fatalf("%s: build base: %v", s.name, err)
+		}
+		out = append(out, signRequestVector{
+			Name:           s.name,
+			Method:         s.method,
+			URL:            s.url,
+			BodyHex:        hex.EncodeToString(s.body),
+			Authorization:  s.authorization,
+			KeyID:          keyid,
+			Created:        created,
+			Expires:        expires,
+			SignerSeedHex:  hex.EncodeToString(seed),
+			PubkeyB64URL:   b64urlNoPad(pub),
+			ContentDigest:  req.Header.Get("Content-Digest"),
+			SignatureBase:  base,
+			SignatureInput: req.Header.Get("Signature-Input"),
+			Signature:      req.Header.Get("Signature"),
+		})
+	}
+	return out
+}
+
+// verifySignRequestVector round-trips a sign-request vector through the REAL Go
+// VerifyRequest at a pinned `now` inside the window, so any divergence surfaces
+// in the Go drift gate rather than in the Python port.
+func verifySignRequestVector(t *testing.T, v signRequestVector) {
+	t.Helper()
+	pubBytes, err := base64.RawURLEncoding.DecodeString(v.PubkeyB64URL)
+	if err != nil {
+		t.Fatalf("%s: decode pub: %v", v.Name, err)
+	}
+	body, err := hex.DecodeString(v.BodyHex)
+	if err != nil {
+		t.Fatalf("%s: decode body: %v", v.Name, err)
+	}
+	req, err := http.NewRequest(v.Method, v.URL, nil)
+	if err != nil {
+		t.Fatalf("%s: new request: %v", v.Name, err)
+	}
+	req.Header.Set("Content-Digest", v.ContentDigest)
+	req.Header.Set("Authorization", v.Authorization)
+	req.Header.Set("Signature-Input", v.SignatureInput)
+	req.Header.Set("Signature", v.Signature)
+	now := time.Unix((v.Created+v.Expires)/2, 0)
+	if _, err := VerifyRequest(req, body, ed25519.PublicKey(pubBytes), VerifyOptions{Now: now}); err != nil {
+		t.Fatalf("sign-request vector %s: oracle VerifyRequest rejected a self-signed vector: %v", v.Name, err)
+	}
+}
+
+// buildAcceptanceVectors signs a fixed set of offer acceptances with the REAL Go
+// SignOfferAcceptance, seeded 0102..1f20 (shared with the app fixture). Includes
+// the empty-domain case (proto3 field-3 default-skip). Records canonical bytes
+// hex + signature hex + std-base64 pubkey.
+func buildAcceptanceVectors(t *testing.T) []acceptanceVector {
+	t.Helper()
+	seed, err := hex.DecodeString(acceptanceSeedHex)
+	if err != nil {
+		t.Fatalf("decode acceptance seed: %v", err)
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	pub := priv.Public().(ed25519.PublicKey)
+	pubB64 := base64.StdEncoding.EncodeToString(pub)
+
+	type spec struct {
+		name            string
+		offerSig        string
+		requesterID     string
+		requesterDomain string
+		idempotencyKey  string
+	}
+	specs := []spec{
+		{"all_present", "ex-offer-sig-hex", "agent-1", "agent.example.com", "idem-1"},
+		{"empty_domain", "sig2deadbeef", "agent-2", "", "idem-2"},
+	}
+
+	out := make([]acceptanceVector, 0, len(specs))
+	for _, s := range specs {
+		offer := &rampv1.Offer{Signature: s.offerSig}
+		requester := &rampv1.Requester{Id: s.requesterID, Domain: s.requesterDomain}
+		canon, err := canonicalAcceptancePayload(offer, requester, s.idempotencyKey)
+		if err != nil {
+			t.Fatalf("%s: canonical: %v", s.name, err)
+		}
+		sigHex, err := SignOfferAcceptance(priv, offer, requester, s.idempotencyKey)
+		if err != nil {
+			t.Fatalf("%s: sign: %v", s.name, err)
+		}
+		// Self-check: the oracle verifies its own signature.
+		if err := VerifyOfferAcceptance(offer, requester, s.idempotencyKey, sigHex, pub); err != nil {
+			t.Fatalf("%s: oracle rejected its own acceptance signature: %v", s.name, err)
+		}
+		out = append(out, acceptanceVector{
+			Name:              s.name,
+			OfferSig:          s.offerSig,
+			RequesterID:       s.requesterID,
+			RequesterDomain:   s.requesterDomain,
+			IdempotencyKey:    s.idempotencyKey,
+			CanonicalBytesHex: hex.EncodeToString(canon),
+			SignatureHex:      sigHex,
+			PubkeyB64:         pubB64,
+			SeedHex:           acceptanceSeedHex,
+		})
+	}
+	return out
+}
+
 // verifySignedURLVector runs the vector through the real Go verifier so the
 // recorded verdict is exactly what the oracle returns (self-consistency guard).
 func verifySignedURLVector(t *testing.T, v signedURLVector) {
@@ -256,18 +478,35 @@ func TestGenerateVectors(t *testing.T) {
 	}
 	popVectors := buildPopVectors(t)
 
+	signRequestVectors := buildSignRequestVectors(t)
+	for _, v := range signRequestVectors {
+		verifySignRequestVector(t, v)
+	}
+	acceptanceVectors := buildAcceptanceVectors(t)
+
 	signedURLPath := filepath.Join("testdata", "signedurl-vectors.json")
 	popPath := filepath.Join("testdata", "pop-vectors.json")
+	signRequestPath := filepath.Join("testdata", "sign-request-vectors.json")
+	acceptancePath := filepath.Join("testdata", "acceptance-vectors.json")
+
+	// The sign-request + acceptance parity suites read a {"vectors": [...]} object
+	// (the thumbprint-vectors.json shape), not a bare array like signedurl/pop.
+	signRequestDoc := map[string]any{"vectors": signRequestVectors}
+	acceptanceDoc := map[string]any{"vectors": acceptanceVectors}
 
 	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {
 		writeJSON(t, signedURLPath, signedURLVectors)
 		writeJSON(t, popPath, popVectors)
+		writeJSON(t, signRequestPath, signRequestDoc)
+		writeJSON(t, acceptancePath, acceptanceDoc)
 		return
 	}
 
 	// Default run: assert the committed files are byte-identical to a fresh emit.
 	assertMatches(t, signedURLPath, signedURLVectors)
 	assertMatches(t, popPath, popVectors)
+	assertMatches(t, signRequestPath, signRequestDoc)
+	assertMatches(t, acceptancePath, acceptanceDoc)
 }
 
 func assertMatches(t *testing.T, path string, v any) {

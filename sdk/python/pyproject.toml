@@ -1,0 +1,67 @@
+# sdk/python — RAMP L1 helper library (ADR-020 tree sdk/{go,ts,python}/).
+#
+# Stateless, IO-free protocol mechanics (thumbprint, signed-URL verify, RFC 9421
+# sign/verify + PoP, offer-acceptance, cross-field validation), byte-parity-guarded
+# against the sdk/go oracle. The import package is `ramp_sdk`; the PyPI dist name
+# defers to the L2/publish ticket.
+#
+# Vetted libs the port uses (the app is the quality bar — do NOT hand-roll
+# crypto/canonicalization): cryptography>=44, pydantic>=2.9. The generated Pydantic
+# types are consumed from gen/python (PYTHONPATH=gen/python at test time).
+
+# Ruff/mypy quality bar mirrors the app (src/mcp): line-length 100, strict typing.
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "PERF", "FURB", "RUF", "PL", "TCH"]
+
+[tool.ruff.lint.per-file-ignores]
+# The parity suites are TDD-authored (red step) and must not be restructured to
+# fit lint idiom: PLR2004 (vector magic values), S101 (asserts are the point),
+# PLC0415 (a deliberate in-function crypto import for a self-contained sanity
+# guard), PERF401 (an explicit vector-iteration loop), I001 (author's import
+# grouping) are the test-file idioms this suite intentionally uses.
+"tests/**" = ["PLR2004", "S101", "PLC0415", "PERF401", "I001"]
+# The L1 crypto helpers expose keyword-only API surfaces whose shape (arg count,
+# early-return branch count) is pinned byte-for-byte by the shared Go-oracle
+# parity vectors and the tests that consume them — condensing them into a params
+# object or fewer returns would obscure the RFC 9421 / offer-acceptance contract
+# these functions transcribe. PLR0913 (arg count) and PLR0911 (return count) are
+# waived for exactly these crypto-primitive modules.
+"ramp_sdk/httpsig.py" = ["PLR0913", "PLR0911"]
+"ramp_sdk/pop.py" = ["PLR0913", "PLR0911"]
+"ramp_sdk/signedurl.py" = ["PLR0911"]
+"ramp_sdk/acceptance.py" = ["PLR0913"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "../../gen/python"
+# gen/python/wire/models.py is generated (buf/datamodel-codegen) and uses
+# constr(...)/conint(...) call-form annotations mypy flags; it is exempt (generated
+# code), so imports of it are type-checked silently — ramp_sdk's own surface stays
+# under full --strict.
+follow_imports = "silent"
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ramp-protocol-sdk"
+version = "0.0.0"
+description = "RAMP L1 protocol-mechanics helpers (thumbprint, signed-URL, RFC 9421 sign/verify + PoP, offer-acceptance, key-resolution). GREENFIELD — under construction."
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "cryptography>=44",
+  "pydantic>=2.9",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ramp_sdk*"]
