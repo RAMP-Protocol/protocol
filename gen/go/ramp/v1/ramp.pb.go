@@ -2515,12 +2515,39 @@ type Offer struct {
 	Exchange string `protobuf:"bytes,8,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
 	// Offer — every field, including `pricing`, `terms` (the full licensing
-	// payload), `expires_at`, and `exchange`. Canonicalization is deterministic
-	// protobuf marshaling (lexicographic field order); only `signature` and
+	// payload), `expires_at`, and `exchange`. Only `signature` and
 	// `signature_algorithm` are excluded from the signed bytes. `expires_at` is
 	// signed so the offer's validity window is integrity-protected: a relaying
 	// Broker cannot extend (or shorten) the TTL of a signed offer to replay it
 	// outside the window the Exchange intended.
+	//
+	// CANONICAL SIGNING (RFC 8785 JCS over canonical proto-JSON). The signed bytes
+	// are:
+	//
+	//	signed_payload = JCS( protojson(msg with signature +
+	//	                                 signature_algorithm cleared) )
+	//
+	// i.e. render the message to canonical proto-JSON with the PINNED option set
+	// below, then apply RFC 8785 (JSON Canonicalization Scheme). Deterministic
+	// protobuf BINARY marshaling is explicitly NOT canonical across languages and
+	// versions (protobuf's own caveat), so it cannot be a cross-language signing
+	// primitive; JCS over proto-JSON can be reproduced by ANY language (Go, TS,
+	// Python) without a protobuf binary codec, so a broker/exchange/client in any
+	// language signs and verifies byte-identically. This same definition applies to
+	// the agent offer-acceptance signature (AgentAcceptance.signature).
+	//
+	// PINNED proto-JSON option set (the arbiter is the Go-emitted golden vector —
+	// whatever these options render MUST be byte-identical across all languages):
+	//   - enum values as NAME strings (not numbers);
+	//   - int64 / uint64 / fixed64 as decimal STRINGS;
+	//   - bytes as standard (padded) base64;
+	//   - google.protobuf.Timestamp / Duration per the proto-JSON WKT rules
+	//     (RFC 3339 string for Timestamp);
+	//   - unpopulated fields are OMITTED (never emitted as defaults);
+	//   - field naming is camelCase (the JSON name), the naming every SDK target
+	//     shares;
+	//   - google.protobuf.Struct (`ext`) → a plain JSON object; JCS then sorts its
+	//     keys recursively, so the Struct case needs no special handling.
 	//
 	// Because the signature covers `terms`, `pricing`, `expires_at`, and
 	// `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,

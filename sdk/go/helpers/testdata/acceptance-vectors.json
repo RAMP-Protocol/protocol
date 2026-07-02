@@ -1,4 +1,5 @@
 {
+  "canonicalization": "jcs",
   "vectors": [
     {
       "name": "all_present",
@@ -6,8 +7,8 @@
       "requester_id": "agent-1",
       "requester_domain": "agent.example.com",
       "idempotency_key": "idem-1",
-      "canonical_bytes_hex": "0a1065782d6f666665722d7369672d68657812076167656e742d311a116167656e742e6578616d706c652e636f6d22066964656d2d31",
-      "signature_hex": "b9791fed276b51b63f90bfc4f52c0adc1d5b9d036734ca355fb01af414879af93b08889ad057a5610c69e4456c622a69bca375a7642cc97949cac4f0595a8701",
+      "canonical_jcs": "{\"idempotencyKey\":\"idem-1\",\"offerSig\":\"ex-offer-sig-hex\",\"requesterDomain\":\"agent.example.com\",\"requesterId\":\"agent-1\"}",
+      "signature_hex": "a6fb638a6b5713c37ed5e0e86d00daeb43b41a00e3cf17928179f56d71226540d2e65a877531e9d7c2dd42eab3a3039775e14aa3a9c864f2bcb087002f68b109",
       "pubkey_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
       "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
     },
@@ -17,8 +18,8 @@
       "requester_id": "agent-2",
       "requester_domain": "",
       "idempotency_key": "idem-2",
-      "canonical_bytes_hex": "0a0c73696732646561646265656612076167656e742d3222066964656d2d32",
-      "signature_hex": "f4e03870ef7a7d2ecf077018dafa07c238f1c4be6493c1cfd94b21f2463094cdf62b0e0c630184dba33854cd08af64eb7aeb6b51883904350a69ec266e4a740e",
+      "canonical_jcs": "{\"idempotencyKey\":\"idem-2\",\"offerSig\":\"sig2deadbeef\",\"requesterId\":\"agent-2\"}",
+      "signature_hex": "104fb4d08bfaef870e84908545cdf6e9fbd3ac2d2b54105998a865e40d7a3e20559dda5fea4000fac8dba3dfc691abb411da5afed78e75083e7e250683fc0000",
       "pubkey_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
       "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
     }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
-	"google.golang.org/protobuf/proto"
 )
 
 // Agent offer-acceptance (RAMP-102 §1, ramp.proto AgentAcceptance). An agent
@@ -31,12 +30,17 @@ const AcceptanceSignatureAlgorithm = "EdDSA"
 // idempotency key).
 var ErrAcceptanceSignatureInvalid = errors.New("helpers: offer-acceptance signature invalid")
 
-// canonicalAcceptancePayload is the deterministic byte sequence an agent's
-// offer acceptance covers: the accepted Offer.signature (which transitively
-// binds the offer's pricing, terms, expiry, and issuing Exchange), plus the
-// requester identity and the transaction's idempotency key. The offer must be
-// signed — an empty anchor would let the acceptance float free of any concrete
-// offer, so it is rejected fail-closed.
+// canonicalAcceptancePayload is the canonical byte sequence an agent's offer
+// acceptance covers: the accepted Offer.signature (which transitively binds the
+// offer's pricing, terms, expiry, and issuing Exchange), plus the requester
+// identity and the transaction's idempotency key. The offer must be signed — an
+// empty anchor would let the acceptance float free of any concrete offer, so it
+// is rejected fail-closed.
+//
+// The canonical form is RFC 8785 JCS over canonical proto-JSON —
+// JCS(protojson(AgentAcceptancePayload)) — via canonicalSignPayload, the same
+// primitive the offer signature uses, so any language reproduces the exact signed
+// bytes without a protobuf binary codec. See canonicalsign.go for the option set.
 func canonicalAcceptancePayload(offer *rampv1.Offer, requester *rampv1.Requester, idempotencyKey string) ([]byte, error) {
 	if offer == nil {
 		return nil, errors.New("helpers: offer is nil")
@@ -53,11 +57,7 @@ func canonicalAcceptancePayload(offer *rampv1.Offer, requester *rampv1.Requester
 		RequesterDomain: requester.GetDomain(),
 		IdempotencyKey:  idempotencyKey,
 	}
-	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("helpers: marshal acceptance payload: %w", err)
-	}
-	return data, nil
+	return canonicalSignPayload(payload)
 }
 
 // SignOfferAcceptance signs the canonical acceptance payload for the accepted

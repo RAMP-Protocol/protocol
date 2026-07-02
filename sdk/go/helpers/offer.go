@@ -60,9 +60,14 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 	return nil
 }
 
-// canonicalOfferPayload is the deterministic byte sequence the offer signature
+// canonicalOfferPayload is the canonical byte sequence the offer signature
 // covers: the ENTIRE Offer (pricing, terms, expires_at, …) with ONLY the
 // signature and signature_algorithm fields cleared, per ramp.proto Offer.signature.
+//
+// The canonical form is RFC 8785 JCS over canonical proto-JSON —
+// JCS(protojson(offer with sig cleared)) — via canonicalSignPayload, so any
+// language (Go/TS/Python) reproduces the exact signed bytes without a protobuf
+// binary codec. See canonicalsign.go for the pinned proto-JSON option set.
 //
 // NOTE (RAMP-96 reconciliation): the protocol spec covers expires_at so a
 // relaying Broker cannot extend/shorten a signed offer's TTL. The pre-SDK
@@ -79,9 +84,5 @@ func canonicalOfferPayload(offer *rampv1.Offer) ([]byte, error) {
 	}
 	clone.Signature = ""
 	clone.SignatureAlgorithm = ""
-	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(clone)
-	if err != nil {
-		return nil, fmt.Errorf("helpers: marshal offer: %w", err)
-	}
-	return data, nil
+	return canonicalSignPayload(clone)
 }

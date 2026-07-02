@@ -1,0 +1,122 @@
+{
+  "canonicalization": "jcs",
+  "vectors": [
+    {
+      "name": "minimal",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "offerId": "offer-minimal",
+        "signature": "e01e0636185bd1ff1428770553cc389fe872dbb66d9e549d355785c8bf7a49cc84513877696a9407e3e6fe75d2d9620e5f64769ab1230854d583a612e92a6507",
+        "signatureAlgorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true
+    },
+    {
+      "name": "struct_ext_multi_key",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "ext": {
+          "alpha": "first",
+          "nested": {
+            "x": 1,
+            "y": 2
+          },
+          "zebra": "last"
+        },
+        "offerId": "offer-struct",
+        "signature": "664fe6a3835a0b5cbe22286910b0f74248c41da1e159e021fe767d32a0837cd7fc4f202557739d9501d4de2e38606191993596f894f32b98856dd299c9a46e06",
+        "signatureAlgorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true
+    },
+    {
+      "name": "two_timestamps",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "dataAsOf": "2023-11-14T19:26:40Z",
+        "exchange": "exchange.example.com",
+        "expiresAt": "2023-11-14T22:28:20Z",
+        "offerId": "offer-two-ts",
+        "signature": "760ca43473b396795813b517ffe71ff8497e0bb84c7866d476d2690fe1c3eff15700a7b1e8c9a54497946c5dfc803be7110c733e012b11d879e1e7f8cdd0d309",
+        "signatureAlgorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true
+    },
+    {
+      "name": "repeated_terms_enum",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "attestations": [
+          {
+            "keyid": "v1",
+            "uri": "https://verifier.example/a",
+            "verifier": "verifier.example"
+          },
+          {
+            "keyid": "v2",
+            "uri": "https://verifier2.example/b",
+            "verifier": "verifier2.example"
+          }
+        ],
+        "deliveryMethod": "DELIVERY_METHOD_DIRECT",
+        "exchange": "exchange.example.com",
+        "iabCategories": [
+          "IAB1",
+          "IAB2"
+        ],
+        "offerId": "offer-repeated",
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.05"
+        },
+        "signature": "2d3f12caf6f320876e2c1a8a2da37e24ce311300fbc68d6424f13df6534f00d6d35f4d9b4c2044f2b58d070a9cf28d154d247ee62dad24988b709fd4cb11bd07",
+        "signatureAlgorithm": "EdDSA",
+        "terms": [
+          {
+            "scopes": [
+              "ai-train",
+              "ai-infer"
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "scopes": [
+              "resell"
+            ],
+            "semantics": "TERM_SEMANTICS_REFERENCE_ONLY"
+          }
+        ]
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true
+    },
+    {
+      "name": "tamper_negative",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "offerId": "offer-tamper",
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_FLAT",
+          "rate": "999.00"
+        },
+        "signature": "71587b7ec02062e4c7cd3a635a4977410f2fd9ff82c4642008a290503c5901d6ea8621306f13e89716e460bb6e3f4365adcc306fa6ec0bfdccfa96c828a66508",
+        "signatureAlgorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": false
+    }
+  ]
+}

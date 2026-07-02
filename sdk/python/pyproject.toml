@@ -22,8 +22,11 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "PERF", "FURB", 
 # fit lint idiom: PLR2004 (vector magic values), S101 (asserts are the point),
 # PLC0415 (a deliberate in-function crypto import for a self-contained sanity
 # guard), PERF401 (an explicit vector-iteration loop), I001 (author's import
-# grouping) are the test-file idioms this suite intentionally uses.
-"tests/**" = ["PLR2004", "S101", "PLC0415", "PERF401", "I001"]
+# grouping), SIM300 (the offer-verify matrix guard asserts the required-name SET
+# is a subset via `_REQUIRED_MATRIX <= names` — deliberate set-subset phrasing the
+# TDD-red author pinned, not a Yoda numeric comparison) are the test-file idioms
+# this suite intentionally uses.
+"tests/**" = ["PLR2004", "S101", "PLC0415", "PERF401", "I001", "SIM300"]
 # The L1 crypto helpers expose keyword-only API surfaces whose shape (arg count,
 # early-return branch count) is pinned byte-for-byte by the shared Go-oracle
 # parity vectors and the tests that consume them — condensing them into a params
@@ -34,6 +37,13 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "PERF", "FURB", 
 "ramp_sdk/pop.py" = ["PLR0913", "PLR0911"]
 "ramp_sdk/signedurl.py" = ["PLR0911"]
 "ramp_sdk/acceptance.py" = ["PLR0913"]
+# The L2 core mirrors the same crypto-primitive shape: the offer-verify _check
+# walks each fail-closed rejection reason as its own early return (resolver-miss,
+# bad-hex, sig-invalid, expired), and the acceptance verify keeps the four
+# offer/requester/idempotency binding fields as keyword args pinned by the shared
+# JCS oracle vectors. Condensing either would obscure the ADR-020 §4 contract.
+# PLR0911 (return count) and PLR0913 (arg count) are waived for exactly this module.
+"ramp_sdk/core.py" = ["PLR0911", "PLR0913"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -57,10 +67,18 @@ license = { text = "Apache-2.0" }
 dependencies = [
   "cryptography>=44",
   "pydantic>=2.9",
+  # Vetted RFC 8785 JCS canonicalization for the offer/acceptance signed payload
+  # (never hand-roll canonicalization). The core composes it; it is the JSON
+  # canonicalizer half of the cross-language signing primitive.
+  "rfc8785>=0.1.2",
 ]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+# httpx is an EXTRA of the opt-in client binding (ramp_sdk.httpx_client), NOT a
+# core dependency — matching the app's httpx>=0.28 pin. The ASGI server-binding
+# extra (FastAPI/Starlette) is deferred with its binding.
+httpx = ["httpx>=0.28"]
 
 [tool.setuptools.packages.find]
 where = ["."]

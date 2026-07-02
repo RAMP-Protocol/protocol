@@ -34,6 +34,9 @@ import (
 	"time"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/gowebpki/jcs"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // signedURLVector mirrors the SignedUrlVector shape the TS/py parity tests read.
@@ -240,21 +243,163 @@ type signRequestVector struct {
 // uses — so the emitted canonical bytes + signature cross-check byte-for-byte
 // against the app.
 type acceptanceVector struct {
-	Name              string `json:"name"`
-	OfferSig          string `json:"offer_sig"`
-	RequesterID       string `json:"requester_id"`
-	RequesterDomain   string `json:"requester_domain"`
-	IdempotencyKey    string `json:"idempotency_key"`
-	CanonicalBytesHex string `json:"canonical_bytes_hex"`
-	SignatureHex      string `json:"signature_hex"`
-	PubkeyB64         string `json:"pubkey_b64"`
-	SeedHex           string `json:"seed_hex"`
+	Name            string `json:"name"`
+	OfferSig        string `json:"offer_sig"`
+	RequesterID     string `json:"requester_id"`
+	RequesterDomain string `json:"requester_domain"`
+	IdempotencyKey  string `json:"idempotency_key"`
+	// CanonicalJCS is the exact RFC 8785 JCS UTF-8 string the acceptance signature
+	// covers (JCS(protojson(AgentAcceptancePayload))). Replaces the old
+	// proto3-field-tag canonical_bytes_hex — the canonicalization itself changed.
+	CanonicalJCS string `json:"canonical_jcs"`
+	SignatureHex string `json:"signature_hex"`
+	PubkeyB64    string `json:"pubkey_b64"`
+	SeedHex      string `json:"seed_hex"`
 }
 
 // acceptanceSeedHex is the fixed seed shared with the app's committed
 // testdata/acceptance-vectors.json (BINDING amendment); its raw bytes are the
 // signer seed for every acceptance vector.
 const acceptanceSeedHex = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+
+// offerVerifyVector mirrors the OfferVerifyVector shape the TS/py core
+// offer-verify parity suites read. The signed payload is
+// JCS(protojson(offer with sig cleared)); offer_json is the FULL canonical
+// proto-JSON of the SIGNED offer (signature + signature_algorithm present) so the
+// port re-derives the signed bytes by clearing those two keys and re-running JCS,
+// exactly as the Go oracle does. A tamper vector carries a signature that does not
+// verify (offer mutated after signing) so the port lands it in Rejected.
+type offerVerifyVector struct {
+	Name              string          `json:"name"`
+	Exchange          string          `json:"exchange"`
+	ExchangePubB64URL string          `json:"exchange_pub_b64url"`
+	OfferJSON         json.RawMessage `json:"offer_json"`
+	NowUnix           int64           `json:"now_unix"`
+	ExpectedVerified  bool            `json:"expected_verified"`
+}
+
+// offerVerifyDoc is the {"vectors":[...]} wrapper the offer-verify suites read,
+// carrying the canonicalization marker so a reader cannot confuse it with a
+// deterministic-protobuf form.
+type offerVerifyDoc struct {
+	Canonicalization string              `json:"canonicalization"`
+	Vectors          []offerVerifyVector `json:"vectors"`
+}
+
+// offerCanonicalProtoJSON renders offer to the SAME pinned proto-JSON the signer
+// canonicalizes over (camelCase, enums-as-names, omit-unpopulated). Emitting the
+// vector's offer_json through the identical option set is what lets the port
+// reproduce JCS(protojson(offer)) byte-for-byte.
+func offerCanonicalProtoJSON(t *testing.T, offer *rampv1.Offer) json.RawMessage {
+	t.Helper()
+	pj, err := canonicalSignJSONOptions.Marshal(offer)
+	if err != nil {
+		t.Fatalf("offer proto-JSON marshal: %v", err)
+	}
+	// Re-key through JCS so the committed offer_json is itself canonical and stable
+	// across protojson's non-deterministic whitespace/ordering (the port clears sig
+	// + re-JCS-es regardless, but a canonical stored form keeps the vector file
+	// deterministic under the drift gate).
+	canon, err := jcs.Transform(pj)
+	if err != nil {
+		t.Fatalf("offer_json JCS: %v", err)
+	}
+	return json.RawMessage(canon)
+}
+
+// buildOfferVerifyVectors signs a MATRIX of offers with the REAL Go SignOffer and
+// records, for each, the canonical proto-JSON, the exchange offer-signing pubkey,
+// and the verdict the real VerifyOffer + expiry gate reaches. The matrix exercises
+// the hard JCS encodings (architect-review MEDIUM): minimal / Struct-ext-with->1-
+// key (recursive key-sort) / two Timestamps / repeated terms+attestations+enum /
+// a tamper negative.
+func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
+	t.Helper()
+	const (
+		exchange = "exchange.example.com"
+		nowUnix  = int64(1_700_000_100)
+		expUnix  = int64(1_700_000_900) // after now → not expired
+	)
+	exSeed := fixedSeed(0x66)
+	exPriv := ed25519.NewKeyFromSeed(exSeed)
+	exPub := exPriv.Public().(ed25519.PublicKey)
+	pubB64URL := b64urlNoPad(exPub)
+
+	// signVerdict signs offer in place and records the verdict the real verifier
+	// reaches (against the pinned clock). tamper mutates the offer AFTER signing so
+	// the recorded verdict is a genuine reject.
+	emit := func(name string, offer *rampv1.Offer, tamper func(*rampv1.Offer)) offerVerifyVector {
+		offer.Exchange = exchange
+		sig, err := SignOffer(exPriv, offer)
+		if err != nil {
+			t.Fatalf("%s: sign offer: %v", name, err)
+		}
+		offer.Signature = sig
+		offer.SignatureAlgorithm = OfferSignatureAlgorithm
+		if tamper != nil {
+			tamper(offer)
+		}
+		verifyErr := VerifyOffer(offer, offer.GetSignature(), exPub)
+		expired := offer.GetExpiresAt() != nil && offer.GetExpiresAt().AsTime().Before(time.Unix(nowUnix, 0))
+		return offerVerifyVector{
+			Name:              name,
+			Exchange:          exchange,
+			ExchangePubB64URL: pubB64URL,
+			OfferJSON:         offerCanonicalProtoJSON(t, offer),
+			NowUnix:           nowUnix,
+			ExpectedVerified:  verifyErr == nil && !expired,
+		}
+	}
+
+	minimal := &rampv1.Offer{OfferId: "offer-minimal"}
+
+	structExt, err := structpb.NewStruct(map[string]any{
+		// >1 key, intentionally NOT in sorted order, to force JCS recursive key-sort.
+		"zebra":  "last",
+		"alpha":  "first",
+		"nested": map[string]any{"y": 2.0, "x": 1.0},
+	})
+	if err != nil {
+		t.Fatalf("struct ext: %v", err)
+	}
+	structExtOffer := &rampv1.Offer{OfferId: "offer-struct", Ext: structExt}
+
+	twoTimestamps := &rampv1.Offer{
+		OfferId:   "offer-two-ts",
+		ExpiresAt: timestamppb.New(time.Unix(expUnix, 0).UTC()),
+		DataAsOf:  timestamppb.New(time.Unix(1_699_990_000, 0).UTC()),
+	}
+
+	repeated := &rampv1.Offer{
+		OfferId:        "offer-repeated",
+		DeliveryMethod: rampv1.DeliveryMethod_DELIVERY_METHOD_DIRECT,
+		Pricing:        &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.05", Currency: "USD"},
+		Terms: []*rampv1.LicenseTerm{
+			{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Scopes: []string{"ai-train", "ai-infer"}},
+			{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY, Scopes: []string{"resell"}},
+		},
+		Attestations: []*rampv1.ResourceAttestation{
+			{Verifier: "verifier.example", Keyid: "v1", Uri: "https://verifier.example/a"},
+			{Verifier: "verifier2.example", Keyid: "v2", Uri: "https://verifier2.example/b"},
+		},
+		IabCategories: []string{"IAB1", "IAB2"},
+	}
+
+	return []offerVerifyVector{
+		emit("minimal", minimal, nil),
+		emit("struct_ext_multi_key", structExtOffer, nil),
+		emit("two_timestamps", twoTimestamps, nil),
+		emit("repeated_terms_enum", repeated, nil),
+		// tamper_negative: sign a clean offer, then bump the price. The stored
+		// signature no longer matches the (tampered) offer_json, so the port rejects.
+		emit("tamper_negative", &rampv1.Offer{
+			OfferId: "offer-tamper",
+			Pricing: &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FLAT, Rate: "1.00", Currency: "USD"},
+		}, func(o *rampv1.Offer) {
+			o.Pricing.Rate = "999.00" // mutate AFTER signing → signature invalid
+		}),
+	}
+}
 
 // buildSignRequestVectors signs a fixed set of requests with the REAL Go
 // SignRequest and records the exact bytes it emits. Covered set is exactly
@@ -417,15 +562,15 @@ func buildAcceptanceVectors(t *testing.T) []acceptanceVector {
 			t.Fatalf("%s: oracle rejected its own acceptance signature: %v", s.name, err)
 		}
 		out = append(out, acceptanceVector{
-			Name:              s.name,
-			OfferSig:          s.offerSig,
-			RequesterID:       s.requesterID,
-			RequesterDomain:   s.requesterDomain,
-			IdempotencyKey:    s.idempotencyKey,
-			CanonicalBytesHex: hex.EncodeToString(canon),
-			SignatureHex:      sigHex,
-			PubkeyB64:         pubB64,
-			SeedHex:           acceptanceSeedHex,
+			Name:            s.name,
+			OfferSig:        s.offerSig,
+			RequesterID:     s.requesterID,
+			RequesterDomain: s.requesterDomain,
+			IdempotencyKey:  s.idempotencyKey,
+			CanonicalJCS:    string(canon),
+			SignatureHex:    sigHex,
+			PubkeyB64:       pubB64,
+			SeedHex:         acceptanceSeedHex,
 		})
 	}
 	return out
@@ -483,22 +628,28 @@ func TestGenerateVectors(t *testing.T) {
 		verifySignRequestVector(t, v)
 	}
 	acceptanceVectors := buildAcceptanceVectors(t)
+	offerVerifyVectors := buildOfferVerifyVectors(t)
 
 	signedURLPath := filepath.Join("testdata", "signedurl-vectors.json")
 	popPath := filepath.Join("testdata", "pop-vectors.json")
 	signRequestPath := filepath.Join("testdata", "sign-request-vectors.json")
 	acceptancePath := filepath.Join("testdata", "acceptance-vectors.json")
+	offerVerifyPath := filepath.Join("testdata", "offer-verify-vectors.json")
 
 	// The sign-request + acceptance parity suites read a {"vectors": [...]} object
-	// (the thumbprint-vectors.json shape), not a bare array like signedurl/pop.
+	// (the thumbprint-vectors.json shape), not a bare array like signedurl/pop. The
+	// acceptance + offer-verify docs additionally carry a canonicalization marker
+	// ("jcs") so a reader cannot confuse them with the old proto-binary form.
 	signRequestDoc := map[string]any{"vectors": signRequestVectors}
-	acceptanceDoc := map[string]any{"vectors": acceptanceVectors}
+	acceptanceDoc := map[string]any{"canonicalization": "jcs", "vectors": acceptanceVectors}
+	offerVerifyDocValue := offerVerifyDoc{Canonicalization: "jcs", Vectors: offerVerifyVectors}
 
 	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {
 		writeJSON(t, signedURLPath, signedURLVectors)
 		writeJSON(t, popPath, popVectors)
 		writeJSON(t, signRequestPath, signRequestDoc)
 		writeJSON(t, acceptancePath, acceptanceDoc)
+		writeJSON(t, offerVerifyPath, offerVerifyDocValue)
 		return
 	}
 
@@ -507,6 +658,7 @@ func TestGenerateVectors(t *testing.T) {
 	assertMatches(t, popPath, popVectors)
 	assertMatches(t, signRequestPath, signRequestDoc)
 	assertMatches(t, acceptancePath, acceptanceDoc)
+	assertMatches(t, offerVerifyPath, offerVerifyDocValue)
 }
 
 func assertMatches(t *testing.T, path string, v any) {

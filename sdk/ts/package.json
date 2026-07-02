@@ -9,13 +9,25 @@
     "./thumbprint": "./src/thumbprint.ts",
     "./verify": "./src/verify.ts",
     "./pop": "./src/pop.ts",
-    "./crossfield": "./src/crossfield.ts"
+    "./crossfield": "./src/crossfield.ts",
+    "./core": "./core/verifier.ts",
+    "./core/sign": "./core/sign.ts",
+    "./hono": "./hono/middleware.ts"
   },
   "scripts": {
     "test": "vitest run"
   },
+  "dependencies": {
+    "canonicalize": "^3.0.0"
+  },
   "peerDependencies": {
+    "hono": "^4.7.0",
     "zod": "^3.23.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "vitest": "^2.1.0",
