@@ -5,7 +5,7 @@
 //
 //	L0  generated wire types          gen/go/ramp/v1, gen/go/vocab/*   (consumed, never rebuilt)
 //	L1  stateless protocol helpers    THIS PACKAGE                     (no IO, no state, no transport)
-//	L2  transport client + server     sdk/go/ramp, sdk/go/rampconnect  (state injected)
+//	L2  transport-neutral core + Connect bindings  sdk/go/core; sdk/go/connect (client), sdk/go/connectserver (server)  (state injected)
 //	L3  framework adapters            separate packages                (convert, never replace)
 //
 // L1 owns exactly the protocol mechanics that are defined by the spec, are

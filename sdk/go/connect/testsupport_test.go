@@ -1,21 +1,19 @@
-package ramp_test
+package connect_test
 
-// Shared test support for the sdk/go L2 red suite: an in-memory ReplayStore
+// Shared test support for the sdk/go L2 connect suite: an in-memory ReplayStore
 // test-double and a timestamp helper. The ReplayStore double implements the SDK's
-// injected ramp.ReplayStore interface — it is an APPLICATION-supplied dependency
+// injected core.ReplayStore interface — it is an APPLICATION-supplied dependency
 // the SDK orchestrates over (the KeyResolver-shaped middle), NOT a mock of the
 // code under test. The SDK owns the replay-check control-flow; the app owns the
-// store and its TTL policy (ADR-020 §3 / Core Invariant).
-//
-// RED STATUS: references ramp.ReplayStore, which does not exist until the
-// implement step creates package sdk/go/ramp.
+// store and its TTL policy (ADR-020 §3 / Core Invariant). Relocated verbatim from
+// sdk/go/ramp on the core/connect split (ramp.ReplayStore → core.ReplayStore).
 
 import (
 	"context"
 	"sync"
 	"time"
 
-	"github.com/RAMP-Protocol/protocol/sdk/go/ramp"
+	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -32,7 +30,7 @@ func newMemReplayStore() *memReplayStore {
 }
 
 // SeenOrAdd returns true when nonce was already recorded (a replay), false when
-// it is new (and records it). It satisfies the SDK's injected ramp.ReplayStore.
+// it is new (and records it). It satisfies the SDK's injected core.ReplayStore.
 func (m *memReplayStore) SeenOrAdd(_ context.Context, nonce string, _ time.Duration) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -44,7 +42,7 @@ func (m *memReplayStore) SeenOrAdd(_ context.Context, nonce string, _ time.Durat
 }
 
 // Compile-time assertion that the double satisfies the injected SDK interface.
-var _ ramp.ReplayStore = (*memReplayStore)(nil)
+var _ core.ReplayStore = (*memReplayStore)(nil)
 
 func timestampProto(t time.Time) *timestamppb.Timestamp {
 	return timestamppb.New(t)

@@ -1,9 +1,6 @@
 package helpers
 
 import (
-	"errors"
-
-	"connectrpc.com/connect"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
@@ -11,10 +8,18 @@ import (
 // transport error: the Connect/gRPC Code is the coarse class, the ErrorDetail
 // oneof carries the precise machine-readable reason. Clients branch on the typed
 // reason, never on a human string. These helpers are the single place the SDK
-// builds an ErrorDetail, attaches it to a transport error, and extracts it back
-// — so every service and client speaks the contract identically instead of
-// re-expressing it. The transport Code is the caller's to choose (it is
-// service-specific policy which Code a given reason maps to, ADR-019 §Consequences).
+// builds an ErrorDetail and reads its typed reason back — so every service and
+// client speaks the contract identically instead of re-expressing it. The transport
+// Code is the caller's to choose (it is service-specific policy which Code a given
+// reason maps to, ADR-019 §Consequences).
+//
+// These builders and the Reason accessor are transport-neutral (they touch only
+// generated *rampv1 types), so this L1 package imposes no Connect dependency on a
+// non-Connect consumer. The ErrorDetail↔Connect bridge — which builds/unwraps a
+// *connect.Error — lives in the Connect bindings, split by direction: the EMIT half
+// AsConnectError (next to the reject→connect.Code mapping) in the server binding
+// sdk/go/connectserver, and the READ half ErrorDetailFrom in the client binding
+// sdk/go/connect.
 
 func base(domain, message string) *rampv1.ErrorDetail {
 	return &rampv1.ErrorDetail{Domain: domain, Message: message}
@@ -67,41 +72,6 @@ func UsageReportRejectionDetail(domain, message string, reason rampv1.UsageRepor
 	d := base(domain, message)
 	d.Reason = &rampv1.ErrorDetail_UsageReportRejection{UsageReportRejection: &rampv1.UsageReportRejection{Reason: reason}}
 	return d
-}
-
-// AsConnectError builds a *connect.Error of the given Code with detail attached
-// as a typed error detail (the ADR-019 transport mechanism). The detail's
-// Message becomes the error string.
-func AsConnectError(code connect.Code, detail *rampv1.ErrorDetail) *connect.Error {
-	msg := "ramp error"
-	if detail.GetMessage() != "" {
-		msg = detail.GetMessage()
-	}
-	cerr := connect.NewError(code, errors.New(msg))
-	if d, err := connect.NewErrorDetail(detail); err == nil {
-		cerr.AddDetail(d)
-	}
-	return cerr
-}
-
-// ErrorDetailFrom extracts the first RAMP ErrorDetail attached to err's Connect
-// error chain. It returns false when err is not a Connect error or carries no
-// ErrorDetail.
-func ErrorDetailFrom(err error) (*rampv1.ErrorDetail, bool) {
-	var cerr *connect.Error
-	if !errors.As(err, &cerr) {
-		return nil, false
-	}
-	for _, d := range cerr.Details() {
-		msg, verr := d.Value()
-		if verr != nil {
-			continue
-		}
-		if ed, ok := msg.(*rampv1.ErrorDetail); ok {
-			return ed, true
-		}
-	}
-	return nil, false
 }
 
 // Reason returns the active typed reason enum from detail — one of

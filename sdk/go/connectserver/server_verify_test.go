@@ -1,9 +1,10 @@
-package rampconnect_test
+package connectserver_test
 
-// Integration TDD-red suite for the sdk/go L2 low-tier SERVER face (rampconnect):
+// Integration suite for the sdk/go L2 low-tier SERVER face (connectserver):
 // the verify http-seam wrapper around a generated Connect handler + the injected
 // ReplayStore replay check + the OUTERMOST request-id stamp that must survive the
-// reject path.
+// reject path. The server handler + options live in sdk/go/connectserver; the client
+// that drives the closed round-trip lives in sdk/go/connect.
 //
 // TESTING DOCTRINE: these tests drive behavior through the OUTERMOST public
 // surface — a real Connect handler wrapped by the SDK server face, served over
@@ -11,12 +12,6 @@ package rampconnect_test
 // through that same surface (the connect.Code and the response headers). The
 // transport is never mocked; the only injected app dependencies are the L1
 // KeyResolver and an in-memory ReplayStore double.
-//
-// RED STATUS: this file does not compile today because package
-// github.com/RAMP-Protocol/protocol/sdk/go/rampconnect does not exist yet. That
-// greenfield build failure IS the intended red — the implement step (jjksa.7)
-// creates rampconnect.NewExchangeServiceHandler + WithKeyResolver +
-// WithReplayStore and turns this green.
 
 import (
 	"context"
@@ -27,13 +22,14 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	connectrpc "connectrpc.com/connect"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
+	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
+	rampserver "github.com/RAMP-Protocol/protocol/sdk/go/connectserver"
+	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
-	"github.com/RAMP-Protocol/protocol/sdk/go/ramp"
-	"github.com/RAMP-Protocol/protocol/sdk/go/rampconnect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -51,12 +47,12 @@ type echoExchange struct {
 }
 
 func (e *echoExchange) DiscoverResources(
-	_ context.Context, _ *connect.Request[rampv1.ResourceQuery],
-) (*connect.Response[rampv1.ResourceResponse], error) {
+	_ context.Context, _ *connectrpc.Request[rampv1.ResourceQuery],
+) (*connectrpc.Response[rampv1.ResourceResponse], error) {
 	e.mu.Lock()
 	e.hits++
 	e.mu.Unlock()
-	return connect.NewResponse(&rampv1.ResourceResponse{}), nil
+	return connectrpc.NewResponse(&rampv1.ResourceResponse{}), nil
 }
 
 func (e *echoExchange) hitCount() int {
@@ -88,7 +84,7 @@ func (c *countingReplayStore) SeenOrAdd(_ context.Context, nonce string, _ time.
 	return false, nil
 }
 
-var _ ramp.ReplayStore = (*countingReplayStore)(nil)
+var _ core.ReplayStore = (*countingReplayStore)(nil)
 
 // alwaysReplayStore reports EVERY nonce as already seen — it forces the replay
 // rejection path on the first request, so the test does not depend on the client
@@ -99,7 +95,7 @@ func (alwaysReplayStore) SeenOrAdd(context.Context, string, time.Duration) (bool
 	return true, nil
 }
 
-var _ ramp.ReplayStore = alwaysReplayStore{}
+var _ core.ReplayStore = alwaysReplayStore{}
 
 // serverFixture wires a signing keypair, its resolver, and the echo origin behind
 // the SDK server face.
@@ -136,20 +132,20 @@ type offerExchange struct {
 }
 
 func (o *offerExchange) DiscoverResources(
-	_ context.Context, _ *connect.Request[rampv1.ResourceQuery],
-) (*connect.Response[rampv1.ResourceResponse], error) {
-	return connect.NewResponse(&rampv1.ResourceResponse{Offers: []*rampv1.Offer{o.offer}}), nil
+	_ context.Context, _ *connectrpc.Request[rampv1.ResourceQuery],
+) (*connectrpc.Response[rampv1.ResourceResponse], error) {
+	return connectrpc.NewResponse(&rampv1.ResourceResponse{Offers: []*rampv1.Offer{o.offer}}), nil
 }
 
 func (o *offerExchange) ExecuteTransaction(
-	_ context.Context, _ *connect.Request[rampv1.TransactionRequest],
-) (*connect.Response[rampv1.TransactionResponse], error) {
-	return connect.NewResponse(&rampv1.TransactionResponse{Ver: "1.0"}), nil
+	_ context.Context, _ *connectrpc.Request[rampv1.TransactionRequest],
+) (*connectrpc.Response[rampv1.TransactionResponse], error) {
+	return connectrpc.NewResponse(&rampv1.TransactionResponse{Ver: "1.0"}), nil
 }
 
 // serve stands up the SDK-wrapped handler over httptest with the given replay
 // store injected.
-func (f serverFixture) serve(t *testing.T, replay ramp.ReplayStore) *httptest.Server {
+func (f serverFixture) serve(t *testing.T, replay core.ReplayStore) *httptest.Server {
 	t.Helper()
 	return serveHandler(t, f.origin, f.resolver, replay)
 }
@@ -157,13 +153,13 @@ func (f serverFixture) serve(t *testing.T, replay ramp.ReplayStore) *httptest.Se
 // serveHandler wraps an arbitrary origin with the SDK server face.
 func serveHandler(
 	t *testing.T, origin rampv1connect.ExchangeServiceHandler,
-	resolver *helpers.StaticKeyResolver, replay ramp.ReplayStore,
+	resolver *helpers.StaticKeyResolver, replay core.ReplayStore,
 ) *httptest.Server {
 	t.Helper()
-	path, h := rampconnect.NewExchangeServiceHandler(
+	path, h := rampserver.NewExchangeServiceHandler(
 		origin,
-		rampconnect.WithKeyResolver(resolver),
-		rampconnect.WithReplayStore(replay),
+		rampserver.WithKeyResolver(resolver),
+		rampserver.WithReplayStore(replay),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, h)
@@ -186,12 +182,12 @@ func TestServerVerify_RejectsReplayViaInjectedStore(t *testing.T) {
 	f := newServerFixture(t)
 	srv := f.serve(t, alwaysReplayStore{}) // every nonce is a replay
 
-	client := ramp.NewClient(srv.URL, ramp.WithSigner(f.signer))
+	client := rampconnect.NewClient(srv.URL, rampconnect.WithSigner(f.signer))
 	_, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
 	if err == nil {
 		t.Fatal("a replayed request must be rejected by the verify face")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeUnauthenticated {
+	if got := connectrpc.CodeOf(err); got != connectrpc.CodeUnauthenticated {
 		t.Fatalf("replay: want CodeUnauthenticated, got %v (err=%v)", got, err)
 	}
 	if f.origin.hitCount() != 0 {
@@ -211,9 +207,9 @@ func TestServerVerify_FirstRequestAcceptedReplayRejected(t *testing.T) {
 	replay := newCountingReplayStore()
 	srv := serveHandler(t, &offerExchange{offer: off.offer}, f.resolver, replay)
 
-	client := ramp.NewClient(srv.URL,
-		ramp.WithSigner(f.signer),
-		ramp.WithOfferKey(off.exchangePub),
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(f.signer),
+		rampconnect.WithOfferKey(off.exchangePub),
 	)
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
 	if err != nil {
@@ -226,14 +222,14 @@ func TestServerVerify_FirstRequestAcceptedReplayRejected(t *testing.T) {
 
 	// Fixed idempotency key pins the nonce across both Execute calls so the second
 	// is a genuine replay of the first.
-	if _, err := client.Execute(context.Background(), verified, ramp.WithIdempotencyKey("fixed-nonce")); err != nil {
+	if _, err := client.Execute(context.Background(), verified, rampconnect.WithIdempotencyKey("fixed-nonce")); err != nil {
 		t.Fatalf("first Execute must be accepted: %v", err)
 	}
-	_, err = client.Execute(context.Background(), verified, ramp.WithIdempotencyKey("fixed-nonce"))
+	_, err = client.Execute(context.Background(), verified, rampconnect.WithIdempotencyKey("fixed-nonce"))
 	if err == nil {
 		t.Fatal("second Execute reusing the nonce must be rejected as a replay")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeUnauthenticated {
+	if got := connectrpc.CodeOf(err); got != connectrpc.CodeUnauthenticated {
 		t.Fatalf("replay: want CodeUnauthenticated, got %v (err=%v)", got, err)
 	}
 }
@@ -250,14 +246,14 @@ func TestServerVerify_RequestIDStampedOnRejectPath(t *testing.T) {
 	f := newServerFixture(t)
 	srv := f.serve(t, alwaysReplayStore{})
 
-	spy := &headerSpyTransport{next: ramp.NewSigningTransport(f.signer, http.DefaultTransport)}
+	spy := &headerSpyTransport{next: core.NewSigningTransport(f.signer, http.DefaultTransport)}
 	client := rampv1connect.NewExchangeServiceClient(&http.Client{Transport: spy}, srv.URL)
 
-	_, err := client.DiscoverResources(context.Background(), connect.NewRequest(&rampv1.ResourceQuery{}))
+	_, err := client.DiscoverResources(context.Background(), connectrpc.NewRequest(&rampv1.ResourceQuery{}))
 	if err == nil {
 		t.Fatal("replay must be rejected")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeUnauthenticated {
+	if got := connectrpc.CodeOf(err); got != connectrpc.CodeUnauthenticated {
 		t.Fatalf("replay: want CodeUnauthenticated, got %v", got)
 	}
 	if spy.respRequestID == "" {

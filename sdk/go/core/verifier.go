@@ -1,4 +1,4 @@
-package ramp
+package core
 
 import (
 	"context"
@@ -71,21 +71,32 @@ type Result struct {
 	Rejected []RejectedOffer
 }
 
-// verifier runs the per-offer authenticity + freshness check over the L1
+// Verifier runs the per-offer authenticity + freshness check over the L1
 // helpers.VerifyOffer primitive, keyed through the injected KeyResolver (the same
 // interface the request-signature face resolves through). It is PURE apart from
-// the resolver IO — no state, no clock beyond the injected now.
-type verifier struct {
+// the resolver IO — no state, no clock beyond the injected now. It is transport-
+// neutral: a plain net/http or grpc-go caller composes it directly, without any
+// Connect binding.
+type Verifier struct {
 	mode     Mode
 	resolver helpers.KeyResolver
 	now      func() time.Time
 }
 
-// sort splits offers into verified and rejected per the configured mode. Under Off
+// NewVerifier builds a Verifier from the injected verification mode, offer
+// KeyResolver, and clock. It is the transport-neutral constructor the Connect
+// client composes (and any non-Connect consumer can use directly): the Verifier's
+// unexported fields are not composite-literal-constructible across packages, so
+// this constructor is the sole way to build one outside package core.
+func NewVerifier(mode Mode, resolver helpers.KeyResolver, now func() time.Time) Verifier {
+	return Verifier{mode: mode, resolver: resolver, now: now}
+}
+
+// Sort splits offers into verified and rejected per the configured mode. Under Off
 // every offer is surfaced verified with no check. Under Strict each offer is
 // verified against its resolved exchange key and its expiry — a failure of either
 // lands it in Rejected with the reason.
-func (v verifier) sort(ctx context.Context, offers []*rampv1.Offer) Result {
+func (v Verifier) Sort(ctx context.Context, offers []*rampv1.Offer) Result {
 	res := Result{}
 	for _, off := range offers {
 		if v.mode == Off {
@@ -105,7 +116,7 @@ func (v verifier) sort(ctx context.Context, offers []*rampv1.Offer) Result {
 // signature, and enforce the not-in-the-past expiry. Any step failing rejects the
 // offer (fail-closed) — including an unresolvable key, so an offer the client
 // cannot key is rejected under Strict rather than trusted.
-func (v verifier) check(ctx context.Context, off *rampv1.Offer) error {
+func (v Verifier) check(ctx context.Context, off *rampv1.Offer) error {
 	pub, err := v.resolver.Resolve(ctx, off.GetExchange())
 	if err != nil {
 		return err

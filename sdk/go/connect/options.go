@@ -1,12 +1,13 @@
-package ramp
+package connect
 
 import (
 	"context"
 	"crypto/ed25519"
 	"net/http"
 
-	"connectrpc.com/connect"
+	connectrpc "connectrpc.com/connect"
 
+	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
@@ -19,10 +20,10 @@ type clientConfig struct {
 	httpClient    *http.Client
 	offerKey      ed25519.PublicKey
 	offerResolver helpers.KeyResolver
-	mode          Mode
+	mode          core.Mode
 	validation    Validation
-	requestID     RequestIDFunc
-	extra         []connect.Interceptor
+	requestID     core.RequestIDFunc
+	extra         []connectrpc.Interceptor
 }
 
 // ClientOption configures a Client. Options are the ONLY way to inject the
@@ -46,21 +47,22 @@ func WithOfferKey(pub ed25519.PublicKey) ClientOption {
 }
 
 // WithKeyResolver injects a custom offer-key resolver (a private registry, a proxy,
-// a preloaded set). It is the same KeyResolver interface the server verify face
-// resolves request-signing keys through — one interface for both faces. Overrides
+// a preloaded set) for the client's offer Verifier. It is the same KeyResolver
+// interface the server verify face resolves request-signing keys through
+// (connectserver.WithKeyResolver) — one interface for both faces. Overrides
 // WithOfferKey.
 func WithKeyResolver(r helpers.KeyResolver) ClientOption {
 	return func(c *clientConfig) { c.offerResolver = r }
 }
 
 // WithVerification sets offer-verification strictness. The default is Strict
-// (fail-closed); WithVerification(Off) is the single loud, named opt-out.
-func WithVerification(m Mode) ClientOption {
+// (fail-closed); WithVerification(core.Off) is the single loud, named opt-out.
+func WithVerification(m core.Mode) ClientOption {
 	return func(c *clientConfig) { c.mode = m }
 }
 
-// WithValidation sets protovalidate strictness. The default is ValidationOff; a
-// caller opts into bidirectional wire-shape enforcement with
+// WithValidation sets protovalidate strictness for the client. The default is
+// ValidationOff; a caller opts into bidirectional wire-shape enforcement with
 // WithValidation(ValidationStrict). It is orthogonal to WithVerification (offer
 // signature authenticity).
 func WithValidation(v Validation) ClientOption {
@@ -74,14 +76,15 @@ func WithHTTPClient(h *http.Client) ClientOption {
 	return func(c *clientConfig) { c.httpClient = h }
 }
 
-// WithRequestIDFunc overrides the request-id source (e.g. to reuse a trace id).
-func WithRequestIDFunc(fn RequestIDFunc) ClientOption {
+// WithRequestIDFunc overrides the client request-id source (e.g. to reuse a trace
+// id).
+func WithRequestIDFunc(fn core.RequestIDFunc) ClientOption {
 	return func(c *clientConfig) { c.requestID = fn }
 }
 
-// WithInterceptors appends application interceptors (tracing, metrics) to the SDK
-// stack. They run inside the SDK cross-cutting interceptors.
-func WithInterceptors(is ...connect.Interceptor) ClientOption {
+// WithInterceptors appends application interceptors (tracing, metrics) to the client
+// SDK stack. They run inside the SDK cross-cutting interceptors.
+func WithInterceptors(is ...connectrpc.Interceptor) ClientOption {
 	return func(c *clientConfig) { c.extra = append(c.extra, is...) }
 }
 

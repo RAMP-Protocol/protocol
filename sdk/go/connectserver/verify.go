@@ -1,4 +1,4 @@
-package rampconnect
+package connectserver
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 // errReplayed is the verify-face sentinel for a nonce the injected ReplayStore
 // reports as already seen. It maps to CodeUnauthenticated like any other
 // verification failure.
-var errReplayed = errors.New("rampconnect: request replayed within window")
+var errReplayed = errors.New("connectserver: request replayed within window")
 
 // verifyMiddleware is the server SIGN-VERIFY face realized as an http.Handler
 // wrapper — NOT a connect.Interceptor. Like the client sign face, it must run at

@@ -1,8 +1,10 @@
-package ramp_test
+package connect_test
 
-// Integration TDD-red suite for the sdk/go L2 low-tier CLIENT face (ramp.Client
-// + Verifier + the fail-closed {verified, rejected} contract + the VerifiedOffer
-// compile guard + WithVerification opt-out).
+// Integration suite for the sdk/go L2 low-tier CLIENT face (connect.Client +
+// core.Verifier + the fail-closed {verified, rejected} contract + the VerifiedOffer
+// compile guard + WithVerification opt-out). The Client and its options live in
+// sdk/go/connect, the Verifier / Result / VerifiedOffer / Mode in sdk/go/core, and
+// the server handler the closed round-trip verifies against in sdk/go/connectserver.
 //
 // TESTING DOCTRINE: these tests drive behavior through the OUTERMOST public
 // surface — a real Connect ExchangeService client built by the SDK, talking over
@@ -12,12 +14,6 @@ package ramp_test
 // KeyResolver, and (server-side) an in-memory ReplayStore test-double: those are
 // application-supplied holders the SDK orchestrates over, not mocks of the code
 // under test.
-//
-// RED STATUS: this file does not compile today because package
-// github.com/RAMP-Protocol/protocol/sdk/go/ramp does not exist yet (sdk/go holds
-// only helpers). A greenfield L2 package that does not build IS the intended red
-// artifact — the implement step (jjksa.7) creates ramp.NewClient / ramp.Verifier
-// / ramp.Result / ramp.VerifiedOffer / ramp.WithVerification and turns this green.
 
 import (
 	"context"
@@ -28,13 +24,14 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	connectrpc "connectrpc.com/connect"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
+	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
+	rampserver "github.com/RAMP-Protocol/protocol/sdk/go/connectserver"
+	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
-	"github.com/RAMP-Protocol/protocol/sdk/go/ramp"
-	"github.com/RAMP-Protocol/protocol/sdk/go/rampconnect"
 )
 
 // ---------------------------------------------------------------------------
@@ -136,27 +133,27 @@ type stubExchange struct {
 }
 
 func (s *stubExchange) DiscoverResources(
-	_ context.Context, _ *connect.Request[rampv1.ResourceQuery],
-) (*connect.Response[rampv1.ResourceResponse], error) {
-	return connect.NewResponse(&rampv1.ResourceResponse{Offers: s.offers}), nil
+	_ context.Context, _ *connectrpc.Request[rampv1.ResourceQuery],
+) (*connectrpc.Response[rampv1.ResourceResponse], error) {
+	return connectrpc.NewResponse(&rampv1.ResourceResponse{Offers: s.offers}), nil
 }
 
 func (s *stubExchange) ExecuteTransaction(
-	_ context.Context, _ *connect.Request[rampv1.TransactionRequest],
-) (*connect.Response[rampv1.TransactionResponse], error) {
-	return connect.NewResponse(&rampv1.TransactionResponse{Ver: "1.0"}), nil
+	_ context.Context, _ *connectrpc.Request[rampv1.TransactionRequest],
+) (*connectrpc.Response[rampv1.TransactionResponse], error) {
+	return connectrpc.NewResponse(&rampv1.TransactionResponse{Ver: "1.0"}), nil
 }
 
 // newVerifyingServer stands up an httptest server whose ExchangeService handler is
-// wrapped by the SDK server verify face (rampconnect), resolving request-signing
-// keys through the injected resolver and deduping through the injected replay
-// store. This is the server side of the closed round-trip.
-func newVerifyingServer(t *testing.T, sig signingFixture, replay ramp.ReplayStore, offers []*rampv1.Offer) *httptest.Server {
+// wrapped by the SDK server verify face (connectserver), resolving request-signing
+// keys through the injected resolver and deduping through the injected replay store.
+// This is the server side of the closed round-trip.
+func newVerifyingServer(t *testing.T, sig signingFixture, replay core.ReplayStore, offers []*rampv1.Offer) *httptest.Server {
 	t.Helper()
-	path, h := rampconnect.NewExchangeServiceHandler(
+	path, h := rampserver.NewExchangeServiceHandler(
 		&stubExchange{offers: offers},
-		rampconnect.WithKeyResolver(sig.resolver),
-		rampconnect.WithReplayStore(replay),
+		rampserver.WithKeyResolver(sig.resolver),
+		rampserver.WithReplayStore(replay),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, h)
@@ -185,7 +182,7 @@ func TestClientSign_RoundTripsThroughServerVerify(t *testing.T) {
 	replay := newMemReplayStore()
 	srv := newVerifyingServer(t, sig, replay, nil)
 
-	client := ramp.NewClient(srv.URL, ramp.WithSigner(sig.signer))
+	client := rampconnect.NewClient(srv.URL, rampconnect.WithSigner(sig.signer))
 
 	// Execute needs a VerifiedOffer; but this test only asserts transport
 	// acceptance, so a discover round-trip (empty offer set) is the minimal
@@ -208,11 +205,11 @@ func TestClientSign_NakedClientRejected(t *testing.T) {
 	// A naked Connect client built directly over the generated stub — no SDK sign
 	// face, so the request carries no RFC 9421 signature.
 	naked := rampv1connect.NewExchangeServiceClient(http.DefaultClient, srv.URL)
-	_, err := naked.DiscoverResources(context.Background(), connect.NewRequest(&rampv1.ResourceQuery{}))
+	_, err := naked.DiscoverResources(context.Background(), connectrpc.NewRequest(&rampv1.ResourceQuery{}))
 	if err == nil {
 		t.Fatal("unsigned request must be rejected by the verify face")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeUnauthenticated {
+	if got := connectrpc.CodeOf(err); got != connectrpc.CodeUnauthenticated {
 		t.Fatalf("unsigned request: want CodeUnauthenticated, got %v (err=%v)", got, err)
 	}
 }
@@ -232,9 +229,9 @@ func TestDiscover_SortsVerifiedAndRejected(t *testing.T) {
 	replay := newMemReplayStore()
 	srv := newVerifyingServer(t, sig, replay, []*rampv1.Offer{off.good, off.doctored})
 
-	client := ramp.NewClient(srv.URL,
-		ramp.WithSigner(sig.signer),
-		ramp.WithOfferKey(off.exchangePub), // exchange offer-verifying key
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithOfferKey(off.exchangePub), // exchange offer-verifying key
 	)
 
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
@@ -271,9 +268,9 @@ func TestExecute_AcceptsVerifiedOffer(t *testing.T) {
 	replay := newMemReplayStore()
 	srv := newVerifyingServer(t, sig, replay, []*rampv1.Offer{off.good})
 
-	client := ramp.NewClient(srv.URL,
-		ramp.WithSigner(sig.signer),
-		ramp.WithOfferKey(off.exchangePub),
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithOfferKey(off.exchangePub),
 	)
 
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
@@ -285,7 +282,7 @@ func TestExecute_AcceptsVerifiedOffer(t *testing.T) {
 	}
 	// Execute takes ONLY a VerifiedOffer — this compiles because res.Verified[0]
 	// is one. Passing res.Rejected[0] (a RejectedOffer) or a raw *rampv1.Offer
-	// here would NOT compile; that guard is documented in doc_compileguard.go.
+	// here would NOT compile; that guard is documented in doc_compileguard_test.go.
 	if _, err := client.Execute(context.Background(), res.Verified[0]); err != nil {
 		t.Fatalf("Execute on a verified offer must succeed, got: %v", err)
 	}
@@ -307,9 +304,9 @@ func TestRejectedOffer_RequiresUnsafeToExecute(t *testing.T) {
 	replay := newMemReplayStore()
 	srv := newVerifyingServer(t, sig, replay, []*rampv1.Offer{off.doctored})
 
-	client := ramp.NewClient(srv.URL,
-		ramp.WithSigner(sig.signer),
-		ramp.WithOfferKey(off.exchangePub),
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithOfferKey(off.exchangePub),
 	)
 
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
@@ -344,7 +341,7 @@ func TestWithVerification_StrictRejectsUnverifiable(t *testing.T) {
 
 	// No WithOfferKey → the client cannot resolve the exchange offer key, so even
 	// the genuinely-signed offer is UNVERIFIABLE and must be rejected under Strict.
-	client := ramp.NewClient(srv.URL, ramp.WithSigner(sig.signer))
+	client := rampconnect.NewClient(srv.URL, rampconnect.WithSigner(sig.signer))
 
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
 	if err != nil {
@@ -369,9 +366,9 @@ func TestWithVerification_OffSurfacesUnverified(t *testing.T) {
 	replay := newMemReplayStore()
 	srv := newVerifyingServer(t, sig, replay, []*rampv1.Offer{off.good})
 
-	client := ramp.NewClient(srv.URL,
-		ramp.WithSigner(sig.signer),
-		ramp.WithVerification(ramp.Off), // loud, named opt-out
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithVerification(core.Off), // loud, named opt-out
 	)
 
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})

@@ -1,4 +1,4 @@
-package ramp_test
+package connect_test
 
 // Coverage for the opt-in bidirectional protovalidate interceptor
 // (WithValidation(ValidationStrict)). The binding round-trip suites in
@@ -6,16 +6,18 @@ package ramp_test
 // offer fixtures reach the origin; this file pins the OTHER half of the option:
 // once a caller opts into strict validation, a proto-invalid request is rejected
 // with CodeInvalidArgument before it can be executed. Together they prove the
-// interceptor is present, wired via the option, and correct.
+// interceptor is present, wired via the option, and correct. Relocated verbatim
+// (assertions unchanged) from sdk/go/ramp on the core/connect split.
 
 import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	connectrpc "connectrpc.com/connect"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
-	"github.com/RAMP-Protocol/protocol/sdk/go/ramp"
+	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
+	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 )
 
 // TestWithValidation_StrictRejectsInvalidRequest pins that under
@@ -33,9 +35,9 @@ func TestWithValidation_StrictRejectsInvalidRequest(t *testing.T) {
 
 	// Client A (validation Off) surfaces the offer so we can obtain a VerifiedOffer
 	// wrapping the proto-minimal fixture (no pricing.model).
-	surfacer := ramp.NewClient(srv.URL,
-		ramp.WithSigner(sig.signer),
-		ramp.WithVerification(ramp.Off),
+	surfacer := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithVerification(core.Off),
 	)
 	res, err := surfacer.Discover(context.Background(), &rampv1.ResourceQuery{})
 	if err != nil {
@@ -48,15 +50,15 @@ func TestWithValidation_StrictRejectsInvalidRequest(t *testing.T) {
 	// Client B opts into strict validation: its outbound Execute request reflects
 	// the model-less offer, which the bidirectional validate interceptor must reject
 	// with CodeInvalidArgument BEFORE the round-trip.
-	strict := ramp.NewClient(srv.URL,
-		ramp.WithSigner(sig.signer),
-		ramp.WithValidation(ramp.ValidationStrict),
+	strict := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithValidation(rampconnect.ValidationStrict),
 	)
 	_, err = strict.Execute(context.Background(), res.Verified[0])
 	if err == nil {
 		t.Fatal("strict validation must reject an offer with no pricing.model")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+	if got := connectrpc.CodeOf(err); got != connectrpc.CodeInvalidArgument {
 		t.Fatalf("strict validation: want CodeInvalidArgument, got %v (err=%v)", got, err)
 	}
 }

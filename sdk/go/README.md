@@ -8,7 +8,7 @@ directly with no `replace` directive.
 |---|---|---|
 | **L0** | `gen/go/ramp/v1`, `gen/go/vocab/*` | generated wire types (consumed, never rebuilt) |
 | **L1** | **`sdk/go/helpers`** | stateless protocol helpers — **this is what ships in RAMP-96** |
-| L2 | `sdk/go/ramp`, `sdk/go/rampconnect` | transport client + server interceptors (state injected) — next |
+| L2 | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + client options + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + server options + `AsConnectError` + reject→code) | transport-neutral core + Connect client/server bindings (state injected) |
 | L3 | separate packages | framework adapters (convert, never replace) — later |
 
 ## L1 — `helpers`

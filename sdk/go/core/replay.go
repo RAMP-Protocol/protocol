@@ -1,4 +1,4 @@
-package ramp
+package core
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // KeyResolver without owning keys (ADR-020 §3 / Core Invariant; architect-review
 // amendment MEDIUM-2).
 //
-// It lives in package ramp (not rampconnect) so the client and server faces share
+// It lives in package core (not connect) so the client and server faces share
 // one interface name and an app defines its store once for both.
 type ReplayStore interface {
 	// SeenOrAdd reports whether nonce was already recorded (a replay → true) and

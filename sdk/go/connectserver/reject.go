@@ -1,12 +1,13 @@
-package rampconnect
+package connectserver
 
 import (
 	"encoding/json"
 	"errors"
 	"net/http"
 
-	"connectrpc.com/connect"
+	connectrpc "connectrpc.com/connect"
 
+	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
@@ -16,17 +17,17 @@ import (
 // rejection (bad signature, replay, broken chain, expiry, missing headers) is an
 // authentication failure. It is a pure, stateless error→code mapping — the SDK
 // mechanics half of the hop-budget concern; the budget VALUE stays injected.
-func rejectCode(err error) connect.Code {
+func rejectCode(err error) connectrpc.Code {
 	if errors.Is(err, helpers.ErrTooManyHops) {
-		return connect.CodeResourceExhausted
+		return connectrpc.CodeResourceExhausted
 	}
-	return connect.CodeUnauthenticated
+	return connectrpc.CodeUnauthenticated
 }
 
 // httpStatus maps the two codes the verify face emits to their canonical
 // Connect-over-HTTP statuses (ResourceExhausted → 429, Unauthenticated → 401).
-func httpStatus(code connect.Code) int {
-	if code == connect.CodeResourceExhausted {
+func httpStatus(code connectrpc.Code) int {
+	if code == connectrpc.CodeResourceExhausted {
 		return http.StatusTooManyRequests
 	}
 	return http.StatusUnauthorized
@@ -37,9 +38,29 @@ func httpStatus(code connect.Code) int {
 // mirrors Connect's unary error JSON.
 func writeReject(w http.ResponseWriter, err error) {
 	code := rejectCode(err)
-	ce := connect.NewError(code, err)
+	ce := connectrpc.NewError(code, err)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus(code))
 	body, _ := json.Marshal(map[string]string{"code": code.String(), "message": ce.Message()})
 	_, _ = w.Write(body)
+}
+
+// AsConnectError builds a *connect.Error of the given Code with detail attached
+// as a typed error detail (the ADR-019 transport mechanism). The detail's
+// Message becomes the error string. It lives in the SERVER binding (the emit
+// direction: a server EMITS a typed error detail) — not the transport-neutral L1
+// helpers — so a non-Connect consumer of helpers/core compiles zero connectrpc; the
+// neutral *rampv1.ErrorDetail builders and Reason stay in helpers, and this is where
+// the ErrorDetail meets the Connect transport. The read direction (ErrorDetailFrom)
+// lives in the client binding sdk/go/connect.
+func AsConnectError(code connectrpc.Code, detail *rampv1.ErrorDetail) *connectrpc.Error {
+	msg := "ramp error"
+	if detail.GetMessage() != "" {
+		msg = detail.GetMessage()
+	}
+	cerr := connectrpc.NewError(code, errors.New(msg))
+	if d, err := connectrpc.NewErrorDetail(detail); err == nil {
+		cerr.AddDetail(d)
+	}
+	return cerr
 }

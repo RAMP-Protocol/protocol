@@ -1,4 +1,4 @@
-package ramp
+package core
 
 import (
 	"bytes"

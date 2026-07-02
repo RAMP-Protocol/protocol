@@ -1,14 +1,15 @@
-package ramp
+package connect
 
 import (
 	"context"
 	"net/http"
 	"time"
 
-	"connectrpc.com/connect"
+	connectrpc "connectrpc.com/connect"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
+	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
@@ -20,7 +21,7 @@ import (
 // injected (ADR-020 §2/§3).
 type Client struct {
 	rpc      rampv1connect.ExchangeServiceClient
-	verifier verifier
+	verifier core.Verifier
 }
 
 // NewClient builds a Client against baseURL. The sign face is composed onto the
@@ -29,22 +30,18 @@ type Client struct {
 // ADR order: sign(RoundTripper) · request-id · validate · (app extras). Offer
 // verification is Strict by default.
 func NewClient(baseURL string, opts ...ClientOption) *Client {
-	cfg := clientConfig{httpClient: &http.Client{}, mode: Strict}
+	cfg := clientConfig{httpClient: &http.Client{}, mode: core.Strict}
 	for _, o := range opts {
 		o(&cfg)
 	}
 	httpClient := signedHTTPClient(cfg)
 	interceptors := clientInterceptors(cfg)
 	rpc := rampv1connect.NewExchangeServiceClient(
-		httpClient, baseURL, connect.WithInterceptors(interceptors...),
+		httpClient, baseURL, connectrpc.WithInterceptors(interceptors...),
 	)
 	return &Client{
-		rpc: rpc,
-		verifier: verifier{
-			mode:     cfg.mode,
-			resolver: cfg.resolveOfferResolver(),
-			now:      time.Now,
-		},
+		rpc:      rpc,
+		verifier: core.NewVerifier(cfg.mode, cfg.resolveOfferResolver(), time.Now),
 	}
 }
 
@@ -57,7 +54,7 @@ func signedHTTPClient(cfg clientConfig) *http.Client {
 		base = http.DefaultTransport
 	}
 	signed := *cfg.httpClient
-	signed.Transport = NewSigningTransport(cfg.signer, base)
+	signed.Transport = core.NewSigningTransport(cfg.signer, base)
 	return &signed
 }
 
@@ -65,10 +62,10 @@ func signedHTTPClient(cfg clientConfig) *http.Client {
 // validate · app extras). Sign is NOT here — it is the RoundTripper. Panics only
 // if the shared validator fails to build, which is a programmer/config error, not
 // a runtime condition.
-func clientInterceptors(cfg clientConfig) []connect.Interceptor {
-	out := []connect.Interceptor{newRequestIDInterceptor(cfg.requestID)}
+func clientInterceptors(cfg clientConfig) []connectrpc.Interceptor {
+	out := []connectrpc.Interceptor{newRequestIDInterceptor(cfg.requestID)}
 	if cfg.validation == ValidationStrict {
-		if v, err := newValidateInterceptor(); err == nil {
+		if v, err := NewValidateInterceptor(); err == nil {
 			out = append(out, v)
 		}
 	}
@@ -82,12 +79,12 @@ func clientInterceptors(cfg clientConfig) []connect.Interceptor {
 // back. Neither an unverifiable nor a doctored offer is silently dropped — it lands
 // in Rejected with a reason. Round-trip: client sign → HTTP → server verify →
 // origin → response, then the offer Verifier over the response.
-func (c *Client) Discover(ctx context.Context, query *rampv1.ResourceQuery) (Result, error) {
-	resp, err := c.rpc.DiscoverResources(ctx, connect.NewRequest(query))
+func (c *Client) Discover(ctx context.Context, query *rampv1.ResourceQuery) (core.Result, error) {
+	resp, err := c.rpc.DiscoverResources(ctx, connectrpc.NewRequest(query))
 	if err != nil {
-		return Result{}, err
+		return core.Result{}, err
 	}
-	return c.verifier.sort(ctx, resp.Msg.GetOffers()), nil
+	return c.verifier.Sort(ctx, resp.Msg.GetOffers()), nil
 }
 
 // ExecuteOption tunes a single Execute call.
@@ -106,10 +103,10 @@ func WithIdempotencyKey(key string) ExecuteOption {
 }
 
 // Execute commits to a VERIFIED offer and returns the transaction response. It
-// accepts ONLY a VerifiedOffer — passing a RejectedOffer or a raw *rampv1.Offer is
-// a COMPILE error (the unforgeable-VerifiedOffer guard). A per-call idempotency key
-// is minted fresh unless WithIdempotencyKey pins one.
-func (c *Client) Execute(ctx context.Context, offer VerifiedOffer, opts ...ExecuteOption) (*rampv1.TransactionResponse, error) {
+// accepts ONLY a core.VerifiedOffer — passing a RejectedOffer or a raw *rampv1.Offer
+// is a COMPILE error (the unforgeable-VerifiedOffer guard). A per-call idempotency
+// key is minted fresh unless WithIdempotencyKey pins one.
+func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...ExecuteOption) (*rampv1.TransactionResponse, error) {
 	var ec executeConfig
 	for _, o := range opts {
 		o(&ec)
@@ -130,7 +127,7 @@ func (c *Client) Execute(ctx context.Context, offer VerifiedOffer, opts ...Execu
 		IdempotencyKey: key,
 		Items:          []*rampv1.TransactionItem{{Offer: offer.Offer()}},
 	}
-	resp, err := c.rpc.ExecuteTransaction(ctx, connect.NewRequest(req))
+	resp, err := c.rpc.ExecuteTransaction(ctx, connectrpc.NewRequest(req))
 	if err != nil {
 		return nil, err
 	}
