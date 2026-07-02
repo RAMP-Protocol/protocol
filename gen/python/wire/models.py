@@ -7,7 +7,6 @@ from typing import Any
 from pydantic import AwareDatetime, ConfigDict, Field, RootModel, conint, constr
 from enum import Enum
 from wire.base import WireModel
-from decimal import Decimal
 
 
 
@@ -71,12 +70,12 @@ class Cost(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    amount: Decimal | None = Field(
+    amount: constr(pattern=r'^([0-9]+([.][0-9]+)?)?$') | None = Field(
         '',
         description='Exact decimal string (not a float), e.g. "19.99". Denominated in `currency`.',
     )
     currency: str | None = ''
-    unitCost: Decimal | None = None
+    unitCost: constr(pattern=r'^([0-9]+([.][0-9]+)?)?$') | None = None
 
 
 class Delegation(WireModel):
@@ -646,7 +645,7 @@ class RequestConstraints(WireModel):
     maxPrice: Cost | None = Field(
         None, description='Maximum price the agent is willing to pay.'
     )
-    maxUnitCost: Decimal | None = Field(
+    maxUnitCost: constr(pattern=r'^([0-9]+([.][0-9]+)?)?$') | None = Field(
         None,
         description='Maximum effective cost per unit, as an exact decimal string (not a float).',
     )
@@ -1074,7 +1073,7 @@ class Pricing(WireModel):
         description='How usage is tracked for billing reconciliation.\n Absent = PRICING_METERING_ONLINE (default real-time tracking).\n NONE = one-time perpetual sale; no ReportUsage required after ExecuteTransaction.\n OFFLINE_SELF_REPORTED = agent self-reports physical-world consumption.',
     )
     model: PricingModel = Field(..., description="Provider's pricing model.")
-    rate: Decimal | None = Field(
+    rate: constr(pattern=r'^([0-9]+([.][0-9]+)?)?$') | None = Field(
         '',
         description='Price in the provider\'s model, as an exact decimal string — e.g. "0.05" =\n $0.05 per article. NOT a float: money is decimal to avoid binary rounding and\n to allow arbitrary sub-cent precision (e.g. "0.0001234"). Denominated in `currency`.',
     )
@@ -1087,7 +1086,7 @@ class Pricing(WireModel):
         None,
         description='The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.',
     )
-    unitCost: Decimal | None = Field(
+    unitCost: constr(pattern=r'^([0-9]+([.][0-9]+)?)?$') | None = Field(
         None,
         description="Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).",
     )

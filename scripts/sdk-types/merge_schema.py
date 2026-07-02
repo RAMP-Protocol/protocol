@@ -60,29 +60,6 @@ def strip_titles(o):
     return o
 
 
-# The decimal-string pattern carried by every money field in the proto
-# (Pricing.rate/unit_cost, Cost.amount/unit_cost, TransactionItem.max_unit_cost).
-MONEY_PATTERN = "^([0-9]+([.][0-9]+)?)?$"
-
-
-def mark_money_decimal(o):
-    """Money is a decimal STRING on the wire (exact, never a float). Tag those
-    fields format: decimal so datamodel-codegen emits `Decimal` — parsed via
-    model_validate_json it is exact and wire-exact. The pattern is kept so
-    json-schema-to-zod still emits z.string().regex(...) (TS has no Decimal type;
-    money is a validated decimal string there). The pattern is the format-only
-    guard; presence/zero-rules live in CEL (server-authoritative)."""
-    if isinstance(o, dict):
-        if o.get("type") == "string" and o.get("pattern") == MONEY_PATTERN:
-            node = dict(o)
-            node["format"] = "decimal"
-            return node
-        return {k: mark_money_decimal(v) for k, v in o.items()}
-    if isinstance(o, list):
-        return [mark_money_decimal(x) for x in o]
-    return o
-
-
 def collapse_int_strings(o):
     """proto-JSON accepts an integer as a number OR a string (and emits int64 as a
     string, to protect JS from >2^53 precision loss), so protoc-gen-jsonschema models
@@ -216,7 +193,7 @@ def main(src_dir, desc_path, out_file, required_path=None):
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
-    defs = mark_money_decimal(collapse_int_strings(hoist_enums(fix_refs(defs))))
+    defs = collapse_int_strings(hoist_enums(fix_refs(defs)))
     # hoist_enums has now populated enum_defs, so their names are known; close the
     # open name-OR-integer enum unions down to the closed string enum.
     defs = close_enum_unions(defs, set(enum_defs))
