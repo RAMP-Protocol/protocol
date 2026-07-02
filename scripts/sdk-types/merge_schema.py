@@ -12,8 +12,9 @@
 # *_UNSPECIFIED enum values are dropped: they are the proto zero-sentinel, never a
 # valid wire value (rejected at ingest / by enum.not_in), so the generated enum omits
 # them and rejects "unset" uniformly. google.protobuf.* well-known types map to
-# idiomatic JSON Schema. Uses the NON-strict variant (no additionalProperties:false)
-# so `extra` policy is controlled once on the WireModel base, not baked per class.
+# idiomatic JSON Schema. Uses the NON-strict variant, then strips the
+# additionalProperties:false it still carries (see open_messages) so `extra` policy
+# is controlled once on the WireModel base / the Zod wire() seam, not baked per class.
 import json, glob, re, os, sys
 from google.protobuf import descriptor_pb2
 
@@ -57,6 +58,33 @@ def strip_titles(o):
         return {k: strip_titles(v) for k, v in o.items() if k != "title"}
     if isinstance(o, list):
         return [strip_titles(x) for x in o]
+    return o
+
+
+def open_messages(o):
+    """protoschema's non-strict variant STILL closes every message object two ways,
+    both of which defeat forward-compat (an unknown top-level field from a newer
+    protocol version must be ACCEPTED and dropped, governed once by the WireModel
+    base / the Zod wire() seam):
+
+      1. additionalProperties:false -> per-class extra='forbid' (Pydantic) / .strict()
+         (Zod). Stripped ONLY where the value is exactly False; additionalProperties:true
+         (Struct/ext) and schema-valued maps (e.g. ErrorDetail.metadata) stay OPEN.
+      2. patternProperties: {"^(snake_name)$": ...} — the original snake_case field-name
+         aliases (every field carries one; all 121 are anchored ^(name)$, none are maps —
+         maps use additionalProperties). json-schema-to-zod compiles these into a
+         .catchall(...) + superRefine that REJECTS any key not matching an alias, so
+         messages with multiword fields reject unknowns even after (1). We drop
+         patternProperties: the canonical wire is camelCase (protojson emits camelCase;
+         the corpus is camelCase-only) and Pydantic already ignores these, so removing
+         them makes every message uniformly open and tightens canonicalization. The
+         camelCase `properties` are untouched."""
+    if isinstance(o, dict):
+        return {k: open_messages(v) for k, v in o.items()
+                if k != "patternProperties"
+                and not (k == "additionalProperties" and v is False)}
+    if isinstance(o, list):
+        return [open_messages(x) for x in o]
     return o
 
 
@@ -193,7 +221,7 @@ def main(src_dir, desc_path, out_file, required_path=None):
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
-    defs = collapse_int_strings(hoist_enums(fix_refs(defs)))
+    defs = open_messages(collapse_int_strings(hoist_enums(fix_refs(defs))))
     # hoist_enums has now populated enum_defs, so their names are known; close the
     # open name-OR-integer enum unions down to the closed string enum.
     defs = close_enum_unions(defs, set(enum_defs))

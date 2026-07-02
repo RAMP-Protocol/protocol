@@ -30,6 +30,7 @@ PYTHONPATH=gen/python "$PY" scripts/sdk-types/roundtrip_py.py "$CORPUS_ABS" > "$
 echo "==> Zod round-trip emission"
 # Run from $WORK so the `zod` import inside schemas.ts resolves against its node_modules.
 cp gen/ts/wire/schemas.ts "$WORK/schemas.ts"
+cp gen/ts/wire/base.ts "$WORK/base.ts"   # schemas.ts imports the wire() extra-policy seam
 cp scripts/sdk-types/roundtrip_ts.ts "$WORK/roundtrip_ts.ts"
 ( cd "$WORK" && node --experimental-strip-types roundtrip_ts.ts schemas.ts "$CORPUS_ABS" ) > "$TSEMIT"
 

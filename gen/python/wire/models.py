@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from typing import Any
-from pydantic import AwareDatetime, ConfigDict, Field, RootModel, conint, constr
+from pydantic import AwareDatetime, Field, RootModel, conint, constr
 from enum import Enum
 from wire.base import WireModel
 
@@ -25,9 +25,6 @@ class C2PAStatus(Enum):
 
 
 class CatalogContributor(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     domain: str | None = Field(
         '',
         description='Canonical domain of the authorized contributor (e.g., "doubleverify.com").',
@@ -67,9 +64,6 @@ class CitationFormat(Enum):
 
 
 class Cost(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     amount: constr(pattern=r'^([0-9]+([.][0-9]+)?)?$') | None = Field(
         '',
         description='Exact decimal string (not a float), e.g. "19.99". Denominated in `currency`.',
@@ -79,9 +73,6 @@ class Cost(WireModel):
 
 
 class Delegation(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     expiresAt: AwareDatetime | None = Field(
         None,
         description='When this delegation expires. Exchange MUST reject expired tokens.',
@@ -187,9 +178,6 @@ class DisputeReason(Enum):
 
 
 class DisputeRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     billingId: str | None = Field(
         '', description='Billing reference from the transaction.'
     )
@@ -234,9 +222,6 @@ class DisputeStatus(Enum):
 
 
 class DomainVerificationChallenge(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     expiresAt: AwareDatetime | None = Field(
         None,
         description='When this challenge expires. Provider must confirm before this time.',
@@ -257,9 +242,6 @@ class DomainVerificationChallenge(WireModel):
 
 
 class DomainVerificationConfirmation(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     cdnType: str | None = Field(None, description='CDN type this key is for.')
     domain: str | None = Field('', description='The domain being verified.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')
@@ -299,9 +281,6 @@ class DomainVerificationFailureReason(Enum):
 
 
 class DomainVerificationRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     callerId: str | None = Field(
         None, description='Caller identity (registered with the Exchange).'
     )
@@ -317,9 +296,6 @@ class DomainVerificationRequest(WireModel):
 
 
 class DomainVerificationResult(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
@@ -347,9 +323,6 @@ class IngestionSource(Enum):
 
 
 class JsonWebKey(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     alg: str | None = Field(
         '', description='Signing algorithm. RAMP v1.0: MUST be "EdDSA".'
     )
@@ -371,9 +344,6 @@ class JsonWebKey(WireModel):
 
 
 class KeyRevocationList(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     asOf: AwareDatetime | None = Field(
         None,
         description="Server's response time (RFC3339, UTC). Consumers use this to detect\n clock skew.",
@@ -385,9 +355,6 @@ class KeyRevocationList(WireModel):
 
 
 class License(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | None = Field(
         None,
         description='Stable short identifier: SPDX short-id ("GPL-3.0-only"), TollBit cuid,\n or catalog doc-id. Used by agents and the vocab linter for known-license\n lookup; SHARE_ALIKE derivatives default their scope_license to this.',
@@ -448,9 +415,6 @@ class OfferAbsenceReason(Enum):
 
 
 class Preview(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     duration: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Duration in seconds (for audio and video clips).'
     )
@@ -492,9 +456,6 @@ class ProviderRelationship(Enum):
 
 
 class PushResourcesResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     accepted: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Number of entries accepted'
     )
@@ -521,9 +482,6 @@ class QuotaWindow(Enum):
 
 
 class RateLimitInfo(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     limit: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Maximum requests allowed in the current window.'
     )
@@ -541,17 +499,11 @@ class RateLimitInfo(WireModel):
 
 
 class RefreshCatalogRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     tenantId: str | None = Field('', description='Tenant identifier')
     ver: str | None = Field('', description='Protocol version')
 
 
 class RefreshCatalogResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     started: bool | None = Field(False, description='Whether the refresh was started')
     ver: str | None = Field('', description='Protocol version')
 
@@ -573,18 +525,12 @@ class RegistrationFailureReason(Enum):
 
 
 class RemoveResourcesRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     paths: list[str] | None = Field(None, description='Paths to remove')
     tenantId: str | None = Field('', description='Tenant identifier')
     ver: str | None = Field('', description='Protocol version')
 
 
 class RemoveResourcesResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     removed: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Number of entries removed'
     )
@@ -592,9 +538,6 @@ class RemoveResourcesResponse(WireModel):
 
 
 class ReportingObligation(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     endpoint: str | None = Field(
         None,
         description='URL to submit the usage report to (if different from Exchange).',
@@ -617,9 +560,6 @@ class ReportingObligation(WireModel):
 
 
 class RequestConstraints(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     budgetPeriod: str | None = Field(
         None,
         description='Budget period (e.g. 720h = 30 days). Resets at period boundary.',
@@ -678,9 +618,6 @@ class ResolutionType(Enum):
 
 
 class ResourceAttestation(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     attestedAt: AwareDatetime | None = Field(
         None,
         description='When this attestation was created. Agents use this to assess freshness\n (e.g., "I accept attestations up to N hours old for breaking news").',
@@ -767,9 +704,6 @@ class Role(Enum):
 
 
 class SubscriptionQuotaInfo(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     quotaLimit: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Total allowed in the current period.'
     )
@@ -797,9 +731,6 @@ class TermSemantics(Enum):
 
 
 class TransactionDenial(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     offerId: str | None = Field(
         None, description='Batch mode: the offer this denial pertains to.'
     )
@@ -813,9 +744,6 @@ class TransactionDenial(WireModel):
 
 
 class TransactionItem(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     offerId: str | None = Field('', description='The offer_id from the selected Offer.')
     offerSignature: str | None = Field(
         '',
@@ -824,9 +752,6 @@ class TransactionItem(WireModel):
 
 
 class TransactionResultItem(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     billingId: str | None = Field('', description='Billing reference.')
     cost: Cost | None = Field(None, description='Cost for this item.')
     deliveryMethod: (
@@ -869,9 +794,6 @@ class TransactionResultItem(WireModel):
 
 
 class UsageAsset(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     packageId: str | None = Field(None, description='Package identifier')
     uri: str | None = Field('', description='Asset URI')
 
@@ -891,9 +813,6 @@ class UsageReportRejectionReason(Enum):
 
 
 class UsageReportResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
@@ -907,9 +826,6 @@ class UsageReportResponse(WireModel):
 
 
 class WBAFile(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     keys: list[JsonWebKey] | None = Field(
         None,
         description='RFC 7517 JWK Set "keys" member. RAMP v1: Ed25519 (OKP) keys, each with\n not_before/not_after RAMP extension members.',
@@ -921,9 +837,6 @@ class WBAFile(WireModel):
 
 
 class AcceptableRestriction(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     axis: (
         constr(pattern=r'^RESTRICTION_KIND_UNSPECIFIED$')
         | RestrictionKind
@@ -943,9 +856,6 @@ class AcceptableRestriction(WireModel):
 
 
 class AttributionDetail(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     displayedUrl: str | None = Field(
         None, description='URL displayed to the user as the attribution link.'
     )
@@ -958,9 +868,6 @@ class AttributionDetail(WireModel):
 
 
 class AuthorizedExchange(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     domain: str | None = Field('', description='Canonical domain of the Exchange.')
     endpoint: str | None = Field('', description='RAMP ExchangeService endpoint URL.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')
@@ -974,9 +881,6 @@ class AuthorizedExchange(WireModel):
 
 
 class CatalogRejection(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     reason: CatalogRejectionReason = Field(
         ..., description='The rejection reason (defined-only, non-zero)'
     )
@@ -987,18 +891,12 @@ class CatalogRejection(WireModel):
 
 
 class DisputeFailure(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     reason: DisputeFailureReason = Field(
         ..., description='The failure reason (defined-only, non-zero)'
     )
 
 
 class DisputeResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     disputeId: str | None = Field(
         None, description='Exchange-assigned dispute case identifier.'
     )
@@ -1027,18 +925,12 @@ class DisputeResponse(WireModel):
 
 
 class DomainVerificationFailure(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     reason: DomainVerificationFailureReason = Field(
         ..., description='The failure reason (defined-only, non-zero)'
     )
 
 
 class Obligation(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     detail: str | None = Field(
         None,
         description='Free-form detail: attribution string, notice file URI, etc.\n OBLIGATION_KIND_OTHER without it → lint warning.',
@@ -1054,9 +946,6 @@ class Obligation(WireModel):
 
 
 class Pricing(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     currency: str | None = Field(
         '', description='ISO 4217 currency code (e.g. "USD", "EUR").'
     )
@@ -1093,9 +982,6 @@ class Pricing(WireModel):
 
 
 class Quota(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     limit: conint(ge=1) = Field(
         ...,
         description='Maximum allowed value in the given window. A quota of 0 grants\n nothing — express "no access" by omitting the term, not a zero quota.',
@@ -1112,18 +998,12 @@ class Quota(WireModel):
 
 
 class RegistrationFailure(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     reason: RegistrationFailureReason = Field(
         ..., description='The failure reason (defined-only, non-zero)'
     )
 
 
 class Requester(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     billingRef: str | None = Field(
         None,
         description="Opaque billing reference linking this requester to the Exchange's (and,\n through the Exchange, the publisher's) billing/accounting systems — e.g. a\n billing account, PO number, or cost center. NOT an entitlement or\n subscription credential: access is governed by scopes and delegation, and\n identity by the request signature. The Exchange uses it only for invoicing\n and cost attribution.",
@@ -1158,9 +1038,6 @@ class Requester(WireModel):
 
 
 class ResourceIdentity(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     c2paManifest: str | None = Field(
         None,
         description='Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...',
@@ -1211,9 +1088,6 @@ class ResourceIdentity(WireModel):
 
 
 class ResourceQuery(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     acceptableRestrictions: list[AcceptableRestriction] | None = Field(
         None,
         description='The limits this query operates within, per restriction axis (function,\n geography, user-type, …) — see AcceptableRestriction. Advisory selection\n inputs the Exchange/Broker MAY pre-select offers against (convenience, not\n enforcement); the agent self-selects and bears compliance.',
@@ -1242,9 +1116,6 @@ class ResourceQuery(WireModel):
 
 
 class Restriction(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     advisory: bool | None = Field(
         False,
         description='Fail-closed by default. When false (the default), this restriction is\n BINDING: an agent that cannot evaluate every token in it — including an\n unknown vendor token — MUST decline the term. Set advisory = true to\n downgrade an unverifiable restriction to non-blocking. This deliberately\n inverts the COSE-`crit` opt-in default: a license restriction a consumer\n does not understand should stop it, not be silently ignored.',
@@ -1269,18 +1140,12 @@ class Restriction(WireModel):
 
 
 class RetrievalAuthFailure(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     reason: RetrievalAuthFailureReason = Field(
         ..., description='The failure reason (defined-only, non-zero)'
     )
 
 
 class TransactionRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     extCritical: list[str] | None = Field(
         None,
@@ -1306,9 +1171,6 @@ class TransactionRequest(WireModel):
 
 
 class TransactionResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     agentIdentityHash: str | None = Field(
         '',
         description='Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of\n the agent\'s Ed25519 request-signing key (see "Retrieval-URL identity binding"\n above). Empty string when absent; non-empty iff a signed retrieval_endpoint\n is present. Delivery-endpoint enforcement of the binding is OPTIONAL.',
@@ -1365,9 +1227,6 @@ class TransactionResponse(WireModel):
 
 
 class Usage(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     attribution: list[AttributionDetail] | None = Field(
         None, description='Structured attribution details for each citation provided.'
     )
@@ -1402,9 +1261,6 @@ class Usage(WireModel):
 
 
 class UsageReport(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     assets: list[UsageAsset] | None = Field(
         None, description='Assets that were delivered and used.'
     )
@@ -1432,18 +1288,12 @@ class UsageReport(WireModel):
 
 
 class UsageReportRejection(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     reason: UsageReportRejectionReason = Field(
         ..., description='The rejection reason (defined-only, non-zero)'
     )
 
 
 class WellKnownManifest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     acceptedVerifiers: list[str] | None = Field(
         None,
         description='Exchange-only. Trusted attestation verification vendors (domains).',
@@ -1537,9 +1387,6 @@ class WellKnownManifest(WireModel):
 
 
 class DiscoveryRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     acceptableRestrictions: list[AcceptableRestriction] | None = Field(
         None,
         description='The limits the agent will operate within, per restriction axis — see\n AcceptableRestriction. The Broker forwards these to Exchanges in\n ResourceQuery.acceptable_restrictions. Advisory selection inputs, not\n enforcement.',
@@ -1577,9 +1424,6 @@ class DiscoveryRequest(WireModel):
 
 
 class ErrorDetail(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     catalogRejection: CatalogRejection | None = Field(
         None, description='`reason` oneof — CatalogService rejection'
     )
@@ -1617,9 +1461,6 @@ class ErrorDetail(WireModel):
 
 
 class LicenseTerm(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     license: License | None = Field(
         None,
         description='Governing license document. Authoritative for REFERENCE_ONLY terms, which\n MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that\n references nothing is rejected at ingest.',
@@ -1653,9 +1494,6 @@ class LicenseTerm(WireModel):
 
 
 class Offer(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     attestations: list[ResourceAttestation] | None = Field(
         None,
         description='Three verification levels determine what is independently verifiable:\n   Level 0 (no attestations): Resource may carry identifiers (DOI, IPTC GUID)\n     for identification, but nothing is cryptographically verifiable.\n     Only CDN delivery failure is auto-disputable.\n   Level 1 (self-attested): Provider signs own claims with Ed25519 key.\n     Agent can independently verify content hash and token count.\n     CDN delivery failure + content hash mismatch are auto-disputable.\n   Level 2 (third-party attested): Independent verification vendor crawled\n     the resource and attested to its properties. Agent trusts the attestation\n     (does not re-verify hash). Token count discrepancy is auto-disputable\n     when corroborated by CDN response size.\n\n Multiple attestations may be present (e.g., provider self-attestation\n plus a third-party verification). Agents choose which to trust.',
@@ -1727,9 +1565,6 @@ class Offer(WireModel):
 
 
 class OfferGroup(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     absenceReason: OfferAbsenceReason | None = Field(
         None,
         description='Why no offers are available for this URI.\n Present when `offers` is empty. Enables agents/Brokers to distinguish\n "resource not in catalog" from "resource blocked for your use case" without\n trial-and-error transactions. Analogous to OpenRTB nbr codes and\n Shutterstock per-item error metadata in batch responses.',
@@ -1753,9 +1588,6 @@ class OfferGroup(WireModel):
 
 
 class ResourceEntry(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     attestations: list[ResourceAttestation] | None = Field(
         None,
         description="Signed attestations about this resource entry.\n Same semantics as Offer.attestations — see ResourceAttestation message\n for verification levels and claim vocabulary. Attestations pushed via\n CatalogService are verified at push time: the Exchange checks that\n the attestation verifier is authorized to push for this provider\n (via catalog_contributors in the provider's WellKnownManifest) and validates the\n attestation signature against the verifier's public key from their\n /.well-known/ramp.json endpoint (WellKnownManifest, role determined\n by the verifier's operator).",
@@ -1793,9 +1625,6 @@ class ResourceEntry(WireModel):
 
 
 class ResourceResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     exchange: str | None = Field(
         '', description='Canonical domain of the responding Exchange.'
     )
@@ -1819,9 +1648,6 @@ class ResourceResponse(WireModel):
 
 
 class DiscoveryResponse(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     absenceReason: OfferAbsenceReason | None = Field(
         None,
         description='Existence-oracle note: an authorization-flavored reason (SCOPE_INSUFFICIENT,\n NOT_AUTHORIZED, NOT_IN_CATALOG, CONTENT_BLOCKED) confirms a resource exists\n and why access was refused. Resolve surfaces the same oracle at the broker\n that OfferGroup.absence_reason does at the Exchange, so the same mitigation\n applies: where existence itself must stay hidden, the Broker MAY omit the\n reason (leave this unset) rather than reveal it. See the threat model.',
@@ -1839,9 +1665,6 @@ class DiscoveryResponse(WireModel):
 
 
 class PushResourcesRequest(WireModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     callerId: str | None = Field(
         '',
         description='Identity of the caller (who is pushing this data).\n The Exchange verifies this matches a registered CatalogService client.',
