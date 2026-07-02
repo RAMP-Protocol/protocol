@@ -16,6 +16,8 @@ on:
       - 'conformance/**'
       - 'gen/python/**'
       - 'gen/ts/**'
+      - 'sdk/ts/**'
+      - 'sdk/go/helpers/**'
       - '.github/workflows/sdk-types-ci.yml'
   pull_request:
     paths: *paths
@@ -73,3 +75,31 @@ jobs:
       # .sdk-types-work venv + zod provisioned by gen-sdk-types.sh above.
       - name: Canonical proto-JSON round-trip
         run: ./scripts/check-canonical.sh
+
+  # sdk/ts L1 helpers (thumbprint, signed-URL/PoP verify, cross-field Zod) byte-parity
+  # against the sdk/go oracle. The signed-URL + PoP vectors are emitted by the Go golden
+  # emitter (sdk/go/helpers TestGenerateVectors); this job first asserts the committed
+  # vectors are not stale (default emitter run is a check), then runs the TS suites that
+  # assert TS verdicts match those Go-signed vectors + the shared thumbprint/crossfield
+  # corpora.
+  sdk-l1:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Drift gate: the emitter re-derives the vectors from FIXED seeds/timestamps and
+      # fails if the committed testdata differs (deterministic, no time.Now()/random).
+      - name: assert Go golden vectors are current
+        run: go test ./sdk/go/helpers/ -run TestGenerateVectors
+
+      - name: TypeScript L1 parity
+        working-directory: sdk/ts
+        run: |
+          npm install
+          npm test

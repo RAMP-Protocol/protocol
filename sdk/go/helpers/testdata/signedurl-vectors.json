@@ -1,0 +1,34 @@
+[
+  {
+    "name": "valid_bearer_sorted_query",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/a?a=2\u0026doc=1\u0026exp=1700000300\u0026kid=ex.v1\u0026sig=OqCa87dZAOQir8gFsQBS6upPFe1A8N6q-4FZaa5g6pRzZgG30xz3D7Qx_ciejcxDGSvRLobIN1YEwavEUjyaBg\u0026z=9",
+    "now_unix": 1700000100,
+    "expected_valid": true
+  },
+  {
+    "name": "valid_agent_bound",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/b?agent_id=rPyqpnT-yK24VXThsYfUf70tnzuOzeZ-XO81BdiMqM8\u0026doc=7\u0026exp=1700000300\u0026kid=ex.v1\u0026sig=ZZZD3wUxAd0DLROnXsMTnwVa7bITF9d5jugIaIGstbh-kierar7gq5Ey6DrziwTxMZ0yksCUFWtW6N4D9D78Dg",
+    "now_unix": 1700000100,
+    "expected_valid": true
+  },
+  {
+    "name": "expired",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/c?exp=1700000300\u0026kid=ex.v1\u0026sig=PALUnH-mgaPjtOt9gKHJlUpFwwFowiX0EvRueBk4oWW91bLsk5CEtyFrnPMmVcwWCs690EWyIJ-vvNA93cRFAQ",
+    "now_unix": 1700000400,
+    "expected_valid": false
+  },
+  {
+    "name": "tampered_path",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/x?a=2\u0026doc=1\u0026exp=1700000300\u0026kid=ex.v1\u0026sig=OqCa87dZAOQir8gFsQBS6upPFe1A8N6q-4FZaa5g6pRzZgG30xz3D7Qx_ciejcxDGSvRLobIN1YEwavEUjyaBg\u0026z=9",
+    "now_unix": 1700000100,
+    "expected_valid": false
+  }
+]

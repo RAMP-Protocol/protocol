@@ -1,0 +1,24 @@
+{
+  "name": "@ramp-protocol/sdk-l1",
+  "version": "0.0.0",
+  "private": true,
+  "description": "RAMP L1 helpers (stateless, IO-free protocol mechanics): RFC 7638 thumbprint, Ed25519 signed-URL verify, RFC 9421 GET PoP verify, and cross-field Zod refinements over gen/ts schemas. Byte-parity-guarded against the sdk/go oracle via shared vectors + the conformance corpus.",
+  "type": "module",
+  "exports": {
+    "./base64url": "./src/base64url.ts",
+    "./thumbprint": "./src/thumbprint.ts",
+    "./verify": "./src/verify.ts",
+    "./pop": "./src/pop.ts",
+    "./crossfield": "./src/crossfield.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "zod": "^3.23.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
+  }
+}
