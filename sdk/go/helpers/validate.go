@@ -24,6 +24,14 @@ var sharedValidator = sync.OnceValues(func() (protovalidate.Validator, error) {
 	return protovalidate.New()
 })
 
+// SharedValidator returns the process-wide protovalidate.Validator that Validate
+// wraps — built once and reused (compiling its CEL is expensive). The L2 validate
+// interceptor injects it into connectrpc.com/validate so the interceptor and the
+// L1 client-side pre-check share one engine, giving zero rule drift by construction.
+func SharedValidator() (protovalidate.Validator, error) {
+	return sharedValidator()
+}
+
 // Validate checks msg against its protovalidate rules. It returns nil when msg is
 // valid and a *protovalidate.ValidationError (carrying the violated rule ids)
 // otherwise. The validator is built once and reused (compiling its CEL is
