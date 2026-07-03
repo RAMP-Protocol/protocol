@@ -139,9 +139,9 @@ function hexToBytes(hex: string): Uint8Array | undefined {
 
 /**
  * canonicalOfferPayload reproduces the signed bytes: clear signature +
- * signatureAlgorithm from the offer's canonical proto-JSON, then apply RFC 8785
+ * signature_algorithm from the offer's canonical proto-JSON, then apply RFC 8785
  * JCS. MUST stay byte-identical to the Go oracle (helpers.canonicalOfferPayload).
- * The offer is already canonical proto-JSON (camelCase, enums-as-names,
+ * The offer is already canonical proto-JSON (snake_case, enums-as-names,
  * omit-unpopulated) — the core only clears the two signature fields and re-JCS-es.
  */
 export function canonicalOfferPayload(
@@ -149,7 +149,7 @@ export function canonicalOfferPayload(
 ): Uint8Array {
 	const stripped: Record<string, unknown> = { ...offer };
 	delete stripped.signature;
-	delete stripped.signatureAlgorithm;
+	delete stripped.signature_algorithm;
 	const jcs = canonicalize(stripped);
 	if (jcs === undefined)
 		throw new Error("ramp/core: offer is not JSON-serializable");
@@ -217,9 +217,9 @@ export class Verifier {
 		return undefined;
 	}
 
-	// expired reports whether the offer carries an expiresAt strictly in the past.
+	// expired reports whether the offer carries an expires_at strictly in the past.
 	private expired(rec: Record<string, unknown>): boolean {
-		const expiresAt = rec.expiresAt;
+		const expiresAt = rec.expires_at;
 		if (typeof expiresAt !== "string") return false;
 		const ms = Date.parse(expiresAt);
 		if (Number.isNaN(ms)) return false;

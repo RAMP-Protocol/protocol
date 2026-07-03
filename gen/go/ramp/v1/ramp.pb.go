@@ -2544,8 +2544,9 @@ type Offer struct {
 	//   - google.protobuf.Timestamp / Duration per the proto-JSON WKT rules
 	//     (RFC 3339 string for Timestamp);
 	//   - unpopulated fields are OMITTED (never emitted as defaults);
-	//   - field naming is camelCase (the JSON name), the naming every SDK target
-	//     shares;
+	//   - field naming is snake_case (the proto field name, UseProtoNames=true),
+	//     the naming every SDK target shares — wire, corpus, and signed form are all
+	//     snake_case;
 	//   - google.protobuf.Struct (`ext`) → a plain JSON object; JCS then sorts its
 	//     keys recursively, so the Struct case needs no special handling.
 	//

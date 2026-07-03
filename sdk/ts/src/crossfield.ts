@@ -23,10 +23,9 @@ import {
 // own members. The restriction FUNCTION token axis is validated at the field
 // layer against gen/ts/vocab/functiontokens.
 //
-// Proto-JSON field names arrive in either camelCase (uriDigest, scopeLicense —
-// the wire default) or snake_case (uri_digest, scope_license — as the shared
-// corpus records them). The accessors below read both so a rule fires on the
-// same field regardless of which casing the caller supplies.
+// Proto-JSON field names are snake_case (the wire standard; UseProtoNames=true).
+// The accessors below read snake_case exclusively — the wire, corpus, and signed
+// form are all snake_case.
 
 /** Stable rule-id carried on each cross-field Zod issue via params.ruleId. */
 export interface CrossFieldIssueParams {
@@ -41,7 +40,7 @@ function asObj(v: unknown): Obj | undefined {
   return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : undefined;
 }
 
-/** Read a field by its camelCase and/or snake_case spellings. */
+/** Read a field by its snake_case name (the only wire naming). */
 function field(o: Obj, ...names: string[]): unknown {
   for (const n of names) {
     if (o[n] !== undefined) return o[n];
@@ -69,7 +68,7 @@ function licenseRules(o: Obj): string[] {
   const uri = str(field(o, "uri"));
   // uri_digest is a string field; the shared valid instance also models a
   // present digest as a `digest` object — both count as "digest present".
-  const uriDigest = str(field(o, "uriDigest", "uri_digest"));
+  const uriDigest = str(field(o, "uri_digest"));
   const digestObj = asObj(field(o, "digest"));
   const hasDigest = uriDigest !== "" || digestObj !== undefined;
   if (uri !== "" && !hasDigest) return ["license.digest_required_with_uri"];
@@ -112,7 +111,7 @@ function licenseTermRules(o: Obj): string[] {
  */
 function obligationRules(o: Obj): string[] {
   if (str(field(o, "kind")) !== OBLIGATION_KIND_SHARE_ALIKE) return [];
-  const raw = field(o, "scopeLicense", "scope_license");
+  const raw = field(o, "scope_license");
   // scope_license is a License (object with id/uri); a bare non-empty string is
   // also accepted as an identifying id (the CEL's `id != ''` intent).
   const identified =

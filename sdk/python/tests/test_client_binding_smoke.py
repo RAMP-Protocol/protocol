@@ -76,7 +76,7 @@ def test_client_verifies_returned_offer_through_verifier() -> None:
 
     # An offer whose exchange has NO resolvable key → rejected (fail-closed),
     # observed through the same Verifier surface MCP would call.
-    unresolvable = {"offerId": "o1", "exchange": "unknown.example"}
+    unresolvable = {"offer_id": "o1", "exchange": "unknown.example"}
     result = verifier.sort([unresolvable])
     assert len(result.verified) == 0
     assert len(result.rejected) == 1

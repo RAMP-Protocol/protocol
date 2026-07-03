@@ -141,11 +141,11 @@ def fix_refs(o):
     if isinstance(o, dict):
         r = o.get("$ref")
         if isinstance(r, str):
-            m = re.match(r"ramp\.v1\.([A-Za-z0-9_]+)\.jsonschema\.json$", r)
+            m = re.match(r"ramp\.v1\.([A-Za-z0-9_]+)\.schema\.json$", r)
             if m:
                 o = dict(o); o["$ref"] = "#/$defs/" + m.group(1)
                 return {k: fix_refs(v) for k, v in o.items()}
-            g = re.match(r"google\.protobuf\.([A-Za-z0-9_]+)\.jsonschema\.json$", r)
+            g = re.match(r"google\.protobuf\.([A-Za-z0-9_]+)\.schema\.json$", r)
             if g and g.group(1) in WKT:
                 o = dict(o); o.pop("$ref"); o.update(WKT[g.group(1)])
                 return {k: fix_refs(v) for k, v in o.items()}
@@ -209,10 +209,12 @@ def main(src_dir, desc_path, out_file, required_path=None):
     defs = {}
     # sorted() so the $defs order — and therefore the generated class order — is
     # deterministic across machines (glob order is filesystem-dependent: macOS vs CI).
-    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.jsonschema.json"))):
-        if ".strict." in f:
+    # Use the proto-names (.schema.json) variant — field names are snake_case, matching
+    # the wire and the signed form. Skip .strict., .bundle., and .jsonschema. variants.
+    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.schema.json"))):
+        if ".strict." in f or ".bundle." in f or ".jsonschema." in f:
             continue
-        name = os.path.basename(f).split(".jsonschema")[0].replace("ramp.v1.", "")
+        name = os.path.basename(f).split(".schema")[0].replace("ramp.v1.", "")
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d

@@ -144,14 +144,14 @@ def _mint_verified(offer: Any) -> VerifiedOffer:
 
 
 def canonical_offer_payload(offer: dict[str, Any]) -> bytes:
-    """Reproduce the offer's signed bytes: clear signature + signatureAlgorithm from
+    """Reproduce the offer's signed bytes: clear signature + signature_algorithm from
     the canonical proto-JSON, then apply RFC 8785 JCS.
 
     MUST stay byte-identical to the Go oracle (helpers.canonicalOfferPayload). The
-    offer is already canonical proto-JSON (camelCase, enums-as-names,
+    offer is already canonical proto-JSON (snake_case, enums-as-names,
     omit-unpopulated) — the core only clears the two signature keys and re-JCS-es.
     """
-    stripped = {k: v for k, v in offer.items() if k not in ("signature", "signatureAlgorithm")}
+    stripped = {k: v for k, v in offer.items() if k not in ("signature", "signature_algorithm")}
     return rfc8785.dumps(stripped)
 
 
@@ -222,7 +222,7 @@ class Verifier:
         return None
 
     def _expired(self, offer: dict[str, Any]) -> bool:
-        expires_at = offer.get("expiresAt")
+        expires_at = offer.get("expires_at")
         if not isinstance(expires_at, str):
             return False
         try:
@@ -256,12 +256,12 @@ def jcs_acceptance_payload(
     if offer_sig == "":
         raise ValueError("cannot accept an unsigned offer (empty offer signature)")
     obj: dict[str, str] = {
-        "offerSig": offer_sig,
-        "requesterId": requester_id,
-        "idempotencyKey": idempotency_key,
+        "offer_sig": offer_sig,
+        "requester_id": requester_id,
+        "idempotency_key": idempotency_key,
     }
     if requester_domain != "":
-        obj["requesterDomain"] = requester_domain
+        obj["requester_domain"] = requester_domain
     return rfc8785.dumps(obj)
 
 

@@ -10,12 +10,9 @@ strings — the direct analogue of the Go oracle's ``ValidationRuleIDs(err)``
 ``contains(got, want)`` contract, not pass/fail-only.
 
 The generated Pydantic models (gen/python/wire/models.py) are COMPOSED onto via
-``@model_validator`` (below), never forked. The rule-id extraction itself reads
-the raw proto-JSON so it works regardless of casing: proto-JSON field names arrive
-in either camelCase (uriDigest, scopeLicense — the wire default) or snake_case
-(uri_digest, scope_license — as the shared corpus records them); the accessors
-read both so a rule fires on the same field regardless of which casing the caller
-supplies.
+``@model_validator`` (below), never forked. The rule-id extraction reads snake_case
+proto-JSON field names exclusively — the wire, corpus, and signed form are all
+snake_case (UseProtoNames=true).
 """
 
 from __future__ import annotations
@@ -63,7 +60,7 @@ def _str(v: Any) -> str:
 def _license_rules(o: dict[str, Any]) -> list[str]:
     """License.digest_required_with_uri: ``this.uri == '' || this.uri_digest != ''``."""
     uri = _str(_field(o, "uri"))
-    uri_digest = _str(_field(o, "uriDigest", "uri_digest"))
+    uri_digest = _str(_field(o, "uri_digest"))
     digest_obj = _as_obj(_field(o, "digest"))
     has_digest = uri_digest != "" or digest_obj is not None
     if uri != "" and not has_digest:
@@ -91,7 +88,7 @@ def _obligation_rules(o: dict[str, Any]) -> list[str]:
     """Obligation.share_alike.requires_scope_license."""
     if _str(_field(o, "kind")) != _OBLIGATION_KIND_SHARE_ALIKE:
         return []
-    raw = _field(o, "scopeLicense", "scope_license")
+    raw = _field(o, "scope_license")
     raw_obj = _as_obj(raw)
     identified = (isinstance(raw, str) and raw != "") or (
         raw_obj is not None

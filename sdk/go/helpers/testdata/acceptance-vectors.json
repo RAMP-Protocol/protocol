@@ -7,8 +7,8 @@
       "requester_id": "agent-1",
       "requester_domain": "agent.example.com",
       "idempotency_key": "idem-1",
-      "canonical_jcs": "{\"idempotencyKey\":\"idem-1\",\"offerSig\":\"ex-offer-sig-hex\",\"requesterDomain\":\"agent.example.com\",\"requesterId\":\"agent-1\"}",
-      "signature_hex": "a6fb638a6b5713c37ed5e0e86d00daeb43b41a00e3cf17928179f56d71226540d2e65a877531e9d7c2dd42eab3a3039775e14aa3a9c864f2bcb087002f68b109",
+      "canonical_jcs": "{\"idempotency_key\":\"idem-1\",\"offer_sig\":\"ex-offer-sig-hex\",\"requester_domain\":\"agent.example.com\",\"requester_id\":\"agent-1\"}",
+      "signature_hex": "20b2587e813a166caa023d3f9ad7307b3c26e4f2d6a038568d750b9d09d7b8b6d5e195265ca96e8bd1e280140a397e8e028aa97043df2f021d1a037a429c4306",
       "pubkey_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
       "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
     },
@@ -18,8 +18,8 @@
       "requester_id": "agent-2",
       "requester_domain": "",
       "idempotency_key": "idem-2",
-      "canonical_jcs": "{\"idempotencyKey\":\"idem-2\",\"offerSig\":\"sig2deadbeef\",\"requesterId\":\"agent-2\"}",
-      "signature_hex": "104fb4d08bfaef870e84908545cdf6e9fbd3ac2d2b54105998a865e40d7a3e20559dda5fea4000fac8dba3dfc691abb411da5afed78e75083e7e250683fc0000",
+      "canonical_jcs": "{\"idempotency_key\":\"idem-2\",\"offer_sig\":\"sig2deadbeef\",\"requester_id\":\"agent-2\"}",
+      "signature_hex": "a067c7d83dcf801f10389a5b2e2936756aae37006478b1eae5dbf70805fdf2feb0292e3ae3b5511a3921f4fe331c52bfc19894f25332f0b2ba2d741db0769506",
       "pubkey_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
       "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
     }

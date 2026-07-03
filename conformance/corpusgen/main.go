@@ -90,8 +90,10 @@ func seeds() map[string]proto.Message {
 // pattern and length bounds becomes the auto-filled value (generic — no per-field
 // table). badStrings are candidates that should FAIL a typical token/number/hash
 // pattern; the first that the pattern rejects becomes the violating value.
-var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), ""}
-var badStrings = []string{"two words", "1.2.3", "!!bad!!", "\x00ctl\x00", " "}
+var (
+	stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), ""}
+	badStrings    = []string{"two words", "1.2.3", "!!bad!!", "\x00ctl\x00", " "}
+)
 
 func main() {
 	v, err := protovalidate.New()
@@ -163,25 +165,38 @@ func writeCrossField(v protovalidate.Validator) {
 	}
 	freePricing := &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 	mutants := []mutant{
-		{"Pricing/cel/per_unit_requires_unit",
+		{
+			"Pricing/cel/per_unit_requires_unit",
 			&rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.05", Currency: "USD"},
-			"pricing.per_unit.requires_unit"},
-		{"Pricing/cel/free_zero_rate",
+			"pricing.per_unit.requires_unit",
+		},
+		{
+			"Pricing/cel/free_zero_rate",
 			&rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "5"},
-			"pricing.free.zero_rate"},
-		{"License/cel/digest_required_with_uri",
+			"pricing.free.zero_rate",
+		},
+		{
+			"License/cel/digest_required_with_uri",
 			&rampv1.License{Id: proto.String("CC-BY-4.0"), Uri: proto.String("https://example.com/license")},
-			"license.digest_required_with_uri"},
-		{"Restriction/cel/permitted_prohibited_disjoint",
+			"license.digest_required_with_uri",
+		},
+		{
+			"Restriction/cel/permitted_prohibited_disjoint",
 			&rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-train"}, Prohibited: []string{"ai-train"}},
-			"restriction.permitted_prohibited_disjoint"},
-		{"Obligation/cel/share_alike_requires_scope_license",
+			"restriction.permitted_prohibited_disjoint",
+		},
+		{
+			"Obligation/cel/share_alike_requires_scope_license",
 			&rampv1.Obligation{Kind: rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE},
-			"obligation.share_alike.requires_scope_license"},
-		{"LicenseTerm/cel/reference_only_requires_uri",
+			"obligation.share_alike.requires_scope_license",
+		},
+		{
+			"LicenseTerm/cel/reference_only_requires_uri",
 			&rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY},
-			"license_term.reference_only.requires_uri"},
-		{"LicenseTerm/cel/one_restriction_per_kind",
+			"license_term.reference_only.requires_uri",
+		},
+		{
+			"LicenseTerm/cel/one_restriction_per_kind",
 			&rampv1.LicenseTerm{
 				Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED,
 				Pricing:   freePricing,
@@ -190,7 +205,8 @@ func writeCrossField(v protovalidate.Validator) {
 					{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-train"}},
 				},
 			},
-			"license_term.one_restriction_per_kind"},
+			"license_term.one_restriction_per_kind",
+		},
 	}
 
 	var cases []Case
@@ -525,7 +541,7 @@ func gte(r *validate.Int64Rules) int64 {
 // ── output / misc ────────────────────────────────────────────────────────────
 
 func mkCase(id, short string, m proto.Message, valid bool, ids []string, _ protovalidate.Validator) Case {
-	b, err := protojson.MarshalOptions{}.Marshal(m)
+	b, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(m)
 	must(err)
 	// re-indent to canonical form so the committed corpus is stable
 	var v any

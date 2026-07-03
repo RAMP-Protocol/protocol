@@ -19,7 +19,7 @@ class AgentAcceptance(WireModel):
         ...,
         description='Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes.',
     )
-    signatureAlgorithm: str | None = Field(
+    signature_algorithm: str | None = Field(
         '', description='Signature algorithm; "EdDSA" for Ed25519.'
     )
 
@@ -28,19 +28,19 @@ class AgentAcceptancePayload(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    idempotencyKey: str | None = Field(
+    idempotency_key: str | None = Field(
         '',
         description="The transaction's idempotency key — binds the acceptance to a single\n execute so it cannot be replayed under a different transaction.",
     )
-    offerSig: str | None = Field(
+    offer_sig: str | None = Field(
         '',
         description="The accepted Offer's signature (Offer.signature). Anchors the whole signed\n offer without re-serializing its terms/pricing/expiry.",
     )
-    requesterDomain: str | None = Field(
+    requester_domain: str | None = Field(
         '',
         description='Requester domain (Requester.domain) the acceptance is bound to.',
     )
-    requesterId: str | None = Field(
+    requester_id: str | None = Field(
         '', description='Requester identity (Requester.id) the acceptance is bound to.'
     )
 
@@ -116,19 +116,19 @@ class Cost(WireModel):
         description='Exact decimal string (not a float), e.g. "19.99". Denominated in `currency`.',
     )
     currency: str | None = ''
-    unitCost: Decimal | None = None
+    unit_cost: Decimal | None = None
 
 
 class Delegation(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    expiresAt: AwareDatetime | None = Field(
+    expires_at: AwareDatetime | None = Field(
         None,
         description='When this delegation expires. Exchange MUST reject expired tokens.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -136,26 +136,26 @@ class Delegation(WireModel):
         None,
         description='Token issuer. OIDC issuer URL or GNAP grant server URL.\n Exchange uses this for JWT validation (OIDC discovery → JWKS)\n or GNAP token introspection.',
     )
-    maxAccesses: conint(ge=-2147483648, le=2147483647) | None = Field(
+    max_accesses: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='Maximum number of accesses allowed under this delegation.\n Exchange tracks cumulative access count against this cap.\n Deny with DENIAL_REASON_QUOTA_EXCEEDED when count >= limit.\n For subscriptions with "10,000 accesses/month", this carries the ceiling.',
     )
-    maxSpendCents: int | None = Field(
+    max_spend_cents: int | None = Field(
         None,
         description='Maximum spend in currency minor units (e.g., cents for USD).\n Exchange tracks cumulative spend against this cap.',
     )
-    principalDomain: str | None = Field(
+    principal_domain: str | None = Field(
         '', description='Who granted this delegation (domain for public key lookup).'
     )
-    principalId: str | None = Field(
+    principal_id: str | None = Field(
         '',
         description='Principal\'s identifier (e.g., "user@acme.com", "marketdata.example.com").',
     )
-    quotaPeriod: str | None = Field(
+    quota_period: str | None = Field(
         None,
         description='Quota reset period. How often the access/spend counters reset.\n Example: 720h (30 days) for monthly subscriptions.\n When absent, the quota is lifetime (bounded only by expires_at).',
     )
-    revocationUri: str | None = Field(
+    revocation_uri: str | None = Field(
         None,
         description='Optional: URI for real-time revocation checking.\n Exchange MAY check this for high-value transactions.\n Not checked for routine low-value access (performance tradeoff).',
     )
@@ -167,7 +167,7 @@ class Delegation(WireModel):
         None,
         description='Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,\n base64-encoded) when token_format is "biscuit-v3".',
     )
-    tokenFormat: str | None = Field(
+    token_format: str | None = Field(
         '',
         description='Token format: "jwt" (default) or "biscuit-v3" (optional, for deep\n multi-hop offline attenuation). Empty is treated as "jwt".',
     )
@@ -231,34 +231,34 @@ class DisputeRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    billingId: str | None = Field(
+    billing_id: str | None = Field(
         '', description='Billing reference from the transaction.'
     )
     description: str | None = Field(
         None, description='Human-readable description of the issue.'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1, max_length=255) = Field(
+    idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
         description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n filing does not open a duplicate case. The dispute's durable identity is the\n Exchange-assigned dispute_id in DisputeResponse.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
     )
     reason: DisputeReason = Field(..., description='Reason for the dispute.')
-    receivedContentHash: str | None = Field(
+    received_content_hash: str | None = Field(
         None,
         description='Evidence: content hash of what was actually received.\n Exchange compares against the hash promised in ResourceIdentity.',
     )
-    receivedHashMethod: str | None = Field(
+    received_hash_method: str | None = Field(
         None, description='Hash algorithm the agent used'
     )
-    reportId: str | None = Field(
+    report_id: str | None = Field(
         '',
         description='Must reference a filed UsageReport. The agent MUST file a UsageReport\n (via ReportUsage RPC) and receive a report_id BEFORE filing a dispute.\n This prevents fire-and-forget disputes and ensures the Exchange has\n the complete evidence chain: what was offered, what was transacted,\n what the agent reported using, and what the agent disputes.\n The dispute chain: Transaction → UsageReport → Dispute.',
     )
-    transactionId: str | None = Field('', description='Transaction being disputed.')
+    transaction_id: str | None = Field('', description='Transaction being disputed.')
     ver: str | None = Field('', description='Protocol version')
 
 
@@ -278,12 +278,12 @@ class DomainVerificationChallenge(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    expiresAt: AwareDatetime | None = Field(
+    expires_at: AwareDatetime | None = Field(
         None,
         description='When this challenge expires. Provider must confirm before this time.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -292,7 +292,7 @@ class DomainVerificationChallenge(WireModel):
         description='Opaque challenge token. Provider must serve this at:\n https://{domain}/.well-known/ramp-verify/{token}',
     )
     ver: str | None = Field('', description='Protocol version')
-    verificationUrl: str | None = Field(
+    verification_url: str | None = Field(
         '', description='The exact URL the Exchange will fetch to verify.'
     )
 
@@ -301,14 +301,14 @@ class DomainVerificationConfirmation(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    cdnType: str | None = Field(None, description='CDN type this key is for.')
+    cdn_type: str | None = Field(None, description='CDN type this key is for.')
     domain: str | None = Field('', description='The domain being verified.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    signingKey: str | None = Field(
+    signing_key: str | None = Field(
         None,
         description='Optional: signing key to register upon successful verification.\n If present, the key is registered atomically with verification.\n Key format depends on CDN type (PEM for CloudFront, hex for HMAC).',
     )
@@ -343,14 +343,14 @@ class DomainVerificationRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    callerId: str | None = Field(
+    caller_id: str | None = Field(
         None, description='Caller identity (registered with the Exchange).'
     )
     domain: str | None = Field(
         '', description='The provider domain to verify (e.g., "techcrunch.com").'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -362,15 +362,15 @@ class DomainVerificationResult(WireModel):
         extra='forbid',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    keyId: str | None = Field(
+    key_id: str | None = Field(
         None,
         description='If signing_key was provided: confirmation of key registration.',
     )
-    validUntil: AwareDatetime | None = Field(
+    valid_until: AwareDatetime | None = Field(
         None,
         description='Verification is valid until this time. Provider must re-verify periodically.',
     )
@@ -396,11 +396,11 @@ class JsonWebKey(WireModel):
     )
     crv: str | None = Field('', description='Curve. RAMP v1.0: MUST be "Ed25519".')
     kty: str | None = Field('', description='Key type. RAMP v1.0: MUST be "OKP".')
-    notAfter: str | None = Field(
+    not_after: str | None = Field(
         '',
         description='RFC3339 timestamp. Key is invalid at and after this instant\n (strict upper bound).',
     )
-    notBefore: str | None = Field(
+    not_before: str | None = Field(
         '', description='RFC3339 timestamp. Key is invalid before this instant.'
     )
     use: str | None = Field(
@@ -415,7 +415,7 @@ class KeyRevocationList(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    asOf: AwareDatetime | None = Field(
+    as_of: AwareDatetime | None = Field(
         None,
         description="Server's response time (RFC3339, UTC). Consumers use this to detect\n clock skew.",
     )
@@ -444,7 +444,7 @@ class License(WireModel):
         None,
         description='"MUST NOT URL-validate" means do not REJECT non-URL schemes — it does NOT\n mean fetch blindly. A consumer that dereferences this URI MUST apply the\n SSRF countermeasures in the security threat model (T-LIC-1): scheme\n allowlist, block loopback/private/metadata addresses (resolve-then-check),\n fetch via an egress proxy, and treat the response as untrusted content.\n Verify the fetched bytes against `uri_digest` before use.',
     )
-    uriDigest: (
+    uri_digest: (
         constr(
             pattern=r'^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$'
         )
@@ -498,7 +498,7 @@ class Preview(WireModel):
     height: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Height in pixels (images and video)'
     )
-    mediaType: str | None = Field(
+    media_type: str | None = Field(
         '',
         description='MIME type of the preview.\n Examples: "image/jpeg", "image/webp", "audio/mpeg", "video/mp4",\n           "text/plain", "application/json"',
     )
@@ -540,7 +540,7 @@ class PushResourcesResponse(WireModel):
         None, description='Number of entries accepted'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -571,7 +571,7 @@ class RateLimitInfo(WireModel):
     remaining: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Requests remaining in the current window.'
     )
-    resetAt: AwareDatetime | None = Field(
+    reset_at: AwareDatetime | None = Field(
         None,
         description='When the current window resets (UTC). After this time, `remaining` resets to `limit`.',
     )
@@ -585,7 +585,7 @@ class RefreshCatalogRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    tenantId: str | None = Field('', description='Tenant identifier')
+    tenant_id: str | None = Field('', description='Tenant identifier')
     ver: str | None = Field('', description='Protocol version')
 
 
@@ -618,7 +618,7 @@ class RemoveResourcesRequest(WireModel):
         extra='forbid',
     )
     paths: list[str] | None = Field(None, description='Paths to remove')
-    tenantId: str | None = Field('', description='Tenant identifier')
+    tenant_id: str | None = Field('', description='Tenant identifier')
     ver: str | None = Field('', description='Protocol version')
 
 
@@ -641,14 +641,14 @@ class ReportingObligation(WireModel):
         description='URL to submit the usage report to (if different from Exchange).',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
     required: bool | None = Field(
         False, description='Whether post-usage reporting is required.'
     )
-    requiredFields: list[str] | None = Field(
+    required_fields: list[str] | None = Field(
         None, description='Field names that must be present in the report.'
     )
     window: str | None = Field(
@@ -661,44 +661,44 @@ class RequestConstraints(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    budgetPeriod: str | None = Field(
+    budget_period: str | None = Field(
         None,
         description='Budget period (e.g. 720h = 30 days). Resets at period boundary.',
     )
-    budgetScope: str | None = Field(
+    budget_scope: str | None = Field(
         None,
         description='Budget scope identifier for per-period tracking.\n E.g. "user:u-12345" for per-user budgets, "team:eng" for per-team.\n The Broker tracks cumulative spend per scope across sessions.',
     )
-    deliveryPreference: list[DeliveryMethod] | None = Field(
+    delivery_preference: list[DeliveryMethod] | None = Field(
         None, description='Preferred delivery methods, in order of preference.'
     )
     exchanges: list[str] | None = Field(
         None, description='Authorized Exchange domains. Broker queries only these.'
     )
-    maxDataAge: str | None = Field(
+    max_data_age: str | None = Field(
         None,
         description='Only relevant for DYNAMIC resources. Ignored for STATIC (content is\n immutable) and LIVE (content doesn\'t exist yet).\n\n Examples:\n   7 days   — "credit report updated within the last week"\n   1 hour   — "stock snapshot from the last hour"\n   30 days  — "drug interaction database updated this month"',
     )
-    maxHops: conint(ge=-2147483648, le=2147483647) | None = Field(
+    max_hops: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description="Maximum forwarding hops the agent will allow (Agent → Broker → … →\n Exchange), counted as the number of RFC 9421 HTTP Message Signatures on the\n request. Caps chain depth so a request is not relayed through more brokers\n than the agent is willing to trust or pay. A Broker MUST NOT forward a\n request whose signature count would exceed this. Absent = agent imposes no\n cap (the Exchange's max_intermediary_hops still applies).",
     )
-    maxPrice: Cost | None = Field(
+    max_price: Cost | None = Field(
         None, description='Maximum price the agent is willing to pay.'
     )
-    maxUnitCost: Decimal | None = Field(
+    max_unit_cost: Decimal | None = Field(
         None,
         description='Maximum effective cost per unit, as an exact decimal string (not a float).',
     )
-    periodBudget: Cost | None = Field(
+    period_budget: Cost | None = Field(
         None,
         description='Per-period budget limit. The Broker tracks spend against this\n for the budget_scope. Transactions that would exceed are denied.',
     )
-    preferredExchanges: list[str] | None = Field(
+    preferred_exchanges: list[str] | None = Field(
         None,
         description='Exchanges the agent has existing relationships with (subscriptions,\n contracts). The Broker SHOULD prefer these when resource is\n available — subscription resource has zero marginal cost.',
     )
-    reportingCapable: bool | None = Field(
+    reporting_capable: bool | None = Field(
         None, description='Whether the agent supports post-usage reporting.'
     )
 
@@ -722,7 +722,7 @@ class ResourceAttestation(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    attestedAt: AwareDatetime | None = Field(
+    attested_at: AwareDatetime | None = Field(
         None,
         description='When this attestation was created. Agents use this to assess freshness\n (e.g., "I accept attestations up to N hours old for breaking news").',
     )
@@ -811,19 +811,19 @@ class SubscriptionQuotaInfo(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    quotaLimit: conint(ge=-2147483648, le=2147483647) | None = Field(
+    quota_limit: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Total allowed in the current period.'
     )
-    quotaRemaining: conint(ge=-2147483648, le=2147483647) | None = Field(
+    quota_remaining: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Remaining in the current period.'
     )
-    quotaUsed: conint(ge=-2147483648, le=2147483647) | None = Field(
+    quota_used: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Used so far in the current period.'
     )
-    resetsAt: AwareDatetime | None = Field(
+    resets_at: AwareDatetime | None = Field(
         None, description='When the quota counter resets (UTC).'
     )
-    subscriptionId: str | None = Field(
+    subscription_id: str | None = Field(
         '', description='Subscription this quota applies to.'
     )
     unit: str | None = Field(
@@ -841,13 +841,13 @@ class TransactionDenial(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    offerId: str | None = Field(
+    offer_id: str | None = Field(
         None, description='Batch mode: the offer this denial pertains to.'
     )
     reason: DenialReason = Field(
         ..., description='The denial reason (defined-only, non-zero)'
     )
-    restrictionMismatches: list[RestrictionKind] | None = Field(
+    restriction_mismatches: list[RestrictionKind] | None = Field(
         None,
         description='When reason = RESTRICTION_NOT_SATISFIED, the failed axes (same\n RestrictionKind vocabulary the terms use).',
     )
@@ -857,43 +857,43 @@ class TransactionResultItem(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    billingId: str | None = Field('', description='Billing reference.')
+    billing_id: str | None = Field('', description='Billing reference.')
     cost: Cost | None = Field(None, description='Cost for this item.')
-    deliveryMethod: (
+    delivery_method: (
         constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
         | DeliveryMethod
         | conint(ge=-2147483648, le=2147483647)
         | None
     ) = Field(0, description='How resource is delivered for this item.')
-    denialReason: DenialReason | None = Field(
+    denial_reason: DenialReason | None = Field(
         None, description='Set if this specific item was denied (others may succeed).'
     )
-    expiresAt: AwareDatetime | None = Field(
+    expires_at: AwareDatetime | None = Field(
         None, description='When retrieval_endpoint expires.'
     )
-    offerId: str | None = Field('', description='The offer_id this result is for.')
-    reportingObligation: ReportingObligation | None = Field(
+    offer_id: str | None = Field('', description='The offer_id this result is for.')
+    reporting_obligation: ReportingObligation | None = Field(
         None, description='Reporting requirements for this item.'
     )
-    resourceTitle: str | None = Field(
+    resource_title: str | None = Field(
         None, description='Resource title echoed from the Offer.'
     )
-    restrictionMismatches: list[RestrictionKind] | None = Field(
+    restriction_mismatches: list[RestrictionKind] | None = Field(
         None,
         description='When denial_reason = RESTRICTION_NOT_SATISFIED, the restriction axes the\n request failed, in the same RestrictionKind vocabulary the terms use.',
     )
-    retrievalEndpoint: str | None = Field(
+    retrieval_endpoint: str | None = Field(
         None,
         description="Signed retrieval URL for this item. Bound to the requesting agent's identity\n via the parent TransactionResponse.agent_identity_hash (shared across all\n batch items); expires at expires_at. Absent if this item was denied or its\n delivery_method is not signed-URL-based.",
     )
-    subscriptionId: str | None = Field(
+    subscription_id: str | None = Field(
         None, description='If under subscription, no per-request charge.'
     )
-    subscriptionUnitValue: Cost | None = Field(
+    subscription_unit_value: Cost | None = Field(
         None,
         description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount=0 (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
     )
-    transactionId: str | None = Field(
+    transaction_id: str | None = Field(
         '', description='Exchange-assigned transaction identifier.'
     )
 
@@ -902,7 +902,7 @@ class UsageAsset(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    packageId: str | None = Field(None, description='Package identifier')
+    package_id: str | None = Field(None, description='Package identifier')
     uri: str | None = Field('', description='Asset URI')
 
 
@@ -925,11 +925,11 @@ class UsageReportResponse(WireModel):
         extra='forbid',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    reportId: str | None = Field(
+    report_id: str | None = Field(
         '',
         description='Exchange-assigned report identifier. Required for the dispute chain —\n the agent must reference this report_id in DisputeRequest to prove that\n a usage report was filed before disputing. The complete evidence chain:\n   Offer → Transaction (transaction_id, billing_id)\n        → UsageReport → UsageReportResponse (report_id)\n        → DisputeRequest (transaction_id + report_id)',
     )
@@ -944,7 +944,7 @@ class WBAFile(WireModel):
         None,
         description='RFC 7517 JWK Set "keys" member. RAMP v1: Ed25519 (OKP) keys, each with\n not_before/not_after RAMP extension members.',
     )
-    revocationUrl: str | None = Field(
+    revocation_url: str | None = Field(
         None,
         description='Directory-level emergency revocation channel. One per directory; the list\n it points to enumerates revoked key thumbprints. Consumers poll on a 300s\n cadence (±10% jitter) and replace their local revoked set with the response.',
     )
@@ -976,13 +976,13 @@ class AttributionDetail(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    displayedUrl: str | None = Field(
+    displayed_url: str | None = Field(
         None, description='URL displayed to the user as the attribution link.'
     )
     format: CitationFormat | None = Field(
         None, description='How the citation was presented.'
     )
-    visibleToUser: bool | None = Field(
+    visible_to_user: bool | None = Field(
         None, description='Whether the attribution was visible to the end user.'
     )
 
@@ -994,7 +994,7 @@ class AuthorizedExchange(WireModel):
     domain: str | None = Field('', description='Canonical domain of the Exchange.')
     endpoint: str | None = Field('', description='RAMP ExchangeService endpoint URL.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -1010,7 +1010,7 @@ class CatalogRejection(WireModel):
     reason: CatalogRejectionReason = Field(
         ..., description='The rejection reason (defined-only, non-zero)'
     )
-    rejectedPaths: list[str] | None = Field(
+    rejected_paths: list[str] | None = Field(
         None,
         description='For partial-batch failures: the entry paths that were rejected.',
     )
@@ -1029,14 +1029,14 @@ class DisputeResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    disputeId: str | None = Field(
+    dispute_id: str | None = Field(
         None, description='Exchange-assigned dispute case identifier.'
     )
-    estimatedResolution: str | None = Field(
+    estimated_resolution: str | None = Field(
         None, description='Expected resolution timeline.'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -1074,7 +1074,7 @@ class Obligation(WireModel):
         description='Free-form detail: attribution string, notice file URI, etc.\n OBLIGATION_KIND_OTHER without it → lint warning.',
     )
     kind: ObligationKind = Field(..., description='What the agent must do.')
-    scopeLicense: License | None = Field(
+    scope_license: License | None = Field(
         None,
         description="The license that derivatives must be released under. REQUIRED for\n SHARE_ALIKE (rejected if absent), where it MUST identify a license — set\n `id` (SPDX short-id, the common copyleft case, often the term's own\n License.id) and/or `uri`. Because it is a License, a referenced `uri`\n inherits the uri_digest swap-protection rule: a uri without a digest is\n rejected, exactly as for any other license reference.",
     )
@@ -1090,11 +1090,11 @@ class Pricing(WireModel):
     currency: str | None = Field(
         '', description='ISO 4217 currency code (e.g. "USD", "EUR").'
     )
-    estimatedQuantity: conint(ge=-2147483648, le=2147483647) | None = Field(
+    estimated_quantity: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='Estimated quantity in the metering unit.\n For text: token count. For video: duration in seconds.\n For documents: page count. For data: record count.',
     )
-    licenseDurationMonths: conint(ge=-2147483648, le=2147483647) | None = Field(
+    license_duration_months: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='License duration in months. How long the granted access remains valid.',
     )
@@ -1116,7 +1116,7 @@ class Pricing(WireModel):
         None,
         description='The (ramp.v1.vocab) entries below are the SOLE authored source of the\n registered bare tokens. A buf plugin reads them structurally and emits the\n pricingunits constants + IsRegistered; ingest enforces membership from\n those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —\n it never lists the tokens, so it cannot drift from the registry.',
     )
-    unitCost: Decimal | None = Field(
+    unit_cost: Decimal | None = Field(
         None,
         description="Normalized cost per unit — the universal comparison metric, exact decimal string.\n For text: cost per token. For video: cost per second.\n For data: cost per record. For APIs: cost per call.\n Denominated in the Exchange's base_currency (from its WellKnownManifest).",
     )
@@ -1154,7 +1154,7 @@ class Requester(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    billingRef: str | None = Field(
+    billing_ref: str | None = Field(
         None,
         description="Opaque billing reference linking this requester to the Exchange's (and,\n through the Exchange, the publisher's) billing/accounting systems — e.g. a\n billing account, PO number, or cost center. NOT an entitlement or\n subscription credential: access is governed by scopes and delegation, and\n identity by the request signature. The Exchange uses it only for invoicing\n and cost attribution.",
     )
@@ -1167,7 +1167,7 @@ class Requester(WireModel):
         description='Domain the requester belongs to — used for public key lookup.\n Keys published at {domain}/.well-known/ramp.json (WellKnownManifest, role=ROLE_AGENT).',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -1191,19 +1191,19 @@ class ResourceIdentity(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    c2paManifest: str | None = Field(
+    c2pa_manifest: str | None = Field(
         None,
         description='Formats:\n   Sidecar: HTTPS URI to a .c2pa manifest file\n   Embedded: same URI as canonical_url (manifest is inside the asset)\n   Content Credentials Cloud: https://contentcredentials.org/verify?uri=...',
     )
-    c2paStatus: C2PAStatus | None = Field(
+    c2pa_status: C2PAStatus | None = Field(
         None,
         description='The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.',
     )
-    canonicalUrl: str | None = Field(
+    canonical_url: str | None = Field(
         None,
         description='Provider\'s authoritative URL for this resource (rel="canonical").\n Always available. Different per provider for syndicated content.',
     )
-    contentHash: str | None = Field(
+    content_hash: str | None = Field(
         None,
         description='Level 1 (SimHash): computed by Exchange from extracted text.\n   Agent verifies that fetched content is "substantially similar."\n   Tolerates dynamic page elements.\n\n Level 2 (SHA-256): computed by provider from deterministic payload.\n   Agent verifies exact match. Requires provider to serve consistent\n   content (e.g., API endpoint, static HTML, structured JSON).\n   Mismatch = dispute. Commands premium pricing.',
     )
@@ -1211,30 +1211,30 @@ class ResourceIdentity(WireModel):
         None, description='Digital Object Identifier — persistent, never changes.'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    hashMethod: str | None = Field(
+    hash_method: str | None = Field(
         None,
         description='Hash algorithm and verification level.\n Examples: "simhash-v1", "minhash-v1", "sha256", "sha384"',
     )
-    iptcGuid: str | None = Field(
+    iptc_guid: str | None = Field(
         None,
         description='IPTC NewsML-G2 globally unique identifier.\n Present when resource flows through news wire syndication (AP, Reuters).',
     )
     isni: str | None = Field(
         None, description='International Standard Name Identifier for the creator.'
     )
-    resourceMutability: ResourceMutability = Field(
+    resource_mutability: ResourceMutability = Field(
         ...,
         description='Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The "resource" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds).',
     )
-    softBinding: str | None = Field(
+    soft_binding: str | None = Field(
         None,
         description='Algorithm specified in soft_binding_method. Values are algorithm-specific\n (e.g., perceptual hash hex string, watermark identifier).',
     )
-    softBindingMethod: str | None = Field(
+    soft_binding_method: str | None = Field(
         None,
         description='Algorithm used for soft_binding.\n Examples: "phash-v1" (perceptual hash), "c2pa-watermark" (C2PA invisible\n watermark), "chromaprint" (audio fingerprint).',
     )
@@ -1244,7 +1244,7 @@ class ResourceQuery(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    acceptableRestrictions: list[AcceptableRestriction] | None = Field(
+    acceptable_restrictions: list[AcceptableRestriction] | None = Field(
         None,
         description='The limits this query operates within, per restriction axis (function,\n geography, user-type, …) — see AcceptableRestriction. Advisory selection\n inputs the Exchange/Broker MAY pre-select offers against (convenience, not\n enforcement); the agent self-selects and bears compliance.',
     )
@@ -1253,7 +1253,7 @@ class ResourceQuery(WireModel):
         description='Maximum time the caller will wait for a response.\n Exchange SHOULD prioritize speed over completeness when tight.\n Absent = 500ms default.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -1261,7 +1261,7 @@ class ResourceQuery(WireModel):
         None,
         description='Requester identity — who is making this request, what scopes they have,\n and optional delegation chain.',
     )
-    supportedProfiles: list[str] | None = Field(
+    supported_profiles: list[str] | None = Field(
         None,
         description='Declares which ext field vocabularies the caller can parse and act on.\n The Exchange SHOULD include profile-specific ext fields in Offers\n when the caller declares support. The Exchange MAY skip expensive\n metadata computation (e.g., retraction checking, consolidation\n verification) when the caller does not declare the relevant profile.\n\n Absence means "send all available metadata" — Exchange MUST NOT\n withhold ext fields solely because the caller omitted this field.\n\n Values match the Exchange\'s WellKnownManifest.supported_profiles entries.\n Examples: ["ramp-news-v1", "ramp-academic-v1", "ramp-legal-v1"]',
     )
@@ -1311,12 +1311,12 @@ class TransactionResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    agentIdentityHash: str | None = Field(
+    agent_identity_hash: str | None = Field(
         '',
         description='Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK\n Thumbprint of the agent\'s Ed25519 request-signing key (see "Retrieval-URL\n identity binding" above). Shared across the request; set once.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -1324,11 +1324,13 @@ class TransactionResponse(WireModel):
         None,
         description='Per-offer results (one entry per committed item, in original order).',
     )
-    subscriptionQuota: list[SubscriptionQuotaInfo] | None = Field(
+    subscription_quota: list[SubscriptionQuotaInfo] | None = Field(
         None,
         description='Post-transaction quota state. Tells the agent how much quota remains\n after this transaction. Enables proactive throttling ("1 access left").\n Multiple entries for multi-dimensional quotas.',
     )
-    totalCost: Cost | None = Field(None, description='Aggregate cost across all items.')
+    total_cost: Cost | None = Field(
+        None, description='Aggregate cost across all items.'
+    )
     ver: str | None = Field('', description='Protocol version')
 
 
@@ -1339,15 +1341,15 @@ class Usage(WireModel):
     attribution: list[AttributionDetail] | None = Field(
         None, description='Structured attribution details for each citation provided.'
     )
-    citationIncluded: bool | None = Field(
+    citation_included: bool | None = Field(
         None,
         description='Whether citation was included as required by the offer terms.',
     )
-    consumedQuantity: conint(ge=-2147483648, le=2147483647) | None = Field(
+    consumed_quantity: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description="REQUIRED. Actual quantity consumed, in the metering unit from the Offer's Pricing.\n For text: tokens consumed. For video: seconds watched. For data: records accessed.\n Exchange cross-references against Offer.pricing.estimated_quantity.",
     )
-    consumedUnit: (
+    consumed_unit: (
         constr(
             pattern=r'^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$', max_length=64
         )
@@ -1356,7 +1358,7 @@ class Usage(WireModel):
         None,
         description='Metering unit for consumed_quantity. Must match the Offer\'s Pricing.unit.\n If omitted, defaults to "tokens". Same token format as Pricing.unit:\n a bare registered token or a vendor:namespaced token.',
     )
-    displayedToUser: bool | None = Field(
+    displayed_to_user: bool | None = Field(
         None, description='Whether resource/output was displayed to a human.'
     )
     function: list[str] | None = Field(
@@ -1376,23 +1378,23 @@ class UsageReport(WireModel):
     assets: list[UsageAsset] | None = Field(
         None, description='Assets that were delivered and used.'
     )
-    billingId: str | None = Field(
+    billing_id: str | None = Field(
         '', description='Billing reference from the delivery.'
     )
     exchange: str | None = Field(None, description='Exchange this report is for.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1, max_length=255) = Field(
+    idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
         description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n report does not double-count usage. The report's durable identity is the\n Exchange-assigned report_id in UsageReportResponse.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
     )
     timestamp: AwareDatetime | None = Field(
         None, description='When the resource was used (ISO 8601).'
     )
-    transactionId: str | None = Field(
+    transaction_id: str | None = Field(
         '', description='Transaction ID from the delivery.'
     )
     usage: Usage | None = Field(None, description='How the resource was actually used.')
@@ -1412,25 +1414,25 @@ class WellKnownManifest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    acceptedVerifiers: list[str] | None = Field(
+    accepted_verifiers: list[str] | None = Field(
         None,
         description='Exchange-only. Trusted attestation verification vendors (domains).',
     )
-    baseCurrency: str | None = Field(
+    base_currency: str | None = Field(
         None,
         description='Exchange-only. Base currency for pricing (ISO 4217). All unit_cost\n values from this Exchange are denominated in this currency.',
     )
-    catalogContributors: list[CatalogContributor] | None = Field(
+    catalog_contributors: list[CatalogContributor] | None = Field(
         None,
         description='Publisher-only. Authorized third-party catalog contributors.\n MUST be empty for non-publisher roles.',
     )
-    catalogEndpoint: str | None = Field(
+    catalog_endpoint: str | None = Field(
         None, description='Exchange-only. CatalogService endpoint URL (if exposed).'
     )
     contact: str | None = Field(
         None, description='Contact email (licensing, integration, security).'
     )
-    deliveryMethodsSupported: list[DeliveryMethod] | None = Field(
+    delivery_methods_supported: list[DeliveryMethod] | None = Field(
         None, description='Exchange-only. Supported delivery methods.'
     )
     domain: str | None = Field(
@@ -1444,58 +1446,58 @@ class WellKnownManifest(WireModel):
         description="Publisher-only. Authorized exchanges for this publisher's resources.\n Like ads.txt — declares who may sell. MUST be empty for non-publisher\n roles.",
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052). Lists keys\n within ext that the consumer MUST understand. Unknown values reject\n with UNKNOWN_CRITICAL_EXTENSION. Empty (default) → ignore-unknown.',
     )
-    gnapGrantEndpoint: str | None = Field(
+    gnap_grant_endpoint: str | None = Field(
         None, description='Exchange-only. GNAP grant endpoint when GNAP is supported.'
     )
-    hashMethodsSupported: list[str] | None = Field(
+    hash_methods_supported: list[str] | None = Field(
         None,
         description='Exchange-only. Accepted resource hash methods for attestation\n verification.',
     )
-    healthEndpoint: str | None = Field(
+    health_endpoint: str | None = Field(
         None, description='Exchange-only. Health check endpoint URL.'
     )
-    maxIntermediaryHops: conint(ge=-2147483648, le=2147483647) | None = Field(
+    max_intermediary_hops: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
         description='Exchange-only. Maximum forwarding hops this Exchange tolerates on an inbound\n request (Agent → Broker → … → Exchange), counted as RFC 9421 HTTP Message\n Signatures. A request carrying more SHOULD be rejected. Lets Exchanges\n publish their chain-depth tolerance so Brokers prune before forwarding.\n Absent = no published limit (Exchange applies its own default policy).',
     )
     name: str | None = Field(
         None, description='Exchange-only. Human-readable Exchange name.'
     )
-    oidcIssuer: str | None = Field(
+    oidc_issuer: str | None = Field(
         None,
         description='Exchange-only. OIDC Discovery URL when OAuth methods are supported.',
     )
     operator: str | None = Field(
         None, description='Exchange-only. Organization operating this Exchange.'
     )
-    operatorDomain: str | None = Field(
+    operator_domain: str | None = Field(
         None,
         description="Exchange-only. Operator's corporate domain (may differ from domain).",
     )
-    pricingModelsSupported: list[PricingModel] | None = Field(
+    pricing_models_supported: list[PricingModel] | None = Field(
         None, description='Exchange-only. Supported pricing models.'
     )
-    privacyUri: str | None = Field(
+    privacy_uri: str | None = Field(
         None, description='Exchange-only. Privacy policy URL.'
     )
-    protocolVersionsSupported: list[str] | None = Field(
+    protocol_versions_supported: list[str] | None = Field(
         None,
         description='Exchange-only. Supported RAMP protocol versions (e.g. ["1.0"]).',
     )
     role: Role = Field(..., description='Role this manifest describes.')
-    supportedAuthMethods: list[AuthMethod] | None = Field(
+    supported_auth_methods: list[AuthMethod] | None = Field(
         None,
         description='Exchange-only. Authorization methods this Exchange supports\n (ordered by preference).',
     )
-    supportedProfiles: list[str] | None = Field(
+    supported_profiles: list[str] | None = Field(
         None,
         description='Exchange-only. Domain extension profiles this Exchange conforms to.\n See standards-layering docs.',
     )
-    termsUri: str | None = Field(
+    terms_uri: str | None = Field(
         None, description='Exchange-only. Terms of service URL.'
     )
     ver: str | None = Field(
@@ -1508,7 +1510,7 @@ class DiscoveryRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    acceptableRestrictions: list[AcceptableRestriction] | None = Field(
+    acceptable_restrictions: list[AcceptableRestriction] | None = Field(
         None,
         description='The limits the agent will operate within, per restriction axis — see\n AcceptableRestriction. The Broker forwards these to Exchanges in\n ResourceQuery.acceptable_restrictions. Advisory selection inputs, not\n enforcement.',
     )
@@ -1516,7 +1518,7 @@ class DiscoveryRequest(WireModel):
         None, description='Constraints for exchange filtering and offer selection.'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
@@ -1528,11 +1530,11 @@ class DiscoveryRequest(WireModel):
         None,
         description='Requester identity — who is making this request, what scopes they have.\n The Broker forwards this to Exchanges in ResourceQuery.requester.',
     )
-    searchFilters: dict[str, Any] | None = Field(
+    search_filters: dict[str, Any] | None = Field(
         None,
         description='Structured search filters (optional, alongside or instead of query).\n Keys are profile-specific: "academic.topic", "news.category",\n "legal.jurisdiction", etc. The Broker maps these to Exchange-specific\n query parameters.',
     )
-    supportedProfiles: list[str] | None = Field(
+    supported_profiles: list[str] | None = Field(
         None,
         description='The Broker uses this to:\n   1. Route queries to Exchanges that support these profiles\n   2. Forward the profiles in ResourceQuery.supported_profiles\n   3. Include profile-specific ext fields when returning results\n\n Examples: ["ramp-academic-v1"] — agent working on literature review',
     )
@@ -1548,17 +1550,17 @@ class ErrorDetail(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    catalogRejection: CatalogRejection | None = Field(
+    catalog_rejection: CatalogRejection | None = Field(
         None, description='`reason` oneof — CatalogService rejection'
     )
-    disputeFailure: DisputeFailure | None = Field(
+    dispute_failure: DisputeFailure | None = Field(
         None, description='`reason` oneof — DisputeTransaction filing refused'
     )
     domain: str | None = Field(
         '',
         description='Stable grouping for the failing surface, e.g. "ramp.v1.ExchangeService".\n Mirrors google.rpc.ErrorInfo.domain so generic tooling can group errors.',
     )
-    domainVerificationFailure: DomainVerificationFailure | None = Field(
+    domain_verification_failure: DomainVerificationFailure | None = Field(
         None, description='`reason` oneof — domain verification failed'
     )
     message: str | None = Field(
@@ -1569,17 +1571,17 @@ class ErrorDetail(WireModel):
         None,
         description='Dynamic key/value context that also appears in `message` (ids, limits,\n axes). Mirrors google.rpc.ErrorInfo.metadata. Strongly-typed context rides\n in the per-domain reason block below instead. Same leakage rule as `message`:\n servers SHOULD NOT put secrets, PII, or withheld existence/authorization\n detail here — it is the same potential side channel as the absence oracle.',
     )
-    registrationFailure: RegistrationFailure | None = Field(
+    registration_failure: RegistrationFailure | None = Field(
         None, description='`reason` oneof — agent/provider registration refused'
     )
-    retrievalAuthFailure: RetrievalAuthFailure | None = Field(
+    retrieval_auth_failure: RetrievalAuthFailure | None = Field(
         None,
         description='`reason` oneof — signed-URL / proof-of-possession check failed',
     )
-    transactionDenial: TransactionDenial | None = Field(
+    transaction_denial: TransactionDenial | None = Field(
         None, description='`reason` oneof — ExecuteTransaction denial'
     )
-    usageReportRejection: UsageReportRejection | None = Field(
+    usage_report_rejection: UsageReportRejection | None = Field(
         None, description='`reason` oneof — ReportUsage filing rejected'
     )
 
@@ -1595,7 +1597,7 @@ class LicenseTerm(WireModel):
     obligations: list[Obligation] | None = Field(
         None, description='Post-use behavioral requirements.'
     )
-    partLabel: str | None = Field(
+    part_label: str | None = Field(
         None,
         description='Informational human-readable name for this sub-part (sub-part terms).',
     )
@@ -1628,11 +1630,11 @@ class Offer(WireModel):
         None,
         description='Three verification levels determine what is independently verifiable:\n   Level 0 (no attestations): Resource may carry identifiers (DOI, IPTC GUID)\n     for identification, but nothing is cryptographically verifiable.\n     Only CDN delivery failure is auto-disputable.\n   Level 1 (self-attested): Provider signs own claims with Ed25519 key.\n     Agent can independently verify content hash and token count.\n     CDN delivery failure + content hash mismatch are auto-disputable.\n   Level 2 (third-party attested): Independent verification vendor crawled\n     the resource and attested to its properties. Agent trusts the attestation\n     (does not re-verify hash). Token count discrepancy is auto-disputable\n     when corroborated by CDN response size.\n\n Multiple attestations may be present (e.g., provider self-attestation\n plus a third-party verification). Agents choose which to trust.',
     )
-    dataAsOf: AwareDatetime | None = Field(
+    data_as_of: AwareDatetime | None = Field(
         None,
         description="Not set for STATIC resources (content doesn't change) or LIVE\n resources (content doesn't exist yet).\n\n The Broker compares this against RequestConstraints.max_data_age\n to filter stale offers. Example: agent requests max_data_age = 7 days,\n Broker drops offers where now() - data_as_of > 7 days.",
     )
-    deliveryMethod: (
+    delivery_method: (
         constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
         | DeliveryMethod
         | conint(ge=-2147483648, le=2147483647)
@@ -1642,15 +1644,15 @@ class Offer(WireModel):
         '',
         description='Canonical domain of the Exchange that issued this offer (e.g.\n "exchange.example.com"). This is the execute-routing target: the agent (or\n a relaying Broker) sends the ExecuteTransaction call for this offer to this\n Exchange. Because it is an ordinary Offer field it falls inside the signed\n bytes (see `signature` below — the signature covers every field except\n `signature` / `signature_algorithm`), so an intermediary cannot redirect\n the execute call to a different Exchange without invalidating the offer.\n (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,\n retiring the X-RAMP-Exchange-Endpoint transport header.)',
     )
-    expiresAt: AwareDatetime | None = Field(
+    expires_at: AwareDatetime | None = Field(
         None, description='When this offer expires (ISO 8601).'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    iabCategories: list[str] | None = Field(
+    iab_categories: list[str] | None = Field(
         None,
         description='IAB Content Taxonomy category codes.\n Enables agents to filter offers by topic (e.g., "only finance resources").\n Uses IAB Content Taxonomy 3.1 codes.',
     )
@@ -1658,7 +1660,7 @@ class Offer(WireModel):
         None,
         description='Resource identity for cross-exchange deduplication.\n Enables Brokers to recognize the same resource offered by\n different Exchanges and compare pricing.',
     )
-    offerId: str | None = Field(
+    offer_id: str | None = Field(
         '', description='Unique identifier for this offer, assigned by the Exchange.'
     )
     previews: list[Preview] | None = Field(
@@ -1674,17 +1676,17 @@ class Offer(WireModel):
     )
     signature: str | None = Field(
         '',
-        description="Because the signature covers `terms`, `pricing`, `expires_at`, and\n `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,\n quotas, obligations, the expiry, the execute-routing target, or any\n licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.",
+        description="CANONICAL SIGNING (RFC 8785 JCS over canonical proto-JSON). The signed bytes\n are:\n\n     signed_payload = JCS( protojson(msg with signature +\n                                      signature_algorithm cleared) )\n\n i.e. render the message to canonical proto-JSON with the PINNED option set\n below, then apply RFC 8785 (JSON Canonicalization Scheme). Deterministic\n protobuf BINARY marshaling is explicitly NOT canonical across languages and\n versions (protobuf's own caveat), so it cannot be a cross-language signing\n primitive; JCS over proto-JSON can be reproduced by ANY language (Go, TS,\n Python) without a protobuf binary codec, so a broker/exchange/client in any\n language signs and verifies byte-identically. This same definition applies to\n the agent offer-acceptance signature (AgentAcceptance.signature).\n\n PINNED proto-JSON option set (the arbiter is the Go-emitted golden vector —\n whatever these options render MUST be byte-identical across all languages):\n   - enum values as NAME strings (not numbers);\n   - int64 / uint64 / fixed64 as decimal STRINGS;\n   - bytes as standard (padded) base64;\n   - google.protobuf.Timestamp / Duration per the proto-JSON WKT rules\n     (RFC 3339 string for Timestamp);\n   - unpopulated fields are OMITTED (never emitted as defaults);\n   - field naming is camelCase (the JSON name), the naming every SDK target\n     shares;\n   - google.protobuf.Struct (`ext`) → a plain JSON object; JCS then sorts its\n     keys recursively, so the Struct case needs no special handling.\n\n Because the signature covers `terms`, `pricing`, `expires_at`, and\n `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,\n quotas, obligations, the expiry, the execute-routing target, or any\n licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.",
     )
-    signatureAlgorithm: str | None = Field(
+    signature_algorithm: str | None = Field(
         '',
         description="JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.",
     )
-    subscriptionId: str | None = Field(
+    subscription_id: str | None = Field(
         None,
         description='If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.',
     )
-    subscriptionQuota: list[SubscriptionQuotaInfo] | None = Field(
+    subscription_quota: list[SubscriptionQuotaInfo] | None = Field(
         None,
         description='Subscription quota state, when this offer is under a subscription.\n Enables the agent to see remaining quota before committing.\n Multiple entries when the subscription has independent quotas\n (e.g., access count + spend cap).',
     )
@@ -1698,11 +1700,11 @@ class OfferGroup(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    absenceReason: OfferAbsenceReason | None = Field(
+    absence_reason: OfferAbsenceReason | None = Field(
         None,
         description='Why no offers are available for this URI.\n Present when `offers` is empty. Enables agents/Brokers to distinguish\n "resource not in catalog" from "resource blocked for your use case" without\n trial-and-error transactions. Analogous to OpenRTB nbr codes and\n Shutterstock per-item error metadata in batch responses.',
     )
-    discoveryMethod: DiscoveryMethod | None = Field(
+    discovery_method: DiscoveryMethod | None = Field(
         None,
         description="How this URI was discovered by the Broker (v2 extension point).\n v1: always DISCOVERY_METHOD_EXCHANGE (Broker queried an Exchange).\n v2: may include DISCOVERY_METHOD_SEARCH (URI found via search engine like Exa),\n     DISCOVERY_METHOD_RECOMMENDATION, etc. The Broker discovers URIs\n     through any source, then routes through Exchange for pricing/transaction.\n     The discovery method does not affect the transaction flow — it's metadata\n     for the agent to understand how the resource was found.",
     )
@@ -1710,7 +1712,7 @@ class OfferGroup(WireModel):
         None,
         description='Zero or more offers for this URI. Empty = resource not available.',
     )
-    restrictionFilters: list[RestrictionKind] | None = Field(
+    restriction_filters: list[RestrictionKind] | None = Field(
         None,
         description="When absence_reason = RESTRICTION_FILTERED, the restriction axes that drove\n the convenience pre-filter, in the same RestrictionKind vocabulary the terms\n use (e.g. [GEOGRAPHY] when the requester's stated geography matched no term).\n Advisory diagnostics, not an enforcement verdict.",
     )
@@ -1728,24 +1730,24 @@ class ResourceEntry(WireModel):
         None,
         description="Signed attestations about this resource entry.\n Same semantics as Offer.attestations — see ResourceAttestation message\n for verification levels and claim vocabulary. Attestations pushed via\n CatalogService are verified at push time: the Exchange checks that\n the attestation verifier is authorized to push for this provider\n (via catalog_contributors in the provider's WellKnownManifest) and validates the\n attestation signature against the verifier's public key from their\n /.well-known/ramp.json endpoint (WellKnownManifest, role determined\n by the verifier's operator).",
     )
-    contentHash: str | None = Field(None, description='Content hash')
-    contentId: str | None = Field(None, description='Content identifier')
+    content_hash: str | None = Field(None, description='Content hash')
+    content_id: str | None = Field(None, description='Content identifier')
     domain: str | None = Field('', description='Provider domain')
-    estimatedQuantity: conint(ge=-2147483648, le=2147483647) | None = Field(
+    estimated_quantity: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Estimated quantity in the metering unit'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    hashMethod: str | None = Field(None, description='Hash algorithm')
+    hash_method: str | None = Field(None, description='Hash algorithm')
     path: str | None = Field('', description='Content path')
-    provenanceSource: str | None = Field(
+    provenance_source: str | None = Field(
         None,
         description='Who provided this resource metadata. Creates audit trail for\n "where did this catalog entry come from?"',
     )
-    provenanceTimestamp: AwareDatetime | None = Field(
+    provenance_timestamp: AwareDatetime | None = Field(
         None, description='When this metadata was collected/generated.'
     )
     source: IngestionSource | None = Field(
@@ -1755,7 +1757,7 @@ class ResourceEntry(WireModel):
         None,
         description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery.',
     )
-    wordCount: conint(ge=-2147483648, le=2147483647) | None = Field(
+    word_count: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Word count'
     )
 
@@ -1768,18 +1770,18 @@ class ResourceResponse(WireModel):
         '', description='Canonical domain of the responding Exchange.'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    offerGroups: list[OfferGroup] | None = Field(
+    offer_groups: list[OfferGroup] | None = Field(
         None,
         description='Offers grouped by requested URI (for multi-URI batch queries).\n When populated, `offers` SHOULD be empty to avoid ambiguity.',
     )
     offers: list[Offer] | None = Field(
         None, description='Flat list of offers (for single-URI queries).'
     )
-    rateLimit: RateLimitInfo | None = Field(
+    rate_limit: RateLimitInfo | None = Field(
         None,
         description='Rate limit status for this caller.\n Present when the Exchange enforces per-caller rate limits on discovery.\n Enables agents/Brokers to throttle proactively rather than hitting\n hard limits. Particularly important when a Broker fans out the\n same batch query to multiple Exchanges — mid-batch rate limiting\n can cause partial results if not signaled early.',
     )
@@ -1790,7 +1792,7 @@ class TransactionItem(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    agentAcceptance: AgentAcceptance | None = Field(
+    agent_acceptance: AgentAcceptance | None = Field(
         None,
         description="The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.",
     )
@@ -1805,11 +1807,11 @@ class TransactionRequest(WireModel):
         extra='forbid',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    idempotencyKey: constr(min_length=1, max_length=255) = Field(
+    idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
         description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
     )
@@ -1818,7 +1820,7 @@ class TransactionRequest(WireModel):
         description="The offers committed in this request (REQUIRED, min 1), each carrying its\n own reflected signed Offer + detached acceptance. A single offer is the\n degenerate 1-element list. The Exchange verifies each item's\n `offer.signature` (which covers pricing, terms, and expires_at) over the\n presented bytes against its own key — stateless, self-contained bearer\n tokens, with no reconstruct-from-catalog.",
         min_length=1,
     )
-    offerId: str | None = Field(
+    offer_id: str | None = Field(
         None,
         description="Optional, non-authoritative correlation/audit key — a human-readable offer\n id. NOT used for verification: the Exchange verifies each item's reflected\n `offer.signature` over the presented Offer bytes, never this scalar. May be\n omitted; if set, it SHOULD match an item's `offer.offer_id`.",
     )
@@ -1832,16 +1834,16 @@ class DiscoveryResponse(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    absenceReason: OfferAbsenceReason | None = Field(
+    absence_reason: OfferAbsenceReason | None = Field(
         None,
         description='Existence-oracle note: an authorization-flavored reason (SCOPE_INSUFFICIENT,\n NOT_AUTHORIZED, NOT_IN_CATALOG, CONTENT_BLOCKED) confirms a resource exists\n and why access was refused. Resolve surfaces the same oracle at the broker\n that OfferGroup.absence_reason does at the Exchange, so the same mitigation\n applies: where existence itself must stay hidden, the Broker MAY omit the\n reason (leave this unset) rather than reveal it. See the threat model.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    offerGroups: list[OfferGroup] | None = Field(
+    offer_groups: list[OfferGroup] | None = Field(
         None,
         description='Offers grouped by requested URI — the sole offer representation in this\n response. One OfferGroup per URI the agent asked for (echoed in\n OfferGroup.uri); a group with no offers carries OfferGroup.absence_reason\n explaining why. Each contained Offer is the full signed Offer the Exchange\n issued (including Offer.exchange, the execute-routing target), forwarded by\n the Broker unchanged so the agent can verify the signature end to end.',
     )
@@ -1852,7 +1854,7 @@ class PushResourcesRequest(WireModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    callerId: str | None = Field(
+    caller_id: str | None = Field(
         '',
         description='Identity of the caller (who is pushing this data).\n The Exchange verifies this matches a registered CatalogService client.',
     )
@@ -1860,9 +1862,9 @@ class PushResourcesRequest(WireModel):
         None, description='Content entries to push'
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
-    extCritical: list[str] | None = Field(
+    ext_critical: list[str] | None = Field(
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    tenantId: str | None = Field('', description='Tenant identifier')
+    tenant_id: str | None = Field('', description='Tenant identifier')
     ver: str | None = Field('', description='Protocol version')

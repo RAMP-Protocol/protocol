@@ -174,7 +174,7 @@
     ],
     "json": {
       "amount": "two words",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -186,7 +186,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "two words"
+      "unit_cost": "two words"
     }
   },
   {
@@ -195,7 +195,7 @@
     "valid": true,
     "json": {
       "amount": "0",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -513,7 +513,7 @@
       "string.max_len"
     ],
     "json": {
-      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
     }
   },
@@ -536,7 +536,7 @@
       "enum.not_in"
     ],
     "json": {
-      "idempotencyKey": "idem-dr"
+      "idempotency_key": "idem-dr"
     }
   },
   {
@@ -544,7 +544,7 @@
     "message": "DisputeRequest",
     "valid": true,
     "json": {
-      "idempotencyKey": "idem-dr",
+      "idempotency_key": "idem-dr",
       "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
     }
   },
@@ -585,7 +585,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "two words"
+      "uri_digest": "two words"
     }
   },
   {
@@ -806,7 +806,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "two words"
+      "unit_cost": "two words"
     }
   },
   {
@@ -914,9 +914,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "two words"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "two words"
     }
   },
   {
@@ -924,9 +924,9 @@
     "message": "RequestConstraints",
     "valid": true,
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "0"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "0"
     }
   },
   {
@@ -1045,7 +1045,7 @@
     "message": "ResourceIdentity",
     "valid": true,
     "json": {
-      "resourceMutability": "RESOURCE_MUTABILITY_STATIC"
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
     }
   },
   {
@@ -1615,7 +1615,7 @@
     "valid": true,
     "json": {
       "offer": {
-        "offerId": "offer-seed",
+        "offer_id": "offer-seed",
         "pricing": {
           "model": "PRICING_MODEL_FREE",
           "rate": "0"
@@ -1631,11 +1631,11 @@
       "string.max_len"
     ],
     "json": {
-      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "items": [
         {
           "offer": {
-            "offerId": "offer-seed",
+            "offer_id": "offer-seed",
             "pricing": {
               "model": "PRICING_MODEL_FREE",
               "rate": "0"
@@ -1656,7 +1656,7 @@
       "items": [
         {
           "offer": {
-            "offerId": "offer-seed",
+            "offer_id": "offer-seed",
             "pricing": {
               "model": "PRICING_MODEL_FREE",
               "rate": "0"
@@ -1671,11 +1671,11 @@
     "message": "TransactionRequest",
     "valid": true,
     "json": {
-      "idempotencyKey": "idem-tx",
+      "idempotency_key": "idem-tx",
       "items": [
         {
           "offer": {
-            "offerId": "offer-seed",
+            "offer_id": "offer-seed",
             "pricing": {
               "model": "PRICING_MODEL_FREE",
               "rate": "0"
@@ -1693,7 +1693,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": "two words"
+      "consumed_unit": "two words"
     }
   },
   {
@@ -1704,7 +1704,7 @@
       "string.max_len"
     ],
     "json": {
-      "consumedUnit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "consumed_unit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {
@@ -1712,7 +1712,7 @@
     "message": "Usage",
     "valid": true,
     "json": {
-      "consumedUnit": "x"
+      "consumed_unit": "x"
     }
   },
   {
@@ -1723,7 +1723,7 @@
       "string.max_len"
     ],
     "json": {
-      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "timestamp": "2026-01-02T03:04:05Z"
     }
   },
@@ -1743,7 +1743,7 @@
     "message": "UsageReport",
     "valid": true,
     "json": {
-      "idempotencyKey": "x",
+      "idempotency_key": "x",
       "timestamp": "2026-01-02T03:04:05Z"
     }
   },

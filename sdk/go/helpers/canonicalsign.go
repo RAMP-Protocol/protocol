@@ -29,9 +29,8 @@ import (
 //   - bytes as std base64 (protojson default)
 //   - google.protobuf.Timestamp / Duration per proto-JSON WKT rules
 //   - OMIT unpopulated fields (EmitUnpopulated=false — protojson default)
-//   - field naming: camelCase (UseProtoNames=false — protojson default; the TS Zod
-//     and Python Pydantic generated types both emit camelCase, so camelCase is the
-//     only naming all three targets share)
+//   - field naming: snake_case (UseProtoNames=true — the proto field name, matching
+//     the wire, the generated Pydantic/Zod clients, and the committed corpus)
 //   - google.protobuf.Struct ext → a plain JSON object; JCS then sorts its keys
 //     recursively, so the Struct case needs no special handling.
 //
@@ -43,7 +42,7 @@ import (
 // canonical-signing site uses. Pinned here (not per call site) so the two signed
 // payloads cannot drift from each other.
 var canonicalSignJSONOptions = protojson.MarshalOptions{
-	UseProtoNames:   false, // camelCase — the naming all three SDK targets share
+	UseProtoNames:   true,  // snake_case — the naming all three SDK targets share
 	UseEnumNumbers:  false, // enums as NAME strings
 	EmitUnpopulated: false, // omit unpopulated fields
 }

@@ -32,7 +32,7 @@ import { NewVerifier, isVerifiedOffer } from "../core/verifier.ts";
 describe("sdk/ts/core VerifiedOffer is unforgeable and rejected offers need .unsafe()", () => {
   it("a hand-built VerifiedOffer-shaped object is NOT recognized as branded", () => {
     // The brand is a module-private Symbol; a plain object cannot carry it.
-    const forged = { offer: { offerId: "forged" } };
+    const forged = { offer: { offer_id: "forged" } };
     expect(isVerifiedOffer(forged)).toBe(false);
   });
 
@@ -43,7 +43,7 @@ describe("sdk/ts/core VerifiedOffer is unforgeable and rejected offers need .uns
       resolve: async () => undefined, // no key → fail-closed reject
       now: () => Date.now(),
     });
-    const result = await verifier.sort([{ offerId: "doctored", exchange: "x" }]);
+    const result = await verifier.sort([{ offer_id: "doctored", exchange: "x" }]);
     expect(result.rejected).toHaveLength(1);
 
     const rejected = result.rejected[0];

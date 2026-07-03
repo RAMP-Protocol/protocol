@@ -7,9 +7,9 @@
       "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
       "offer_json": {
         "exchange": "exchange.example.com",
-        "offerId": "offer-minimal",
-        "signature": "e01e0636185bd1ff1428770553cc389fe872dbb66d9e549d355785c8bf7a49cc84513877696a9407e3e6fe75d2d9620e5f64769ab1230854d583a612e92a6507",
-        "signatureAlgorithm": "EdDSA"
+        "offer_id": "offer-minimal",
+        "signature": "76ac4a8ee0d56644dec18bec7205811ec13cd1324e7c71071b8165d912e9655c84936df8d73a27524aa57756d649eee84180508c17416d8ec85e23e9ac342e02",
+        "signature_algorithm": "EdDSA"
       },
       "now_unix": 1700000100,
       "expected_verified": true
@@ -28,9 +28,9 @@
           },
           "zebra": "last"
         },
-        "offerId": "offer-struct",
-        "signature": "664fe6a3835a0b5cbe22286910b0f74248c41da1e159e021fe767d32a0837cd7fc4f202557739d9501d4de2e38606191993596f894f32b98856dd299c9a46e06",
-        "signatureAlgorithm": "EdDSA"
+        "offer_id": "offer-struct",
+        "signature": "7df5ab39207d117cec0d538f978e41e402f47e1c74c37f8d9802bc4aa0b1d12ab12508e0940c9b42fdf4413744e26a3095a0a7fe77e76a4d521c444224e43e05",
+        "signature_algorithm": "EdDSA"
       },
       "now_unix": 1700000100,
       "expected_verified": true
@@ -40,12 +40,12 @@
       "exchange": "exchange.example.com",
       "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
       "offer_json": {
-        "dataAsOf": "2023-11-14T19:26:40Z",
+        "data_as_of": "2023-11-14T19:26:40Z",
         "exchange": "exchange.example.com",
-        "expiresAt": "2023-11-14T22:28:20Z",
-        "offerId": "offer-two-ts",
-        "signature": "760ca43473b396795813b517ffe71ff8497e0bb84c7866d476d2690fe1c3eff15700a7b1e8c9a54497946c5dfc803be7110c733e012b11d879e1e7f8cdd0d309",
-        "signatureAlgorithm": "EdDSA"
+        "expires_at": "2023-11-14T22:28:20Z",
+        "offer_id": "offer-two-ts",
+        "signature": "7a07cd88ec832d4dd630ff3c2aae40d6bdddcbe0536bdd60a05cdfb4b76808e6c00a1efd5185ff6ccd185dd0f29a5f64daef831c0b7434ec7670504aa4745706",
+        "signature_algorithm": "EdDSA"
       },
       "now_unix": 1700000100,
       "expected_verified": true
@@ -67,20 +67,20 @@
             "verifier": "verifier2.example"
           }
         ],
-        "deliveryMethod": "DELIVERY_METHOD_DIRECT",
+        "delivery_method": "DELIVERY_METHOD_DIRECT",
         "exchange": "exchange.example.com",
-        "iabCategories": [
+        "iab_categories": [
           "IAB1",
           "IAB2"
         ],
-        "offerId": "offer-repeated",
+        "offer_id": "offer-repeated",
         "pricing": {
           "currency": "USD",
           "model": "PRICING_MODEL_PER_UNIT",
           "rate": "0.05"
         },
-        "signature": "2d3f12caf6f320876e2c1a8a2da37e24ce311300fbc68d6424f13df6534f00d6d35f4d9b4c2044f2b58d070a9cf28d154d247ee62dad24988b709fd4cb11bd07",
-        "signatureAlgorithm": "EdDSA",
+        "signature": "245362e2b34d4e593938349add1a065b17c4222e57fc3e61bd978e91d464641e9d40755ae942f12b39132f70568e3e4f2d92a1bf39f13eeaf5ec178e7f442405",
+        "signature_algorithm": "EdDSA",
         "terms": [
           {
             "scopes": [
@@ -106,14 +106,14 @@
       "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
       "offer_json": {
         "exchange": "exchange.example.com",
-        "offerId": "offer-tamper",
+        "offer_id": "offer-tamper",
         "pricing": {
           "currency": "USD",
           "model": "PRICING_MODEL_FLAT",
           "rate": "999.00"
         },
-        "signature": "71587b7ec02062e4c7cd3a635a4977410f2fd9ff82c4642008a290503c5901d6ea8621306f13e89716e460bb6e3f4365adcc306fa6ec0bfdccfa96c828a66508",
-        "signatureAlgorithm": "EdDSA"
+        "signature": "116aac0648bae66b52f981e87db7c5ea3f318dcec55e2baa348f6417206b8dbd8a276284925e14e909746c95a6705b5e4b95ced614065dcd4555bf040427dd07",
+        "signature_algorithm": "EdDSA"
       },
       "now_unix": 1700000100,
       "expected_verified": false
