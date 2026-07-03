@@ -161,6 +161,19 @@
     }
   },
   {
+    "id": "Cost/amount/too_long",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.max_len",
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "unitCost": "0"
+    }
+  },
+  {
     "id": "Cost/unit_cost/pattern",
     "message": "Cost",
     "valid": false,
@@ -170,6 +183,19 @@
     "json": {
       "amount": "0",
       "unitCost": "two words"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/too_long",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.max_len",
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {
@@ -754,6 +780,20 @@
     }
   },
   {
+    "id": "Pricing/rate/too_long",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.max_len",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
     "id": "Pricing/unit/pattern",
     "message": "Pricing",
     "valid": false,
@@ -790,6 +830,20 @@
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
       "unitCost": "two words"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/too_long",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.max_len",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {
@@ -900,6 +954,20 @@
       "budgetPeriod": "90s",
       "maxDataAge": "90s",
       "maxUnitCost": "two words"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/too_long",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.max_len",
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {

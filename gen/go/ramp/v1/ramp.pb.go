@@ -8561,12 +8561,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x06_widthB\t\n" +
 	"\a_heightB\v\n" +
 	"\t_durationB\a\n" +
-	"\x05_size\"\xc4\b\n" +
+	"\x05_size\"\xc8\b\n" +
 	"\aPricing\x125\n" +
-	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelB\b\xbaH\x05\x82\x01\x02 \x00R\x05model\x122\n" +
-	"\x04rate\x18\x02 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$R\x04rate\x12\x1a\n" +
-	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12@\n" +
-	"\tunit_cost\x18\x04 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01\x122\n" +
+	"\x05model\x18\x01 \x01(\x0e2\x15.ramp.v1.PricingModelB\b\xbaH\x05\x82\x01\x02 \x00R\x05model\x124\n" +
+	"\x04rate\x18\x02 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$R\x04rate\x12\x1a\n" +
+	"\bcurrency\x18\x03 \x01(\tR\bcurrency\x12B\n" +
+	"\tunit_cost\x18\x04 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01\x122\n" +
 	"\x12estimated_quantity\x18\x05 \x01(\x05H\x01R\x11estimatedQuantity\x88\x01\x01\x12;\n" +
 	"\x17license_duration_months\x18\a \x01(\x05H\x02R\x15licenseDurationMonths\x88\x01\x01\x12\x93\x02\n" +
 	"\x04unit\x18\b \x01(\tB\xf9\x01\xbaH5r3\x18@2/^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$\x8a\xb5\x18\afetches\x8a\xb5\x18\baccesses\x8a\xb5\x18\x06tokens\x8a\xb5\x18\x05calls\x8a\xb5\x18\x05pages\x8a\xb5\x18\aseconds\x8a\xb5\x18\aminutes\x8a\xb5\x18\arecords\x8a\xb5\x18\astreams\x8a\xb5\x18\x06images\x8a\xb5\x18\x05seats\x8a\xb5\x18\x12units-manufactured\x8a\xb5\x18\n" +
@@ -8688,11 +8688,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0e_denial_reasonB\r\n" +
 	"\v_expires_atB\x15\n" +
 	"\x13_retrieval_endpointB\x17\n" +
-	"\x15_reporting_obligation\"\xaa\x01\n" +
-	"\x04Cost\x126\n" +
-	"\x06amount\x18\x01 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$R\x06amount\x12\x1a\n" +
-	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12@\n" +
-	"\tunit_cost\x18\x03 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01B\f\n" +
+	"\x15_reporting_obligation\"\xae\x01\n" +
+	"\x04Cost\x128\n" +
+	"\x06amount\x18\x01 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$R\x06amount\x12\x1a\n" +
+	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12B\n" +
+	"\tunit_cost\x18\x03 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01B\f\n" +
 	"\n" +
 	"_unit_cost\"\xe2\x01\n" +
 	"\x14PushResourcesRequest\x12\x10\n" +
@@ -8818,11 +8818,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0e\n" +
 	"\f_constraintsB\b\n" +
 	"\x06_queryB\x11\n" +
-	"\x0f_search_filters\"\xea\x05\n" +
+	"\x0f_search_filters\"\xec\x05\n" +
 	"\x12RequestConstraints\x12\x1c\n" +
 	"\texchanges\x18\x01 \x03(\tR\texchanges\x12/\n" +
-	"\tmax_price\x18\x02 \x01(\v2\r.ramp.v1.CostH\x00R\bmaxPrice\x88\x01\x01\x12G\n" +
-	"\rmax_unit_cost\x18\x03 \x01(\tB\x1e\xbaH\x1br\x192\x17^([0-9]+([.][0-9]+)?)?$H\x01R\vmaxUnitCost\x88\x01\x01\x12H\n" +
+	"\tmax_price\x18\x02 \x01(\v2\r.ramp.v1.CostH\x00R\bmaxPrice\x88\x01\x01\x12I\n" +
+	"\rmax_unit_cost\x18\x03 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x01R\vmaxUnitCost\x88\x01\x01\x12H\n" +
 	"\x13delivery_preference\x18\x04 \x03(\x0e2\x17.ramp.v1.DeliveryMethodR\x12deliveryPreference\x120\n" +
 	"\x11reporting_capable\x18\x05 \x01(\bH\x02R\x10reportingCapable\x88\x01\x01\x12/\n" +
 	"\x13preferred_exchanges\x18\x06 \x03(\tR\x12preferredExchanges\x12&\n" +
