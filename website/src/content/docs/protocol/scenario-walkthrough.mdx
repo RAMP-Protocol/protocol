@@ -134,7 +134,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
      title: "AI Regulation: What Providers Need to Know",
      word_count: 2500,
      estimated_quantity: 3300,
-     pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD", unit: "accesses", unit_cost: 0.00001515 },
+     pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD", unit: "accesses", unit_cost: "0.00001515" },
      identity: {
        canonical_url: "https://techcrunch.com/premium/ai-regulation-2026.html",
        iptc_guid: "urn:newsml:techcrunch:20260315:ai-reg-001",
@@ -151,7 +151,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
      ],
      terms: [
        { semantics: TERM_SEMANTICS_ENUMERATED,
-         pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD", unit: "accesses" },
+         pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD", unit: "accesses" },
          restrictions: [
            { kind: RESTRICTION_KIND_FUNCTION,
              permitted: ["ai-input", "ai-index", "search"],
@@ -283,8 +283,8 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
    Offer A (per-request):
      offer_id: "offer-tc-reg-001"
-     pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD",
-                unit: "accesses", unit_cost: 0.00001515, estimated_quantity: 3300 }
+     pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD",
+                unit: "accesses", unit_cost: "0.00001515", estimated_quantity: 3300 }
      identity: { canonical_url: "https://techcrunch.com/premium/ai-regulation-2026.html",
                  iptc_guid: "urn:newsml:techcrunch:20260315:ai-reg-001",
                  content_hash: "a1b2c3d4e5f6...", hash_method: "simhash-v1" }
@@ -295,7 +295,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
      ]
      terms: [
        { semantics: TERM_SEMANTICS_ENUMERATED,
-         pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD", unit: "accesses" },
+         pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD", unit: "accesses" },
          restrictions: [
            { kind: RESTRICTION_KIND_FUNCTION,
              permitted: ["ai-input", "ai-index", "search"],
@@ -308,14 +308,14 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
    Offer B (subscription):
      offer_id: "sub-offer-tc-reg-001"
-     pricing: { model: PRICING_MODEL_FREE, rate: 0, currency: "USD",
-                unit_cost: 0, estimated_quantity: 3300 }
+     pricing: { model: PRICING_MODEL_FREE, rate: "0", currency: "USD",
+                unit_cost: "0", estimated_quantity: 3300 }
      subscription_id: "SUB-ANTHROPIC-HEARST-2026"
      identity: { same as Offer A }
      attestations: { same as Offer A }
      terms: [
        { semantics: TERM_SEMANTICS_ENUMERATED,
-         pricing: { model: PRICING_MODEL_FREE, rate: 0, currency: "USD" },
+         pricing: { model: PRICING_MODEL_FREE, rate: "0", currency: "USD" },
          restrictions: [ same as Offer A ],
          scopes: ["subscription:SUB-ANTHROPIC-HEARST-2026"] }
      ]
@@ -681,7 +681,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
      billing_id: "bill-sub-alpha-001",
      offer_id: "sub-offer-tc-reg-001",
      subscription_id: "SUB-ANTHROPIC-HEARST-2026",
-     amount: 0,
+     amount: "0",
      agent_identity_hash: "e3b0c442...",
      offer_snapshot_json: "<full offer at transaction time, including exchange_signature>",
      reporting_required: true,
