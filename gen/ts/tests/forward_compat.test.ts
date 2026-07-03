@@ -26,7 +26,7 @@ const schemaByName = (name: string): SafeParse => {
 // (case_id, SchemaName, minimally-valid proto-JSON body)
 const DROP_CASES: Array<[string, string, Record<string, unknown>]> = [
   ["Cost", "CostSchema", { amount: "19.99" }],
-  ["Delegation", "DelegationSchema", { principalId: "user@acme.com" }],
+  ["Delegation", "DelegationSchema", { principal_id: "user@acme.com" }],
   ["Pricing", "PricingSchema", { model: "PRICING_MODEL_FREE" }],
 ];
 

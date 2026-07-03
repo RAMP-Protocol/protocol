@@ -8,7 +8,7 @@ import * as schemas from "../wire/schemas.ts";
 // wrongly failed safeParse.
 describe("Delegation.token (bytes) tolerates omission", () => {
   it("parses a Delegation with token omitted", () => {
-    const res = schemas.DelegationSchema.safeParse({ principalId: "user@acme.com" });
+    const res = schemas.DelegationSchema.safeParse({ principal_id: "user@acme.com" });
     expect(res.success).toBe(true);
   });
 });

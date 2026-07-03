@@ -19,8 +19,8 @@ import (
 	"regexp"
 	"sort"
 
-	protovalidate "buf.build/go/protovalidate"
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	protovalidate "buf.build/go/protovalidate"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
@@ -37,7 +37,7 @@ func main() {
 		for i := 0; i < md.Fields().Len(); i++ {
 			fd := md.Fields().Get(i)
 			if zeroRejected(fd) {
-				names = append(names, fd.JSONName())
+				names = append(names, string(fd.Name()))
 			}
 		}
 		if len(names) > 0 {

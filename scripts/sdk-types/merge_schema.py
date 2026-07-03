@@ -86,15 +86,16 @@ def open_messages(o):
       1. additionalProperties:false -> per-class extra='forbid' (Pydantic) / .strict()
          (Zod). Stripped ONLY where the value is exactly False; additionalProperties:true
          (Struct/ext) and schema-valued maps (e.g. ErrorDetail.metadata) stay OPEN.
-      2. patternProperties: {"^(snake_name)$": ...} — the original snake_case field-name
-         aliases (every field carries one; all 121 are anchored ^(name)$, none are maps —
-         maps use additionalProperties). json-schema-to-zod compiles these into a
-         .catchall(...) + superRefine that REJECTS any key not matching an alias, so
-         messages with multiword fields reject unknowns even after (1). We drop
-         patternProperties: the canonical wire is camelCase (protojson emits camelCase;
-         the corpus is camelCase-only) and Pydantic already ignores these, so removing
-         them makes every message uniformly open and tightens canonicalization. The
-         camelCase `properties` are untouched."""
+      2. patternProperties: {"^(camelName)$": ...} — the alternate field-name aliases.
+         We consume the proto-names (snake_case) `.schema.json` variant, so `properties`
+         are snake_case and the aliases protoschema emits are the camelCase json_names.
+         json-schema-to-zod compiles those into a .catchall(...) + superRefine that
+         REJECTS any key not matching an alias, so messages with multiword fields reject
+         unknowns even after (1). We drop patternProperties entirely: the wire is
+         snake_case proto-JSON everywhere (proto, docs, corpus via protojson
+         UseProtoNames=true, and both clients), so the camelCase aliases are not a
+         supported input form — dropping them makes every message uniformly open AND
+         keeps the clients snake-only. The snake_case `properties` are untouched."""
     if isinstance(o, dict):
         return {k: open_messages(v) for k, v in o.items()
                 if k != "patternProperties"
@@ -170,11 +171,11 @@ def fix_refs(o):
     if isinstance(o, dict):
         r = o.get("$ref")
         if isinstance(r, str):
-            m = re.match(r"ramp\.v1\.([A-Za-z0-9_]+)\.jsonschema\.json$", r)
+            m = re.match(r"ramp\.v1\.([A-Za-z0-9_]+)\.schema\.json$", r)
             if m:
                 o = dict(o); o["$ref"] = "#/$defs/" + m.group(1)
                 return {k: fix_refs(v) for k, v in o.items()}
-            g = re.match(r"google\.protobuf\.([A-Za-z0-9_]+)\.jsonschema\.json$", r)
+            g = re.match(r"google\.protobuf\.([A-Za-z0-9_]+)\.schema\.json$", r)
             if g and g.group(1) in WKT:
                 o = dict(o); o.pop("$ref"); o.update(WKT[g.group(1)])
                 return {k: fix_refs(v) for k, v in o.items()}
@@ -238,10 +239,15 @@ def main(src_dir, desc_path, out_file, required_path=None):
     defs = {}
     # sorted() so the $defs order — and therefore the generated class order — is
     # deterministic across machines (glob order is filesystem-dependent: macOS vs CI).
-    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.jsonschema.json"))):
-        if ".strict." in f:
+    # The `.schema.json` variant carries the proto (snake_case) field names as primary
+    # (protoschema's default); the `.jsonschema.json` variant is the camelCase json_name
+    # form. We consume snake_case: it is the one wire naming shared by the proto, the
+    # docs, the corpus (protojson UseProtoNames=true), and both generated clients.
+    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.schema.json"))):
+        base = os.path.basename(f)
+        if "jsonschema" in base or ".strict." in base or ".bundle." in base:
             continue
-        name = os.path.basename(f).split(".jsonschema")[0].replace("ramp.v1.", "")
+        name = base.split(".schema")[0].replace("ramp.v1.", "")
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d

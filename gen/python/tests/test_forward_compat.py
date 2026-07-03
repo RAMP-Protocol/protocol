@@ -30,7 +30,7 @@ UNKNOWN_KEY = "__unknown_future_field__"
 # (case_id, ModelClass, base_instance)
 DROP_CASES = [
     ("Cost", models.Cost, {"amount": "19.99"}),
-    ("Delegation", models.Delegation, {"principalId": "user@acme.com"}),
+    ("Delegation", models.Delegation, {"principal_id": "user@acme.com"}),
     ("Pricing", models.Pricing, {"model": models.PricingModel.PRICING_MODEL_FREE.value}),
 ]
 

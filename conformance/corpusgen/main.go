@@ -502,7 +502,7 @@ func gte(r *validate.Int64Rules) int64 {
 // ── output / misc ────────────────────────────────────────────────────────────
 
 func mkCase(id, short string, m proto.Message, valid bool, ids []string, _ protovalidate.Validator) Case {
-	b, err := protojson.MarshalOptions{}.Marshal(m)
+	b, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(m)
 	must(err)
 	// re-indent to canonical form so the committed corpus is stable
 	var v any

@@ -7,8 +7,8 @@ Pydantic models MUST enforce the identical rule so the three verdicts converge.
 This exercises the REAL generated models (wire.models) through their public
 parse surface (model_validate on proto-JSON dicts, which routes through
 wire.base.WireModel) for all five money fields:
-  Cost.amount, Cost.unitCost, RequestConstraints.maxUnitCost,
-  Pricing.rate, Pricing.unitCost
+  Cost.amount, Cost.unit_cost, RequestConstraints.max_unit_cost,
+  Pricing.rate, Pricing.unit_cost
 
 Run:  PYTHONPATH=gen/python python3 -m pytest gen/python/tests/test_money_pattern.py -q
 
@@ -28,12 +28,12 @@ import wire.models as models
 # sole rule under test.
 MONEY_FIELDS = [
     ("Cost.amount", models.Cost, {}, "amount"),
-    ("Cost.unitCost", models.Cost, {}, "unitCost"),
+    ("Cost.unit_cost", models.Cost, {}, "unit_cost"),
     (
-        "RequestConstraints.maxUnitCost",
+        "RequestConstraints.max_unit_cost",
         models.RequestConstraints,
         {},
-        "maxUnitCost",
+        "max_unit_cost",
     ),
     (
         "Pricing.rate",
@@ -42,10 +42,10 @@ MONEY_FIELDS = [
         "rate",
     ),
     (
-        "Pricing.unitCost",
+        "Pricing.unit_cost",
         models.Pricing,
         {"model": models.PricingModel.PRICING_MODEL_PER_UNIT.value},
-        "unitCost",
+        "unit_cost",
     ),
 ]
 

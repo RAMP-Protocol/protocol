@@ -17,16 +17,16 @@ import (
 	"testing"
 )
 
-// moneyJSONKeys are the proto-JSON (camelCase) field names of every money-typed
+// moneyJSONKeys are the proto-JSON (snake_case) field names of every money-typed
 // string field in the schema: Cost.amount/unit_cost, Pricing.rate/unit_cost,
 // RequestConstraints.max_unit_cost. Money carries a value space (negatives, NaN,
 // Infinity, scientific notation, and the accepted-empty edge) distinct from the
 // generic token/hash patterns, so its coverage must be checked on these keys.
 var moneyJSONKeys = map[string]bool{
-	"amount":      true,
-	"unitCost":    true,
-	"rate":        true,
-	"maxUnitCost": true,
+	"amount":        true,
+	"unit_cost":     true,
+	"rate":          true,
+	"max_unit_cost": true,
 }
 
 // moneyKillers are values that fail ONLY the money pattern ^([0-9]+([.][0-9]+)?)?$
@@ -127,7 +127,7 @@ func TestCorpusCoverage(t *testing.T) {
 			}
 		}
 		t.Errorf("MISSING CLASS 1 (money killers): no INVALID case feeds a money field "+
-			"(amount/unitCost/rate/maxUnitCost) one of -5/NaN/Infinity/1E3; the corpus "+
+			"(amount/unit_cost/rate/max_unit_cost) one of -5/NaN/Infinity/1E3; the corpus "+
 			"proves the clients reject 'two words' but never the money-specific value space (%d cases scanned)", len(cases))
 	})
 
@@ -190,4 +190,39 @@ func TestCorpusCoverage(t *testing.T) {
 			"OMITS 'metric' and trips string.pattern; the 'missing' edge fires only for the one "+
 			"explicit required field, so pattern-required presence (Quota.metric) is untested (%d cases scanned)", len(cases))
 	})
+}
+
+// TestWireIsSnakeCase locks the wire-naming decision: the RAMP wire is snake_case
+// proto-JSON everywhere — the proto field names, the docs, this corpus (emitted with
+// protojson UseProtoNames=true), and the generated Pydantic/Zod clients. protojson
+// still ACCEPTS the camelCase json_name on input, so a stray UseProtoNames=false (in
+// corpusgen or a client codec) would silently reintroduce camelCase and split the
+// naming again. This fails if any object key in the corpus carries a camelCase hump.
+func TestWireIsSnakeCase(t *testing.T) {
+	var walk func(t *testing.T, id string, v any)
+	walk = func(t *testing.T, id string, v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			for k, vv := range x {
+				for i := 0; i+1 < len(k); i++ {
+					if k[i] >= 'a' && k[i] <= 'z' && k[i+1] >= 'A' && k[i+1] <= 'Z' {
+						t.Errorf("case %s: camelCase wire key %q — the wire is snake_case proto-JSON (check corpusgen protojson UseProtoNames=true)", id, k)
+						break
+					}
+				}
+				walk(t, id, vv)
+			}
+		case []any:
+			for _, e := range x {
+				walk(t, id, e)
+			}
+		}
+	}
+	for _, c := range loadCorpus(t) {
+		var v any
+		if err := json.Unmarshal(c.JSON, &v); err != nil {
+			t.Fatalf("case %s: %v", c.ID, err)
+		}
+		walk(t, c.ID, v)
+	}
 }

@@ -184,7 +184,7 @@
     "message": "Cost",
     "valid": true,
     "json": {
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -196,7 +196,7 @@
     ],
     "json": {
       "amount": "two words",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -208,7 +208,7 @@
     ],
     "json": {
       "amount": "1.2.3",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -220,7 +220,7 @@
     ],
     "json": {
       "amount": "!!bad!!",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -232,7 +232,7 @@
     ],
     "json": {
       "amount": "\u0000ctl\u0000",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -244,7 +244,7 @@
     ],
     "json": {
       "amount": " ",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -256,7 +256,7 @@
     ],
     "json": {
       "amount": "-5",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -268,7 +268,7 @@
     ],
     "json": {
       "amount": "NaN",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -280,7 +280,7 @@
     ],
     "json": {
       "amount": "Infinity",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -292,7 +292,7 @@
     ],
     "json": {
       "amount": "1E3",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -305,7 +305,7 @@
     ],
     "json": {
       "amount": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -314,7 +314,7 @@
     "valid": true,
     "json": {
       "amount": "0",
-      "unitCost": ""
+      "unit_cost": ""
     }
   },
   {
@@ -326,7 +326,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "two words"
+      "unit_cost": "two words"
     }
   },
   {
@@ -338,7 +338,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "1.2.3"
+      "unit_cost": "1.2.3"
     }
   },
   {
@@ -350,7 +350,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "!!bad!!"
+      "unit_cost": "!!bad!!"
     }
   },
   {
@@ -362,7 +362,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "\u0000ctl\u0000"
+      "unit_cost": "\u0000ctl\u0000"
     }
   },
   {
@@ -374,7 +374,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": " "
+      "unit_cost": " "
     }
   },
   {
@@ -386,7 +386,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "-5"
+      "unit_cost": "-5"
     }
   },
   {
@@ -398,7 +398,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "NaN"
+      "unit_cost": "NaN"
     }
   },
   {
@@ -410,7 +410,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "Infinity"
+      "unit_cost": "Infinity"
     }
   },
   {
@@ -422,7 +422,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "1E3"
+      "unit_cost": "1E3"
     }
   },
   {
@@ -435,7 +435,7 @@
     ],
     "json": {
       "amount": "0",
-      "unitCost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "unit_cost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {
@@ -444,7 +444,7 @@
     "valid": true,
     "json": {
       "amount": "0",
-      "unitCost": "0"
+      "unit_cost": "0"
     }
   },
   {
@@ -762,7 +762,7 @@
       "string.max_len"
     ],
     "json": {
-      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
     }
   },
@@ -785,7 +785,7 @@
       "enum.not_in"
     ],
     "json": {
-      "idempotencyKey": "idem-dr"
+      "idempotency_key": "idem-dr"
     }
   },
   {
@@ -793,7 +793,7 @@
     "message": "DisputeRequest",
     "valid": true,
     "json": {
-      "idempotencyKey": "idem-dr",
+      "idempotency_key": "idem-dr",
       "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
     }
   },
@@ -831,7 +831,7 @@
     "valid": true,
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": ""
+      "uri_digest": ""
     }
   },
   {
@@ -843,7 +843,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "two words"
+      "uri_digest": "two words"
     }
   },
   {
@@ -855,7 +855,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "1.2.3"
+      "uri_digest": "1.2.3"
     }
   },
   {
@@ -867,7 +867,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "!!bad!!"
+      "uri_digest": "!!bad!!"
     }
   },
   {
@@ -879,7 +879,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "\u0000ctl\u0000"
+      "uri_digest": "\u0000ctl\u0000"
     }
   },
   {
@@ -891,7 +891,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": " "
+      "uri_digest": " "
     }
   },
   {
@@ -903,7 +903,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "-5"
+      "uri_digest": "-5"
     }
   },
   {
@@ -915,7 +915,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "NaN"
+      "uri_digest": "NaN"
     }
   },
   {
@@ -927,7 +927,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "Infinity"
+      "uri_digest": "Infinity"
     }
   },
   {
@@ -939,7 +939,7 @@
     ],
     "json": {
       "id": "CC-BY-4.0",
-      "uriDigest": "1E3"
+      "uri_digest": "1E3"
     }
   },
   {
@@ -1384,7 +1384,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": ""
+      "unit_cost": ""
     }
   },
   {
@@ -1397,7 +1397,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "two words"
+      "unit_cost": "two words"
     }
   },
   {
@@ -1410,7 +1410,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "1.2.3"
+      "unit_cost": "1.2.3"
     }
   },
   {
@@ -1423,7 +1423,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "!!bad!!"
+      "unit_cost": "!!bad!!"
     }
   },
   {
@@ -1436,7 +1436,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "\u0000ctl\u0000"
+      "unit_cost": "\u0000ctl\u0000"
     }
   },
   {
@@ -1449,7 +1449,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": " "
+      "unit_cost": " "
     }
   },
   {
@@ -1462,7 +1462,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "-5"
+      "unit_cost": "-5"
     }
   },
   {
@@ -1475,7 +1475,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "NaN"
+      "unit_cost": "NaN"
     }
   },
   {
@@ -1488,7 +1488,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "Infinity"
+      "unit_cost": "Infinity"
     }
   },
   {
@@ -1501,7 +1501,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "1E3"
+      "unit_cost": "1E3"
     }
   },
   {
@@ -1515,7 +1515,7 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
-      "unitCost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "unit_cost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {
@@ -1723,9 +1723,9 @@
     "message": "RequestConstraints",
     "valid": true,
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": ""
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": ""
     }
   },
   {
@@ -1736,9 +1736,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "two words"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "two words"
     }
   },
   {
@@ -1749,9 +1749,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "1.2.3"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "1.2.3"
     }
   },
   {
@@ -1762,9 +1762,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "!!bad!!"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "!!bad!!"
     }
   },
   {
@@ -1775,9 +1775,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "\u0000ctl\u0000"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "\u0000ctl\u0000"
     }
   },
   {
@@ -1788,9 +1788,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": " "
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": " "
     }
   },
   {
@@ -1801,9 +1801,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "-5"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "-5"
     }
   },
   {
@@ -1814,9 +1814,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "NaN"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "NaN"
     }
   },
   {
@@ -1827,9 +1827,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "Infinity"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "Infinity"
     }
   },
   {
@@ -1840,9 +1840,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "1E3"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "1E3"
     }
   },
   {
@@ -1854,9 +1854,9 @@
       "string.pattern"
     ],
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {
@@ -1864,9 +1864,9 @@
     "message": "RequestConstraints",
     "valid": true,
     "json": {
-      "budgetPeriod": "90s",
-      "maxDataAge": "90s",
-      "maxUnitCost": "0"
+      "budget_period": "90s",
+      "max_data_age": "90s",
+      "max_unit_cost": "0"
     }
   },
   {
@@ -1985,7 +1985,7 @@
     "message": "ResourceIdentity",
     "valid": true,
     "json": {
-      "resourceMutability": "RESOURCE_MUTABILITY_STATIC"
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
     }
   },
   {
@@ -2614,7 +2614,7 @@
       "string.max_len"
     ],
     "json": {
-      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {
@@ -2631,7 +2631,7 @@
     "message": "TransactionRequest",
     "valid": true,
     "json": {
-      "idempotencyKey": "x"
+      "idempotency_key": "x"
     }
   },
   {
@@ -2639,7 +2639,7 @@
     "message": "Usage",
     "valid": true,
     "json": {
-      "consumedUnit": ""
+      "consumed_unit": ""
     }
   },
   {
@@ -2650,7 +2650,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": "two words"
+      "consumed_unit": "two words"
     }
   },
   {
@@ -2661,7 +2661,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": "1.2.3"
+      "consumed_unit": "1.2.3"
     }
   },
   {
@@ -2672,7 +2672,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": "!!bad!!"
+      "consumed_unit": "!!bad!!"
     }
   },
   {
@@ -2683,7 +2683,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": "\u0000ctl\u0000"
+      "consumed_unit": "\u0000ctl\u0000"
     }
   },
   {
@@ -2694,7 +2694,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": " "
+      "consumed_unit": " "
     }
   },
   {
@@ -2705,7 +2705,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": "NaN"
+      "consumed_unit": "NaN"
     }
   },
   {
@@ -2716,7 +2716,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": "Infinity"
+      "consumed_unit": "Infinity"
     }
   },
   {
@@ -2727,7 +2727,7 @@
       "string.pattern"
     ],
     "json": {
-      "consumedUnit": "1E3"
+      "consumed_unit": "1E3"
     }
   },
   {
@@ -2738,7 +2738,7 @@
       "string.max_len"
     ],
     "json": {
-      "consumedUnit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "consumed_unit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   },
   {
@@ -2746,7 +2746,7 @@
     "message": "Usage",
     "valid": true,
     "json": {
-      "consumedUnit": "x"
+      "consumed_unit": "x"
     }
   },
   {
@@ -2757,7 +2757,7 @@
       "string.max_len"
     ],
     "json": {
-      "idempotencyKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "timestamp": "2026-01-02T03:04:05Z"
     }
   },
@@ -2777,7 +2777,7 @@
     "message": "UsageReport",
     "valid": true,
     "json": {
-      "idempotencyKey": "x",
+      "idempotency_key": "x",
       "timestamp": "2026-01-02T03:04:05Z"
     }
   },
