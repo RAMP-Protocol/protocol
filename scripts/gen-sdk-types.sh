@@ -63,7 +63,10 @@ echo "==> 4/4 Zod (json-schema-to-zod)"
 # json-schema-to-zod/zod (and transitive) tree every run — the byte-compared
 # schemas.ts cannot drift on a transparent dependency bump.
 cp scripts/sdk-types/package.json scripts/sdk-types/package-lock.json "$WORK/"
-(cd "$WORK" && npm ci --no-audit --no-fund)
+# --ignore-scripts: json-schema-to-zod + zod are pure JS (no native postinstall), so
+# no install-time code runs — this step produces the drift-gated schemas.ts, so it must
+# not execute third-party lifecycle scripts (which would run with the CI token in env).
+(cd "$WORK" && npm ci --no-audit --no-fund --ignore-scripts)
 cp scripts/sdk-types/gen_zod.mjs "$WORK/gen_zod.mjs"
 node "$WORK/gen_zod.mjs" "$COMBINED" gen/ts/wire/schemas.ts
 

@@ -17,7 +17,7 @@ if [ ! -d "$WORK/venv" ] || [ ! -d "$WORK/node_modules/zod" ]; then
   exit 1
 fi
 PY="$WORK/venv/bin/python"
-"$WORK/venv/bin/pip" install -q --disable-pip-version-check "pydantic>=2.0" >/dev/null 2>&1
+"$WORK/venv/bin/pip" install -q --disable-pip-version-check "pydantic==2.12.4" >/dev/null 2>&1
 
 CORPUS_ABS="$(pwd)/conformance/corpus/cases.json"
 # Absolute: the Go test runs with cwd = ./conformance, so relative paths would miss.
