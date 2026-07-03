@@ -114,7 +114,7 @@ class Delegation(WireModel):
         description="Scopes granted by this delegation. MUST be a subset of the\n principal's own scopes (attenuation — can only narrow, not widen).",
     )
     token: constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$') | None = Field(
-        None,
+        '',
         description='Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,\n base64-encoded) when token_format is "biscuit-v3".',
     )
     tokenFormat: str | None = Field(

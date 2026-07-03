@@ -61,6 +61,22 @@ def strip_titles(o):
     return o
 
 
+def fix_string_null_default(o):
+    """A proto `bytes` field renders as {type: string, pattern: <base64>, default: null}.
+    A JSON-Schema string node must never carry a non-string default: its proto3 zero is
+    "" (an empty base64 string, which the pattern accepts). Left as null, json-schema-to-zod
+    emits .default(null), and Zod's ZodDefault re-validates that default against z.string(),
+    so an OMITTED field is wrongly rejected. Normalize null -> "" on string nodes."""
+    if isinstance(o, dict):
+        o = {k: fix_string_null_default(v) for k, v in o.items()}
+        if o.get("type") == "string" and o.get("default", "") is None:
+            o["default"] = ""
+        return o
+    if isinstance(o, list):
+        return [fix_string_null_default(x) for x in o]
+    return o
+
+
 def open_messages(o):
     """protoschema's non-strict variant STILL closes every message object two ways,
     both of which defeat forward-compat (an unknown top-level field from a newer
@@ -229,7 +245,7 @@ def main(src_dir, desc_path, out_file, required_path=None):
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
-    defs = open_messages(collapse_int_strings(hoist_enums(fix_refs(defs))))
+    defs = fix_string_null_default(open_messages(collapse_int_strings(hoist_enums(fix_refs(defs)))))
     # hoist_enums has now populated enum_defs, so their names are known; close the
     # open name-OR-integer enum unions down to the closed string enum.
     defs = close_enum_unions(defs, set(enum_defs))

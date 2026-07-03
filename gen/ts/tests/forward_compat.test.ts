@@ -26,10 +26,7 @@ const schemaByName = (name: string): SafeParse => {
 // (case_id, SchemaName, minimally-valid proto-JSON body)
 const DROP_CASES: Array<[string, string, Record<string, unknown>]> = [
   ["Cost", "CostSchema", { amount: "19.99" }],
-  // token is provided explicitly: the generated `token` field defaults to null and
-  // re-validates it against z.string(), so omitting it fails for a reason unrelated to
-  // forward-compat (tracked separately). "" satisfies the token base64 pattern.
-  ["Delegation", "DelegationSchema", { principalId: "user@acme.com", token: "" }],
+  ["Delegation", "DelegationSchema", { principalId: "user@acme.com" }],
   ["Pricing", "PricingSchema", { model: "PRICING_MODEL_FREE" }],
 ];
 
