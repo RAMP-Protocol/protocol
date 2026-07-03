@@ -28,13 +28,14 @@ echo "==> 1/4 JSON Schema from proto (bufbuild/protoschema)"
 
 echo "==> 2/4 tools + merge (clean names; enums named from the descriptor)"
 python3 -m venv "$WORK/venv"
-# Pinned: generated output is byte-compared in CI, so EVERY tool that shapes it must be
-# fixed. datamodel-code-generator emits the models; black formats them; isort orders
-# their imports; protobuf parses the descriptor. An unpinned black/isort reflows the
-# byte-compared output and fails the drift gate on an unrelated day (bumping any of
-# these is a deliberate regenerate-and-review step).
+# Pinned AND hash-locked: generated output is byte-compared in CI, so every tool that
+# shapes it must be fixed. datamodel-code-generator emits the models; black formats them;
+# isort orders their imports; protobuf parses the descriptor. requirements-gen.txt pins
+# the full transitive tree with per-distribution hashes (regenerate with
+# `pip-compile --generate-hashes --allow-unsafe -o requirements-gen.txt requirements-gen.in`);
+# --require-hashes makes a tampered or drifted dependency fail closed.
 "$WORK/venv/bin/pip" install -q --disable-pip-version-check \
-  "datamodel-code-generator==0.64.0" "black==26.5.1" "isort==8.0.1" "protobuf==7.35.1"
+  --require-hashes -r scripts/sdk-types/requirements-gen.txt
 # required_fields.json: the authoritative protovalidate view of which fields are
 # required on the wire (their zero value is rejected). merge_schema marks those
 # `required` so the generated clients reject omission, matching the Go server.

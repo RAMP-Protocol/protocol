@@ -113,7 +113,7 @@ else
   fi
 
   step "SDK types parity (Pydantic + Zod vs the Go oracle)"
-  ".sdk-types-work/venv/bin/pip" install -q --disable-pip-version-check "pydantic==2.12.4" pytest || fail=1
+  ".sdk-types-work/venv/bin/pip" install -q --disable-pip-version-check --require-hashes -r scripts/sdk-types/requirements-test.txt || fail=1
   PYTHONPATH=gen/python ".sdk-types-work/venv/bin/python" -m pytest gen/python/tests -q || fail=1
   (cd gen/ts && npm ci --no-audit --no-fund && npm test --silent) || fail=1
 
