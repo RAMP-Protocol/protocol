@@ -124,7 +124,15 @@ def close_enum_unions(o, enum_names):
     reject anything outside the defined, non-UNSPECIFIED set. The wire form is the
     enum NAME (protojson default); the numeric form is intentionally not accepted
     by the typed clients (the Go server still accepts it). The stray default: 0 (an
-    UNSPECIFIED int that is not even a valid member) is dropped with the union."""
+    UNSPECIFIED int that is not even a valid member) is dropped with the union.
+
+    SCOPE — this closes ONLY `not_in: [0]` discriminators. Those drop their
+    UNSPECIFIED member, so protoschema emits a 2-branch anyOf[{$ref}, {integer}]
+    that this collapses. An enum field WITHOUT `not_in: [0]` keeps its UNSPECIFIED
+    member and is emitted as a 3-branch anyOf[{UNSPECIFIED name}, {$ref}, {integer}]
+    (len != 2), which this deliberately leaves OPEN — it stays name-OR-number and
+    admits raw ints, matching proto's open-enum forward-compat. So "closed enums"
+    means the discriminators only, not every enum field."""
     if isinstance(o, dict):
         aof = o.get("anyOf")
         if isinstance(aof, list) and len(aof) == 2:
