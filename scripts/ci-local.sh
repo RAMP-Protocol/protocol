@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 #
-# The single source of the proto gating sequence — runs the full set in ONE
+# The single source of the local gating sequence — runs the full set in ONE
 # command so the "I only ran a subset of the checks" failure mode cannot recur.
 # .github/workflows/proto-ci.yml invokes THIS script (it does not re-list the
 # steps), so CI and local cannot drift.
+#
+# Coverage: the proto gate (lint/generate/drift/build/test/docs) AND the SDK types
+# export gate (regenerate gen-sdk-types + drift + Pydantic/Zod parity + canonical
+# round-trip). The two run as SEPARATE CI workflows (proto-ci.yml + sdk-types-ci.yml,
+# path-filtered); locally they are one command. proto-ci.yml sets
+# RAMP_CI_SKIP_SDK_TYPES=1 so it keeps mirroring proto-ci only (sdk-types-ci.yml owns
+# the sdk-types gate in CI); the block also self-skips if python3/npm are absent.
 #
 # Non-destructive: it does not modify your git index or working tree (the drift
 # check compares the regenerated output against HEAD rather than `git add -A`).
@@ -80,6 +87,38 @@ if [ -d website/node_modules ]; then
   (cd website && npm test --silent) || fail=1
 else
   note "skipped — run 'npm install' in website/ to enable"
+fi
+
+# --- SDK types export gate (mirrors .github/workflows/sdk-types-ci.yml) ---
+# The generated Pydantic/Zod types export + its cross-language parity and canonical
+# round-trip. CI runs this as a SEPARATE, path-filtered workflow; locally it belongs in
+# the one command so a developer gets full coverage in a single run. proto-ci.yml sets
+# RAMP_CI_SKIP_SDK_TYPES=1 (sdk-types-ci.yml owns it there), and it self-skips if the
+# python3/npm toolchain is absent.
+if [ "${RAMP_CI_SKIP_SDK_TYPES:-0}" = "1" ]; then
+  step "sdk-types export gate"
+  note "skipped (RAMP_CI_SKIP_SDK_TYPES=1 — covered by sdk-types-ci.yml)"
+elif ! command -v python3 >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  step "sdk-types export gate"
+  note "skipped — needs python3 + npm"
+else
+  step "regenerate SDK types export (Pydantic + Zod) + drift"
+  ./scripts/gen-sdk-types.sh || fail=1
+  if ! git diff --quiet HEAD -- gen/python/wire/models.py gen/ts/wire/schemas.ts; then
+    echo "::error:: SDK types export out of sync — run scripts/gen-sdk-types.sh and commit gen/python/wire/models.py + gen/ts/wire/schemas.ts."
+    git status --short -- gen/python/wire/models.py gen/ts/wire/schemas.ts
+    fail=1
+  else
+    note "no drift"
+  fi
+
+  step "SDK types parity (Pydantic + Zod vs the Go oracle)"
+  ".sdk-types-work/venv/bin/pip" install -q --disable-pip-version-check "pydantic>=2.0" pytest || fail=1
+  PYTHONPATH=gen/python ".sdk-types-work/venv/bin/python" -m pytest gen/python/tests -q || fail=1
+  (cd gen/ts && npm ci --no-audit --no-fund && npm test --silent) || fail=1
+
+  step "canonical proto-JSON round-trip"
+  ./scripts/check-canonical.sh || fail=1
 fi
 
 step "buf breaking (informational, pre-v1 — non-blocking)"
