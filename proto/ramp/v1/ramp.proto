@@ -438,7 +438,7 @@ message Offer {
 
   // If set, this offer is available under an existing subscription/deal.
   // No per-request billing — usage tracked against subscription quota.
-  // Pricing.rate = 0 for subscription offers (zero marginal cost).
+  // Pricing.rate = "0" for subscription offers (zero marginal cost).
   // The Broker SHOULD prefer subscription offers when available.
   optional string subscription_id = 11;
 
@@ -1702,7 +1702,7 @@ message TransactionResponse {
   optional string subscription_id = 12;
 
   // Computed per-unit cost for financial attribution on subscription transactions.
-  // Even when cost.amount=0 (subscription), this field carries the value
+  // Even when cost.amount="0" (subscription), this field carries the value
   // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
   optional Cost subscription_unit_value = 16;
 
@@ -1748,7 +1748,7 @@ message TransactionResultItem {
   optional string subscription_id = 6;
 
   // Computed per-unit cost for financial attribution on subscription transactions.
-  // Even when cost.amount=0 (subscription), this field carries the value
+  // Even when cost.amount="0" (subscription), this field carries the value
   // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
   optional Cost subscription_unit_value = 11;
 

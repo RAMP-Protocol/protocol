@@ -6,9 +6,10 @@
 // manifest to mark them `required` (and drop the zero default) so the generated
 // Pydantic/Zod reject omission, matching the Go server.
 //
-// This is the single, authoritative source of "is the zero value invalid" — the
-// same protovalidate view the conformance tests use — so the Python bridge does
-// not re-implement the rule semantics.
+// This is the single, authoritative source of "is the zero value invalid" (the same
+// Go protovalidate the conformance corpus is labeled against), consumed by
+// scripts/gen-sdk-types.sh so the Python bridge does not re-implement the rule
+// semantics.
 package main
 
 import (

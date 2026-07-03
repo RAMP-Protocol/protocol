@@ -2517,7 +2517,7 @@ type Offer struct {
 	SignatureAlgorithm string `protobuf:"bytes,10,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
 	// If set, this offer is available under an existing subscription/deal.
 	// No per-request billing — usage tracked against subscription quota.
-	// Pricing.rate = 0 for subscription offers (zero marginal cost).
+	// Pricing.rate = "0" for subscription offers (zero marginal cost).
 	// The Broker SHOULD prefer subscription offers when available.
 	SubscriptionId *string `protobuf:"bytes,11,opt,name=subscription_id,json=subscriptionId,proto3,oneof" json:"subscription_id,omitempty"`
 	// IAB Content Taxonomy category codes.
@@ -4535,7 +4535,7 @@ type TransactionResponse struct {
 	// No per-request charge — usage tracked against subscription quota.
 	SubscriptionId *string `protobuf:"bytes,12,opt,name=subscription_id,json=subscriptionId,proto3,oneof" json:"subscription_id,omitempty"`
 	// Computed per-unit cost for financial attribution on subscription transactions.
-	// Even when cost.amount=0 (subscription), this field carries the value
+	// Even when cost.amount="0" (subscription), this field carries the value
 	// of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
 	SubscriptionUnitValue *Cost `protobuf:"bytes,16,opt,name=subscription_unit_value,json=subscriptionUnitValue,proto3,oneof" json:"subscription_unit_value,omitempty"`
 	// Batch mode: per-offer results.
@@ -4722,7 +4722,7 @@ type TransactionResultItem struct {
 	// If under subscription, no per-request charge.
 	SubscriptionId *string `protobuf:"bytes,6,opt,name=subscription_id,json=subscriptionId,proto3,oneof" json:"subscription_id,omitempty"`
 	// Computed per-unit cost for financial attribution on subscription transactions.
-	// Even when cost.amount=0 (subscription), this field carries the value
+	// Even when cost.amount="0" (subscription), this field carries the value
 	// of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
 	SubscriptionUnitValue *Cost `protobuf:"bytes,11,opt,name=subscription_unit_value,json=subscriptionUnitValue,proto3,oneof" json:"subscription_unit_value,omitempty"`
 	// Set if this specific item was denied (others may succeed).

@@ -786,7 +786,7 @@ class TransactionResultItem(WireModel):
     )
     subscriptionUnitValue: Cost | None = Field(
         None,
-        description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount=0 (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
+        description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount="0" (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
     )
     transactionId: str | None = Field(
         '', description='Exchange-assigned transaction identifier.'
@@ -1214,7 +1214,7 @@ class TransactionResponse(WireModel):
     )
     subscriptionUnitValue: Cost | None = Field(
         None,
-        description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount=0 (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
+        description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount="0" (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
     )
     totalCost: Cost | None = Field(
         None, description='Batch mode: aggregate cost across all items.'
@@ -1552,7 +1552,7 @@ class Offer(WireModel):
     )
     subscriptionId: str | None = Field(
         None,
-        description='If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = 0 for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.',
+        description='If set, this offer is available under an existing subscription/deal.\n No per-request billing — usage tracked against subscription quota.\n Pricing.rate = "0" for subscription offers (zero marginal cost).\n The Broker SHOULD prefer subscription offers when available.',
     )
     subscriptionQuota: list[SubscriptionQuotaInfo] | None = Field(
         None,

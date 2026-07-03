@@ -11,7 +11,7 @@
 // is fine; the field-level violation is what the clients are expected to catch).
 //
 // Determinism: cases are emitted in a stable order so the committed corpus is a
-// byte-exact, drift-gated artifact (regenerate: scripts/gen-corpus.sh).
+// byte-exact, drift-gated artifact (regenerate: go run ./conformance/corpusgen).
 package main
 
 import (
