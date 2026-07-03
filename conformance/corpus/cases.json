@@ -26,6 +26,37 @@
     }
   },
   {
+    "id": "AcceptableRestriction/values/item_too_long",
+    "message": "AcceptableRestriction",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "axis": "RESTRICTION_KIND_FUNCTION",
+      "values": [
+        "ai-train",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
+    }
+  },
+  {
+    "id": "AcceptableRestriction/values/item_too_short",
+    "message": "AcceptableRestriction",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {
+      "axis": "RESTRICTION_KIND_FUNCTION",
+      "values": [
+        "ai-train",
+        ""
+      ]
+    }
+  },
+  {
     "id": "AcceptableRestriction/values/too_many",
     "message": "AcceptableRestriction",
     "valid": false,
@@ -149,7 +180,15 @@
     }
   },
   {
-    "id": "Cost/amount/pattern",
+    "id": "Cost/amount/empty_ok",
+    "message": "Cost",
+    "valid": true,
+    "json": {
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#0",
     "message": "Cost",
     "valid": false,
     "rules": [
@@ -157,6 +196,102 @@
     ],
     "json": {
       "amount": "two words",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#1",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "1.2.3",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#2",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "!!bad!!",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#3",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "\u0000ctl\u0000",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#4",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": " ",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#5",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "-5",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#6",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "NaN",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#7",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "Infinity",
+      "unitCost": "0"
+    }
+  },
+  {
+    "id": "Cost/amount/pattern#8",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "1E3",
       "unitCost": "0"
     }
   },
@@ -174,7 +309,16 @@
     }
   },
   {
-    "id": "Cost/unit_cost/pattern",
+    "id": "Cost/unit_cost/empty_ok",
+    "message": "Cost",
+    "valid": true,
+    "json": {
+      "amount": "0",
+      "unitCost": ""
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#0",
     "message": "Cost",
     "valid": false,
     "rules": [
@@ -183,6 +327,102 @@
     "json": {
       "amount": "0",
       "unitCost": "two words"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#1",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "1.2.3"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#2",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "!!bad!!"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#3",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#4",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": " "
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#5",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "-5"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#6",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "NaN"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#7",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "Infinity"
+    }
+  },
+  {
+    "id": "Cost/unit_cost/pattern#8",
+    "message": "Cost",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "amount": "0",
+      "unitCost": "1E3"
     }
   },
   {
@@ -586,7 +826,16 @@
     }
   },
   {
-    "id": "License/uri_digest/pattern",
+    "id": "License/uri_digest/empty_ok",
+    "message": "License",
+    "valid": true,
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": ""
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#0",
     "message": "License",
     "valid": false,
     "rules": [
@@ -595,6 +844,102 @@
     "json": {
       "id": "CC-BY-4.0",
       "uriDigest": "two words"
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#1",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": "1.2.3"
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#2",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": "!!bad!!"
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#3",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#4",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": " "
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#5",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": "-5"
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#6",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": "NaN"
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#7",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": "Infinity"
+    }
+  },
+  {
+    "id": "License/uri_digest/pattern#8",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uriDigest": "1E3"
     }
   },
   {
@@ -767,7 +1112,15 @@
     }
   },
   {
-    "id": "Pricing/rate/pattern",
+    "id": "Pricing/rate/empty_ok",
+    "message": "Pricing",
+    "valid": true,
+    "json": {
+      "model": "PRICING_MODEL_FREE"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#0",
     "message": "Pricing",
     "valid": false,
     "rules": [
@@ -777,6 +1130,110 @@
     "json": {
       "model": "PRICING_MODEL_FREE",
       "rate": "two words"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#1",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "1.2.3"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#2",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "!!bad!!"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#3",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#4",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": " "
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#5",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "-5"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#6",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "NaN"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#7",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "Infinity"
+    }
+  },
+  {
+    "id": "Pricing/rate/pattern#8",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate",
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "1E3"
     }
   },
   {
@@ -794,7 +1251,17 @@
     }
   },
   {
-    "id": "Pricing/unit/pattern",
+    "id": "Pricing/unit/empty_ok",
+    "message": "Pricing",
+    "valid": true,
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": ""
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern#0",
     "message": "Pricing",
     "valid": false,
     "rules": [
@@ -804,6 +1271,97 @@
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
       "unit": "two words"
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern#1",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": "1.2.3"
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern#2",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": "!!bad!!"
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern#3",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern#4",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": " "
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern#6",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": "NaN"
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern#7",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": "Infinity"
+    }
+  },
+  {
+    "id": "Pricing/unit/pattern#8",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unit": "1E3"
     }
   },
   {
@@ -820,7 +1378,17 @@
     }
   },
   {
-    "id": "Pricing/unit_cost/pattern",
+    "id": "Pricing/unit_cost/empty_ok",
+    "message": "Pricing",
+    "valid": true,
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": ""
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#0",
     "message": "Pricing",
     "valid": false,
     "rules": [
@@ -830,6 +1398,110 @@
       "model": "PRICING_MODEL_FREE",
       "rate": "0",
       "unitCost": "two words"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#1",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "1.2.3"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#2",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "!!bad!!"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#3",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#4",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": " "
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#5",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "-5"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#6",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "NaN"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#7",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "Infinity"
+    }
+  },
+  {
+    "id": "Pricing/unit_cost/pattern#8",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "0",
+      "unitCost": "1E3"
     }
   },
   {
@@ -868,7 +1540,19 @@
     }
   },
   {
-    "id": "Quota/metric/pattern",
+    "id": "Quota/metric/missing_empty",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern#0",
     "message": "Quota",
     "valid": false,
     "rules": [
@@ -877,6 +1561,97 @@
     "json": {
       "limit": "1",
       "metric": "two words",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern#1",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "1.2.3",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern#2",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "!!bad!!",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern#3",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "\u0000ctl\u0000",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern#4",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": " ",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern#6",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "NaN",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern#7",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "Infinity",
+      "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/metric/pattern#8",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "1E3",
       "window": "QUOTA_WINDOW_DAILY"
     }
   },
@@ -944,7 +1719,17 @@
     }
   },
   {
-    "id": "RequestConstraints/max_unit_cost/pattern",
+    "id": "RequestConstraints/max_unit_cost/empty_ok",
+    "message": "RequestConstraints",
+    "valid": true,
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": ""
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#0",
     "message": "RequestConstraints",
     "valid": false,
     "rules": [
@@ -954,6 +1739,110 @@
       "budgetPeriod": "90s",
       "maxDataAge": "90s",
       "maxUnitCost": "two words"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#1",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": "1.2.3"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#2",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": "!!bad!!"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#3",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#4",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": " "
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#5",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": "-5"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#6",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": "NaN"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#7",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": "Infinity"
+    }
+  },
+  {
+    "id": "RequestConstraints/max_unit_cost/pattern#8",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budgetPeriod": "90s",
+      "maxDataAge": "90s",
+      "maxUnitCost": "1E3"
     }
   },
   {
@@ -1409,6 +2298,37 @@
     }
   },
   {
+    "id": "Restriction/permitted/item_too_long",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/permitted/item_too_short",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input",
+        ""
+      ]
+    }
+  },
+  {
     "id": "Restriction/permitted/too_many",
     "message": "Restriction",
     "valid": false,
@@ -1500,6 +2420,41 @@
       ],
       "prohibited": [
         "two words"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/prohibited/item_too_long",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input"
+      ],
+      "prohibited": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
+    }
+  },
+  {
+    "id": "Restriction/prohibited/item_too_short",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-input"
+      ],
+      "prohibited": [
+        ""
       ]
     }
   },
@@ -1680,7 +2635,15 @@
     }
   },
   {
-    "id": "Usage/consumed_unit/pattern",
+    "id": "Usage/consumed_unit/empty_ok",
+    "message": "Usage",
+    "valid": true,
+    "json": {
+      "consumedUnit": ""
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern#0",
     "message": "Usage",
     "valid": false,
     "rules": [
@@ -1688,6 +2651,83 @@
     ],
     "json": {
       "consumedUnit": "two words"
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern#1",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumedUnit": "1.2.3"
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern#2",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumedUnit": "!!bad!!"
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern#3",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumedUnit": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern#4",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumedUnit": " "
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern#6",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumedUnit": "NaN"
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern#7",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumedUnit": "Infinity"
+    }
+  },
+  {
+    "id": "Usage/consumed_unit/pattern#8",
+    "message": "Usage",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumedUnit": "1E3"
     }
   },
   {
