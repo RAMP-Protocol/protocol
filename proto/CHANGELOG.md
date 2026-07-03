@@ -28,6 +28,21 @@ extended `DenialReason` with
 values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
 breaking change; `buf breaking` reports the deltas as expected.
 
+**Money as an exact decimal string + field validation as standard constraints (breaking).**
+
+- **Money is a decimal string, not a `double`.** `Pricing.rate`/`unit_cost`,
+  `Cost.amount`/`unit_cost`, and `RequestConstraints.max_unit_cost` change from
+  `double` to `string` carrying a decimal `string.pattern`
+  (`^([0-9]+([.][0-9]+)?)?$`). Binary `double` cannot represent most decimal money
+  values exactly, so it drifts and breaks settlement sums; a decimal string is exact
+  and supports arbitrary sub-cent precision (e.g. `"0.0001234"`). Accepted pre-v1
+  breaking change; `buf breaking` reports the five field-type deltas as expected.
+- **Field-level validation moved to standard protovalidate constraints.** 18 of 25
+  field-level rules moved from custom CEL to standard constraints (11 enum
+  discriminators to `enum.not_in: [0]`, 7 formats to `string.pattern`) so they flow
+  through JSON Schema into the generated Pydantic/Zod types export; the 7 genuine
+  cross-field rules stay server-authoritative CEL.
+
 **Discovery/offer response model (breaking).** The Agent-to-Broker discovery
 messages are renamed and the response is re-modeled to carry offers rather than
 a single transaction result:
