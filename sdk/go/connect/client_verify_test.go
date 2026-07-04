@@ -126,21 +126,38 @@ func sampleOffer(id string) *rampv1.Offer {
 // stubExchange is a minimal ExchangeService that echoes a fixed offer set from
 // Discover and a fixed TransactionResponse from Execute. It is the ORIGIN behind
 // the SDK's server verify face — not a mock of the SDK, but the app service the
-// SDK wraps.
+// SDK wraps. Like a real platform handler it OWNS the unauthenticated rejection:
+// the seam verifies only requests that present a signature, and an unsigned
+// request reaches the handler, which rejects before acting.
 type stubExchange struct {
 	rampv1connect.UnimplementedExchangeServiceHandler
 	offers []*rampv1.Offer
 }
 
+// requireVerified mirrors the platform handlers' auth guard: no verified
+// signature in context → typed Unauthenticated, before any side effect.
+func requireVerified(ctx context.Context) error {
+	if helpers.FromContext(ctx) == nil {
+		return connectrpc.NewError(connectrpc.CodeUnauthenticated, errors.New("origin: unverified caller"))
+	}
+	return nil
+}
+
 func (s *stubExchange) DiscoverResources(
-	_ context.Context, _ *connectrpc.Request[rampv1.ResourceQuery],
+	ctx context.Context, _ *connectrpc.Request[rampv1.ResourceQuery],
 ) (*connectrpc.Response[rampv1.ResourceResponse], error) {
+	if err := requireVerified(ctx); err != nil {
+		return nil, err
+	}
 	return connectrpc.NewResponse(&rampv1.ResourceResponse{Offers: s.offers}), nil
 }
 
 func (s *stubExchange) ExecuteTransaction(
-	_ context.Context, _ *connectrpc.Request[rampv1.TransactionRequest],
+	ctx context.Context, _ *connectrpc.Request[rampv1.TransactionRequest],
 ) (*connectrpc.Response[rampv1.TransactionResponse], error) {
+	if err := requireVerified(ctx); err != nil {
+		return nil, err
+	}
 	return connectrpc.NewResponse(&rampv1.TransactionResponse{Ver: "1.0"}), nil
 }
 

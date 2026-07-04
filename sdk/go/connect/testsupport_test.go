@@ -31,6 +31,13 @@ func newMemReplayStore() *memReplayStore {
 
 // SeenOrAdd returns true when nonce was already recorded (a replay), false when
 // it is new (and records it). It satisfies the SDK's injected core.ReplayStore.
+func (m *memReplayStore) Seen(_ context.Context, nonce string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.seen[nonce]
+	return ok, nil
+}
+
 func (m *memReplayStore) SeenOrAdd(_ context.Context, nonce string, _ time.Duration) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

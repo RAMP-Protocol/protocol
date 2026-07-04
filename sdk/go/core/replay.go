@@ -17,6 +17,11 @@ import (
 // It lives in package core (not connect) so the client and server faces share
 // one interface name and an app defines its store once for both.
 type ReplayStore interface {
+	// Seen reports whether nonce was already recorded, WITHOUT recording it.
+	// The verify face checks all of a multisig request's nonces in a read-only
+	// phase before committing any of them, so a request rejected part-way never
+	// burns its other signatures' nonces.
+	Seen(ctx context.Context, nonce string) (bool, error)
 	// SeenOrAdd reports whether nonce was already recorded (a replay → true) and
 	// records it with ttl when it is new (→ false). The SDK decides WHEN to call it;
 	// the app decides HOW long a nonce is remembered.

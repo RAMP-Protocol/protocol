@@ -25,7 +25,12 @@ var errReplayed = errors.New("connectserver: request replayed within window")
 // handler's side effects are absent on the negative path (fail-closed).
 func verifyMiddleware(cfg serverConfig, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isRampProcedure(r) {
+		if !isRampProcedure(r) || r.Header.Get("Signature-Input") == "" {
+			// Only a request that PRESENTS a signature is verified at the seam.
+			// An unsigned /ramp. request flows to the origin handler, which owns
+			// the typed Unauthenticated fault (the ADR-019 ErrorDetail contract)
+			// and rejects before acting — the seam stays fail-closed for any
+			// request that claims a signature, and the handler for the rest.
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -49,9 +54,14 @@ func verifyMiddleware(cfg serverConfig, next http.Handler) http.Handler {
 // verified signatures (sig1..sigN) for the middleware to place into the request
 // context. Verification uses the multisig resolver path so a relay chain and a
 // single signature share one gate; the hop budget is the injected maxSignatures.
-// The replay nonce is the request's Content-Digest — stable across an
-// idempotency-key replay (identical body bytes) yet distinct per distinct
-// request — so reusing an idempotency key trips the store.
+//
+// The replay nonce is PER VERIFIED SIGNATURE — keyid plus the signature bytes —
+// never the body digest: an idempotent retry re-signs the same body with a
+// fresh window and must pass the transport gate (the handler dedups per
+// verified signer via idempotency_key and returns the original result), while
+// replaying the exact signed bytes trips the store. The check is two-phase —
+// read-only Seen over every signature, then SeenOrAdd commits them all — so a
+// request rejected part-way never burns its other signatures' nonces.
 func (cfg serverConfig) verify(r *http.Request, body []byte) ([]helpers.VerifiedRequest, error) {
 	opts := helpers.VerifyOptions{MaxSignatures: cfg.maxSignatures}
 	sigs, err := helpers.VerifyMultisigRequestResolved(r.Context(), r, body, cfg.resolver, opts)
@@ -61,15 +71,32 @@ func (cfg serverConfig) verify(r *http.Request, body []byte) ([]helpers.Verified
 	if cfg.replay == nil || len(sigs) == 0 {
 		return sigs, nil
 	}
-	nonce := r.Header.Get("Content-Digest")
-	seen, rerr := cfg.replay.SeenOrAdd(r.Context(), nonce, cfg.replayTTL)
-	if rerr != nil {
-		return nil, rerr
+	for i := range sigs {
+		seen, rerr := cfg.replay.Seen(r.Context(), replayNonce(&sigs[i]))
+		if rerr != nil {
+			return nil, rerr
+		}
+		if seen {
+			return nil, errReplayed
+		}
 	}
-	if seen {
-		return nil, errReplayed
+	for i := range sigs {
+		seen, rerr := cfg.replay.SeenOrAdd(r.Context(), replayNonce(&sigs[i]), cfg.replayTTL)
+		if rerr != nil {
+			return nil, rerr
+		}
+		if seen {
+			// A concurrent duplicate raced between the phases.
+			return nil, errReplayed
+		}
 	}
 	return sigs, nil
+}
+
+// replayNonce derives a signature's replay-store key: the resolved keyid and
+// the signature bytes, NUL-separated so neither part can forge a boundary.
+func replayNonce(v *helpers.VerifiedRequest) string {
+	return v.KeyID + "\x00" + v.Signature
 }
 
 // bufferBody reads the request body and re-seats it so the downstream handler

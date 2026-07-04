@@ -16,6 +16,7 @@ package connectserver_test
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -47,8 +48,13 @@ type echoExchange struct {
 }
 
 func (e *echoExchange) DiscoverResources(
-	_ context.Context, _ *connectrpc.Request[rampv1.ResourceQuery],
+	ctx context.Context, _ *connectrpc.Request[rampv1.ResourceQuery],
 ) (*connectrpc.Response[rampv1.ResourceResponse], error) {
+	// Like a real platform handler: no verified signature in context → typed
+	// Unauthenticated BEFORE any side effect (hits counts business effects only).
+	if helpers.FromContext(ctx) == nil {
+		return nil, connectrpc.NewError(connectrpc.CodeUnauthenticated, errors.New("origin: unverified caller"))
+	}
 	e.mu.Lock()
 	e.hits++
 	e.mu.Unlock()
@@ -74,6 +80,13 @@ func newCountingReplayStore() *countingReplayStore {
 	return &countingReplayStore{seen: map[string]struct{}{}}
 }
 
+func (c *countingReplayStore) Seen(_ context.Context, nonce string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.seen[nonce]
+	return ok, nil
+}
+
 func (c *countingReplayStore) SeenOrAdd(_ context.Context, nonce string, _ time.Duration) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -90,6 +103,10 @@ var _ core.ReplayStore = (*countingReplayStore)(nil)
 // rejection path on the first request, so the test does not depend on the client
 // minting a stable nonce across two calls.
 type alwaysReplayStore struct{}
+
+func (alwaysReplayStore) Seen(context.Context, string) (bool, error) {
+	return true, nil
+}
 
 func (alwaysReplayStore) SeenOrAdd(context.Context, string, time.Duration) (bool, error) {
 	return true, nil

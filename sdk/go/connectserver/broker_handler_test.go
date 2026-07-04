@@ -8,6 +8,7 @@ package connectserver_test
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -58,8 +59,13 @@ type brokerEcho struct {
 }
 
 func (b *brokerEcho) Resolve(
-	_ context.Context, _ *connectrpc.Request[rampv1.DiscoveryRequest],
+	ctx context.Context, _ *connectrpc.Request[rampv1.DiscoveryRequest],
 ) (*connectrpc.Response[rampv1.DiscoveryResponse], error) {
+	// Like a real platform handler: no verified signature in context → typed
+	// Unauthenticated BEFORE any side effect (hits counts business effects only).
+	if helpers.FromContext(ctx) == nil {
+		return nil, connectrpc.NewError(connectrpc.CodeUnauthenticated, errors.New("origin: unverified caller"))
+	}
 	b.mu.Lock()
 	b.hits++
 	b.mu.Unlock()
@@ -171,8 +177,9 @@ func TestServerVerify_BrokerHandlerRejectsUnsigned(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	// Send an UNSIGNED request directly via an unadorned HTTP client (no signing
-	// transport). The broker handler must reject it with CodeUnauthenticated, and
-	// the origin Resolve handler must not run.
+	// transport). The seam passes an unsigned request through (typed-fault
+	// contract); the ORIGIN rejects it with CodeUnauthenticated before acting, so
+	// its business side effects (hits) stay absent.
 	brokerClient := rampv1connect.NewBrokerServiceClient(&http.Client{}, srv.URL)
 	_, err = brokerClient.Resolve(context.Background(), connectrpc.NewRequest(&rampv1.DiscoveryRequest{}))
 	if err == nil {
