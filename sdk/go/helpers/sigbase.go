@@ -81,6 +81,13 @@ type sigParams struct {
 	Alg     string
 	Created int64
 	Expires int64
+	// RawInner is the VERBATIM member value from the wire Signature-Input
+	// (everything after "label="). RFC 9421 §2.5 terminates the signature base
+	// with this exact byte sequence — parameter order and spacing are the
+	// signer's choice — so the VERIFY path must rebuild the base from it. Empty
+	// on the SIGN path, where the base and the emitted header both come from
+	// signatureInputInner and are identical by construction.
+	RawInner string
 }
 
 // requiredCoveredComponents is the minimum covered-component set (by name). The
@@ -141,7 +148,15 @@ func buildSignatureBase(req *http.Request, params sigParams) (string, error) {
 		}
 		fmt.Fprintf(&b, "%s: %s\n", renderComponent(c), v)
 	}
-	fmt.Fprintf(&b, "\"@signature-params\": %s", signatureInputInner(params))
+	// Verify path: the base terminates with the signer's verbatim inner list
+	// from the wire (RFC 9421 §2.5) — never a re-rendering in our own parameter
+	// order. Sign path: RawInner is empty and the rendered inner is what gets
+	// emitted in Signature-Input, so base and header stay identical.
+	inner := params.RawInner
+	if inner == "" {
+		inner = signatureInputInner(params)
+	}
+	fmt.Fprintf(&b, "\"@signature-params\": %s", inner)
 	return b.String(), nil
 }
 

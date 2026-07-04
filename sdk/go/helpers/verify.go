@@ -277,6 +277,7 @@ func parseAllSignatures(h http.Header) ([]sigParams, map[string][]byte, error) {
 	if len(names) == 0 {
 		return nil, nil, fmt.Errorf("%w: no labels found", ErrMalformedSignatureInput)
 	}
+	rawInner := rawInnerByLabel(inputValues)
 	allParams := make([]sigParams, 0, len(names))
 	sigMap := make(map[string][]byte, len(names))
 	for _, label := range names {
@@ -284,6 +285,7 @@ func parseAllSignatures(h http.Header) ([]sigParams, map[string][]byte, error) {
 		if perr != nil {
 			return nil, nil, perr
 		}
+		params.RawInner = rawInner[label]
 		allParams = append(allParams, params)
 		sigBytes, serr := parseSigLabel(sigDict, label)
 		if serr != nil {
@@ -292,6 +294,51 @@ func parseAllSignatures(h http.Header) ([]sigParams, map[string][]byte, error) {
 		sigMap[label] = sigBytes
 	}
 	return allParams, sigMap, nil
+}
+
+// rawInnerByLabel extracts the VERBATIM member value (everything after
+// "label=") for each dictionary member across the Signature-Input header
+// values, so the verifier can rebuild the signature base with the exact inner
+// list the signer emitted (RFC 9421 §2.5). Splitting is quoted-string-aware
+// (a keyid may legally contain ',' or parens inside its quotes) and later
+// occurrences of a label overwrite earlier ones, matching SFV dictionary
+// last-wins semantics so the raw text corresponds to the member httpsfv parsed.
+func rawInnerByLabel(values []string) map[string]string {
+	out := make(map[string]string)
+	for _, v := range values {
+		for _, member := range splitTopLevelMembers(v) {
+			eq := strings.IndexByte(member, '=')
+			if eq <= 0 {
+				continue
+			}
+			label := strings.TrimSpace(member[:eq])
+			out[label] = strings.TrimSpace(member[eq+1:])
+		}
+	}
+	return out
+}
+
+// splitTopLevelMembers splits one SFV dictionary header value on top-level
+// commas, honoring quoted strings and their backslash escapes.
+func splitTopLevelMembers(s string) []string {
+	var parts []string
+	start := 0
+	inQuote := false
+	escaped := false
+	for i := range len(s) {
+		switch c := s[i]; {
+		case escaped:
+			escaped = false
+		case c == '\\' && inQuote:
+			escaped = true
+		case c == '"':
+			inQuote = !inQuote
+		case c == ',' && !inQuote:
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	return append(parts, s[start:])
 }
 
 // parseInputLabel converts one Signature-Input dictionary member (an inner list
