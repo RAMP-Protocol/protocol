@@ -20,14 +20,66 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
+	rampserver "github.com/RAMP-Protocol/protocol/sdk/go/connectserver"
+	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
+
+// serveHandlerWithOpts mirrors serveHandler but lets a test add extra server
+// options (e.g. a narrowed verify gate).
+func serveHandlerWithOpts(
+	t *testing.T, origin rampv1connect.ExchangeServiceHandler,
+	resolver *helpers.StaticKeyResolver, replay core.ReplayStore,
+	extra ...rampserver.ServerOption,
+) *httptest.Server {
+	t.Helper()
+	opts := append([]rampserver.ServerOption{
+		rampserver.WithKeyResolver(resolver),
+		rampserver.WithReplayStore(replay),
+	}, extra...)
+	path, h := rampserver.NewExchangeServiceHandler(origin, opts...)
+	mux := http.NewServeMux()
+	mux.Handle(path, h)
+	srv := httptest.NewServer(mux)
+	return srv
+}
+
+// TestServerVerify_DefaultGateRejectsUnsigned pins the DEFAULT: with no
+// injected gate, every /ramp. procedure is verified — an unsigned request is
+// seam-rejected fail-closed and never reaches the origin.
+func TestServerVerify_DefaultGateRejectsUnsigned(t *testing.T) {
+	f := newServerFixture(t)
+	srv := f.serve(t, newCountingReplayStore())
+	defer srv.Close()
+
+	body := discoverBody(t)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, srv.URL+discoverProcedure, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("default gate: unsigned request status %d, want 401 (seam reject)", resp.StatusCode)
+	}
+	if bytes.Contains(respBody, []byte("origin: unverified caller")) {
+		t.Error("default gate must reject at the SEAM, not reach the origin")
+	}
+}
 
 const discoverProcedure = "/ramp.v1.ExchangeService/DiscoverResources"
 
@@ -56,16 +108,19 @@ func discoverBody(t *testing.T) []byte {
 	return raw
 }
 
-// TestServerVerify_UnsignedRequestReachesHandler pins the gate predicate: an
-// unsigned /ramp. request is NOT rejected at the seam — it reaches the origin,
-// which owns the typed Unauthenticated fault and rejects before acting. The
-// seam verifies only requests that present a Signature-Input. The origin's
-// marker in the error body proves the rejection came from the handler, not the
-// seam's reject writer; the absence of business side effects (hits) proves
-// fail-closed held.
+// TestServerVerify_UnsignedRequestReachesHandler pins the injectable gate: with
+// WithVerifyGate narrowed to signature-presenting requests, an unsigned /ramp.
+// request is NOT rejected at the seam — it reaches the origin, which owns the
+// typed Unauthenticated fault and rejects before acting. The origin's marker in
+// the error body proves the rejection came from the handler, not the seam's
+// reject writer; the absence of business side effects (hits) proves fail-closed
+// held.
 func TestServerVerify_UnsignedRequestReachesHandler(t *testing.T) {
 	f := newServerFixture(t)
-	srv := f.serve(t, newCountingReplayStore())
+	srv := serveHandlerWithOpts(t, f.origin, f.resolver, newCountingReplayStore(),
+		rampserver.WithVerifyGate(func(r *http.Request) bool {
+			return r.Header.Get("Signature-Input") != ""
+		}))
 	defer srv.Close()
 
 	body := discoverBody(t)

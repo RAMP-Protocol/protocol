@@ -24,9 +24,7 @@ import (
 // ReplayStore are injected by the application (ADR-020 §2/§3).
 func NewExchangeServiceHandler(svc rampv1connect.ExchangeServiceHandler, opts ...ServerOption) (string, http.Handler) {
 	cfg := resolveServerConfig(opts)
-	path, connectHandler := rampv1connect.NewExchangeServiceHandler(
-		svc, connectrpc.WithInterceptors(handlerInterceptors(cfg)...),
-	)
+	path, connectHandler := rampv1connect.NewExchangeServiceHandler(svc, cfg.connectHandlerOptions()...)
 	// verify wraps the connect handler; request-id wraps verify (outermost).
 	wrapped := core.RequestIDMiddleware(cfg.requestID, verifyMiddleware(cfg, connectHandler))
 	return path, wrapped
@@ -41,11 +39,17 @@ func NewExchangeServiceHandler(svc rampv1connect.ExchangeServiceHandler, opts ..
 // handler; they keep their bespoke verification.
 func NewBrokerServiceHandler(svc rampv1connect.BrokerServiceHandler, opts ...ServerOption) (string, http.Handler) {
 	cfg := resolveServerConfig(opts)
-	path, connectHandler := rampv1connect.NewBrokerServiceHandler(
-		svc, connectrpc.WithInterceptors(handlerInterceptors(cfg)...),
-	)
+	path, connectHandler := rampv1connect.NewBrokerServiceHandler(svc, cfg.connectHandlerOptions()...)
 	wrapped := core.RequestIDMiddleware(cfg.requestID, verifyMiddleware(cfg, connectHandler))
 	return path, wrapped
+}
+
+// connectHandlerOptions assembles the generated handler's options: the
+// interceptor stack plus any raw pass-through handler options the app injected
+// (WithHandlerOptions — e.g. a custom codec).
+func (cfg serverConfig) connectHandlerOptions() []connectrpc.HandlerOption {
+	out := []connectrpc.HandlerOption{connectrpc.WithInterceptors(handlerInterceptors(cfg)...)}
+	return append(out, cfg.handlerOpts...)
 }
 
 // handlerInterceptors assembles the true connect.Interceptors composed onto the

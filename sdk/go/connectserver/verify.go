@@ -25,12 +25,13 @@ var errReplayed = errors.New("connectserver: request replayed within window")
 // handler's side effects are absent on the negative path (fail-closed).
 func verifyMiddleware(cfg serverConfig, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isRampProcedure(r) || r.Header.Get("Signature-Input") == "" {
-			// Only a request that PRESENTS a signature is verified at the seam.
-			// An unsigned /ramp. request flows to the origin handler, which owns
-			// the typed Unauthenticated fault (the ADR-019 ErrorDetail contract)
-			// and rejects before acting — the seam stays fail-closed for any
-			// request that claims a signature, and the handler for the rest.
+		if !isRampProcedure(r) || (cfg.verifyGate != nil && !cfg.verifyGate(r)) {
+			// The default gates every /ramp. procedure (fail-closed). An injected
+			// WithVerifyGate can narrow the seam — e.g. to signature-presenting
+			// requests only, for a service whose handlers own the typed
+			// Unauthenticated fault for unsigned callers. A declined request
+			// flows to the origin handler UNVERIFIED (helpers.FromContext is nil
+			// there); the gate never widens the seam past /ramp. procedures.
 			next.ServeHTTP(w, r)
 			return
 		}

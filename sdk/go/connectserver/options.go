@@ -1,6 +1,7 @@
 package connectserver
 
 import (
+	"net/http"
 	"time"
 
 	connectrpc "connectrpc.com/connect"
@@ -27,6 +28,8 @@ type serverConfig struct {
 	validation    rampconnect.Validation
 	requestID     core.RequestIDFunc
 	extra         []connectrpc.Interceptor
+	handlerOpts   []connectrpc.HandlerOption
+	verifyGate    func(*http.Request) bool
 }
 
 // ServerOption configures the server verify face.
@@ -80,6 +83,31 @@ func WithRequestIDFunc(fn core.RequestIDFunc) ServerOption {
 // interceptors.
 func WithInterceptors(is ...connectrpc.Interceptor) ServerOption {
 	return func(c *serverConfig) { c.extra = append(c.extra, is...) }
+}
+
+// WithHandlerOptions appends raw connect handler options (e.g. a custom codec
+// via connectrpc.WithCodec) to the generated handler. Interceptors belong in
+// WithInterceptors; this is the escape hatch for the remaining handler-level
+// knobs the SDK does not model.
+func WithHandlerOptions(opts ...connectrpc.HandlerOption) ServerOption {
+	return func(c *serverConfig) { c.handlerOpts = append(c.handlerOpts, opts...) }
+}
+
+// WithVerifyGate overrides which requests the seam verifies. The DEFAULT gates
+// every /ramp. procedure unconditionally (fail-closed). A service whose
+// handlers own the typed Unauthenticated fault for UNSIGNED requests narrows
+// the gate to signature-presenting requests only:
+//
+//	WithVerifyGate(func(r *http.Request) bool {
+//		return r.Header.Get("Signature-Input") != ""
+//	})
+//
+// A request the gate declines is NOT rejected — it flows to the origin handler
+// unverified (helpers.FromContext returns nil there), so the handler decides.
+// The gate composes with the /ramp. procedure check; it cannot widen the seam
+// to non-procedure paths.
+func WithVerifyGate(gate func(*http.Request) bool) ServerOption {
+	return func(c *serverConfig) { c.verifyGate = gate }
 }
 
 func resolveServerConfig(opts []ServerOption) serverConfig {
