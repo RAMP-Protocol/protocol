@@ -14,4 +14,13 @@ const (
 	ConnectProtocolVersion = "1"
 	// RequestIDHeader correlates a request across services and the edge.
 	RequestIDHeader = "X-Request-ID"
+	// SignatureAgentHeader carries the signer's Web Bot Auth key-directory URL
+	// (the WBA identity anchor). It is a required covered component: every RAMP
+	// signature commits to it, empty included, so the directory a verifier
+	// resolves keys from is the one the signer bound (RAMP-24).
+	SignatureAgentHeader = "Signature-Agent"
 )
+
+// signatureAgentLower is SignatureAgentHeader in the lowercase form RFC 9421
+// covered-component names use.
+const signatureAgentLower = "signature-agent"

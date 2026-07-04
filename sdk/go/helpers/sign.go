@@ -89,6 +89,7 @@ func SignRequest(ctx context.Context, req *http.Request, body []byte, signer Sig
 	}
 	req.Header.Set("Content-Digest", ContentDigest(body))
 	bindAuthorization(req)
+	bindSignatureAgent(req)
 
 	params := sigParams{
 		Label:   "sig1",
@@ -117,6 +118,7 @@ func AppendSignature(ctx context.Context, req *http.Request, body []byte, signer
 		req.Header.Set("Content-Digest", ContentDigest(body))
 	}
 	bindAuthorization(req)
+	bindSignatureAgent(req)
 	prevLabel, hasPrev := findPrevLabel(req.Header)
 	params := sigParams{
 		Label:   findNextLabel(req.Header),
@@ -135,6 +137,16 @@ func AppendSignature(ctx context.Context, req *http.Request, body []byte, signer
 func bindAuthorization(req *http.Request) {
 	if req.Header.Get("Authorization") == "" {
 		req.Header.Set("Authorization", "")
+	}
+}
+
+// bindSignatureAgent ensures the Signature-Agent header is present so the
+// signature commits to the signer's WBA key-directory URL — empty included: a
+// signer with no directory (the static bootstrap path) binds "" and a later
+// injection cannot piggy-back the same signature.
+func bindSignatureAgent(req *http.Request) {
+	if req.Header.Get(SignatureAgentHeader) == "" {
+		req.Header.Set(SignatureAgentHeader, "")
 	}
 }
 

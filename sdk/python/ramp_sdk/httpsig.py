@@ -7,10 +7,13 @@ MUST produce, byte-for-byte, the same signature base, Signature-Input, and
 Signature the Go oracle emits, pinned to the shared
 sdk/go/helpers/testdata/sign-request-vectors.json.
 
-Covered set is EXACTLY ``@method @target-uri content-digest authorization`` (no
-conditional biscuit component). L1 purity (ADR-020 §1/§4): ``created``/``expires``
-are INJECTED — sign reads no wall clock. The ``Signature`` value is STANDARD
-base64 (``sig1=:<b64>:``), NOT b64url-nopad — the two encodings are not unified.
+Covered set is EXACTLY ``@method @target-uri content-digest authorization
+signature-agent`` (no conditional biscuit component). Signature-Agent joined the
+required set with the WBA identity split (RAMP-24): every signature commits to
+the signer's key-directory URL, empty included — this supersedes the earlier
+four-component pin. L1 purity (ADR-020 §1/§4): ``created``/``expires`` are
+INJECTED — sign reads no wall clock. The ``Signature`` value is STANDARD base64
+(``sig1=:<b64>:``), NOT b64url-nopad — the two encodings are not unified.
 
 ``@target-uri`` is rendered verbatim from the supplied absolute URL, matching Go's
 ``reconstructTargetURI`` (scheme://host + path + "?"+query) when the URL is already
@@ -38,6 +41,7 @@ _COVERED_COMPONENTS: tuple[str, ...] = (
     "@target-uri",
     "content-digest",
     "authorization",
+    "signature-agent",
 )
 
 #: A signature's created timestamp may not lead the verifier clock by more than
@@ -79,6 +83,7 @@ def _signature_base(
     url: str,
     digest_header: str,
     authorization: str,
+    signature_agent: str,
     sig_params: str,
 ) -> str:
     return "\n".join(
@@ -87,6 +92,7 @@ def _signature_base(
             f'"@target-uri": {url}',
             f'"content-digest": {digest_header}',
             f'"authorization": {authorization}',
+            f'"signature-agent": {signature_agent}',
             f'"@signature-params": {sig_params}',
         ]
     )
@@ -102,11 +108,15 @@ def sign_request(
     keyid: str,
     created: int,
     expires: int,
+    signature_agent: str = "",
 ) -> SignedRequest:
     """Sign a request over the RAMP covered set; return the RFC 9421 headers.
 
     ``created``/``expires`` are injected unix seconds (L1-pure, no wall clock).
     Authorization is always bound — pass an empty string to pin its absence.
+    ``signature_agent`` is the signer's WBA key-directory URL, bound the same
+    way (empty string for the static bootstrap path), mirroring Go's
+    ``bindSignatureAgent``.
     """
     digest_header = content_digest(body)
     sig_params = _signature_params(_COVERED_COMPONENTS, keyid, created, expires)
@@ -115,6 +125,7 @@ def sign_request(
         url=url,
         digest_header=digest_header,
         authorization=authorization,
+        signature_agent=signature_agent,
         sig_params=sig_params,
     )
     priv = Ed25519PrivateKey.from_private_bytes(signer_seed)
@@ -162,12 +173,14 @@ def verify_request(
     authorization: str,
     pubkey: bytes,
     now: int,
+    signature_agent: str = "",
 ) -> VerifiedRequest:
     """Verify an RFC 9421 request against ``pubkey`` at ``now`` (unix seconds).
 
     ``content_digest`` is the request's Content-Digest header value. Enforces the
     digest, the created/expires window, and the Ed25519 signature over the
-    reconstructed base. Pure: key resolution and ``now`` are injected.
+    reconstructed base (which commits to ``signature_agent``, empty included).
+    Pure: key resolution and ``now`` are injected.
     """
     sig_params = _extract_sig_params(signature_input)
     if sig_params is None:
@@ -197,6 +210,7 @@ def verify_request(
         url=url,
         digest_header=content_digest,
         authorization=authorization,
+        signature_agent=signature_agent,
         sig_params=sig_params,
     )
     try:

@@ -12,6 +12,25 @@ import "context"
 // slot).
 type verifiedKey struct{}
 
+// signatureAgentKey carries the request's Signature-Agent header value for the
+// duration of key resolution.
+type signatureAgentKey struct{}
+
+// WithSignatureAgent returns a copy of ctx carrying the request's
+// Signature-Agent value (the signer's WBA key-directory URL). The resolved
+// verify entrypoints thread it before per-signature resolution so a KeyResolver
+// can fetch keys from the directory the signature commits to.
+func WithSignatureAgent(ctx context.Context, dir string) context.Context {
+	return context.WithValue(ctx, signatureAgentKey{}, dir)
+}
+
+// SignatureAgentFromContext returns the Signature-Agent value threaded by the
+// resolved verify entrypoints, or "" when none was set.
+func SignatureAgentFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(signatureAgentKey{}).(string)
+	return v
+}
+
 // multisigKey carries all verified signatures for a multisig request.
 type multisigKey struct{}
 

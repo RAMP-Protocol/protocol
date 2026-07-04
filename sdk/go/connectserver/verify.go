@@ -34,37 +34,42 @@ func verifyMiddleware(cfg serverConfig, next http.Handler) http.Handler {
 			writeReject(w, err)
 			return
 		}
-		if err := cfg.verify(r, body); err != nil {
+		sigs, err := cfg.verify(r, body)
+		if err != nil {
 			writeReject(w, err)
 			return
 		}
-		next.ServeHTTP(w, r)
+		// Expose the proven signatures to the handler: downstream authz reads
+		// them via helpers.FromContext / helpers.AllSignaturesFromContext.
+		next.ServeHTTP(w, r.WithContext(helpers.NewMultisigContext(r.Context(), sigs)))
 	})
 }
 
-// verify runs signature verification then the replay check. Verification uses the
-// multisig resolver path so a relay chain and a single signature share one gate;
-// the hop budget is the injected maxSignatures. The replay nonce is the request's
-// Content-Digest — stable across an idempotency-key replay (identical body bytes)
-// yet distinct per distinct request — so reusing an idempotency key trips the store.
-func (cfg serverConfig) verify(r *http.Request, body []byte) error {
+// verify runs signature verification then the replay check, returning the
+// verified signatures (sig1..sigN) for the middleware to place into the request
+// context. Verification uses the multisig resolver path so a relay chain and a
+// single signature share one gate; the hop budget is the injected maxSignatures.
+// The replay nonce is the request's Content-Digest — stable across an
+// idempotency-key replay (identical body bytes) yet distinct per distinct
+// request — so reusing an idempotency key trips the store.
+func (cfg serverConfig) verify(r *http.Request, body []byte) ([]helpers.VerifiedRequest, error) {
 	opts := helpers.VerifyOptions{MaxSignatures: cfg.maxSignatures}
 	sigs, err := helpers.VerifyMultisigRequestResolved(r.Context(), r, body, cfg.resolver, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if cfg.replay == nil || len(sigs) == 0 {
-		return nil
+		return sigs, nil
 	}
 	nonce := r.Header.Get("Content-Digest")
 	seen, rerr := cfg.replay.SeenOrAdd(r.Context(), nonce, cfg.replayTTL)
 	if rerr != nil {
-		return rerr
+		return nil, rerr
 	}
 	if seen {
-		return errReplayed
+		return nil, errReplayed
 	}
-	return nil
+	return sigs, nil
 }
 
 // bufferBody reads the request body and re-seats it so the downstream handler

@@ -85,7 +85,7 @@ type sigParams struct {
 
 // requiredCoveredComponents is the minimum covered-component set (by name). The
 // biscuit header is appended conditionally (see coveredFor).
-var requiredCoveredComponents = []string{"@method", "@target-uri", "content-digest", "authorization"}
+var requiredCoveredComponents = []string{"@method", "@target-uri", "content-digest", "authorization", signatureAgentLower}
 
 // entitlementHeader is the canonical entitlement-biscuit header; when present on
 // a request the signature MUST commit to it.

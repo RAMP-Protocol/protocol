@@ -13,10 +13,15 @@ over a fixed request+body+created+expires, cross-checked by round-tripping
 through the real Go SignRequest/VerifyRequest). Referencing it by its planned
 path keeps this test RED now on BOTH the missing module AND the missing file.
 
-Contract pinned by the BINDING architect-review amendment (supersedes plan step
-2/6):
+Contract (the WBA identity split REVERSED the earlier exactly-four-components
+binding amendment — signature-agent joined the required covered set platform-wide
+with RAMP-24, so a four-component signer would produce signatures the platform
+rejects; architect-review + user approval 2026-07-04):
   - covered set is EXACTLY @method @target-uri content-digest authorization
-    (NO biscuit / no conditional 5th component);
+    signature-agent (NO biscuit / no conditional component beyond these five);
+  - Signature-Agent is bound like Authorization: an empty string is still
+    covered (the static bootstrap path) — the empty-bind case is a distinct
+    vector;
   - created/expires are injected NON-zero (1_700_000_000 / 1_700_000_600 — the
     pop emitter's pinned window; Go omits created/expires from the base when 0,
     so zero values would drop from the signature base);
@@ -50,9 +55,9 @@ from ramp_sdk.httpsig import sign_request, verify_request  # type: ignore[import
 _SIGN_REQUEST_VECTORS_PATH = GO_TESTDATA / "sign-request-vectors.json"
 _VECTORS = load_json(_SIGN_REQUEST_VECTORS_PATH)["vectors"]
 
-# The covered set the emitter MUST use (BINDING amendment): exactly these four,
-# no conditional biscuit component.
-_EXPECTED_COVERED = '("@method" "@target-uri" "content-digest" "authorization")'
+# The covered set the emitter MUST use: exactly these five (signature-agent
+# joined with the WBA split), no conditional biscuit component.
+_EXPECTED_COVERED = '("@method" "@target-uri" "content-digest" "authorization" "signature-agent")'
 
 
 def _b64url_nopad_decode(s: str) -> bytes:
@@ -91,11 +96,12 @@ def test_sign_request_produces_byte_identical_signature(vector: dict[str, object
         keyid=str(vector["keyid"]),
         created=int(vector["created"]),  # type: ignore[arg-type]
         expires=int(vector["expires"]),  # type: ignore[arg-type]
+        signature_agent=str(vector.get("signature_agent", "")),
     )
 
     # Full signature base is byte-identical to the Go oracle.
     assert result.signature_base == str(vector["signature_base"])
-    # Covered set is exactly the four RAMP components (no conditional 5th).
+    # Covered set is exactly the five RAMP components (no conditional 6th).
     assert _EXPECTED_COVERED in result.signature_input
     # Signature-Input and Signature headers are byte-identical.
     assert result.signature_input == str(vector["signature_input"])
@@ -133,6 +139,7 @@ def test_sign_request_roundtrips_through_verify(vector: dict[str, object]) -> No
         authorization=str(vector["authorization"]),
         pubkey=pub,
         now=now,
+        signature_agent=str(vector.get("signature_agent", "")),
     )
     assert result.valid is True
 

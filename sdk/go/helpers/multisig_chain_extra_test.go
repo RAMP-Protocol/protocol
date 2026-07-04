@@ -72,7 +72,7 @@ func TestChain_GoldenSignatureBase(t *testing.T) {
 	if req.Header.Get("Content-Digest") != digest {
 		t.Fatalf("content-digest = %q, want %q", req.Header.Get("Content-Digest"), digest)
 	}
-	wantSig1Input := `sig1=("@method" "@target-uri" "content-digest" "authorization");keyid="agent-demo.v1";alg="ed25519";created=1700000000;expires=1700000030`
+	wantSig1Input := `sig1=("@method" "@target-uri" "content-digest" "authorization" "signature-agent");keyid="agent-demo.v1";alg="ed25519";created=1700000000;expires=1700000030`
 	if gotSig1Input != wantSig1Input {
 		t.Fatalf("sig1 Signature-Input (single-sig golden) mismatch:\n got: %s\nwant: %s", gotSig1Input, wantSig1Input)
 	}
@@ -83,7 +83,7 @@ func TestChain_GoldenSignatureBase(t *testing.T) {
 	}
 
 	// sig2's Signature-Input inner list must carry exactly the chain link.
-	wantInner := `("@method" "@target-uri" "content-digest" "authorization" "signature";key="sig1")`
+	wantInner := `("@method" "@target-uri" "content-digest" "authorization" "signature-agent" "signature";key="sig1")`
 	si := req.Header.Get("Signature-Input")
 	if !strings.Contains(si, wantInner) {
 		t.Fatalf("sig2 inner list missing chain link:\n%s", si)

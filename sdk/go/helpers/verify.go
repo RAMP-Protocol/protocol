@@ -75,6 +75,10 @@ type VerifiedRequest struct {
 	Created   int64
 	Expires   int64
 	PublicKey ed25519.PublicKey
+	// SignatureAgent is the (covered, therefore signed) Signature-Agent header
+	// value — the signer's WBA key-directory URL. Empty when the signer bound
+	// no directory (the static bootstrap path).
+	SignatureAgent string
 }
 
 // VerifyRequest verifies req+body against pub. body MUST be the exact bytes that
@@ -157,7 +161,17 @@ func verifySingleSignature(
 		Created:   params.Created,
 		Expires:   params.Expires,
 		PublicKey: pub,
+		// Signature-Agent is a required covered component (enforced above), so
+		// its value is signed and safe to expose as the proven directory.
+		SignatureAgent: signatureAgentOf(req),
 	}, nil
+}
+
+// signatureAgentOf returns the request's Signature-Agent header value,
+// whitespace-trimmed. The covered-component enforcement above guarantees the
+// header is signed whenever this value is consumed off a VerifiedRequest.
+func signatureAgentOf(req *http.Request) string {
+	return strings.TrimSpace(req.Header.Get(SignatureAgentHeader))
 }
 
 func enforceRequiredComponents(covered []CoveredComponent) error {

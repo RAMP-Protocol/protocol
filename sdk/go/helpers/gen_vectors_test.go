@@ -227,6 +227,7 @@ type signRequestVector struct {
 	URL            string `json:"url"`
 	BodyHex        string `json:"body_hex"`
 	Authorization  string `json:"authorization"`
+	SignatureAgent string `json:"signature_agent"`
 	KeyID          string `json:"keyid"`
 	Created        int64  `json:"created"`
 	Expires        int64  `json:"expires"`
@@ -403,10 +404,12 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 
 // buildSignRequestVectors signs a fixed set of requests with the REAL Go
 // SignRequest and records the exact bytes it emits. Covered set is exactly
-// @method @target-uri content-digest authorization (no biscuit header present, so
-// coveredFor never appends the conditional 5th component). created/expires are the
-// non-zero pinned window (reused from the pop emitter) so renderParamsTail never
-// drops them. One vector carries an empty-authorization bound value.
+// @method @target-uri content-digest authorization signature-agent (no biscuit
+// header present, so coveredFor never appends the conditional entitlement
+// component). created/expires are the non-zero pinned window (reused from the
+// pop emitter) so renderParamsTail never drops them. One vector carries an
+// empty-authorization bound value; one carries an absent Signature-Agent so the
+// empty-bind (static bootstrap) semantics are pinned cross-language.
 func buildSignRequestVectors(t *testing.T) []signRequestVector {
 	t.Helper()
 	const (
@@ -419,21 +422,25 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 	pub := priv.Public().(ed25519.PublicKey)
 
 	type spec struct {
-		name          string
-		method        string
-		url           string
-		body          []byte
-		authorization string
+		name           string
+		method         string
+		url            string
+		body           []byte
+		authorization  string
+		signatureAgent string
 	}
 	specs := []spec{
 		{
-			name:          "post_with_authorization",
-			method:        "POST",
-			url:           "https://broker.example/ramp.v1.BrokerService/Fetch",
-			body:          []byte(`{"uri":"https://cdn.example/doc"}`),
-			authorization: "Bearer token-123",
+			name:           "post_with_authorization",
+			method:         "POST",
+			url:            "https://broker.example/ramp.v1.BrokerService/Fetch",
+			body:           []byte(`{"uri":"https://cdn.example/doc"}`),
+			authorization:  "Bearer token-123",
+			signatureAgent: "https://agent.example",
 		},
 		{
+			// Signature-Agent left absent: bindSignatureAgent binds "" — the
+			// static-bootstrap empty-bind case, pinned cross-language.
 			name:          "post_empty_authorization_bound",
 			method:        "POST",
 			url:           "https://broker.example/ramp.v1.BrokerService/Fetch?trace=1",
@@ -450,6 +457,9 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 		}
 		if s.authorization != "" {
 			req.Header.Set("Authorization", s.authorization)
+		}
+		if s.signatureAgent != "" {
+			req.Header.Set(SignatureAgentHeader, s.signatureAgent)
 		}
 		signer, err := NewEd25519SignerFromSeed(keyid, seed)
 		if err != nil {
@@ -478,6 +488,7 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 			URL:            s.url,
 			BodyHex:        hex.EncodeToString(s.body),
 			Authorization:  s.authorization,
+			SignatureAgent: s.signatureAgent,
 			KeyID:          keyid,
 			Created:        created,
 			Expires:        expires,
@@ -511,6 +522,7 @@ func verifySignRequestVector(t *testing.T, v signRequestVector) {
 	}
 	req.Header.Set("Content-Digest", v.ContentDigest)
 	req.Header.Set("Authorization", v.Authorization)
+	req.Header.Set(SignatureAgentHeader, v.SignatureAgent)
 	req.Header.Set("Signature-Input", v.SignatureInput)
 	req.Header.Set("Signature", v.Signature)
 	now := time.Unix((v.Created+v.Expires)/2, 0)

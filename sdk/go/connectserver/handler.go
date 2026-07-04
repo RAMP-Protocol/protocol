@@ -32,6 +32,22 @@ func NewExchangeServiceHandler(svc rampv1connect.ExchangeServiceHandler, opts ..
 	return path, wrapped
 }
 
+// NewBrokerServiceHandler builds the BrokerService HTTP handler wrapped by the
+// SDK server face and returns the mount path and handler. It composes the same
+// stack as NewExchangeServiceHandler — request-id outermost, verify at the http
+// seam, validate/error-detail as connect interceptors — over the generated
+// BrokerService handler. Broker relay routes outside the /ramp. procedure
+// prefix are the application's own http surface and never pass through this
+// handler; they keep their bespoke verification.
+func NewBrokerServiceHandler(svc rampv1connect.BrokerServiceHandler, opts ...ServerOption) (string, http.Handler) {
+	cfg := resolveServerConfig(opts)
+	path, connectHandler := rampv1connect.NewBrokerServiceHandler(
+		svc, connectrpc.WithInterceptors(handlerInterceptors(cfg)...),
+	)
+	wrapped := core.RequestIDMiddleware(cfg.requestID, verifyMiddleware(cfg, connectHandler))
+	return path, wrapped
+}
+
 // handlerInterceptors assembles the true connect.Interceptors composed onto the
 // generated handler: bidirectional validate (requests + responses + error details)
 // and any application interceptors. verify and request-id are NOT here — they are

@@ -200,6 +200,7 @@ func VerifyRequestResolved(ctx context.Context, req *http.Request, body []byte, 
 	if err != nil {
 		return nil, err
 	}
+	ctx = WithSignatureAgent(ctx, signatureAgentOf(req))
 	return verifySingleSignature(req, allParams[0], sigMap, body, ctxResolver(ctx, resolver), opts)
 }
 
@@ -219,5 +220,6 @@ func ctxResolver(ctx context.Context, resolver KeyResolver) resolveFunc {
 // substituted predecessor is rejected. A single-signature request is the N=1
 // case and verifies identically.
 func VerifyMultisigRequestResolved(ctx context.Context, req *http.Request, body []byte, resolver KeyResolver, opts VerifyOptions) ([]VerifiedRequest, error) {
+	ctx = WithSignatureAgent(ctx, signatureAgentOf(req))
 	return VerifyMultisigRequest(req, body, ctxResolver(ctx, resolver), opts)
 }
