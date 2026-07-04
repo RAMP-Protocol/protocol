@@ -66,6 +66,11 @@ func (s *StaticKeyResolver) Put(keyID string, pub ed25519.PublicKey) {
 // is the RFC 7517 subset:
 //
 //	{"keys":[{"kid":"agent1.v1","kty":"OKP","crv":"Ed25519","x":"<base64url>"}]}
+//
+// NOTE: kid-matched keys in ramp.json are the pre-WBA-split identity shape.
+// For party IDENTITY keys use WBAKeyResolver, which resolves the WBA directory
+// (WBADirectoryPath) by RFC 7638 thumbprint with validity windows and
+// revocation; this resolver remains for fixed-URL JWKS documents.
 type WellKnownKeyResolver struct {
 	url         string
 	http        *http.Client
