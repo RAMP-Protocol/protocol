@@ -30,6 +30,7 @@ type serverConfig struct {
 	extra         []connectrpc.Interceptor
 	handlerOpts   []connectrpc.HandlerOption
 	verifyGate    func(*http.Request) bool
+	onReject      func(*http.Request, error)
 }
 
 // ServerOption configures the server verify face.
@@ -108,6 +109,19 @@ func WithHandlerOptions(opts ...connectrpc.HandlerOption) ServerOption {
 // to non-procedure paths.
 func WithVerifyGate(gate func(*http.Request) bool) ServerOption {
 	return func(c *serverConfig) { c.verifyGate = gate }
+}
+
+// WithOnReject injects an observer the verify gate calls when it REJECTS a
+// request, before the rejection response is written. It receives the request
+// and the rejection error so a consumer can audit-log the outcome, classifying
+// it via errors.Is against the exported sentinels (ErrTooManyHops → hop budget,
+// ErrReplayed → replay, helpers.ErrBrokenSignatureChain → broken chain, else →
+// signature). The observer is for observation only — it MUST NOT write to the
+// response (the gate owns the fail-closed response) and runs on the reject path
+// exclusively (a verified request never calls it). Omitting it keeps rejections
+// silent (the pre-existing behavior).
+func WithOnReject(fn func(*http.Request, error)) ServerOption {
+	return func(c *serverConfig) { c.onReject = fn }
 }
 
 func resolveServerConfig(opts []ServerOption) serverConfig {

@@ -10,10 +10,12 @@ import (
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
-// errReplayed is the verify-face sentinel for a nonce the injected ReplayStore
+// ErrReplayed is the verify-face sentinel for a nonce the injected ReplayStore
 // reports as already seen. It maps to CodeUnauthenticated like any other
-// verification failure.
-var errReplayed = errors.New("connectserver: request replayed within window")
+// verification failure. Exported so a WithOnReject observer can classify a
+// replay rejection distinctly from a signature or chain failure (the reject
+// error is otherwise opaque to the consumer).
+var ErrReplayed = errors.New("connectserver: request replayed within window")
 
 // verifyMiddleware is the server SIGN-VERIFY face realized as an http.Handler
 // wrapper — NOT a connect.Interceptor. Like the client sign face, it must run at
@@ -37,18 +39,31 @@ func verifyMiddleware(cfg serverConfig, next http.Handler) http.Handler {
 		}
 		body, err := bufferBody(r)
 		if err != nil {
-			writeReject(w, err)
+			cfg.reject(w, r, err)
 			return
 		}
 		sigs, err := cfg.verify(r, body)
 		if err != nil {
-			writeReject(w, err)
+			cfg.reject(w, r, err)
 			return
 		}
 		// Expose the proven signatures to the handler: downstream authz reads
 		// them via helpers.FromContext / helpers.AllSignaturesFromContext.
 		next.ServeHTTP(w, r.WithContext(helpers.NewMultisigContext(r.Context(), sigs)))
 	})
+}
+
+// reject writes the Connect-compatible rejection response and, if the app
+// injected WithOnReject, hands it the request + the rejection error FIRST so the
+// consumer can audit-classify it (via errors.Is against ErrTooManyHops /
+// ErrReplayed / helpers.ErrBrokenSignatureChain). The observer runs before the
+// response is written and must not write to w; a rejected request never reaches
+// the origin handler either way (fail-closed).
+func (cfg serverConfig) reject(w http.ResponseWriter, r *http.Request, err error) {
+	if cfg.onReject != nil {
+		cfg.onReject(r, err)
+	}
+	writeReject(w, err)
 }
 
 // verify runs signature verification then the replay check, returning the
@@ -78,7 +93,7 @@ func (cfg serverConfig) verify(r *http.Request, body []byte) ([]helpers.Verified
 			return nil, rerr
 		}
 		if seen {
-			return nil, errReplayed
+			return nil, ErrReplayed
 		}
 	}
 	for i := range sigs {
@@ -88,7 +103,7 @@ func (cfg serverConfig) verify(r *http.Request, body []byte) ([]helpers.Verified
 		}
 		if seen {
 			// A concurrent duplicate raced between the phases.
-			return nil, errReplayed
+			return nil, ErrReplayed
 		}
 	}
 	return sigs, nil
