@@ -294,7 +294,7 @@ Each event record is signed by the Exchange's Ed25519 private key. Providers and
 func SignEvent(event *TransactionEvent, privateKey ed25519.PrivateKey) {
     chainHashBytes, _ := hex.DecodeString(event.ChainHash)
     sig := ed25519.Sign(privateKey, chainHashBytes)
-    event.OfferSignature = base64.StdEncoding.EncodeToString(sig)
+    event.RecordSignature = base64.StdEncoding.EncodeToString(sig)
 }
 ```
 

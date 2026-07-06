@@ -155,7 +155,7 @@ graph LR
     B --> C[Filter by<br/>RequestConstraints]
     C --> D[Deduplicate by<br/>ResourceIdentity]
     D --> E[Rank by unit_cost<br/>lowest wins]
-    E --> F[Verify<br/>exchange_signature]
+    E --> F[Verify<br/>offer signature]
     F --> G[Winner]
 ```
 
@@ -421,9 +421,9 @@ func unitCostOf(o rankedOffer) float64 {
 }
 ```
 
-## Stage 5: Verify exchange_signature
+## Stage 5: Verify the offer signature
 
-The Broker SHOULD verify `exchange_signature` on the winning Offer before proceeding. This prevents an Exchange from tampering with its own offer fields after signing.
+The Broker SHOULD verify `Offer.signature` on the winning Offer before proceeding. This prevents an Exchange from tampering with its own offer fields after signing.
 
 ```go
 func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[string]crypto.PublicKey) error {
@@ -530,10 +530,10 @@ sequenceDiagram
     participant Orch as Broker
     participant Agent as AI Agent
 
-    MP->>Orch: ResourceResponse (Offer with exchange_signature)
+    MP->>Orch: ResourceResponse (signed Offer)
     Note over Orch: Broker CANNOT modify<br/>offer fields without<br/>invalidating signature
     Orch->>Agent: DiscoveryResponse (includes original signed Offer)
-    Note over Agent: Agent verifies exchange_signature<br/>against MP's public key.<br/>Price tampering detected.
+    Note over Agent: Agent verifies Offer.signature<br/>against MP's public key.<br/>Price tampering detected.
 ```
 
 ### Fee Disclosure

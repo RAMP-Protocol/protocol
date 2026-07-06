@@ -132,7 +132,7 @@ Each `Offer` includes:
 - `LicenseTerm` entries on `terms[]`, each carrying `restrictions` (`repeated Restriction`) derived from the provider's RSL terms
 - `ReportingObligation` defining post-usage reporting requirements
 - `Preview` URLs for pre-transaction evaluation (see [Resource Previews](#resource-previews))
-- An Ed25519 `exchange_signature` that proves the Exchange issued this offer
+- An Ed25519 `Offer.signature` that proves the Exchange issued this offer
 
 ### Batch Multi-URL Query
 
@@ -334,7 +334,7 @@ The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A b
 1. Validate request (proto validation)
 2. Verify the agent's RFC 9421 HTTP Message Signature (alg=ed25519) in the request headers (and each broker hop signature if present)
 3. Check idempotency key (prevent double-charge on retry)
-4. Verify offer signature (reconstruct offer from signed token)
+4. Verify `offer.signature` over the presented bytes of the reflected Offer, then its `expires_at` freshness (stateless — no offer storage)
 5. Authorize billing (`BillingAdapter.Authorize`) -- or skip for subscription offers
 6. Write transaction to WAL (must succeed before signing URL)
 7. Generate HMAC-SHA256 signed URL (Exchange-CDN shared secret)
@@ -360,6 +360,7 @@ For batch transactions, use the `items` array:
       "offer": {
         "offer_id": "offer-tc-4921",
         "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
+        "expires_at": "2026-03-14T02:30:00Z",
         "signature": "a1b2c3...",
         "signature_algorithm": "EdDSA"
       }
@@ -368,6 +369,7 @@ For batch transactions, use the `items` array:
       "offer": {
         "offer_id": "offer-tc-4922",
         "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001200", "unit": "accesses" },
+        "expires_at": "2026-03-14T02:30:00Z",
         "signature": "d4e5f6...",
         "signature_algorithm": "EdDSA"
       }

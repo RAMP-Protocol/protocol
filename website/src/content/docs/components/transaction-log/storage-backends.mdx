@@ -134,7 +134,7 @@ func (ps *PostgresStore) WriteBatch(events []*TransactionEvent) error {
         "transaction_id", "billing_id", "idempotency_key",
         "buyer_lid", "provider_domain", "exchange_id",
         "cost_amount", "cost_currency",
-        "chain_hash", "offer_id",
+        "chain_hash", "record_signature", "offer_id",
         "payload",
     ))
     if err != nil {
@@ -148,7 +148,7 @@ func (ps *PostgresStore) WriteBatch(events []*TransactionEvent) error {
             event.TransactionID, event.BillingID, event.IdempotencyKey,
             event.BuyerLID, event.ProviderDomain, event.ExchangeID,
             event.CostAmount, event.CostCurrency,
-            event.ChainHash, event.OfferID,
+            event.ChainHash, event.RecordSignature, event.OfferID,
             payload,
         )
         if err != nil {
@@ -203,7 +203,11 @@ type TransactionEvent struct {
     CostCurrency string  `json:"cost_currency,omitempty" db:"cost_currency"`
     CostUnitCost float64 `json:"cost_unit_cost"           db:"cost_unit_cost"`
 
-    ChainHash            string `json:"chain_hash"             db:"chain_hash"`
+    ChainHash string `json:"chain_hash" db:"chain_hash"`
+    // Layer-3 tamper-evidence: the Exchange's Ed25519 signature over
+    // chain_hash (see Reconciliation — Signed Event Records). An event-record
+    // signature, unrelated to the wire's Offer.signature.
+    RecordSignature string `json:"record_signature" db:"record_signature"`
 
     // ... additional fields per event type (see Event Types page)
 }

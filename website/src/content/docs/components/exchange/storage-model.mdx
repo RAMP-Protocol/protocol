@@ -272,13 +272,13 @@ Providers get read-only access to all signed Offers issued for their content. Th
 **Returns** (per transaction):
 - `transaction_id` — Exchange-assigned transaction identifier
 - `billing_id` — billing reference for settlement
-- `offer_snapshot` — full Offer at transaction time, including `exchange_signature`
+- `offer_snapshot` — full Offer at transaction time, including `Offer.signature`
 - `cost` — actual amount charged (or `0` for subscription transactions)
 - `agent_id` — hashed agent identity (`SHA256(agent_key)`)
 - `timestamp` — when the transaction was executed
 
 **Verification capabilities**:
-- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (fetch the Exchange's WBA directory, the JWK Set at `/.well-known/http-message-signatures-directory`, and read its `keys`)
+- Provider can independently verify every Offer's `Offer.signature` using the Exchange's published Ed25519 public key (fetch the Exchange's WBA directory, the JWK Set at `/.well-known/http-message-signatures-directory`, and read its `keys`)
 - RSL pricing, when present, serves as the **price ceiling** — Offers exceeding the RSL-declared rate are detectable by comparing `offer_snapshot.pricing.rate` against the RSL terms
 - Private floor pricing is contractual between provider and Exchange, not protocol-enforced — the protocol provides the audit data, the contract governs the terms
 

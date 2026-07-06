@@ -339,7 +339,7 @@ sequenceDiagram
         Handler-->>Agent: TransactionResponse (replay)
     end
 
-    Note over Handler: Reconstruct offer data from signed token<br/>(no offer storage, no re-resolution)
+    Note over Handler: Verify offer.signature over the presented Offer bytes<br/>(stateless — no offer storage, no re-resolution)
 
     Handler->>BA: Authorize(ctx, AuthorizeRequest)
     Note over BA: Check requester balance/credit<br/>Resolve billing reference<br/>Reserve funds
@@ -409,13 +409,18 @@ func (h *ExchangeHandler) ExecuteTransaction(
         return h.executeBatchTransaction(ctx, req)
     }
 
-    // 4. Verify offer signature and reconstruct offer data (stateless — no offer storage)
+    // 4. Verify the reflected Offer (stateless — the request carries the FULL
+    //    signed Offer; the Exchange verifies offer.signature over the presented
+    //    bytes against its own key, and never rebuilds an offer from a catalog).
     //    A denied single transaction is NOT a success body: it travels as a
     //    non-OK transport error carrying ErrorDetail.transaction_denial (a typed
     //    DenialReason plus restriction_mismatches). The transport code is the
     //    error CLASS; the ErrorDetail is the typed reason.
-    offer, err := h.offerSigner.VerifyAndDecode(req.Msg.OfferId, req.Msg.OfferSignature, req.Msg.OfferSignatureAlgorithm)
-    if err != nil {
+    offer := req.Msg.Offer
+    if err := h.offerSigner.VerifyPresented(offer); err != nil {
+        if errors.Is(err, ramphelpers.ErrOfferExpired) {
+            return nil, transactionDenied(rampv1.DenialReason_DENIAL_REASON_OFFER_EXPIRED)
+        }
         return nil, transactionDenied(rampv1.DenialReason_DENIAL_REASON_SIGNATURE_INVALID)
     }
 
@@ -452,12 +457,12 @@ func (h *ExchangeHandler) ExecuteTransaction(
         BillingRef:     billingRef,
         Amount:         offer.Pricing.Rate,
         Currency:       offer.Pricing.Currency,
-        OfferID:        req.Msg.OfferId,
+        OfferID:        offer.OfferId,
         TenantID:       tenantCfg.ID,
     })
     if err != nil {
         slog.Error("billing authorization failed",
-            slog.String("offer_id", req.Msg.OfferId),
+            slog.String("offer_id", offer.OfferId),
             slog.String("tenant_id", tenantCfg.ID),
             slog.Any("error", err),
         )
@@ -465,7 +470,7 @@ func (h *ExchangeHandler) ExecuteTransaction(
     }
     if !authResp.Approved {
         slog.Warn("billing authorization denied",
-            slog.String("offer_id", req.Msg.OfferId),
+            slog.String("offer_id", offer.OfferId),
             slog.String("reason", authResp.Reason),
         )
         denial := txnErrToDenialReason(fmt.Errorf("%w: %s", ErrBillingDenied, authResp.Reason))
@@ -480,7 +485,7 @@ func (h *ExchangeHandler) ExecuteTransaction(
     record := &TransactionRecord{
         TransactionID:     txnID,
         BillingID:         authResp.BillingID,
-        OfferID:           req.Msg.OfferId,
+        OfferID:           offer.OfferId,
         TenantID:          tenantCfg.ID,
         BillingRef:        billingRef,
         AgentIdentityHash: agentHash,
@@ -622,12 +627,16 @@ func (h *ExchangeHandler) executeBatchTransaction(
     var currency string
 
     for _, item := range req.Msg.Items {
-        resultItem := &rampv1.TransactionResultItem{OfferId: item.OfferId}
+        offer := item.Offer // REQUIRED — every batch item reflects its full signed Offer
+        resultItem := &rampv1.TransactionResultItem{OfferId: offer.GetOfferId()}
 
-        // 1. Verify offer signature (per item)
-        offer, err := h.offerSigner.VerifyAndDecode(item.OfferId, item.OfferSignature, item.OfferSignatureAlgorithm)
-        if err != nil {
+        // 1. Verify the reflected Offer (per item — offer.signature over the
+        //    presented bytes, then freshness)
+        if err := h.offerSigner.VerifyPresented(offer); err != nil {
             denial := rampv1.DenialReason_DENIAL_REASON_SIGNATURE_INVALID
+            if errors.Is(err, ramphelpers.ErrOfferExpired) {
+                denial = rampv1.DenialReason_DENIAL_REASON_OFFER_EXPIRED
+            }
             resultItem.DenialReason = &denial
             resultItems = append(resultItems, resultItem)
             continue
@@ -658,7 +667,7 @@ func (h *ExchangeHandler) executeBatchTransaction(
                 BillingRef:     billingRef,
                 Amount:         offer.Pricing.Rate,
                 Currency:       offer.Pricing.Currency,
-                OfferID:        item.OfferId,
+                OfferID:        offer.OfferId,
                 TenantID:       tenantCfg.ID,
             })
             if err != nil || !authResp.Approved {
@@ -675,12 +684,12 @@ func (h *ExchangeHandler) executeBatchTransaction(
         txnID := ulid.Make().String()
         record := &TransactionRecord{
             TransactionID: txnID, BillingID: billingID,
-            OfferID: item.OfferId, TenantID: tenantCfg.ID,
+            OfferID: offer.OfferId, TenantID: tenantCfg.ID,
             BillingRef: billingRef,
             Amount: amount, Currency: offer.Pricing.Currency,
         }
         if err := h.txLog.Write(ctx, record); err != nil {
-            slog.Error("batch item txlog write failed", slog.String("offer_id", item.OfferId), slog.Any("error", err))
+            slog.Error("batch item txlog write failed", slog.String("offer_id", offer.OfferId), slog.Any("error", err))
             denial := rampv1.DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE
             resultItem.DenialReason = &denial
             resultItems = append(resultItems, resultItem)

@@ -123,13 +123,13 @@ Pink nodes are external dependencies. Everything else runs in-process.
 The Exchange sits between AI agents/Brokers and provider CDN infrastructure:
 
 1. An AI agent discovers available resources by calling `DiscoverResources` — the Exchange verifies the `Requester` identity (Ed25519 signature over domain-bound key), filters the catalog by the requester's scopes, and returns signed offers. If a `Delegation` is present, the Exchange verifies the delegation JWT chain — including the **holder-binding** step (the request-signing key MUST hash to the final JWT's `cnf.jkt`; see [Verification](/protocol/authentication/#verification)) — before granting scoped access. When the request was forwarded through one or more intermediaries, each adds a labeled RFC 9421 HTTP Message Signature to the header stack (each covering the request plus the prior hop's signature); the Exchange verifies the whole stack to prove the request path and counts hops against `max_hops` / `max_intermediary_hops`
-2. The agent executes a transaction by calling `ExecuteTransaction` with a chosen offer — the Exchange verifies the offer signature, authorizes billing, logs the transaction, and returns a signed URL
+2. The agent executes a transaction by calling `ExecuteTransaction`, reflecting the full signed offer back exactly as received — the Exchange verifies `offer.signature` over the presented bytes, authorizes billing, logs the transaction, and returns a signed URL
 3. The agent fetches the resource using the signed URL — the CDN edge function verifies the URL signature using the same HMAC secret shared with the Exchange
 4. The agent reports usage by calling `ReportUsage` — the Exchange validates the report and updates the obligation state
 
 ## Key Design Decisions
 
-- **Stateless offer verification**: Offers are Ed25519-signed tokens. ExecuteTransaction verifies and decodes the offer from its signature — no offer storage, no offer cache, no re-resolution against the catalog. This eliminates a class of consistency bugs and simplifies horizontal scaling.
+- **Stateless offer verification**: Offers are Ed25519-signed, self-contained bearer tokens. ExecuteTransaction receives the FULL signed Offer reflected back and verifies `offer.signature` (which covers pricing, terms, and `expires_at`) over the presented bytes — no offer storage, no offer cache, no re-resolution against the catalog. This eliminates a class of consistency bugs and simplifies horizontal scaling.
 - **Write-before-sign invariant**: The transaction log write MUST complete before the Signing Engine generates the signed URL. No signed URL is ever issued for an unrecorded transaction.
 - **Two signing subsystems**: Ed25519 for offer signatures (asymmetric, agents verify with public key) and HMAC-SHA256 for signed URLs (symmetric, shared secret between Exchange and CDN). Different trust models require different cryptographic primitives.
 - **Pluggable Billing Adapter**: The single point of custom integration per deployment. The open-source Exchange is billing-system-agnostic.
@@ -151,7 +151,11 @@ type BillingAdapter interface {
 
 type OfferSigner interface {
     Sign(offer *rampv1.Offer) (string, error)
-    VerifyAndDecode(offerID string, signature string, algorithm string) (*rampv1.Offer, error)
+    // VerifyPresented checks offer.signature over the presented Offer bytes
+    // against the Exchange's own key, then freshness (expires_at) — the
+    // stateless reflected-Offer contract. Typically wraps the SDK primitive
+    // ramphelpers.VerifyPresentedOffer.
+    VerifyPresented(offer *rampv1.Offer) error
 }
 
 type Signer interface {

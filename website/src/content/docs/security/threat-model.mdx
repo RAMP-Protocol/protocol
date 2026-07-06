@@ -120,7 +120,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T22: Exchange impersonation
 **Attack**: Attacker sets up fake Exchange, poisons ramp.json via DNS hijack.
-**Countermeasure (protocol)**: ramp.json served over HTTPS from provider's domain (TLS proves endorsement). Every Offer carries `exchange_signature` (Ed25519). Agent verifies against Exchange's public key.
+**Countermeasure (protocol)**: ramp.json served over HTTPS from provider's domain (TLS proves endorsement). Every Offer carries `Offer.signature` (Ed25519). Agent verifies against Exchange's public key.
 
 ### T23: Signed URL interception (MITM)
 **Attack**: Attacker intercepts TransactionResponse, steals signed URL.
@@ -276,7 +276,7 @@ Line 3: Legal/contractual enforcement
 |---|---|---|---|
 | ads.txt | 2017 | ramp.json (authorized providers) | In proto |
 | sellers.json | 2019 | Exchange identity in ResourceResponse | In proto |
-| SupplyChain Object | 2019 | exchange_signature on Offer | In proto |
-| ads.cert | 2020 | exchange_signature + content_integrity_hash | In proto |
+| SupplyChain Object | 2019 | Offer.signature on Offer | In proto |
+| ads.cert | 2020 | Offer.signature + content_integrity_hash | In proto |
 | MRC Viewability Standard | 2014 | Minimum billable token count | Design principle |
 | Open Measurement SDK | 2018 | Three-sided reconciliation | In protocol flow |

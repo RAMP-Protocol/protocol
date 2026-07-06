@@ -133,7 +133,7 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
 Key fields in each offer:
 - **offer_id** — unique identifier for this offer
 - **pricing** — rate ($0.05/article), currency, estimated tokens. Pricing models are defined in the [protocol spec](/protocol/standards-layering) and follow [RSL conventions](/protocol/discovery-paths)
-- **exchange_signature** — [Ed25519 signature](/protocol/authentication) over the offer. Stateless: the Exchange can verify this signature on ExecuteTransaction without storing the offer
+- **signature** — the Exchange's [Ed25519 signature](/protocol/authentication) over the offer (`Offer.signature`). Stateless: the Exchange verifies it on ExecuteTransaction over the reflected Offer bytes, without storing the offer
 - **reporting** — usage reporting is mandatory, due within 24 hours, must include `consumed_quantity`. See [how the billing cycle works](/getting-started/how-money-flows)
 - **title** — human-readable offer title, plus optional `ramp-comp-v1` `comp.*` ext fields (e.g. `comp.package_id`) carrying [IAB CoMP](/protocol/standards-layering) package metadata
 
@@ -157,6 +157,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
         "unit": "accesses"
       },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "expires_at": "2026-03-16T17:43:20Z",
       "signature": "ae77b181...32607e08",
       "signature_algorithm": "EdDSA"
     },

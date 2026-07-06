@@ -703,9 +703,9 @@ The request body is identical to the direct case; the forwarding chain lives in 
    - For each hop's labeled RFC 9421 signature: fetch public key from {hop.domain}/.well-known/ramp.json
    - Ed25519 verify each hop's signature -> pass
 3. Check idempotency: tx-claude-001 not seen before -> proceed
-4. Verify offer signature:
-   - Ed25519 verify exchange_signature on offer -> pass
-   - Reconstruct offer data from signed token (stateless, no offer storage)
+4. Verify the reflected offer (stateless, no offer storage):
+   - Ed25519 verify offer.signature over the presented Offer bytes -> pass
+   - Check offer.expires_at freshness -> pass
 5. subscription_id present on offer -> SKIP billing.Authorize (already paid under subscription)
 6. Quota check:
    - BillingAdapter.CheckSubscription("claude-agent-001@claude.ai", "hearst-media")
@@ -723,7 +723,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
      subscription_id: "SUB-ANTHROPIC-HEARST-2026",
      amount: "0",
      agent_identity_hash: "e3b0c442...",
-     offer_snapshot_json: "<full offer at transaction time, including exchange_signature>",
+     offer_snapshot_json: "<full offer at transaction time, including Offer.signature>",
      reporting_required: true,
      reporting_deadline: "2026-03-16T15:00:00Z"
    }
@@ -872,7 +872,7 @@ Three independent records that must agree:
    - txn-alpha-001: subscription SUB-ANTHROPIC-HEARST-2026, amount=$0
    - subscription_unit_value: $0.05 (value of the access for accounting)
    - offer_snapshot: article "AI Regulation...", 3300 est tokens
-   - offer_snapshot includes exchange_signature (Ed25519, non-repudiable)
+   - offer_snapshot includes Offer.signature (Ed25519, non-repudiable)
    - reporting_deadline: 2026-03-16T15:00:00Z
 
 3. Usage report (Anthropic filed):
@@ -927,7 +927,7 @@ Response includes signed Offer snapshots for every transaction:
 
 **What Hearst can verify**:
 
-1. **Offer authenticity**: Hearst verifies the `exchange_signature` on each `offer_snapshot` using SSP-Alpha's published Ed25519 public key (fetch SSP-Alpha's WBA directory at `exchange.ssp-alpha.com/.well-known/http-message-signatures-directory` and read its `keys`). This proves the Exchange actually issued this Offer -- it cannot deny having offered these terms.
+1. **Offer authenticity**: Hearst verifies the `Offer.signature` on each `offer_snapshot` using SSP-Alpha's published Ed25519 public key (fetch SSP-Alpha's WBA directory at `exchange.ssp-alpha.com/.well-known/http-message-signatures-directory` and read its `keys`). This proves the Exchange actually issued this Offer -- it cannot deny having offered these terms.
 
 2. **RSL price ceiling compliance**: Hearst's RSL declares a maximum rate of $0.08/crawl. The subscription's `subscription_unit_value` of $0.05 is below this ceiling. If any per-request Offer exceeded $0.08, Hearst would detect it by comparing `offer_snapshot.pricing.rate` against their RSL terms.
 

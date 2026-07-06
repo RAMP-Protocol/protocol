@@ -11,16 +11,41 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-# Removed / renamed identifiers that must not appear in current docs.
-patterns=(
+# Removed / renamed wire FIELD identifiers: list the proto snake_case name ONCE.
+# The check loop derives and also bans the camelCase json_name and the PascalCase
+# Go form (the R13 class: `req.Msg.OfferSignature` inside a Go fence survived a
+# snake_case-only denylist — fenced code is invisible to the remark-proto guard,
+# so this grep is the only gate that sees it). The snake form matches as a
+# substring (underscores glue compounds); the derived camel/Pascal forms are
+# boundary-anchored so identifiers that merely CONTAIN them
+# (`verifyOfferSignature`, `ErrOfferSignatureInvalid`) stay legal.
+wire_idents=(
   # Requester reshape
-  'license_id' 'licenseId' 'BuyerLicenseID'
-  'IntermediaryHop' '"intermediaries"'
+  'license_id'
   # request signatures live in HTTP headers (RFC 9421), not message fields
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   # the scalar offer_signature pair is gone: the execute-request now reflects the
   # FULL signed Offer back (offer.signature carries the JWS). offer_id stays live.
-  'offer_signature' 'offer_signature_algorithm'
+  # exchange_signature is the pre-standardization name of Offer.signature.
+  'offer_signature' 'offer_signature_algorithm' 'exchange_signature'
+  'spdx_expression'
+  # Fields from the deleted AccessRestrictions message — express as Quota now.
+  'max_display_words'
+  # Identity split (#16): keys moved from the manifest to the WBA directory.
+  'public_keys' 'invalidation_url'
+)
+
+# Removed / renamed identifiers that must not appear in current docs.
+patterns=(
+  # Requester reshape (doc-specific compound; the license_id family itself is
+  # covered by wire_idents derivation above)
+  'BuyerLicenseID'
+  'IntermediaryHop' '"intermediaries"'
+  # the abolished reconstruct-from-token execute model (RAMP-103): neither the
+  # doc-fictional OfferSigner.VerifyAndDecode interface nor "reconstruct offer"
+  # prose may survive — the Exchange verifies offer.signature over the presented
+  # bytes of the reflected Offer, it never rebuilds an offer from a token.
+  'VerifyAndDecode' '[Rr]econstruct(ed|s)? offer'
   # token / vocabulary — both the hyphenated token form and the prose spelling;
   # the canonical optional delegation format is biscuit-v3 (NEVER v2), and
   # entitlement denials are format-neutral ("entitlement token", not "biscuit").
@@ -33,7 +58,6 @@ patterns=(
   # *pricing model* is guarded via the enum-constant patterns below instead.
   'PER_ACCESS' 'REVENUE_SHARE'
   'PRICING_MODEL_ATTRIBUTION' 'PRICING_MODEL_CONTRIBUTION'
-  'spdx_expression'
   # collapsed reason enums
   'FUNCTION_PROHIBITED' 'GEO_RESTRICTED' 'USER_CATEGORY_PROHIBITED'
   'INVALID_LICENSE' 'EXPIRED_LICENSE' 'DELEGATION_EXPIRED'
@@ -42,8 +66,6 @@ patterns=(
   # Removed CoMP Go path (req.Aisystem.Aisysuse.…). Narrow Go-path patterns only,
   # so legitimate CoMP JSON keys elsewhere don't false-positive. (R5-9)
   'req\.Aisystem' '\.Aisysuse\.'
-  # Fields from the deleted AccessRestrictions message — express as Quota now.
-  'max_display_words'
   # Underscore function tokens — the registered RAMP vocabulary is dashed
   # (ai-input/ai-train/ai-index). Lowercase underscore forms are wrong; CoMP's
   # uppercase AI_INPUT enum is unaffected (case-sensitive). (CON-05)
@@ -52,13 +74,13 @@ patterns=(
   # banned word does not appear verbatim anywhere in the repo (the runtime pattern
   # is still [Bb]loomberg).
   '[Bb]loom''berg'
-  # Identity split (#16): keys moved out of the manifest (WellKnownManifest.
-  # public_keys / invalidation_url) into the WBA directory (WBAFile.keys /
-  # revocation_url), and the per-key `kid` label was dropped in favour of the
-  # RFC 7638 thumbprint (the RFC 9421 keyid). The `"kid"` pattern is anchored to
-  # the JSON-key form so it does NOT collide with the live `keyid` identifier or
-  # with legitimate "keys carry no kid" prose.
-  'public_keys' 'invalidation_url' 'KeyInvalidationList' '"kid"[[:space:]]*:'
+  # Identity split (#16): the public_keys/invalidation_url field family is
+  # covered by wire_idents derivation above; the removed message name and the
+  # dropped per-key `kid` label (replaced by the RFC 7638 thumbprint — the
+  # RFC 9421 keyid) stay here. The `"kid"` pattern is anchored to the JSON-key
+  # form so it does NOT collide with the live `keyid` identifier or with
+  # legitimate "keys carry no kid" prose.
+  'KeyInvalidationList' '"kid"[[:space:]]*:'
 )
 
 # Files where naming a removed identifier is legitimate (they record history).
@@ -87,6 +109,31 @@ for f in "$proto_ramp" "$event_types" "$auth"; do
 done
 
 # --- 1. Denylist: removed/renamed identifiers must not reappear -------------
+
+# 1a. Wire field identifiers, all three spellings derived from the ONE snake_case
+# entry: the snake form itself (substring — underscores glue compounds), the
+# camelCase json_name, and the PascalCase Go form. The camel/Pascal forms are
+# boundary-anchored (ERE character classes, not \b, for BSD-grep portability)
+# so containing identifiers stay legal. Derivation is pure awk — bash 3.2 safe.
+ident_bl='(^|[^A-Za-z0-9_])'
+ident_br='([^A-Za-z0-9_]|$)'
+for ident in "${wire_idents[@]}"; do
+  camel=$(awk -v s="$ident" 'BEGIN{
+    n=split(s, a, "_"); o=a[1]
+    for (i=2; i<=n; i++) o = o toupper(substr(a[i],1,1)) substr(a[i],2)
+    print o }')
+  pascal=$(awk -v s="$camel" 'BEGIN{print toupper(substr(s,1,1)) substr(s,2)}')
+  for p in "$ident" "${ident_bl}${camel}${ident_br}" "${ident_bl}${pascal}${ident_br}"; do
+    hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
+    if [ -n "$hits" ]; then
+      echo "::error::removed/renamed wire identifier still present (entry '${ident}', spelling '${p}'):"
+      echo "$hits"
+      status=1
+    fi
+  done
+done
+
+# 1a'. Non-derived patterns.
 for p in "${patterns[@]}"; do
   hits=$(grep -rEn -- "$p" "${roots[@]}" 2>/dev/null | grep -Ev "$exclude_re" || true)
   if [ -n "$hits" ]; then
