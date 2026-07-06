@@ -21,6 +21,8 @@
 
 import canonicalize from "canonicalize";
 
+import { utf8Bytes } from "../src/base64url.ts";
+
 // OFFER_SIGNATURE_ALGORITHM is the JWS alg advertised on signed offers. Always
 // EdDSA for Ed25519 (mirror helpers.OfferSignatureAlgorithm).
 export const OFFER_SIGNATURE_ALGORITHM = "EdDSA";
@@ -155,7 +157,7 @@ export function canonicalOfferPayload(
 	const jcs = canonicalize(stripped);
 	if (jcs === undefined)
 		throw new Error("ramp/core: offer is not JSON-serializable");
-	return new TextEncoder().encode(jcs);
+	return utf8Bytes(jcs);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { thumbprint } from "./thumbprint.ts";
-import { decodeBase64Url } from "./base64url.ts";
+import { decodeBase64Url, utf8Bytes } from "./base64url.ts";
 
 // Proof-of-possession verification for delivery-URL identity binding (ADR-013),
 // relocated from the app edge (src/edge/src/pop.ts) as a pure L1 helper.
@@ -114,7 +114,7 @@ export async function verifyAgentBinding(input: PopInput): Promise<PopResult> {
 
   const base = signatureBase(input.method, input.url, parsed.rawParams);
   const verify = input.verifyEd25519 ?? defaultVerifyEd25519;
-  const valid = await verify(presented.key, sigBytes, new TextEncoder().encode(base));
+  const valid = await verify(presented.key, sigBytes, utf8Bytes(base));
   return valid ? okResult : fail("pop_sig_invalid");
 }
 

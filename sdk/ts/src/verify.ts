@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { decodeBase64Url } from "./base64url.ts";
+import { decodeBase64Url, utf8Bytes } from "./base64url.ts";
 
 // Ed25519 signed delivery-URL verification (ADR-013), relocated from the app
 // edge (src/edge/src/verify.ts) as a pure, IO-free L1 helper. Key resolution is
@@ -134,5 +134,5 @@ export function canonicalMessage(url: URL): Uint8Array<ArrayBuffer> {
   const stripped = new URL(url.toString());
   stripped.searchParams.delete("sig");
   const canonical = `GET\n${stripped.toString()}`;
-  return new TextEncoder().encode(canonical);
+  return utf8Bytes(canonical);
 }

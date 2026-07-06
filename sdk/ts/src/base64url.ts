@@ -23,6 +23,14 @@ export function decodeBase64Url(input: string): Uint8Array<ArrayBuffer> | undefi
   }
 }
 
+/** UTF-8 encode, pinned ArrayBuffer-backed. TextEncoder.encode always allocates
+ * a fresh ArrayBuffer, but some lib typings widen the return to ArrayBufferLike;
+ * pin it once here so consumers on any TS/lib version feed WebCrypto without
+ * casts of their own. */
+export function utf8Bytes(s: string): Uint8Array<ArrayBuffer> {
+  return new TextEncoder().encode(s) as Uint8Array<ArrayBuffer>;
+}
+
 /** Encode bytes as base64url with no padding. */
 export function encodeBase64Url(bytes: Uint8Array): string {
   let bin = "";
