@@ -11,3 +11,4 @@ research-*.md
 .claude/
 __pycache__/
 .sdk-types-work/
+*.egg-info/

@@ -81,10 +81,9 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
-# httpx is an EXTRA of the opt-in client binding (ramp_sdk.httpx_client), NOT a
-# core dependency — matching the app's httpx>=0.28 pin. The ASGI server-binding
+# No httpx extra: ramp_sdk.signing_transport is a transport-neutral sign face —
+# it imports no httpx; the consumer owns its HTTP client. The ASGI server-binding
 # extra (FastAPI/Starlette) is deferred with its binding.
-httpx = ["httpx>=0.28"]
 
 [tool.setuptools.packages.find]
 where = ["."]

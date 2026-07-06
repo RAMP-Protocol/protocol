@@ -1,15 +1,13 @@
-"""sdk/python httpx CLIENT binding — the OPT-IN outbound-sign face over the core.
+"""sdk/python outbound-sign face — TRANSPORT-NEUTRAL, the client analogue of the
+Go RoundTripper sign face.
 
-The MCP shim (src/mcp) is a CLIENT: it auto-signs every outbound httpx POST to the
-Broker (RFC 9421) and receives offers. This binding is the SigningTransport analogue
-of the Go RoundTripper client sign face: it wraps an outbound request and signs it
-via the core/L1 sign seam over the EXACT body bytes (RFC 9530 Content-Digest), and a
-returned offer is verified through the core Verifier (in the app, not here).
-
-It is OPT-IN: ``httpx`` is an extra dependency of this binding, NOT of the core. The
-binding composes the shipped L1 ``httpsig.sign_request`` (the byte oracle); it adds
-NO new crypto. Framework (httpx) integration is a thin add over ``sign_outbound`` —
-kept minimal here so the smoke exercises the sign seam MCP actually adopts.
+``SigningTransport.sign_outbound`` assembles the RFC 9421 headers for one outbound
+request (RFC 9530 Content-Digest over the EXACT body bytes) via the shipped L1
+``httpsig.sign_request`` byte oracle; it adds NO new crypto and performs NO IO. It
+is NOT an HTTP client binding: it imports no httpx and wraps no transport — the
+consumer (e.g. the app MCP shim, src/mcp) owns the actual httpx transport and
+applies the returned headers itself. A returned offer is verified through the core
+Verifier (in the app, not here).
 """
 
 from __future__ import annotations

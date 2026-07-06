@@ -2,7 +2,7 @@
 
 Mirror of sdk/go/core, translated to idiomatic Python. It imposes NOTHING beyond
 Python's stdlib + cryptography: NO framework (no httpx, no FastAPI/Starlette). The
-framework bindings (ramp_sdk.httpx_client) depend one-directionally on this core,
+framework bindings (ramp_sdk.signing_transport) depend one-directionally on this core,
 never the reverse. The core is stateless — the key resolver and clock are injected.
 
 It carries three things:
@@ -33,7 +33,7 @@ from __future__ import annotations
 import base64
 import enum
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import rfc8785
@@ -230,6 +230,11 @@ class Verifier:
             when = datetime.fromisoformat(expires_at)
         except ValueError:
             return False
+        if when.tzinfo is None:
+            # An offset-less RFC 3339 instant is UTC on the wire (protobuf
+            # Timestamp.AsTime() is always UTC); naive .timestamp() would read
+            # it as host-LOCAL time — invisible on UTC CI, wrong elsewhere.
+            when = when.replace(tzinfo=UTC)
         return when.timestamp() < self._now()
 
 

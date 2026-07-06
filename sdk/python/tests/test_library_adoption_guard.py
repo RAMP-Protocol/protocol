@@ -105,7 +105,7 @@ def test_meta_passes_clean_composed_source() -> None:
 # Mirror of the Go core "no connectrpc import" guard and the sdk/ts core guard. The
 # L2 CORE must impose NOTHING beyond stdlib + cryptography + the vetted JCS lib: NO
 # framework import — no httpx, no FastAPI/Starlette. The framework bindings
-# (ramp_sdk.httpx_client) depend on core, never the reverse, so the forbidden
+# (ramp_sdk.signing_transport) depend on core, never the reverse, so the forbidden
 # imports are the FRAMEWORK names in core.py, and the required marker is that
 # offer-verify + acceptance compose the vetted rfc8785 JCS lib rather than
 # hand-rolling canonicalization.
@@ -123,9 +123,9 @@ def test_core_imports_no_framework_and_uses_vetted_jcs() -> None:
 
 def test_core_does_not_depend_on_the_binding() -> None:
     # One-directional: the binding composes core; core must not IMPORT the binding.
-    # (A prose mention of ramp_sdk.httpx_client in the module docstring is fine — it
+    # (A prose mention of ramp_sdk.signing_transport in the module docstring is fine — it
     # is the import STATEMENT that would create the illegal reverse edge.)
     src = _read_source("core.py")
-    assert "import httpx_client" not in src
-    assert "from ramp_sdk.httpx_client" not in src
-    assert "import ramp_sdk.httpx_client" not in src
+    assert "import signing_transport" not in src
+    assert "from ramp_sdk.signing_transport" not in src
+    assert "import ramp_sdk.signing_transport" not in src

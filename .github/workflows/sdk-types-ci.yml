@@ -115,13 +115,12 @@ jobs:
 
       # sdk/python L1 helpers (thumbprint, signed-URL verify, RFC 9421 sign/verify +
       # PoP, offer-acceptance, cross-field Pydantic) byte-parity against the same
-      # Go-signed vectors + shared crossfield corpus, PLUS the L2 core + httpx client
-      # binding (ixs7u.10: offer-verify over JCS, VerifiedOffer guard, acceptance JCS
+      # Go-signed vectors + shared crossfield corpus, PLUS the L2 core + the outbound
+      # sign face (offer-verify over JCS, VerifiedOffer guard, acceptance JCS
       # re-pin, SigningTransport). Consumes the generated Pydantic types from
       # gen/python (PYTHONPATH) + sdk/python on the path so ramp_sdk.core /
-      # ramp_sdk.httpx_client resolve. rfc8785 = the vetted JCS lib the core composes;
-      # httpx = the client-binding extra.
+      # ramp_sdk.signing_transport resolve. rfc8785 = the vetted JCS lib the core composes.
       - name: Python L1 + L2 core parity
         run: |
-          python -m pip install -q "cryptography>=44" "pydantic>=2.9" "rfc8785>=0.1.2" "httpx>=0.28" pytest
+          python -m pip install -q "cryptography>=44" "pydantic>=2.9" "rfc8785>=0.1.2" pytest
           PYTHONPATH=gen/python:sdk/python python -m pytest sdk/python/tests -q

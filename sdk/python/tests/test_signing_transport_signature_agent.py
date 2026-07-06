@@ -20,7 +20,7 @@ Test shape mirrors test_client_binding_smoke.py (sign_outbound invocation).
 
 from __future__ import annotations
 
-from ramp_sdk.httpx_client import SigningTransport
+from ramp_sdk.signing_transport import SigningTransport
 
 
 def _make_transport(*, signature_agent: str = "") -> SigningTransport:

@@ -19,7 +19,7 @@ of a returned offer), the outermost surface MCP actually adopts.
 RED now for TWO expected reasons:
   1. sdk/python/ramp_sdk/core does not exist yet (sign seam + Verifier import
      cannot resolve).
-  2. sdk/python/ramp_sdk/httpx_client (the opt-in client binding) does not exist
+  2. sdk/python/ramp_sdk/signing_transport (the outbound-sign face) does not exist
      yet.
 Referencing both by their planned paths keeps this smoke RED until the implement
 step lands the core + httpx client binding.
@@ -38,7 +38,7 @@ from ramp_sdk.core import (  # type: ignore[import-not-found]
 )
 
 # RED (also): the opt-in httpx client binding does not exist yet.
-from ramp_sdk.httpx_client import SigningTransport  # type: ignore[import-not-found]
+from ramp_sdk.signing_transport import SigningTransport  # type: ignore[import-not-found]
 
 
 def _raw_pub(priv: Ed25519PrivateKey) -> bytes:
