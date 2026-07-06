@@ -49,12 +49,14 @@ export interface PopResult {
 /**
  * Ed25519 verify primitive: (publicKey, signature, message) -> valid?. Injected
  * so non-WebCrypto runtimes can supply their own without changing the byte
- * contract. Defaults to WebCrypto.
+ * contract. Defaults to WebCrypto. Byte params are `Uint8Array<ArrayBuffer>`
+ * (never SharedArrayBuffer-backed) so the default can hand them to WebCrypto's
+ * BufferSource without casts.
  */
 export type Ed25519Verify = (
-  publicKey: Uint8Array,
-  signature: Uint8Array,
-  message: Uint8Array,
+  publicKey: Uint8Array<ArrayBuffer>,
+  signature: Uint8Array<ArrayBuffer>,
+  message: Uint8Array<ArrayBuffer>,
 ) => Promise<boolean>;
 
 export interface PopInput {
@@ -116,7 +118,7 @@ export async function verifyAgentBinding(input: PopInput): Promise<PopResult> {
   return valid ? okResult : fail("pop_sig_invalid");
 }
 
-type PresentedKey = { ok: true; key: Uint8Array } | { ok: false; result: PopResult };
+type PresentedKey = { ok: true; key: Uint8Array<ArrayBuffer> } | { ok: false; result: PopResult };
 
 function readPresentedKey(headers: Headers): PresentedKey {
   const raw = headers.get(AGENT_KEY_HEADER);
@@ -195,7 +197,7 @@ function matchInt(s: string, re: RegExp): number | undefined {
 }
 
 /** Parse the RFC 9421 `Signature` header value `label=:<base64>:`. */
-export function parseSignature(raw: string | null): Uint8Array | undefined {
+export function parseSignature(raw: string | null): Uint8Array<ArrayBuffer> | undefined {
   if (!raw) return undefined;
   const m = raw.match(/:([^:]+):/);
   if (!m || !m[1]) return undefined;

@@ -15,7 +15,8 @@
     "./hono": "./hono/middleware.ts"
   },
   "scripts": {
-    "test": "vitest run"
+    "typecheck": "tsc -p tsconfig.json --strict --noEmit",
+    "test": "tsc -p tsconfig.json --strict --noEmit && vitest run"
   },
   "dependencies": {
     "canonicalize": "^3.0.0"
@@ -30,6 +31,8 @@
     }
   },
   "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3",
     "vitest": "^2.1.0",
     "zod": "^3.23.0"
   }

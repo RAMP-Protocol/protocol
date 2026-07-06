@@ -5,7 +5,7 @@ import {
   ObligationSchema,
   PricingSchema,
   RestrictionSchema,
-} from "../../gen/ts/wire/schemas.ts";
+} from "../../../gen/ts/wire/schemas.ts";
 
 // Cross-field (message-CEL) refinements — the one genuinely net-new L1 surface.
 //

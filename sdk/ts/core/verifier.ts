@@ -38,18 +38,20 @@ export type Mode = "strict" | "off";
  * strict).
  */
 export interface KeyResolverTs {
-	resolve(exchange: string): Promise<Uint8Array | undefined>;
+	resolve(exchange: string): Promise<Uint8Array<ArrayBuffer> | undefined>;
 }
 
 /**
  * Ed25519 verify primitive: (publicKey, signature, message) -> valid?. Injected
  * so a non-WebCrypto runtime can supply its own without changing the byte
- * contract. Defaults to WebCrypto crypto.subtle.
+ * contract. Defaults to WebCrypto crypto.subtle. Byte params are
+ * `Uint8Array<ArrayBuffer>` (never SharedArrayBuffer-backed) so the default can
+ * hand them to WebCrypto's BufferSource without casts.
  */
 export type Ed25519Verify = (
-	publicKey: Uint8Array,
-	signature: Uint8Array,
-	message: Uint8Array,
+	publicKey: Uint8Array<ArrayBuffer>,
+	signature: Uint8Array<ArrayBuffer>,
+	message: Uint8Array<ArrayBuffer>,
 ) => Promise<boolean>;
 
 // The module-private brand. Only code in this module can read/stamp it, so a
@@ -126,7 +128,7 @@ const defaultVerifyEd25519: Ed25519Verify = async (pubkey, sig, message) => {
 };
 
 // hexToBytes decodes a hex string (the Offer.signature encoding) to bytes.
-function hexToBytes(hex: string): Uint8Array | undefined {
+function hexToBytes(hex: string): Uint8Array<ArrayBuffer> | undefined {
 	if (hex.length % 2 !== 0) return undefined;
 	const out = new Uint8Array(hex.length / 2);
 	for (let i = 0; i < out.length; i += 1) {
@@ -146,7 +148,7 @@ function hexToBytes(hex: string): Uint8Array | undefined {
  */
 export function canonicalOfferPayload(
 	offer: Record<string, unknown>,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
 	const stripped: Record<string, unknown> = { ...offer };
 	delete stripped.signature;
 	delete stripped.signature_algorithm;
@@ -229,7 +231,7 @@ export class Verifier {
 
 /** Options for NewVerifier (all injected — the core owns no state). */
 export interface VerifierOptions {
-	resolve: (exchange: string) => Promise<Uint8Array | undefined>;
+	resolve: (exchange: string) => Promise<Uint8Array<ArrayBuffer> | undefined>;
 	now: () => number;
 	verifyEd25519?: Ed25519Verify;
 }

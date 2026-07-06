@@ -12,7 +12,6 @@
 // src/edge/src/thumbprint.ts into sdk/ts/src/thumbprint.ts, at which point this
 // goes green with no change to the assertions.
 import { describe, it, expect } from "vitest";
-// @ts-expect-error — sdk/ts/src/thumbprint.ts does not exist yet (TDD red).
 import { thumbprint } from "../src/thumbprint.ts";
 import vectorsFile from "../../go/helpers/testdata/thumbprint-vectors.json";
 

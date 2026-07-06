@@ -23,7 +23,6 @@
 // rule-id) composed onto the generated <Message>Schema, at which point this goes
 // green with no change to the assertions.
 import { describe, it, expect } from "vitest";
-// @ts-expect-error — sdk/ts/src/crossfield.ts does not exist yet (TDD red).
 import { crossFieldRuleIds } from "../src/crossfield.ts";
 import crossfield from "../../../conformance/corpus/crossfield.json";
 // Reference generated vocabulary tokens rather than string literals for the

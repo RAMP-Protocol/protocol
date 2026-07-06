@@ -18,7 +18,6 @@
 // against the branded type once sdk/ts/core lands, and deliberately NOT written as
 // a test that fails to COMPILE (that would be red for the wrong reason).
 import { describe, it, expect } from "vitest";
-// @ts-expect-error — sdk/ts/core does not exist yet (TDD red).
 import { NewVerifier, isVerifiedOffer } from "../core/verifier.ts";
 
 // TYPE-GUARD NOTE (documented, enforced by tsc --strict once core lands):
@@ -47,6 +46,7 @@ describe("sdk/ts/core VerifiedOffer is unforgeable and rejected offers need .uns
     expect(result.rejected).toHaveLength(1);
 
     const rejected = result.rejected[0];
+    if (!rejected) throw new Error("expected one rejected offer");
     // The mint that only the escape hatch performs:
     const forced = rejected.unsafe();
     expect(isVerifiedOffer(forced)).toBe(true);

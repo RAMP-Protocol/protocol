@@ -1,3 +1,6 @@
+// @ts-nocheck — generated code is exempt from the sdk/ts tsc gate (json-schema-to-zod
+// emits type-loose forms like .default(null) on string schemas; runtime behavior is
+// covered by the canonical round-trip + crossfield parity suites).
 // Code generated from the RAMP proto (via JSON Schema). DO NOT EDIT.
 // Regenerate: scripts/gen-sdk-types.sh
 import { z } from "zod";

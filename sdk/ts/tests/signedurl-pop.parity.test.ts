@@ -26,16 +26,12 @@
 // BOTH a default-WebCrypto-primitive case (byte-identical output observed on the
 // default path, not merely asserted in prose) AND an injected-primitive case.
 import { describe, it, expect } from "vitest";
-// @ts-expect-error — sdk/ts/src/verify.ts does not exist yet (TDD red).
 import { verifyEd25519SignedUrl } from "../src/verify.ts";
-// @ts-expect-error — sdk/ts/src/pop.ts does not exist yet (TDD red).
 import { verifyAgentBinding } from "../src/pop.ts";
 // These vector files are produced by the Go golden-emitter in a later step;
 // referencing them by their planned paths keeps this test RED now (missing
 // module) and green once the emitter + sdk/ts land.
-// @ts-expect-error — testdata/signedurl-vectors.json does not exist yet (TDD red).
 import signedUrlVectors from "../../go/helpers/testdata/signedurl-vectors.json";
-// @ts-expect-error — testdata/pop-vectors.json does not exist yet (TDD red).
 import popVectors from "../../go/helpers/testdata/pop-vectors.json";
 
 // ---- signed-URL vectors ----------------------------------------------------
@@ -68,7 +64,7 @@ type PopVector = {
   expected_valid: boolean;
 };
 
-function b64urlToBytes(s: string): Uint8Array {
+function b64urlToBytes(s: string): Uint8Array<ArrayBuffer> {
   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
   const bin = atob(b64);
@@ -77,7 +73,7 @@ function b64urlToBytes(s: string): Uint8Array {
   return out;
 }
 
-async function importEd25519PublicKey(raw: Uint8Array): Promise<CryptoKey> {
+async function importEd25519PublicKey(raw: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   return crypto.subtle.importKey("raw", raw, { name: "Ed25519" }, false, [
     "verify",
   ]);
@@ -140,9 +136,9 @@ describe("sdk/ts RFC 9421 GET-PoP verify matches the Go signer vectors", () => {
   for (const v of vectors) {
     it(`[injected primitive] ${v.name} -> ok=${v.expected_valid}`, async () => {
       const injectedVerify = async (
-        pub: Uint8Array,
-        sig: Uint8Array,
-        msg: Uint8Array,
+        pub: Uint8Array<ArrayBuffer>,
+        sig: Uint8Array<ArrayBuffer>,
+        msg: Uint8Array<ArrayBuffer>,
       ): Promise<boolean> => {
         const key = await importEd25519PublicKey(pub);
         return crypto.subtle.verify("Ed25519", key, sig, msg);

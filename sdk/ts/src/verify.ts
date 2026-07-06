@@ -130,7 +130,7 @@ function parseParams(
  * stripped — the query is NOT re-sorted, matching the Go signer's already-sorted
  * output (url.Values.Encode()).
  */
-export function canonicalMessage(url: URL): Uint8Array {
+export function canonicalMessage(url: URL): Uint8Array<ArrayBuffer> {
   const stripped = new URL(url.toString());
   stripped.searchParams.delete("sig");
   const canonical = `GET\n${stripped.toString()}`;

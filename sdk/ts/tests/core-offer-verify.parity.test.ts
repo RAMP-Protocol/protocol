@@ -28,9 +28,7 @@
 // single vector would let Struct-key-ordering or Timestamp encoding diverge
 // silently on real offers while the guard stays green.
 import { describe, it, expect } from "vitest";
-// @ts-expect-error — sdk/ts/core does not exist yet (TDD red).
 import { NewVerifier } from "../core/verifier.ts";
-// @ts-expect-error — testdata/offer-verify-vectors.json does not exist yet (TDD red).
 import offerVerifyVectors from "../../go/helpers/testdata/offer-verify-vectors.json";
 
 // Each vector is emitted by the Go oracle: an Offer (as canonical proto-JSON),
@@ -46,7 +44,7 @@ type OfferVerifyVector = {
   expected_verified: boolean; // true → lands in Verified, false → Rejected
 };
 
-function b64urlToBytes(s: string): Uint8Array {
+function b64urlToBytes(s: string): Uint8Array<ArrayBuffer> {
   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
   const bin = atob(b64);
@@ -97,7 +95,7 @@ describe("sdk/ts/core Verifier offer-verify matches the shared JCS oracle matrix
       } else {
         expect(result.verified).toHaveLength(0);
         expect(result.rejected).toHaveLength(1);
-        expect(result.rejected[0].reason).toBeTruthy();
+        expect(result.rejected[0]?.reason).toBeTruthy();
       }
     });
   }

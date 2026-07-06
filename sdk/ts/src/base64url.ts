@@ -7,8 +7,10 @@
 // and pads), so an RFC 9421 Signature header — which carries STANDARD base64 —
 // decodes correctly through the same path (the remap is a no-op on std input).
 
-/** Decode a base64url (or std-base64) string to bytes, or `undefined` on error. */
-export function decodeBase64Url(input: string): Uint8Array | undefined {
+/** Decode a base64url (or std-base64) string to bytes, or `undefined` on error.
+ * Typed `Uint8Array<ArrayBuffer>` (never SharedArrayBuffer-backed) so decoded
+ * bytes satisfy WebCrypto's BufferSource without casts. */
+export function decodeBase64Url(input: string): Uint8Array<ArrayBuffer> | undefined {
   const pad = input.length % 4 === 0 ? "" : "=".repeat(4 - (input.length % 4));
   const b64 = input.replaceAll("-", "+").replaceAll("_", "/") + pad;
   try {
