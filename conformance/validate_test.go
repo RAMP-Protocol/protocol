@@ -94,38 +94,38 @@ func licensingCases() []validationCase {
 		// License.uri_digest — strong-hash structure only.
 		{"uri_digest empty ok", &rampv1.License{UriDigest: proto.String("")}, true, ""},
 		{"uri_digest sha256 ok", &rampv1.License{UriDigest: proto.String("sha256:" + hex64)}, true, ""},
-		{"uri_digest md5 rejected", &rampv1.License{UriDigest: proto.String("md5:" + hex64)}, false, "license.uri_digest.format"},
-		{"uri_digest sha256 wrong length", &rampv1.License{UriDigest: proto.String("sha256:dead")}, false, "license.uri_digest.format"},
-		{"uri_digest sha256 non-hex", &rampv1.License{UriDigest: proto.String("sha256:" + "g" + hex64[1:])}, false, "license.uri_digest.format"},
+		{"uri_digest md5 rejected", &rampv1.License{UriDigest: proto.String("md5:" + hex64)}, false, "string.pattern"},
+		{"uri_digest sha256 wrong length", &rampv1.License{UriDigest: proto.String("sha256:dead")}, false, "string.pattern"},
+		{"uri_digest sha256 non-hex", &rampv1.License{UriDigest: proto.String("sha256:" + "g" + hex64[1:])}, false, "string.pattern"},
 
 		// Pricing message-level CEL: PER_UNIT⇒unit set; FREE⇒rate 0.
-		{"pricing per_unit with unit ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("tokens"), Currency: "USD", Rate: 0.05}, true, ""},
-		{"pricing per_unit without unit rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Currency: "USD", Rate: 0.05}, false, "pricing.per_unit.requires_unit"},
-		{"pricing free zero rate ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: 0}, true, ""},
-		{"pricing free nonzero rate rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: 1.0}, false, "pricing.free.zero_rate"},
+		{"pricing per_unit with unit ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("tokens"), Currency: "USD", Rate: "0.05"}, true, ""},
+		{"pricing per_unit without unit rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Currency: "USD", Rate: "0.05"}, false, "pricing.per_unit.requires_unit"},
+		{"pricing free zero rate ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}, true, ""},
+		{"pricing free nonzero rate rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "1.0"}, false, "pricing.free.zero_rate"},
 
 		// Pricing.unit format: empty / bare-dashed / vendor:namespaced.
-		{"pricing unit bare ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("sq-km"), Rate: 1}, true, ""},
-		{"pricing unit vendor ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("acme:widgets"), Rate: 1}, true, ""},
-		{"pricing unit with space rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("two words"), Rate: 1}, false, "pricing.unit.format"},
+		{"pricing unit bare ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("sq-km"), Rate: "1"}, true, ""},
+		{"pricing unit vendor ok", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("acme:widgets"), Rate: "1"}, true, ""},
+		{"pricing unit with space rejected", &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Unit: proto.String("two words"), Rate: "1"}, false, "string.pattern"},
 
 		// AcceptableRestriction.values charset + max_items.
 		{"acceptable values ok", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train", "ai-input"}}, true, ""},
-		{"acceptable values space rejected", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai train"}}, false, "acceptable_restriction.values.format"},
+		{"acceptable values space rejected", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai train"}}, false, "string.pattern"},
 		{"acceptable values too many rejected", &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: gen65()}, false, "repeated.max_items"},
 
 		// Restriction.permitted/prohibited charset.
 		{"restriction permitted ok", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-input"}}, true, ""},
-		{"restriction permitted control-char rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"bad\ttoken"}}, false, "restriction.permitted.format"},
+		{"restriction permitted control-char rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"bad\ttoken"}}, false, "string.pattern"},
 		{"restriction prohibited ok", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Prohibited: []string{"ai-train"}}, true, ""},
-		{"restriction prohibited space rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Prohibited: []string{"ai train"}}, false, "restriction.prohibited.format"},
+		{"restriction prohibited space rejected", &rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Prohibited: []string{"ai train"}}, false, "string.pattern"},
 
 		// Quota.metric format — bare-dashed or vendor:namespaced; empty rejected.
 		// window set so the only variable under test is metric.
 		{"quota metric bare ok", &rampv1.Quota{Metric: "display-words", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, true, ""},
 		{"quota metric vendor ok", &rampv1.Quota{Metric: "acme:frames", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, true, ""},
-		{"quota metric empty rejected", &rampv1.Quota{Metric: "", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false, "quota.metric.format"},
-		{"quota metric space rejected", &rampv1.Quota{Metric: "two words", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false, "quota.metric.format"},
+		{"quota metric empty rejected", &rampv1.Quota{Metric: "", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false, "string.pattern"},
+		{"quota metric space rejected", &rampv1.Quota{Metric: "two words", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY}, false, "string.pattern"},
 
 		// License.uri present requires uri_digest (any semantics).
 		{"license no uri ok", &rampv1.License{Id: proto.String("CC-BY-4.0")}, true, ""},
@@ -153,30 +153,30 @@ func licensingCases() []validationCase {
 		// Required-enum discriminators — UNSPECIFIED (zero) is never a valid value.
 		// These guard the gap where the conditional coherence CELs above are
 		// vacuously satisfied by an unset discriminator.
-		{"term semantics unspecified rejected", &rampv1.LicenseTerm{Pricing: freePricing()}, false, "license_term.semantics_specified"},
-		{"pricing model unspecified rejected", &rampv1.Pricing{Rate: 0}, false, "pricing.model_specified"},
-		{"restriction kind unspecified rejected", &rampv1.Restriction{Permitted: []string{"ai-input"}}, false, "restriction.kind_specified"},
-		{"obligation kind unspecified rejected", &rampv1.Obligation{Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE}, false, "obligation.kind_specified"},
-		{"quota window unspecified rejected", &rampv1.Quota{Metric: "accesses", Limit: 1}, false, "quota.window_specified"},
-		{"obligation trigger unspecified rejected", &rampv1.Obligation{Kind: rampv1.ObligationKind_OBLIGATION_KIND_ATTRIBUTION}, false, "obligation.trigger_specified"},
+		{"term semantics unspecified rejected", &rampv1.LicenseTerm{Pricing: freePricing()}, false, "enum.not_in"},
+		{"pricing model unspecified rejected", &rampv1.Pricing{Rate: "0"}, false, "enum.not_in"},
+		{"restriction kind unspecified rejected", &rampv1.Restriction{Permitted: []string{"ai-input"}}, false, "enum.not_in"},
+		{"obligation kind unspecified rejected", &rampv1.Obligation{Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE}, false, "enum.not_in"},
+		{"quota window unspecified rejected", &rampv1.Quota{Metric: "accesses", Limit: 1}, false, "enum.not_in"},
+		{"obligation trigger unspecified rejected", &rampv1.Obligation{Kind: rampv1.ObligationKind_OBLIGATION_KIND_ATTRIBUTION}, false, "enum.not_in"},
 
 		// Discriminator + format CELs on messages OUTSIDE the licensing core. The
 		// rules are identical in shape to the ones above; covering them here keeps
 		// TestCELRuleCoverage's completeness assertion green for the whole proto,
 		// not just the licensing subtree.
 		{"authorized_exchange relationship set ok", &rampv1.AuthorizedExchange{Relationship: rampv1.ProviderRelationship_PROVIDER_RELATIONSHIP_DIRECT}, true, ""},
-		{"authorized_exchange relationship unspecified rejected", &rampv1.AuthorizedExchange{}, false, "authorized_exchange.relationship_specified"},
+		{"authorized_exchange relationship unspecified rejected", &rampv1.AuthorizedExchange{}, false, "enum.not_in"},
 		{"requester type set ok", &rampv1.Requester{Type: rampv1.RequesterType_REQUESTER_TYPE_AGENT}, true, ""},
-		{"requester type unspecified rejected", &rampv1.Requester{}, false, "requester.type_specified"},
+		{"requester type unspecified rejected", &rampv1.Requester{}, false, "enum.not_in"},
 		{"resource_identity mutability set ok", &rampv1.ResourceIdentity{ResourceMutability: rampv1.ResourceMutability_RESOURCE_MUTABILITY_STATIC}, true, ""},
-		{"resource_identity mutability unspecified rejected", &rampv1.ResourceIdentity{}, false, "resource_identity.resource_mutability_specified"},
+		{"resource_identity mutability unspecified rejected", &rampv1.ResourceIdentity{}, false, "enum.not_in"},
 		{"well_known_manifest role set ok", &rampv1.WellKnownManifest{Role: rampv1.Role_ROLE_AGENT}, true, ""},
-		{"well_known_manifest role unspecified rejected", &rampv1.WellKnownManifest{}, false, "well_known_manifest.role_specified"},
+		{"well_known_manifest role unspecified rejected", &rampv1.WellKnownManifest{}, false, "enum.not_in"},
 		{"dispute_request reason set ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
-		{"dispute_request reason unspecified rejected", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x"}, false, "dispute_request.reason_specified"},
+		{"dispute_request reason unspecified rejected", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x"}, false, "enum.not_in"},
 		{"usage consumed_unit empty ok", &rampv1.Usage{}, true, ""},
 		{"usage consumed_unit bare ok", &rampv1.Usage{ConsumedUnit: proto.String("tokens")}, true, ""},
-		{"usage consumed_unit space rejected", &rampv1.Usage{ConsumedUnit: proto.String("two words")}, false, "usage.consumed_unit.format"},
+		{"usage consumed_unit space rejected", &rampv1.Usage{ConsumedUnit: proto.String("two words")}, false, "string.pattern"},
 	}
 }
 
@@ -200,7 +200,7 @@ func idempotencyCases() []validationCase {
 }
 
 func freePricing() *rampv1.Pricing {
-	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: 0}
+	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 }
 
 func gen65() []string {
@@ -256,6 +256,7 @@ func errorDetailCases() []validationCase {
 // listing them lets the integrity check reject a mistyped wantRule that is
 // neither a real custom CEL id nor a known standard rule.
 var standardRuleIDs = map[string]bool{
+	"string.pattern":     true,
 	"required":           true,
 	"repeated.max_items": true,
 	"int64.gte":          true,

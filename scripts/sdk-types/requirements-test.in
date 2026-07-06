@@ -1,0 +1,4 @@
+# Runtime for the parity + canonical round-trip suites (check-canonical.sh, ci-local.sh).
+# Compile with: pip-compile --generate-hashes --allow-unsafe -o requirements-test.txt requirements-test.in
+pydantic==2.13.4
+pytest

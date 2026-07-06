@@ -42,4 +42,6 @@ jobs:
       # (informational, pre-v1). The remark docs-guard step self-skips here because
       # node_modules is absent; docs-ci.yml owns the docs build.
       - name: gating sequence (scripts/ci-local.sh)
-        run: ./scripts/ci-local.sh
+        # sdk-types-ci.yml owns the Pydantic/Zod gate (path-filtered), so skip it here
+        # and keep this job the proto mirror. Locally ci-local.sh runs both.
+        run: RAMP_CI_SKIP_SDK_TYPES=1 ./scripts/ci-local.sh

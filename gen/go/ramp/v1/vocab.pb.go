@@ -44,11 +44,27 @@ var file_ramp_v1_vocab_proto_extTypes = []protoimpl.ExtensionInfo{
 		Filename:      "ramp/v1/vocab.proto",
 	},
 	{
+		ExtendedType:  (*descriptorpb.FieldOptions)(nil),
+		ExtensionType: (*string)(nil),
+		Field:         50003,
+		Name:          "ramp.v1.vocab_package",
+		Tag:           "bytes,50003,opt,name=vocab_package",
+		Filename:      "ramp/v1/vocab.proto",
+	},
+	{
 		ExtendedType:  (*descriptorpb.EnumValueOptions)(nil),
 		ExtensionType: ([]string)(nil),
 		Field:         50002,
 		Name:          "ramp.v1.vocab_enum",
 		Tag:           "bytes,50002,rep,name=vocab_enum",
+		Filename:      "ramp/v1/vocab.proto",
+	},
+	{
+		ExtendedType:  (*descriptorpb.EnumValueOptions)(nil),
+		ExtensionType: (*string)(nil),
+		Field:         50004,
+		Name:          "ramp.v1.vocab_enum_package",
+		Tag:           "bytes,50004,opt,name=vocab_enum_package",
 		Filename:      "ramp/v1/vocab.proto",
 	},
 }
@@ -64,6 +80,14 @@ var (
 	//
 	// repeated string vocab = 50001;
 	E_Vocab = &file_ramp_v1_vocab_proto_extTypes[0]
+	// vocab_package names the generated SDK package/module for this field's axis
+	// (e.g. "pricingunits", "quotametrics"). It lives on the field — alongside the
+	// tokens — so the axis→package mapping is part of the single proto source and
+	// protoc-gen-rampvocab needs no hand-maintained mapping table. Required on any
+	// field that carries (ramp.v1.vocab).
+	//
+	// optional string vocab_package = 50003;
+	E_VocabPackage = &file_ramp_v1_vocab_proto_extTypes[1]
 )
 
 // Extension fields to descriptorpb.EnumValueOptions.
@@ -79,7 +103,14 @@ var (
 	// EnumValueOptions; 50002 is the next slot in the same internal block.
 	//
 	// repeated string vocab_enum = 50002;
-	E_VocabEnum = &file_ramp_v1_vocab_proto_extTypes[1]
+	E_VocabEnum = &file_ramp_v1_vocab_proto_extTypes[2]
+	// vocab_enum_package is the enum-value twin of (ramp.v1.vocab_package): it
+	// names the generated package/module for an axis selected by an enum value
+	// (e.g. "functiontokens"). Required on any enum value that carries
+	// (ramp.v1.vocab_enum).
+	//
+	// optional string vocab_enum_package = 50004;
+	E_VocabEnumPackage = &file_ramp_v1_vocab_proto_extTypes[3]
 )
 
 var File_ramp_v1_vocab_proto protoreflect.FileDescriptor
@@ -87,9 +118,11 @@ var File_ramp_v1_vocab_proto protoreflect.FileDescriptor
 const file_ramp_v1_vocab_proto_rawDesc = "" +
 	"\n" +
 	"\x13ramp/v1/vocab.proto\x12\aramp.v1\x1a google/protobuf/descriptor.proto:5\n" +
-	"\x05vocab\x12\x1d.google.protobuf.FieldOptions\x18ц\x03 \x03(\tR\x05vocab:B\n" +
+	"\x05vocab\x12\x1d.google.protobuf.FieldOptions\x18ц\x03 \x03(\tR\x05vocab:G\n" +
+	"\rvocab_package\x12\x1d.google.protobuf.FieldOptions\x18ӆ\x03 \x01(\tR\fvocabPackage\x88\x01\x01:B\n" +
 	"\n" +
-	"vocab_enum\x12!.google.protobuf.EnumValueOptions\x18҆\x03 \x03(\tR\tvocabEnumB\x8f\x01\n" +
+	"vocab_enum\x12!.google.protobuf.EnumValueOptions\x18҆\x03 \x03(\tR\tvocabEnum:T\n" +
+	"\x12vocab_enum_package\x12!.google.protobuf.EnumValueOptions\x18Ԇ\x03 \x01(\tR\x10vocabEnumPackage\x88\x01\x01B\x8f\x01\n" +
 	"\vcom.ramp.v1B\n" +
 	"VocabProtoP\x01Z7github.com/RAMP-Protocol/protocol/gen/go/ramp/v1;rampv1\xa2\x02\x03RXX\xaa\x02\aRamp.V1\xca\x02\aRamp\\V1\xe2\x02\x13Ramp\\V1\\GPBMetadata\xea\x02\bRamp::V1b\x06proto3"
 
@@ -99,11 +132,13 @@ var file_ramp_v1_vocab_proto_goTypes = []any{
 }
 var file_ramp_v1_vocab_proto_depIdxs = []int32{
 	0, // 0: ramp.v1.vocab:extendee -> google.protobuf.FieldOptions
-	1, // 1: ramp.v1.vocab_enum:extendee -> google.protobuf.EnumValueOptions
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	0, // [0:2] is the sub-list for extension extendee
+	0, // 1: ramp.v1.vocab_package:extendee -> google.protobuf.FieldOptions
+	1, // 2: ramp.v1.vocab_enum:extendee -> google.protobuf.EnumValueOptions
+	1, // 3: ramp.v1.vocab_enum_package:extendee -> google.protobuf.EnumValueOptions
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	0, // [0:4] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
 }
 
@@ -119,7 +154,7 @@ func file_ramp_v1_vocab_proto_init() {
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ramp_v1_vocab_proto_rawDesc), len(file_ramp_v1_vocab_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   0,
-			NumExtensions: 2,
+			NumExtensions: 4,
 			NumServices:   0,
 		},
 		GoTypes:           file_ramp_v1_vocab_proto_goTypes,

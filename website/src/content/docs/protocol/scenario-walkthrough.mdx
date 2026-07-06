@@ -134,7 +134,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
      title: "AI Regulation: What Providers Need to Know",
      word_count: 2500,
      estimated_quantity: 3300,
-     pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD", unit: "accesses", unit_cost: 0.00001515 },
+     pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD", unit: "accesses", unit_cost: "0.00001515" },
      identity: {
        canonical_url: "https://techcrunch.com/premium/ai-regulation-2026.html",
        iptc_guid: "urn:newsml:techcrunch:20260315:ai-reg-001",
@@ -151,7 +151,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
      ],
      terms: [
        { semantics: TERM_SEMANTICS_ENUMERATED,
-         pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD", unit: "accesses" },
+         pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD", unit: "accesses" },
          restrictions: [
            { kind: RESTRICTION_KIND_FUNCTION,
              permitted: ["ai-input", "ai-index", "search"],
@@ -283,8 +283,8 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
    Offer A (per-request):
      offer_id: "offer-tc-reg-001"
-     pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD",
-                unit: "accesses", unit_cost: 0.00001515, estimated_quantity: 3300 }
+     pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD",
+                unit: "accesses", unit_cost: "0.00001515", estimated_quantity: 3300 }
      identity: { canonical_url: "https://techcrunch.com/premium/ai-regulation-2026.html",
                  iptc_guid: "urn:newsml:techcrunch:20260315:ai-reg-001",
                  content_hash: "a1b2c3d4e5f6...", hash_method: "simhash-v1" }
@@ -295,7 +295,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
      ]
      terms: [
        { semantics: TERM_SEMANTICS_ENUMERATED,
-         pricing: { model: PRICING_MODEL_PER_UNIT, rate: 0.05, currency: "USD", unit: "accesses" },
+         pricing: { model: PRICING_MODEL_PER_UNIT, rate: "0.05", currency: "USD", unit: "accesses" },
          restrictions: [
            { kind: RESTRICTION_KIND_FUNCTION,
              permitted: ["ai-input", "ai-index", "search"],
@@ -308,14 +308,14 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
    Offer B (subscription):
      offer_id: "sub-offer-tc-reg-001"
-     pricing: { model: PRICING_MODEL_FREE, rate: 0, currency: "USD",
-                unit_cost: 0, estimated_quantity: 3300 }
+     pricing: { model: PRICING_MODEL_FREE, rate: "0", currency: "USD",
+                unit_cost: "0", estimated_quantity: 3300 }
      subscription_id: "SUB-ANTHROPIC-HEARST-2026"
      identity: { same as Offer A }
      attestations: { same as Offer A }
      terms: [
        { semantics: TERM_SEMANTICS_ENUMERATED,
-         pricing: { model: PRICING_MODEL_FREE, rate: 0, currency: "USD" },
+         pricing: { model: PRICING_MODEL_FREE, rate: "0", currency: "USD" },
          restrictions: [ same as Offer A ],
          scopes: ["subscription:SUB-ANTHROPIC-HEARST-2026"] }
      ]
@@ -338,10 +338,10 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
       "title": "AI Regulation: What Providers Need to Know",
       "pricing": {
         "model": "PRICING_MODEL_PER_UNIT",
-        "rate": 0.05,
+        "rate": "0.05",
         "currency": "USD",
         "unit": "accesses",
-        "unit_cost": 0.00001515,
+        "unit_cost": "0.00001515",
         "estimated_quantity": 3300
       },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
@@ -381,9 +381,9 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
       "title": "AI Regulation: What Providers Need to Know",
       "pricing": {
         "model": "PRICING_MODEL_FREE",
-        "rate": 0,
+        "rate": "0",
         "currency": "USD",
-        "unit_cost": 0,
+        "unit_cost": "0",
         "estimated_quantity": 3300
       },
       "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
@@ -453,10 +453,10 @@ If Anthropic uses its hosted Broker instead of the SDK directly, the Broker prov
   "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
   "constraints": {
     "preferred_exchanges": ["exchange.ssp-alpha.com"],
-    "max_unit_cost": 0.00005,
+    "max_unit_cost": "0.00005",
     "reporting_capable": true,
     "budget_scope": "team:claude-rag",
-    "period_budget": { "amount": 500.00, "currency": "USD" },
+    "period_budget": { "amount": "500.00", "currency": "USD" },
     "budget_period": "2592000s"
   }
 }
@@ -507,7 +507,7 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
       "offers": [
         {
           "offer_id": "offer-tc-reg-001",
-          "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.05, "currency": "USD", "unit": "accesses", "unit_cost": 0.00001515, "estimated_quantity": 3300 },
+          "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit": "accesses", "unit_cost": "0.00001515", "estimated_quantity": 3300 },
           "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
           "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
           "signature": "base64-ed25519-sig-A...",
@@ -515,7 +515,7 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
         },
         {
           "offer_id": "sub-offer-tc-reg-001",
-          "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD", "unit_cost": 0, "estimated_quantity": 3300 },
+          "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD", "unit_cost": "0", "estimated_quantity": 3300 },
           "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
           "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
           "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
@@ -544,7 +544,7 @@ Note: SSP-Alpha returns an empty `offers` array for the `theverge.com` URI with 
   "offers": [
     {
       "offer_id": "offer-verge-reg-001",
-      "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": 0.07, "currency": "USD", "unit": "accesses", "unit_cost": 0.00002258, "estimated_quantity": 3100 },
+      "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.07", "currency": "USD", "unit": "accesses", "unit_cost": "0.00002258", "estimated_quantity": 3100 },
       "identity": {
         "canonical_url": "https://theverge.com/premium/ai-regulation-republish.html",
         "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
@@ -617,7 +617,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 {
   "ver": "1.0",
-  "idempotencyKey": "tx-claude-001",
+  "idempotency_key": "tx-claude-001",
   "offer_id": "sub-offer-tc-reg-001",
   "requester": {
     "id": "claude-agent-001",
@@ -637,7 +637,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 {
   "ver": "1.0",
-  "idempotencyKey": "tx-claude-001",
+  "idempotency_key": "tx-claude-001",
   "offer_id": "sub-offer-tc-reg-001",
   "requester": {
     "id": "claude-agent-001",
@@ -681,7 +681,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
      billing_id: "bill-sub-alpha-001",
      offer_id: "sub-offer-tc-reg-001",
      subscription_id: "SUB-ANTHROPIC-HEARST-2026",
-     amount: 0,
+     amount: "0",
      agent_identity_hash: "e3b0c442...",
      offer_snapshot_json: "<full offer at transaction time, including exchange_signature>",
      reporting_required: true,
@@ -711,10 +711,10 @@ The request body is identical to the direct case; the forwarding chain lives in 
   "billing_id": "bill-sub-alpha-001",
   "resource_title": "AI Regulation: What Providers Need to Know",
   "retrieval_endpoint": "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html?expires=1710517800&agent_id=e3b0c442...&txn_id=txn-alpha-001&sig=d4e5f6a7b8c9...",
-  "cost": { "amount": 0, "currency": "USD", "unit_cost": 0 },
+  "cost": { "amount": "0", "currency": "USD", "unit_cost": "0" },
   "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
   "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
-  "subscription_unit_value": { "amount": 0.05, "currency": "USD", "unit_cost": 0.00001515 },
+  "subscription_unit_value": { "amount": "0.05", "currency": "USD", "unit_cost": "0.00001515" },
   "agent_identity_hash": "e3b0c442...",
   "reporting_obligation": {
     "required": true,
@@ -770,7 +770,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 
 {
   "ver": "1.0",
-  "idempotencyKey": "ur-claude-001",
+  "idempotency_key": "ur-claude-001",
   "transaction_id": "txn-alpha-001",
   "billing_id": "bill-sub-alpha-001",
   "usage": {
@@ -813,7 +813,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 }
 ```
 
-A successful `UsageReportResponse` carries only the Exchange-assigned `report_id` (the durable identity the agent references when filing a dispute). A rejected report is not a success body — it travels as a non-OK transport error carrying `ErrorDetail.usageReportRejection` (e.g. `{ "usageReportRejection": { "reason": "USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED" } }`).
+A successful `UsageReportResponse` carries only the Exchange-assigned `report_id` (the durable identity the agent references when filing a dispute). A rejected report is not a success body — it travels as a non-OK transport error carrying `ErrorDetail.usageReportRejection` (e.g. `{ "usage_report_rejection": { "reason": "USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED" } }`).
 
 ---
 
@@ -871,13 +871,13 @@ Response includes signed Offer snapshots for every transaction:
       "billing_id": "bill-sub-alpha-001",
       "offer_snapshot": {
         "offer_id": "sub-offer-tc-reg-001",
-        "pricing": { "model": "PRICING_MODEL_FREE", "rate": 0, "currency": "USD" },
+        "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" },
         "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
         "signature": "base64-ed25519-sig-B...",
         "signature_algorithm": "EdDSA"
       },
-      "cost": { "amount": 0, "currency": "USD" },
-      "subscription_unit_value": { "amount": 0.05, "currency": "USD" },
+      "cost": { "amount": "0", "currency": "USD" },
+      "subscription_unit_value": { "amount": "0.05", "currency": "USD" },
       "agent_id": "e3b0c442...",
       "timestamp": "2026-03-15T15:25:00Z"
     }

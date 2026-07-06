@@ -6,6 +6,13 @@
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.
+//
+// Wire format: the canonical wire is snake_case proto-JSON — the field names as
+// declared here (idempotency_key, unit_cost), used by the generated Pydantic/Zod
+// clients and the conformance corpus. The camelCase json_name alias is out of
+// contract for those clients. This is load-bearing for signatures: signed messages
+// are Ed25519 over JCS-canonicalized (RFC 8785) proto-JSON, and JCS sorts keys, so
+// field-name casing determines the signed bytes.
 
 syntax = "proto3";
 
@@ -124,11 +131,9 @@ message AcceptableRestriction {
   // as the terms (e.g. FUNCTION ["ai-train"], GEOGRAPHY ["US", "EU"]).
   repeated string values = 2 [
     (buf.validate.field).repeated.max_items = 64,
-    (buf.validate.field).cel = {
-      id: "acceptable_restriction.values.format"
-      message: "each value must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
-      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
-    }
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 64,
+    (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
   ];
 }
 
@@ -440,7 +445,7 @@ message Offer {
 
   // If set, this offer is available under an existing subscription/deal.
   // No per-request billing — usage tracked against subscription quota.
-  // Pricing.rate = 0 for subscription offers (zero marginal cost).
+  // Pricing.rate = "0" for subscription offers (zero marginal cost).
   // The Broker SHOULD prefer subscription offers when available.
   optional string subscription_id = 11;
 
@@ -599,14 +604,8 @@ message ResourceIdentity {
   // Validated across 18 use cases: static content (articles, patents, legislation),
   // dynamic data (credit reports, drug interactions, stock snapshots), and live
   // streams (MarketData quotes, NPR broadcast, news monitoring feeds).
-  ResourceMutability resource_mutability = 8;
+  ResourceMutability resource_mutability = 8 [(buf.validate.field).enum = {not_in: [0]}];
 
-  // Mutability must be specified; UNSPECIFIED is ambiguous at ingest.
-  option (buf.validate.message).cel = {
-    id: "resource_identity.resource_mutability_specified"
-    message: "resource_mutability must not be RESOURCE_MUTABILITY_UNSPECIFIED"
-    expression: "this.resource_mutability != ramp.v1.ResourceMutability.RESOURCE_MUTABILITY_UNSPECIFIED"
-  };
 
   // --- Provenance (C2PA Content Credentials) ---
 
@@ -806,6 +805,7 @@ enum RestrictionKind {
   // What the agent may do with the content. Seeded from RSL 1.0 AI-use
   // vocabulary and extended with established IP/copyright terms.
   RESTRICTION_KIND_FUNCTION = 1 [
+    (ramp.v1.vocab_enum_package) = "functiontokens",
     (ramp.v1.vocab_enum) = "all",
     (ramp.v1.vocab_enum) = "ai-all",
     (ramp.v1.vocab_enum) = "ai-train",
@@ -834,6 +834,7 @@ enum RestrictionKind {
   // Where the agent may use the content. ISO 3166-1 alpha-2 codes (US, DE, GB)
   // are valid structurally; only the non-ISO specials are registered here.
   RESTRICTION_KIND_GEOGRAPHY = 2 [
+    (ramp.v1.vocab_enum_package) = "geographytokens",
     (ramp.v1.vocab_enum) = "*",
     (ramp.v1.vocab_enum) = "EU",
     (ramp.v1.vocab_enum) = "EEA"
@@ -841,6 +842,7 @@ enum RestrictionKind {
 
   // Who may access and use the content.
   RESTRICTION_KIND_USER_TYPE = 3 [
+    (ramp.v1.vocab_enum_package) = "usertypes",
     (ramp.v1.vocab_enum) = "individual",
     (ramp.v1.vocab_enum) = "academic",
     (ramp.v1.vocab_enum) = "non_profit",
@@ -934,11 +936,7 @@ message License {
   // (allowlisted prefix + matching hex length); presence (digest-when-uri) is
   // enforced at ingest.
   optional string uri_digest = 5 [
-    (buf.validate.field).cel = {
-      id: "license.uri_digest.format"
-      message: "uri_digest must be sha256:/sha384:/sha512: followed by a hex digest of the matching length"
-      expression: "this == '' || this.matches('^sha256:[0-9a-f]{64}$') || this.matches('^sha384:[0-9a-f]{96}$') || this.matches('^sha512:[0-9a-f]{128}$')"
-    }
+    (buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$"
   ];
 }
 
@@ -982,15 +980,9 @@ message Restriction {
     message: "a token cannot appear in both permitted and prohibited"
     expression: "this.permitted.all(p, !(p in this.prohibited))"
   };
-  // The restriction axis must be specified; UNSPECIFIED is not a valid kind.
-  option (buf.validate.message).cel = {
-    id: "restriction.kind_specified"
-    message: "kind must not be RESTRICTION_KIND_UNSPECIFIED"
-    expression: "this.kind != ramp.v1.RestrictionKind.RESTRICTION_KIND_UNSPECIFIED"
-  };
 
   // Which dimension this restriction applies to.
-  RestrictionKind kind = 1;
+  RestrictionKind kind = 1 [(buf.validate.field).enum = {not_in: [0]}];
 
   // Tokens allowed on this axis. Empty = all permitted.
   // For FUNCTION: "ai-input", "ai-train", "search", "editorial", "commercial", …
@@ -998,21 +990,17 @@ message Restriction {
   // For USER_TYPE: "individual", "academic", "commercial_entity", …
   repeated string permitted = 2 [
     (buf.validate.field).repeated.max_items = 64,
-    (buf.validate.field).cel = {
-      id: "restriction.permitted.format"
-      message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
-      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
-    }
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 64,
+    (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
   ];
 
   // Tokens blocked on this axis. Takes precedence over permitted[].
   repeated string prohibited = 3 [
     (buf.validate.field).repeated.max_items = 64,
-    (buf.validate.field).cel = {
-      id: "restriction.prohibited.format"
-      message: "each token must be 1-64 chars from [A-Za-z0-9._:*-] (no spaces/control chars)"
-      expression: "this.all(t, t.size() >= 1 && t.size() <= 64 && t.matches('^[A-Za-z0-9._:*-]+$'))"
-    }
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 64,
+    (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
   ];
 
   // Fail-closed by default. When false (the default), this restriction is
@@ -1050,6 +1038,7 @@ message Quota {
   //   copies             Digital or physical copies produced.
   //   seats              Distinct named users licensed to access the content.
   string metric = 1 [
+    (ramp.v1.vocab_package) = "quotametrics",
     (ramp.v1.vocab) = "display-words",
     (ramp.v1.vocab) = "impressions",
     (ramp.v1.vocab) = "tokens",
@@ -1059,26 +1048,16 @@ message Quota {
     (ramp.v1.vocab) = "copies",
     (ramp.v1.vocab) = "seats",
     (buf.validate.field).string.max_len = 64,
-    (buf.validate.field).cel = {
-      id: "quota.metric.format"
-      message: "metric must be a lowercase-dashed token or vendor:namespaced (no spaces/control chars, ≤64 chars)"
-      expression: "this != '' && (this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$'))"
-    }
+    (buf.validate.field).string.pattern = "^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)$"
   ];
 
   // Maximum allowed value in the given window. A quota of 0 grants
   // nothing — express "no access" by omitting the term, not a zero quota.
   int64 limit = 2 [(buf.validate.field).int64.gte = 1];
 
-  // The accumulation window must be specified; UNSPECIFIED is ambiguous.
-  option (buf.validate.message).cel = {
-    id: "quota.window_specified"
-    message: "window must not be QUOTA_WINDOW_UNSPECIFIED"
-    expression: "this.window != ramp.v1.QuotaWindow.QUOTA_WINDOW_UNSPECIFIED"
-  };
 
   // Time window over which the limit accumulates.
-  QuotaWindow window = 3;
+  QuotaWindow window = 3 [(buf.validate.field).enum = {not_in: [0]}];
 }
 
 // Obligation — A post-use behavioral requirement attached to a LicenseTerm.
@@ -1095,24 +1074,12 @@ message Obligation {
     message: "SHARE_ALIKE requires scope_license to identify a license (id or uri)"
     expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_SHARE_ALIKE || (has(this.scope_license) && (this.scope_license.id != '' || this.scope_license.uri != ''))"
   };
-  // The obligation kind must be specified; UNSPECIFIED is not a valid kind.
-  option (buf.validate.message).cel = {
-    id: "obligation.kind_specified"
-    message: "kind must not be OBLIGATION_KIND_UNSPECIFIED"
-    expression: "this.kind != ramp.v1.ObligationKind.OBLIGATION_KIND_UNSPECIFIED"
-  };
-  // The firing trigger must be specified; UNSPECIFIED is ambiguous.
-  option (buf.validate.message).cel = {
-    id: "obligation.trigger_specified"
-    message: "trigger must not be OBLIGATION_TRIGGER_UNSPECIFIED"
-    expression: "this.trigger != ramp.v1.ObligationTrigger.OBLIGATION_TRIGGER_UNSPECIFIED"
-  };
 
   // What the agent must do.
-  ObligationKind kind = 1;
+  ObligationKind kind = 1 [(buf.validate.field).enum = {not_in: [0]}];
 
   // When the obligation activates.
-  ObligationTrigger trigger = 2;
+  ObligationTrigger trigger = 2 [(buf.validate.field).enum = {not_in: [0]}];
 
   // The license that derivatives must be released under. REQUIRED for
   // SHARE_ALIKE (rejected if absent), where it MUST identify a license — set
@@ -1168,12 +1135,6 @@ message LicenseTerm {
     message: "at most one restriction is allowed per kind"
     expression: "this.restrictions.all(r, this.restrictions.filter(o, o.kind == r.kind).size() <= 1)"
   };
-  // Every term must declare its semantics; UNSPECIFIED is not a valid term.
-  option (buf.validate.message).cel = {
-    id: "license_term.semantics_specified"
-    message: "semantics must not be TERM_SEMANTICS_UNSPECIFIED"
-    expression: "this.semantics != ramp.v1.TermSemantics.TERM_SEMANTICS_UNSPECIFIED"
-  };
 
   // Governing license document. Authoritative for REFERENCE_ONLY terms, which
   // MUST carry a License with a non-empty uri — a REFERENCE_ONLY term that
@@ -1181,7 +1142,7 @@ message LicenseTerm {
   optional License license = 1;
 
   // How to interpret the machine fields.
-  TermSemantics semantics = 2;
+  TermSemantics semantics = 2 [(buf.validate.field).enum = {not_in: [0]}];
 
   // Usage restrictions (function, geography, user-type).
   // Multiple restrictions are AND-combined — the agent must satisfy all of them.
@@ -1283,30 +1244,26 @@ message Pricing {
   };
   option (buf.validate.message).cel = {
     id: "pricing.free.zero_rate"
-    message: "rate must be 0 when model is FREE"
-    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == 0.0"
-  };
-  // Pricing must declare a model; UNSPECIFIED is not a valid pricing model.
-  option (buf.validate.message).cel = {
-    id: "pricing.model_specified"
-    message: "model must not be PRICING_MODEL_UNSPECIFIED"
-    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_UNSPECIFIED"
+    message: "rate must be 0 (or empty) when model is FREE"
+    expression: "this.model != ramp.v1.PricingModel.PRICING_MODEL_FREE || this.rate == '' || this.rate.matches('^0+([.]0+)?$')"
   };
 
   // Provider's pricing model.
-  PricingModel model = 1;
+  PricingModel model = 1 [(buf.validate.field).enum = {not_in: [0]}];
 
-  // Price in the provider's model (e.g. 0.05 = $0.05 per article).
-  double rate = 2;
+  // Price in the provider's model, as an exact decimal string — e.g. "0.05" =
+  // $0.05 per article. NOT a float: money is decimal to avoid binary rounding and
+  // to allow arbitrary sub-cent precision (e.g. "0.0001234"). Denominated in `currency`.
+  string rate = 2 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];
 
   // ISO 4217 currency code (e.g. "USD", "EUR").
   string currency = 3;
 
-  // Normalized cost per unit — the universal comparison metric.
+  // Normalized cost per unit — the universal comparison metric, exact decimal string.
   // For text: cost per token. For video: cost per second.
   // For data: cost per record. For APIs: cost per call.
   // Denominated in the Exchange's base_currency (from its WellKnownManifest).
-  optional double unit_cost = 4;
+  optional string unit_cost = 4 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];
 
   // Estimated quantity in the metering unit.
   // For text: token count. For video: duration in seconds.
@@ -1326,6 +1283,7 @@ message Pricing {
   // those. The CEL is STRUCTURE ONLY (empty / bare-form / vendor:namespaced) —
   // it never lists the tokens, so it cannot drift from the registry.
   optional string unit = 8 [
+    (ramp.v1.vocab_package) = "pricingunits",
     (ramp.v1.vocab) = "fetches",  (ramp.v1.vocab) = "accesses", (ramp.v1.vocab) = "tokens",
     (ramp.v1.vocab) = "calls",    (ramp.v1.vocab) = "pages",    (ramp.v1.vocab) = "seconds",
     (ramp.v1.vocab) = "minutes",  (ramp.v1.vocab) = "records",  (ramp.v1.vocab) = "streams",
@@ -1334,11 +1292,7 @@ message Pricing {
     (ramp.v1.vocab) = "characters", (ramp.v1.vocab) = "bytes",  (ramp.v1.vocab) = "items",
     (ramp.v1.vocab) = "sq-km",
     (buf.validate.field).string.max_len = 64,
-    (buf.validate.field).cel = {
-      id: "pricing.unit.format"
-      message: "unit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)"
-      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
-    }
+    (buf.validate.field).string.pattern = "^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$"
   ];
 
   // How usage is tracked for billing reconciliation.
@@ -1431,14 +1385,8 @@ message Requester {
   string domain = 2;
 
   // What kind of entity is making this request.
-  RequesterType type = 3;
+  RequesterType type = 3 [(buf.validate.field).enum = {not_in: [0]}];
 
-  // The requester type must be specified; UNSPECIFIED is ambiguous at ingest.
-  option (buf.validate.message).cel = {
-    id: "requester.type_specified"
-    message: "type must not be REQUESTER_TYPE_UNSPECIFIED"
-    expression: "this.type != ramp.v1.RequesterType.REQUESTER_TYPE_UNSPECIFIED"
-  };
 
   // Human-readable name (e.g., "Acme Research Assistant").
   optional string name = 4;
@@ -1761,7 +1709,7 @@ message TransactionResponse {
   optional string subscription_id = 12;
 
   // Computed per-unit cost for financial attribution on subscription transactions.
-  // Even when cost.amount=0 (subscription), this field carries the value
+  // Even when cost.amount="0" (subscription), this field carries the value
   // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
   optional Cost subscription_unit_value = 16;
 
@@ -1807,7 +1755,7 @@ message TransactionResultItem {
   optional string subscription_id = 6;
 
   // Computed per-unit cost for financial attribution on subscription transactions.
-  // Even when cost.amount=0 (subscription), this field carries the value
+  // Even when cost.amount="0" (subscription), this field carries the value
   // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
   optional Cost subscription_unit_value = 11;
 
@@ -1836,10 +1784,10 @@ message TransactionResultItem {
 
 // Cost — Actual transaction cost.
 message Cost {
-  // Cost amount
-  double amount = 1;
+  // Exact decimal string (not a float), e.g. "19.99". Denominated in `currency`.
+  string amount = 1 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];
   string currency = 2;        // ISO 4217
-  optional double unit_cost = 3;   // Effective cost per unit
+  optional string unit_cost = 3 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];   // Effective cost per unit (decimal string)
 }
 
 // DenialReason — Standard vocabulary for transaction denial.
@@ -2175,11 +2123,7 @@ message Usage {
   // a bare registered token or a vendor:namespaced token.
   optional string consumed_unit = 8 [
     (buf.validate.field).string.max_len = 64,
-    (buf.validate.field).cel = {
-      id: "usage.consumed_unit.format"
-      message: "consumed_unit must be empty, a lowercase-dashed token, or vendor:namespaced (no spaces/control chars, ≤64 chars)"
-      expression: "this == '' || this.matches('^[a-z0-9-]+$') || this.matches('^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$')"
-    }
+    (buf.validate.field).string.pattern = "^([a-z0-9-]+|[A-Za-z0-9._-]+:[A-Za-z0-9._-]+)?$"
   ];
 }
 
@@ -2296,8 +2240,8 @@ message RequestConstraints {
   // Maximum price the agent is willing to pay.
   optional Cost max_price = 2;
 
-  // Maximum effective cost per unit.
-  optional double max_unit_cost = 3;
+  // Maximum effective cost per unit, as an exact decimal string (not a float).
+  optional string max_unit_cost = 3 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];
 
   // Preferred delivery methods, in order of preference.
   repeated DeliveryMethod delivery_preference = 4;
@@ -2441,14 +2385,8 @@ message WellKnownManifest {
   string ver = 1;
 
   // Role this manifest describes.
-  Role role = 2;
+  Role role = 2 [(buf.validate.field).enum = {not_in: [0]}];
 
-  // The manifest role must be specified; UNSPECIFIED is ambiguous at ingest.
-  option (buf.validate.message).cel = {
-    id: "well_known_manifest.role_specified"
-    message: "role must not be ROLE_UNSPECIFIED"
-    expression: "this.role != ramp.v1.Role.ROLE_UNSPECIFIED"
-  };
 
   // Canonical domain serving this manifest.
   string domain = 3;
@@ -2597,14 +2535,8 @@ message AuthorizedExchange {
   string endpoint = 2;
 
   // Relationship type (mirrors ads.txt DIRECT/RESELLER).
-  ProviderRelationship relationship = 3;
+  ProviderRelationship relationship = 3 [(buf.validate.field).enum = {not_in: [0]}];
 
-  // The relationship must be specified; UNSPECIFIED is ambiguous at ingest.
-  option (buf.validate.message).cel = {
-    id: "authorized_exchange.relationship_specified"
-    message: "relationship must not be PROVIDER_RELATIONSHIP_UNSPECIFIED"
-    expression: "this.relationship != ramp.v1.ProviderRelationship.PROVIDER_RELATIONSHIP_UNSPECIFIED"
-  };
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -2718,7 +2650,7 @@ message DisputeRequest {
   string billing_id = 4;
 
   // Reason for the dispute.
-  DisputeReason reason = 5;
+  DisputeReason reason = 5 [(buf.validate.field).enum = {not_in: [0]}];
 
   // Human-readable description of the issue.
   optional string description = 6;
@@ -2746,12 +2678,6 @@ message DisputeRequest {
   // Empty (default) → all ext keys are safe to ignore.
   repeated string ext_critical = 90;
 
-  // The dispute reason must be specified; UNSPECIFIED is ambiguous at ingest.
-  option (buf.validate.message).cel = {
-    id: "dispute_request.reason_specified"
-    message: "reason must not be DISPUTE_REASON_UNSPECIFIED"
-    expression: "this.reason != ramp.v1.DisputeReason.DISPUTE_REASON_UNSPECIFIED"
-  };
 }
 
 enum DisputeReason {

@@ -12,6 +12,12 @@ Every RPC request/response carries `ver` (field 1, RAMP protocol version). The e
 Request correlation is **not** carried in the proto body. It rides on the `X-Request-ID` HTTP header, and cross-system tracing uses W3C Trace Context (`traceparent` / `tracestate`). The former `request_id` fields have been removed from every message.
 :::
 
+:::note[Wire format is snake_case proto-JSON]
+The canonical wire form is **snake_case proto-JSON** — the field names exactly as declared in the `.proto` (e.g. `idempotency_key`, `unit_cost`), across every example on this site, the generated Pydantic/Zod clients, and the conformance corpus. The proto3-JSON `lowerCamelCase` alias (`idempotencyKey`) is **out of contract**: `protojson` on the server tolerates it on input, but the generated clients emit and accept snake_case only.
+
+This is **load-bearing for signatures**: signed messages (`Offer.signature`, `ResourceAttestation`, …) are Ed25519 over **JCS-canonicalized (RFC 8785) proto-JSON**, and JCS sorts keys lexicographically, so the field-name casing determines the signed bytes. snake_case proto-JSON is the canonical input the signature is computed over.
+:::
+
 ## Services
 
 ### ExchangeService
@@ -347,10 +353,10 @@ See [`/protocol/licensing-terms`](/protocol/licensing-terms/) for a full concept
 
 One complete access arrangement for a resource. Lives at both ingestion (`ResourceEntry.terms`) and emission (`Offer.terms`).
 
-Validation rules (wire-enforced via protovalidate CEL unless noted). A parenthetical
-code is the CEL rule `id:` that enforces the rule (e.g. `license_term.semantics_specified`).
+Validation rules (wire-enforced via protovalidate unless noted). A parenthetical
+code is the cross-field CEL rule `id:` that enforces the rule (e.g. `license_term.reference_only.requires_uri`); single-field rules use protovalidate's standard constraints (`enum.not_in`, `string.pattern`, …).
 - `pricing` MUST be present on **every** term, any semantics — absent Pricing is a validation error. `model = FREE` must be stated explicitly — absent Pricing is not free.
-- `semantics` MUST be set — `TERM_SEMANTICS_UNSPECIFIED` is rejected (`license_term.semantics_specified`).
+- `semantics` MUST be set — `TERM_SEMANTICS_UNSPECIFIED` is rejected (the field's `enum.not_in:[0]` rule).
 - `REFERENCE_ONLY` requires `license.uri` to be non-empty (`license_term.reference_only.requires_uri`); a `License` with a `uri` requires a `uri_digest` (`license.digest_required_with_uri`).
 - At most one `Restriction` per `kind` (`license_term.one_restriction_per_kind`); a token cannot be both permitted and prohibited (`restriction.permitted_prohibited_disjoint`).
 - Unknown tokens in `restrictions[].permitted` / `prohibited` produce `PushResourcesResponse.warnings[]` but do NOT cause hard rejection (ingest-time, not CEL).

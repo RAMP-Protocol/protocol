@@ -459,7 +459,7 @@ An offer from an Exchange connected to EUR-Lex, providing the GDPR in German:
   "offer_id": "off-gdpr-de-001",
   "pricing": {
     "model": "PRICING_MODEL_FREE",
-    "unit_cost": 0,
+    "unit_cost": "0",
     "unit": "pages"
   },
   "delivery_method": "DELIVERY_METHOD_DIRECT",
@@ -511,7 +511,7 @@ An offer from a Legal Exchange for a specific filing in a Southern District of N
   "offer_id": "off-pacer-sdny-45",
   "pricing": {
     "model": "PRICING_MODEL_PER_UNIT",
-    "unit_cost": 0.10,
+    "unit_cost": "0.10",
     "estimated_quantity": 12,
     "unit": "pages",
     "currency": "USD"
@@ -562,7 +562,7 @@ An offer for a granted US patent from a commercial patent aggregator:
   "offer_id": "off-patent-us11234567",
   "pricing": {
     "model": "PRICING_MODEL_PER_UNIT",
-    "unit_cost": 5.00,
+    "unit_cost": "5.00",
     "estimated_quantity": 1,
     "unit": "items",
     "currency": "USD"
@@ -632,7 +632,7 @@ The Exchange returns an OfferGroup with two offers -- one free from EUR-Lex, one
   "offers": [
     {
       "offer_id": "off-eurlex-gdpr-de-consol",
-      "pricing": { "model": "PRICING_MODEL_FREE", "unit_cost": 0 },
+      "pricing": { "model": "PRICING_MODEL_FREE", "unit_cost": "0" },
       "ext": {
         "legal.language": "de",
         "legal.available_languages": ["bg","hr","cs","da","nl","en","et","fi","fr","de","el","hu","ga","it","lv","lt","mt","pl","pt","ro","sk","sl","es","sv"],
@@ -647,7 +647,7 @@ The Exchange returns an OfferGroup with two offers -- one free from EUR-Lex, one
     },
     {
       "offer_id": "off-wk-gdpr-de-annotated",
-      "pricing": { "model": "PRICING_MODEL_PER_UNIT", "unit_cost": 75.00, "unit": "items", "currency": "EUR" },
+      "pricing": { "model": "PRICING_MODEL_PER_UNIT", "unit_cost": "75.00", "unit": "items", "currency": "EUR" },
       "ext": {
         "legal.language": "de",
         "legal.available_languages": ["en", "fr", "de"],
@@ -676,7 +676,7 @@ An agent researches a patent that has been through opposition at the EPO. The or
   "offers": [
     {
       "offer_id": "off-ep-3456789-a1",
-      "pricing": { "model": "PRICING_MODEL_FREE", "unit_cost": 0 },
+      "pricing": { "model": "PRICING_MODEL_FREE", "unit_cost": "0" },
       "identity": {
         "ext": {
           "legal.jurisdiction": "EP",

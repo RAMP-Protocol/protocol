@@ -16,17 +16,16 @@ plugins:
   - remote: buf.build/connectrpc/go:v1.19.1
     out: ../gen/go
     opt: paths=source_relative
-  # TypeScript message types (protobuf-es)
-  - remote: buf.build/bufbuild/es:v2.12.1
-    out: ../gen/ts
-    opt: target=ts
-  # TypeScript Connect service client/handler
-  - remote: buf.build/connectrpc/es:v1.6.1
-    out: ../gen/ts
-    opt: target=ts
+  # NOTE: the protobuf-native TS (protobuf-es) and Python (_pb2/connect) SDKs were
+  # removed — they are not usable in the target ecosystems (FastMCP needs Pydantic,
+  # edge stacks need Zod), and consumers were hand-mirroring the proto anyway. The
+  # TS/Python *types export* is now generated as Pydantic + Zod from JSON Schema
+  # (see scripts/gen-sdk-types.sh). Go keeps native protobuf (it's the server).
   # RAMP vocabulary constants — reads (ramp.v1.vocab) field options and
   # (ramp.v1.vocab_enum) enum-value options and emits typed token constants +
-  # IsRegistered per axis (Pricing.unit, Quota.metric, function, geography,
-  # user-type).
+  # membership check per axis (Pricing.unit, Quota.metric, function, geography,
+  # user-type) for EVERY SDK language in one pass: Go, TypeScript, and Python.
+  # out is ../gen (not ../gen/go/vocab) so it writes go/vocab/, ts/vocab/, and
+  # python/vocab/ from the single source — the three cannot drift from each other.
   - local: ["go", "run", "github.com/RAMP-Protocol/protocol/cmd/protoc-gen-rampvocab"]
-    out: ../gen/go/vocab
+    out: ../gen

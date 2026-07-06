@@ -60,10 +60,50 @@ func TestConstNameSpecialValidation(t *testing.T) {
 	}
 }
 
+func TestPyConstName(t *testing.T) {
+	cases := []struct {
+		token   string
+		want    string
+		wantErr bool
+	}{
+		{token: "accesses", want: "ACCESSES"},
+		{token: "units-manufactured", want: "UNITS_MANUFACTURED"},
+		{token: "sq-km", want: "SQ_KM"},
+		{token: "news_publisher", want: "NEWS_PUBLISHER"},
+		// special-cased tokens
+		{token: "*", want: "WORLDWIDE"},
+		{token: "all", want: "ALL_USES"}, // bare ALL would shadow the emitted ALL tuple
+		// invalid → error
+		{token: "", wantErr: true},         // empty
+		{token: "3d-model", wantErr: true}, // leading digit
+	}
+	for _, c := range cases {
+		got, err := pyConstName(c.token)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("pyConstName(%q) = %q, want error", c.token, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("pyConstName(%q) unexpected error: %v", c.token, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("pyConstName(%q) = %q, want %q", c.token, got, c.want)
+		}
+	}
+}
+
 func TestConstEntriesCollision(t *testing.T) {
 	// "ai-train" and "ai_train" both PascalCase to "AiTrain".
 	if _, err := constEntries([]string{"ai-train", "ai_train"}); err == nil {
 		t.Fatal("expected collision error for ai-train / ai_train")
+	}
+	// The same tokens UPPER_SNAKE to "AI_TRAIN" — the per-language collision
+	// check must catch it under the Python identifier scheme too.
+	if _, err := constEntriesFor([]string{"ai-train", "ai_train"}, pyConstName); err == nil {
+		t.Fatal("expected collision error for ai-train / ai_train under pyConstName")
 	}
 }
 

@@ -35,18 +35,44 @@ A working multi-language stack — Exchange (Go), Broker (Go), Edge (TypeScript)
 
 ## SDKs
 
+All three languages are generated from `proto/`: Go is native protobuf + Connect via
+`buf generate` (it is the server/runtime); the Python and TypeScript **types exports**
+— Pydantic models and Zod schemas — are generated from the same proto via JSON Schema
+by `scripts/gen-sdk-types.sh` (the two real consumers, the Python MCP shim and the
+TypeScript edge worker, cannot use protobuf natively). All three carry **registered
+vocabulary constants** per axis (`pricingunits`, `quotametrics`, `functiontokens`,
+`geographytokens`, `usertypes`) so consumers use typed constants and an
+`IsRegistered`/`isRegistered`/`is_registered` membership check instead of magic
+strings. The vocab is emitted from the single `(ramp.v1.vocab)` source in one pass, so
+the three languages cannot drift from each other.
+
 ### Go
 
 ```go
 import (
     rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
     "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
+    "github.com/RAMP-Protocol/protocol/gen/go/vocab/pricingunits"
 )
 ```
 
 ### TypeScript
 
-TypeScript message types and a Connect client are generated under [`gen/ts/`](gen/ts) (Protobuf-ES + Connect-ES); the [reference implementation](https://github.com/RAMP-Protocol/reference-implementation) shows them in use.
+Zod schemas for every message are generated under [`gen/ts/wire/schemas.ts`](gen/ts/wire/schemas.ts) (validated message types; the edge worker uses them for request validation), with vocabulary constants under [`gen/ts/vocab/`](gen/ts/vocab); the [reference implementation](https://github.com/RAMP-Protocol/reference-implementation) shows them in use.
+
+```typescript
+import { OfferSchema } from "@ramp-protocol/sdk/wire/schemas";
+import { pricingunits } from "@ramp-protocol/sdk/vocab/pricingunits";
+```
+
+### Python
+
+Pydantic v2 models for every message (extending the hand-written `wire.base.WireModel` seam) plus vocabulary constants are generated under [`gen/python/`](gen/python) (`pip install .` from that directory; see its [README](gen/python/README.md)).
+
+```python
+from wire.models import Offer, Pricing
+from vocab import pricingunits
+```
 
 ## License
 
