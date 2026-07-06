@@ -28,9 +28,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 
-from ._b64 import b64url_decode
+from .b64 import b64url_decode, b64url_nopad
 from .thumbprint import thumbprint
 
 AGENT_KEY_HEADER = "x-ramp-agent-key"
@@ -150,6 +153,40 @@ def signature_base(method: str, url: str, raw_params: str) -> str:
             f'"@target-uri": {url}',
             f'"@signature-params": {raw_params}',
         ]
+    )
+
+
+def sign_agent_binding(
+    *,
+    url: str,
+    signer_seed: bytes,
+    created: int,
+    expires: int,
+) -> tuple[str, str, str]:
+    """Produce the agent's GET proof-of-possession — the SIGN face of this module.
+
+    Returns ``(presented_key_b64url, signature_input_value, signature_value)``:
+    the ``X-RAMP-Agent-Key`` value, the ``Signature-Input`` header value, and the
+    ``Signature`` header value the fetcher attaches to its GET. The covered set is
+    exactly ``@method @target-uri`` (ADR-013), keyid is the RFC 7638 thumbprint of
+    the signer's public key (the 3-way identity anchor), and the signed bytes are
+    the same :func:`signature_base` the verify face reconstructs — byte-identical
+    to the sdk/go signer (pinned by pop-vectors.json). ``created``/``expires`` are
+    injected unix seconds: the helper reads no clock (L1-pure).
+    """
+    priv = Ed25519PrivateKey.from_private_bytes(signer_seed)
+    pub = priv.public_key().public_bytes_raw()
+    keyid = thumbprint(pub)
+    sig_params = (
+        f'("@method" "@target-uri");keyid="{keyid}";alg="ed25519"'
+        f";created={created};expires={expires}"
+    )
+    raw = priv.sign(signature_base("GET", url, sig_params).encode())
+    # The Signature byte string is STANDARD base64 (mirror _parse_signature).
+    return (
+        b64url_nopad(pub),
+        f"sig1={sig_params}",
+        f"sig1=:{base64.b64encode(raw).decode()}:",
     )
 
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 
-from ._b64 import b64url_nopad
+from .b64 import b64url_nopad
 
 _ED25519_PUBLIC_KEY_BYTES = 32
 

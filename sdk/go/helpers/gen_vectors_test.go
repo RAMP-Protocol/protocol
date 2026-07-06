@@ -56,10 +56,15 @@ type popVector struct {
 	URL                string `json:"url"`
 	AgentID            string `json:"agent_id"`
 	PresentedKeyB64URL string `json:"presented_key_b64url"`
-	SignatureInput     string `json:"signature_input"`
-	Signature          string `json:"signature"`
-	NowUnix            int64  `json:"now_unix"`
-	ExpectedValid      bool   `json:"expected_valid"`
+	// SignerSeedHex is the raw Ed25519 seed of the key that PRODUCED the
+	// vector's signature, so a sign-face port can re-sign and byte-compare
+	// against the stored Signature (the same self-contained-oracle shape
+	// acceptance-vectors.json uses via seed_hex).
+	SignerSeedHex  string `json:"signer_seed_hex"`
+	SignatureInput string `json:"signature_input"`
+	Signature      string `json:"signature"`
+	NowUnix        int64  `json:"now_unix"`
+	ExpectedValid  bool   `json:"expected_valid"`
 }
 
 // fixedSeed returns a deterministic 32-byte Ed25519 seed: byte i = (b+i) mod 256.
@@ -199,18 +204,21 @@ func buildPopVectors(t *testing.T) []popVector {
 	return []popVector{
 		{
 			Name: "valid", Method: method, URL: url, AgentID: agentTP,
-			PresentedKeyB64URL: presented, SignatureInput: validInput, Signature: validSig,
+			PresentedKeyB64URL: presented, SignerSeedHex: hex.EncodeToString(agentSeed),
+			SignatureInput: validInput, Signature: validSig,
 			NowUnix: freshNow, ExpectedValid: true,
 		},
 		{
 			Name: "expired", Method: method, URL: url, AgentID: agentTP,
-			PresentedKeyB64URL: presented, SignatureInput: validInput, Signature: validSig,
+			PresentedKeyB64URL: presented, SignerSeedHex: hex.EncodeToString(agentSeed),
+			SignatureInput: validInput, Signature: validSig,
 			NowUnix: staleNow, ExpectedValid: false,
 		},
 		{
 			// Presented key's thumbprint != agent_id -> thumbprint_mismatch.
 			Name: "wrong_key_thumbprint_mismatch", Method: method, URL: url, AgentID: agentTP,
-			PresentedKeyB64URL: wrongPresented, SignatureInput: wrongInput, Signature: wrongSig,
+			PresentedKeyB64URL: wrongPresented, SignerSeedHex: hex.EncodeToString(fixedSeed(0x44)),
+			SignatureInput: wrongInput, Signature: wrongSig,
 			NowUnix: freshNow, ExpectedValid: false,
 		},
 	}

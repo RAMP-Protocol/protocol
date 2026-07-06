@@ -22,7 +22,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from ._b64 import b64url_decode
+from .b64 import b64url_decode
 
 _SIG_PARAM = "sig"
 _EXP_PARAM = "exp"

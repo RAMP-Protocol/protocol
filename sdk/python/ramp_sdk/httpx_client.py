@@ -53,11 +53,22 @@ class SigningTransport:
         keyid: str,
         now: Callable[[], float] | None = None,
         ttl_sec: int = _DEFAULT_TTL_SEC,
+        signature_agent: str = "",
     ) -> None:
+        """``signature_agent`` is the signer's own WBA directory URL.
+
+        Signature-Agent is a COVERED wire component: the sign seam always binds
+        its value (empty included) into the signature base, and when non-empty
+        the header itself is attached so the verifier resolves the signer's
+        keys against that directory. Always-stamp-when-configured is the client
+        shape — Python has no relay path, so the Go relay's set-if-absent guard
+        (core.WithSignatureAgent) has no analogue here.
+        """
         self._signer_seed = signer_seed
         self._keyid = keyid
         self._now = now or time.time
         self._ttl_sec = ttl_sec
+        self._signature_agent = signature_agent
 
     def sign_outbound(
         self,
@@ -83,10 +94,15 @@ class SigningTransport:
             keyid=self._keyid,
             created=created,
             expires=expires,
+            signature_agent=self._signature_agent,
         )
         headers = {
             "content-digest": signed.content_digest,
             "signature-input": signed.signature_input,
             "signature": signed.signature,
         }
+        # The covered set binds signature-agent unconditionally (empty included);
+        # the header itself travels only when a directory is configured.
+        if self._signature_agent:
+            headers["signature-agent"] = self._signature_agent
         return SignedOutbound(method=method, url=url, body=body, headers=headers)
