@@ -6,13 +6,15 @@
 // manifest to mark them `required` (and drop the zero default) so the generated
 // Pydantic/Zod reject omission, matching the Go server.
 //
-// This is the single, authoritative source of "is the zero value invalid" — the
-// same protovalidate view the conformance tests use — so the Python bridge does
-// not re-implement the rule semantics.
+// This is the single, authoritative source of "is the zero value invalid" (the same
+// Go protovalidate the conformance corpus is labeled against), consumed by
+// scripts/gen-sdk-types.sh so the Python bridge does not re-implement the rule
+// semantics.
 package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"regexp"
 	"sort"
@@ -95,6 +97,16 @@ func zeroRejected(fd protoreflect.FieldDescriptor) bool {
 				return true
 			}
 		}
+	}
+	// Loud guard: only int64 numeric rules are evaluated above (Quota.limit today). A
+	// rule of another numeric kind would fall through as "zero is valid" — the field
+	// would not be marked required and the generated clients would accept an omission
+	// the Go server rejects. Fail instead of silently under-marking.
+	if fr.GetInt32() != nil || fr.GetUint64() != nil || fr.GetUint32() != nil ||
+		fr.GetSint64() != nil || fr.GetSint32() != nil || fr.GetFixed64() != nil ||
+		fr.GetFixed32() != nil || fr.GetSfixed64() != nil || fr.GetSfixed32() != nil ||
+		fr.GetFloat() != nil || fr.GetDouble() != nil {
+		panic(fmt.Sprintf("requiredgen: unhandled numeric rule on field %s (kind %s) — extend zeroRejected to evaluate it", fd.FullName(), fd.Kind()))
 	}
 	return false
 }

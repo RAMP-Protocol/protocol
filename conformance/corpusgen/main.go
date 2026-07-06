@@ -11,7 +11,7 @@
 // is fine; the field-level violation is what the clients are expected to catch).
 //
 // Determinism: cases are emitted in a stable order so the committed corpus is a
-// byte-exact, drift-gated artifact (regenerate: scripts/gen-corpus.sh).
+// byte-exact, drift-gated artifact (regenerate: go run ./conformance/corpusgen).
 package main
 
 import (
@@ -90,10 +90,14 @@ func seeds() map[string]proto.Message {
 // pattern and length bounds becomes the auto-filled value (generic — no per-field
 // table). badStrings are candidates that should FAIL a typical token/number/hash
 // pattern; the first that the pattern rejects becomes the violating value.
-var (
-	stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), ""}
-	badStrings    = []string{"two words", "1.2.3", "!!bad!!", "\x00ctl\x00", " "}
-)
+var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), ""}
+
+// APPEND-ONLY: a badStrings entry's INDEX is baked into the emitted case IDs (see
+// stringEdges' pattern#<idx> mutants), so appending keeps existing case IDs stable and
+// the byte drift-gate diff purely additive. The trailing four are money-specific
+// killers — numbers a naive Decimal would accept (negative / NaN / Infinity / exponent)
+// but the decimal-string money pattern rejects; they are the H1 blind spot.
+var badStrings = []string{"two words", "1.2.3", "!!bad!!", "\x00ctl\x00", " ", "-5", "NaN", "Infinity", "1E3"}
 
 func main() {
 	v, err := protovalidate.New()
@@ -128,13 +132,22 @@ func main() {
 				e.apply(m)
 				verr := v.Validate(m.Interface())
 				ids := ruleIDs(verr)
+				id := fmt.Sprintf("%s/%s/%s", short, fd.Name(), e.label)
+				if e.valid {
+					// Positive edge: Go must accept it. Proves the ACCEPT boundary
+					// (e.g. money "") the negative-only mutants never exercise.
+					if verr != nil {
+						die("positive edge %s expected valid, got %v", id, ids)
+					}
+					cases = append(cases, mkCase(id, short, m.Interface(), true, nil, v))
+					continue
+				}
 				if verr == nil {
 					die("mutant %s.%s/%s did not violate any rule — edge is wrong", short, fd.Name(), e.label)
 				}
 				if !contains(ids, e.want) {
 					die("mutant %s.%s/%s expected rule %q, got %v", short, fd.Name(), e.label, e.want, ids)
 				}
-				id := fmt.Sprintf("%s/%s/%s", short, fd.Name(), e.label)
 				cases = append(cases, mkCase(id, short, m.Interface(), false, ids, v))
 			}
 		}
@@ -328,12 +341,13 @@ type edge struct {
 	label string
 	want  string // the protovalidate rule id this edge must trip (integrity check)
 	apply func(m protoreflect.Message)
+	valid bool // a POSITIVE edge: Go must ACCEPT it (e.g. "" on a money field). want is unused.
 }
 
 func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
 	var es []edge
 	if fr.GetRequired() {
-		es = append(es, edge{"missing", "required", func(m protoreflect.Message) { m.Clear(fd) }})
+		es = append(es, edge{label: "missing", want: "required", apply: func(m protoreflect.Message) { m.Clear(fd) }})
 	}
 	if fd.IsList() {
 		return append(es, listEdges(fd, fr)...)
@@ -347,7 +361,7 @@ func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
 		if r := fr.GetInt64(); r != nil {
 			if _, ok := r.GetGreaterThan().(*validate.Int64Rules_Gte); ok {
 				n := r.GetGte() - 1
-				es = append(es, edge{"below_min", "int64.gte", func(m protoreflect.Message) {
+				es = append(es, edge{label: "below_min", want: "int64.gte", apply: func(m protoreflect.Message) {
 					m.Set(fd, protoreflect.ValueOfInt64(n))
 				}})
 			}
@@ -360,7 +374,7 @@ func enumEdges(fd protoreflect.FieldDescriptor, r *validate.EnumRules) []edge {
 	var es []edge
 	for _, n := range r.GetNotIn() {
 		nn := protoreflect.EnumNumber(n)
-		es = append(es, edge{"not_in", "enum.not_in", func(m protoreflect.Message) {
+		es = append(es, edge{label: "not_in", want: "enum.not_in", apply: func(m protoreflect.Message) {
 			m.Set(fd, protoreflect.ValueOfEnum(nn))
 		}})
 	}
@@ -369,7 +383,7 @@ func enumEdges(fd protoreflect.FieldDescriptor, r *validate.EnumRules) []edge {
 	// through server-side (a newer peer's value), so no edge here.
 	if r.GetDefinedOnly() {
 		undef := undefinedEnum(fd.Enum())
-		es = append(es, edge{"undefined", "enum.defined_only", func(m protoreflect.Message) {
+		es = append(es, edge{label: "undefined", want: "enum.defined_only", apply: func(m protoreflect.Message) {
 			m.Set(fd, protoreflect.ValueOfEnum(undef))
 		}})
 	}
@@ -379,25 +393,52 @@ func enumEdges(fd protoreflect.FieldDescriptor, r *validate.EnumRules) []edge {
 func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edge {
 	var es []edge
 	if p := r.GetPattern(); p != "" {
-		if bad, ok := badString(p); ok {
-			es = append(es, edge{"pattern", "string.pattern", func(m protoreflect.Message) {
-				m.Set(fd, protoreflect.ValueOfString(bad))
-			}})
+		// One INVALID mutant per badStrings entry the pattern rejects (option A), each
+		// keyed by the stable badStrings index so IDs don't shift when the list grows.
+		// This is where the money killers reach money fields.
+		for _, i := range failingBadStringIdxs(p) {
+			bad := badStrings[i]
+			es = append(es, edge{label: fmt.Sprintf("pattern#%d", i), want: "string.pattern",
+				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(bad)) }})
+		}
+		// The empty-string boundary: if the pattern ACCEPTS "" it is a positive case
+		// (money — the H1 blind spot; proves clients accept ""); if it REJECTS "" then
+		// the zero value is invalid, so omission must be rejected (pattern-derived
+		// required-presence, e.g. Quota.metric) — only meaningful for a non-optional
+		// field whose cleared value really is "".
+		if regexp.MustCompile(p).MatchString("") {
+			es = append(es, edge{label: "empty_ok", valid: true,
+				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString("")) }})
+		} else if !fd.HasPresence() {
+			es = append(es, edge{label: "missing_empty", want: "string.pattern",
+				apply: func(m protoreflect.Message) { m.Clear(fd) }})
 		}
 	}
 	if n := r.GetMinLen(); n > 0 {
 		s := strings.Repeat("a", int(n)-1)
-		es = append(es, edge{"too_short", "string.min_len", func(m protoreflect.Message) {
-			m.Set(fd, protoreflect.ValueOfString(s))
-		}})
+		es = append(es, edge{label: "too_short", want: "string.min_len",
+			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(s)) }})
 	}
 	if n := r.GetMaxLen(); n > 0 {
 		s := strings.Repeat("a", int(n)+1)
-		es = append(es, edge{"too_long", "string.max_len", func(m protoreflect.Message) {
-			m.Set(fd, protoreflect.ValueOfString(s))
-		}})
+		es = append(es, edge{label: "too_long", want: "string.max_len",
+			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(s)) }})
 	}
 	return es
+}
+
+// failingBadStringIdxs returns the indices of badStrings the pattern rejects, in order.
+// Shared by stringEdges (multi-emit) and listEdges item_pattern (first only), so the two
+// call sites stay in lockstep on what "a bad string for this pattern" means.
+func failingBadStringIdxs(pattern string) []int {
+	re := regexp.MustCompile(pattern)
+	var idxs []int
+	for i, s := range badStrings {
+		if !re.MatchString(s) {
+			idxs = append(idxs, i)
+		}
+	}
+	return idxs
 }
 
 func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
@@ -407,7 +448,7 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge 
 	good, _ := validScalar(fd, item) // a valid item value
 	if r != nil && r.GetMaxItems() > 0 {
 		n := int(r.GetMaxItems()) + 1
-		es = append(es, edge{"too_many", "repeated.max_items", func(m protoreflect.Message) {
+		es = append(es, edge{label: "too_many", want: "repeated.max_items", apply: func(m protoreflect.Message) {
 			l := m.Mutable(fd).List()
 			for l.Len() < n {
 				l.Append(good)
@@ -415,11 +456,22 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge 
 		}})
 	}
 	if item != nil {
-		if p := item.GetString().GetPattern(); p != "" {
-			if bad, ok := badString(p); ok {
-				es = append(es, edge{"item_pattern", "string.pattern", func(m protoreflect.Message) {
-					m.Mutable(fd).List().Append(protoreflect.ValueOfString(bad))
-				}})
+		if s := item.GetString(); s != nil {
+			if p := s.GetPattern(); p != "" {
+				if bad, ok := badString(p); ok {
+					es = append(es, edge{label: "item_pattern", want: "string.pattern",
+						apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(protoreflect.ValueOfString(bad)) }})
+				}
+			}
+			if n := s.GetMinLen(); n > 0 {
+				bad := strings.Repeat("a", int(n)-1)
+				es = append(es, edge{label: "item_too_short", want: "string.min_len",
+					apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(protoreflect.ValueOfString(bad)) }})
+			}
+			if n := s.GetMaxLen(); n > 0 {
+				bad := strings.Repeat("a", int(n)+1)
+				es = append(es, edge{label: "item_too_long", want: "string.max_len",
+					apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(protoreflect.ValueOfString(bad)) }})
 			}
 		}
 	}
@@ -518,12 +570,12 @@ func validString(r *validate.StringRules) (string, bool) {
 	return "", false
 }
 
+// badString returns the FIRST badStrings entry the pattern rejects — the single-emit
+// form used for list items (multi-emit belongs to scalar stringEdges only, so list
+// edges don't amplify). Shares failingBadStringIdxs so both sites agree on "bad".
 func badString(pattern string) (string, bool) {
-	re := regexp.MustCompile(pattern)
-	for _, s := range badStrings {
-		if !re.MatchString(s) {
-			return s, true
-		}
+	if idxs := failingBadStringIdxs(pattern); len(idxs) > 0 {
+		return badStrings[idxs[0]], true
 	}
 	return "", false
 }

@@ -1,0 +1,10 @@
+{
+  "name": "ramp-sdk-types-work",
+  "private": true,
+  "type": "module",
+  "description": "Pinned toolchain for the Zod types export (scripts/gen-sdk-types.sh copies this + the lockfile into .sdk-types-work and runs `npm ci`). Byte-compared output — bump deliberately, then regenerate and review.",
+  "dependencies": {
+    "json-schema-to-zod": "2.8.1",
+    "zod": "4.4.3"
+  }
+}

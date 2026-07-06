@@ -62,9 +62,9 @@ import { Aside } from '@astrojs/starlight/components';
 <Aside type="note">
 The SDK is not yet published to package registries. Use the working implementations directly from the repository:
 
-- **Go**: Import generated types from [`gen/go/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/go/) and the Connect-Go client from `gen/go/ramp/v1/rampv1connect`. See [`poc/exchange/`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/exchange/) for a working server example.
-- **TypeScript**: See [`poc/agent-sdk/client.ts`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/agent-sdk/client.ts) for the working `RampClient` implementation. The npm package is not yet published.
-- **Python**: See [`poc/mcp-tool/server.py`](https://github.com/RAMP-Protocol/protocol/tree/main/poc/mcp-tool/server.py) for the Python reference implementation (FastMCP-based).
+- **Go**: Import generated types from [`gen/go/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/go/) and the Connect-Go client from `gen/go/ramp/v1/rampv1connect`.
+- **TypeScript**: Validate messages with the generated Zod schemas from [`gen/ts/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/ts/). The npm package is not yet published.
+- **Python**: Parse messages with the generated Pydantic models from [`gen/python/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/python/). The PyPI package is not yet published.
 </Aside>
 
 Configure it with your billing reference, signing key, and budget:
