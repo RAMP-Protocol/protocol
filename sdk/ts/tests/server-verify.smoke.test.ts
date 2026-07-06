@@ -1,4 +1,4 @@
-// sdk/ts server-verify (Hono) binding smoke — TDD red for ixs7u.10.
+// sdk/ts server-verify (Hono) binding smoke.
 //
 // Edge (src/edge/src/app.ts) is a SERVER/VERIFIER: it verifies inbound Ed25519
 // signed-URLs and RFC 9421 GET-PoP agent-bindings and returns 403/deny. It is the
@@ -14,15 +14,8 @@
 // handler never runs on the negative path (fail-closed, mirroring the Go
 // connectserver verify middleware).
 //
-// RED now for TWO expected reasons:
-//   1. sdk/ts/core does not exist yet (verify seam import cannot resolve).
-//   2. sdk/ts/hono (the opt-in server-verify binding) does not exist yet.
-// Referencing both by their planned paths keeps this smoke RED until the implement
-// step lands the core + Hono binding.
 import { describe, it, expect } from "vitest";
-// @ts-expect-error — sdk/ts/hono server-verify binding does not exist yet (TDD red).
 import { rampVerify } from "../hono/middleware.ts";
-// @ts-expect-error — sdk/ts/core does not exist yet (TDD red).
 import type { KeyResolverTs } from "../core/verifier.ts";
 
 // A trivial WebCrypto Ed25519 keypair helper — the binding's verify primitive is
@@ -92,11 +85,9 @@ describe("sdk/ts Hono server-verify binding (Edge's real consumer)", () => {
 });
 
 // signInboundRequest produces a genuinely RFC 9421 GET-PoP-signed inbound Request
-// the binding must accept. Its body reuses the L1 sign path once sdk/ts/core
-// exposes a sign-over-Fetch-Request seam; referenced here so the smoke is RED on
-// the missing core/binding, not on an unrelated helper.
+// the binding must accept. Its body reuses the L1 sign path via sdk/ts/core's
+// sign-over-Fetch-Request seam.
 async function signInboundRequest(_kp: CryptoKeyPair): Promise<Request> {
-  // @ts-expect-error — sdk/ts/core sign seam does not exist yet (TDD red).
   const { signInbound } = await import("../core/sign.ts");
   return signInbound(_kp, "https://edge.example/ramp.v1/resource");
 }
