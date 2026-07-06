@@ -4346,7 +4346,9 @@ type TransactionRequest struct {
 	// Optional, non-authoritative correlation/audit key — the human-readable id
 	// of the committed offer. NOT used for verification: the Exchange verifies
 	// the reflected `offer.signature` over the presented Offer bytes, never this
-	// scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.
+	// scalar. May be omitted; if set, it MUST equal `offer.offer_id` (the
+	// offer_id_matches_offer rule — single mode only, since batch correlation is
+	// per-item).
 	OfferId *string `protobuf:"bytes,3,opt,name=offer_id,json=offerId,proto3,oneof" json:"offer_id,omitempty"`
 	// Requester identity — forwarded for authorization and audit.
 	Requester *Requester `protobuf:"bytes,4,opt,name=requester,proto3" json:"requester,omitempty"`
@@ -8624,7 +8626,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\r_max_accessesB\x0f\n" +
 	"\r_quota_periodB\x11\n" +
 	"\x0f_revocation_uriB\t\n" +
-	"\a_issuer\"\xba\x04\n" +
+	"\a_issuer\"\x89\x06\n" +
 	"\x12TransactionRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
@@ -8634,8 +8636,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x05offer\x18\b \x01(\v2\x0e.ramp.v1.OfferH\x01R\x05offer\x88\x01\x01\x12.\n" +
 	"\x05items\x18\a \x03(\v2\x18.ramp.v1.TransactionItemR\x05items\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical:\xca\x01\xbaH\xc6\x01\x1a\xc3\x01\n" +
-	"#transaction_request.offer_xor_items\x12@set exactly one of `offer` (single mode) or `items` (batch mode)\x1aZ(has(this.offer) && this.items.size() == 0) || (!has(this.offer) && this.items.size() > 0)B\v\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical:\x99\x03\xbaH\x95\x03\x1a\xc3\x01\n" +
+	"#transaction_request.offer_xor_items\x12@set exactly one of `offer` (single mode) or `items` (batch mode)\x1aZ(has(this.offer) && this.items.size() == 0) || (!has(this.offer) && this.items.size() > 0)\x1a\xcc\x01\n" +
+	"*transaction_request.offer_id_matches_offer\x12Loffer_id, when set, must equal offer.offer_id (single-mode correlation echo)\x1aP!has(this.offer_id) || (has(this.offer) && this.offer_id == this.offer.offer_id)B\v\n" +
 	"\t_offer_idB\b\n" +
 	"\x06_offer\"?\n" +
 	"\x0fTransactionItem\x12,\n" +

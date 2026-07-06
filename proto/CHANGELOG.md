@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+**Stateless offer redemption — execute reflects the full signed Offer (breaking).**
+
+- **The execute request carries the offer itself, not a detached signature.**
+  Removed `TransactionRequest.offer_signature`/`offer_signature_algorithm` and
+  `TransactionItem.offer_id`/`offer_signature`; the single-mode `offer` field and
+  each batch item's `offer` now carry the FULL signed Offer, reflected exactly as
+  received at discovery. The Exchange verifies `offer.signature` over the
+  presented bytes against its own key — a stateless, self-contained bearer
+  token, with no reconstruct-from-catalog. Freshness comes from the signed
+  `expires_at`, fail-closed when absent. Accepted pre-v1 breaking change; `buf
+  breaking` reports the three field deletions as expected.
+- **The `offer_id` echo is enforced.** New message CEL
+  `transaction_request.offer_id_matches_offer`: the optional top-level
+  `offer_id`, when set, must equal `offer.offer_id` (single mode only — batch
+  correlation is per-item), closing a confused-deputy hole where audit/billing
+  could key off an unauthenticated scalar that contradicts the verified offer.
+- **SDK.** `ramphelpers.VerifyPresentedOffer(offer, exchangePub, now)` is the
+  {verified, rejected} primitive: Ed25519 over the canonical Offer bytes
+  (`expires_at` included) first, then inclusive-expiry freshness against the
+  injected clock; an offer with no `expires_at` is rejected fail-closed.
+
 **Protocol standardization — unified error/response contract + a Connect RPC for
 every role (breaking).** Three threads land together:
 

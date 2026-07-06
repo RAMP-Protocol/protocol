@@ -236,6 +236,30 @@ func writeCrossField(v protovalidate.Validator) {
 				},
 			},
 			""},
+		// offer_id is an enforced correlation echo of the verified offer
+		// (confused-deputy guard): mismatch rejected, batch-mode scalar
+		// rejected (correlation is per-item there), matching echo accepted.
+		{"TransactionRequest/cel/offer_id_matches_offer/mismatch",
+			&rampv1.TransactionRequest{
+				IdempotencyKey: "idem-tx",
+				OfferId:        proto.String("offer-other"),
+				Offer:          seedOffer(),
+			},
+			"transaction_request.offer_id_matches_offer"},
+		{"TransactionRequest/cel/offer_id_matches_offer/batch_scalar",
+			&rampv1.TransactionRequest{
+				IdempotencyKey: "idem-tx",
+				OfferId:        proto.String("offer-seed"),
+				Items:          []*rampv1.TransactionItem{{Offer: seedOffer()}},
+			},
+			"transaction_request.offer_id_matches_offer"},
+		{"TransactionRequest/cel/offer_id_matches_offer/echo_valid",
+			&rampv1.TransactionRequest{
+				IdempotencyKey: "idem-tx",
+				OfferId:        proto.String("offer-seed"),
+				Offer:          seedOffer(),
+			},
+			""},
 	}
 
 	var cases []Case

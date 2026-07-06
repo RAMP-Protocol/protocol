@@ -1643,7 +1643,7 @@ class TransactionRequest(WireModel):
     )
     offer_id: str | None = Field(
         None,
-        description='Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.',
+        description='Optional, non-authoritative correlation/audit key — the human-readable id\n of the committed offer. NOT used for verification: the Exchange verifies\n the reflected `offer.signature` over the presented Offer bytes, never this\n scalar. May be omitted; if set, it MUST equal `offer.offer_id` (the\n offer_id_matches_offer rule — single mode only, since batch correlation is\n per-item).',
     )
     requester: Requester | None = Field(
         None, description='Requester identity — forwarded for authorization and audit.'

@@ -204,6 +204,23 @@ func freePricing() *rampv1.Pricing {
 	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 }
 
+// TestTransactionRequestOfferEcho: the top-level offer_id is an unauthenticated
+// correlation echo of the verified offer; the offer_id_matches_offer rule makes
+// the match enforced (confused-deputy guard), not advisory — and single-mode
+// only, since batch correlation is per-item.
+func TestTransactionRequestOfferEcho(t *testing.T) {
+	runValidationCases(t, transactionEchoCases())
+}
+
+func transactionEchoCases() []validationCase {
+	echoOffer := func() *rampv1.Offer { return &rampv1.Offer{OfferId: "of_1", Pricing: freePricing()} }
+	return []validationCase{
+		{"matching offer_id echo ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-echo-1", OfferId: proto.String("of_1"), Offer: echoOffer()}, true, ""},
+		{"mismatching offer_id echo rejected", &rampv1.TransactionRequest{IdempotencyKey: "idem-echo-2", OfferId: proto.String("of_other"), Offer: echoOffer()}, false, "transaction_request.offer_id_matches_offer"},
+		{"offer_id scalar in batch mode rejected", &rampv1.TransactionRequest{IdempotencyKey: "idem-echo-3", OfferId: proto.String("of_1"), Items: []*rampv1.TransactionItem{{Offer: echoOffer()}}}, false, "transaction_request.offer_id_matches_offer"},
+	}
+}
+
 func gen65() []string {
 	s := make([]string, 65)
 	for i := range s {
@@ -298,6 +315,7 @@ func TestCELRuleCoverage(t *testing.T) {
 	all = append(all, licensingCases()...)
 	all = append(all, idempotencyCases()...)
 	all = append(all, errorDetailCases()...)
+	all = append(all, transactionEchoCases()...)
 
 	claimed := map[string]bool{}
 	for _, c := range all {

@@ -1622,6 +1622,16 @@ message TransactionRequest {
     expression: "(has(this.offer) && this.items.size() == 0) || (!has(this.offer) && this.items.size() > 0)"
   };
 
+  // offer_id is an unauthenticated echo of the verified offer: a server keying
+  // audit/billing/consumption off a scalar that may contradict the signed Offer
+  // would be a confused deputy, so the match is enforced, not advisory.
+  // Single mode only — batch correlation is per-item (TransactionResultItem).
+  option (buf.validate.message).cel = {
+    id: "transaction_request.offer_id_matches_offer"
+    message: "offer_id, when set, must equal offer.offer_id (single-mode correlation echo)"
+    expression: "!has(this.offer_id) || (has(this.offer) && this.offer_id == this.offer.offer_id)"
+  };
+
   // Protocol version
   string ver = 1;
 
@@ -1638,7 +1648,9 @@ message TransactionRequest {
   // Optional, non-authoritative correlation/audit key — the human-readable id
   // of the committed offer. NOT used for verification: the Exchange verifies
   // the reflected `offer.signature` over the presented Offer bytes, never this
-  // scalar. May be omitted; if set, it SHOULD match `offer.offer_id`.
+  // scalar. May be omitted; if set, it MUST equal `offer.offer_id` (the
+  // offer_id_matches_offer rule — single mode only, since batch correlation is
+  // per-item).
   optional string offer_id = 3;
 
   // Requester identity — forwarded for authorization and audit.

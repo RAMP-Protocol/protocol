@@ -107,6 +107,64 @@
     }
   },
   {
+    "id": "TransactionRequest/cel/offer_id_matches_offer/batch_scalar",
+    "message": "TransactionRequest",
+    "valid": false,
+    "rules": [
+      "transaction_request.offer_id_matches_offer"
+    ],
+    "json": {
+      "idempotency_key": "idem-tx",
+      "items": [
+        {
+          "offer": {
+            "offer_id": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
+        }
+      ],
+      "offer_id": "offer-seed"
+    }
+  },
+  {
+    "id": "TransactionRequest/cel/offer_id_matches_offer/echo_valid",
+    "message": "TransactionRequest",
+    "valid": true,
+    "json": {
+      "idempotency_key": "idem-tx",
+      "offer": {
+        "offer_id": "offer-seed",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        }
+      },
+      "offer_id": "offer-seed"
+    }
+  },
+  {
+    "id": "TransactionRequest/cel/offer_id_matches_offer/mismatch",
+    "message": "TransactionRequest",
+    "valid": false,
+    "rules": [
+      "transaction_request.offer_id_matches_offer"
+    ],
+    "json": {
+      "idempotency_key": "idem-tx",
+      "offer": {
+        "offer_id": "offer-seed",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        }
+      },
+      "offer_id": "offer-other"
+    }
+  },
+  {
     "id": "TransactionRequest/cel/offer_xor_items/batch_valid",
     "message": "TransactionRequest",
     "valid": true,
