@@ -69,6 +69,15 @@ func TestVerifyOffer_wrongKey(t *testing.T) {
 	}
 }
 
+func TestVerifyOffer_malformedHex(t *testing.T) {
+	// A garbage (non-hex) signature is a verification failure like a forged
+	// one: errors.Is-branching callers must land on the same rejected path.
+	pub, _, _ := ed25519.GenerateKey(nil)
+	if err := ramphelpers.VerifyOffer(sampleOffer(), "not-hex!", pub); !errors.Is(err, ramphelpers.ErrOfferSignatureInvalid) {
+		t.Errorf("err = %v, want ErrOfferSignatureInvalid", err)
+	}
+}
+
 func TestVerifyOffer_nil(t *testing.T) {
 	pub, _, _ := ed25519.GenerateKey(nil)
 	if err := ramphelpers.VerifyOffer(nil, "00", pub); err == nil {
