@@ -617,7 +617,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 {
   "ver": "1.0",
-  "idempotencyKey": "tx-claude-001",
+  "idempotency_key": "tx-claude-001",
   "offer_id": "sub-offer-tc-reg-001",
   "requester": {
     "id": "claude-agent-001",
@@ -637,7 +637,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 {
   "ver": "1.0",
-  "idempotencyKey": "tx-claude-001",
+  "idempotency_key": "tx-claude-001",
   "offer_id": "sub-offer-tc-reg-001",
   "requester": {
     "id": "claude-agent-001",
@@ -770,7 +770,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 
 {
   "ver": "1.0",
-  "idempotencyKey": "ur-claude-001",
+  "idempotency_key": "ur-claude-001",
   "transaction_id": "txn-alpha-001",
   "billing_id": "bill-sub-alpha-001",
   "usage": {
@@ -813,7 +813,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 }
 ```
 
-A successful `UsageReportResponse` carries only the Exchange-assigned `report_id` (the durable identity the agent references when filing a dispute). A rejected report is not a success body — it travels as a non-OK transport error carrying `ErrorDetail.usageReportRejection` (e.g. `{ "usageReportRejection": { "reason": "USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED" } }`).
+A successful `UsageReportResponse` carries only the Exchange-assigned `report_id` (the durable identity the agent references when filing a dispute). A rejected report is not a success body — it travels as a non-OK transport error carrying `ErrorDetail.usageReportRejection` (e.g. `{ "usage_report_rejection": { "reason": "USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED" } }`).
 
 ---
 

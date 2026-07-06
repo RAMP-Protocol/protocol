@@ -6,6 +6,13 @@
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.
+//
+// Wire format: the canonical wire is snake_case proto-JSON — the field names as
+// declared here (idempotency_key, unit_cost), used by the generated Pydantic/Zod
+// clients and the conformance corpus. The camelCase json_name alias is out of
+// contract for those clients. This is load-bearing for signatures: signed messages
+// are Ed25519 over JCS-canonicalized (RFC 8785) proto-JSON, and JCS sorts keys, so
+// field-name casing determines the signed bytes.
 
 syntax = "proto3";
 

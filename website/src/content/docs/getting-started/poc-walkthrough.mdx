@@ -146,7 +146,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
   -H "Content-Type: application/json" \
   -d '{
     "ver": "1.0",
-    "idempotencyKey": "demo-txn-001",
+    "idempotency_key": "demo-txn-001",
     "offer_id": "<offer_id from Step 3>",
     "offer_signature": "<signature from Step 3>",
     "aisystem": {
@@ -202,7 +202,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Repor
   -H "Content-Type: application/json" \
   -d '{
     "ver": "1.0",
-    "idempotencyKey": "demo-report-001",
+    "idempotency_key": "demo-report-001",
     "transaction_id": "<transaction_id from Step 4>",
     "billing_id": "<billing_id from Step 4>",
     "usage": { "consumed_quantity": 1500 }
@@ -225,7 +225,7 @@ A denied single transaction is **not** a 200 success body — it travels as a no
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
   -H "Content-Type: application/json" \
-  -d '{"ver":"0.2","idempotencyKey":"deny-001","offer_id":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq
+  -d '{"ver":"0.2","idempotency_key":"deny-001","offer_id":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq
 ```
 The Exchange returns a non-OK status (Connect maps this to HTTP 400 / `failed_precondition`) with an `ErrorDetail`:
 ```json
@@ -234,7 +234,7 @@ The Exchange returns a non-OK status (Connect maps this to HTTP 400 / `failed_pr
   "message": "offer signature invalid",
   "details": [
     {
-      "transactionDenial": { "reason": "DENIAL_REASON_SIGNATURE_INVALID" }
+      "transaction_denial": { "reason": "DENIAL_REASON_SIGNATURE_INVALID" }
     }
   ]
 }
@@ -249,7 +249,7 @@ A rejected `ReportUsage` is likewise a non-OK transport error carrying `ErrorDet
   "message": "consumed_quantity is required and must be > 0",
   "details": [
     {
-      "usageReportRejection": { "reason": "USAGE_REPORT_REJECTION_REASON_MALFORMED" }
+      "usage_report_rejection": { "reason": "USAGE_REPORT_REJECTION_REASON_MALFORMED" }
     }
   ]
 }

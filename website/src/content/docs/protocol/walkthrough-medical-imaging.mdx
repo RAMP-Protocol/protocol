@@ -213,7 +213,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Execut
 
 {
   "ver": "1.0",
-  "idempotencyKey": "tx-mri-001",
+  "idempotency_key": "tx-mri-001",
   "offer_id": "offer-tcia-gbm-0152-001",
   "offer_signature": "base64-ed25519-medimg-offer-sig...",
   "requester": {
@@ -254,9 +254,9 @@ A denied transaction is not a 200 success body — it travels as a non-OK transp
     "required_dua_type": "TCIA-Standard-v3",
     "apply_url": "https://imaging.tcia.org/access/dua-application"
   },
-  "transactionDenial": {
+  "transaction_denial": {
     "reason": "DENIAL_REASON_RESTRICTION_NOT_SATISFIED",
-    "restrictionMismatches": ["RESTRICTION_KIND_FUNCTION"]
+    "restriction_mismatches": ["RESTRICTION_KIND_FUNCTION"]
   }
 }
 ```
@@ -422,7 +422,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Report
 
 {
   "ver": "1.0",
-  "idempotencyKey": "ur-mri-001",
+  "idempotency_key": "ur-mri-001",
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",
   "usage": {
@@ -477,7 +477,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Disput
 
 {
   "ver": "1.0",
-  "idempotencyKey": "disp-mri-001",
+  "idempotency_key": "disp-mri-001",
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",
   "reason": "DISPUTE_REASON_CONTENT_MISMATCH",

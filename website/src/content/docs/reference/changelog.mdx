@@ -46,6 +46,14 @@ breaking change; `buf breaking` reports the deltas as expected.
   through JSON Schema into the generated Pydantic/Zod types export; the 7 genuine
   cross-field rules stay server-authoritative CEL.
 
+**Wire is snake_case proto-JSON (breaking for the generated clients).** The generated
+Pydantic/Zod clients and the shared conformance corpus use the proto field names
+(snake_case) as the wire form (Go `protojson` with `UseProtoNames`), matching the
+`.proto` and the docs. protojson still accepts the camelCase `json_name` on input, but
+it is out of contract for the generated clients: they emit and accept snake_case only,
+and — because JCS-canonicalized signing is over the JSON field names — snake_case is the
+canonical form the signature bytes are computed over. Accepted pre-v1 breaking change.
+
 **Discovery/offer response model (breaking).** The Agent-to-Broker discovery
 messages are renamed and the response re-modeled to carry offers rather than a
 single transaction result:
