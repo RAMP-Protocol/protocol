@@ -12,7 +12,10 @@ export interface VerifyResult {
   valid: boolean;
   expired: boolean;
   kid?: string;
-  agentHash?: Uint8Array;
+  /** RFC 7638 thumbprint the URL is bound to (base64url string, the agent_id
+   * param verbatim) — the same name/representation as Go VerifiedURL.AgentID
+   * and Python SignedUrlResult.agent_id. Absent on a bearer (unbound) URL. */
+  agentId?: string;
   reason?: VerifyFailure;
 }
 
@@ -58,13 +61,12 @@ export async function verifyEd25519SignedUrl(
     return { valid: false, expired: false, reason: "bad_sig_encoding" };
   }
 
-  let agentHash: Uint8Array | undefined;
   if (agentId !== undefined) {
-    const decoded = decodeBase64Url(agentId);
-    if (!decoded) {
+    // Decode purely as VALIDATION: a malformed agent_id is rejected before any
+    // signature work; the public surface carries the base64url STRING verbatim.
+    if (!decodeBase64Url(agentId)) {
       return { valid: false, expired: false, reason: "bad_agent_encoding" };
     }
-    agentHash = decoded;
   }
 
   const key = await deps.resolveKey(kid);
@@ -77,19 +79,19 @@ export async function verifyEd25519SignedUrl(
   if (!okSig) {
     return buildResult({ valid: false, expired: false, kid, reason: "signature_mismatch" });
   }
-  return buildResult({ valid: true, expired: false, kid, ...(agentHash && { agentHash }) });
+  return buildResult({ valid: true, expired: false, kid, ...(agentId !== undefined && { agentId }) });
 }
 
 function buildResult(r: {
   valid: boolean;
   expired: boolean;
   kid: string | undefined;
-  agentHash?: Uint8Array;
+  agentId?: string;
   reason?: VerifyFailure;
 }): VerifyResult {
   const out: VerifyResult = { valid: r.valid, expired: r.expired };
   if (r.kid !== undefined) out.kid = r.kid;
-  if (r.agentHash !== undefined) out.agentHash = r.agentHash;
+  if (r.agentId !== undefined) out.agentId = r.agentId;
   if (r.reason !== undefined) out.reason = r.reason;
   return out;
 }
