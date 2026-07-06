@@ -15,7 +15,7 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 |---|---|---|---|
 | Request sign (RFC 9421, 5-component covered set) | ✅ `helpers.SignRequest` (+`core.NewSigningTransport` L2) | ⚠️ `core/sign.ts signInbound` is GET-PoP-only — no outbound RPC signer | ✅ `httpsig.sign_request` (+`signing_transport.SigningTransport` L2) |
 | PoP sign (GET agent binding) | ⚠️ via `AppendSignature` 2-component set; no dedicated face | ✅ `core/sign.ts signInbound` | ✅ `pop.sign_agent_binding` |
-| Acceptance sign / verify | ✅ `helpers.SignOfferAcceptance` / `VerifyOfferAcceptance` | ❌ (ticket ov97t.13) | ✅ `core.sign_offer_acceptance_jcs` / `verify_offer_acceptance_jcs` (+`acceptance` aliases) |
+| Acceptance sign / verify | ✅ `helpers.SignOfferAcceptance` / `VerifyOfferAcceptance` | ✅ `src/acceptance.ts signOfferAcceptance` / `verifyOfferAcceptance` | ✅ `core.sign_offer_acceptance_jcs` / `verify_offer_acceptance_jcs` (+`acceptance` aliases) |
 | Offer verify ({verified, rejected}, unforgeable VerifiedOffer) | ✅ `core.Verifier.Sort` + brand | ✅ `core/verifier.ts Verifier.sort` + brand | ✅ `core.Verifier.sort` + token-gated brand |
 | Key resolution — static | ✅ `helpers.NewStaticKeyResolver` | ❌ (raw injected function only) | ✅ `keyresolver.StaticKeyResolver` |
 | Key resolution — well-known JWKS | ✅ `helpers.NewWellKnownKeyResolver` | ❌ | ❌ |
@@ -68,7 +68,7 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | signedurl-vectors.json | ✅ emit+consume | ✅ | ✅ |
 | pop-vectors.json | ✅ emit+consume | ✅ | ✅ |
 | sign-request-vectors.json | ✅ emit+consume | ❌ (no TS consumer — gap ticket) | ✅ |
-| acceptance-vectors.json | ✅ emit+consume | ❌ (with ov97t.13) | ✅ |
+| acceptance-vectors.json | ✅ emit+consume | ✅ `acceptance.parity.test.ts` (byte-identical) | ✅ |
 | offer-verify-vectors.json | ✅ emit+consume | ✅ | ✅ |
 | wire-canonical-vectors.json | ✅ emit+consume | ❌ (no TS from-wire face; not currently intended) | ✅ |
 | conformance/corpus/crossfield.json | ✅ | ✅ | ✅ |
@@ -94,5 +94,5 @@ is byte-deterministic):
   (`agentic-content-access-qqkro`).
 
 Already tracked elsewhere (not duplicated): TS acceptance sign/verify
-(ov97t.13), TS agentHash→agentId rename (ov97t.14), CloudFront RSA TS helper
+(DONE — src/acceptance.ts), TS agentHash→agentId rename (ov97t.14), CloudFront RSA TS helper
 (m8t96).

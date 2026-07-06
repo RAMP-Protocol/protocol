@@ -12,7 +12,8 @@
     "./crossfield": "./src/crossfield.ts",
     "./core": "./core/verifier.ts",
     "./core/sign": "./core/sign.ts",
-    "./hono": "./hono/middleware.ts"
+    "./hono": "./hono/middleware.ts",
+    "./acceptance": "./src/acceptance.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --strict --noEmit",
