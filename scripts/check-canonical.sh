@@ -17,7 +17,7 @@ if [ ! -d "$WORK/venv" ] || [ ! -d "$WORK/node_modules/zod" ]; then
   exit 1
 fi
 PY="$WORK/venv/bin/python"
-"$WORK/venv/bin/pip" install -q --disable-pip-version-check "pydantic>=2.0" >/dev/null 2>&1
+"$WORK/venv/bin/pip" install -q --disable-pip-version-check --require-hashes -r scripts/sdk-types/requirements-test.txt >/dev/null 2>&1
 
 CORPUS_ABS="$(pwd)/conformance/corpus/cases.json"
 # Absolute: the Go test runs with cwd = ./conformance, so relative paths would miss.
@@ -30,6 +30,7 @@ PYTHONPATH=gen/python "$PY" scripts/sdk-types/roundtrip_py.py "$CORPUS_ABS" > "$
 echo "==> Zod round-trip emission"
 # Run from $WORK so the `zod` import inside schemas.ts resolves against its node_modules.
 cp gen/ts/wire/schemas.ts "$WORK/schemas.ts"
+cp gen/ts/wire/base.ts "$WORK/base.ts"   # schemas.ts imports the wire() extra-policy seam
 cp scripts/sdk-types/roundtrip_ts.ts "$WORK/roundtrip_ts.ts"
 ( cd "$WORK" && node --experimental-strip-types roundtrip_ts.ts schemas.ts "$CORPUS_ABS" ) > "$TSEMIT"
 

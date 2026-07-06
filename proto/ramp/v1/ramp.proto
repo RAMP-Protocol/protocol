@@ -6,6 +6,13 @@
 //
 // The ExchangeService is the core protocol. Both AI agents and
 // Brokers are valid clients — the Exchange doesn't distinguish.
+//
+// Wire format: the canonical wire is snake_case proto-JSON — the field names as
+// declared here (idempotency_key, unit_cost), used by the generated Pydantic/Zod
+// clients and the conformance corpus. The camelCase json_name alias is out of
+// contract for those clients. This is load-bearing for signatures: signed messages
+// are Ed25519 over JCS-canonicalized (RFC 8785) proto-JSON, and JCS sorts keys, so
+// field-name casing determines the signed bytes.
 
 syntax = "proto3";
 
@@ -438,7 +445,7 @@ message Offer {
 
   // If set, this offer is available under an existing subscription/deal.
   // No per-request billing — usage tracked against subscription quota.
-  // Pricing.rate = 0 for subscription offers (zero marginal cost).
+  // Pricing.rate = "0" for subscription offers (zero marginal cost).
   // The Broker SHOULD prefer subscription offers when available.
   optional string subscription_id = 11;
 
@@ -1247,7 +1254,7 @@ message Pricing {
   // Price in the provider's model, as an exact decimal string — e.g. "0.05" =
   // $0.05 per article. NOT a float: money is decimal to avoid binary rounding and
   // to allow arbitrary sub-cent precision (e.g. "0.0001234"). Denominated in `currency`.
-  string rate = 2 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];
+  string rate = 2 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];
 
   // ISO 4217 currency code (e.g. "USD", "EUR").
   string currency = 3;
@@ -1256,7 +1263,7 @@ message Pricing {
   // For text: cost per token. For video: cost per second.
   // For data: cost per record. For APIs: cost per call.
   // Denominated in the Exchange's base_currency (from its WellKnownManifest).
-  optional string unit_cost = 4 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];
+  optional string unit_cost = 4 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];
 
   // Estimated quantity in the metering unit.
   // For text: token count. For video: duration in seconds.
@@ -1716,7 +1723,7 @@ message TransactionResponse {
   optional string subscription_id = 12;
 
   // Computed per-unit cost for financial attribution on subscription transactions.
-  // Even when cost.amount=0 (subscription), this field carries the value
+  // Even when cost.amount="0" (subscription), this field carries the value
   // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
   optional Cost subscription_unit_value = 16;
 
@@ -1762,7 +1769,7 @@ message TransactionResultItem {
   optional string subscription_id = 6;
 
   // Computed per-unit cost for financial attribution on subscription transactions.
-  // Even when cost.amount=0 (subscription), this field carries the value
+  // Even when cost.amount="0" (subscription), this field carries the value
   // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
   optional Cost subscription_unit_value = 11;
 
@@ -1792,9 +1799,9 @@ message TransactionResultItem {
 // Cost — Actual transaction cost.
 message Cost {
   // Exact decimal string (not a float), e.g. "19.99". Denominated in `currency`.
-  string amount = 1 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];
+  string amount = 1 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];
   string currency = 2;        // ISO 4217
-  optional string unit_cost = 3 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];   // Effective cost per unit (decimal string)
+  optional string unit_cost = 3 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];   // Effective cost per unit (decimal string)
 }
 
 // DenialReason — Standard vocabulary for transaction denial.
@@ -2248,7 +2255,7 @@ message RequestConstraints {
   optional Cost max_price = 2;
 
   // Maximum effective cost per unit, as an exact decimal string (not a float).
-  optional string max_unit_cost = 3 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$"];
+  optional string max_unit_cost = 3 [(buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$", (buf.validate.field).string.max_len = 32];
 
   // Preferred delivery methods, in order of preference.
   repeated DeliveryMethod delivery_preference = 4;

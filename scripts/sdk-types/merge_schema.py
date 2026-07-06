@@ -12,8 +12,9 @@
 # *_UNSPECIFIED enum values are dropped: they are the proto zero-sentinel, never a
 # valid wire value (rejected at ingest / by enum.not_in), so the generated enum omits
 # them and rejects "unset" uniformly. google.protobuf.* well-known types map to
-# idiomatic JSON Schema. Uses the NON-strict variant (no additionalProperties:false)
-# so `extra` policy is controlled once on the WireModel base, not baked per class.
+# idiomatic JSON Schema. Uses the NON-strict variant, then strips the
+# additionalProperties:false it still carries (see open_messages) so `extra` policy
+# is controlled once on the WireModel base / the Zod wire() seam, not baked per class.
 import json, glob, re, os, sys
 from google.protobuf import descriptor_pb2
 
@@ -60,26 +61,47 @@ def strip_titles(o):
     return o
 
 
-# The decimal-string pattern carried by every money field in the proto
-# (Pricing.rate/unit_cost, Cost.amount/unit_cost, TransactionItem.max_unit_cost).
-MONEY_PATTERN = "^([0-9]+([.][0-9]+)?)?$"
-
-
-def mark_money_decimal(o):
-    """Money is a decimal STRING on the wire (exact, never a float). Tag those
-    fields format: decimal so datamodel-codegen emits `Decimal` — parsed via
-    model_validate_json it is exact and wire-exact. The pattern is kept so
-    json-schema-to-zod still emits z.string().regex(...) (TS has no Decimal type;
-    money is a validated decimal string there). The pattern is the format-only
-    guard; presence/zero-rules live in CEL (server-authoritative)."""
+def fix_string_null_default(o):
+    """A proto `bytes` field renders as {type: string, pattern: <base64>, default: null}.
+    A JSON-Schema string node must never carry a non-string default: its proto3 zero is
+    "" (an empty base64 string, which the pattern accepts). Left as null, json-schema-to-zod
+    emits .default(null), and Zod's ZodDefault re-validates that default against z.string(),
+    so an OMITTED field is wrongly rejected. Normalize null -> "" on string nodes."""
     if isinstance(o, dict):
-        if o.get("type") == "string" and o.get("pattern") == MONEY_PATTERN:
-            node = dict(o)
-            node["format"] = "decimal"
-            return node
-        return {k: mark_money_decimal(v) for k, v in o.items()}
+        o = {k: fix_string_null_default(v) for k, v in o.items()}
+        if o.get("type") == "string" and o.get("default", "") is None:
+            o["default"] = ""
+        return o
     if isinstance(o, list):
-        return [mark_money_decimal(x) for x in o]
+        return [fix_string_null_default(x) for x in o]
+    return o
+
+
+def open_messages(o):
+    """protoschema's non-strict variant STILL closes every message object two ways,
+    both of which defeat forward-compat (an unknown top-level field from a newer
+    protocol version must be ACCEPTED and dropped, governed once by the WireModel
+    base / the Zod wire() seam):
+
+      1. additionalProperties:false -> per-class extra='forbid' (Pydantic) / .strict()
+         (Zod). Stripped ONLY where the value is exactly False; additionalProperties:true
+         (Struct/ext) and schema-valued maps (e.g. ErrorDetail.metadata) stay OPEN.
+      2. patternProperties: {"^(camelName)$": ...} — the alternate field-name aliases.
+         We consume the proto-names (snake_case) `.schema.json` variant, so `properties`
+         are snake_case and the aliases protoschema emits are the camelCase json_names.
+         json-schema-to-zod compiles those into a .catchall(...) + superRefine that
+         REJECTS any key not matching an alias, so messages with multiword fields reject
+         unknowns even after (1). We drop patternProperties entirely: the wire is
+         snake_case proto-JSON everywhere (proto, docs, corpus via protojson
+         UseProtoNames=true, and both clients), so the camelCase aliases are not a
+         supported input form — dropping them makes every message uniformly open AND
+         keeps the clients snake-only. The snake_case `properties` are untouched."""
+    if isinstance(o, dict):
+        return {k: open_messages(v) for k, v in o.items()
+                if k != "patternProperties"
+                and not (k == "additionalProperties" and v is False)}
+    if isinstance(o, list):
+        return [open_messages(x) for x in o]
     return o
 
 
@@ -119,7 +141,15 @@ def close_enum_unions(o, enum_names):
     reject anything outside the defined, non-UNSPECIFIED set. The wire form is the
     enum NAME (protojson default); the numeric form is intentionally not accepted
     by the typed clients (the Go server still accepts it). The stray default: 0 (an
-    UNSPECIFIED int that is not even a valid member) is dropped with the union."""
+    UNSPECIFIED int that is not even a valid member) is dropped with the union.
+
+    SCOPE — this closes ONLY `not_in: [0]` discriminators. Those drop their
+    UNSPECIFIED member, so protoschema emits a 2-branch anyOf[{$ref}, {integer}]
+    that this collapses. An enum field WITHOUT `not_in: [0]` keeps its UNSPECIFIED
+    member and is emitted as a 3-branch anyOf[{UNSPECIFIED name}, {$ref}, {integer}]
+    (len != 2), which this deliberately leaves OPEN — it stays name-OR-number and
+    admits raw ints, matching proto's open-enum forward-compat. So "closed enums"
+    means the discriminators only, not every enum field."""
     if isinstance(o, dict):
         aof = o.get("anyOf")
         if isinstance(aof, list) and len(aof) == 2:
@@ -141,11 +171,11 @@ def fix_refs(o):
     if isinstance(o, dict):
         r = o.get("$ref")
         if isinstance(r, str):
-            m = re.match(r"ramp\.v1\.([A-Za-z0-9_]+)\.jsonschema\.json$", r)
+            m = re.match(r"ramp\.v1\.([A-Za-z0-9_]+)\.schema\.json$", r)
             if m:
                 o = dict(o); o["$ref"] = "#/$defs/" + m.group(1)
                 return {k: fix_refs(v) for k, v in o.items()}
-            g = re.match(r"google\.protobuf\.([A-Za-z0-9_]+)\.jsonschema\.json$", r)
+            g = re.match(r"google\.protobuf\.([A-Za-z0-9_]+)\.schema\.json$", r)
             if g and g.group(1) in WKT:
                 o = dict(o); o.pop("$ref"); o.update(WKT[g.group(1)])
                 return {k: fix_refs(v) for k, v in o.items()}
@@ -209,14 +239,19 @@ def main(src_dir, desc_path, out_file, required_path=None):
     defs = {}
     # sorted() so the $defs order — and therefore the generated class order — is
     # deterministic across machines (glob order is filesystem-dependent: macOS vs CI).
-    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.jsonschema.json"))):
-        if ".strict." in f:
+    # The `.schema.json` variant carries the proto (snake_case) field names as primary
+    # (protoschema's default); the `.jsonschema.json` variant is the camelCase json_name
+    # form. We consume snake_case: it is the one wire naming shared by the proto, the
+    # docs, the corpus (protojson UseProtoNames=true), and both generated clients.
+    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.schema.json"))):
+        base = os.path.basename(f)
+        if "jsonschema" in base or ".strict." in base or ".bundle." in base:
             continue
-        name = os.path.basename(f).split(".jsonschema")[0].replace("ramp.v1.", "")
+        name = base.split(".schema")[0].replace("ramp.v1.", "")
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
-    defs = mark_money_decimal(collapse_int_strings(hoist_enums(fix_refs(defs))))
+    defs = fix_string_null_default(open_messages(collapse_int_strings(hoist_enums(fix_refs(defs)))))
     # hoist_enums has now populated enum_defs, so their names are known; close the
     # open name-OR-integer enum unions down to the closed string enum.
     defs = close_enum_unions(defs, set(enum_defs))

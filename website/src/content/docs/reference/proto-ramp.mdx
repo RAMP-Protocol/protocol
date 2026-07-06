@@ -12,6 +12,12 @@ Every RPC request/response carries `ver` (field 1, RAMP protocol version). The e
 Request correlation is **not** carried in the proto body. It rides on the `X-Request-ID` HTTP header, and cross-system tracing uses W3C Trace Context (`traceparent` / `tracestate`). The former `request_id` fields have been removed from every message.
 :::
 
+:::note[Wire format is snake_case proto-JSON]
+The canonical wire form is **snake_case proto-JSON** — the field names exactly as declared in the `.proto` (e.g. `idempotency_key`, `unit_cost`), across every example on this site, the generated Pydantic/Zod clients, and the conformance corpus. The proto3-JSON `lowerCamelCase` alias (`idempotencyKey`) is **out of contract**: `protojson` on the server tolerates it on input, but the generated clients emit and accept snake_case only.
+
+This is **load-bearing for signatures**: signed messages (`Offer.signature`, `ResourceAttestation`, …) are Ed25519 over **JCS-canonicalized (RFC 8785) proto-JSON**, and JCS sorts keys lexicographically, so the field-name casing determines the signed bytes. snake_case proto-JSON is the canonical input the signature is computed over.
+:::
+
 ## Services
 
 ### ExchangeService

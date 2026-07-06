@@ -34,12 +34,13 @@ function inline(node, stack) {
 let out =
   "// Code generated from the RAMP proto (via JSON Schema). DO NOT EDIT.\n" +
   "// Regenerate: scripts/gen-sdk-types.sh\n" +
-  'import { z } from "zod";\n\n';
+  'import { z } from "zod";\n' +
+  'import { wire } from "./base.ts";\n\n';
 
 for (const name of Object.keys(defs).sort()) {
   const root = inline(defs[name], [name]);
   root["$schema"] = "https://json-schema.org/draft/2020-12/schema";
-  out += `export const ${name}Schema = ${String(jsonSchemaToZod(root, { module: "none" }))};\n\n`;
+  out += `export const ${name}Schema = wire(${String(jsonSchemaToZod(root, { module: "none" }))});\n\n`;
 }
 
 // proto-JSON encodes an integer as a number OR a string (int64 is always a string).

@@ -28,9 +28,14 @@ echo "==> 1/4 JSON Schema from proto (bufbuild/protoschema)"
 
 echo "==> 2/4 tools + merge (clean names; enums named from the descriptor)"
 python3 -m venv "$WORK/venv"
-# Pinned: generated output is byte-compared in CI, so the generator versions must be
-# fixed (an unpinned datamodel-code-generator drifts the models in CI).
-"$WORK/venv/bin/pip" install -q --disable-pip-version-check "datamodel-code-generator==0.64.0" protobuf
+# Pinned AND hash-locked: generated output is byte-compared in CI, so every tool that
+# shapes it must be fixed. datamodel-code-generator emits the models; black formats them;
+# isort orders their imports; protobuf parses the descriptor. requirements-gen.txt pins
+# the full transitive tree with per-distribution hashes (regenerate with
+# `pip-compile --generate-hashes --allow-unsafe -o requirements-gen.txt requirements-gen.in`);
+# --require-hashes makes a tampered or drifted dependency fail closed.
+"$WORK/venv/bin/pip" install -q --disable-pip-version-check \
+  --require-hashes -r scripts/sdk-types/requirements-gen.txt
 # required_fields.json: the authoritative protovalidate view of which fields are
 # required on the wire (their zero value is rejected). merge_schema marks those
 # `required` so the generated clients reject omission, matching the Go server.
@@ -55,8 +60,14 @@ open(p, "w").write(s)
 PYEOF
 
 echo "==> 4/4 Zod (json-schema-to-zod)"
-printf '{"name":"ramp-sdk-types-work","private":true,"type":"module"}\n' > "$WORK/package.json"
-(cd "$WORK" && npm install --no-save json-schema-to-zod@2.8.1 zod)
+# Pinned via a committed manifest + lockfile so `npm ci` installs the exact same
+# json-schema-to-zod/zod (and transitive) tree every run — the byte-compared
+# schemas.ts cannot drift on a transparent dependency bump.
+cp scripts/sdk-types/package.json scripts/sdk-types/package-lock.json "$WORK/"
+# --ignore-scripts: json-schema-to-zod + zod are pure JS (no native postinstall), so
+# no install-time code runs — this step produces the drift-gated schemas.ts, so it must
+# not execute third-party lifecycle scripts (which would run with the CI token in env).
+(cd "$WORK" && npm ci --no-audit --no-fund --ignore-scripts)
 cp scripts/sdk-types/gen_zod.mjs "$WORK/gen_zod.mjs"
 node "$WORK/gen_zod.mjs" "$COMBINED" gen/ts/wire/schemas.ts
 

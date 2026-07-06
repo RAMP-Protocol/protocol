@@ -114,7 +114,7 @@
       "transaction_request.offer_xor_items"
     ],
     "json": {
-      "idempotencyKey": "idem-tx"
+      "idempotency_key": "idem-tx"
     }
   }
 ]
