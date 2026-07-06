@@ -12,7 +12,7 @@
 // and the standard Response it assigns to ctx.res, so it is testable without a
 // running Hono app and stays byte-neutral to the web standard.
 
-import type { Ed25519Verify, KeyResolverTs } from "../core/verifier.ts";
+import type { Ed25519Verify } from "../core/verifier.ts";
 import { decodeBase64Url } from "../src/base64url.ts";
 import { AGENT_KEY_HEADER, verifyAgentBinding } from "../src/pop.ts";
 import { thumbprint } from "../src/thumbprint.ts";
@@ -32,13 +32,11 @@ export interface RampVerifyContext {
 
 export type RampVerifyNext = () => Promise<void> | void;
 
-/** Options for the server-verify binding. The resolver + clock + verify primitive
- * are injected exactly as the core Verifier's are; the binding owns no state. */
+/** Options for the server-verify binding. The clock + verify primitive are
+ * injected exactly as the core Verifier's are; the binding owns no state. The
+ * GET-PoP path is self-verifying via the presented key, so no key resolver is
+ * accepted — a resolver here would be dead weight the middleware never reads. */
 export interface RampVerifyOptions {
-	/** Offer/agent key resolver — injected for symmetry with the core Verifier; the
-	 *  GET-PoP path is self-verifying via the presented key, so it is accepted but
-	 *  the presented key is the authority for the PoP check. */
-	resolver: KeyResolverTs;
 	now?: () => number;
 	verifyEd25519?: Ed25519Verify;
 }
@@ -48,6 +46,15 @@ export interface RampVerifyOptions {
  * request it verifies the RFC 9421 GET PoP through the L1 verifyAgentBinding; on
  * success it calls next() (the guarded handler runs); on failure it sets a 403 deny
  * response and does NOT call next() (fail-closed).
+ *
+ * SCOPE LIMIT — presenter self-consistency only: the binding derives agentId
+ * from the PRESENTED key (thumbprint), so the 3-way check collapses to "the
+ * presenter signed with the key it presented". It does NOT anchor a URL-bound
+ * agent_id. A consumer enforcing URL-bound delivery (e.g. an edge serving
+ * signed URLs whose agent_id query param binds the fetcher) MUST call the L1
+ * verifyAgentBinding directly with the URL's agent_id as the anchor — building
+ * URL-bound verification on this middleware would silently accept any
+ * self-consistent presenter.
  */
 export function rampVerify(
 	opts: RampVerifyOptions,

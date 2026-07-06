@@ -16,7 +16,6 @@
 //
 import { describe, it, expect } from "vitest";
 import { rampVerify } from "../hono/middleware.ts";
-import type { KeyResolverTs } from "../core/verifier.ts";
 
 // A trivial WebCrypto Ed25519 keypair helper — the binding's verify primitive is
 // WebCrypto by default (the same primitive the L1 pop/verify helpers use). The
@@ -31,16 +30,10 @@ async function generateAgentKey(): Promise<CryptoKeyPair> {
 describe("sdk/ts Hono server-verify binding (Edge's real consumer)", () => {
   it("an inbound signed request verifies through the binding and reaches the guarded handler", async () => {
     const kp = await generateAgentKey();
-    const resolver: KeyResolverTs = {
-      resolve: async () =>
-        new Uint8Array(
-          await crypto.subtle.exportKey("raw", kp.publicKey),
-        ),
-    };
 
     // The opt-in Hono middleware over sdk/ts/core: verifies the inbound RFC 9421
     // signature at the HTTP seam and, on success, passes control to next().
-    const mw = rampVerify({ resolver });
+    const mw = rampVerify({});
 
     let reachedHandler = false;
     const next = async () => {
@@ -59,12 +52,7 @@ describe("sdk/ts Hono server-verify binding (Edge's real consumer)", () => {
   });
 
   it("an unsigned inbound request is denied and never reaches the guarded handler (fail-closed)", async () => {
-    const kp = await generateAgentKey();
-    const resolver: KeyResolverTs = {
-      resolve: async () =>
-        new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey)),
-    };
-    const mw = rampVerify({ resolver });
+    const mw = rampVerify({});
 
     let reachedHandler = false;
     const next = async () => {
@@ -79,6 +67,51 @@ describe("sdk/ts Hono server-verify binding (Edge's real consumer)", () => {
     await mw(ctx, next);
     // Fail-closed: the guarded handler MUST NOT run, and the binding sets a deny
     // response.
+    expect(reachedHandler).toBe(false);
+    expect(ctx.res?.status).toBe(403);
+  });
+});
+
+describe("sdk/ts Hono server-verify binding — takes no key resolver", () => {
+  // These two cases pin that the binding takes no key resolver: the GET-PoP path
+  // is self-verifying via the presented key, so RampVerifyOptions deliberately
+  // has no resolver field (one existed once, was never read, and misled a
+  // consumer assessment — these cases keep it from growing back unread).
+  it("a signed request PASSES through rampVerify called without a resolver (resolver is dead code)", async () => {
+    const kp = await generateAgentKey();
+
+    const mw = rampVerify({});
+
+    let reachedHandler = false;
+    const next = async () => {
+      reachedHandler = true;
+    };
+
+    const signedReq = await signInboundRequest(kp);
+    const ctx = { req: { raw: signedReq }, res: undefined as Response | undefined };
+
+    await mw(ctx, next);
+    // The signed request must reach the handler regardless of whether a resolver
+    // was supplied — the middleware derives agentId from the presented key and
+    // reads no resolver option.
+    expect(reachedHandler).toBe(true);
+  });
+
+  it("an unsigned request is DENIED by rampVerify called without a resolver (fail-closed without resolver)", async () => {
+    const mw = rampVerify({});
+
+    let reachedHandler = false;
+    const next = async () => {
+      reachedHandler = true;
+    };
+
+    const nakedReq = new Request("https://edge.example/ramp.v1/resource", {
+      method: "GET",
+    });
+    const ctx = { req: { raw: nakedReq }, res: undefined as Response | undefined };
+
+    await mw(ctx, next);
+    // Fail-closed semantics hold whether or not a resolver was supplied.
     expect(reachedHandler).toBe(false);
     expect(ctx.res?.status).toBe(403);
   });
