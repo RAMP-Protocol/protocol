@@ -35,6 +35,8 @@ import (
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/gowebpki/jcs"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -410,6 +412,103 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 	}
 }
 
+// wireCanonicalVector pins the wire-to-canonical conversion: wire_json is the
+// offer exactly as the Connect codec emits it (camelCase json_names, enums as
+// names, EmitUnpopulated zero-inflation; JCS-stabilized so the committed file is
+// deterministic), canonical_json is the byte sequence the offer signature covers
+// (canonicalOfferPayload: signature/signature_algorithm cleared, snake_case,
+// omit-unpopulated, JCS). A from-wire canonicalizer in any language must map
+// wire_json to canonical_json exactly.
+type wireCanonicalVector struct {
+	Name          string          `json:"name"`
+	WireJSON      json.RawMessage `json:"wire_json"`
+	CanonicalJSON json.RawMessage `json:"canonical_json"`
+}
+
+// wireEmitJSONOptions is the Connect wire emission the broker's codec produces:
+// protojson defaults (camelCase json_names, enums as names) plus EmitUnpopulated
+// (see sdk/go/connectserver codec — camelCase NOT UseProtoNames is the pinned,
+// non-negotiable wire contract).
+var wireEmitJSONOptions = protojson.MarshalOptions{EmitUnpopulated: true}
+
+// buildWireCanonicalVectors renders a matrix of offers through BOTH pinned
+// option sets. The matrix deliberately covers the pruning rules a from-wire
+// canonicalizer must implement: an UNSPECIFIED (zero) enum the wire inflates
+// but the canonical form omits, a proto3-optional scalar SET to its zero value
+// ("" — kept, presence-tracked), Struct ext key order, two Timestamps, and
+// repeated message fields.
+func buildWireCanonicalVectors(t *testing.T) []wireCanonicalVector {
+	t.Helper()
+	emit := func(name string, offer *rampv1.Offer) wireCanonicalVector {
+		wirePJ, err := wireEmitJSONOptions.Marshal(offer)
+		if err != nil {
+			t.Fatalf("%s: wire proto-JSON marshal: %v", name, err)
+		}
+		// JCS-stabilize the committed wire form (protojson whitespace/order is not
+		// deterministic); key CASE is untouched, so the camel wire shape survives.
+		wireCanon, err := jcs.Transform(wirePJ)
+		if err != nil {
+			t.Fatalf("%s: wire JCS: %v", name, err)
+		}
+		canonical, err := canonicalOfferPayload(offer)
+		if err != nil {
+			t.Fatalf("%s: canonical payload: %v", name, err)
+		}
+		return wireCanonicalVector{Name: name, WireJSON: wireCanon, CanonicalJSON: canonical}
+	}
+
+	structExt, err := structpb.NewStruct(map[string]any{
+		"zebra": "last", "alpha": "first",
+		"nested": map[string]any{"y": 2.0, "x": 1.0},
+	})
+	if err != nil {
+		t.Fatalf("wire-canonical struct ext: %v", err)
+	}
+
+	return []wireCanonicalVector{
+		// deliveryMethod is the zero enum: the wire renders
+		// DELIVERY_METHOD_UNSPECIFIED, the canonical form omits the field.
+		emit("unspecified_enum_pruned", &rampv1.Offer{
+			OfferId:  "offer-wire-unspec",
+			Exchange: "exchange.example.com",
+		}),
+		// Pricing.unit is proto3 optional: set to "" it is presence-tracked and
+		// KEPT by the canonical form, while the sibling non-optional zero scalars
+		// the wire inflates are pruned.
+		emit("set_empty_optional_unit", &rampv1.Offer{
+			OfferId:  "offer-wire-unit",
+			Exchange: "exchange.example.com",
+			Pricing: &rampv1.Pricing{
+				Model:    rampv1.PricingModel_PRICING_MODEL_FREE,
+				Currency: "EUR",
+				Unit:     proto.String(""),
+			},
+		}),
+		emit("struct_ext_multi_key", &rampv1.Offer{
+			OfferId:  "offer-wire-struct",
+			Exchange: "exchange.example.com",
+			Ext:      structExt,
+		}),
+		emit("two_timestamps", &rampv1.Offer{
+			OfferId:   "offer-wire-two-ts",
+			Exchange:  "exchange.example.com",
+			ExpiresAt: timestamppb.New(time.Unix(1_700_000_900, 0).UTC()),
+			DataAsOf:  timestamppb.New(time.Unix(1_699_990_000, 0).UTC()),
+		}),
+		emit("repeated_terms_enum", &rampv1.Offer{
+			OfferId:        "offer-wire-repeated",
+			Exchange:       "exchange.example.com",
+			DeliveryMethod: rampv1.DeliveryMethod_DELIVERY_METHOD_DIRECT,
+			Pricing: &rampv1.Pricing{
+				Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.05", Currency: "USD",
+			},
+			Terms: []*rampv1.LicenseTerm{
+				{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Scopes: []string{"ai-train"}},
+			},
+		}),
+	}
+}
+
 // buildSignRequestVectors signs a fixed set of requests with the REAL Go
 // SignRequest and records the exact bytes it emits. Covered set is exactly
 // @method @target-uri content-digest authorization signature-agent (no biscuit
@@ -649,12 +748,14 @@ func TestGenerateVectors(t *testing.T) {
 	}
 	acceptanceVectors := buildAcceptanceVectors(t)
 	offerVerifyVectors := buildOfferVerifyVectors(t)
+	wireCanonicalVectors := buildWireCanonicalVectors(t)
 
 	signedURLPath := filepath.Join("testdata", "signedurl-vectors.json")
 	popPath := filepath.Join("testdata", "pop-vectors.json")
 	signRequestPath := filepath.Join("testdata", "sign-request-vectors.json")
 	acceptancePath := filepath.Join("testdata", "acceptance-vectors.json")
 	offerVerifyPath := filepath.Join("testdata", "offer-verify-vectors.json")
+	wireCanonicalPath := filepath.Join("testdata", "wire-canonical-vectors.json")
 
 	// The sign-request + acceptance parity suites read a {"vectors": [...]} object
 	// (the thumbprint-vectors.json shape), not a bare array like signedurl/pop. The
@@ -663,6 +764,7 @@ func TestGenerateVectors(t *testing.T) {
 	signRequestDoc := map[string]any{"vectors": signRequestVectors}
 	acceptanceDoc := map[string]any{"canonicalization": "jcs", "vectors": acceptanceVectors}
 	offerVerifyDocValue := offerVerifyDoc{Canonicalization: "jcs", Vectors: offerVerifyVectors}
+	wireCanonicalDoc := map[string]any{"canonicalization": "jcs", "vectors": wireCanonicalVectors}
 
 	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {
 		writeJSON(t, signedURLPath, signedURLVectors)
@@ -670,6 +772,7 @@ func TestGenerateVectors(t *testing.T) {
 		writeJSON(t, signRequestPath, signRequestDoc)
 		writeJSON(t, acceptancePath, acceptanceDoc)
 		writeJSON(t, offerVerifyPath, offerVerifyDocValue)
+		writeJSON(t, wireCanonicalPath, wireCanonicalDoc)
 		return
 	}
 
@@ -679,6 +782,7 @@ func TestGenerateVectors(t *testing.T) {
 	assertMatches(t, signRequestPath, signRequestDoc)
 	assertMatches(t, acceptancePath, acceptanceDoc)
 	assertMatches(t, offerVerifyPath, offerVerifyDocValue)
+	assertMatches(t, wireCanonicalPath, wireCanonicalDoc)
 }
 
 func assertMatches(t *testing.T, path string, v any) {
