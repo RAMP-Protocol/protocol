@@ -246,6 +246,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
               ]
             }
           ],
+          "expires_at": "2026-03-20T18:00:00Z",
           "signature": "base64-ed25519-credit-offer-sig...",
           "signature_algorithm": "EdDSA",
           "ext": {
@@ -318,6 +319,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
               ]
             }
           ],
+          "expires_at": "2026-03-20T18:00:00Z",
           "signature": "base64-ed25519-legal-offer-sig-001...",
           "signature_algorithm": "EdDSA",
           "ext": {
@@ -345,6 +347,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "identity": {
             "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
           },
+          "expires_at": "2026-03-20T18:00:00Z",
           "signature": "base64-ed25519-legal-offer-sig-002...",
           "signature_algorithm": "EdDSA",
           "ext": {
@@ -372,6 +375,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
           "identity": {
             "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
           },
+          "expires_at": "2026-03-20T18:00:00Z",
           "signature": "base64-ed25519-legal-offer-sig-003...",
           "signature_algorithm": "EdDSA",
           "ext": {
@@ -531,6 +535,7 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTran
           "canonical_url": "https://creditdata.com/reports/duns/123456789",
           "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC"
         },
+        "expires_at": "2026-03-20T18:00:00Z",
         "signature": "base64-ed25519-credit-offer-sig...",
         "signature_algorithm": "EdDSA"
       }
@@ -573,6 +578,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
           "hash_method": "sha256",
           "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
+        "expires_at": "2026-03-20T18:00:00Z",
         "signature": "base64-ed25519-legal-offer-sig-001...",
         "signature_algorithm": "EdDSA"
       }
@@ -591,6 +597,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
         "identity": {
           "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
+        "expires_at": "2026-03-20T18:00:00Z",
         "signature": "base64-ed25519-legal-offer-sig-002...",
         "signature_algorithm": "EdDSA"
       }
@@ -609,6 +616,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
         "identity": {
           "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
+        "expires_at": "2026-03-20T18:00:00Z",
         "signature": "base64-ed25519-legal-offer-sig-003...",
         "signature_algorithm": "EdDSA"
       }
@@ -624,7 +632,6 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 ```json
 {
   "ver": "1.0",
-  "idempotency_key": "tx-dd-legal-001",
   "items": [
     {
       "offer_id": "offer-legal-001",

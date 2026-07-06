@@ -66,9 +66,11 @@ func TestValidate_matchesCorpusVerdict(t *testing.T) {
 }
 
 // TestValidate_enforcesCrossFieldCEL is the cross-field guardrail: every mutant
-// in crossfield.json must be rejected by the L1 validator, with the recorded
-// message-CEL rule id present. This is the gap field-level Zod/Pydantic miss; the
-// Go L1 closes it via protovalidate, and this pins it to the oracle.
+// in crossfield.json must reach the recorded verdict in the L1 validator —
+// invalid mutants rejected with the recorded message-CEL rule id present, and
+// positive boundary cases (e.g. the XOR rule's batch-mode arm) accepted. This is
+// the gap field-level Zod/Pydantic miss; the Go L1 closes it via protovalidate,
+// and this pins it to the oracle.
 func TestValidate_enforcesCrossFieldCEL(t *testing.T) {
 	cases := loadCorpusFile(t, "../../../conformance/corpus/crossfield.json")
 	if len(cases) < 7 {
@@ -76,10 +78,13 @@ func TestValidate_enforcesCrossFieldCEL(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.ID, func(t *testing.T) {
-			if c.Valid {
-				t.Fatalf("crossfield case %s should be invalid", c.ID)
-			}
 			err := ramphelpers.Validate(unmarshalCase(t, c))
+			if c.Valid {
+				if err != nil {
+					t.Fatalf("cross-field positive case %s was rejected: %v", c.ID, err)
+				}
+				return
+			}
 			if err == nil {
 				t.Fatalf("cross-field mutant %s was accepted (rule %v not enforced)", c.ID, c.Rules)
 			}

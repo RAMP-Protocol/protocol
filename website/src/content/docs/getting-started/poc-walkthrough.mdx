@@ -82,14 +82,13 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Disco
   -H "Content-Type: application/json" \
   -d '{
     "ver": "1.0",
-    "id": "demo-query-001",
-    "aisystem": {
-      "name": "DemoAgent",
-      "aisysuse": {
-        "lid": "LIC-DEMO-001",
-        "uri": ["https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding"]
-      }
-    }
+    "requester": {
+      "id": "demo-agent",
+      "domain": "demo.example.com",
+      "type": "REQUESTER_TYPE_AGENT",
+      "scopes": ["*"]
+    },
+    "uris": ["https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding"]
   }' | jq
 ```
 
@@ -161,9 +160,11 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
       "signature": "ae77b181...32607e08",
       "signature_algorithm": "EdDSA"
     },
-    "aisystem": {
-      "name": "DemoAgent",
-      "aisysuse": { "lid": "LIC-DEMO-001" }
+    "requester": {
+      "id": "demo-agent",
+      "domain": "demo.example.com",
+      "type": "REQUESTER_TYPE_AGENT",
+      "scopes": ["*"]
     }
   }' | jq
 ```
@@ -237,7 +238,7 @@ A denied single transaction is **not** a 200 success body — it travels as a no
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
   -H "Content-Type: application/json" \
-  -d '{"ver":"0.2","idempotency_key":"deny-001","offer_id":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq
+  -d '{"ver":"1.0","idempotency_key":"deny-001","requester":{"id":"demo-agent","domain":"demo.example.com","type":"REQUESTER_TYPE_AGENT"},"offer":{"offer_id":"offer-forged","pricing":{"model":"PRICING_MODEL_PER_UNIT","rate":"0.05","currency":"USD","unit":"accesses"},"delivery_method":"DELIVERY_METHOD_INSTRUCTIONS","expires_at":"2026-03-16T17:43:20Z","signature":"deadbeef","signature_algorithm":"EdDSA"}}' | jq
 ```
 The Exchange returns a non-OK status (Connect maps this to HTTP 400 / `failed_precondition`) with an `ErrorDetail`:
 ```json
@@ -343,18 +344,17 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Disco
   -H "Content-Type: application/json" \
   -d '{
     "ver": "1.0",
-    "id": "demo-batch-001",
-    "aisystem": {
-      "name": "DemoAgent",
-      "aisysuse": {
-        "lid": "LIC-DEMO-001",
-        "uri": [
-          "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
-          "https://cdn.ramp-protocol.org/2024/02/20/cloud-computing-trends",
-          "https://cdn.ramp-protocol.org/2024/03/10/robotics-warehouse"
-        ]
-      }
-    }
+    "requester": {
+      "id": "demo-agent",
+      "domain": "demo.example.com",
+      "type": "REQUESTER_TYPE_AGENT",
+      "scopes": ["*"]
+    },
+    "uris": [
+      "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
+      "https://cdn.ramp-protocol.org/2024/02/20/cloud-computing-trends",
+      "https://cdn.ramp-protocol.org/2024/03/10/robotics-warehouse"
+    ]
   }' | jq '.offer_groups[] | {uri, rate: .offers[0].pricing.rate}'
 ```
 

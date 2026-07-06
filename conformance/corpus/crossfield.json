@@ -107,7 +107,64 @@
     }
   },
   {
-    "id": "TransactionRequest/cel/offer_xor_items",
+    "id": "TransactionRequest/cel/offer_xor_items/batch_valid",
+    "message": "TransactionRequest",
+    "valid": true,
+    "json": {
+      "idempotency_key": "idem-tx",
+      "items": [
+        {
+          "offer": {
+            "offer_id": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
+        },
+        {
+          "offer": {
+            "offer_id": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "TransactionRequest/cel/offer_xor_items/both_set",
+    "message": "TransactionRequest",
+    "valid": false,
+    "rules": [
+      "transaction_request.offer_xor_items"
+    ],
+    "json": {
+      "idempotency_key": "idem-tx",
+      "items": [
+        {
+          "offer": {
+            "offer_id": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
+        }
+      ],
+      "offer": {
+        "offer_id": "offer-seed",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        }
+      }
+    }
+  },
+  {
+    "id": "TransactionRequest/cel/offer_xor_items/neither_set",
     "message": "TransactionRequest",
     "valid": false,
     "rules": [

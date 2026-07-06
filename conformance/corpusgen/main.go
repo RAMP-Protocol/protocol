@@ -58,13 +58,20 @@ type Case struct {
 // required sub-message) auto-fill cannot satisfy. A seed is a valid EXAMPLE, not
 // a restatement of any rule. Auto-fill handles everything else; a message that
 // auto-fill cannot make valid AND has no seed fails the run loudly.
+// seedOffer is the valid baseline Offer, shared by the auto-fill seeds and the
+// cross-field XOR mutants (which need offers on both arms of the rule).
+func seedOffer() *rampv1.Offer {
+	return &rampv1.Offer{
+		OfferId: "offer-seed",
+		Pricing: &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"},
+	}
+}
+
 func seeds() map[string]proto.Message {
 	pricing := func() *rampv1.Pricing {
 		return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 	}
-	offer := func() *rampv1.Offer {
-		return &rampv1.Offer{OfferId: "offer-seed", Pricing: pricing()}
-	}
+	offer := seedOffer
 	return map[string]proto.Message{
 		"Pricing":     pricing(),
 		"License":     &rampv1.License{Id: proto.String("CC-BY-4.0")},
@@ -174,7 +181,7 @@ func writeCrossField(v protovalidate.Validator) {
 	type mutant struct {
 		id   string
 		msg  proto.Message
-		want string // the message CEL rule id this mutant must trip
+		want string // the message CEL rule id this mutant must trip; "" = a VALID case the oracle must ACCEPT (proves the rule's pass side)
 	}
 	freePricing := &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 	mutants := []mutant{
@@ -206,14 +213,42 @@ func writeCrossField(v protovalidate.Validator) {
 				},
 			},
 			"license_term.one_restriction_per_kind"},
-		{"TransactionRequest/cel/offer_xor_items",
+		// The XOR rule needs all three boundaries pinned: neither-set and
+		// both-set must REJECT, and a batch-mode baseline must ACCEPT — a
+		// future TS/Python L1 that half-implements the XOR (e.g. checks only
+		// "offer present") would pass a neither-set-only corpus clean.
+		{"TransactionRequest/cel/offer_xor_items/neither_set",
 			&rampv1.TransactionRequest{IdempotencyKey: "idem-tx"},
 			"transaction_request.offer_xor_items"},
+		{"TransactionRequest/cel/offer_xor_items/both_set",
+			&rampv1.TransactionRequest{
+				IdempotencyKey: "idem-tx",
+				Offer:          seedOffer(),
+				Items:          []*rampv1.TransactionItem{{Offer: seedOffer()}},
+			},
+			"transaction_request.offer_xor_items"},
+		{"TransactionRequest/cel/offer_xor_items/batch_valid",
+			&rampv1.TransactionRequest{
+				IdempotencyKey: "idem-tx",
+				Items: []*rampv1.TransactionItem{
+					{Offer: seedOffer()},
+					{Offer: seedOffer()},
+				},
+			},
+			""},
 	}
 
 	var cases []Case
 	for _, mt := range mutants {
 		verr := v.Validate(mt.msg)
+		short := string(mt.msg.ProtoReflect().Descriptor().Name())
+		if mt.want == "" {
+			if verr != nil {
+				die("cross-field positive case %s expected valid, got %v", mt.id, ruleIDs(verr))
+			}
+			cases = append(cases, mkCase(mt.id, short, mt.msg, true, nil, v))
+			continue
+		}
 		if verr == nil {
 			die("cross-field mutant %s did not violate any rule", mt.id)
 		}
@@ -221,7 +256,6 @@ func writeCrossField(v protovalidate.Validator) {
 		if !contains(ids, mt.want) {
 			die("cross-field mutant %s expected rule %q, got %v", mt.id, mt.want, ids)
 		}
-		short := string(mt.msg.ProtoReflect().Descriptor().Name())
 		cases = append(cases, mkCase(mt.id, short, mt.msg, false, ids, v))
 	}
 	sort.Slice(cases, func(i, j int) bool { return cases[i].ID < cases[j].ID })
