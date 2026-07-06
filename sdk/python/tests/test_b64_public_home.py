@@ -1,18 +1,8 @@
-"""Sub-task C (TDD red) — ramp_sdk.b64 public module and top-level re-export.
-
-MUST FAIL TODAY with ModuleNotFoundError: ramp_sdk.b64 does not exist yet
-(the codec lives at ramp_sdk._b64, a private-named module with no public
-re-export).  Isolated in its own file so the import error on collection does
-NOT mask the other sub-task suites.
-
-Expected red reason:
-  ModuleNotFoundError: No module named 'ramp_sdk.b64'
-"""
+"""ramp_sdk.b64 — the public base64url codec module and its top-level re-export."""
 
 from __future__ import annotations
 
-# RED: ramp_sdk.b64 is the planned public name; today only ramp_sdk._b64 exists.
-from ramp_sdk.b64 import b64url_decode, b64url_nopad  # type: ignore[import-not-found]
+from ramp_sdk.b64 import b64url_decode, b64url_nopad
 
 
 # ---- round-trip parity ---------------------------------------------------
