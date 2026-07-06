@@ -14,10 +14,12 @@ import (
 // subscription-covered offer) appear in the JSON wire output. Connect's
 // default protojson.MarshalOptions{} omits zero-valued scalars, which loses an
 // observable agents depend on: "the subscription-covered offer carries
-// price.amountMinor==0" cannot be asserted when amountMinor is omitted
+// price.amount_minor==0" cannot be asserted when amount_minor is omitted
 // entirely from the response. Proto3 fields with explicit presence
 // (optional / message fields) are still omitted when unset, so presence-based
-// reads stay correct. Field names stay protojson defaults (lowerCamel).
+// reads stay correct. Field names are snake_case (UseProtoNames=true) — the RAMP wire is
+// snake_case proto-JSON everywhere (proto field names, corpus, generated
+// clients, and this Connect codec).
 //
 // Unmarshal discards unknown fields (a newer client may send fields this
 // server's pin does not know) and rejects a zero-length payload.
@@ -49,7 +51,7 @@ func (c *emitUnpopulatedJSONCodec) Marshal(message any) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("emit-unpopulated json codec: %T is not proto.Message", message)
 	}
-	return protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(pm)
+	return protojson.MarshalOptions{EmitUnpopulated: true, UseProtoNames: true}.Marshal(pm)
 }
 
 func (c *emitUnpopulatedJSONCodec) MarshalAppend(dst []byte, message any) ([]byte, error) {
@@ -57,7 +59,7 @@ func (c *emitUnpopulatedJSONCodec) MarshalAppend(dst []byte, message any) ([]byt
 	if !ok {
 		return nil, fmt.Errorf("emit-unpopulated json codec: %T is not proto.Message", message)
 	}
-	return protojson.MarshalOptions{EmitUnpopulated: true}.MarshalAppend(dst, pm)
+	return protojson.MarshalOptions{EmitUnpopulated: true, UseProtoNames: true}.MarshalAppend(dst, pm)
 }
 
 func (c *emitUnpopulatedJSONCodec) Unmarshal(binary []byte, message any) error {

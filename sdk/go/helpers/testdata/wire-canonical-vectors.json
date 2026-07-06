@@ -5,17 +5,17 @@
       "name": "unspecified_enum_pruned",
       "wire_json": {
         "attestations": [],
-        "deliveryMethod": "DELIVERY_METHOD_UNSPECIFIED",
+        "delivery_method": "DELIVERY_METHOD_UNSPECIFIED",
         "exchange": "exchange.example.com",
         "ext": null,
-        "extCritical": [],
-        "iabCategories": [],
-        "offerId": "offer-wire-unspec",
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-unspec",
         "previews": [],
         "pricing": null,
         "signature": "",
-        "signatureAlgorithm": "",
-        "subscriptionQuota": [],
+        "signature_algorithm": "",
+        "subscription_quota": [],
         "terms": []
       },
       "canonical_json": {
@@ -27,12 +27,12 @@
       "name": "set_empty_optional_unit",
       "wire_json": {
         "attestations": [],
-        "deliveryMethod": "DELIVERY_METHOD_UNSPECIFIED",
+        "delivery_method": "DELIVERY_METHOD_UNSPECIFIED",
         "exchange": "exchange.example.com",
         "ext": null,
-        "extCritical": [],
-        "iabCategories": [],
-        "offerId": "offer-wire-unit",
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-unit",
         "previews": [],
         "pricing": {
           "currency": "EUR",
@@ -41,8 +41,8 @@
           "unit": ""
         },
         "signature": "",
-        "signatureAlgorithm": "",
-        "subscriptionQuota": [],
+        "signature_algorithm": "",
+        "subscription_quota": [],
         "terms": []
       },
       "canonical_json": {
@@ -59,7 +59,7 @@
       "name": "struct_ext_multi_key",
       "wire_json": {
         "attestations": [],
-        "deliveryMethod": "DELIVERY_METHOD_UNSPECIFIED",
+        "delivery_method": "DELIVERY_METHOD_UNSPECIFIED",
         "exchange": "exchange.example.com",
         "ext": {
           "alpha": "first",
@@ -69,14 +69,14 @@
           },
           "zebra": "last"
         },
-        "extCritical": [],
-        "iabCategories": [],
-        "offerId": "offer-wire-struct",
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-struct",
         "previews": [],
         "pricing": null,
         "signature": "",
-        "signatureAlgorithm": "",
-        "subscriptionQuota": [],
+        "signature_algorithm": "",
+        "subscription_quota": [],
         "terms": []
       },
       "canonical_json": {
@@ -96,19 +96,19 @@
       "name": "two_timestamps",
       "wire_json": {
         "attestations": [],
-        "dataAsOf": "2023-11-14T19:26:40Z",
-        "deliveryMethod": "DELIVERY_METHOD_UNSPECIFIED",
+        "data_as_of": "2023-11-14T19:26:40Z",
+        "delivery_method": "DELIVERY_METHOD_UNSPECIFIED",
         "exchange": "exchange.example.com",
-        "expiresAt": "2023-11-14T22:28:20Z",
+        "expires_at": "2023-11-14T22:28:20Z",
         "ext": null,
-        "extCritical": [],
-        "iabCategories": [],
-        "offerId": "offer-wire-two-ts",
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-two-ts",
         "previews": [],
         "pricing": null,
         "signature": "",
-        "signatureAlgorithm": "",
-        "subscriptionQuota": [],
+        "signature_algorithm": "",
+        "subscription_quota": [],
         "terms": []
       },
       "canonical_json": {
@@ -122,12 +122,12 @@
       "name": "repeated_terms_enum",
       "wire_json": {
         "attestations": [],
-        "deliveryMethod": "DELIVERY_METHOD_DIRECT",
+        "delivery_method": "DELIVERY_METHOD_DIRECT",
         "exchange": "exchange.example.com",
         "ext": null,
-        "extCritical": [],
-        "iabCategories": [],
-        "offerId": "offer-wire-repeated",
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-repeated",
         "previews": [],
         "pricing": {
           "currency": "USD",
@@ -135,8 +135,8 @@
           "rate": "0.05"
         },
         "signature": "",
-        "signatureAlgorithm": "",
-        "subscriptionQuota": [],
+        "signature_algorithm": "",
+        "subscription_quota": [],
         "terms": [
           {
             "obligations": [],

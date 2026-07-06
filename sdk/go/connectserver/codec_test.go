@@ -11,9 +11,10 @@ package connectserver_test
 // internal/rampcodec (and the two thin per-service forwarders) can be deleted.
 // No case may be weakened or removed during implementation.
 //
-// Binding pin: camelCase names NOT UseProtoNames. The MCP response models and
-// the edge tests depend on camelCase emission. Any SDK codec using UseProtoNames
-// breaks MCP and edge tests — this is the one non-negotiable constraint.
+// Binding pin: snake_case names (UseProtoNames=true). The RAMP wire is
+// snake_case proto-JSON everywhere — the proto field names, the corpus, the
+// generated clients, and this Connect codec. A stray UseProtoNames=false would
+// split the naming and reintroduce camelCase; that is the regression this guards.
 
 import (
 	"strings"
@@ -24,30 +25,34 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// TestSDKCodec_Marshal_EmitsZeroScalarsWithCamelNames pins the two load-bearing
-// marshal properties in one byte-exact check: zero scalars present, camelCase
-// names (ported from internal/rampcodec TestMarshal_EmitsZeroScalarsWithCamelNames).
-func TestSDKCodec_Marshal_EmitsZeroScalarsWithCamelNames(t *testing.T) {
+// TestSDKCodec_Marshal_EmitsZeroScalarsWithSnakeNames pins the two load-bearing
+// marshal properties in one check: zero scalars present (EmitUnpopulated), and
+// snake_case field names (UseProtoNames). SubscriptionQuotaInfo carries
+// multi-word non-optional scalars (quota_limit, quota_used, ...) so the snake
+// form is observable — a camelCase hump would leak as quotaLimit.
+func TestSDKCodec_Marshal_EmitsZeroScalarsWithSnakeNames(t *testing.T) {
 	t.Parallel()
 	codec := rampserver.EmitUnpopulatedJSONCodec()
 
-	got, err := codec.Marshal(&rampv1.Cost{})
+	got, err := codec.Marshal(&rampv1.SubscriptionQuotaInfo{})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	for _, want := range []string{`"amount":""`, `"currency":""`} {
+	for _, want := range []string{`"subscription_id":""`, `"quota_limit":0`, `"quota_used":0`, `"quota_remaining":0`} {
 		if !strings.Contains(string(got), want) {
-			t.Errorf("marshal(Cost{}) = %s; want it to contain %s (EmitUnpopulated zero scalar)", got, want)
+			t.Errorf("marshal(SubscriptionQuotaInfo{}) = %s; want it to contain %s (EmitUnpopulated zero scalar, snake name)", got, want)
 		}
 	}
-	if strings.Contains(string(got), "unit_cost") {
-		t.Errorf("marshal(Cost{}) = %s; snake_case name leaked — the wire is protojson default camelCase", got)
+	for _, camel := range []string{"subscriptionId", "quotaLimit", "quotaUsed", "quotaRemaining"} {
+		if strings.Contains(string(got), camel) {
+			t.Errorf("marshal(SubscriptionQuotaInfo{}) = %s; camelCase name %q leaked — the wire is snake_case (UseProtoNames=true)", got, camel)
+		}
 	}
 }
 
 // TestSDKCodec_Marshal_OmitsUnsetExplicitPresence pins that proto3
 // explicit-presence fields (optional scalars, message fields) stay ABSENT when
-// unset even under EmitUnpopulated — the presence-based reads (retrieval_endpoint
+// unset even under EmitUnpopulated — the presence-based reads (unit_cost
 // et al.) depend on absence meaning unset (ported from internal/rampcodec
 // TestMarshal_OmitsUnsetExplicitPresence).
 func TestSDKCodec_Marshal_OmitsUnsetExplicitPresence(t *testing.T) {
@@ -59,7 +64,7 @@ func TestSDKCodec_Marshal_OmitsUnsetExplicitPresence(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	// Cost.unit_cost is proto3 optional (explicit presence): unset => absent.
-	if strings.Contains(string(got), "unitCost") {
+	if strings.Contains(string(got), "unit_cost") {
 		t.Errorf("marshal(Cost{}) = %s; unset optional unit_cost must stay absent", got)
 	}
 }
@@ -124,14 +129,14 @@ type marshalAppender interface {
 	MarshalAppend([]byte, any) ([]byte, error)
 }
 
-// TestSDKCodec_MarshalAppend_EmitsZeroScalarsWithCamelNamesAndAppendsToPrefix
-// pins MarshalAppend: (a) it emits zero scalars and camelCase names (same
+// TestSDKCodec_MarshalAppend_EmitsZeroScalarsWithSnakeNamesAndAppendsToPrefix
+// pins MarshalAppend: (a) it emits zero scalars and snake_case names (same
 // semantic contract as Marshal); (b) it appends the JSON bytes to a non-empty
 // dst prefix rather than replacing it — the connect.Codec MarshalAppend
 // contract requires append-to-dst semantics, not overwrite. This case was added
 // by the architect's review (MEDIUM finding: equivalence gate was incomplete
 // because MarshalAppend has its own implementation path in the app codec).
-func TestSDKCodec_MarshalAppend_EmitsZeroScalarsWithCamelNamesAndAppendsToPrefix(t *testing.T) {
+func TestSDKCodec_MarshalAppend_EmitsZeroScalarsWithSnakeNamesAndAppendsToPrefix(t *testing.T) {
 	t.Parallel()
 	raw := rampserver.EmitUnpopulatedJSONCodec()
 	// MarshalAppend is not part of the public connect.Codec interface; the
@@ -143,7 +148,7 @@ func TestSDKCodec_MarshalAppend_EmitsZeroScalarsWithCamelNamesAndAppendsToPrefix
 	}
 
 	prefix := []byte(`SENTINEL`)
-	got, err := codec.MarshalAppend(prefix, &rampv1.Cost{})
+	got, err := codec.MarshalAppend(prefix, &rampv1.SubscriptionQuotaInfo{})
 	if err != nil {
 		t.Fatalf("MarshalAppend: %v", err)
 	}
@@ -153,14 +158,14 @@ func TestSDKCodec_MarshalAppend_EmitsZeroScalarsWithCamelNamesAndAppendsToPrefix
 		t.Errorf("MarshalAppend result = %q; must start with the dst prefix %q (append, not overwrite)", got, prefix)
 	}
 
-	// The appended JSON must still honor EmitUnpopulated + camelCase.
+	// The appended JSON must still honor EmitUnpopulated + snake_case.
 	appended := string(got[len(prefix):])
-	for _, want := range []string{`"amount":""`, `"currency":""`} {
+	for _, want := range []string{`"subscription_id":""`, `"quota_limit":0`} {
 		if !strings.Contains(appended, want) {
-			t.Errorf("MarshalAppend appended portion = %q; must contain %q (EmitUnpopulated zero scalar)", appended, want)
+			t.Errorf("MarshalAppend appended portion = %q; must contain %q (EmitUnpopulated zero scalar, snake name)", appended, want)
 		}
 	}
-	if strings.Contains(appended, "unit_cost") {
-		t.Errorf("MarshalAppend appended portion = %q; snake_case leaked — must be camelCase", appended)
+	if strings.Contains(appended, "quotaLimit") {
+		t.Errorf("MarshalAppend appended portion = %q; camelCase leaked — must be snake_case (UseProtoNames=true)", appended)
 	}
 }

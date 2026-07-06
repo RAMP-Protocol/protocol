@@ -426,10 +426,9 @@ type wireCanonicalVector struct {
 }
 
 // wireEmitJSONOptions is the Connect wire emission the broker's codec produces:
-// protojson defaults (camelCase json_names, enums as names) plus EmitUnpopulated
-// (see sdk/go/connectserver codec — camelCase NOT UseProtoNames is the pinned,
-// non-negotiable wire contract).
-var wireEmitJSONOptions = protojson.MarshalOptions{EmitUnpopulated: true}
+// snake_case proto names (UseProtoNames=true, the RAMP wire contract) plus
+// EmitUnpopulated (see sdk/go/connectserver codec).
+var wireEmitJSONOptions = protojson.MarshalOptions{EmitUnpopulated: true, UseProtoNames: true}
 
 // buildWireCanonicalVectors renders a matrix of offers through BOTH pinned
 // option sets. The matrix deliberately covers the pruning rules a from-wire
