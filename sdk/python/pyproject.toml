@@ -15,7 +15,13 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "PERF", "FURB", "RUF", "PL", "TCH"]
+# The selector set is a SUPERSET of the consuming app's (src/mcp/pyproject.toml):
+# the canonical crypto library must never be linted more loosely than its
+# consumer. If the app gains a selector, add it here too.
+select = [
+  "E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "PERF", "FURB", "RUF",
+  "PL", "ASYNC", "S", "TCH", "ARG", "RET", "PTH", "TID",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # The parity suites are TDD-authored (red step) and must not be restructured to
