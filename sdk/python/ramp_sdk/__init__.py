@@ -28,7 +28,12 @@ from .core import (
     verify_offer_acceptance_jcs,
 )
 from .crossfield import cross_field_rule_ids
-from .httpsig import sign_request, verify_request
+from .httpsig import (
+    ReplayStore,
+    sign_request,
+    verify_request,
+    verify_request_server,
+)
 from .keyresolver import KeyResolver, StaticKeyResolver
 from .pop import sign_agent_binding, verify_agent_binding
 from .signedurl import sign_ed25519_signed_url, verify_ed25519_signed_url
@@ -36,6 +41,7 @@ from .thumbprint import thumbprint
 
 __all__ = [
     "KeyResolver",
+    "ReplayStore",
     "StaticKeyResolver",
     "b64url_decode",
     "b64url_nopad",
@@ -55,4 +61,5 @@ __all__ = [
     "verify_offer_acceptance",
     "verify_offer_acceptance_jcs",
     "verify_request",
+    "verify_request_server",
 ]

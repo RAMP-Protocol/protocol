@@ -18,8 +18,9 @@ import { stdBase64 } from "./sign.ts";
 
 // The RAMP request covered set: exactly these five, in this order. No conditional
 // biscuit component — it is bound only when an entitlement header is present,
-// which this signer's inputs never carry.
-const COVERED_COMPONENTS = [
+// which this signer's inputs never carry. Exported so the verify sibling
+// (core/verify-request.ts) enforces the SAME required set without duplicating it.
+export const COVERED_COMPONENTS = [
 	"@method",
 	"@target-uri",
 	"content-digest",
@@ -50,7 +51,11 @@ export interface SignedRequest {
 }
 
 // RFC 9530 Content-Digest header value: `sha-256=:<STANDARD-base64(SHA-256)>:`.
-async function contentDigest(body: Uint8Array<ArrayBuffer>): Promise<string> {
+// Exported so the verify sibling recomputes the digest over the exact body bytes
+// and compares against the covered Content-Digest header byte-for-byte.
+export async function contentDigest(
+	body: Uint8Array<ArrayBuffer>,
+): Promise<string> {
 	const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", body));
 	return `sha-256=:${stdBase64(digest)}:`;
 }
@@ -66,21 +71,35 @@ function signatureParams(
 	return `(${covered});keyid="${keyid}";alg="ed25519";created=${created};expires=${expires}`;
 }
 
-// The signature base: one `"name": value` line per covered component, joined by
-// "\n", with @signature-params last and NO trailing newline. Empty authorization/
-// signature-agent still render (name + ": " + "" ) — the trailing space is part
-// of the covered bytes, so it must never be trimmed.
-function buildSignatureBase(
-	opts: SignRequestOptions,
-	digestHeader: string,
+/** The covered request field values a 5-component RAMP signature base is built over. */
+export interface RequestBaseFields {
+	method: string;
+	url: string;
+	digestHeader: string;
+	authorization: string;
+	signatureAgent: string;
+}
+
+/**
+ * The RFC 9421 signature base over the RAMP 5-component covered set: one
+ * `"name": value` line per component, joined by "\n", terminated by
+ * `"@signature-params": <sigParams>` with NO trailing newline. Empty
+ * authorization/signature-agent still render (name + ": " + "") — the trailing
+ * space is part of the covered bytes and must never be trimmed. Exported and
+ * shared with the verify sibling (core/verify-request.ts) so sign and verify
+ * reconstruct byte-identical bases; `sigParams` is the VERBATIM inner-list +
+ * params tail (the signer's own on sign, the wire's on verify).
+ */
+export function buildRequestSignatureBase(
+	fields: RequestBaseFields,
 	sigParams: string,
 ): string {
 	return [
-		`"@method": ${opts.method.toUpperCase()}`,
-		`"@target-uri": ${opts.url}`,
-		`"content-digest": ${digestHeader}`,
-		`"authorization": ${opts.authorization}`,
-		`"signature-agent": ${opts.signatureAgent}`,
+		`"@method": ${fields.method.toUpperCase()}`,
+		`"@target-uri": ${fields.url}`,
+		`"content-digest": ${fields.digestHeader}`,
+		`"authorization": ${fields.authorization}`,
+		`"signature-agent": ${fields.signatureAgent}`,
 		`"@signature-params": ${sigParams}`,
 	].join("\n");
 }
@@ -98,7 +117,16 @@ export async function signRequest(
 ): Promise<SignedRequest> {
 	const digestHeader = await contentDigest(opts.body);
 	const sigParams = signatureParams(opts.keyid, opts.created, opts.expires);
-	const base = buildSignatureBase(opts, digestHeader, sigParams);
+	const base = buildRequestSignatureBase(
+		{
+			method: opts.method,
+			url: opts.url,
+			digestHeader,
+			authorization: opts.authorization,
+			signatureAgent: opts.signatureAgent,
+		},
+		sigParams,
+	);
 	const sig = await crypto.subtle.sign(
 		"Ed25519",
 		privKey,

@@ -27,9 +27,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -641,6 +643,279 @@ func buildSignRequestVectors(t *testing.T) []signRequestVector {
 	return out
 }
 
+// verifyRequestNegVector mirrors the NegVerifyVector shape the TS/py server-verify
+// parity suites read. It is a fully-formed SINGLE-SIG request whose verification
+// MUST be rejected, tagged with the exact reason token the connectserver taxonomy
+// (classify.go RejectReason.String()) assigns — proven by running the REAL Go
+// verify path (VerifyRequest + the replay orchestration) against the vector and
+// asserting it produces that reason. The port reconstructs the request from these
+// fields, injects resolver_pubkey for keyid, pins the clock to `now`, and asserts
+// the same rejection.
+type verifyRequestNegVector struct {
+	Name           string `json:"name"`
+	Method         string `json:"method"`
+	URL            string `json:"url"`
+	BodyHex        string `json:"body_hex"`
+	Authorization  string `json:"authorization"`
+	SignatureAgent string `json:"signature_agent"`
+	ContentDigest  string `json:"content_digest"`
+	SignatureInput string `json:"signature_input"`
+	Signature      string `json:"signature"`
+	// KeyID is the keyid the request's Signature-Input claims.
+	KeyID string `json:"keyid"`
+	// ResolverKeyID / ResolverPubkeyB64URL describe the key the injected resolver
+	// serves: for most cases resolver_keyid==keyid and the pubkey is the true
+	// signer key; for neg_wrong_key the resolver serves a DIFFERENT (wrong) key so
+	// the crypto check fails.
+	ResolverKeyID        string `json:"resolver_keyid"`
+	ResolverPubkeyB64URL string `json:"resolver_pubkey_b64url"`
+	// Now is the verifier clock the case is pinned to (inside the window except for
+	// neg_expired, which is post-expiry).
+	Now int64 `json:"now"`
+	// ExpectedReason is RejectReason.String() for the Go rejection.
+	ExpectedReason string `json:"expected_reason"`
+	// Replay marks the neg_replay case: the same request is presented twice; the
+	// SECOND presentation is the one that must be rejected as "replay".
+	Replay bool `json:"replay,omitempty"`
+}
+
+// negRequest is one signed request the negative emitter mutates into a reject case.
+type negRequest struct {
+	method, url    string
+	body           []byte
+	authorization  string
+	signatureAgent string
+	req            *http.Request
+	sigInput       string
+	sig            string
+	contentDigest  string
+}
+
+// signNegBase signs a fixed request with the neg-vector signer (seed 0x77) and
+// returns the wire artifacts, so each negative is a real signature the Go verifier
+// accepts before the case-specific mutation flips it to a rejection.
+func signNegBase(t *testing.T, keyid string, seed []byte, created, expires int64) negRequest {
+	t.Helper()
+	const (
+		method        = "POST"
+		url           = "https://broker.example/ramp.v1.BrokerService/Fetch"
+		authorization = "Bearer neg-token"
+		sigAgent      = "https://agent.example"
+	)
+	body := []byte(`{"uri":"https://cdn.example/neg"}`)
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		t.Fatalf("neg base: new request: %v", err)
+	}
+	req.Header.Set("Authorization", authorization)
+	req.Header.Set(SignatureAgentHeader, sigAgent)
+	signer, err := NewEd25519SignerFromSeed(keyid, seed)
+	if err != nil {
+		t.Fatalf("neg base: signer: %v", err)
+	}
+	if err := SignRequest(context.Background(), req, body, signer, SignOptions{Created: created, Expires: expires}); err != nil {
+		t.Fatalf("neg base: sign: %v", err)
+	}
+	return negRequest{
+		method: method, url: url, body: body,
+		authorization: authorization, signatureAgent: sigAgent, req: req,
+		sigInput:      req.Header.Get("Signature-Input"),
+		sig:           req.Header.Get("Signature"),
+		contentDigest: req.Header.Get("Content-Digest"),
+	}
+}
+
+// verifyNegReason drives the REAL Go verify path (VerifyRequest, then the
+// connectserver replay orchestration when replay!=nil) over a reconstructed
+// request and returns the classified reject reason token — the authoritative
+// oracle the emitted expected_reason is taken from. The reconstruction mirrors
+// what the TS/py port does: headers off the vector fields, key from the resolver,
+// clock pinned to now.
+func verifyNegReason(
+	t *testing.T, v verifyRequestNegVector, resolverPub ed25519.PublicKey,
+	replaySeen map[string]bool,
+) string {
+	t.Helper()
+	body, err := hex.DecodeString(v.BodyHex)
+	if err != nil {
+		t.Fatalf("%s: decode body: %v", v.Name, err)
+	}
+	req, err := http.NewRequest(v.Method, v.URL, nil)
+	if err != nil {
+		t.Fatalf("%s: new request: %v", v.Name, err)
+	}
+	req.Header.Set("Content-Digest", v.ContentDigest)
+	req.Header.Set("Authorization", v.Authorization)
+	req.Header.Set(SignatureAgentHeader, v.SignatureAgent)
+	req.Header.Set("Signature-Input", v.SignatureInput)
+	req.Header.Set("Signature", v.Signature)
+	resolver := NewStaticKeyResolver(map[string]ed25519.PublicKey{})
+	if resolverPub != nil {
+		resolver.Put(v.ResolverKeyID, resolverPub)
+	}
+	opts := VerifyOptions{Now: time.Unix(v.Now, 0)}
+	sigs, verr := VerifyMultisigRequestResolved(context.Background(), req, body, resolver, opts)
+	if verr != nil {
+		return classifyNegReason(verr)
+	}
+	// Replay orchestration mirrors connectserver.serverConfig.verify: the nonce is
+	// keyid+"\x00"+std-base64(sig); a seen nonce classifies as "replay".
+	for i := range sigs {
+		nonce := sigs[i].KeyID + "\x00" + sigs[i].Signature
+		if replaySeen != nil {
+			if replaySeen[nonce] {
+				return "replay"
+			}
+			replaySeen[nonce] = true
+		}
+	}
+	return ""
+}
+
+// classifyNegReason mirrors connectserver.ClassifyReject over the helpers
+// sentinels for the SINGLE-SIG surface (broken_chain / hop_budget are multisig,
+// out of scope): every signature-authenticity/freshness/key failure is the
+// default "signature" token.
+func classifyNegReason(err error) string {
+	switch {
+	case errors.Is(err, ErrTooManyHops):
+		return "hop_budget"
+	case errors.Is(err, ErrBrokenSignatureChain):
+		return "broken_chain"
+	default:
+		return "signature"
+	}
+}
+
+// buildVerifyRequestNegVectors emits the SINGLE-SIG negative-verify corpus the
+// TS/py server-verify suites consume: neg_bad_sig, neg_replay, neg_expired,
+// neg_wrong_key, neg_tampered_authorization. Each is produced by signing with the
+// REAL Go signer then applying the case mutation, and each recorded
+// expected_reason is taken from the REAL Go verify path (verifyNegReason) so the
+// tokens are authoritative, never hand-authored.
+func buildVerifyRequestNegVectors(t *testing.T) []verifyRequestNegVector {
+	t.Helper()
+	const (
+		keyid    = "mcp.v1"
+		created  = int64(1_700_000_000)
+		expires  = int64(1_700_000_600)
+		freshNow = int64(1_700_000_100) // inside window
+		staleNow = int64(1_700_000_900) // past expires
+	)
+	seed := fixedSeed(0x77)
+	pub := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	pubB64 := b64urlNoPad(pub)
+	base := signNegBase(t, keyid, seed, created, expires)
+	bodyHex := hex.EncodeToString(base.body)
+
+	// mk builds a vector template carrying the base (valid) artifacts; each case
+	// then overrides the field it mutates.
+	mk := func(name string, now int64) verifyRequestNegVector {
+		return verifyRequestNegVector{
+			Name: name, Method: base.method, URL: base.url, BodyHex: bodyHex,
+			Authorization: base.authorization, SignatureAgent: base.signatureAgent,
+			ContentDigest: base.contentDigest, SignatureInput: base.sigInput, Signature: base.sig,
+			KeyID: keyid, ResolverKeyID: keyid, ResolverPubkeyB64URL: pubB64, Now: now,
+		}
+	}
+
+	// neg_bad_sig: flip the last signature byte so the Ed25519 check fails.
+	badSig := mk("neg_bad_sig", freshNow)
+	badSig.Signature = corruptSignatureLastByte(base.sig)
+
+	// neg_replay: the base request is valid; presented twice the second trips the
+	// replay store. Reason "replay".
+	replay := mk("neg_replay", freshNow)
+	replay.Replay = true
+
+	// neg_expired: the base request, verified past its expires. Reason "signature".
+	expired := mk("neg_expired", staleNow)
+
+	// neg_wrong_key: the resolver serves a DIFFERENT key (seed 0x78) for keyid, so
+	// the crypto check fails against the wrong public key. Reason "signature".
+	wrongPub := ed25519.NewKeyFromSeed(fixedSeed(0x78)).Public().(ed25519.PublicKey)
+	wrongKey := mk("neg_wrong_key", freshNow)
+	wrongKey.ResolverPubkeyB64URL = b64urlNoPad(wrongPub)
+
+	// neg_tampered_authorization: the covered authorization header value is changed
+	// after signing, so the reconstructed base no longer matches. Reason "signature".
+	tampered := mk("neg_tampered_authorization", freshNow)
+	tampered.Authorization = base.authorization + "-tampered"
+
+	out := []verifyRequestNegVector{badSig, replay, expired, wrongKey, tampered}
+	// Derive expected_reason from the REAL Go verify path — never hand-author it.
+	for i := range out {
+		out[i].ExpectedReason = oracleNegReason(t, out[i])
+	}
+	return out
+}
+
+// oracleNegReason runs the emitted vector through the REAL Go verify path and
+// returns the reason token it produces, so expected_reason is authoritative.
+func oracleNegReason(t *testing.T, v verifyRequestNegVector) string {
+	t.Helper()
+	var resolverPub ed25519.PublicKey
+	if v.ResolverPubkeyB64URL != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(v.ResolverPubkeyB64URL)
+		if err != nil {
+			t.Fatalf("%s: decode resolver pub: %v", v.Name, err)
+		}
+		resolverPub = ed25519.PublicKey(raw)
+	}
+	var seen map[string]bool
+	if v.Replay {
+		seen = map[string]bool{}
+		_ = verifyNegReason(t, v, resolverPub, seen) // first presentation records the nonce
+	}
+	return verifyNegReason(t, v, resolverPub, seen)
+}
+
+// corruptSignatureLastByte decodes the `sig1=:<b64>:` value, flips the final byte,
+// and re-encodes — a minimal, deterministic mutation that fails the Ed25519 check
+// while keeping the wire form well-formed (so the rejection is a signature failure,
+// not a parse failure).
+func corruptSignatureLastByte(sig string) string {
+	i := strings.IndexByte(sig, ':')
+	j := strings.LastIndexByte(sig, ':')
+	if i < 0 || j <= i {
+		return sig
+	}
+	label := sig[:i]
+	raw, err := base64.StdEncoding.DecodeString(sig[i+1 : j])
+	if err != nil || len(raw) == 0 {
+		return sig
+	}
+	raw[len(raw)-1] ^= 0x01
+	return label + ":" + base64.StdEncoding.EncodeToString(raw) + ":"
+}
+
+// verifyNegVectorReason asserts each emitted negative rejects with the recorded
+// reason through the REAL Go verify path — the self-consistency guard that makes
+// expected_reason authoritative rather than hand-authored.
+func verifyNegVectorReason(t *testing.T, v verifyRequestNegVector) {
+	t.Helper()
+	var resolverPub ed25519.PublicKey
+	if v.ResolverPubkeyB64URL != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(v.ResolverPubkeyB64URL)
+		if err != nil {
+			t.Fatalf("%s: decode resolver pub: %v", v.Name, err)
+		}
+		resolverPub = ed25519.PublicKey(raw)
+	}
+	var seen map[string]bool
+	if v.Replay {
+		seen = map[string]bool{}
+		// First presentation must be accepted (empty reason), recording the nonce.
+		if got := verifyNegReason(t, v, resolverPub, seen); got != "" {
+			t.Fatalf("%s: first presentation unexpectedly rejected: %q", v.Name, got)
+		}
+	}
+	got := verifyNegReason(t, v, resolverPub, seen)
+	if got != v.ExpectedReason {
+		t.Fatalf("neg vector %s: oracle reason=%q, recorded=%q", v.Name, got, v.ExpectedReason)
+	}
+}
+
 // verifySignRequestVector round-trips a sign-request vector through the REAL Go
 // VerifyRequest at a pinned `now` inside the window, so any divergence surfaces
 // in the Go drift gate rather than in the Python port.
@@ -777,6 +1052,10 @@ func TestGenerateVectors(t *testing.T) {
 	for _, v := range signRequestVectors {
 		verifySignRequestVector(t, v)
 	}
+	verifyRequestNegVectors := buildVerifyRequestNegVectors(t)
+	for _, v := range verifyRequestNegVectors {
+		verifyNegVectorReason(t, v)
+	}
 	acceptanceVectors := buildAcceptanceVectors(t)
 	offerVerifyVectors := buildOfferVerifyVectors(t)
 	wireCanonicalVectors := buildWireCanonicalVectors(t)
@@ -784,6 +1063,7 @@ func TestGenerateVectors(t *testing.T) {
 	signedURLPath := filepath.Join("testdata", "signedurl-vectors.json")
 	popPath := filepath.Join("testdata", "pop-vectors.json")
 	signRequestPath := filepath.Join("testdata", "sign-request-vectors.json")
+	verifyNegPath := filepath.Join("testdata", "verify-request-neg-vectors.json")
 	acceptancePath := filepath.Join("testdata", "acceptance-vectors.json")
 	offerVerifyPath := filepath.Join("testdata", "offer-verify-vectors.json")
 	wireCanonicalPath := filepath.Join("testdata", "wire-canonical-vectors.json")
@@ -793,6 +1073,7 @@ func TestGenerateVectors(t *testing.T) {
 	// acceptance + offer-verify docs additionally carry a canonicalization marker
 	// ("jcs") so a reader cannot confuse them with the old proto-binary form.
 	signRequestDoc := map[string]any{"vectors": signRequestVectors}
+	verifyNegDoc := map[string]any{"vectors": verifyRequestNegVectors}
 	acceptanceDoc := map[string]any{"canonicalization": "jcs", "vectors": acceptanceVectors}
 	offerVerifyDocValue := offerVerifyDoc{Canonicalization: "jcs", Vectors: offerVerifyVectors}
 	wireCanonicalDoc := map[string]any{"canonicalization": "jcs", "vectors": wireCanonicalVectors}
@@ -801,6 +1082,7 @@ func TestGenerateVectors(t *testing.T) {
 		writeJSON(t, signedURLPath, signedURLVectors)
 		writeJSON(t, popPath, popVectors)
 		writeJSON(t, signRequestPath, signRequestDoc)
+		writeJSON(t, verifyNegPath, verifyNegDoc)
 		writeJSON(t, acceptancePath, acceptanceDoc)
 		writeJSON(t, offerVerifyPath, offerVerifyDocValue)
 		writeJSON(t, wireCanonicalPath, wireCanonicalDoc)
@@ -811,6 +1093,7 @@ func TestGenerateVectors(t *testing.T) {
 	assertMatches(t, signedURLPath, signedURLVectors)
 	assertMatches(t, popPath, popVectors)
 	assertMatches(t, signRequestPath, signRequestDoc)
+	assertMatches(t, verifyNegPath, verifyNegDoc)
 	assertMatches(t, acceptancePath, acceptanceDoc)
 	assertMatches(t, offerVerifyPath, offerVerifyDocValue)
 	assertMatches(t, wireCanonicalPath, wireCanonicalDoc)

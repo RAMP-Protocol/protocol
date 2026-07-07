@@ -40,6 +40,13 @@ select = [
 # these functions transcribe. PLR0913 (arg count) and PLR0911 (return count) are
 # waived for exactly these crypto-primitive modules.
 "ramp_sdk/httpsig.py" = ["PLR0913", "PLR0911"]
+# The framework-agnostic server-verify entry mirrors the Go connectserver contract:
+# its keyword-only surface (method/url/body/headers + the injected resolver/replay
+# store/clock/ttl) is pinned by the parity test, and each fail-closed reject reason
+# (bad input, missing covered component, unresolvable key, crypto/window failure,
+# replay) is its own early return mirroring classify.go. Condensing either into a
+# params object or fewer returns would obscure the RFC 9421 verify contract it ports.
+"ramp_sdk/server_verify.py" = ["PLR0913", "PLR0911"]
 "ramp_sdk/pop.py" = ["PLR0913", "PLR0911"]
 "ramp_sdk/signedurl.py" = ["PLR0911"]
 "ramp_sdk/acceptance.py" = ["PLR0913"]

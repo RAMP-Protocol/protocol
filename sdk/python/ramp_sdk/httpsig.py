@@ -218,3 +218,23 @@ def verify_request(
     except (InvalidSignature, ValueError):
         return VerifiedRequest(valid=False, reason="signature_verify")
     return VerifiedRequest(valid=True)
+
+
+# The framework-agnostic single-sig SERVER-verify face lives in server_verify.py
+# (it composes this module's verify_request primitive with the injected resolver /
+# replay store / clock). Re-export it here so a Broker/Exchange imports the whole
+# request-verify surface — primitive + server entry — from ramp_sdk.httpsig.
+from .server_verify import (  # noqa: E402
+    ReplayStore,
+    verify_request_server,
+)
+
+__all__ = [
+    "ReplayStore",
+    "SignedRequest",
+    "VerifiedRequest",
+    "content_digest",
+    "sign_request",
+    "verify_request",
+    "verify_request_server",
+]
