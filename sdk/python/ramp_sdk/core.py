@@ -155,6 +155,21 @@ def canonical_offer_payload(offer: dict[str, Any]) -> bytes:
     return rfc8785.dumps(stripped)
 
 
+def sign_offer_jcs(*, seed: bytes, offer: dict[str, Any]) -> tuple[str, str]:
+    """Sign an offer's canonical payload; return ``(hex_signature, "EdDSA")``.
+
+    REUSES :func:`canonical_offer_payload` (the verify-side byte source of truth) —
+    JCS over the offer with signature/signature_algorithm cleared — never a
+    re-derived canonicalization. Ed25519 is deterministic (RFC 8032), so the hex
+    signature is byte-identical to the Go oracle (``helpers.SignOffer``). The offer
+    must already be canonical proto-JSON (snake_case, enums-as-names,
+    omit-unpopulated), as the verify face requires.
+    """
+    payload = canonical_offer_payload(offer)
+    priv = Ed25519PrivateKey.from_private_bytes(seed)
+    return priv.sign(payload).hex(), OFFER_SIGNATURE_ALGORITHM
+
+
 class Verifier:
     """Per-offer authenticity + freshness check over JCS(protojson(offer)), keyed
     through the injected resolver.

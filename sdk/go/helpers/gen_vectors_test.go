@@ -42,6 +42,9 @@ import (
 )
 
 // signedURLVector mirrors the SignedUrlVector shape the TS/py parity tests read.
+// The SIGN-parity fields (SignerSeedHex, SourceURL, AgentID, ExpUnix) let a
+// TS/python port re-sign the exact SOURCE under the oracle's seed and reproduce
+// the emitted SignedURL string byte-for-byte.
 type signedURLVector struct {
 	Name          string `json:"name"`
 	PubB64URL     string `json:"pub_b64url"`
@@ -49,6 +52,11 @@ type signedURLVector struct {
 	SignedURL     string `json:"signed_url"`
 	NowUnix       int64  `json:"now_unix"`
 	ExpectedValid bool   `json:"expected_valid"`
+	// --- SIGN-parity additions ---
+	SignerSeedHex string `json:"signer_seed_hex"`
+	SourceURL     string `json:"source_url"`
+	AgentID       string `json:"agent_id"`
+	ExpUnix       int64  `json:"exp_unix"`
 }
 
 // popVector mirrors the PopVector shape the TS/py parity tests read.
@@ -102,6 +110,8 @@ func buildSignedURLVectors(t *testing.T) []signedURLVector {
 	}
 
 	expiry := time.Unix(expUnix, 0)
+	exSeedHex := hex.EncodeToString(exSeed)
+	pub := b64urlNoPad(exPub)
 
 	signOrFail := func(rawURL, agentID string) SignedURL {
 		su, err := SignURLEd25519(exPriv, kid, rawURL, agentID, expiry)
@@ -111,21 +121,38 @@ func buildSignedURLVectors(t *testing.T) []signedURLVector {
 		return su
 	}
 
-	valid := signOrFail("https://cdn.example/a?doc=1&z=9&a=2", "")
-	bound := signOrFail("https://cdn.example/b?doc=7", agentTP)
-	expired := signOrFail("https://cdn.example/c", "")
+	// emit signs `source` and records everything a sign-face port needs to
+	// reproduce the exact `signed_url` string (source, agent_id, exp, signer seed).
+	emit := func(name, source, agentID string, now int64, valid bool) signedURLVector {
+		return signedURLVector{
+			Name: name, PubB64URL: pub, KID: kid,
+			SignedURL: signOrFail(source, agentID).URL,
+			NowUnix:   now, ExpectedValid: valid,
+			SignerSeedHex: exSeedHex, SourceURL: source, AgentID: agentID, ExpUnix: expUnix,
+		}
+	}
 
-	// Tampered: flip a byte in the signed valid URL's path so verify fails.
-	tampered := valid.URL
-	// Replace "/a?" with "/A?" (path tamper leaves query params intact).
-	tampered = replaceFirst(tampered, "/a?", "/x?")
+	// Tampered: flip a byte in the signed valid URL's path so verify fails. Its
+	// stored signed_url no longer matches a fresh sign of any source, so it is
+	// NOT exercised by the positive (re-sign) parity loop (expected_valid=false).
+	tampered := replaceFirst(signOrFail("https://cdn.example/a?doc=1&z=9&a=2", "").URL, "/a?", "/x?")
 
-	pub := b64urlNoPad(exPub)
 	return []signedURLVector{
-		{Name: "valid_bearer_sorted_query", PubB64URL: pub, KID: kid, SignedURL: valid.URL, NowUnix: freshNow, ExpectedValid: true},
-		{Name: "valid_agent_bound", PubB64URL: pub, KID: kid, SignedURL: bound.URL, NowUnix: freshNow, ExpectedValid: true},
-		{Name: "expired", PubB64URL: pub, KID: kid, SignedURL: expired.URL, NowUnix: staleNow, ExpectedValid: false},
-		{Name: "tampered_path", PubB64URL: pub, KID: kid, SignedURL: tampered, NowUnix: freshNow, ExpectedValid: false},
+		emit("valid_bearer_sorted_query", "https://cdn.example/a?doc=1&z=9&a=2", "", freshNow, true),
+		emit("valid_agent_bound", "https://cdn.example/b?doc=7", agentTP, freshNow, true),
+		emit("expired", "https://cdn.example/c", "", staleNow, false),
+		{
+			Name: "tampered_path", PubB64URL: pub, KID: kid, SignedURL: tampered,
+			NowUnix: freshNow, ExpectedValid: false,
+			SignerSeedHex: exSeedHex, SourceURL: "https://cdn.example/a?doc=1&z=9&a=2", AgentID: "", ExpUnix: expUnix,
+		},
+		// TRICKY vectors — the cases a `new URL()`/urlsplit-normalizing sign face
+		// gets WRONG: mixed-case host, an explicit default :443, and a raw space or
+		// percent in the PATH. Signed as OPAQUE BYTES, they MUST round-trip verbatim.
+		emit("tricky_mixed_case_host", "https://CDN.Example/Doc?x=1", "", freshNow, true),
+		emit("tricky_explicit_default_port", "https://cdn.example:443/doc?x=1", "", freshNow, true),
+		emit("tricky_space_in_path", "https://cdn.example/a path/doc?x=1", "", freshNow, true),
+		emit("tricky_percent_in_path", "https://cdn.example/Doc%2Fpart?z=9&a=2", "", freshNow, true),
 	}
 }
 
@@ -287,6 +314,10 @@ type offerVerifyVector struct {
 	OfferJSON         json.RawMessage `json:"offer_json"`
 	NowUnix           int64           `json:"now_unix"`
 	ExpectedVerified  bool            `json:"expected_verified"`
+	// ExchangeSeedHex is the exchange offer-signing seed (fixedSeed 0x66), so a
+	// sign-face port re-signs canonicalOfferPayload(offer_json) and byte-matches
+	// the signature already embedded in offer_json.
+	ExchangeSeedHex string `json:"exchange_seed_hex"`
 }
 
 // offerVerifyDoc is the {"vectors":[...]} wrapper the offer-verify suites read,
@@ -359,6 +390,7 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 			OfferJSON:         offerCanonicalProtoJSON(t, offer),
 			NowUnix:           nowUnix,
 			ExpectedVerified:  verifyErr == nil && !expired,
+			ExchangeSeedHex:   hex.EncodeToString(exSeed),
 		}
 	}
 

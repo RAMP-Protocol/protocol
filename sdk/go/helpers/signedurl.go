@@ -7,17 +7,23 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // Ed25519 signed delivery URLs (ADR-013). The Exchange issues a URL signed over
-// the canonical message "GET\n<url-without-sig>"; the edge worker
-// (src/edge/src/verify.ts) and this SDK verify it identically. The signature
-// covers the FULL URL (scheme+host+path+query minus sig), so the byte-parity
-// hinges on the query being sorted — Go's url.Values.Encode() sorts, and the
-// edge removes only the sig param without reordering, so both reconstruct the
-// same canonical bytes.
+// the canonical message "GET\n<url>"; the edge worker (src/edge/src/verify.ts)
+// and this SDK verify it identically. The signature covers the URL as OPAQUE
+// BYTES (Constantine, 2026-07-07): neither signer nor verifier re-normalizes
+// scheme/host/path — a mixed-case host, an explicit default port, and a raw
+// space or percent in the path are all preserved verbatim. The ONLY transform is
+// deterministic query handling (add exp/kid/agent_id, remove sig, sort the
+// query), done identically across sdk/{go,ts,python}. This is why the canonical
+// string is built by splitting the raw URL at its first '?' and preserving the
+// prefix byte-for-byte, rather than round-tripping through url.URL.String()
+// (which escapes the path and normalizes the host).
 //
 // agent_id, when present, is the requesting agent's RFC 7638 JWK thumbprint; it
 // is covered by the signature, binding the URL to the agent's key (proof of
@@ -59,34 +65,134 @@ type VerifiedURL struct {
 // Bound reports whether the URL is agent-bound (carries an agent_id).
 func (v VerifiedURL) Bound() bool { return v.AgentID != "" }
 
+// splitURL divides a raw URL into its verbatim prefix (scheme+host+path) and its
+// raw query (the bytes after the first '?'). Signed delivery URLs carry no
+// fragment, so a '#' — if present — stays with the prefix and is signed verbatim
+// like any other path byte. Preserving the prefix as raw bytes is what makes the
+// canonicalization VERBATIM (no host/port/path normalization).
+func splitURL(rawURL string) (prefix, rawQuery string) {
+	if i := strings.IndexByte(rawURL, '?'); i >= 0 {
+		return rawURL[:i], rawURL[i+1:]
+	}
+	return rawURL, ""
+}
+
+// encodeQuery serializes key/value pairs exactly as Go's url.Values.Encode():
+// sort by key (stable per-key value order), url.QueryEscape each key and value
+// (space -> '+', unreserved A-Za-z0-9-._~ kept, everything else %XX uppercase),
+// joined "k=v&k=v". sdk/ts and sdk/python reproduce this byte-for-byte.
+func encodeQuery(pairs [][2]string) string {
+	sort.SliceStable(pairs, func(i, j int) bool { return pairs[i][0] < pairs[j][0] })
+	var b strings.Builder
+	for i, kv := range pairs {
+		if i > 0 {
+			b.WriteByte('&')
+		}
+		b.WriteString(url.QueryEscape(kv[0]))
+		b.WriteByte('=')
+		b.WriteString(url.QueryEscape(kv[1]))
+	}
+	return b.String()
+}
+
+// canonicalSignedURL builds the URL whose bytes the signature covers: the raw
+// prefix (verbatim) plus the deterministically re-encoded query. It parses the
+// raw query WITHOUT normalizing the prefix, drops sig, applies the mutate
+// callback (used by the signer to set exp/kid/agent_id), sorts, and re-encodes.
+// Both SignURLEd25519 and VerifyURLEd25519 route through this one builder so the
+// signer and verifier agree on the byte contract by construction.
+func canonicalSignedURL(rawURL string, mutate func(pairs [][2]string) [][2]string) (string, error) {
+	prefix, rawQuery := splitURL(rawURL)
+	pairs, err := parseQueryPairs(rawQuery)
+	if err != nil {
+		return "", err
+	}
+	kept := pairs[:0]
+	for _, kv := range pairs {
+		if kv[0] != urlSigParam {
+			kept = append(kept, kv)
+		}
+	}
+	if mutate != nil {
+		kept = mutate(kept)
+	}
+	encoded := encodeQuery(kept)
+	if encoded == "" {
+		return prefix, nil
+	}
+	return prefix + "?" + encoded, nil
+}
+
+// parseQueryPairs splits a raw query string into ordered key/value pairs,
+// url.QueryUnescape-ing each side (so the re-encode is idempotent on
+// already-encoded input). A '+' decodes to space, matching Go's url.ParseQuery.
+func parseQueryPairs(rawQuery string) ([][2]string, error) {
+	if rawQuery == "" {
+		return nil, nil
+	}
+	parts := strings.Split(rawQuery, "&")
+	pairs := make([][2]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		key, value, _ := strings.Cut(part, "=")
+		k, err := url.QueryUnescape(key)
+		if err != nil {
+			return nil, fmt.Errorf("helpers: bad query key %q: %w", key, err)
+		}
+		v, err := url.QueryUnescape(value)
+		if err != nil {
+			return nil, fmt.Errorf("helpers: bad query value %q: %w", value, err)
+		}
+		pairs = append(pairs, [2]string{k, v})
+	}
+	return pairs, nil
+}
+
+// setParam sets (replacing any existing) a single query key, preserving order:
+// an existing key is overwritten in place, a new key is appended.
+func setParam(pairs [][2]string, key, value string) [][2]string {
+	for i := range pairs {
+		if pairs[i][0] == key {
+			pairs[i][1] = value
+			return pairs
+		}
+	}
+	return append(pairs, [2]string{key, value})
+}
+
 // SignURLEd25519 signs rawURL with priv, embedding exp (and kid when keyID is
 // set, agent_id when agentID is set) and the base64url-no-pad signature over
-// "GET\n<url-without-sig>". The result matches the edge worker's verifier.
+// "GET\n<url>". The URL is signed as OPAQUE BYTES — scheme/host/path are
+// preserved verbatim; only the query is deterministically re-encoded. The result
+// matches the edge worker's verifier.
 func SignURLEd25519(priv ed25519.PrivateKey, keyID, rawURL, agentID string, expiry time.Time) (SignedURL, error) {
 	if len(priv) != ed25519.PrivateKeySize {
 		return SignedURL{}, fmt.Errorf("helpers: ed25519 private key must be %d bytes, got %d", ed25519.PrivateKeySize, len(priv))
 	}
-	parsed, err := url.Parse(rawURL)
+	addParams := func(pairs [][2]string) [][2]string {
+		pairs = setParam(pairs, urlExpParam, strconv.FormatInt(expiry.Unix(), 10))
+		if keyID != "" {
+			pairs = setParam(pairs, urlKIDParam, keyID)
+		}
+		if agentID != "" {
+			pairs = setParam(pairs, AgentIDParam, agentID)
+		}
+		return pairs
+	}
+	unsigned, err := canonicalSignedURL(rawURL, addParams)
 	if err != nil {
-		return SignedURL{}, fmt.Errorf("helpers: parse url: %w", err)
+		return SignedURL{}, err
 	}
-	q := parsed.Query()
-	q.Set(urlExpParam, strconv.FormatInt(expiry.Unix(), 10))
-	if keyID != "" {
-		q.Set(urlKIDParam, keyID)
+	sig := ed25519.Sign(priv, []byte("GET\n"+unsigned))
+	sigParam := base64.RawURLEncoding.EncodeToString(sig)
+	signed, err := canonicalSignedURL(unsigned, func(pairs [][2]string) [][2]string {
+		return setParam(pairs, urlSigParam, sigParam)
+	})
+	if err != nil {
+		return SignedURL{}, err
 	}
-	if agentID != "" {
-		q.Set(AgentIDParam, agentID)
-	}
-	q.Del(urlSigParam)
-	parsed.RawQuery = q.Encode() // sorted; the canonical message signs this form
-
-	canonical := "GET\n" + parsed.String()
-	sig := ed25519.Sign(priv, []byte(canonical))
-	q.Set(urlSigParam, base64.RawURLEncoding.EncodeToString(sig))
-	parsed.RawQuery = q.Encode()
-
-	signed := parsed.String()
 	return SignedURL{URL: signed, Expiry: expiry, Hash: HashURL(signed)}, nil
 }
 
@@ -97,17 +203,17 @@ func VerifyURLEd25519(rawURL string, pub ed25519.PublicKey, now time.Time) (Veri
 	if len(pub) != ed25519.PublicKeySize {
 		return VerifiedURL{}, fmt.Errorf("helpers: ed25519 public key must be %d bytes, got %d", ed25519.PublicKeySize, len(pub))
 	}
-	parsed, err := url.Parse(rawURL)
+	_, rawQuery := splitURL(rawURL)
+	pairs, err := parseQueryPairs(rawQuery)
 	if err != nil {
 		return VerifiedURL{}, fmt.Errorf("helpers: parse url: %w", err)
 	}
-	q := parsed.Query()
-	sigB64 := q.Get(urlSigParam)
+	q := pairsToMap(pairs)
+	sigB64 := q[urlSigParam]
 	if sigB64 == "" {
 		return VerifiedURL{}, ErrURLMissingSignature
 	}
-	expRaw := q.Get(urlExpParam)
-	expUnix, err := strconv.ParseInt(expRaw, 10, 64)
+	expUnix, err := strconv.ParseInt(q[urlExpParam], 10, 64)
 	if err != nil {
 		return VerifiedURL{}, ErrURLMissingExpiry
 	}
@@ -116,10 +222,13 @@ func VerifyURLEd25519(rawURL string, pub ed25519.PublicKey, now time.Time) (Veri
 		return VerifiedURL{}, fmt.Errorf("%w: bad base64url", ErrURLSignatureInvalid)
 	}
 
-	q.Del(urlSigParam)
-	parsed.RawQuery = q.Encode()
-	canonical := "GET\n" + parsed.String()
-	if !ed25519.Verify(pub, []byte(canonical), sig) {
+	// Reconstruct the exact bytes the signer covered: the URL with sig dropped,
+	// scheme/host/path verbatim, query deterministically re-encoded.
+	unsigned, err := canonicalSignedURL(rawURL, nil)
+	if err != nil {
+		return VerifiedURL{}, fmt.Errorf("helpers: parse url: %w", err)
+	}
+	if !ed25519.Verify(pub, []byte("GET\n"+unsigned), sig) {
 		return VerifiedURL{}, ErrURLSignatureInvalid
 	}
 
@@ -127,7 +236,17 @@ func VerifyURLEd25519(rawURL string, pub ed25519.PublicKey, now time.Time) (Veri
 	if expiry.Before(now) {
 		return VerifiedURL{}, fmt.Errorf("%w: exp=%d now=%d", ErrURLExpired, expUnix, now.Unix())
 	}
-	return VerifiedURL{AgentID: q.Get(AgentIDParam), KeyID: q.Get(urlKIDParam), Expiry: expiry}, nil
+	return VerifiedURL{AgentID: q[AgentIDParam], KeyID: q[urlKIDParam], Expiry: expiry}, nil
+}
+
+// pairsToMap flattens ordered pairs to a last-wins map for single-value lookups
+// (sig/exp/kid/agent_id are never repeated on a signed delivery URL).
+func pairsToMap(pairs [][2]string) map[string]string {
+	m := make(map[string]string, len(pairs))
+	for _, kv := range pairs {
+		m[kv[0]] = kv[1]
+	}
+	return m
 }
 
 // CheckProofOfPossession enforces the agent binding: the presented public key's

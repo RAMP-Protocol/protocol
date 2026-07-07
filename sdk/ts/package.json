@@ -8,6 +8,8 @@
     "./base64url": "./src/base64url.ts",
     "./thumbprint": "./src/thumbprint.ts",
     "./verify": "./src/verify.ts",
+    "./signurl": "./src/signurl.ts",
+    "./offer-sign": "./src/offer-sign.ts",
     "./pop": "./src/pop.ts",
     "./crossfield": "./src/crossfield.ts",
     "./core": "./core/verifier.ts",

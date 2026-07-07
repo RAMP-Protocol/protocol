@@ -21,15 +21,17 @@ from .acceptance import (
 )
 from .b64 import b64url_decode, b64url_nopad
 from .core import (
+    canonical_offer_payload,
     jcs_acceptance_payload,
     sign_offer_acceptance_jcs,
+    sign_offer_jcs,
     verify_offer_acceptance_jcs,
 )
 from .crossfield import cross_field_rule_ids
 from .httpsig import sign_request, verify_request
 from .keyresolver import KeyResolver, StaticKeyResolver
 from .pop import sign_agent_binding, verify_agent_binding
-from .signedurl import verify_ed25519_signed_url
+from .signedurl import sign_ed25519_signed_url, verify_ed25519_signed_url
 from .thumbprint import thumbprint
 
 __all__ = [
@@ -38,11 +40,14 @@ __all__ = [
     "b64url_decode",
     "b64url_nopad",
     "canonical_acceptance_payload",
+    "canonical_offer_payload",
     "cross_field_rule_ids",
     "jcs_acceptance_payload",
     "sign_agent_binding",
+    "sign_ed25519_signed_url",
     "sign_offer_acceptance",
     "sign_offer_acceptance_jcs",
+    "sign_offer_jcs",
     "sign_request",
     "thumbprint",
     "verify_agent_binding",

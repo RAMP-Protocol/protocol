@@ -12,7 +12,8 @@
         "signature_algorithm": "EdDSA"
       },
       "now_unix": 1700000100,
-      "expected_verified": true
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
     },
     {
       "name": "struct_ext_multi_key",
@@ -33,7 +34,8 @@
         "signature_algorithm": "EdDSA"
       },
       "now_unix": 1700000100,
-      "expected_verified": true
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
     },
     {
       "name": "two_timestamps",
@@ -48,7 +50,8 @@
         "signature_algorithm": "EdDSA"
       },
       "now_unix": 1700000100,
-      "expected_verified": true
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
     },
     {
       "name": "repeated_terms_enum",
@@ -98,7 +101,8 @@
         ]
       },
       "now_unix": 1700000100,
-      "expected_verified": true
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
     },
     {
       "name": "tamper_negative",
@@ -116,7 +120,8 @@
         "signature_algorithm": "EdDSA"
       },
       "now_unix": 1700000100,
-      "expected_verified": false
+      "expected_verified": false,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
     }
   ]
 }

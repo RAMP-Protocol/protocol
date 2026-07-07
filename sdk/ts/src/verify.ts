@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { decodeBase64Url, utf8Bytes } from "./base64url.ts";
+import { canonicalUrl } from "./signurl.ts";
 
 // Ed25519 signed delivery-URL verification (ADR-013), relocated from the app
 // edge (src/edge/src/verify.ts) as a pure, IO-free L1 helper. Key resolution is
@@ -74,7 +75,7 @@ export async function verifyEd25519SignedUrl(
     return buildResult({ valid: false, expired: false, kid, reason: "signature_mismatch" });
   }
 
-  const message = canonicalMessage(url);
+  const message = canonicalMessage(rawUrl);
   const okSig = await crypto.subtle.verify("Ed25519", key, sigBytes, message);
   if (!okSig) {
     return buildResult({ valid: false, expired: false, kid, reason: "signature_mismatch" });
@@ -128,13 +129,13 @@ function parseParams(
 }
 
 /**
- * The canonical signed message: "GET\n<url-without-sig>". Only the `sig` param is
- * stripped — the query is NOT re-sorted, matching the Go signer's already-sorted
- * output (url.Values.Encode()).
+ * The canonical signed message: "GET\n<url>" over the URL as OPAQUE BYTES. Only
+ * the `sig` param is stripped and the query is deterministically re-encoded;
+ * scheme/host/path are preserved verbatim (no `new URL()` host-lowercasing,
+ * default-port stripping, or path-escaping). Reuses the SAME builder the sign
+ * face uses (signurl.ts::canonicalUrl) so signer and verifier agree by
+ * construction — see the verbatim-canonicalization contract there.
  */
-export function canonicalMessage(url: URL): Uint8Array<ArrayBuffer> {
-  const stripped = new URL(url.toString());
-  stripped.searchParams.delete("sig");
-  const canonical = `GET\n${stripped.toString()}`;
-  return utf8Bytes(canonical);
+export function canonicalMessage(rawUrl: string): Uint8Array<ArrayBuffer> {
+  return utf8Bytes(`GET\n${canonicalUrl(rawUrl)}`);
 }
