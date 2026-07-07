@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { decodeBase64Url, utf8Bytes } from "./base64url.ts";
+import { opaqueUrl } from "./opaque-url.ts";
 import { canonicalUrl } from "./signurl.ts";
 
 // Ed25519 signed delivery-URL verification (ADR-013), relocated from the app
@@ -45,7 +46,11 @@ export async function verifyEd25519SignedUrl(
   rawUrl: string,
   deps: VerifyDeps,
 ): Promise<VerifyResult> {
-  const url = new URL(rawUrl);
+  // Coerce a URL-like input (a Fastly Compute request URL object) to its opaque
+  // string form ONCE at the boundary, so param parsing and the canonical message
+  // both operate on the same verbatim bytes. No-op for string callers.
+  const raw = opaqueUrl(rawUrl);
+  const url = new URL(raw);
   const params = parseParams(url);
   if (!params.ok) {
     return { valid: false, expired: false, reason: params.reason };
@@ -75,7 +80,7 @@ export async function verifyEd25519SignedUrl(
     return buildResult({ valid: false, expired: false, kid, reason: "signature_mismatch" });
   }
 
-  const message = canonicalMessage(rawUrl);
+  const message = canonicalMessage(raw);
   const okSig = await crypto.subtle.verify("Ed25519", key, sigBytes, message);
   if (!okSig) {
     return buildResult({ valid: false, expired: false, kid, reason: "signature_mismatch" });
@@ -136,12 +141,14 @@ function parseParams(
  * face uses (signurl.ts::canonicalUrl) so signer and verifier agree by
  * construction — see the verbatim-canonicalization contract there.
  *
- * rawUrl is coerced to a string defensively: some edge runtimes (Fastly Compute)
+ * rawUrl is coerced via opaqueUrl defensively: some edge runtimes (Fastly Compute)
  * hand the request URL as a URL-like object rather than a primitive string, and
  * canonicalUrl needs string operations. For a primitive string this is a no-op,
  * so the verbatim bytes are preserved for the server-to-server callers that own
- * the raw URL string.
+ * the raw URL string. This coercion is retained even though verifyEd25519SignedUrl
+ * now coerces at its boundary: canonicalMessage is a public export with its own
+ * external callers, so it owns its input contract independently.
  */
 export function canonicalMessage(rawUrl: string): Uint8Array<ArrayBuffer> {
-  return utf8Bytes(`GET\n${canonicalUrl(String(rawUrl))}`);
+  return utf8Bytes(`GET\n${canonicalUrl(opaqueUrl(rawUrl))}`);
 }

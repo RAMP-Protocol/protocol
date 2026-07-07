@@ -1,5 +1,6 @@
 import { thumbprint } from "./thumbprint.ts";
 import { decodeBase64Url, utf8Bytes } from "./base64url.ts";
+import { opaqueUrl } from "./opaque-url.ts";
 
 // Proof-of-possession verification for delivery-URL identity binding (ADR-013),
 // relocated from the app edge (src/edge/src/pop.ts) as a pure L1 helper.
@@ -112,7 +113,14 @@ export async function verifyAgentBinding(input: PopInput): Promise<PopResult> {
   const stale = freshnessFailure(parsed, input.now);
   if (stale) return fail(stale);
 
-  const base = signatureBase(input.method, input.url, parsed.rawParams);
+  // Coerce a URL-like input (Fastly hands a URL object, not a string) to its
+  // opaque string form once at the boundary. The @target-uri line must carry the
+  // verbatim bytes the agent signed, never a WHATWG-normalized toString(). This
+  // is behavior-neutral for the template literal on a string caller
+  // (String(s) === s); it makes the opaque-string contract explicit and matches
+  // the signed-URL verify boundary.
+  const url = opaqueUrl(input.url);
+  const base = signatureBase(input.method, url, parsed.rawParams);
   const verify = input.verifyEd25519 ?? defaultVerifyEd25519;
   const valid = await verify(presented.key, sigBytes, utf8Bytes(base));
   return valid ? okResult : fail("pop_sig_invalid");
