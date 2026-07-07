@@ -29,8 +29,11 @@ from .core import (
 )
 from .crossfield import cross_field_rule_ids
 from .httpsig import (
+    MultisigVerdict,
     ReplayStore,
+    append_signature,
     sign_request,
+    verify_multisig_request_server,
     verify_request,
     verify_request_server,
 )
@@ -41,8 +44,10 @@ from .thumbprint import thumbprint
 
 __all__ = [
     "KeyResolver",
+    "MultisigVerdict",
     "ReplayStore",
     "StaticKeyResolver",
+    "append_signature",
     "b64url_decode",
     "b64url_nopad",
     "canonical_acceptance_payload",
@@ -58,6 +63,7 @@ __all__ = [
     "thumbprint",
     "verify_agent_binding",
     "verify_ed25519_signed_url",
+    "verify_multisig_request_server",
     "verify_offer_acceptance",
     "verify_offer_acceptance_jcs",
     "verify_request",

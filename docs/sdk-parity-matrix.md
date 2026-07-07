@@ -28,7 +28,7 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | Operation | go | ts | python |
 |---|---|---|---|
 | Server-verify middleware (all /ramp. procedures) | ✅ `connectserver.New{Exchange,Broker}ServiceHandler` + options | ⚠️ `hono rampVerify` is edge GET-PoP only (documented scope limit) | ❌ (intent unconfirmed — see decision ticket) |
-| Multisig append / verify (+hop budget) | ✅ `helpers.AppendSignature` / `VerifyMultisigRequest[Resolved]`, `core.WithAppendSigner` | ❌ | ❌ |
+| Multisig append / verify (+hop budget) | ✅ `helpers.AppendSignature` / `VerifyMultisigRequest[Resolved]`, `core.WithAppendSigner` | ✅ `appendSignature` (core/sign-request.ts) / `verifyMultisigRequestServer` (core/verify-multisig-request.ts) | ✅ `append_signature` (httpsig) / `verify_multisig_request_server` (server_verify) |
 | Codec (EmitUnpopulated JSON) | ✅ `connectserver.EmitUnpopulatedJSONCodec` / `WithEmitUnpopulated` | n/a (no Connect binding) | n/a |
 | Reject / error mapping | ✅ `connectserver` reject mapping, `connect.ErrorDetailFrom`, `helpers.*Detail` | ❌ | ❌ |
 | Replay window | ✅ `core.ReplayStore`, `core.MonotonicWindow` | ❌ | ❌ |

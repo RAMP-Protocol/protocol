@@ -22,6 +22,7 @@ import { decodeBase64Url, utf8Bytes } from "../src/base64url.ts";
 import { stdBase64 } from "./sign.ts";
 import {
 	buildRequestSignatureBase,
+	type ChainLink,
 	COVERED_COMPONENTS,
 	contentDigest,
 } from "./sign-request.ts";
@@ -167,7 +168,7 @@ function replayNonce(keyid: string, sigBytes: Uint8Array<ArrayBuffer>): string {
 	return `${keyid}\u0000${stdBase64(sigBytes)}`;
 }
 
-async function ed25519Verify(
+export async function ed25519Verify(
 	pub: Uint8Array<ArrayBuffer>,
 	sig: Uint8Array<ArrayBuffer>,
 	message: Uint8Array<ArrayBuffer>,
@@ -186,6 +187,74 @@ async function ed25519Verify(
 	}
 }
 
+/** The request-level covered fields shared across every hop of a request. */
+export interface RequestVerifyFields {
+	method: string;
+	url: string;
+	digestHeader: string;
+	authorization: string;
+	signatureAgent: string;
+	body: Uint8Array<ArrayBuffer>;
+}
+
+/** The parsed per-signature params the verify core judges (one hop). */
+export interface ParsedSignatureParams {
+	/** Verbatim inner-list + params tail — the base @signature-params value. */
+	rawParams: string;
+	covered: ReadonlySet<string>;
+	keyid: string | null;
+	alg: string | null;
+	created?: number;
+	expires?: number;
+}
+
+/**
+ * The per-signature verify core shared by the single-sig and multisig paths
+ * (mirrors Go verifySingleSignature, MINUS replay — o3szv R1): alg + required
+ * covered set + created/expires window + content-digest + key resolution +
+ * Ed25519 over the reconstructed base. Returns true iff the signature is authentic
+ * and policy-valid. `chainLink`, when present, inserts the forwarding-chain base
+ * line for a chained hop (sigN, N>1). NO replay — the caller owns that so the
+ * multisig loop never touches a ReplayStore.
+ */
+export async function verifyParsedSignature(
+	fields: RequestVerifyFields,
+	parsed: ParsedSignatureParams,
+	sigBytes: Uint8Array<ArrayBuffer> | undefined,
+	resolve: KeyResolverTs,
+	nowSec: number,
+	chainLink?: ChainLink,
+): Promise<boolean> {
+	if (parsed.keyid === null) return false;
+	if (parsed.alg === null || parsed.alg.toLowerCase() !== "ed25519") return false;
+	for (const need of REQUIRED_COVERED) {
+		if (!parsed.covered.has(need)) return false;
+	}
+	if (parsed.created === undefined || parsed.expires === undefined) return false;
+	if (parsed.expires < nowSec) return false;
+	if (parsed.created > nowSec + MAX_FUTURE_SKEW_SEC) return false;
+
+	const expectedDigest = await contentDigest(fields.body);
+	if (fields.digestHeader.trim() !== expectedDigest) return false;
+	if (!sigBytes) return false;
+
+	const pub = resolve.resolve(parsed.keyid);
+	if (!pub || pub.length !== 32) return false;
+
+	const base = buildRequestSignatureBase(
+		{
+			method: fields.method,
+			url: fields.url,
+			digestHeader: fields.digestHeader,
+			authorization: fields.authorization,
+			signatureAgent: fields.signatureAgent,
+		},
+		parsed.rawParams,
+		chainLink,
+	);
+	return ed25519Verify(pub, sigBytes, utf8Bytes(base));
+}
+
 /**
  * Verify an inbound single-signature RAMP request; return a reason-tagged verdict.
  *
@@ -200,52 +269,29 @@ export async function verifyRequestServer(
 	input: VerifyRequestServerInput,
 ): Promise<VerifyVerdict> {
 	const parsed = parseSignatureInput(input.headers["signature-input"]);
-	if (!parsed || parsed.keyid === null) return reject(REASON_SIGNATURE);
-	if (parsed.alg === null || parsed.alg.toLowerCase() !== "ed25519") {
-		return reject(REASON_SIGNATURE);
-	}
-	// Required covered-set enforcement (Go enforceRequiredComponents): all five RAMP
-	// components must be declared, or a signer omitting a bound field slips through.
-	for (const need of REQUIRED_COVERED) {
-		if (!parsed.covered.has(need)) return reject(REASON_SIGNATURE);
-	}
+	if (!parsed) return reject(REASON_SIGNATURE);
 
 	const nowSec = Math.floor(input.now());
-	if (parsed.created === undefined || parsed.expires === undefined) {
-		return reject(REASON_SIGNATURE);
-	}
-	if (parsed.expires < nowSec) return reject(REASON_SIGNATURE);
-	if (parsed.created > nowSec + MAX_FUTURE_SKEW_SEC) {
-		return reject(REASON_SIGNATURE);
-	}
-
-	// Content-Digest binds the body: recompute over the exact bytes and compare the
-	// covered header value byte-for-byte (Go verifyContentDigest).
-	const digestHeader = input.headers["content-digest"];
-	const expectedDigest = await contentDigest(input.body);
-	if (digestHeader.trim() !== expectedDigest) return reject(REASON_SIGNATURE);
-
 	const sigBytes = parseSignatureBytes(input.headers.signature);
-	if (!sigBytes) return reject(REASON_SIGNATURE);
 
-	const pub = input.resolve.resolve(parsed.keyid);
-	// An unresolvable / unknown key is an authentication failure (Go default branch).
-	if (!pub || pub.length !== 32) return reject(REASON_SIGNATURE);
-
-	// Rebuild the base with the signer's VERBATIM @signature-params tail so the
-	// bytes are byte-identical to what was signed (Go buildSignatureBase RawInner).
-	const base = buildRequestSignatureBase(
+	// The full per-signature core (covered set / window / digest / key / Ed25519),
+	// shared with the multisig path; replay stays here so the multisig loop never
+	// touches a ReplayStore (o3szv R1).
+	const ok = await verifyParsedSignature(
 		{
 			method: input.method,
 			url: input.url,
-			digestHeader,
+			digestHeader: input.headers["content-digest"],
 			authorization: input.headers.authorization,
 			signatureAgent: input.headers["signature-agent"],
+			body: input.body,
 		},
-		parsed.rawParams,
+		parsed,
+		sigBytes,
+		input.resolve,
+		nowSec,
 	);
-	const ok = await ed25519Verify(pub, sigBytes, utf8Bytes(base));
-	if (!ok) return reject(REASON_SIGNATURE);
+	if (!ok || parsed.keyid === null || !sigBytes) return reject(REASON_SIGNATURE);
 
 	if (input.replayStore) {
 		// Two-phase (read-only Seen, then SeenOrAdd) mirrors connectserver.verify so a

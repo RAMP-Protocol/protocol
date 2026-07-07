@@ -15,6 +15,10 @@
 // caller supplies an absolute @target-uri; the signer never normalizes it.
 
 import { opaqueUrl } from "../src/opaque-url.ts";
+import {
+	maxSigLabelN,
+	signatureBytesByLabel,
+} from "./multisig-parse.ts";
 import { stdBase64 } from "./sign.ts";
 
 // The RAMP request covered set: exactly these five, in this order. No conditional
@@ -61,14 +65,29 @@ export async function contentDigest(
 	return `sha-256=:${stdBase64(digest)}:`;
 }
 
+// A forwarding-chain link (RAMP-56): the pre-rendered covered token
+// `"signature";key="sigN"` and its base value `:<std-base64(prev sig bytes)>:`.
+// The token is inserted as the LAST covered component before @signature-params
+// and is rendered VERBATIM (NOT re-wrapped in the naive per-element quoting) —
+// it already carries its own quotes and the key= param (o3szv R4).
+export interface ChainLink {
+	token: string;
+	value: string;
+}
+
 // The @signature-params inner list: the covered components then keyid/alg/
-// created/expires, RFC 9421 order — byte-identical to Go signatureInputInner.
+// created/expires, RFC 9421 order — byte-identical to Go signatureInputInner. An
+// optional chain-link token appends as the final covered component (sigN, N>1),
+// defaulting absent so the single-sig (N=1) inner list stays byte-identical.
 function signatureParams(
 	keyid: string,
 	created: number,
 	expires: number,
+	chainLinkToken?: string,
 ): string {
-	const covered = COVERED_COMPONENTS.map((c) => `"${c}"`).join(" ");
+	const tokens = COVERED_COMPONENTS.map((c) => `"${c}"`);
+	if (chainLinkToken !== undefined) tokens.push(chainLinkToken);
+	const covered = tokens.join(" ");
 	return `(${covered});keyid="${keyid}";alg="ed25519";created=${created};expires=${expires}`;
 }
 
@@ -94,15 +113,22 @@ export interface RequestBaseFields {
 export function buildRequestSignatureBase(
 	fields: RequestBaseFields,
 	sigParams: string,
+	chainLink?: ChainLink,
 ): string {
-	return [
+	const lines = [
 		`"@method": ${fields.method.toUpperCase()}`,
 		`"@target-uri": ${opaqueUrl(fields.url)}`,
 		`"content-digest": ${fields.digestHeader}`,
 		`"authorization": ${fields.authorization}`,
 		`"signature-agent": ${fields.signatureAgent}`,
-		`"@signature-params": ${sigParams}`,
-	].join("\n");
+	];
+	// The chain-link line is the LAST covered component BEFORE @signature-params
+	// (Go buildSignatureBase renders params.Covered in order, chain link last).
+	if (chainLink !== undefined) {
+		lines.push(`${chainLink.token}: ${chainLink.value}`);
+	}
+	lines.push(`"@signature-params": ${sigParams}`);
+	return lines.join("\n");
 }
 
 /**
@@ -137,6 +163,68 @@ export async function signRequest(
 		contentDigest: digestHeader,
 		signatureInput: `sig1=${sigParams}`,
 		signature: `sig1=:${stdBase64(new Uint8Array(sig))}:`,
+		signatureBase: base,
+	};
+}
+
+/** A request's prior signature state — the Signature-Input / Signature header
+ * values already on the request (both "" for an unsigned request). */
+export interface PriorSignatures {
+	signatureInput: string;
+	signature: string;
+}
+
+/**
+ * appendSignature chains sig(N+1) onto `prev` WITHOUT disturbing existing members
+ * (RAMP-56 forwarding chain), the TS port of Go helpers.AppendSignature. It finds
+ * the next label sig(N+1) and predecessor sigN, binds the RAMP base plus a
+ * `"signature";key="sigN"` link whose value is `:<std-base64(decoded predecessor
+ * sig bytes)>:` (re-encoded canonically, NOT a wire splice), Ed25519-signs, and
+ * returns the APPENDED Signature-Input / Signature strings. Appending to an
+ * unsigned request (empty prev) produces a sig1 byte-for-byte identical to
+ * signRequest — single-sig is the N=1 case.
+ */
+export async function appendSignature(
+	privKey: CryptoKey,
+	prev: PriorSignatures,
+	opts: SignRequestOptions,
+): Promise<SignedRequest> {
+	const digestHeader = await contentDigest(opts.body);
+	const hasPrev = prev.signatureInput !== "";
+	const prevN = hasPrev ? maxSigLabelN(prev.signatureInput) : 0;
+	const label = `sig${prevN + 1}`;
+
+	let chainLink: ChainLink | undefined;
+	let chainLinkToken: string | undefined;
+	if (prevN > 0) {
+		const prevLabel = `sig${prevN}`;
+		const prevBytes = signatureBytesByLabel(prev.signature)[prevLabel];
+		if (!prevBytes) {
+			throw new Error(`appendSignature: predecessor ${prevLabel} not in Signature`);
+		}
+		chainLinkToken = `"signature";key="${prevLabel}"`;
+		chainLink = { token: chainLinkToken, value: `:${stdBase64(prevBytes)}:` };
+	}
+
+	const sigParams = signatureParams(opts.keyid, opts.created, opts.expires, chainLinkToken);
+	const base = buildRequestSignatureBase(
+		{
+			method: opts.method,
+			url: opts.url,
+			digestHeader,
+			authorization: opts.authorization,
+			signatureAgent: opts.signatureAgent,
+		},
+		sigParams,
+		chainLink,
+	);
+	const sig = await crypto.subtle.sign("Ed25519", privKey, new TextEncoder().encode(base));
+	const memberInput = `${label}=${sigParams}`;
+	const memberSig = `${label}=:${stdBase64(new Uint8Array(sig))}:`;
+	return {
+		contentDigest: digestHeader,
+		signatureInput: hasPrev ? `${prev.signatureInput}, ${memberInput}` : memberInput,
+		signature: prev.signature !== "" ? `${prev.signature}, ${memberSig}` : memberSig,
 		signatureBase: base,
 	};
 }

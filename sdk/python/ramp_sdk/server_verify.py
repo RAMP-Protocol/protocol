@@ -27,10 +27,30 @@ import base64
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from .httpsig import VerifiedRequest, verify_request
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+from .httpsig import (
+    _MAX_FUTURE_SKEW_SEC,
+    VerifiedRequest,
+    _signature_base,
+    content_digest,
+    verify_request,
+)
+from .multisig_parse import (
+    MultisigMember,
+    parse_multisig_signature_input,
+    signature_bytes_by_label,
+)
 
 if TYPE_CHECKING:
     from .keyresolver import KeyResolver
+
+# The connectserver multisig reject-reason tokens (mirrors Go verify.go): a chain
+# longer than the budget is "hop_budget"; a structurally-broken chain is
+# "broken_chain"; any per-hop authenticity failure collapses to "signature".
+_REASON_HOP_BUDGET = "hop_budget"
+_REASON_BROKEN_CHAIN = "broken_chain"
 
 # The RAMP required covered set, mirroring Go helpers.requiredCoveredComponents.
 # The presented Signature-Input MUST declare all five, or the request is rejected
@@ -243,3 +263,159 @@ def verify_request_server(
             return _reject(_REASON_REPLAY)
 
     return VerifiedRequest(valid=True)
+
+
+# --- MULTISIG forwarding-chain server-verify (o3szv) --------------------------
+#
+# The Python sibling of Go helpers.VerifyMultisigRequest[Resolved]. Reject
+# precedence is parity-critical: hop_budget -> broken_chain -> signature. NO replay
+# (o3szv R1) — the Go helpers oracle performs none; the per-hop verify core below
+# mirrors verify_request's checks MINUS the two-phase ReplayStore path, and the
+# chain link resolves to the LIVE predecessor bytes so a stripped / reordered /
+# tampered predecessor is rejected.
+
+
+@dataclass(frozen=True)
+class MultisigVerdict:
+    """The multisig verify verdict: valid with the verified keyids in chain order,
+    or invalid with the classified reason. Never raised — always returned."""
+
+    valid: bool
+    reason: str | None = None
+    keyids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _RequestFields:
+    """The request-level covered fields shared across every hop of a request."""
+
+    method: str
+    url: str
+    digest_header: str
+    authorization: str
+    signature_agent: str
+    body: bytes
+
+
+def _enforce_chain(members: list[MultisigMember]) -> bool:
+    """The STRUCTURAL forwarding-chain gate (Go enforceSignatureChain): labels are
+    exactly sig1..sigN contiguous in header order, sig1 carries no "signature"
+    component, and every sigK (K>1) covers exactly one "signature";key="sig(K-1)"."""
+    for i, m in enumerate(members):
+        if m.label != f"sig{i + 1}":
+            return False
+        links = [c for c in m.covered if c.name == "signature"]
+        if i == 0:
+            if links:
+                return False
+            continue
+        if len(links) != 1 or links[0].chain_key != f"sig{i}":
+            return False
+    return True
+
+
+def _verify_member(
+    fields: _RequestFields,
+    member: MultisigMember,
+    sig_bytes: bytes | None,
+    resolver: KeyResolver,
+    now: int,
+    chain_link: tuple[str, str] | None,
+) -> bool:
+    """The per-hop verify core shared by the multisig loop (mirrors Go
+    verifySingleSignature MINUS replay): alg + required covered set + window +
+    content-digest + key resolution + Ed25519 over the reconstructed base (which
+    inserts the forwarding-chain line for a chained hop)."""
+    if member.keyid is None:
+        return False
+    if member.alg is None or member.alg.lower() != "ed25519":
+        return False
+    if not member.covered_names >= _REQUIRED_COVERED:
+        return False
+    if member.created is None or member.expires is None:
+        return False
+    if member.expires < now or member.created > now + _MAX_FUTURE_SKEW_SEC:
+        return False
+    if fields.digest_header.strip() != content_digest(fields.body):
+        return False
+    if sig_bytes is None:
+        return False
+    pub = resolver.resolve(member.keyid)
+    if pub is None:
+        return False
+    base = _signature_base(
+        method=fields.method,
+        url=fields.url,
+        digest_header=fields.digest_header,
+        authorization=fields.authorization,
+        signature_agent=fields.signature_agent,
+        sig_params=member.raw_inner,
+        chain_link=chain_link,
+    )
+    try:
+        Ed25519PublicKey.from_public_bytes(pub).verify(sig_bytes, base.encode())
+    except (InvalidSignature, ValueError):
+        return False
+    return True
+
+
+def _chain_link_for(i: int, sig_map: dict[str, bytes]) -> tuple[str, str] | None:
+    """The forwarding-chain base line for hop i (>0): the token
+    ``"signature";key="sig(i)"`` and its value ``:<std-base64(live predecessor
+    bytes)>:``, or None when the predecessor bytes are absent (a signature failure)."""
+    prev_label = f"sig{i}"
+    prev_bytes = sig_map.get(prev_label)
+    if prev_bytes is None:
+        return None
+    return f'"signature";key="{prev_label}"', ":" + base64.b64encode(prev_bytes).decode() + ":"
+
+
+def verify_multisig_request_server(
+    *,
+    method: str,
+    url: str,
+    body: bytes,
+    headers: dict[str, str],
+    resolver: KeyResolver,
+    now: int,
+    max_signatures: int = 0,
+) -> MultisigVerdict:
+    """Verify an inbound MULTISIG forwarding-chain RAMP request; return a
+    reason-tagged verdict carrying the verified keyids in chain order.
+
+    Enforces the hop budget FIRST (``hop_budget``), then the structural chain
+    (``broken_chain``), then every hop's signature (``signature``) — in that
+    precedence (mirrors Go VerifyMultisigRequest). ``max_signatures`` 0 / omitted
+    means unbounded. Keys resolve ONLY through ``resolver``; time is ``now``.
+    """
+    signature_input = headers.get("signature-input", "")
+    signature = headers.get("signature", "")
+    members = parse_multisig_signature_input([signature_input])
+    if not members:
+        return MultisigVerdict(False, _REASON_SIGNATURE)
+    if max_signatures > 0 and len(members) > max_signatures:
+        return MultisigVerdict(False, _REASON_HOP_BUDGET)
+    if not _enforce_chain(members):
+        return MultisigVerdict(False, _REASON_BROKEN_CHAIN)
+
+    sig_map = signature_bytes_by_label(signature)
+    fields = _RequestFields(
+        method=method,
+        url=url,
+        digest_header=headers.get("content-digest", ""),
+        authorization=headers.get("authorization", ""),
+        signature_agent=headers.get("signature-agent", ""),
+        body=body,
+    )
+    keyids: list[str] = []
+    for i, member in enumerate(members):
+        chain_link = _chain_link_for(i, sig_map) if i > 0 else None
+        if i > 0 and chain_link is None:
+            return MultisigVerdict(False, _REASON_SIGNATURE)
+        keyid = member.keyid
+        if keyid is None:
+            return MultisigVerdict(False, _REASON_SIGNATURE)
+        if not _verify_member(fields, member, sig_map.get(member.label), resolver, now, chain_link):
+            return MultisigVerdict(False, _REASON_SIGNATURE)
+        keyids.append(keyid)
+    return MultisigVerdict(True, None, tuple(keyids))

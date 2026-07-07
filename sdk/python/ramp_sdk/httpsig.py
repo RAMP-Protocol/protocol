@@ -33,6 +33,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from .multisig_parse import max_sig_label_n, signature_bytes_by_label
+
 # RAMP coverage set (ADR-001 §2.1) for the originating sig1 — MUST match the
 # Broker/Exchange verifiers' required base components and the Go oracle's
 # requiredCoveredComponents.
@@ -72,8 +74,21 @@ def content_digest(body: bytes) -> str:
     return "sha-256=:" + base64.b64encode(hashlib.sha256(body).digest()).decode() + ":"
 
 
-def _signature_params(covered: tuple[str, ...], keyid: str, created: int, expires: int) -> str:
-    covered_list = " ".join(f'"{c}"' for c in covered)
+def _signature_params(
+    covered: tuple[str, ...],
+    keyid: str,
+    created: int,
+    expires: int,
+    chain_link_token: str | None = None,
+) -> str:
+    # The optional forwarding-chain token (``"signature";key="sigN"``) is appended
+    # as the LAST covered component and rendered VERBATIM — it already carries its
+    # own quotes + key= param, so it must NOT be re-wrapped (o3szv R4). Default None
+    # keeps the single-sig (N=1) inner list byte-identical.
+    tokens = [f'"{c}"' for c in covered]
+    if chain_link_token is not None:
+        tokens.append(chain_link_token)
+    covered_list = " ".join(tokens)
     return f'({covered_list});keyid="{keyid}";alg="ed25519";created={created};expires={expires}'
 
 
@@ -85,17 +100,22 @@ def _signature_base(
     authorization: str,
     signature_agent: str,
     sig_params: str,
+    chain_link: tuple[str, str] | None = None,
 ) -> str:
-    return "\n".join(
-        [
-            f'"@method": {method.upper()}',
-            f'"@target-uri": {url}',
-            f'"content-digest": {digest_header}',
-            f'"authorization": {authorization}',
-            f'"signature-agent": {signature_agent}',
-            f'"@signature-params": {sig_params}',
-        ]
-    )
+    lines = [
+        f'"@method": {method.upper()}',
+        f'"@target-uri": {url}',
+        f'"content-digest": {digest_header}',
+        f'"authorization": {authorization}',
+        f'"signature-agent": {signature_agent}',
+    ]
+    # The chain-link line is the LAST covered component BEFORE @signature-params
+    # (Go buildSignatureBase renders params.Covered in order, chain link last).
+    if chain_link is not None:
+        token, value = chain_link
+        lines.append(f"{token}: {value}")
+    lines.append(f'"@signature-params": {sig_params}')
+    return "\n".join(lines)
 
 
 def sign_request(
@@ -135,6 +155,68 @@ def sign_request(
         content_digest=digest_header,
         signature_input=f"sig1={sig_params}",
         signature=f"sig1=:{sig_b64}:",
+        signature_base=base,
+    )
+
+
+def append_signature(
+    *,
+    method: str,
+    url: str,
+    body: bytes,
+    authorization: str,
+    signature_agent: str,
+    prev_signature_input: str,
+    prev_signature: str,
+    signer_seed: bytes,
+    keyid: str,
+    created: int,
+    expires: int,
+) -> SignedRequest:
+    """Chain sig(N+1) onto ``prev_signature_input``/``prev_signature`` WITHOUT
+    disturbing existing members (RAMP-56 forwarding chain), the Python port of Go
+    ``helpers.AppendSignature``.
+
+    Finds the next label sig(N+1) and predecessor sigN, binds the RAMP base plus a
+    ``"signature";key="sigN"`` link whose value is ``:<std-base64(decoded
+    predecessor sig bytes)>:`` (re-encoded canonically, NOT a wire splice),
+    Ed25519-signs, and returns the APPENDED Signature-Input / Signature. Appending
+    to an unsigned request (empty prev) produces a sig1 byte-for-byte identical to
+    ``sign_request`` — single-sig is the N=1 case.
+    """
+    digest_header = content_digest(body)
+    has_prev = prev_signature_input != ""
+    prev_n = max_sig_label_n(prev_signature_input) if has_prev else 0
+    label = f"sig{prev_n + 1}"
+
+    chain_link_token: str | None = None
+    chain_link: tuple[str, str] | None = None
+    if prev_n > 0:
+        prev_label = f"sig{prev_n}"
+        prev_bytes = signature_bytes_by_label(prev_signature).get(prev_label)
+        if prev_bytes is None:
+            raise ValueError(f"append_signature: predecessor {prev_label} not in Signature")
+        chain_link_token = f'"signature";key="{prev_label}"'
+        chain_link = (chain_link_token, ":" + base64.b64encode(prev_bytes).decode() + ":")
+
+    sig_params = _signature_params(_COVERED_COMPONENTS, keyid, created, expires, chain_link_token)
+    base = _signature_base(
+        method=method,
+        url=url,
+        digest_header=digest_header,
+        authorization=authorization,
+        signature_agent=signature_agent,
+        sig_params=sig_params,
+        chain_link=chain_link,
+    )
+    sig = Ed25519PrivateKey.from_private_bytes(signer_seed).sign(base.encode())
+    sig_b64 = base64.b64encode(sig).decode()
+    member_input = f"{label}={sig_params}"
+    member_sig = f"{label}=:{sig_b64}:"
+    return SignedRequest(
+        content_digest=digest_header,
+        signature_input=f"{prev_signature_input}, {member_input}" if has_prev else member_input,
+        signature=f"{prev_signature}, {member_sig}" if prev_signature != "" else member_sig,
         signature_base=base,
     )
 
@@ -225,16 +307,21 @@ def verify_request(
 # replay store / clock). Re-export it here so a Broker/Exchange imports the whole
 # request-verify surface — primitive + server entry — from ramp_sdk.httpsig.
 from .server_verify import (  # noqa: E402
+    MultisigVerdict,
     ReplayStore,
+    verify_multisig_request_server,
     verify_request_server,
 )
 
 __all__ = [
+    "MultisigVerdict",
     "ReplayStore",
     "SignedRequest",
     "VerifiedRequest",
+    "append_signature",
     "content_digest",
     "sign_request",
+    "verify_multisig_request_server",
     "verify_request",
     "verify_request_server",
 ]
