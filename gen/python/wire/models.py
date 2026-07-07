@@ -1644,10 +1644,6 @@ class TransactionRequest(WireModel):
         description="The offers committed in this request (REQUIRED, min 1), each carrying its\n own reflected signed Offer + detached acceptance. A single offer is the\n degenerate 1-element list. The Exchange verifies each item's\n `offer.signature` (which covers pricing, terms, and expires_at) over the\n presented bytes against its own key — stateless, self-contained bearer\n tokens, with no reconstruct-from-catalog.",
         min_length=1,
     )
-    offer_id: str | None = Field(
-        None,
-        description="Optional, non-authoritative correlation/audit key — a human-readable offer\n id. NOT used for verification: the Exchange verifies each item's reflected\n `offer.signature` over the presented Offer bytes, never this scalar. May be\n omitted; if set, it SHOULD match an item's `offer.offer_id`.",
-    )
     requester: Requester | None = Field(
         None, description='Requester identity — forwarded for authorization and audit.'
     )

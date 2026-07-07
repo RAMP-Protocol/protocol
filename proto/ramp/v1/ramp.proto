@@ -1718,12 +1718,6 @@ message TransactionRequest {
     (buf.validate.field).string = {min_len: 1, max_len: 255}
   ];
 
-  // Optional, non-authoritative correlation/audit key — a human-readable offer
-  // id. NOT used for verification: the Exchange verifies each item's reflected
-  // `offer.signature` over the presented Offer bytes, never this scalar. May be
-  // omitted; if set, it SHOULD match an item's `offer.offer_id`.
-  optional string offer_id = 3;
-
   // Requester identity — forwarded for authorization and audit.
   Requester requester = 4;
 

@@ -4545,11 +4545,6 @@ type TransactionRequest struct {
 	// (authenticated caller, key), never globally, so a key chosen by one caller
 	// cannot collide with another's cached result.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// Optional, non-authoritative correlation/audit key — a human-readable offer
-	// id. NOT used for verification: the Exchange verifies each item's reflected
-	// `offer.signature` over the presented Offer bytes, never this scalar. May be
-	// omitted; if set, it SHOULD match an item's `offer.offer_id`.
-	OfferId *string `protobuf:"bytes,3,opt,name=offer_id,json=offerId,proto3,oneof" json:"offer_id,omitempty"`
 	// Requester identity — forwarded for authorization and audit.
 	Requester *Requester `protobuf:"bytes,4,opt,name=requester,proto3" json:"requester,omitempty"`
 	// The offers committed in this request (REQUIRED, min 1), each carrying its
@@ -4610,13 +4605,6 @@ func (x *TransactionRequest) GetVer() string {
 func (x *TransactionRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *TransactionRequest) GetOfferId() string {
-	if x != nil && x.OfferId != nil {
-		return *x.OfferId
 	}
 	return ""
 }
@@ -8743,17 +8731,15 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\toffer_sig\x18\x01 \x01(\tR\bofferSig\x12!\n" +
 	"\frequester_id\x18\x02 \x01(\tR\vrequesterId\x12)\n" +
 	"\x10requester_domain\x18\x03 \x01(\tR\x0frequesterDomain\x12'\n" +
-	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\xce\x02\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\xa1\x02\n" +
 	"\x12TransactionRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x12\x1e\n" +
-	"\boffer_id\x18\x03 \x01(\tH\x00R\aofferId\x88\x01\x01\x120\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x120\n" +
 	"\trequester\x18\x04 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x128\n" +
 	"\x05items\x18\a \x03(\v2\x18.ramp.v1.TransactionItemB\b\xbaH\x05\x92\x01\x02\b\x01R\x05items\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCriticalB\v\n" +
-	"\t_offer_idJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCriticalJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"\"\x9e\x01\n" +
 	"\x0fTransactionItem\x12,\n" +
 	"\x05offer\x18\x03 \x01(\v2\x0e.ramp.v1.OfferB\x06\xbaH\x03\xc8\x01\x01R\x05offer\x12H\n" +
@@ -9658,7 +9644,6 @@ func file_ramp_v1_ramp_proto_init() {
 	file_ramp_v1_ramp_proto_msgTypes[15].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[16].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[17].OneofWrappers = []any{}
-	file_ramp_v1_ramp_proto_msgTypes[20].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[21].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[22].OneofWrappers = []any{}
 	file_ramp_v1_ramp_proto_msgTypes[23].OneofWrappers = []any{}

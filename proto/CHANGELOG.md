@@ -28,6 +28,14 @@ extended `DenialReason` with
 values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
 breaking change; `buf breaking` reports the deltas as expected.
 
+Also: removed the vestigial `TransactionRequest.offer_id` (field 3). It was a
+single-offer-era correlation scalar left stranded by the items-only migration —
+never authoritative (the Exchange keys binding, billing, and audit off each
+item's signature-verified `offer.offer_id`, never this scalar) and read by
+nothing. A single-offer transaction is the degenerate one-element `items` list;
+offer identity lives inside the signed Offer. Deleted outright with no reserved
+(pre-v1); `buf breaking` reports the delta as expected.
+
 **Money as an exact decimal string + field validation as standard constraints (breaking).**
 
 - **Money is a decimal string, not a `double`.** `Pricing.rate`/`unit_cost`,
