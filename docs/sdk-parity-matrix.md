@@ -17,10 +17,10 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | PoP sign (GET agent binding) | ⚠️ via `AppendSignature` 2-component set; no dedicated face | ✅ `core/sign.ts signInbound` | ✅ `pop.sign_agent_binding` |
 | Acceptance sign / verify | ✅ `helpers.SignOfferAcceptance` / `VerifyOfferAcceptance` | ✅ `src/acceptance.ts signOfferAcceptance` / `verifyOfferAcceptance` | ✅ `core.sign_offer_acceptance_jcs` / `verify_offer_acceptance_jcs` (+`acceptance` aliases) |
 | Offer verify ({verified, rejected}, unforgeable VerifiedOffer) | ✅ `core.Verifier.Sort` + brand | ✅ `core/verifier.ts Verifier.sort` + brand | ✅ `core.Verifier.sort` + token-gated brand |
-| Key resolution — static | ✅ `helpers.NewStaticKeyResolver` | ❌ (raw injected function only) | ✅ `keyresolver.StaticKeyResolver` |
-| Key resolution — well-known JWKS | ✅ `helpers.NewWellKnownKeyResolver` | ❌ | ❌ |
-| Key resolution — WBA directory (revocation-aware) | ✅ `helpers.NewWBAKeyResolver` (+`Run` poller) | ❌ | ❌ |
-| Endpoint resolution — well-known ramp.json | ✅ `helpers.NewWellKnownEndpointResolver` | ❌ | ❌ |
+| Key resolution — static | ✅ `helpers.NewStaticKeyResolver` | ✅ `resolvers.newStaticKeyResolver` | ✅ `keyresolver.StaticKeyResolver` |
+| Key resolution — well-known JWKS | ✅ `helpers.NewWellKnownKeyResolver` | ✅ `resolvers.newWellKnownKeyResolver` | ✅ `resolvers.WellKnownKeyResolver` |
+| Key resolution — WBA directory (revocation-aware) | ✅ `helpers.NewWBAKeyResolver` (+`Run` poller) | ✅ `resolvers.newWBAKeyResolver` (+`run` poller) | ✅ `resolvers.WBAKeyResolver` (+`run` poller) |
+| Endpoint resolution — well-known ramp.json | ✅ `helpers.NewWellKnownEndpointResolver` | ✅ `resolvers.newWellKnownEndpointResolver` | ✅ `resolvers.WellKnownEndpointResolver` |
 | Signed-URL fetch binding (3-way PoP against URL agent_id) | ✅ `helpers.VerifiedURL.CheckProofOfPossession` | ✅ `src/pop.ts verifyAgentBinding` | ✅ `pop.verify_agent_binding` |
 
 ## SERVER role (broker / exchange)

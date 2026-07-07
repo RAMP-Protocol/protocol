@@ -1,0 +1,66 @@
+"""Structural guard for the resolver IO-leaf invariant (bsh8k).
+
+The resolver faces (``ramp_sdk/resolvers/``) are the SDK's ONLY IO-bearing tree:
+they fetch JWKS / WBA directories / ramp.json over an injected transport (default
+stdlib urllib). The pure L1 modules (``core``, ``httpsig``, ``pop``,
+``server_verify``, ``keyresolver``, ``thumbprint``, ``b64``, ...) are
+transport-neutral by contract -- they own no keys, open no sockets, and MUST NOT
+depend on the IO tree. Dependency flows one way only: ``resolvers`` ->
+pure-modules (it reuses thumbprint + b64), never the reverse. A pure module that
+imports ``ramp_sdk.resolvers`` or raw ``urllib`` would drag IO into the
+transport-neutral core and is exactly the regression this guard bans.
+
+``__init__.py`` is the public aggregator and legitimately re-exports the resolver
+faces, so it is excluded from the pure set.
+"""
+
+from __future__ import annotations
+
+import pathlib
+import re
+
+_RAMP_SDK = pathlib.Path(__file__).resolve().parents[1] / "ramp_sdk"
+
+# The public aggregator re-exports everything; the resolvers package IS the IO
+# tree. Everything else under ramp_sdk/*.py is the pure, transport-neutral set.
+_NON_PURE = {"__init__.py"}
+
+_FORBIDDEN = (
+    re.compile(r"(?:from|import)\s+ramp_sdk\.resolvers\b"),
+    re.compile(r"(?:from|import)\s+ramp_sdk\.resolvers$", re.MULTILINE),
+    re.compile(r"\bimport\s+urllib\b"),
+    re.compile(r"\bfrom\s+urllib\b"),
+)
+
+
+def _imports_io(source: str) -> bool:
+    return any(pat.search(source) for pat in _FORBIDDEN)
+
+
+def _pure_modules() -> list[pathlib.Path]:
+    return [p for p in sorted(_RAMP_SDK.glob("*.py")) if p.name not in _NON_PURE]
+
+
+class TestResolverIoLeaf:
+    def test_no_pure_module_imports_the_io_tree(self) -> None:
+        offenders = [
+            p.name for p in _pure_modules() if _imports_io(p.read_text(encoding="utf8"))
+        ]
+        assert offenders == []
+
+    def test_resolvers_reuse_pure_primitives(self) -> None:
+        wba = (_RAMP_SDK / "resolvers" / "wba.py").read_text(encoding="utf8")
+        assert "thumbprint" in wba
+        http = (_RAMP_SDK / "resolvers" / "_http.py").read_text(encoding="utf8")
+        # The IO tree is where urllib legitimately lives.
+        assert "urllib" in http
+
+    # --- meta-tests: exercise the detector against synthetic source ----------
+    def test_meta_positive_catches_resolvers_import(self) -> None:
+        assert _imports_io("from ramp_sdk.resolvers import WBAKeyResolver")
+
+    def test_meta_positive_catches_urllib_import(self) -> None:
+        assert _imports_io("import urllib.request")
+
+    def test_meta_negative_passes_pure_import(self) -> None:
+        assert not _imports_io("from ramp_sdk.thumbprint import thumbprint")

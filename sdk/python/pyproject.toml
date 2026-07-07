@@ -57,6 +57,18 @@ select = [
 # JCS oracle vectors. Condensing either would obscure the ADR-020 §4 contract.
 # PLR0911 (return count) and PLR0913 (arg count) are waived for exactly this module.
 "ramp_sdk/core.py" = ["PLR0911", "PLR0913"]
+# The WBA resolver's constructor mirrors the Go WBAKeyResolverOptions: each of its
+# keyword-only seams (scheme/ttl/poll_interval/now/after/on_poll_armed/
+# on_poll_cycle/http) is an INDEPENDENT injection point pinned by the parity tests
+# (the deterministic clock + poll seams drive the poller without sleeping), so it
+# cannot collapse into an options object without breaking the call sites the tests
+# fix. The poll jitter is not security-sensitive (mirrors Go math/rand). PLR0913
+# (arg count) and S311 (non-crypto random) are waived for exactly this module.
+"ramp_sdk/resolvers/wba.py" = ["PLR0913", "S311"]
+# The default transport is a bounded stdlib urllib GET. Per the Go SSRF contract
+# the SDK exposes the injection point and the SSRF guard stays with the caller;
+# S310 (urllib url-open) is the intended, documented shape here.
+"ramp_sdk/resolvers/_http.py" = ["S310"]
 
 [tool.mypy]
 python_version = "3.11"

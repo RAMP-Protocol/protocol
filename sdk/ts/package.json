@@ -17,7 +17,8 @@
     "./core/sign-request": "./core/sign-request.ts",
     "./core/verify-request": "./core/verify-request.ts",
     "./hono": "./hono/middleware.ts",
-    "./acceptance": "./src/acceptance.ts"
+    "./acceptance": "./src/acceptance.ts",
+    "./resolvers": "./resolvers/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --strict --noEmit",

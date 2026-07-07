@@ -1,0 +1,218 @@
+// Integration suite (TDD red) for the ported STATIC, WELL-KNOWN-KEY, and
+// WELL-KNOWN-ENDPOINT resolver faces — mirroring sdk/go/helpers
+// keyresolver_test.go + endpointresolver_test.go 1:1, plus the R2 skip-not-fail
+// JWKS matrix.
+//
+// These are IO-bound faces, so every case drives a REAL node:http origin (the
+// shared harness) through the resolver's default global-fetch transport and
+// asserts the resolved key/endpoint back out. Only the clock is injected.
+//
+// RED CONTRACT: the faces live in ../resolvers/ (kept OUT of the IO-free
+// core/src tree per the transport-neutrality invariant) and DO NOT EXIST YET.
+// The import below fails module resolution, so the whole file is RED until the
+// next atom lands the faces — RED on the missing faces, not on a fixture error.
+import { afterEach, describe, expect, it } from "vitest";
+
+import {
+	ANCHOR_MS,
+	HOUR_MS,
+	type Origin,
+	jwksEntry,
+	jwksKeyDocJson,
+	makeKey,
+	manifestJson,
+	startOrigin,
+} from "./resolvers-harness.ts";
+
+// RED: ../resolvers/index.ts does not exist yet (TDD red for bsh8k). The typed
+// error classes and the four named constructors are the ported public surface.
+import {
+	DirectoryUnavailable,
+	NoEndpoint,
+	newStaticKeyResolver,
+	newWellKnownEndpointResolver,
+	newWellKnownKeyResolver,
+} from "../resolvers/index.ts";
+
+describe("newStaticKeyResolver", () => {
+	it("resolves a seeded key and returns undefined for an unknown keyid", async () => {
+		const a = await makeKey();
+		const b = await makeKey();
+		const r = newStaticKeyResolver({ "a.v1": a.rawPub });
+
+		expect(await r.resolve("a.v1")).toEqual(a.rawPub);
+		// R4: a plain unknown key is undefined (NOT a thrown typed error).
+		expect(await r.resolve("missing")).toBeUndefined();
+
+		r.put("b.v1", b.rawPub);
+		expect(await r.resolve("b.v1")).toEqual(b.rawPub);
+	});
+});
+
+describe("newWellKnownKeyResolver", () => {
+	let origin: Origin | undefined;
+	afterEach(async () => {
+		await origin?.close();
+	});
+
+	it("fetches on a cache miss, then serves the second resolve from cache", async () => {
+		const k = await makeKey();
+		origin = await startOrigin();
+		origin.setJwks(jwksKeyDocJson([jwksEntry("ex.v1", k.x)]));
+
+		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS });
+		expect(await r.resolve("ex.v1")).toEqual(k.rawPub);
+		// Cached: no second fetch.
+		expect(await r.resolve("ex.v1")).toEqual(k.rawPub);
+		expect(origin.jwksHits()).toBe(1);
+		// Unknown kid within the cache is undefined and does not refetch.
+		expect(await r.resolve("nope")).toBeUndefined();
+		expect(origin.jwksHits()).toBe(1);
+	});
+
+	it("refetches after the TTL expires", async () => {
+		const k = await makeKey();
+		origin = await startOrigin();
+		origin.setJwks(jwksKeyDocJson([jwksEntry("ex.v1", k.x)]));
+
+		let now = ANCHOR_MS;
+		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, {
+			ttlMs: 60_000,
+			now: () => now,
+		});
+		expect(await r.resolve("ex.v1")).toEqual(k.rawPub);
+		now = ANCHOR_MS + 2 * 60_000; // expire the cache
+		expect(await r.resolve("ex.v1")).toEqual(k.rawPub);
+		expect(origin.jwksHits()).toBe(2);
+	});
+
+	it("throws DirectoryUnavailable on a non-200 fetch, DISTINCT from an unknown key", async () => {
+		origin = await startOrigin();
+		origin.setJwksStatus(500);
+
+		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS });
+		// The taxonomy the composite depends on: an outage is a thrown
+		// DirectoryUnavailable (fail-closed halt), never a silent undefined that
+		// a composite would treat as "unknown key, fall through".
+		await expect(r.resolve("ex.v1")).rejects.toBeInstanceOf(DirectoryUnavailable);
+	});
+
+	// R2: JWKS extraction is skip-not-fail — one malformed key must not kill the
+	// whole publisher key set; survivors still resolve, bad entries become
+	// unknown (undefined).
+	it("skips malformed JWKS entries (missing kid / non-Ed25519 / bad-length x) and resolves survivors", async () => {
+		const good = await makeKey();
+		const nonEd = await makeKey();
+		origin = await startOrigin();
+		origin.setJwks(
+			jwksKeyDocJson([
+				// missing kid → skipped
+				{ kty: "OKP", crv: "Ed25519", x: (await makeKey()).x },
+				// non-Ed25519 kty → skipped
+				{ kid: "rsa.v1", kty: "RSA", crv: "Ed25519", x: nonEd.x },
+				// wrong-length x (not 32 bytes) → skipped
+				{ kid: "short.v1", kty: "OKP", crv: "Ed25519", x: "AAAA" },
+				// valid survivor
+				jwksEntry("good.v1", good.x),
+			]),
+		);
+
+		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS });
+		expect(await r.resolve("good.v1")).toEqual(good.rawPub);
+		// The skipped entries are unknown (undefined), NOT a thrown parse failure.
+		expect(await r.resolve("rsa.v1")).toBeUndefined();
+		expect(await r.resolve("short.v1")).toBeUndefined();
+	});
+});
+
+describe("newWellKnownEndpointResolver", () => {
+	it("resolves each host to its OWN endpoint (per-host cache isolation)", async () => {
+		const epA = "https://exchange-a.example/ramp.v1.ExchangeService";
+		const epB = "https://exchange-b.example/ramp.v1.ExchangeService";
+		const a = await startOrigin();
+		const b = await startOrigin();
+		a.setManifest(manifestJson(epA));
+		b.setManifest(manifestJson(epB));
+		try {
+			const r = newWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http" });
+			expect(await r.resolveEndpoint(a.host)).toBe(epA);
+			expect(await r.resolveEndpoint(b.host)).toBe(epB);
+			// Re-resolving A must never return B's endpoint — the cache is keyed
+			// per host and B did not clobber A.
+			expect(await r.resolveEndpoint(a.host)).toBe(epA);
+		} finally {
+			await a.close();
+			await b.close();
+		}
+	});
+
+	it("serves the second resolve for the same host from cache", async () => {
+		const ep = "https://exchange.example/ramp.v1.ExchangeService";
+		const origin = await startOrigin();
+		origin.setManifest(manifestJson(ep));
+		try {
+			const r = newWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http" });
+			expect(await r.resolveEndpoint(origin.host)).toBe(ep);
+			expect(await r.resolveEndpoint(origin.host)).toBe(ep);
+			expect(origin.manifestHits()).toBe(1);
+		} finally {
+			await origin.close();
+		}
+	});
+
+	it("refetches after the TTL expires", async () => {
+		const ep = "https://exchange.example/ramp.v1.ExchangeService";
+		const origin = await startOrigin();
+		origin.setManifest(manifestJson(ep));
+		try {
+			let now = ANCHOR_MS;
+			const r = newWellKnownEndpointResolver({
+				ttlMs: 60_000,
+				scheme: "http",
+				now: () => now,
+			});
+			expect(await r.resolveEndpoint(origin.host)).toBe(ep);
+			now = ANCHOR_MS + 2 * 60_000;
+			expect(await r.resolveEndpoint(origin.host)).toBe(ep);
+			expect(origin.manifestHits()).toBe(2);
+		} finally {
+			await origin.close();
+		}
+	});
+
+	it("throws DirectoryUnavailable on a non-200 manifest response", async () => {
+		const origin = await startOrigin();
+		origin.setManifestStatus(503);
+		try {
+			const r = newWellKnownEndpointResolver({ scheme: "http" });
+			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(DirectoryUnavailable);
+		} finally {
+			await origin.close();
+		}
+	});
+
+	it("throws DirectoryUnavailable on a malformed manifest body", async () => {
+		const origin = await startOrigin();
+		origin.setManifest("{not json");
+		try {
+			const r = newWellKnownEndpointResolver({ scheme: "http" });
+			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(DirectoryUnavailable);
+		} finally {
+			await origin.close();
+		}
+	});
+
+	it("throws NoEndpoint when a valid manifest omits the endpoint field", async () => {
+		const origin = await startOrigin();
+		origin.setManifest(manifestJson(undefined)); // valid manifest, no endpoint
+		try {
+			const r = newWellKnownEndpointResolver({ scheme: "http" });
+			// NoEndpoint must be DISTINCT from DirectoryUnavailable: the manifest
+			// was reachable and decoded, it simply advertises no endpoint.
+			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(NoEndpoint);
+			expect(origin.manifestHits()).toBe(1);
+		} finally {
+			await origin.close();
+		}
+	});
+});

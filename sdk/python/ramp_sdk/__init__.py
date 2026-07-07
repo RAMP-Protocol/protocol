@@ -39,14 +39,34 @@ from .httpsig import (
 )
 from .keyresolver import KeyResolver, StaticKeyResolver
 from .pop import sign_agent_binding, verify_agent_binding
+from .resolvers import (
+    DirectoryUnavailableError,
+    KeyExpiredError,
+    KeyRevokedError,
+    NoEndpointError,
+    ResolverError,
+    UnknownKeyError,
+    WBAKeyResolver,
+    WellKnownEndpointResolver,
+    WellKnownKeyResolver,
+)
 from .signedurl import sign_ed25519_signed_url, verify_ed25519_signed_url
 from .thumbprint import thumbprint
 
 __all__ = [
+    "DirectoryUnavailableError",
+    "KeyExpiredError",
     "KeyResolver",
+    "KeyRevokedError",
     "MultisigVerdict",
+    "NoEndpointError",
     "ReplayStore",
+    "ResolverError",
     "StaticKeyResolver",
+    "UnknownKeyError",
+    "WBAKeyResolver",
+    "WellKnownEndpointResolver",
+    "WellKnownKeyResolver",
     "append_signature",
     "b64url_decode",
     "b64url_nopad",
