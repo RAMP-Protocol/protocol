@@ -48,7 +48,10 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 	}
 	sig, err := hex.DecodeString(signatureHex)
 	if err != nil {
-		return fmt.Errorf("helpers: decode offer signature: %w", err)
+		// Malformed encoding is a signature-verification failure like any
+		// other: callers branch on the sentinel (errors.Is), and a garbage
+		// signature must land on the same rejected path as a forged one.
+		return fmt.Errorf("%w: decode hex: %v", ErrOfferSignatureInvalid, err)
 	}
 	payload, err := canonicalOfferPayload(offer)
 	if err != nil {
