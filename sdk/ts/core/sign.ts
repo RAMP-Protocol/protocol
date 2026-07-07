@@ -76,8 +76,9 @@ export async function signInbound(
 }
 
 // stdBase64 encodes bytes as standard (padded) base64 — the RFC 9421 Signature
-// header byte-string encoding the L1 parseSignature decodes.
-function stdBase64(bytes: Uint8Array): string {
+// header byte-string encoding the L1 parseSignature decodes. Exported so the
+// 5-component request signer (core/sign-request.ts) shares the exact encoder.
+export function stdBase64(bytes: Uint8Array): string {
 	let bin = "";
 	for (let i = 0; i < bytes.length; i += 1)
 		bin += String.fromCharCode(bytes[i] as number);

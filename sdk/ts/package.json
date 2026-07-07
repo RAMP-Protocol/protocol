@@ -12,6 +12,7 @@
     "./crossfield": "./src/crossfield.ts",
     "./core": "./core/verifier.ts",
     "./core/sign": "./core/sign.ts",
+    "./core/sign-request": "./core/sign-request.ts",
     "./hono": "./hono/middleware.ts",
     "./acceptance": "./src/acceptance.ts"
   },
