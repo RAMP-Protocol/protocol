@@ -1,0 +1,106 @@
+{
+  "vectors": [
+    {
+      "name": "leading_zero_integer",
+      "input": "007",
+      "canonical": "7",
+      "valid": true
+    },
+    {
+      "name": "leading_zero_fraction",
+      "input": "00.5",
+      "canonical": "0.5",
+      "valid": true
+    },
+    {
+      "name": "leading_zeros_and_trailing",
+      "input": "0010.20",
+      "canonical": "10.2",
+      "valid": true
+    },
+    {
+      "name": "high_precision_small_fraction",
+      "input": "0.0000001",
+      "canonical": "0.0000001",
+      "valid": true
+    },
+    {
+      "name": "zero_point_zero",
+      "input": "0.0",
+      "canonical": "0",
+      "valid": true
+    },
+    {
+      "name": "double_zero_point_zero",
+      "input": "00.0",
+      "canonical": "0",
+      "valid": true
+    },
+    {
+      "name": "all_zeros_integer",
+      "input": "000",
+      "canonical": "0",
+      "valid": true
+    },
+    {
+      "name": "trailing_zeros_integer_frac",
+      "input": "1.00",
+      "canonical": "1",
+      "valid": true
+    },
+    {
+      "name": "trailing_zero_fraction",
+      "input": "0.050",
+      "canonical": "0.05",
+      "valid": true
+    },
+    {
+      "name": "plain_integer",
+      "input": "10",
+      "canonical": "10",
+      "valid": true
+    },
+    {
+      "name": "plain_integer_large",
+      "input": "123456789",
+      "canonical": "123456789",
+      "valid": true
+    },
+    {
+      "name": "plain_zero",
+      "input": "0",
+      "canonical": "0",
+      "valid": true
+    },
+    {
+      "name": "empty_string",
+      "input": "",
+      "canonical": "",
+      "valid": false
+    },
+    {
+      "name": "negative",
+      "input": "-1",
+      "canonical": "",
+      "valid": false
+    },
+    {
+      "name": "leading_plus",
+      "input": "+1",
+      "canonical": "",
+      "valid": false
+    },
+    {
+      "name": "exponent_form",
+      "input": "1e3",
+      "canonical": "",
+      "valid": false
+    },
+    {
+      "name": "leading_dot",
+      "input": ".5",
+      "canonical": "",
+      "valid": false
+    }
+  ]
+}

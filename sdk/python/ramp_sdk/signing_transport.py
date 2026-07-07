@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ramp_sdk.httpsig import sign_request
+from ramp_sdk.window import Window, clock_window
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -52,6 +53,7 @@ class SigningTransport:
         now: Callable[[], float] | None = None,
         ttl_sec: int = _DEFAULT_TTL_SEC,
         signature_agent: str = "",
+        window: Window | None = None,
     ) -> None:
         """``signature_agent`` is the signer's own WBA directory URL.
 
@@ -67,6 +69,11 @@ class SigningTransport:
         self._now = now or time.time
         self._ttl_sec = ttl_sec
         self._signature_agent = signature_agent
+        # Source (created, expires) from an injected Window, defaulting to a
+        # clock_window over now/ttl_sec. clock_window int()-truncates to whole
+        # seconds, so the @signature-params bytes stay byte-identical to the
+        # historical inline ``int(self._now())`` mint (R3).
+        self._window = window or clock_window(self._now, self._ttl_sec)
 
     def sign_outbound(
         self,
@@ -81,8 +88,7 @@ class SigningTransport:
         Authorization is always bound — pass an empty string to pin its absence
         (mirror the L1 sign_request contract).
         """
-        created = int(self._now())
-        expires = created + self._ttl_sec
+        created, expires = self._window()
         signed = sign_request(
             method=method,
             url=url,

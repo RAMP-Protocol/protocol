@@ -69,6 +69,14 @@ select = [
 # the SDK exposes the injection point and the SSRF guard stays with the caller;
 # S310 (urllib url-open) is the intended, documented shape here.
 "ramp_sdk/resolvers/_http.py" = ["S310"]
+# SigningTransport exposes the sign-window seam as an INJECTION point: signer_seed
+# and keyid are identity, now/ttl_sec are the default clock+TTL, signature_agent is
+# the covered directory, and window is the injectable Window (mirroring the Go
+# WithWindow transport option — a monotonic_window keeps back-to-back relay
+# signatures' expires cutoffs unique). Each is an independent seam the deterministic
+# regression pin fixes; collapsing them into an options object would break those
+# call sites. PLR0913 (arg count) is waived for exactly this constructor.
+"ramp_sdk/signing_transport.py" = ["PLR0913"]
 
 [tool.mypy]
 python_version = "3.11"

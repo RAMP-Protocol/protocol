@@ -14,6 +14,7 @@ import { encodeBase64Url } from "../src/base64url.ts";
 import { opaqueUrl } from "../src/opaque-url.ts";
 import { AGENT_KEY_HEADER, signatureBase } from "../src/pop.ts";
 import { thumbprint } from "../src/thumbprint.ts";
+import { clockWindow, type Window } from "./window.ts";
 
 // A default signing window (seconds) for the GET PoP created/expires params.
 const DEFAULT_POP_TTL_SEC = 600;
@@ -29,6 +30,12 @@ export type Ed25519SignFn = (message: Uint8Array) => Promise<Uint8Array>;
 export interface SignInboundOptions {
 	now?: () => number;
 	ttlSec?: number;
+	/**
+	 * An injectable signature Window sourcing (created, expires). Defaults to a
+	 * clockWindow over `now`/`ttlSec` (both floored to integer seconds). Supply a
+	 * monotonicWindow to keep back-to-back signatures' expires cutoffs unique.
+	 */
+	window?: Window;
 }
 
 /**
@@ -52,9 +59,15 @@ export async function signInbound(
 	);
 	const agentId = await thumbprint(rawPub);
 
-	const nowSec = Math.floor((opts.now?.() ?? Date.now()) / 1000);
-	const created = nowSec;
-	const expires = nowSec + (opts.ttlSec ?? DEFAULT_POP_TTL_SEC);
+	// Source (created, expires) from the injected Window, defaulting to a
+	// clockWindow over now (ms → seconds) and ttlSec. clockWindow floors to
+	// integer seconds, so the @signature-params bytes stay byte-identical to the
+	// historical inline `Math.floor(now()/1000)` mint (R3).
+	const ttlSec = opts.ttlSec ?? DEFAULT_POP_TTL_SEC;
+	const window =
+		opts.window ??
+		clockWindow(() => (opts.now?.() ?? Date.now()) / 1000, ttlSec);
+	const [created, expires] = window();
 
 	// The @signature-params inner list the verifier rebuilds verbatim: covered
 	// components then keyid/alg/created/expires, RFC 9421 order.

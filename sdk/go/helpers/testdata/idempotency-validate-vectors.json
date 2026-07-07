@@ -1,0 +1,29 @@
+{
+  "vectors": [
+    {
+      "name": "empty_rejected",
+      "key": "",
+      "valid": false
+    },
+    {
+      "name": "typical_22char_b64url",
+      "key": "AAAAAAAAAAAAAAAAAAAAAA",
+      "valid": true
+    },
+    {
+      "name": "single_char",
+      "key": "x",
+      "valid": true
+    },
+    {
+      "name": "with_dash_underscore",
+      "key": "a-b_c",
+      "valid": true
+    },
+    {
+      "name": "long_key",
+      "key": "0123456789abcdef0123456789abcdef",
+      "valid": true
+    }
+  ]
+}

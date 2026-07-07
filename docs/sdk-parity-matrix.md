@@ -43,7 +43,7 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | Signed-URL verify | ✅ `helpers.VerifyURLEd25519` | ✅ `src/verify.ts verifyEd25519SignedUrl` | ✅ `signedurl.verify_ed25519_signed_url` |
 | GET-PoP verify | ✅ `VerifiedURL.CheckProofOfPossession` | ✅ `src/pop.ts verifyAgentBinding` (+`hono rampVerify` binding) | ✅ `pop.verify_agent_binding` |
 | Thumbprint (RFC 7638) | ✅ `helpers.Thumbprint` | ✅ `src/thumbprint.ts` | ✅ `thumbprint.thumbprint` |
-| HashURL (audit hash) | ✅ `helpers.HashURL` | ❌ | ❌ |
+| HashURL (audit hash) | ✅ `helpers.HashURL` | ✅ `src/hashurl.ts hashUrl` | ✅ `hashurl.hash_url` |
 
 ## SHARED
 
@@ -54,11 +54,11 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | JCS canonical acceptance payload | ✅ (unexported; sign/verify public) | ❌ (with ov97t.13) | ✅ `core.jcs_acceptance_payload` |
 | Wire→canonical offer (camel+EmitUnpopulated → snake) | n/a (Go emits, never inverts) | ❌ (TS edge consumes canonical input today) | ✅ `wire_canon.from_wire_offer` |
 | Crossfield validation (stable rule-ids) | ✅ `helpers.ValidationRuleIDs` (protovalidate oracle) | ✅ `src/crossfield.ts crossFieldRuleIds` | ✅ `crossfield.cross_field_rule_ids` |
-| Scopes normalize/apply/subset | ✅ `helpers.{Normalize,Apply}Scopes`, `ScopesSubset` | ❌ | ❌ |
-| Money parse/format/canonicalize | ✅ `helpers.{Parse,Format,Canonicalize}Money` | ❌ | ❌ |
-| Idempotency key mint/validate | ✅ `helpers.{New,Validate}IdempotencyKey` | ❌ | ❌ |
-| Wire constants (headers, content types) | ✅ `helpers` constants | ❌ | ❌ |
-| Window (created/expires source) | ✅ `core.Window`/`ClockWindow`/`MonotonicWindow` | ❌ (inline now+ttl) | ❌ (inline now+ttl) |
+| Scopes normalize/apply/subset | ✅ `helpers.{Normalize,Apply}Scopes`, `ScopesSubset` | ✅ `src/scopes.ts {normalize,apply}Scopes/scopesSubset` | ✅ `scopes.{normalize,apply}_scopes/scopes_subset` |
+| Money parse/format/canonicalize | ✅ `helpers.{Parse,Format,Canonicalize}Money` | ✅ `src/money.ts {parse,format,canonicalize}Money` | ✅ `money.{parse,format,canonicalize}_money` |
+| Idempotency key mint/validate | ✅ `helpers.{New,Validate}IdempotencyKey` | ✅ `src/idempotency.ts {new,validate}IdempotencyKey` | ✅ `idempotency.{new,validate}_idempotency_key` |
+| Wire constants (headers, content types) | ✅ `helpers` constants | ✅ `src/wire.ts` | ✅ `wire` |
+| Window (created/expires source) | ✅ `core.Window`/`ClockWindow`/`MonotonicWindow` | ✅ `core/window.ts {clock,monotonic}Window` | ✅ `window.{clock,monotonic}_window` |
 
 ## Conformance-vector consumption (oracle: sdk/go/helpers/testdata)
 
@@ -72,6 +72,12 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | offer-verify-vectors.json | ✅ emit+consume | ✅ | ✅ |
 | wire-canonical-vectors.json | ✅ emit+consume | ❌ (no TS from-wire face; not currently intended) | ✅ |
 | conformance/corpus/crossfield.json | ✅ | ✅ | ✅ |
+| multisig-chain-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| scopes-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| money-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| idempotency-validate-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| hashurl-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| wire-constants-vectors.json | ✅ emit+consume | ✅ | ✅ |
 
 ## Gap tickets
 

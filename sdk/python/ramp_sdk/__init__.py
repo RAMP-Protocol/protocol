@@ -28,6 +28,7 @@ from .core import (
     verify_offer_acceptance_jcs,
 )
 from .crossfield import cross_field_rule_ids
+from .hashurl import hash_url
 from .httpsig import (
     MultisigVerdict,
     ReplayStore,
@@ -37,7 +38,9 @@ from .httpsig import (
     verify_request,
     verify_request_server,
 )
+from .idempotency import new_idempotency_key, validate_idempotency_key
 from .keyresolver import KeyResolver, StaticKeyResolver
+from .money import canonicalize_money, format_money, parse_money
 from .pop import sign_agent_binding, verify_agent_binding
 from .resolvers import (
     DirectoryUnavailableError,
@@ -50,10 +53,24 @@ from .resolvers import (
     WellKnownEndpointResolver,
     WellKnownKeyResolver,
 )
+from .scopes import apply_scopes, normalize_scopes, scopes_subset
 from .signedurl import sign_ed25519_signed_url, verify_ed25519_signed_url
 from .thumbprint import thumbprint
+from .window import Window, clock_window, monotonic_window
+from .wire import (
+    ConnectProtocolVersion,
+    ConnectProtocolVersionHeader,
+    ContentTypeJSON,
+    ContentTypeProto,
+    RequestIDHeader,
+    SignatureAgentHeader,
+)
 
 __all__ = [
+    "ConnectProtocolVersion",
+    "ConnectProtocolVersionHeader",
+    "ContentTypeJSON",
+    "ContentTypeProto",
     "DirectoryUnavailableError",
     "KeyExpiredError",
     "KeyResolver",
@@ -61,19 +78,32 @@ __all__ = [
     "MultisigVerdict",
     "NoEndpointError",
     "ReplayStore",
+    "RequestIDHeader",
     "ResolverError",
+    "SignatureAgentHeader",
     "StaticKeyResolver",
     "UnknownKeyError",
     "WBAKeyResolver",
     "WellKnownEndpointResolver",
     "WellKnownKeyResolver",
+    "Window",
     "append_signature",
+    "apply_scopes",
     "b64url_decode",
     "b64url_nopad",
     "canonical_acceptance_payload",
     "canonical_offer_payload",
+    "canonicalize_money",
+    "clock_window",
     "cross_field_rule_ids",
+    "format_money",
+    "hash_url",
     "jcs_acceptance_payload",
+    "monotonic_window",
+    "new_idempotency_key",
+    "normalize_scopes",
+    "parse_money",
+    "scopes_subset",
     "sign_agent_binding",
     "sign_ed25519_signed_url",
     "sign_offer_acceptance",
@@ -81,6 +111,7 @@ __all__ = [
     "sign_offer_jcs",
     "sign_request",
     "thumbprint",
+    "validate_idempotency_key",
     "verify_agent_binding",
     "verify_ed25519_signed_url",
     "verify_multisig_request_server",
