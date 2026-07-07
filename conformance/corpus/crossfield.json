@@ -1,0 +1,109 @@
+[
+  {
+    "id": "License/cel/digest_required_with_uri",
+    "message": "License",
+    "valid": false,
+    "rules": [
+      "license.digest_required_with_uri"
+    ],
+    "json": {
+      "id": "CC-BY-4.0",
+      "uri": "https://example.com/license"
+    }
+  },
+  {
+    "id": "LicenseTerm/cel/one_restriction_per_kind",
+    "message": "LicenseTerm",
+    "valid": false,
+    "rules": [
+      "license_term.one_restriction_per_kind"
+    ],
+    "json": {
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "restrictions": [
+        {
+          "kind": "RESTRICTION_KIND_FUNCTION",
+          "permitted": [
+            "ai-input"
+          ]
+        },
+        {
+          "kind": "RESTRICTION_KIND_FUNCTION",
+          "permitted": [
+            "ai-train"
+          ]
+        }
+      ],
+      "semantics": "TERM_SEMANTICS_ENUMERATED"
+    }
+  },
+  {
+    "id": "LicenseTerm/cel/reference_only_requires_uri",
+    "message": "LicenseTerm",
+    "valid": false,
+    "rules": [
+      "license_term.reference_only.requires_uri",
+      "required"
+    ],
+    "json": {
+      "semantics": "TERM_SEMANTICS_REFERENCE_ONLY"
+    }
+  },
+  {
+    "id": "Obligation/cel/share_alike_requires_scope_license",
+    "message": "Obligation",
+    "valid": false,
+    "rules": [
+      "obligation.share_alike.requires_scope_license"
+    ],
+    "json": {
+      "kind": "OBLIGATION_KIND_SHARE_ALIKE",
+      "trigger": "OBLIGATION_TRIGGER_ON_USE"
+    }
+  },
+  {
+    "id": "Pricing/cel/free_zero_rate",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.free.zero_rate"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_FREE",
+      "rate": "5"
+    }
+  },
+  {
+    "id": "Pricing/cel/per_unit_requires_unit",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "pricing.per_unit.requires_unit"
+    ],
+    "json": {
+      "currency": "USD",
+      "model": "PRICING_MODEL_PER_UNIT",
+      "rate": "0.05"
+    }
+  },
+  {
+    "id": "Restriction/cel/permitted_prohibited_disjoint",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "restriction.permitted_prohibited_disjoint"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_FUNCTION",
+      "permitted": [
+        "ai-train"
+      ],
+      "prohibited": [
+        "ai-train"
+      ]
+    }
+  }
+]

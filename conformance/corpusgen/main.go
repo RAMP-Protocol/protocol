@@ -149,6 +149,74 @@ func main() {
 	must(err)
 	must(os.WriteFile("conformance/corpus/cases.json", append(out, '\n'), 0o644))
 	fmt.Printf("wrote %d cases -> conformance/corpus/cases.json\n", len(cases))
+
+	writeCrossField(v)
+}
+
+// writeCrossField emits conformance/corpus/crossfield.json: one invalid mutant
+// per message-level (cross-field) CEL rule, each pinned to Go protovalidate's
+// verdict. This is kept SEPARATE from cases.json on purpose — cases.json is the
+// FIELD-level corpus the generated Pydantic/Zod clients are tested against today,
+// and those clients do not yet enforce cross-field CEL (the symmetric gap noted
+// in ramp-sdk-api.md). The SDK L1 validator (ramphelpers.Validate) is tested
+// against THIS file, and a future TS/Python L1 that authors the cross-field rules
+// by hand consumes it as their oracle — without breaking the field-level parity.
+func writeCrossField(v protovalidate.Validator) {
+	type mutant struct {
+		id   string
+		msg  proto.Message
+		want string // the message CEL rule id this mutant must trip
+	}
+	freePricing := &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
+	mutants := []mutant{
+		{"Pricing/cel/per_unit_requires_unit",
+			&rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.05", Currency: "USD"},
+			"pricing.per_unit.requires_unit"},
+		{"Pricing/cel/free_zero_rate",
+			&rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "5"},
+			"pricing.free.zero_rate"},
+		{"License/cel/digest_required_with_uri",
+			&rampv1.License{Id: proto.String("CC-BY-4.0"), Uri: proto.String("https://example.com/license")},
+			"license.digest_required_with_uri"},
+		{"Restriction/cel/permitted_prohibited_disjoint",
+			&rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-train"}, Prohibited: []string{"ai-train"}},
+			"restriction.permitted_prohibited_disjoint"},
+		{"Obligation/cel/share_alike_requires_scope_license",
+			&rampv1.Obligation{Kind: rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE},
+			"obligation.share_alike.requires_scope_license"},
+		{"LicenseTerm/cel/reference_only_requires_uri",
+			&rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY},
+			"license_term.reference_only.requires_uri"},
+		{"LicenseTerm/cel/one_restriction_per_kind",
+			&rampv1.LicenseTerm{
+				Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED,
+				Pricing:   freePricing,
+				Restrictions: []*rampv1.Restriction{
+					{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-input"}},
+					{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-train"}},
+				},
+			},
+			"license_term.one_restriction_per_kind"},
+	}
+
+	var cases []Case
+	for _, mt := range mutants {
+		verr := v.Validate(mt.msg)
+		if verr == nil {
+			die("cross-field mutant %s did not violate any rule", mt.id)
+		}
+		ids := ruleIDs(verr)
+		if !contains(ids, mt.want) {
+			die("cross-field mutant %s expected rule %q, got %v", mt.id, mt.want, ids)
+		}
+		short := string(mt.msg.ProtoReflect().Descriptor().Name())
+		cases = append(cases, mkCase(mt.id, short, mt.msg, false, ids, v))
+	}
+	sort.Slice(cases, func(i, j int) bool { return cases[i].ID < cases[j].ID })
+	out, err := json.MarshalIndent(cases, "", "  ")
+	must(err)
+	must(os.WriteFile("conformance/corpus/crossfield.json", append(out, '\n'), 0o644))
+	fmt.Printf("wrote %d cross-field cases -> conformance/corpus/crossfield.json\n", len(cases))
 }
 
 // ── baseline construction ────────────────────────────────────────────────────
