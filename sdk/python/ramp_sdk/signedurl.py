@@ -39,9 +39,7 @@ _AGENT_ID_PARAM = "agent_id"
 #: Go url.QueryEscape keeps these unreserved bytes unescaped; space -> "+";
 #: everything else -> %XX (uppercase). Reproduced here so the three SDKs emit
 #: byte-identical query strings.
-_UNRESERVED = frozenset(
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-)
+_UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
 
 def _query_escape(s: str) -> str:
@@ -117,9 +115,7 @@ def _canonical_url(
     return prefix if encoded == "" else f"{prefix}?{encoded}"
 
 
-def _set_param(
-    pairs: list[tuple[str, str]], key: str, value: str
-) -> list[tuple[str, str]]:
+def _set_param(pairs: list[tuple[str, str]], key: str, value: str) -> list[tuple[str, str]]:
     """Set (replacing) a single query key, preserving order: overwrite in place or
     append."""
     for i, (k, _v) in enumerate(pairs):
@@ -128,6 +124,7 @@ def _set_param(
             return pairs
     pairs.append((key, value))
     return pairs
+
 
 #: Injected verifying-key resolver: ``kid -> raw 32-byte Ed25519 key | None``.
 ResolveKey = Callable[[str | None], bytes | None]
