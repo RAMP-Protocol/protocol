@@ -4,7 +4,7 @@
 // fail-closed verdict rather than fall through as if the key were merely unknown.
 // The TS port preserves that distinctness as distinct thrown classes; a plain
 // unknown key stays `undefined` (never a thrown error), matching the existing
-// KeyResolverTs fail-closed-is-undefined convention.
+// RequestKeyResolver fail-closed-is-undefined convention.
 
 /** Base of every fail-closed resolver verdict. Unknown-key is NOT modelled here
  * — it is the `undefined` return, deliberately outside this hierarchy. */

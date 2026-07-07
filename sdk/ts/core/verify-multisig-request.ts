@@ -24,7 +24,7 @@ import {
 	signatureBytesByLabel,
 } from "./multisig-parse.ts";
 import {
-	type KeyResolverTs,
+	type RequestKeyResolver,
 	type RequestVerifyFields,
 	verifyParsedSignature,
 } from "./verify-request.ts";
@@ -38,8 +38,8 @@ import {
 export type MultisigRejectReason = "signature" | "broken_chain" | "hop_budget";
 
 /** The injected keyid-keyed verifying-key resolver — every hop's key resolves
- * through it (the SDK owns no keys). Structurally identical to KeyResolverTs. */
-export type MultisigKeyResolver = KeyResolverTs;
+ * through it (the SDK owns no keys). Structurally identical to RequestKeyResolver. */
+export type MultisigKeyResolver = RequestKeyResolver;
 
 /** The lowercased request headers a multisig server-verify reads. */
 export interface MultisigVerifyHeaders {

@@ -37,11 +37,11 @@ export type RejectReason = "signature" | "replay";
 
 /**
  * The injected keyid-keyed verifying-key resolver (ADR-020 §4). Distinct from
- * core/verifier.ts::KeyResolverTs which is EXCHANGE-keyed for offer verify: a
+ * core/verifier.ts::OfferKeyResolver which is EXCHANGE-keyed for offer verify: a
  * request-verify resolver is keyed by the Signature-Input keyid. Returns the raw
  * 32-byte Ed25519 public key, or undefined when the key is unknown.
  */
-export interface KeyResolverTs {
+export interface RequestKeyResolver {
 	resolve(keyid: string | null): Uint8Array<ArrayBuffer> | undefined;
 }
 
@@ -71,7 +71,7 @@ export interface VerifyRequestServerInput {
 	url: string;
 	body: Uint8Array<ArrayBuffer>;
 	headers: VerifyRequestHeaders;
-	resolve: KeyResolverTs;
+	resolve: RequestKeyResolver;
 	/** Omit to disable replay detection (verify-only), matching Go WithReplayStore-absent. */
 	replayStore?: ReplayStore;
 	/** Injected clock returning unix seconds — verify reads time ONLY through this. */
@@ -221,7 +221,7 @@ export async function verifyParsedSignature(
 	fields: RequestVerifyFields,
 	parsed: ParsedSignatureParams,
 	sigBytes: Uint8Array<ArrayBuffer> | undefined,
-	resolve: KeyResolverTs,
+	resolve: RequestKeyResolver,
 	nowSec: number,
 	chainLink?: ChainLink,
 ): Promise<boolean> {

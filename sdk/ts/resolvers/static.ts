@@ -1,5 +1,5 @@
 // The static named key resolver face — a thin in-memory map satisfying the
-// KeyResolverTs-shaped `resolve(keyid) -> Promise<Uint8Array | undefined>` plus a
+// RequestKeyResolver-shaped `resolve(keyid) -> Promise<Uint8Array | undefined>` plus a
 // `put` for dynamic/test seeding. Mirrors the Go NewStaticKeyResolver: a plain
 // unknown key is `undefined` (the fall-through miss), never a thrown error.
 

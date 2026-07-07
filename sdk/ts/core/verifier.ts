@@ -34,12 +34,12 @@ export const OFFER_SIGNATURE_ALGORITHM = "EdDSA";
 export type Mode = "strict" | "off";
 
 /**
- * KeyResolverTs resolves an exchange identity to its raw 32-byte Ed25519
+ * OfferKeyResolver resolves an exchange identity to its raw 32-byte Ed25519
  * offer-signing public key. Injected — the core owns no key state. Returns
  * undefined when no key is known for the exchange (→ fail-closed reject under
  * strict).
  */
-export interface KeyResolverTs {
+export interface OfferKeyResolver {
 	resolve(exchange: string): Promise<Uint8Array<ArrayBuffer> | undefined>;
 }
 
@@ -169,7 +169,7 @@ export function canonicalOfferPayload(
 export class Verifier {
 	constructor(
 		private readonly mode: Mode,
-		private readonly resolver: KeyResolverTs,
+		private readonly resolver: OfferKeyResolver,
 		private readonly now: () => number,
 		private readonly verifyEd25519: Ed25519Verify,
 	) {}
@@ -244,7 +244,7 @@ export interface VerifierOptions {
  * injected; the Ed25519 primitive defaults to WebCrypto.
  */
 export function NewVerifier(mode: Mode, opts: VerifierOptions): Verifier {
-	const resolver: KeyResolverTs = { resolve: opts.resolve };
+	const resolver: OfferKeyResolver = { resolve: opts.resolve };
 	return new Verifier(
 		mode,
 		resolver,

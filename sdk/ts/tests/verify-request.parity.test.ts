@@ -40,7 +40,7 @@ import { describe, it, expect } from "vitest";
 import {
   verifyRequestServer,
   type RejectReason,
-  type KeyResolverTs,
+  type RequestKeyResolver,
   type ReplayStore,
 } from "../core/verify-request.ts";
 import { signRequest } from "../core/sign-request.ts";
@@ -132,7 +132,7 @@ async function importSigningKey(seedHex: string): Promise<CryptoKey> {
 // the test asserts the recorded calls to prove no key was read out-of-band.
 function recordingResolver(
   keys: Record<string, Uint8Array<ArrayBuffer>>,
-): KeyResolverTs & { calls: (string | null)[] } {
+): RequestKeyResolver & { calls: (string | null)[] } {
   const calls: (string | null)[] = [];
   return {
     calls,
