@@ -269,6 +269,7 @@ Content-Type: application/json
 
 ### Request (`TransactionRequest`)
 
+{/* ramp-validate: TransactionRequest */}
 ```json
 {
   "ver": "1.0",
@@ -347,6 +348,7 @@ The `retrieval_endpoint` is a CDN signed URL bound to `agent_identity_hash`. A b
 
 For batch transactions, use the `items` array:
 
+{/* ramp-validate: TransactionRequest */}
 ```json
 {
   "ver": "1.0",
@@ -363,6 +365,7 @@ For batch transactions, use the `items` array:
       "offer": {
         "offer_id": "offer-tc-4921",
         "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
+        "expires_at": "2026-03-14T02:30:00Z",
         "signature": "a1b2c3...",
         "signature_algorithm": "EdDSA"
       }
@@ -371,6 +374,7 @@ For batch transactions, use the `items` array:
       "offer": {
         "offer_id": "offer-tc-4922",
         "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001200", "unit": "accesses" },
+        "expires_at": "2026-03-14T02:30:00Z",
         "signature": "d4e5f6...",
         "signature_algorithm": "EdDSA"
       }
@@ -436,6 +440,7 @@ Content-Type: application/json
 
 ### Request (`UsageReport`)
 
+{/* ramp-validate: UsageReport */}
 ```json
 {
   "ver": "1.0",
@@ -558,6 +563,7 @@ Content-Type: application/json
 
 ### Request (`DisputeRequest`)
 
+{/* ramp-validate: DisputeRequest */}
 ```json
 {
   "ver": "1.0",

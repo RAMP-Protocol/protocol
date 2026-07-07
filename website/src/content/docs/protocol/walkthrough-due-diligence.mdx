@@ -527,6 +527,7 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTran
         },
         "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
         "data_as_of": "2026-03-20T06:00:00Z",
+        "expires_at": "2026-03-20T14:00:00Z",
         "identity": {
           "canonical_url": "https://creditdata.com/reports/duns/123456789",
           "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC"
@@ -567,6 +568,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
           "unit": "pages"
         },
         "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "expires_at": "2026-03-20T14:00:00Z",
         "identity": {
           "canonical_url": "https://pacer.uscourts.gov/case/2:24-cv-01234",
           "content_hash": "sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
@@ -588,6 +590,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
           "estimated_quantity": 32,
           "unit": "pages"
         },
+        "expires_at": "2026-03-20T14:00:00Z",
         "identity": {
           "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
@@ -606,6 +609,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
           "estimated_quantity": 28,
           "unit": "pages"
         },
+        "expires_at": "2026-03-20T14:00:00Z",
         "identity": {
           "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
@@ -621,10 +625,11 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 ### Batch TransactionResponse from Legal Exchange
 
+{/* ramp-validate: TransactionResponse */}
 ```json
 {
   "ver": "1.0",
-  "idempotency_key": "tx-dd-legal-001",
+  "agent_identity_hash": "3a2b1c0d...",
   "items": [
     {
       "offer_id": "offer-legal-001",
@@ -654,8 +659,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
       "expires_at": "2026-03-20T14:15:00Z"
     }
   ],
-  "total_cost": { "amount": "10.50", "currency": "USD" },
-  "agent_identity_hash": "3a2b1c0d..."
+  "total_cost": { "amount": "10.50", "currency": "USD" }
 }
 ```
 
