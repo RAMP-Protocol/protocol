@@ -135,7 +135,13 @@ function parseParams(
  * default-port stripping, or path-escaping). Reuses the SAME builder the sign
  * face uses (signurl.ts::canonicalUrl) so signer and verifier agree by
  * construction — see the verbatim-canonicalization contract there.
+ *
+ * rawUrl is coerced to a string defensively: some edge runtimes (Fastly Compute)
+ * hand the request URL as a URL-like object rather than a primitive string, and
+ * canonicalUrl needs string operations. For a primitive string this is a no-op,
+ * so the verbatim bytes are preserved for the server-to-server callers that own
+ * the raw URL string.
  */
 export function canonicalMessage(rawUrl: string): Uint8Array<ArrayBuffer> {
-  return utf8Bytes(`GET\n${canonicalUrl(rawUrl)}`);
+  return utf8Bytes(`GET\n${canonicalUrl(String(rawUrl))}`);
 }
