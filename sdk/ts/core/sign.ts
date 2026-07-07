@@ -11,6 +11,7 @@
 // nothing above the web standard.
 
 import { encodeBase64Url } from "../src/base64url.ts";
+import { opaqueUrl } from "../src/opaque-url.ts";
 import { AGENT_KEY_HEADER, signatureBase } from "../src/pop.ts";
 import { thumbprint } from "../src/thumbprint.ts";
 
@@ -59,7 +60,11 @@ export async function signInbound(
 	// components then keyid/alg/created/expires, RFC 9421 order.
 	const rawParams = `("@method" "@target-uri");keyid="${agentId}";alg="ed25519";created=${created};expires=${expires}`;
 
-	const base = signatureBase("GET", url, rawParams);
+	// Coerce a URL-like input (a Fastly Compute request URL object) to its opaque
+	// string form ONCE at the boundary, so the signed @target-uri and the emitted
+	// Request carry the same verbatim bytes. No-op for string callers.
+	const target = opaqueUrl(url);
+	const base = signatureBase("GET", target, rawParams);
 	const sig = await crypto.subtle.sign(
 		"Ed25519",
 		kp.privateKey,
@@ -72,7 +77,7 @@ export async function signInbound(
 	headers.set("signature-input", `sig1=${rawParams}`);
 	headers.set("signature", `sig1=:${sigStd}:`);
 
-	return new Request(url, { method: "GET", headers });
+	return new Request(target, { method: "GET", headers });
 }
 
 // stdBase64 encodes bytes as standard (padded) base64 — the RFC 9421 Signature

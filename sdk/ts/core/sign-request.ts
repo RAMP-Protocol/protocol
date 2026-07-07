@@ -14,6 +14,7 @@
 // injection cannot piggy-back the signature. Values pass through verbatim: the
 // caller supplies an absolute @target-uri; the signer never normalizes it.
 
+import { opaqueUrl } from "../src/opaque-url.ts";
 import { stdBase64 } from "./sign.ts";
 
 // The RAMP request covered set: exactly these five, in this order. No conditional
@@ -96,7 +97,7 @@ export function buildRequestSignatureBase(
 ): string {
 	return [
 		`"@method": ${fields.method.toUpperCase()}`,
-		`"@target-uri": ${fields.url}`,
+		`"@target-uri": ${opaqueUrl(fields.url)}`,
 		`"content-digest": ${fields.digestHeader}`,
 		`"authorization": ${fields.authorization}`,
 		`"signature-agent": ${fields.signatureAgent}`,

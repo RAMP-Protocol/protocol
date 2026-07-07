@@ -10,13 +10,15 @@ import { describe, expect, it } from "vitest";
 // value. A URL-like object (Fastly Compute) then either throws (canonicalUrl
 // string ops) or silently WHATWG-normalizes (@target-uri template literal).
 //
-// SCOPE — the two public VERIFY faces only (src/verify.ts, src/pop.ts). The
-// sibling sign faces + core/verify-request.ts are the SAME disease but are
-// tracked/fixed under their own ticket (g5ok5); guarding them here would
-// false-fire before that fix lands.
+// SCOPE — every URL-consuming SDK face: the verify faces (src/verify.ts,
+// src/pop.ts), the sign faces (src/signurl.ts, core/sign.ts), and the shared
+// 5-component request signature-base sink (core/sign-request.ts, used by BOTH
+// signRequest and verifyRequestServer). signurl.ts:53 canonicalUrl(unsigned) is
+// intentionally NOT guarded: `unsigned` is canonicalUrl's own output, always a
+// primitive string.
 //
 // The behavioral guard is rawurl-shape.regression.test.ts (drives a Fastly-like
-// URL-like object through both faces). This file adds the source-level guard the
+// URL-like object through every face). This file adds the source-level guard the
 // sweep atom asks for: it pins that the boundary coercion stays in place.
 //
 // The detector is REGEX-based and whitespace-tolerant on purpose: a naive
@@ -26,13 +28,14 @@ import { describe, expect, it } from "vitest";
 // variant and asserts the guard still catches it.
 
 const srcPath = (name: string): string =>
-  fileURLToPath(new URL(`../src/${name}`, import.meta.url));
+  fileURLToPath(new URL(`../${name}`, import.meta.url));
 
-function readSource(name: string): string {
-  return readFileSync(srcPath(name), "utf8");
+function readSource(relPath: string): string {
+  return readFileSync(srcPath(relPath), "utf8");
 }
 
 interface SiteGuard {
+  /** Path relative to sdk/ts (e.g. "src/verify.ts", "core/sign.ts"). */
   file: string;
   /** RAW-input-reaches-sink forms that MUST be absent (the disease). */
   forbidden: RegExp[];
@@ -56,18 +59,39 @@ function evalSite(source: string, guard: SiteGuard): string[] {
 
 const GUARDS: SiteGuard[] = [
   {
-    file: "verify.ts",
+    file: "src/verify.ts",
     // The raw `rawUrl` parameter must NOT flow directly into the URL parser or
     // the canonical message; both must consume the opaqueUrl-coerced `raw`.
     forbidden: [/\bnew URL\(\s*rawUrl\s*\)/, /\bcanonicalMessage\(\s*rawUrl\s*\)/],
     required: [/\bopaqueUrl\(\s*rawUrl\s*\)/],
   },
   {
-    file: "pop.ts",
+    file: "src/pop.ts",
     // The raw `input.url` must NOT flow directly into the signature base; the
     // boundary must pass the opaqueUrl-coerced local instead.
     forbidden: [/\bsignatureBase\(\s*[^,]+,\s*input\.url\b/],
     required: [/\bopaqueUrl\(\s*input\.url\s*\)/],
+  },
+  {
+    file: "src/signurl.ts",
+    // The raw `source` must NOT flow into canonicalUrl (its string ops throw on a
+    // URL-like object); the boundary must pass the opaqueUrl-coerced `src`.
+    forbidden: [/\bcanonicalUrl\(\s*source\b/],
+    required: [/\bopaqueUrl\(\s*source\s*\)/],
+  },
+  {
+    file: "core/sign.ts",
+    // The raw `url` must NOT flow into the signature base or the emitted Request;
+    // both must consume the opaqueUrl-coerced `target`.
+    forbidden: [/\bsignatureBase\(\s*[^,]+,\s*url\b/, /\bnew Request\(\s*url\b/],
+    required: [/\bopaqueUrl\(\s*url\s*\)/],
+  },
+  {
+    file: "core/sign-request.ts",
+    // The shared @target-uri sink (used by BOTH signRequest and verifyRequestServer)
+    // must coerce fields.url, never interpolate it raw.
+    forbidden: [/"@target-uri": \$\{\s*fields\.url\s*\}/],
+    required: [/\bopaqueUrl\(\s*fields\.url\s*\)/],
   },
 ];
 
@@ -79,7 +103,7 @@ describe("raw-URL runtime-shape structural guard", () => {
   }
 
   // --- meta-tests: exercise the detector against synthetic source ----------
-  const popGuard = GUARDS.find((g) => g.file === "pop.ts")!;
+  const popGuard = GUARDS.find((g) => g.file === "src/pop.ts")!;
 
   it("[meta positive] catches the raw input.url disease", () => {
     const bad = "const base = signatureBase(input.method, input.url, parsed.rawParams);";

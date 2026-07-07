@@ -30,6 +30,9 @@ import { describe, it, expect } from "vitest";
 import { verifyEd25519SignedUrl } from "../src/verify.ts";
 import { verifyAgentBinding, signatureBase } from "../src/pop.ts";
 import { signEd25519SignedUrl } from "../src/signurl.ts";
+import { signRequest } from "../core/sign-request.ts";
+import { verifyRequestServer } from "../core/verify-request.ts";
+import { signInbound } from "../core/sign.ts";
 import { thumbprint } from "../src/thumbprint.ts";
 import { encodeBase64Url, utf8Bytes } from "../src/base64url.ts";
 
@@ -147,5 +150,106 @@ describe("GET-PoP verify accepts a Fastly-like URL-like object (verbatim @target
     // boundary coercion, the object shape's template-literal @target-uri diverges.
     expect(captured).toHaveLength(2);
     expect(Array.from(captured[1]!)).toEqual(Array.from(captured[0]!));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sibling faces: the SAME raw-URL runtime-shape divergence on the SIGN faces
+// (signurl source, signInbound) and the request VERIFY face (verifyRequestServer),
+// which share the buildRequestSignatureBase @target-uri sink. The signurl SIGN
+// face carries the fail-on-revert teeth: canonicalUrl's string ops throw on a
+// URL-like object, so its object case is RED until the boundary coerces. The
+// request faces are byte-identity guards (String()===template for the object).
+// ---------------------------------------------------------------------------
+
+describe("signed-URL SIGN accepts a Fastly-like URL-like object (verbatim bytes preserved)", () => {
+  it("URL-object source produces the SAME signed URL as the string source", async () => {
+    const { priv } = await genKeyPair();
+    const params = { kid: "k1", agentId: "", expUnix: NOW_SEC + 300 };
+    const fromString = await signEd25519SignedUrl(TRICKY_PREFIX, params, priv);
+    // On a revert of the signurl boundary coercion, canonicalUrl's indexOf/slice
+    // throw on this non-string source.
+    const fromObject = await signEd25519SignedUrl(
+      new FastlyLikeUrl(TRICKY_PREFIX) as unknown as string,
+      params,
+      priv,
+    );
+    expect(fromObject).toBe(fromString);
+  });
+});
+
+describe("RFC 9421 5-component request verify accepts a Fastly-like URL-like object", () => {
+  it("URL-object url reaches the SAME verdict as the string url (round-trip through signRequest)", async () => {
+    const { priv, pubRaw } = await genKeyPair();
+    const keyid = "req-key-1";
+    const body = new Uint8Array(0) as Uint8Array<ArrayBuffer>;
+    const url = `${TRICKY_PREFIX}/resource`;
+
+    const signed = await signRequest(priv, {
+      method: "GET",
+      url,
+      body,
+      authorization: "",
+      signatureAgent: "",
+      keyid,
+      created: NOW_SEC,
+      expires: NOW_SEC + 300,
+    });
+    const headers = {
+      "content-digest": signed.contentDigest,
+      "signature-input": signed.signatureInput,
+      signature: signed.signature,
+      authorization: "",
+      "signature-agent": "",
+    };
+    const resolve = {
+      resolve: (kid: string | null) => (kid === keyid ? pubRaw : undefined),
+    };
+    const base = {
+      method: "GET",
+      body,
+      headers,
+      resolve,
+      now: () => NOW_SEC,
+    };
+
+    const stringVerdict = await verifyRequestServer({ ...base, url });
+    expect(stringVerdict.valid).toBe(true);
+
+    const objectVerdict = await verifyRequestServer({
+      ...base,
+      url: new FastlyLikeUrl(url) as unknown as string,
+    });
+    expect(objectVerdict).toEqual(stringVerdict);
+    expect(objectVerdict.valid).toBe(true);
+  });
+});
+
+describe("inbound GET-PoP SIGN accepts a Fastly-like URL-like object", () => {
+  it("URL-object url produces a request that verifies identically to the string url", async () => {
+    const kp = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
+    const pubRaw = new Uint8Array(
+      await crypto.subtle.exportKey("raw", kp.publicKey),
+    ) as Uint8Array<ArrayBuffer>;
+    const agentId = await thumbprint(pubRaw);
+    const url = `${TRICKY_PREFIX}?agent_id=${agentId}`;
+
+    const opts = { now: nowMs, ttlSec: 300 };
+    const fromString = await signInbound(kp, url, opts);
+    const fromObject = await signInbound(kp, new FastlyLikeUrl(url) as unknown as string, opts);
+
+    // Both signed requests must verify against the SAME verbatim @target-uri.
+    const verifyInput = (headers: Headers) => ({
+      method: "GET",
+      url,
+      headers,
+      agentId,
+      now: nowMs,
+    });
+    expect((await verifyAgentBinding(verifyInput(fromString.headers))).ok).toBe(true);
+    expect((await verifyAgentBinding(verifyInput(fromObject.headers))).ok).toBe(true);
   });
 });

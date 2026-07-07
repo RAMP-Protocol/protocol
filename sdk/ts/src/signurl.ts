@@ -15,6 +15,7 @@
 // %XX uppercase) so the three SDKs produce identical bytes — see canonicalUrl.
 
 import { encodeBase64Url, utf8Bytes } from "./base64url.ts";
+import { opaqueUrl } from "./opaque-url.ts";
 
 const SIG_PARAM = "sig";
 const EXP_PARAM = "exp";
@@ -41,7 +42,11 @@ export async function signEd25519SignedUrl(
 	params: SignUrlParams,
 	privateKey: CryptoKey,
 ): Promise<string> {
-	const unsigned = canonicalUrl(source, (pairs) => {
+	// Coerce a URL-like source (a Fastly Compute request URL object) to its opaque
+	// string form ONCE at the boundary; canonicalUrl needs string ops. No-op for
+	// string callers (verbatim bytes preserved).
+	const src = opaqueUrl(source);
+	const unsigned = canonicalUrl(src, (pairs) => {
 		setParam(pairs, EXP_PARAM, String(params.expUnix));
 		if (params.kid !== "") setParam(pairs, KID_PARAM, params.kid);
 		if (params.agentId !== "") setParam(pairs, AGENT_ID_PARAM, params.agentId);
