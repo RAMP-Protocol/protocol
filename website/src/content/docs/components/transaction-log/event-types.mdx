@@ -79,7 +79,7 @@ Logged when an `ExecuteTransaction` RPC is received, before billing authorizatio
 | `event_type` | `EventType` | yes | `EVENT_TRANSACTION_REQUESTED` |
 | `timestamp` | `time.Time` | yes | Server receipt time |
 | `idempotency_key` | `string` | yes | `TransactionRequest.idempotency_key` (the request's idempotency key) |
-| `offer_id` | `string` | yes | `TransactionRequest.offer_id` |
+| `offer_id` | `string` | yes | `Offer.offer_id` of the committed `TransactionItem` |
 | `buyer_lid` | `string` | yes | `aisystem.aisysuse.lid` |
 | `buyer_name` | `string` | yes | `aisystem.name` |
 | `provider_domain` | `string` | yes | From cached offer lookup |
