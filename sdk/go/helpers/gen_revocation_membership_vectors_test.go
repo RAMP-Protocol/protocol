@@ -81,6 +81,7 @@ func buildRevocationMembershipVector(t *testing.T) revMembershipVector {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		Now:    func() time.Time { return revMembershipAnchor },
 	})
 	if _, err := r.Resolve(ctx, tpPresent); err != nil {

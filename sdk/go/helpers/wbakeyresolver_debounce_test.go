@@ -96,6 +96,7 @@ func TestWBAKeyResolver_UnknownThumbprintBurstDebounced(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.URL)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme:       "http",
+		HTTP:         origin.Client(),
 		TTL:          time.Hour,
 		SyncDebounce: 5 * time.Second,
 		Now:          func() time.Time { return now },
@@ -152,6 +153,7 @@ func TestWBAKeyResolver_ConcurrentRefreshSingleflight(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.URL)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return wbaAnchor },
 	})

@@ -9,10 +9,12 @@ import (
 	"io"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -69,7 +71,43 @@ const (
 	// far-future as_of that would freeze every subsequent (legitimately earlier)
 	// snapshot under the monotonic guard — the first-poll integrity bug.
 	wbaRevocationAsOfSkew = 300 * time.Second
+
+	// defaultWBAHTTPTimeout bounds the built-in guarded client's directory /
+	// revocation GETs so a slow origin cannot pin the poller or a Resolve call.
+	defaultWBAHTTPTimeout = 10 * time.Second
 )
+
+// newGuardedWBAClient is the HTTP client used when the caller injects none. It
+// refuses to dial any non-public address (loopback, RFC 1918 private, link-local,
+// unspecified, multicast). The directory host is derived from a caller-supplied
+// Signature-Agent and the fetch runs BEFORE the ed25519 signature check, so an
+// unguarded default is a pre-auth SSRF lever against internal networks. The IP
+// check runs in Dialer.Control against the ALREADY-RESOLVED address, so it also
+// closes the DNS-rebinding window (a public A record that resolves to 169.254.x
+// is rejected at connect time, not just at lookup time). A deployment that must
+// reach a private directory (tests, on-prem) injects its own HTTP client.
+func newGuardedWBAClient() *http.Client {
+	dialer := &net.Dialer{
+		Control: func(_, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				return fmt.Errorf("helpers: refusing to dial unresolved address %q (SSRF guard)", address)
+			}
+			if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
+				return fmt.Errorf("helpers: refusing to dial non-public address %s (SSRF guard)", ip)
+			}
+			return nil
+		},
+	}
+	return &http.Client{
+		Timeout:   defaultWBAHTTPTimeout,
+		Transport: &http.Transport{DialContext: dialer.DialContext},
+	}
+}
 
 // WBAKeyResolverOptions tune a WBAKeyResolver. Zero values are safe defaults.
 type WBAKeyResolverOptions struct {
@@ -163,7 +201,9 @@ type wbaRevSet struct {
 func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 	client := opts.HTTP
 	if client == nil {
-		client = http.DefaultClient
+		// Safe by default: block SSRF to internal networks. A caller that needs a
+		// private directory (tests, on-prem) injects its own client via opts.HTTP.
+		client = newGuardedWBAClient()
 	}
 	ttl := opts.TTL
 	if ttl <= 0 {
