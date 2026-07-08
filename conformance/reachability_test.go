@@ -20,8 +20,6 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
-
-	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
 // outOfBandRoots are the delivery roots that are NOT an RPC input/output: served
@@ -83,14 +81,13 @@ func reachFrom(seeds []protoreflect.MessageDescriptor) (reachMsg map[protoreflec
 	return
 }
 
-// allDefinedTypes walks the file and returns every message (excluding synthetic
-// map-entry messages) and every enum it defines, indexed by full name, plus a
-// name→descriptor index of TOP-LEVEL messages for root lookup.
+// allDefinedTypes walks the contract files and returns every message (excluding
+// synthetic map-entry messages) and every enum they define, indexed by full
+// name, plus a name→descriptor index of TOP-LEVEL messages for root lookup.
 func allDefinedTypes() (msgs map[protoreflect.FullName]protoreflect.MessageDescriptor, enums map[protoreflect.FullName]protoreflect.EnumDescriptor, topByName map[string]protoreflect.MessageDescriptor) {
 	msgs = map[protoreflect.FullName]protoreflect.MessageDescriptor{}
 	enums = map[protoreflect.FullName]protoreflect.EnumDescriptor{}
 	topByName = map[string]protoreflect.MessageDescriptor{}
-	f := rampv1.File_ramp_v1_ramp_proto
 	var walk func(protoreflect.MessageDescriptors)
 	walk = func(ms protoreflect.MessageDescriptors) {
 		for i := 0; i < ms.Len(); i++ {
@@ -105,27 +102,32 @@ func allDefinedTypes() (msgs map[protoreflect.FullName]protoreflect.MessageDescr
 			walk(md.Messages())
 		}
 	}
-	walk(f.Messages())
-	for i := 0; i < f.Messages().Len(); i++ {
-		md := f.Messages().Get(i)
-		topByName[string(md.Name())] = md
-	}
-	fe := f.Enums()
-	for i := 0; i < fe.Len(); i++ {
-		enums[fe.Get(i).FullName()] = fe.Get(i)
+	for _, f := range contractFiles {
+		walk(f.Messages())
+		for i := 0; i < f.Messages().Len(); i++ {
+			md := f.Messages().Get(i)
+			topByName[string(md.Name())] = md
+		}
+		fe := f.Enums()
+		for i := 0; i < fe.Len(); i++ {
+			enums[fe.Get(i).FullName()] = fe.Get(i)
+		}
 	}
 	return
 }
 
-// rpcRootMessages collects every service method's input and output message.
+// rpcRootMessages collects every service method's input and output message
+// across the contract files.
 func rpcRootMessages() []protoreflect.MessageDescriptor {
 	var roots []protoreflect.MessageDescriptor
-	svcs := rampv1.File_ramp_v1_ramp_proto.Services()
-	for i := 0; i < svcs.Len(); i++ {
-		ms := svcs.Get(i).Methods()
-		for j := 0; j < ms.Len(); j++ {
-			m := ms.Get(j)
-			roots = append(roots, m.Input(), m.Output())
+	for _, f := range contractFiles {
+		svcs := f.Services()
+		for i := 0; i < svcs.Len(); i++ {
+			ms := svcs.Get(i).Methods()
+			for j := 0; j < ms.Len(); j++ {
+				m := ms.Get(j)
+				roots = append(roots, m.Input(), m.Output())
+			}
 		}
 	}
 	return roots

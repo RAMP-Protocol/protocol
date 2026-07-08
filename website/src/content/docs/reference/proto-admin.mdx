@@ -1,0 +1,51 @@
+---
+title: "Proto: Admin v1"
+description: "ramp.admin.v1 protobuf reference -- the operator-plane AdminService: tenant fee-rate and reporting-policy overrides"
+---
+
+
+Source: [`proto/ramp/admin/v1/admin.proto`](https://github.com/RAMP-Protocol/protocol/blob/main/proto/ramp/admin/v1/admin.proto)
+
+:::note[Operator plane, not agent wire]
+`ramp.admin.v1` is the Exchange **operator/config plane** — deliberately a separate package and service from `ExchangeService`, so the agent-facing contract is untouched. Deployments MUST NOT expose `AdminService` on the public agent-facing listener: reachability is restricted at the network layer (an internal listener plus a source allowlist), and there is no per-operator identity inside the service in v1.
+
+Both RPCs are **full-replace overwrites** and therefore idempotent — they carry no `idempotency_key` (the `ramp.v1` idempotency convention dedupes per verified RFC 9421 signer, and the admin plane has no request signing in v1) and no `ext`/`ext_critical` extension maps. Requests and responses carry `ver` (field 1, RAMP protocol version); responses echo the state **as persisted**, giving operator tooling a read-back confirmation.
+
+Every constraint is a **field-level** protovalidate rule, so it flows into the generated Pydantic/Zod types; this package defines no cross-field (message-level CEL) rules.
+:::
+
+## Services
+
+### AdminService
+
+Exchange operator overrides: the tenant fee rate and the tenant reporting policy. `SetOfferPrice` and `SetDeliveryWitnessMode` are planned extensions of this service and are tracked separately.
+
+::proto-service{name=AdminService}
+
+## Messages -- Tenant Fee Rate
+
+### SetTenantFeeRateRequest
+
+Sets the tenant's fee rate in basis points (`0 <= fee_rate_bps < 10000`, mirroring the consumer-side storage constraint; `0` is a legitimate explicit value, not an unset sentinel) with an optional operator note. Omitting `notes` clears any existing note.
+
+::proto-message{name=SetTenantFeeRateRequest}
+
+### SetTenantFeeRateResponse
+
+The fee rate and note as persisted.
+
+::proto-message{name=SetTenantFeeRateResponse}
+
+## Messages -- Reporting Policy
+
+### SetReportingPolicyRequest
+
+Replaces the tenant's reporting policy: the report fields the usage-report validator requires, the accepted quantity tolerance (a fraction, `0`–`1`), and the reporting window in seconds (capped at one year). Omitted optional fields clear their key so the consumer's defaults apply. Which `required_fields` names are meaningful is enforced by the consumer service-side; the wire constrains only the token shape. The policy is snapshotted onto each obligation when a transaction executes, so a change affects **new** obligations only.
+
+::proto-message{name=SetReportingPolicyRequest}
+
+### SetReportingPolicyResponse
+
+The reporting policy as persisted.
+
+::proto-message{name=SetReportingPolicyResponse}

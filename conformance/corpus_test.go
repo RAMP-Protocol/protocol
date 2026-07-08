@@ -16,8 +16,6 @@ import (
 
 	protovalidate "buf.build/go/protovalidate"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 type corpusCase struct {
@@ -55,9 +53,9 @@ func TestCorpusMatchesProtovalidate(t *testing.T) {
 	}
 	for _, c := range loadCorpus(t) {
 		t.Run(c.ID, func(t *testing.T) {
-			mt, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName("ramp.v1." + c.Message))
+			mt, err := findContractMessage(c.Message)
 			if err != nil {
-				t.Fatalf("unknown message ramp.v1.%s: %v", c.Message, err)
+				t.Fatalf("unknown message %s (tried %v): %v", c.Message, contractPackages, err)
 			}
 			m := mt.New().Interface()
 			if err := protojson.Unmarshal(c.JSON, m); err != nil {

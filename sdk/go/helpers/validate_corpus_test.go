@@ -9,7 +9,16 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+
+	// Registers the ramp.admin.v1 types so corpus cases for the admin
+	// package resolve in protoregistry.GlobalTypes.
+	_ "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
 )
+
+// contractPackages are the proto packages a corpus message may come from, in
+// resolution order. Bare names are unique across them — corpusgen guards that
+// at generation time.
+var contractPackages = []string{"ramp.v1", "ramp.admin.v1"}
 
 type corpusCase struct {
 	ID      string          `json:"id"`
@@ -37,9 +46,15 @@ func loadCorpusFile(t *testing.T, path string) []corpusCase {
 
 func unmarshalCase(t *testing.T, c corpusCase) protoreflect.ProtoMessage {
 	t.Helper()
-	mt, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName("ramp.v1." + c.Message))
+	var mt protoreflect.MessageType
+	var err error
+	for _, pkg := range contractPackages {
+		if mt, err = protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(pkg + "." + c.Message)); err == nil {
+			break
+		}
+	}
 	if err != nil {
-		t.Fatalf("unknown message ramp.v1.%s: %v", c.Message, err)
+		t.Fatalf("unknown message %s (tried %v): %v", c.Message, contractPackages, err)
 	}
 	m := mt.New().Interface()
 	if err := protojson.Unmarshal(c.JSON, m); err != nil {

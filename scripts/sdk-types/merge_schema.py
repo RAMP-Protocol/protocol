@@ -46,7 +46,7 @@ def enum_names_from_descriptor(desc_path):
             walk_msgs(m.nested_type)
 
     for f in fds.file:
-        if f.package != "ramp.v1":
+        if f.package not in ("ramp.v1", "ramp.admin.v1"):
             continue
         take(f.enum_type)
         walk_msgs(f.message_type)
@@ -171,7 +171,7 @@ def fix_refs(o):
     if isinstance(o, dict):
         r = o.get("$ref")
         if isinstance(r, str):
-            m = re.match(r"ramp\.v1\.([A-Za-z0-9_]+)\.schema\.json$", r)
+            m = re.match(r"ramp\.(?:admin\.)?v1\.([A-Za-z0-9_]+)\.schema\.json$", r)
             if m:
                 o = dict(o); o["$ref"] = "#/$defs/" + m.group(1)
                 return {k: fix_refs(v) for k, v in o.items()}
@@ -243,11 +243,12 @@ def main(src_dir, desc_path, out_file, required_path=None):
     # (protoschema's default); the `.jsonschema.json` variant is the camelCase json_name
     # form. We consume snake_case: it is the one wire naming shared by the proto, the
     # docs, the corpus (protojson UseProtoNames=true), and both generated clients.
-    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.schema.json"))):
+    for f in sorted(glob.glob(os.path.join(src_dir, "ramp.v1.*.schema.json"))
+                    + glob.glob(os.path.join(src_dir, "ramp.admin.v1.*.schema.json"))):
         base = os.path.basename(f)
         if "jsonschema" in base or ".strict." in base or ".bundle." in base:
             continue
-        name = base.split(".schema")[0].replace("ramp.v1.", "")
+        name = re.sub(r"^ramp\.(?:admin\.)?v1\.", "", base.split(".schema")[0])
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d

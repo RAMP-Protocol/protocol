@@ -9,8 +9,6 @@ import (
 
 	"buf.build/go/protovalidate"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 // This file closes the OMISSION class of doc drift: the denylist and the
@@ -90,9 +88,9 @@ func TestDocMarkedExamplesValidate(t *testing.T) {
 				continue
 			}
 			marked++
-			mt, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName("ramp.v1." + name))
+			mt, err := findContractMessage(name)
 			if err != nil {
-				flag(path, "ramp-validate names unknown message ramp.v1."+name)
+				flag(path, "ramp-validate names unknown message "+name)
 				continue
 			}
 			msg := mt.New().Interface()

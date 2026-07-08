@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+**Operator plane: new `ramp.admin.v1` package with `AdminService` (additive).**
+Two full-replace, idempotent setters for Exchange operators —
+`SetTenantFeeRate(SetTenantFeeRateRequest) → SetTenantFeeRateResponse` (fee rate
+in basis points, `0 <= fee_rate_bps < 10000`, plus an optional operator note) and
+`SetReportingPolicy(SetReportingPolicyRequest) → SetReportingPolicyResponse`
+(required report fields, quantity tolerance `0`–`1`, reporting window ≤ 1 year).
+Typed requests/responses with field-level protovalidate constraints that flow
+into the generated Pydantic/Zod types export and the validation corpus;
+responses echo the state as persisted. Deliberately a separate service/package
+from `ExchangeService` — the operator plane is not part of the agent contract,
+carries no `idempotency_key` (full-replace setters on an unsigned internal
+plane have nothing to dedupe) and no `ext`/`ext_critical` maps, and is expected
+to be network-isolated by deployments. `SetOfferPrice` and
+`SetDeliveryWitnessMode` are deferred to follow-up work. The conformance
+tooling (corpus generator, required-fields export, reachability and
+doc-coverage guards, Zod/Pydantic types pipeline) now walks both contract
+packages, and the corpus generator gained int32/double boundary mutants for the
+new numeric rules.
+
 **Protocol standardization — unified error/response contract + a Connect RPC for
 every role (breaking).** Three threads land together:
 

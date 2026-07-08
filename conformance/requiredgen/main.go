@@ -23,6 +23,7 @@ import (
 	protovalidate "buf.build/go/protovalidate"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	rampadminv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
@@ -98,11 +99,24 @@ func zeroRejected(fd protoreflect.FieldDescriptor) bool {
 			}
 		}
 	}
-	// Loud guard: only int64 numeric rules are evaluated above (Quota.limit today). A
-	// rule of another numeric kind would fall through as "zero is valid" — the field
-	// would not be marked required and the generated clients would accept an omission
-	// the Go server rejects. Fail instead of silently under-marking.
-	if fr.GetInt32() != nil || fr.GetUint64() != nil || fr.GetUint32() != nil ||
+	if i := fr.GetInt32(); i != nil {
+		switch x := i.GetGreaterThan().(type) {
+		case *validate.Int32Rules_Gte:
+			if x.Gte >= 1 {
+				return true
+			}
+		case *validate.Int32Rules_Gt:
+			if x.Gt >= 0 {
+				return true
+			}
+		}
+	}
+	// Loud guard: only int64 and int32 numeric rules are evaluated above (Quota.limit,
+	// the ramp.admin.v1 setters). A rule of another numeric kind would fall through as
+	// "zero is valid" — the field would not be marked required and the generated
+	// clients would accept an omission the Go server rejects. Fail instead of silently
+	// under-marking.
+	if fr.GetUint64() != nil || fr.GetUint32() != nil ||
 		fr.GetSint64() != nil || fr.GetSint32() != nil || fr.GetFixed64() != nil ||
 		fr.GetFixed32() != nil || fr.GetSfixed64() != nil || fr.GetSfixed32() != nil ||
 		fr.GetFloat() != nil || fr.GetDouble() != nil {
@@ -123,4 +137,5 @@ func eachMessage(fn func(protoreflect.MessageDescriptor)) {
 		}
 	}
 	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
+	walk(rampadminv1.File_ramp_admin_v1_admin_proto.Messages())
 }

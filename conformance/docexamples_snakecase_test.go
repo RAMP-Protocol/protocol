@@ -2,7 +2,6 @@ package conformance
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -19,7 +18,7 @@ func camelProtoFieldNames(t *testing.T) map[string]bool {
 	t.Helper()
 	out := map[string]bool{}
 	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		if !strings.HasPrefix(string(fd.Package()), "ramp.v1") {
+		if pkg := string(fd.Package()); pkg != "ramp.v1" && pkg != "ramp.admin.v1" {
 			return true
 		}
 		var visit func(msgs protoreflect.MessageDescriptors)
