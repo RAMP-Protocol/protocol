@@ -361,6 +361,51 @@ func TestWBAKeyResolver_RevocationURLHostNotAnchored(t *testing.T) {
 	}
 }
 
+// TestWBAKeyResolver_RequireRevocationUnevaluated (M-6): a directory that
+// declares a revocation_url whose snapshot never lands (here: cross-host, so the
+// poll is refused) leaves revocation UNEVALUATED. The default best-effort mode
+// still resolves the key; RequireRevocation makes Resolve fail closed with
+// ErrRevocationUnevaluated — distinct from ErrKeyRevoked ("evaluated, revoked").
+func TestWBAKeyResolver_RequireRevocationUnevaluated(t *testing.T) {
+	t.Parallel()
+	priv, jwk := newSigningKey("k1", wbaAnchor.Add(-time.Hour), wbaAnchor.Add(time.Hour))
+	tp := mustThumbprint(t, priv.Public().(ed25519.PublicKey))
+
+	evilOrigin := newWBAOrigin(nil) // a revocation host the resolver must not follow
+	defer evilOrigin.close()
+	evilOrigin.setRevocation(marshalRevocation(wbaAnchor, tp))
+
+	dirOrigin := newWBAOrigin(nil)
+	defer dirOrigin.close()
+	dirOrigin.setWBA(marshalWBAWithRevocation(jwk, evilOrigin.revocationURL()))
+	ctx := helpers.WithSignatureAgent(context.Background(), dirOrigin.url)
+
+	// Default (best-effort): resolves despite the unevaluated revocation channel.
+	best := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+		Scheme: "http",
+		HTTP:   dirOrigin.Client(),
+		Now:    func() time.Time { return wbaAnchor },
+	})
+	if _, err := best.Resolve(ctx, tp); err != nil {
+		t.Fatalf("best-effort default must resolve; got %v", err)
+	}
+
+	// RequireRevocation: fail closed — revocation_url declared, no snapshot.
+	strict := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+		Scheme:            "http",
+		HTTP:              dirOrigin.Client(),
+		RequireRevocation: true,
+		Now:               func() time.Time { return wbaAnchor },
+	})
+	_, err := strict.Resolve(ctx, tp)
+	if !errors.Is(err, helpers.ErrRevocationUnevaluated) {
+		t.Fatalf("RequireRevocation must fail closed with ErrRevocationUnevaluated; got %v", err)
+	}
+	if errors.Is(err, helpers.ErrKeyRevoked) {
+		t.Fatal("unevaluated must be distinct from revoked")
+	}
+}
+
 // ── Test 11 ────────────────────────────────────────────────────────────────
 
 // TestWBAKeyResolver_Run_PollerAppliesRevocation verifies that the background

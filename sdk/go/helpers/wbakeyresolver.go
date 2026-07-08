@@ -41,6 +41,14 @@ var (
 	// fail-closed composite must be able to halt on a directory outage rather
 	// than fall through as if the key were merely unknown.
 	ErrDirectoryUnavailable = errors.New("helpers: WBA directory unavailable")
+	// ErrRevocationUnevaluated signals that the key resolved, but its directory
+	// declares a revocation_url whose snapshot has never been fetched (unreachable
+	// or not host-anchored) — so revocation was NEVER EVALUATED, which is distinct
+	// from "evaluated and not revoked". Only surfaced when RequireRevocation is
+	// set; the default keeps the prior best-effort behavior. It lets a caller that
+	// treats revocation as mandatory fail closed instead of trusting an
+	// unevaluated key.
+	ErrRevocationUnevaluated = errors.New("helpers: key revocation unevaluated")
 )
 
 // WBADirectoryPath is the well-known path a WBA identity directory is served
@@ -111,11 +119,12 @@ func newGuardedWBAClient() *http.Client {
 
 // WBAKeyResolverOptions tune a WBAKeyResolver. Zero values are safe defaults.
 type WBAKeyResolverOptions struct {
-	// HTTP overrides the client used for directory and revocation GETs (nil →
-	// http.DefaultClient). SSRF CONTRACT: when the directory URL is derived from
-	// request input (the Signature-Agent header), the caller MUST inject a
-	// client whose dialer rejects private/link-local targets — the SDK exposes
-	// the injection point, the guard itself stays with the application.
+	// HTTP overrides the client used for directory and revocation GETs. When nil,
+	// the resolver installs a safe-by-default SSRF-guarded client (see
+	// newGuardedWBAClient): the directory host is derived from request input (the
+	// Signature-Agent header) and fetched before the ed25519 check, so the default
+	// refuses private/link-local/loopback targets. Inject a client only to REACH a
+	// private directory (tests, on-prem) or to apply a custom dialer/timeout.
 	HTTP *http.Client
 	// TTL bounds how long a fetched directory is reused (≤0 → 1 hour).
 	TTL time.Duration
@@ -137,6 +146,13 @@ type WBAKeyResolverOptions struct {
 	// Scheme is applied when the Signature-Agent value carries no scheme
 	// (empty → "https"). Tests inject "http" to drive an httptest server.
 	Scheme string
+	// RequireRevocation makes Resolve fail closed with ErrRevocationUnevaluated
+	// when a key's directory declares a revocation_url but no snapshot has been
+	// fetched (unreachable or not host-anchored) — i.e. revocation could not be
+	// evaluated. Default false keeps the best-effort behavior (a declared-but-
+	// unreachable revocation channel does not block resolution). Set it where a
+	// revoked-key must never resolve even if the revocation channel is down.
+	RequireRevocation bool
 	// Logger receives best-effort revocation-refresh diagnostics (nil →
 	// slog.Default()).
 	Logger *slog.Logger
@@ -160,16 +176,17 @@ type WBAKeyResolverOptions struct {
 // fresh by the Run poller. See the sentinel var block for the authority
 // contract: revoked/expired/unavailable verdicts surface raw.
 type WBAKeyResolver struct {
-	http         *http.Client
-	ttl          time.Duration
-	pollInterval time.Duration
-	syncDebounce time.Duration
-	now          func() time.Time
-	after        func(time.Duration) <-chan time.Time
-	scheme       string
-	logger       *slog.Logger
-	onPollArmed  func()
-	onPollCycle  func()
+	http              *http.Client
+	ttl               time.Duration
+	pollInterval      time.Duration
+	syncDebounce      time.Duration
+	now               func() time.Time
+	after             func(time.Duration) <-chan time.Time
+	scheme            string
+	requireRevocation bool
+	logger            *slog.Logger
+	onPollArmed       func()
+	onPollCycle       func()
 
 	dirMu    sync.Mutex
 	dirCache map[string]wbaDirEntry
@@ -234,20 +251,21 @@ func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 		logger = slog.Default()
 	}
 	return &WBAKeyResolver{
-		http:         client,
-		ttl:          ttl,
-		pollInterval: interval,
-		syncDebounce: debounce,
-		now:          now,
-		after:        after,
-		scheme:       scheme,
-		logger:       logger,
-		onPollArmed:  opts.OnPollArmed,
-		onPollCycle:  opts.OnPollCycle,
-		dirCache:     map[string]wbaDirEntry{},
-		dirBase:      map[string]string{},
-		lastSync:     map[string]time.Time{},
-		revoked:      map[string]wbaRevSet{},
+		http:              client,
+		ttl:               ttl,
+		pollInterval:      interval,
+		syncDebounce:      debounce,
+		now:               now,
+		after:             after,
+		scheme:            scheme,
+		requireRevocation: opts.RequireRevocation,
+		logger:            logger,
+		onPollArmed:       opts.OnPollArmed,
+		onPollCycle:       opts.OnPollCycle,
+		dirCache:          map[string]wbaDirEntry{},
+		dirBase:           map[string]string{},
+		lastSync:          map[string]time.Time{},
+		revoked:           map[string]wbaRevSet{},
 	}
 }
 
@@ -292,6 +310,12 @@ func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.Pub
 	}
 	if r.isRevoked(host, keyID) {
 		return nil, fmt.Errorf("%w: keyid=%q", ErrKeyRevoked, keyID)
+	}
+	// Fail-closed on unevaluated revocation: the directory advertises a
+	// revocation channel but we hold no snapshot for it, so we cannot assert the
+	// key is un-revoked. Only enforced when the caller opted into RequireRevocation.
+	if r.requireRevocation && f.GetRevocationUrl() != "" && !r.revocationSnapshotPresent(host) {
+		return nil, fmt.Errorf("%w: keyid=%q host=%q", ErrRevocationUnevaluated, keyID, host)
 	}
 	if !wbaKeyActiveAt(key, r.now()) {
 		return nil, fmt.Errorf("%w: keyid=%q", ErrKeyExpired, keyID)
@@ -443,6 +467,18 @@ func (r *WBAKeyResolver) isRevoked(host, thumbprint string) bool {
 	}
 	_, revoked := set.thumbprints[thumbprint]
 	return revoked
+}
+
+// revocationSnapshotPresent reports whether a revocation snapshot has ever been
+// fetched for host. This is DISTINCT from "the snapshot is empty": an empty
+// snapshot means revocation WAS evaluated and nothing is revoked, whereas an
+// absent snapshot means revocation was never evaluated (revocation_url
+// unreachable / not host-anchored / not yet polled).
+func (r *WBAKeyResolver) revocationSnapshotPresent(host string) bool {
+	r.revMu.RLock()
+	defer r.revMu.RUnlock()
+	_, ok := r.revoked[host]
+	return ok
 }
 
 // Revoked reports whether keyID (an RFC 7638 thumbprint) is present in ANY
