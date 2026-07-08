@@ -32,6 +32,11 @@ def parse_money(s: str) -> Decimal:
     if s == "":
         msg = "money: empty money string (field is unset)"
         raise ValueError(msg)
+    # Mirror protovalidate string.max_len = 32 (ramp.proto Pricing.rate) so a
+    # pattern-valid but over-length value is rejected here, not only server-side.
+    if len(s) > 32:
+        msg = f"money: string length {len(s)} exceeds max 32"
+        raise ValueError(msg)
     if not _MONEY_WIRE.match(s):
         msg = f"money: {s!r} is not a canonical money string"
         raise ValueError(msg)

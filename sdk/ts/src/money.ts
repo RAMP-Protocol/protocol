@@ -22,6 +22,11 @@ export function parseMoney(s: string): string {
 	if (s === "") {
 		throw new Error("money: empty money string (field is unset)");
 	}
+	// Mirror protovalidate string.max_len = 32 (ramp.proto Pricing.rate) so a
+	// pattern-valid but over-length value is rejected here, not only server-side.
+	if (s.length > 32) {
+		throw new Error(`money: string length ${s.length} exceeds max 32`);
+	}
 	if (!moneyWire.test(s)) {
 		throw new Error(
 			`money: ${JSON.stringify(s)} is not a canonical money string`,

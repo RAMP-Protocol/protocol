@@ -25,6 +25,11 @@ import (
 // "unset" — ParseMoney rejects it so callers check presence explicitly.
 var moneyWire = regexp.MustCompile(`^([0-9]+([.][0-9]+)?)?$`)
 
+// moneyMaxLen mirrors the protovalidate `string.max_len = 32` on rate/amount/
+// unit_cost. Without it the client helper would accept a pattern-valid but
+// over-length value that the server then rejects — a client/server split.
+const moneyMaxLen = 32
+
 // ErrEmptyMoney is returned by ParseMoney for the empty (unset) wire string.
 var ErrEmptyMoney = errors.New("helpers: empty money string (field is unset)")
 
@@ -35,6 +40,9 @@ var ErrEmptyMoney = errors.New("helpers: empty money string (field is unset)")
 func ParseMoney(s string) (decimal.Decimal, error) {
 	if s == "" {
 		return decimal.Decimal{}, ErrEmptyMoney
+	}
+	if len(s) > moneyMaxLen {
+		return decimal.Decimal{}, fmt.Errorf("helpers: money string length %d exceeds max %d", len(s), moneyMaxLen)
 	}
 	if !moneyWire.MatchString(s) {
 		return decimal.Decimal{}, fmt.Errorf("helpers: %q is not a canonical money string (want %s)", s, moneyWire.String())

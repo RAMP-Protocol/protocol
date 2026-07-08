@@ -101,6 +101,12 @@
       "input": ".5",
       "canonical": "",
       "valid": false
+    },
+    {
+      "name": "over_max_len",
+      "input": "123456789012345678901234567890123",
+      "canonical": "",
+      "valid": false
     }
   ]
 }
