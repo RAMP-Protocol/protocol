@@ -1,6 +1,7 @@
 package connectserver
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -21,16 +22,18 @@ const replayTTL = 5 * time.Minute
 // request-id source, and any application interceptors. All are injected — the SDK
 // owns no keys, no replay state, and no policy constants (ADR-020 §3).
 type serverConfig struct {
-	resolver      helpers.KeyResolver
-	replay        core.ReplayStore
-	replayTTL     time.Duration
-	maxSignatures int
-	validation    rampconnect.Validation
-	requestID     core.RequestIDFunc
-	extra         []connectrpc.Interceptor
-	handlerOpts   []connectrpc.HandlerOption
-	verifyGate    func(*http.Request) bool
-	onReject      func(*http.Request, error)
+	resolver        helpers.KeyResolver
+	replay          core.ReplayStore
+	replayTTL       time.Duration
+	maxSignatures   int
+	maxSignatureAge time.Duration
+	allowNoReplay   bool
+	validation      rampconnect.Validation
+	requestID       core.RequestIDFunc
+	extra           []connectrpc.Interceptor
+	handlerOpts     []connectrpc.HandlerOption
+	verifyGate      func(*http.Request) bool
+	onReject        func(*http.Request, error)
 }
 
 // ServerOption configures the server verify face.
@@ -54,6 +57,24 @@ func WithReplayStore(s core.ReplayStore) ServerOption {
 // SeenOrAdd (default 5 minutes).
 func WithReplayTTL(ttl time.Duration) ServerOption {
 	return func(c *serverConfig) { c.replayTTL = ttl }
+}
+
+// WithMaxSignatureAge clamps the accepted signature lifetime (expires − created).
+// It bounds the replay window even when no ReplayStore is wired: without it a
+// signer can set a far-future expires and replay the same bytes until then. 0
+// (default) is unbounded; a terminal Exchange sets it to its replay-window target
+// (minutes). A longer-lived signature is rejected as a verify-gate failure.
+func WithMaxSignatureAge(d time.Duration) ServerOption {
+	return func(c *serverConfig) { c.maxSignatureAge = d }
+}
+
+// WithoutReplayStore is the explicit acknowledgement that this server face runs
+// with no replay protection (e.g. a stateless edge that relies only on the
+// MaxSignatureAge window). It silences the construction-time warning that a
+// server handler otherwise emits when no ReplayStore is injected, so an
+// ACCIDENTAL omission stays loud while a DELIBERATE one is quiet.
+func WithoutReplayStore() ServerOption {
+	return func(c *serverConfig) { c.allowNoReplay = true }
 }
 
 // WithMaxSignatures injects the hop budget — the maximum number of signatures a
@@ -131,6 +152,14 @@ func resolveServerConfig(opts []ServerOption) serverConfig {
 	}
 	if cfg.replayTTL <= 0 {
 		cfg.replayTTL = replayTTL
+	}
+	// A server face with no replay store silently accepts a replayed signature
+	// within its window. That is a legitimate stateless-edge choice, but a
+	// FORGOTTEN WithReplayStore is a security hole, so make an unacknowledged
+	// omission loud (opt out deliberately with WithoutReplayStore).
+	if cfg.replay == nil && !cfg.allowNoReplay {
+		slog.Warn("connectserver: no ReplayStore injected — replay protection is OFF; " +
+			"inject WithReplayStore, or acknowledge with WithoutReplayStore to silence this")
 	}
 	return cfg
 }

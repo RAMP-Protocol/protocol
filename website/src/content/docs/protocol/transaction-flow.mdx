@@ -311,22 +311,26 @@ Each item's `offer` is the full signed Offer reflected back exactly as received 
 ```json
 {
   "ver": "1.0",
-  "transaction_id": "txn-mp-93a7f2",
-  "billing_id": "bill-93a7f2-001",
-  "resource_title": "The Future of AI Infrastructure",
-  "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Expires=1773451434&Key-Pair-Id=KXYZ&Signature=abc123...",
-  "cost": {
-    "amount": "0.05",
-    "currency": "USD",
-    "unit_cost": "0.00001515"
-  },
-  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-  "reporting_obligation": {
-    "required": true,
-    "window": "86400s",
-    "required_fields": ["transaction_id", "function", "consumed_quantity"]
-  },
-  "expires_at": "2026-03-14T02:30:00Z",
+  "items": [
+    {
+      "transaction_id": "txn-mp-93a7f2",
+      "billing_id": "bill-93a7f2-001",
+      "resource_title": "The Future of AI Infrastructure",
+      "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Expires=1773451434&Key-Pair-Id=KXYZ&Signature=abc123...",
+      "cost": {
+        "amount": "0.05",
+        "currency": "USD",
+        "unit_cost": "0.00001515"
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["transaction_id", "function", "consumed_quantity"]
+      },
+      "expires_at": "2026-03-14T02:30:00Z"
+    }
+  ],
   "agent_identity_hash": "e3b0c44298fc1c14..."
 }
 ```
@@ -418,14 +422,18 @@ Each item gets its own `transaction_id`, `billing_id`, and signed URL. Batch tra
 ```json
 {
   "ver": "1.0",
-  "transaction_id": "txn-sub-001",
-  "billing_id": "bill-sub-001",
-  "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=...",
-  "cost": { "amount": "0", "currency": "USD" },
-  "subscription_id": "SUB-12345",
-  "subscription_unit_value": { "amount": "0.05", "currency": "USD", "unit_cost": "0.00001515" },
-  "agent_identity_hash": "e3b0c44298fc1c14...",
-  "reporting_obligation": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] }
+  "items": [
+    {
+      "transaction_id": "txn-sub-001",
+      "billing_id": "bill-sub-001",
+      "retrieval_endpoint": "https://cdn.ramp-protocol.org/server/premium/ai-infrastructure.html?Signature=...",
+      "cost": { "amount": "0", "currency": "USD" },
+      "subscription_id": "SUB-12345",
+      "subscription_unit_value": { "amount": "0.05", "currency": "USD", "unit_cost": "0.00001515" },
+      "reporting_obligation": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] }
+    }
+  ],
+  "agent_identity_hash": "e3b0c44298fc1c14..."
 }
 ```
 

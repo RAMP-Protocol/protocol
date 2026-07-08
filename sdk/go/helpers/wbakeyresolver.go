@@ -9,12 +9,15 @@ import (
 	"io"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
@@ -38,6 +41,14 @@ var (
 	// fail-closed composite must be able to halt on a directory outage rather
 	// than fall through as if the key were merely unknown.
 	ErrDirectoryUnavailable = errors.New("helpers: WBA directory unavailable")
+	// ErrRevocationUnevaluated signals that the key resolved, but its directory
+	// declares a revocation_url whose snapshot has never been fetched (unreachable
+	// or not host-anchored) — so revocation was NEVER EVALUATED, which is distinct
+	// from "evaluated and not revoked". Only surfaced when RequireRevocation is
+	// set; the default keeps the prior best-effort behavior. It lets a caller that
+	// treats revocation as mandatory fail closed instead of trusting an
+	// unevaluated key.
+	ErrRevocationUnevaluated = errors.New("helpers: key revocation unevaluated")
 )
 
 // WBADirectoryPath is the well-known path a WBA identity directory is served
@@ -53,26 +64,79 @@ const (
 	defaultWBADirectoryTTL = time.Hour
 	defaultWBAPollInterval = 300 * time.Second
 
+	// defaultWBASyncDebounce bounds how often the unknown-thumbprint force-refresh
+	// may fire per directory host. The key resolver runs BEFORE the ed25519
+	// signature check and the directory host is the caller-supplied
+	// Signature-Agent, so an unauthenticated caller can otherwise drive one
+	// outbound directory GET per unknown thumbprint (reflection/amplification +
+	// self-DoS). The SSRF-guarded dialer blocks private TARGETS, not the fetch
+	// RATE to public hosts — this window is the rate bound.
+	defaultWBASyncDebounce = 5 * time.Second
+
 	// wbaRevocationAsOfSkew bounds how far into the future a revocation
 	// snapshot's as_of may sit relative to the verifier's clock before it is
 	// clamped. A compromised or misconfigured origin cannot then stamp a
 	// far-future as_of that would freeze every subsequent (legitimately earlier)
 	// snapshot under the monotonic guard — the first-poll integrity bug.
 	wbaRevocationAsOfSkew = 300 * time.Second
+
+	// defaultWBAHTTPTimeout bounds the built-in guarded client's directory /
+	// revocation GETs so a slow origin cannot pin the poller or a Resolve call.
+	defaultWBAHTTPTimeout = 10 * time.Second
 )
+
+// newGuardedWBAClient is the HTTP client used when the caller injects none. It
+// refuses to dial any non-public address (loopback, RFC 1918 private, link-local,
+// unspecified, multicast). The directory host is derived from a caller-supplied
+// Signature-Agent and the fetch runs BEFORE the ed25519 signature check, so an
+// unguarded default is a pre-auth SSRF lever against internal networks. The IP
+// check runs in Dialer.Control against the ALREADY-RESOLVED address, so it also
+// closes the DNS-rebinding window (a public A record that resolves to 169.254.x
+// is rejected at connect time, not just at lookup time). A deployment that must
+// reach a private directory (tests, on-prem) injects its own HTTP client.
+func newGuardedWBAClient() *http.Client {
+	dialer := &net.Dialer{
+		Control: func(_, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				return fmt.Errorf("helpers: refusing to dial unresolved address %q (SSRF guard)", address)
+			}
+			if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
+				return fmt.Errorf("helpers: refusing to dial non-public address %s (SSRF guard)", ip)
+			}
+			return nil
+		},
+	}
+	return &http.Client{
+		Timeout:   defaultWBAHTTPTimeout,
+		Transport: &http.Transport{DialContext: dialer.DialContext},
+	}
+}
 
 // WBAKeyResolverOptions tune a WBAKeyResolver. Zero values are safe defaults.
 type WBAKeyResolverOptions struct {
-	// HTTP overrides the client used for directory and revocation GETs (nil →
-	// http.DefaultClient). SSRF CONTRACT: when the directory URL is derived from
-	// request input (the Signature-Agent header), the caller MUST inject a
-	// client whose dialer rejects private/link-local targets — the SDK exposes
-	// the injection point, the guard itself stays with the application.
+	// HTTP overrides the client used for directory and revocation GETs. When nil,
+	// the resolver installs a safe-by-default SSRF-guarded client (see
+	// newGuardedWBAClient): the directory host is derived from request input (the
+	// Signature-Agent header) and fetched before the ed25519 check, so the default
+	// refuses private/link-local/loopback targets. Inject a client only to REACH a
+	// private directory (tests, on-prem) or to apply a custom dialer/timeout.
 	HTTP *http.Client
 	// TTL bounds how long a fetched directory is reused (≤0 → 1 hour).
 	TTL time.Duration
 	// PollInterval is the base revocation-poll cadence for Run (≤0 → 300s).
 	PollInterval time.Duration
+	// SyncDebounce bounds how often the unknown-thumbprint force-refresh may fire
+	// per directory host (≤0 → 5s). It caps the outbound directory fetches an
+	// unauthenticated caller can drive by presenting unknown thumbprints — the
+	// resolver runs before the ed25519 check and the host is the caller-supplied
+	// Signature-Agent. The TTL-cache refresh path is NOT gated by it; only the
+	// self-heal force-fetch on an unknown thumbprint is.
+	SyncDebounce time.Duration
 	// Now overrides the clock for TTL and validity-window comparisons (nil →
 	// time.Now). Tests inject.
 	Now func() time.Time
@@ -82,6 +146,13 @@ type WBAKeyResolverOptions struct {
 	// Scheme is applied when the Signature-Agent value carries no scheme
 	// (empty → "https"). Tests inject "http" to drive an httptest server.
 	Scheme string
+	// RequireRevocation makes Resolve fail closed with ErrRevocationUnevaluated
+	// when a key's directory declares a revocation_url but no snapshot has been
+	// fetched (unreachable or not host-anchored) — i.e. revocation could not be
+	// evaluated. Default false keeps the best-effort behavior (a declared-but-
+	// unreachable revocation channel does not block resolution). Set it where a
+	// revoked-key must never resolve even if the revocation channel is down.
+	RequireRevocation bool
 	// Logger receives best-effort revocation-refresh diagnostics (nil →
 	// slog.Default()).
 	Logger *slog.Logger
@@ -105,19 +176,29 @@ type WBAKeyResolverOptions struct {
 // fresh by the Run poller. See the sentinel var block for the authority
 // contract: revoked/expired/unavailable verdicts surface raw.
 type WBAKeyResolver struct {
-	http         *http.Client
-	ttl          time.Duration
-	pollInterval time.Duration
-	now          func() time.Time
-	after        func(time.Duration) <-chan time.Time
-	scheme       string
-	logger       *slog.Logger
-	onPollArmed  func()
-	onPollCycle  func()
+	http              *http.Client
+	ttl               time.Duration
+	pollInterval      time.Duration
+	syncDebounce      time.Duration
+	now               func() time.Time
+	after             func(time.Duration) <-chan time.Time
+	scheme            string
+	requireRevocation bool
+	logger            *slog.Logger
+	onPollArmed       func()
+	onPollCycle       func()
 
 	dirMu    sync.Mutex
 	dirCache map[string]wbaDirEntry
 	dirBase  map[string]string // host → scheme://host base for poller re-fetch
+
+	// sf coalesces a concurrent burst of directory fetches for the same host into
+	// ONE in-flight GET (thundering-herd guard on the TTL-refresh AND unknown-
+	// thumbprint self-heal paths). syncMu/lastSync throttle the unknown-thumbprint
+	// force-refresh to one per SyncDebounce window per host (anti-amplification).
+	sf       singleflight.Group
+	syncMu   sync.Mutex
+	lastSync map[string]time.Time
 
 	revMu   sync.RWMutex
 	revoked map[string]wbaRevSet
@@ -137,7 +218,9 @@ type wbaRevSet struct {
 func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 	client := opts.HTTP
 	if client == nil {
-		client = http.DefaultClient
+		// Safe by default: block SSRF to internal networks. A caller that needs a
+		// private directory (tests, on-prem) injects its own client via opts.HTTP.
+		client = newGuardedWBAClient()
 	}
 	ttl := opts.TTL
 	if ttl <= 0 {
@@ -146,6 +229,10 @@ func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 	interval := opts.PollInterval
 	if interval <= 0 {
 		interval = defaultWBAPollInterval
+	}
+	debounce := opts.SyncDebounce
+	if debounce <= 0 {
+		debounce = defaultWBASyncDebounce
 	}
 	now := opts.Now
 	if now == nil {
@@ -164,18 +251,21 @@ func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 		logger = slog.Default()
 	}
 	return &WBAKeyResolver{
-		http:         client,
-		ttl:          ttl,
-		pollInterval: interval,
-		now:          now,
-		after:        after,
-		scheme:       scheme,
-		logger:       logger,
-		onPollArmed:  opts.OnPollArmed,
-		onPollCycle:  opts.OnPollCycle,
-		dirCache:     map[string]wbaDirEntry{},
-		dirBase:      map[string]string{},
-		revoked:      map[string]wbaRevSet{},
+		http:              client,
+		ttl:               ttl,
+		pollInterval:      interval,
+		syncDebounce:      debounce,
+		now:               now,
+		after:             after,
+		scheme:            scheme,
+		requireRevocation: opts.RequireRevocation,
+		logger:            logger,
+		onPollArmed:       opts.OnPollArmed,
+		onPollCycle:       opts.OnPollCycle,
+		dirCache:          map[string]wbaDirEntry{},
+		dirBase:           map[string]string{},
+		lastSync:          map[string]time.Time{},
+		revoked:           map[string]wbaRevSet{},
 	}
 }
 
@@ -203,6 +293,14 @@ func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.Pub
 	}
 	key, ok := wbaKeyByThumbprint(f, keyID)
 	if !ok {
+		// The force-refresh below bypasses the TTL cache, so it is the lever an
+		// unauthenticated caller could pull once per unknown thumbprint. Gate it
+		// to one fetch per SyncDebounce window per host: outside the window the
+		// thumbprint is reported unknown WITHOUT a fetch. Removal-vs-rotation
+		// self-heal still works — the first unknown lookup in each window refetches.
+		if !r.beginSync(host) {
+			return nil, fmt.Errorf("%w: keyid=%q host=%q (refresh debounced)", ErrUnknownKey, keyID, host)
+		}
 		if f, err = r.syncRefresh(ctx, base, host); err != nil {
 			return nil, err
 		}
@@ -212,6 +310,12 @@ func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.Pub
 	}
 	if r.isRevoked(host, keyID) {
 		return nil, fmt.Errorf("%w: keyid=%q", ErrKeyRevoked, keyID)
+	}
+	// Fail-closed on unevaluated revocation: the directory advertises a
+	// revocation channel but we hold no snapshot for it, so we cannot assert the
+	// key is un-revoked. Only enforced when the caller opted into RequireRevocation.
+	if r.requireRevocation && f.GetRevocationUrl() != "" && !r.revocationSnapshotPresent(host) {
+		return nil, fmt.Errorf("%w: keyid=%q host=%q", ErrRevocationUnevaluated, keyID, host)
 	}
 	if !wbaKeyActiveAt(key, r.now()) {
 		return nil, fmt.Errorf("%w: keyid=%q", ErrKeyExpired, keyID)
@@ -272,18 +376,48 @@ func (r *WBAKeyResolver) wbaFile(ctx context.Context, base, host string) (*rampv
 	return r.syncRefresh(ctx, base, host)
 }
 
+// beginSync reports whether an unknown-thumbprint force-refresh for host may
+// proceed now, recording the attempt's timestamp when it does. It admits at most
+// one forced refresh per SyncDebounce window per host: an unauthenticated caller
+// presenting N unknown thumbprints for one host drives ONE outbound fetch, not N.
+// The TTL-cache refresh path (wbaFile) does not call it — a legitimately-expired
+// directory always re-fetches.
+func (r *WBAKeyResolver) beginSync(host string) bool {
+	now := r.now()
+	r.syncMu.Lock()
+	defer r.syncMu.Unlock()
+	if last, ok := r.lastSync[host]; ok && now.Sub(last) < r.syncDebounce {
+		return false
+	}
+	r.lastSync[host] = now
+	return true
+}
+
 // syncRefresh force-fetches host's WBA directory, bypassing the TTL cache, and
-// refreshes its revocation snapshot.
+// refreshes its revocation snapshot. A concurrent burst for the same host
+// coalesces to ONE in-flight fetch via singleflight — a thundering herd (many
+// callers crossing a TTL boundary, or an unknown-thumbprint burst) issues a
+// single GET and shares its result.
 func (r *WBAKeyResolver) syncRefresh(ctx context.Context, base, host string) (*rampv1.WBAFile, error) {
-	f, err := r.fetchDirectory(ctx, base)
+	v, err, _ := r.sf.Do(host, func() (any, error) {
+		f, ferr := r.fetchDirectory(ctx, base)
+		if ferr != nil {
+			return nil, ferr
+		}
+		r.dirMu.Lock()
+		r.dirCache[host] = wbaDirEntry{file: f, exp: r.now().Add(r.ttl)}
+		r.dirBase[host] = base
+		r.dirMu.Unlock()
+		r.refreshRevocationFor(ctx, host, f)
+		return f, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	r.dirMu.Lock()
-	r.dirCache[host] = wbaDirEntry{file: f, exp: r.now().Add(r.ttl)}
-	r.dirBase[host] = base
-	r.dirMu.Unlock()
-	r.refreshRevocationFor(ctx, host, f)
+	f, ok := v.(*rampv1.WBAFile)
+	if !ok {
+		return nil, fmt.Errorf("%w: internal fetch result type", ErrDirectoryUnavailable)
+	}
 	return f, nil
 }
 
@@ -333,6 +467,43 @@ func (r *WBAKeyResolver) isRevoked(host, thumbprint string) bool {
 	}
 	_, revoked := set.thumbprints[thumbprint]
 	return revoked
+}
+
+// revocationSnapshotPresent reports whether a revocation snapshot has ever been
+// fetched for host. This is DISTINCT from "the snapshot is empty": an empty
+// snapshot means revocation WAS evaluated and nothing is revoked, whereas an
+// absent snapshot means revocation was never evaluated (revocation_url
+// unreachable / not host-anchored / not yet polled).
+func (r *WBAKeyResolver) revocationSnapshotPresent(host string) bool {
+	r.revMu.RLock()
+	defer r.revMu.RUnlock()
+	_, ok := r.revoked[host]
+	return ok
+}
+
+// Revoked reports whether keyID (an RFC 7638 thumbprint) is present in ANY
+// host's fetched revocation snapshot, INDEPENDENT of whether that thumbprint
+// appears in the corresponding WBA directory. Resolve gates a key only when the
+// directory lists it (removal is not revocation); a key resolved from a source
+// OTHER than the directory — e.g. a static bootstrap file — is invisible to that
+// path, so a composite resolver can still admit a broker-revoked, directory-
+// absent thumbprint. Revoked closes that gap: a caller that resolved a key
+// elsewhere consults it to fail closed against the revocation channel. It
+// returns false when no snapshot has been fetched (the snapshot is unavailable —
+// the caller decides whether an unavailable revocation channel is itself
+// fail-closed; this accessor reports membership only, never an outage).
+func (r *WBAKeyResolver) Revoked(keyID string) bool {
+	if keyID == "" {
+		return false
+	}
+	r.revMu.RLock()
+	defer r.revMu.RUnlock()
+	for _, set := range r.revoked {
+		if _, ok := set.thumbprints[keyID]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // refreshRevocationFor replaces host's revocation snapshot from f's

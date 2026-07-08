@@ -79,7 +79,7 @@ func (cfg serverConfig) reject(w http.ResponseWriter, r *http.Request, err error
 // read-only Seen over every signature, then SeenOrAdd commits them all — so a
 // request rejected part-way never burns its other signatures' nonces.
 func (cfg serverConfig) verify(r *http.Request, body []byte) ([]helpers.VerifiedRequest, error) {
-	opts := helpers.VerifyOptions{MaxSignatures: cfg.maxSignatures}
+	opts := helpers.VerifyOptions{MaxSignatures: cfg.maxSignatures, MaxSignatureAge: cfg.maxSignatureAge}
 	sigs, err := helpers.VerifyMultisigRequestResolved(r.Context(), r, body, cfg.resolver, opts)
 	if err != nil {
 		return nil, err

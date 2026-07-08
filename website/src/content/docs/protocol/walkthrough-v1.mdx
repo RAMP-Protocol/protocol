@@ -182,29 +182,36 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 {
   "ver": "1.0",
   "idempotency_key": "tx-001",
-  "offer_id": "offer-tc-agents-001",
-  "offer": {
-    "offer_id": "offer-tc-agents-001",
-    "title": "AI Agents Are Rewriting Commerce",
-    "pricing": {
-      "model": "PRICING_MODEL_PER_UNIT",
-      "rate": "0.05",
-      "currency": "USD",
-      "unit_cost": "0.0000156",
-      "estimated_quantity": 3200,
-      "unit": "accesses"
-    },
-    "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-    "expires_at": "2026-03-19T12:05:00Z",
-    "identity": {
-      "canonical_url": "https://techcrunch.com/2026/03/19/ai-agents-commerce.html",
-      "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
-      "hash_method": "sha256",
-      "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
-    },
-    "signature": "base64-ed25519-offer-sig...",
-    "signature_algorithm": "EdDSA"
-  },
+  "items": [
+    {
+      "offer": {
+        "offer_id": "offer-tc-agents-001",
+        "title": "AI Agents Are Rewriting Commerce",
+        "pricing": {
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.05",
+          "currency": "USD",
+          "unit_cost": "0.0000156",
+          "estimated_quantity": 3200,
+          "unit": "accesses"
+        },
+        "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "expires_at": "2026-03-19T12:05:00Z",
+        "identity": {
+          "canonical_url": "https://techcrunch.com/2026/03/19/ai-agents-commerce.html",
+          "content_hash": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+          "hash_method": "sha256",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+        },
+        "signature": "base64-ed25519-offer-sig...",
+        "signature_algorithm": "EdDSA"
+      },
+      "agent_acceptance": {
+        "signature": "base64-ed25519-acceptance-sig...",
+        "signature_algorithm": "EdDSA"
+      }
+    }
+  ],
   "requester": {
     "id": "research-bot",
     "domain": "startup.com",
@@ -226,20 +233,25 @@ Response:
 ```json
 {
   "ver": "1.0",
-  "transaction_id": "txn-tc-001",
-  "billing_id": "bill-tc-001",
-  "retrieval_endpoint": "https://cdn.techcrunch.com/premium/ai-agents-commerce.html?expires=1742403900&agent_id=7a3f8c1d...&txn_id=txn-tc-001&sig=hmac-sha256-d4e5f6...",
-  "cost": {
-    "amount": "0.05",
-    "currency": "USD"
-  },
-  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-  "reporting_obligation": {
-    "required": true,
-    "window": "86400s",
-    "required_fields": ["consumed_quantity"]
-  },
-  "expires_at": "2026-03-19T12:05:00Z",
+  "items": [
+    {
+      "offer_id": "offer-tc-agents-001",
+      "transaction_id": "txn-tc-001",
+      "billing_id": "bill-tc-001",
+      "retrieval_endpoint": "https://cdn.techcrunch.com/premium/ai-agents-commerce.html?expires=1742403900&agent_id=7a3f8c1d...&txn_id=txn-tc-001&sig=hmac-sha256-d4e5f6...",
+      "cost": {
+        "amount": "0.05",
+        "currency": "USD"
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["consumed_quantity"]
+      },
+      "expires_at": "2026-03-19T12:05:00Z"
+    }
+  ],
   "agent_identity_hash": "7a3f8c1d..."
 }
 ```
@@ -498,25 +510,30 @@ The remaining steps follow the same pattern as Scenario A, with one key differen
 ```json
 {
   "ver": "1.0",
-  "transaction_id": "txn-bb-001",
-  "billing_id": "bill-bb-sub-001",
-  "retrieval_endpoint": "https://cdn.marketdata.example.com/earnings/NVDA/2026-Q1-transcript.html?expires=1742404200&agent_id=8b4f9d2e...&txn_id=txn-bb-001&sig=hmac-sha256-a7b8c9...",
-  "cost": {
-    "amount": "0",
-    "currency": "USD"
-  },
-  "subscription_id": "enterprise-sub-HF-001",
-  "subscription_unit_value": {
-    "amount": "0.15",
-    "currency": "USD"
-  },
-  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-  "reporting_obligation": {
-    "required": true,
-    "window": "86400s",
-    "required_fields": ["transaction_id", "function", "consumed_quantity"]
-  },
-  "expires_at": "2026-03-19T12:10:00Z",
+  "items": [
+    {
+      "offer_id": "offer-bb-nvda-q1-001",
+      "transaction_id": "txn-bb-001",
+      "billing_id": "bill-bb-sub-001",
+      "retrieval_endpoint": "https://cdn.marketdata.example.com/earnings/NVDA/2026-Q1-transcript.html?expires=1742404200&agent_id=8b4f9d2e...&txn_id=txn-bb-001&sig=hmac-sha256-a7b8c9...",
+      "cost": {
+        "amount": "0",
+        "currency": "USD"
+      },
+      "subscription_id": "enterprise-sub-HF-001",
+      "subscription_unit_value": {
+        "amount": "0.15",
+        "currency": "USD"
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["transaction_id", "function", "consumed_quantity"]
+      },
+      "expires_at": "2026-03-19T12:10:00Z"
+    }
+  ],
   "agent_identity_hash": "8b4f9d2e..."
 }
 ```

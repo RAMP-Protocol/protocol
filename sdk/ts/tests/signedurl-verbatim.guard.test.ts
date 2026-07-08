@@ -1,4 +1,4 @@
-// sdk/ts verbatim-canonicalization guard (TDD red for ov97t.16).
+// sdk/ts verbatim-canonicalization guard (parity guard, ov97t.16).
 //
 // THE CONTRACT (Constantine, 2026-07-07): the signed-URL signature covers
 // `GET\n<url>` as OPAQUE URL BYTES. Signer and verifier MUST agree on `<url>`
@@ -14,15 +14,12 @@
 // over a URL whose host case, explicit :443, and path space/percent would be
 // mangled by any `new URL()` normalization on EITHER side.
 //
-// RED now for reasons that are ALL intended:
-//   1. sdk/ts/src/signurl.ts (the SIGN face) does not exist yet — import fails.
-//   2. Even once the sign face lands, verify.ts::canonicalMessage currently
-//      round-trips through `new URL().toString()` (WHATWG lowercases the host,
-//      strips :443, re-escapes the path). A verbatim signer + a normalizing
-//      verifier disagree on the tricky URL → the self-signed URL fails to verify.
-//      This guard therefore stays RED until BOTH faces canonicalize verbatim.
+// Both faces now exist and canonicalize the URL VERBATIM (no `new URL()`
+// round-trip on either side), so a self-signed tricky URL — mixed-case host,
+// explicit :443, spaced/percent path — verifies. This guard keeps them honest:
+// if either side reintroduces WHATWG normalization, the self-signed URL stops
+// verifying and this goes red.
 import { describe, it, expect } from "vitest";
-// RED: the SIGN face does not exist yet.
 import { signEd25519SignedUrl } from "../src/signurl.ts";
 import { verifyEd25519SignedUrl } from "../src/verify.ts";
 

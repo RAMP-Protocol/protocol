@@ -36,6 +36,20 @@ export class KeyExpired extends ResolverError {
   }
 }
 
+/** The key resolved, but its directory declares a revocation_url whose snapshot
+ * has never been fetched (unreachable or not host-anchored) — so revocation was
+ * NEVER EVALUATED, DISTINCT from KeyRevoked ("evaluated and revoked"). Only
+ * thrown when the resolver's `requireRevocation` option is set; the default
+ * keeps the prior best-effort behavior (a declared-but-unreachable revocation
+ * channel does not block resolution). It lets a caller that treats revocation as
+ * mandatory fail closed instead of trusting an unevaluated key. */
+export class RevocationUnevaluated extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "RevocationUnevaluated";
+  }
+}
+
 /** A well-known manifest was fetched and decoded, but advertises no endpoint.
  * DISTINCT from DirectoryUnavailable: the manifest is reachable, simply inert. */
 export class NoEndpoint extends ResolverError {

@@ -1,4 +1,4 @@
-// HashURL parity (TypeScript side) — TDD red for djeue.
+// HashURL parity (TypeScript side) (parity guard, djeue).
 //
 // sdk/ts `hashUrl(signed)` MUST reproduce the sdk/go oracle: SHA-256 over the
 // VERBATIM URL bytes (opaque bytes, no WHATWG renormalization), returning the
@@ -6,9 +6,8 @@
 // at sdk/go/helpers/testdata/hashurl-vectors.json carry {url, sha256_hex}. The
 // TS face is async (crypto.subtle.digest); the vector encodes the digest as hex.
 //
-// RED now purely because sdk/ts/src/hashurl.ts does not exist yet.
+// These faces now exist; the suite is green and guards cross-language parity.
 import { describe, it, expect } from "vitest";
-// RED: sdk/ts/src/hashurl.ts does not exist yet (TDD red — missing face).
 import { hashUrl } from "../src/hashurl.ts";
 import vectorsFile from "../../go/helpers/testdata/hashurl-vectors.json";
 

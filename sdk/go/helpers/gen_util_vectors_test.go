@@ -165,6 +165,9 @@ func buildMoneyVectors() []moneyVector {
 		{"leading_plus", "+1"},
 		{"exponent_form", "1e3"},
 		{"leading_dot", ".5"},
+		// 33 digits: pattern-valid but exceeds max_len=32 — the client helper must
+		// reject it too, or it splits from the server's protovalidate (DRY-1).
+		{"over_max_len", "123456789012345678901234567890123"},
 	}
 	out := make([]moneyVector, 0, len(valid)+len(invalid))
 	for _, v := range valid {

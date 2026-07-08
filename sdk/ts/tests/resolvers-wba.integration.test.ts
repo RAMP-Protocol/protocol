@@ -33,6 +33,7 @@ import {
 	KeyExpired,
 	KeyRevoked,
 	newWBAKeyResolver,
+	RevocationUnevaluated,
 } from "../resolvers/index.ts";
 
 // activeJwk / expiredJwk / longJwk build a directory JWK member whose validity
@@ -240,6 +241,36 @@ describe("newWBAKeyResolver.resolve", () => {
 		const r = newWBAKeyResolver({ scheme: "http", now: () => ANCHOR_MS });
 		// Not anchored → not polled → key resolves.
 		expect(await r.resolve(k.tp, origin.url)).toEqual(k.rawPub);
+	});
+
+	// M-6 — a directory that declares a revocation_url whose snapshot never lands
+	// (here: cross-host, so the poll is refused) leaves revocation UNEVALUATED. The
+	// default best-effort mode still resolves the key; requireRevocation makes
+	// resolve fail closed with RevocationUnevaluated — DISTINCT from KeyRevoked
+	// ("evaluated, revoked").
+	it("fails closed with RevocationUnevaluated when requireRevocation and the snapshot never landed", async () => {
+		const k = await makeKey();
+		extra = await startOrigin(); // a revocation host the resolver must not follow
+		extra.setRevocation(revocationJson(iso(ANCHOR_MS), [k.tp]));
+
+		origin = await startOrigin();
+		// Declares a revocation_url, but cross-host → never anchored → no snapshot.
+		origin.setWBA(wbaFileJson([activeJwk(k.x)], extra.revocationURL()));
+
+		// Default (best-effort): resolves despite the unevaluated revocation channel.
+		const best = newWBAKeyResolver({ scheme: "http", now: () => ANCHOR_MS });
+		expect(await best.resolve(k.tp, origin.url)).toEqual(k.rawPub);
+
+		// requireRevocation: fail closed — revocation_url declared, no snapshot.
+		const strict = newWBAKeyResolver({
+			scheme: "http",
+			requireRevocation: true,
+			now: () => ANCHOR_MS,
+		});
+		const rejects = expect(strict.resolve(k.tp, origin.url)).rejects;
+		await rejects.toBeInstanceOf(RevocationUnevaluated);
+		// Unevaluated must be distinct from revoked.
+		await rejects.not.toBeInstanceOf(KeyRevoked);
 	});
 
 	// Test 12 — no directory (empty Signature-Agent) → unknown (undefined).

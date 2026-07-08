@@ -10,11 +10,11 @@ import (
 )
 
 // EmitUnpopulatedJSONCodec replaces Connect-Go's default JSON codec so scalar
-// fields with their zero value (e.g. Money.amount_minor=0 for a
-// subscription-covered offer) appear in the JSON wire output. Connect's
-// default protojson.MarshalOptions{} omits zero-valued scalars, which loses an
-// observable agents depend on: "the subscription-covered offer carries
-// price.amount_minor==0" cannot be asserted when amount_minor is omitted
+// fields with their zero value (e.g. a non-optional Cost.amount left as the
+// empty decimal string on a subscription-covered offer) appear in the JSON wire
+// output. Connect's default protojson.MarshalOptions{} omits zero-valued
+// scalars, which loses an observable agents depend on: "the subscription-covered
+// offer carries a zero Cost.amount" cannot be asserted when the field is omitted
 // entirely from the response. Proto3 fields with explicit presence
 // (optional / message fields) are still omitted when unset, so presence-based
 // reads stay correct. Field names are snake_case (UseProtoNames=true) — the RAMP wire is

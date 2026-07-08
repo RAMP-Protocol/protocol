@@ -53,6 +53,7 @@ func TestWBAKeyResolver_Active(t *testing.T) {
 
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
 	})
 	got, err := r.Resolve(ctx, tp)
@@ -80,6 +81,7 @@ func TestWBAKeyResolver_ErrKeyExpired(t *testing.T) {
 
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
 	})
 	_, err := r.Resolve(ctx, tp)
@@ -103,6 +105,7 @@ func TestWBAKeyResolver_ErrUnknownKey(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
 	})
 	_, err := r.Resolve(ctx, "absent-thumbprint")
@@ -127,6 +130,7 @@ func TestWBAKeyResolver_ErrKeyRevoked(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
 	})
 	_, err := r.Resolve(ctx, tp)
@@ -153,6 +157,7 @@ func TestWBAKeyResolver_RotationSelfHeal(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return now },
 	})
@@ -194,6 +199,7 @@ func TestWBAKeyResolver_RevocationRollbackIgnored(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return now },
 	})
@@ -227,6 +233,7 @@ func TestWBAKeyResolver_RevocationForwardProgressApplied(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return now },
 	})
@@ -265,6 +272,7 @@ func TestWBAKeyResolver_FirstPollFarFutureAsOfClamp(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return now },
 	})
@@ -298,6 +306,7 @@ func TestWBAKeyResolver_RemovalIsNotRevocation(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return now },
 	})
@@ -340,6 +349,7 @@ func TestWBAKeyResolver_RevocationURLHostNotAnchored(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), dirOrigin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   dirOrigin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
 	})
 	got, err := r.Resolve(ctx, tp)
@@ -348,6 +358,51 @@ func TestWBAKeyResolver_RevocationURLHostNotAnchored(t *testing.T) {
 	}
 	if got == nil {
 		t.Fatal("expected the un-revoked key to resolve")
+	}
+}
+
+// TestWBAKeyResolver_RequireRevocationUnevaluated (M-6): a directory that
+// declares a revocation_url whose snapshot never lands (here: cross-host, so the
+// poll is refused) leaves revocation UNEVALUATED. The default best-effort mode
+// still resolves the key; RequireRevocation makes Resolve fail closed with
+// ErrRevocationUnevaluated — distinct from ErrKeyRevoked ("evaluated, revoked").
+func TestWBAKeyResolver_RequireRevocationUnevaluated(t *testing.T) {
+	t.Parallel()
+	priv, jwk := newSigningKey("k1", wbaAnchor.Add(-time.Hour), wbaAnchor.Add(time.Hour))
+	tp := mustThumbprint(t, priv.Public().(ed25519.PublicKey))
+
+	evilOrigin := newWBAOrigin(nil) // a revocation host the resolver must not follow
+	defer evilOrigin.close()
+	evilOrigin.setRevocation(marshalRevocation(wbaAnchor, tp))
+
+	dirOrigin := newWBAOrigin(nil)
+	defer dirOrigin.close()
+	dirOrigin.setWBA(marshalWBAWithRevocation(jwk, evilOrigin.revocationURL()))
+	ctx := helpers.WithSignatureAgent(context.Background(), dirOrigin.url)
+
+	// Default (best-effort): resolves despite the unevaluated revocation channel.
+	best := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+		Scheme: "http",
+		HTTP:   dirOrigin.Client(),
+		Now:    func() time.Time { return wbaAnchor },
+	})
+	if _, err := best.Resolve(ctx, tp); err != nil {
+		t.Fatalf("best-effort default must resolve; got %v", err)
+	}
+
+	// RequireRevocation: fail closed — revocation_url declared, no snapshot.
+	strict := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+		Scheme:            "http",
+		HTTP:              dirOrigin.Client(),
+		RequireRevocation: true,
+		Now:               func() time.Time { return wbaAnchor },
+	})
+	_, err := strict.Resolve(ctx, tp)
+	if !errors.Is(err, helpers.ErrRevocationUnevaluated) {
+		t.Fatalf("RequireRevocation must fail closed with ErrRevocationUnevaluated; got %v", err)
+	}
+	if errors.Is(err, helpers.ErrKeyRevoked) {
+		t.Fatal("unevaluated must be distinct from revoked")
 	}
 }
 
@@ -372,6 +427,7 @@ func TestWBAKeyResolver_Run_PollerAppliesRevocation(t *testing.T) {
 
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme:       "http",
+		HTTP:         origin.Client(),
 		TTL:          100 * time.Hour, // never expires during the test → isolate poller
 		PollInterval: pollInterval,
 		Now:          clk.Now,
@@ -435,6 +491,7 @@ func TestWBAKeyResolver_TTLCacheHit(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return now },
 	})
@@ -467,6 +524,7 @@ func TestWBAKeyResolver_FetchError(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
 		Scheme: "http",
+		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
 	})
 	_, err := r.Resolve(ctx, "any-thumbprint")
@@ -480,6 +538,61 @@ func TestWBAKeyResolver_FetchError(t *testing.T) {
 	// composite resolver must halt (fail closed), not fall through.
 	if errors.Is(err, helpers.ErrUnknownKey) {
 		t.Fatal("fetch/parse failure must be errors.Is-DISTINCT from ErrUnknownKey to preserve broker composite fail-closed semantics")
+	}
+}
+
+// ── Test 15 ────────────────────────────────────────────────────────────────
+
+// TestWBAKeyResolver_Revoked verifies the revocation-set-membership accessor:
+// after the snapshot is primed, Revoked reports true for a thumbprint present in
+// the revocation list even when the directory never listed it (directory-absent-
+// but-revoked), false for a directory-listed key that is not revoked, and false
+// for a thumbprint unknown to both. The accessor is INDEPENDENT of directory
+// membership — it is the fail-closed hook a composite resolver uses to reject a
+// static-bootstrap-only key the broker has revoked.
+func TestWBAKeyResolver_Revoked(t *testing.T) {
+	t.Parallel()
+	presentPriv, presentJWK := newSigningKey("present.v1", wbaAnchor.Add(-time.Hour), wbaAnchor.Add(1000*time.Hour))
+	tpPresent := mustThumbprint(t, presentPriv.Public().(ed25519.PublicKey))
+	absentPriv, _ := newSigningKey("absent-revoked.v1", wbaAnchor.Add(-time.Hour), wbaAnchor.Add(1000*time.Hour))
+	tpAbsentRevoked := mustThumbprint(t, absentPriv.Public().(ed25519.PublicKey))
+	unknownPriv, _ := newSigningKey("unknown.v1", wbaAnchor.Add(-time.Hour), wbaAnchor.Add(1000*time.Hour))
+	tpUnknown := mustThumbprint(t, unknownPriv.Public().(ed25519.PublicKey))
+
+	origin := newWBAOrigin(nil)
+	defer origin.close()
+	// The directory lists only the present key; the revocation snapshot revokes
+	// the directory-ABSENT thumbprint.
+	origin.setWBA(marshalWBAWithRevocation(presentJWK, origin.revocationURL()))
+	origin.setRevocation(marshalRevocation(wbaAnchor, tpAbsentRevoked))
+
+	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
+	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+		Scheme: "http",
+		HTTP:   origin.Client(),
+		Now:    func() time.Time { return wbaAnchor },
+	})
+
+	// Before any fetch the snapshot is unavailable → membership is false.
+	if r.Revoked(tpAbsentRevoked) {
+		t.Fatal("Revoked before priming must be false (no snapshot)")
+	}
+	// Prime the snapshot by resolving the directory-present key.
+	if _, err := r.Resolve(ctx, tpPresent); err != nil {
+		t.Fatalf("prime resolve: %v", err)
+	}
+
+	if !r.Revoked(tpAbsentRevoked) {
+		t.Fatal("directory-absent-but-revoked thumbprint must report Revoked=true")
+	}
+	if r.Revoked(tpPresent) {
+		t.Fatal("directory-present, not-revoked thumbprint must report Revoked=false")
+	}
+	if r.Revoked(tpUnknown) {
+		t.Fatal("thumbprint unknown to directory and revocation must report Revoked=false")
+	}
+	if r.Revoked("") {
+		t.Fatal("empty keyID must report Revoked=false")
 	}
 }
 

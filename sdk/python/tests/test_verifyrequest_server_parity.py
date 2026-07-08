@@ -105,6 +105,7 @@ def test_neg_vector_set_covers_the_five_single_sig_reject_cases() -> None:
         "neg_expired",
         "neg_wrong_key",
         "neg_tampered_authorization",
+        "neg_entitlement_uncovered",
     } <= names
 
 
@@ -198,18 +199,26 @@ def test_negative_vector_rejected_with_correct_reason(vector: dict[str, object])
     resolver = _RecordingResolver(keys)
     store = _MemoryReplayStore()
 
+    headers = {
+        "content-digest": str(vector["content_digest"]),
+        "signature-input": str(vector["signature_input"]),
+        "signature": str(vector["signature"]),
+        "authorization": str(vector["authorization"]),
+        "signature-agent": str(vector.get("signature_agent", "")),
+    }
+    # A vector carrying an "entitlement" value exercises entitlement-coverage
+    # enforcement: set the X-RAMP-Entitlement-Biscuit request header to it. The
+    # base request's covered set does not cover the header, so a conformant
+    # verifier must reject with reason "signature".
+    if vector.get("entitlement"):
+        headers["X-RAMP-Entitlement-Biscuit"] = str(vector["entitlement"])
+
     def _verify() -> object:
         return verify_request_server(
             method=str(vector["method"]),
             url=str(vector["url"]),
             body=bytes.fromhex(str(vector["body_hex"])),
-            headers={
-                "content-digest": str(vector["content_digest"]),
-                "signature-input": str(vector["signature_input"]),
-                "signature": str(vector["signature"]),
-                "authorization": str(vector["authorization"]),
-                "signature-agent": str(vector.get("signature_agent", "")),
-            },
+            headers=headers,
             resolver=resolver,
             replay_store=store,
             now=int(vector["now"]),  # type: ignore[call-overload]

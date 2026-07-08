@@ -1,0 +1,32 @@
+{
+  "note": "revoked() reports revocation-set membership independent of WBA directory membership; verdicts produced by the sdk/go oracle",
+  "as_of": "2026-05-01T12:00:00Z",
+  "directory_keys": [
+    {
+      "x": "4PyBGH-xShW8Le_y6WX9mCnppnUk8YRFXSQrlIWmVWg",
+      "not_before": "2026-05-01T11:00:00Z",
+      "not_after": "2026-06-12T04:00:00Z"
+    }
+  ],
+  "revoked": [
+    "IHrfYIiZHEOqA9JrPLln5Rb7fp6f426ev0oXMm7wY3M"
+  ],
+  "prime_thumbprint": "5aXEjrN76nnuGCZEn8xNmlBDxTU9yxbawIpa5YLqJAo",
+  "cases": [
+    {
+      "label": "directory-absent-but-revoked",
+      "thumbprint": "IHrfYIiZHEOqA9JrPLln5Rb7fp6f426ev0oXMm7wY3M",
+      "expected_revoked": true
+    },
+    {
+      "label": "directory-present-not-revoked",
+      "thumbprint": "5aXEjrN76nnuGCZEn8xNmlBDxTU9yxbawIpa5YLqJAo",
+      "expected_revoked": false
+    },
+    {
+      "label": "unknown",
+      "thumbprint": "67nOSOKqPKPRKoBuhfDCkep_jF2ukQAMdCKk--WSmps",
+      "expected_revoked": false
+    }
+  ]
+}

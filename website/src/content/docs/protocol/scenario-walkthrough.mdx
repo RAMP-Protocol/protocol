@@ -618,7 +618,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 {
   "ver": "1.0",
   "idempotency_key": "tx-claude-001",
-  "offer_id": "sub-offer-tc-reg-001",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
@@ -626,28 +625,36 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
-  "offer": {
-    "offer_id": "sub-offer-tc-reg-001",
-    "title": "AI Regulation: What Providers Need to Know",
-    "pricing": {
-      "model": "PRICING_MODEL_FREE",
-      "rate": "0",
-      "currency": "USD",
-      "unit_cost": "0",
-      "estimated_quantity": 3300
-    },
-    "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-    "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
-    "expires_at": "2026-03-15T14:00:00Z",
-    "identity": {
-      "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
-      "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
-      "content_hash": "a1b2c3d4e5f6...",
-      "hash_method": "simhash-v1"
-    },
-    "signature": "base64-ed25519-sig-B...",
-    "signature_algorithm": "EdDSA"
-  }
+  "items": [
+    {
+      "offer": {
+        "offer_id": "sub-offer-tc-reg-001",
+        "title": "AI Regulation: What Providers Need to Know",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0",
+          "currency": "USD",
+          "unit_cost": "0",
+          "estimated_quantity": 3300
+        },
+        "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+        "expires_at": "2026-03-15T14:00:00Z",
+        "identity": {
+          "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
+          "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
+          "content_hash": "a1b2c3d4e5f6...",
+          "hash_method": "simhash-v1"
+        },
+        "signature": "base64-ed25519-sig-B...",
+        "signature_algorithm": "EdDSA"
+      },
+      "agent_acceptance": {
+        "signature": "base64-ed25519-acceptance-sig...",
+        "signature_algorithm": "EdDSA"
+      }
+    }
+  ]
 }
 ```
 
@@ -659,7 +666,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 {
   "ver": "1.0",
   "idempotency_key": "tx-claude-001",
-  "offer_id": "sub-offer-tc-reg-001",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
@@ -667,28 +673,36 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
-  "offer": {
-    "offer_id": "sub-offer-tc-reg-001",
-    "title": "AI Regulation: What Providers Need to Know",
-    "pricing": {
-      "model": "PRICING_MODEL_FREE",
-      "rate": "0",
-      "currency": "USD",
-      "unit_cost": "0",
-      "estimated_quantity": 3300
-    },
-    "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-    "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
-    "expires_at": "2026-03-15T14:00:00Z",
-    "identity": {
-      "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
-      "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
-      "content_hash": "a1b2c3d4e5f6...",
-      "hash_method": "simhash-v1"
-    },
-    "signature": "base64-ed25519-sig-B...",
-    "signature_algorithm": "EdDSA"
-  }
+  "items": [
+    {
+      "offer": {
+        "offer_id": "sub-offer-tc-reg-001",
+        "title": "AI Regulation: What Providers Need to Know",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0",
+          "currency": "USD",
+          "unit_cost": "0",
+          "estimated_quantity": 3300
+        },
+        "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+        "expires_at": "2026-03-15T14:00:00Z",
+        "identity": {
+          "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
+          "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
+          "content_hash": "a1b2c3d4e5f6...",
+          "hash_method": "simhash-v1"
+        },
+        "signature": "base64-ed25519-sig-B...",
+        "signature_algorithm": "EdDSA"
+      },
+      "agent_acceptance": {
+        "signature": "base64-ed25519-acceptance-sig...",
+        "signature_algorithm": "EdDSA"
+      }
+    }
+  ]
 }
 ```
 
@@ -749,21 +763,25 @@ The request body is identical to the direct case; the forwarding chain lives in 
 ```json
 {
   "ver": "1.0",
-  "transaction_id": "txn-alpha-001",
-  "billing_id": "bill-sub-alpha-001",
-  "resource_title": "AI Regulation: What Providers Need to Know",
-  "retrieval_endpoint": "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html?expires=1710517800&agent_id=e3b0c442...&txn_id=txn-alpha-001&sig=d4e5f6a7b8c9...",
-  "cost": { "amount": "0", "currency": "USD", "unit_cost": "0" },
-  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-  "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
-  "subscription_unit_value": { "amount": "0.05", "currency": "USD", "unit_cost": "0.00001515" },
   "agent_identity_hash": "e3b0c442...",
-  "reporting_obligation": {
-    "required": true,
-    "window": "86400s",
-    "required_fields": ["transaction_id", "function", "consumed_quantity"]
-  },
-  "expires_at": "2026-03-15T15:30:00Z"
+  "items": [
+    {
+      "transaction_id": "txn-alpha-001",
+      "billing_id": "bill-sub-alpha-001",
+      "resource_title": "AI Regulation: What Providers Need to Know",
+      "retrieval_endpoint": "https://cdn.techcrunch.com/server/premium/ai-regulation-2026.html?expires=1710517800&agent_id=e3b0c442...&txn_id=txn-alpha-001&sig=d4e5f6a7b8c9...",
+      "cost": { "amount": "0", "currency": "USD", "unit_cost": "0" },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
+      "subscription_unit_value": { "amount": "0.05", "currency": "USD", "unit_cost": "0.00001515" },
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["transaction_id", "function", "consumed_quantity"]
+      },
+      "expires_at": "2026-03-15T15:30:00Z"
+    }
+  ]
 }
 ```
 

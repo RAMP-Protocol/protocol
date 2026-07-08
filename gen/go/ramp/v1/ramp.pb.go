@@ -8731,7 +8731,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\toffer_sig\x18\x01 \x01(\tR\bofferSig\x12!\n" +
 	"\frequester_id\x18\x02 \x01(\tR\vrequesterId\x12)\n" +
 	"\x10requester_domain\x18\x03 \x01(\tR\x0frequesterDomain\x12'\n" +
-	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\xa1\x02\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\"\x95\x02\n" +
 	"\x12TransactionRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
@@ -8739,12 +8739,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\trequester\x18\x04 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x128\n" +
 	"\x05items\x18\a \x03(\v2\x18.ramp.v1.TransactionItemB\b\xbaH\x05\x92\x01\x02\b\x01R\x05items\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCriticalJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"\"\x9e\x01\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\x9e\x01\n" +
 	"\x0fTransactionItem\x12,\n" +
 	"\x05offer\x18\x03 \x01(\v2\x0e.ramp.v1.OfferB\x06\xbaH\x03\xc8\x01\x01R\x05offer\x12H\n" +
 	"\x10agent_acceptance\x18\x04 \x01(\v2\x18.ramp.v1.AgentAcceptanceH\x00R\x0fagentAcceptance\x88\x01\x01B\x13\n" +
-	"\x11_agent_acceptance\"\xa8\x03\n" +
+	"\x11_agent_acceptance\"\xec\x02\n" +
 	"\x13TransactionResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12.\n" +
 	"\x13agent_identity_hash\x18\n" +
@@ -8755,8 +8754,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x12subscription_quota\x18\x11 \x03(\v2\x1e.ramp.v1.SubscriptionQuotaInfoR\x11subscriptionQuota\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
-	"\v_total_costJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"J\x04\b\f\x10\rJ\x04\b\x10\x10\x11J\x04\b\x12\x10\x13\"\xf3\x06\n" +
+	"\v_total_cost\"\xf3\x06\n" +
 	"\x15TransactionResultItem\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12\x1d\n" +

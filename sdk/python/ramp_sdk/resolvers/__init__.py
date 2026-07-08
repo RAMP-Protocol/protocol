@@ -17,6 +17,7 @@ from ramp_sdk.resolvers.errors import (
     KeyRevokedError,
     NoEndpointError,
     ResolverError,
+    RevocationUnevaluatedError,
     UnknownKeyError,
 )
 from ramp_sdk.resolvers.wba import WBAKeyResolver
@@ -28,6 +29,7 @@ __all__ = [
     "KeyRevokedError",
     "NoEndpointError",
     "ResolverError",
+    "RevocationUnevaluatedError",
     "UnknownKeyError",
     "WBAKeyResolver",
     "WellKnownEndpointResolver",

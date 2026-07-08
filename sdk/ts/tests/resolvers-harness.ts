@@ -46,7 +46,11 @@ export async function makeKey(): Promise<TestKey> {
 
 /** One JWK member of a WBA directory, snake_case exactly as the Go oracle emits
  * it via protojson (UseProtoNames). */
-export function wbaJwk(x: string, notBefore: string, notAfter: string): Record<string, unknown> {
+export function wbaJwk(
+	x: string,
+	notBefore: string,
+	notAfter: string,
+): Record<string, unknown> {
 	return {
 		kty: "OKP",
 		crv: "Ed25519",
@@ -59,7 +63,10 @@ export function wbaJwk(x: string, notBefore: string, notAfter: string): Record<s
 }
 
 /** Serialize a WBAFile carrying keys (and optionally a revocation_url). */
-export function wbaFileJson(keys: Record<string, unknown>[], revocationUrl?: string): string {
+export function wbaFileJson(
+	keys: Record<string, unknown>[],
+	revocationUrl?: string,
+): string {
 	const doc: Record<string, unknown> = { keys };
 	if (revocationUrl !== undefined) doc.revocation_url = revocationUrl;
 	return JSON.stringify(doc);
@@ -92,6 +99,7 @@ export function manifestJson(endpoint?: string): string {
 interface OriginState {
 	wba?: string;
 	wbaStatus: number;
+	wbaHits: number;
 	rev?: string;
 	jwks?: string;
 	jwksStatus: number;
@@ -109,6 +117,7 @@ export interface Origin {
 	host: string;
 	setWBA(body: string): void;
 	setWBAStatus(code: number): void;
+	wbaHits(): number;
 	setRevocation(body: string): void;
 	setJwks(body: string): void;
 	setJwksStatus(code: number): void;
@@ -120,8 +129,12 @@ export interface Origin {
 	close(): Promise<void>;
 }
 
-function route(state: OriginState, path: string): { code: number; body: string } | undefined {
+function route(
+	state: OriginState,
+	path: string,
+): { code: number; body: string } | undefined {
 	if (path === WBA_DIR_PATH) {
+		state.wbaHits += 1;
 		if (state.wbaStatus !== 0) return { code: state.wbaStatus, body: "" };
 		if (state.wba === undefined) return { code: 404, body: "" };
 		return { code: 200, body: state.wba };
@@ -138,7 +151,8 @@ function route(state: OriginState, path: string): { code: number; body: string }
 	}
 	if (path === MANIFEST_PATH) {
 		state.manifestHits += 1;
-		if (state.manifestStatus !== 0) return { code: state.manifestStatus, body: "" };
+		if (state.manifestStatus !== 0)
+			return { code: state.manifestStatus, body: "" };
 		if (state.manifest === undefined) return { code: 404, body: "" };
 		return { code: 200, body: state.manifest };
 	}
@@ -149,6 +163,7 @@ function route(state: OriginState, path: string): { code: number; body: string }
 export async function startOrigin(): Promise<Origin> {
 	const state: OriginState = {
 		wbaStatus: 0,
+		wbaHits: 0,
 		jwksStatus: 0,
 		jwksHits: 0,
 		manifestStatus: 0,
@@ -178,6 +193,7 @@ export async function startOrigin(): Promise<Origin> {
 		setWBAStatus: (c) => {
 			state.wbaStatus = c;
 		},
+		wbaHits: () => state.wbaHits,
 		setRevocation: (b) => {
 			state.rev = b;
 		},

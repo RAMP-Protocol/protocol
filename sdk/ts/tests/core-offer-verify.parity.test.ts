@@ -77,6 +77,20 @@ describe("sdk/ts/core Verifier offer-verify matches the shared JCS oracle matrix
     }
   });
 
+  it("matrix covers the freshness dimension (M-7 fail-closed contract)", () => {
+    // The fail-closed expires_at verdict must stay exercised across ports; if the
+    // corpus loses these, this guard goes red before a fail-open regression (a
+    // missing expires_at silently treated as "fresh") can ship.
+    const names = new Set(vectors.vectors.map((v) => v.name));
+    for (const required of [
+      "fresh_at_now_inclusive",
+      "expired_past",
+      "missing_expires_at",
+    ]) {
+      expect(names).toContain(required);
+    }
+  });
+
   for (const v of vectors.vectors) {
     it(`${v.name} -> verified=${v.expected_verified}`, async () => {
       const exchangePub = b64urlToBytes(v.exchange_pub_b64url);

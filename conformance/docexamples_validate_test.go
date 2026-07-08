@@ -118,3 +118,111 @@ func firstLine(s string) string {
 	}
 	return s
 }
+
+// balancedJSONObjects returns every top-level {...} span in s whose braces
+// balance (ignoring braces inside strings). It lets the example guards see a
+// payload wrapped by a shell (`curl ... -d '{...}'`) or preceded by an RPC verb
+// line (`POST /path` then the body) — spans that a whole-fence json.Unmarshal
+// rejects. This is the coverage hole that let the pre-items-only walkthrough
+// request/response examples pass the marked-fence guard silently.
+func balancedJSONObjects(s string) []string {
+	var out []string
+	depth, start := 0, -1
+	inStr, esc := false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr {
+			switch {
+			case esc:
+				esc = false
+			case c == '\\':
+				esc = true
+			case c == '"':
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inStr = true
+		case '{':
+			if depth == 0 {
+				start = i
+			}
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+				if depth == 0 && start >= 0 {
+					out = append(out, s[start:i+1])
+					start = -1
+				}
+			}
+		}
+	}
+	return out
+}
+
+// The items-only collapse (RAMP-102) moved the single offer into items[].offer
+// and the per-result data into items[] TransactionResultItem. A transaction
+// example carrying any of these at the TOP LEVEL is the removed single-offer
+// shape. Detection is positive-keyed so non-transaction JSON (ramp.json, JWKS,
+// ErrorDetail) is never touched: idempotency_key marks a request; results /
+// agent_identity_hash / total_cost mark a response.
+var (
+	removedRequestTopFields  = []string{"offer", "offer_id", "aisystem", "agent_acceptance"}
+	removedResponseTopFields = []string{
+		"offer_id", "transaction_id", "billing_id", "resource_title", "cost",
+		"delivery_method", "reporting_obligation", "expires_at", "subscription_id",
+		"subscription_unit_value", "retrieval_endpoint", "denial_reason",
+	}
+	responseMarkerFields = []string{"results", "agent_identity_hash", "total_cost"}
+)
+
+// TestDocTransactionExamplesAreItemsOnly: every transaction request/response
+// example in the docs — in a ```json fence, a curl `-d`, or after a verb line —
+// must use the items-only shape. A top-level offer/offer_id/aisystem in a
+// request, or a top-level per-item result field in a response, is the pre-RAMP-102
+// single-offer shape and fails here instead of teaching a removed contract.
+func TestDocTransactionExamplesAreItemsOnly(t *testing.T) {
+	scanned := 0
+	var bad []string
+	hasKey := func(top map[string]json.RawMessage, keys []string) (string, bool) {
+		for _, k := range keys {
+			if _, ok := top[k]; ok {
+				return k, true
+			}
+		}
+		return "", false
+	}
+	walkDocs(t, func(path, content string) {
+		for _, f := range codeFences(content) {
+			for _, obj := range balancedJSONObjects(f) {
+				var top map[string]json.RawMessage
+				if json.Unmarshal([]byte(obj), &top) != nil {
+					continue
+				}
+				if _, isReq := top["idempotency_key"]; isReq {
+					scanned++
+					if k, badField := hasKey(top, removedRequestTopFields); badField {
+						bad = append(bad, filepath.Base(path)+": transaction-request example carries removed top-level \""+k+"\" — items-only puts the offer in items[].offer")
+					}
+					continue
+				}
+				if _, isResp := hasKey(top, responseMarkerFields); isResp {
+					scanned++
+					if k, badField := hasKey(top, removedResponseTopFields); badField {
+						bad = append(bad, filepath.Base(path)+": transaction-response example carries removed top-level \""+k+"\" — items-only puts per-result data in items[]")
+					}
+				}
+			}
+		}
+	})
+	if scanned < 2 {
+		t.Fatalf("only %d transaction example(s) scanned — the fence/JSON extractor drifted (expected >=2)", scanned)
+	}
+	t.Logf("transaction examples scanned=%d", scanned)
+	for _, b := range bad {
+		t.Error(b)
+	}
+}

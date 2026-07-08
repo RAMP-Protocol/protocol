@@ -221,14 +221,28 @@ export class Verifier {
 		return undefined;
 	}
 
-	// expired reports whether the offer carries an expires_at strictly in the past.
+	// expired mirrors the Go oracle (core.Verifier.expired), fail-closed: an offer
+	// with no expires_at, or one whose expires_at cannot be parsed, is treated as
+	// EXPIRED — RAMP offers are minted now+TTL, so a missing/broken bound is
+	// malformed bearer state, never an eternal grant. A present bound is inclusive
+	// at now (strictly-before is expired). The wire form is UTC, so an offset-less
+	// instant is read as UTC, not host-local.
 	private expired(rec: Record<string, unknown>): boolean {
 		const expiresAt = rec.expires_at;
-		if (typeof expiresAt !== "string") return false;
-		const ms = Date.parse(expiresAt);
-		if (Number.isNaN(ms)) return false;
+		if (typeof expiresAt !== "string") return true;
+		const ms = parseUtcMillis(expiresAt);
+		if (Number.isNaN(ms)) return true;
 		return ms < this.now();
 	}
+}
+
+// parseUtcMillis parses an RFC 3339 instant as UTC epoch-millis. An instant with
+// no timezone designator (no trailing Z / ±hh:mm) is read as UTC — the protobuf
+// Timestamp wire form is always UTC — rather than host-local, which is what
+// Date.parse would silently assume and which diverges from Go/Python.
+function parseUtcMillis(s: string): number {
+	const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s);
+	return Date.parse(hasTz ? s : `${s}Z`);
 }
 
 /** Options for NewVerifier (all injected — the core owns no state). */

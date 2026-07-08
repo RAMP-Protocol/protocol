@@ -237,14 +237,18 @@ class Verifier:
         return None
 
     def _expired(self, offer: dict[str, Any]) -> bool:
+        # Fail-closed, mirroring the Go oracle (core.Verifier.expired): an offer
+        # with no expires_at, or one whose expires_at cannot be parsed, is EXPIRED
+        # — RAMP offers are minted now+TTL, so a missing/broken bound is malformed
+        # bearer state, never an eternal grant.
         expires_at = offer.get("expires_at")
         if not isinstance(expires_at, str):
-            return False
+            return True
         try:
             # Python 3.11+ fromisoformat parses the trailing "Z" (UTC) directly.
             when = datetime.fromisoformat(expires_at)
         except ValueError:
-            return False
+            return True
         if when.tzinfo is None:
             # An offset-less RFC 3339 instant is UTC on the wire (protobuf
             # Timestamp.AsTime() is always UTC); naive .timestamp() would read
