@@ -105,30 +105,78 @@ def open_messages(o):
     return o
 
 
-def collapse_int_strings(o):
-    """proto-JSON accepts an integer as a number OR a string (and emits int64 as a
+# The string forms proto-JSON accepts for a numeric field, as protoschema emits them:
+# integers (int32/int64/…) and floating point (double/float).
+INT_STR_PATTERN = r"^-?[0-9]+$"
+FLOAT_STR_PATTERN = r"^-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?$"
+NUMERIC_STR_PATTERNS = {INT_STR_PATTERN, FLOAT_STR_PATTERN}
+NUMERIC_TYPES = ("integer", "number")
+
+
+def collapse_numeric_strings(o):
+    """proto-JSON accepts a number as a JSON number OR a string (and emits int64 as a
     string, to protect JS from >2^53 precision loss), so protoc-gen-jsonschema models
-    every integer field as anyOf[{integer}, {string, pattern ^-?[0-9]+$}]. Collapse to
-    the integer branch: datamodel-codegen emits a clean `int`/`conint` (Pydantic lax
-    parsing still coerces the wire string), instead of an `int | str` union. The Zod
-    side accepts the string via z.coerce.number() (see gen_zod.mjs). Go is unaffected —
-    protobuf-go uses native int64 and protojson does the string conversion."""
+    every numeric field as anyOf[{integer|number}, {string, pattern <numeric>}]. Collapse
+    to the numeric branch: datamodel-codegen emits a clean `int`/`conint`/`confloat`
+    (Pydantic lax parsing still coerces the wire string), instead of a `int | str` union.
+    The Zod side accepts the string via z.coerce.number() (see gen_zod.mjs). Go is
+    unaffected — protobuf-go uses native int64/float64 and protojson does the conversion.
+
+    THIS IS LOAD-BEARING, not cosmetic: protoschema puts minimum/maximum on the NUMERIC
+    arm only. Leave the string arm standing and a bounded field is bypassable through its
+    wire string form — the clients accept "1000" for a [0,1] double the Go server rejects.
+    assert_no_numeric_string_arms below fails the build if any survives."""
     if isinstance(o, dict):
         aof = o.get("anyOf")
         if isinstance(aof, list) and any(
-            isinstance(b, dict) and b.get("type") == "string" and b.get("pattern") == "^-?[0-9]+$"
+            isinstance(b, dict) and b.get("type") == "string" and b.get("pattern") in NUMERIC_STR_PATTERNS
             for b in aof
         ):
-            intb = next((b for b in aof if isinstance(b, dict) and b.get("type") == "integer"), None)
-            if intb is not None:
-                node = dict(intb)
+            numb = next((b for b in aof if isinstance(b, dict) and b.get("type") in NUMERIC_TYPES), None)
+            if numb is not None:
+                node = dict(numb)
                 if "description" in o:
                     node["description"] = o["description"]
                 return node
-        return {k: collapse_int_strings(v) for k, v in o.items()}
+        return {k: collapse_numeric_strings(v) for k, v in o.items()}
     if isinstance(o, list):
-        return [collapse_int_strings(x) for x in o]
+        return [collapse_numeric_strings(x) for x in o]
     return o
+
+
+def assert_no_numeric_string_arms(combined):
+    """Loud guard for the collapse above. A surviving anyOf that pairs a numeric arm with
+    a plain string arm means the field's bound (minimum/maximum) rides on ONE arm only:
+    the generated clients accept an out-of-range value in proto-JSON's string form while
+    Go protovalidate rejects it. That is a silent client/server divergence, which the
+    typed-contract pipeline exists to make impossible.
+
+    Structural, not a pattern allowlist: a future numeric encoding (a uint64's ^[0-9]+$,
+    a float's Infinity/NaN set) trips this instead of shipping unnoticed, and the money
+    fields — standalone {type: string, pattern: <decimal>} nodes, not anyOf arms — are
+    never touched. Enum unions legitimately pair an integer with a string, and always
+    carry a $ref arm; they are exempt."""
+    bad = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            aof = node.get("anyOf")
+            if isinstance(aof, list):
+                arms = [b for b in aof if isinstance(b, dict)]
+                if not any("$ref" in b for b in arms) \
+                        and any(b.get("type") in NUMERIC_TYPES for b in arms) \
+                        and any(b.get("type") == "string" for b in arms):
+                    bad.append(path)
+            for k, v in node.items():
+                walk(v, f"{path}/{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+
+    walk(combined, "")
+    if bad:
+        sys.exit("numeric field(s) keep a proto-JSON string arm, so their bounds are "
+                 f"bypassable in the clients — extend collapse_numeric_strings: {bad}")
 
 
 def close_enum_unions(o, enum_names):
@@ -209,7 +257,30 @@ def mark_required(defs, required_fields):
     return defs
 
 
-def main(src_dir, desc_path, out_file, required_path=None):
+def mark_unique(defs, unique_items):
+    """A repeated field carrying (buf.validate.field).repeated.unique is a SET on the wire:
+    Go protovalidate rejects a duplicate item. protoschema-plugins emits no `uniqueItems`
+    keyword at all, so without this the rule reaches neither client while the proto declares
+    it. unique_items (from the Go uniquegen manifest — the authoritative protovalidate view)
+    names them per message by JSON field name.
+
+    Downstream: json-schema-to-zod compiles `uniqueItems` into a `.refine(...)`, so Zod is
+    covered for free. datamodel-code-generator DROPS it for pydantic v2 (its only option,
+    --use-unique-items-as-set, would rewrite list[str] as set[str] and lose wire ordering),
+    so the Pydantic side is enforced by gen/python/wire/base.py from the generated
+    gen/python/wire/unique.py — emitted from this same manifest."""
+    for msg, names in unique_items.items():
+        d = defs.get(msg)
+        if not isinstance(d, dict) or "properties" not in d:
+            continue
+        for jname in names:
+            prop = d["properties"].get(jname)
+            if isinstance(prop, dict) and prop.get("type") == "array":
+                prop["uniqueItems"] = True
+    return defs
+
+
+def main(src_dir, desc_path, out_file, required_path=None, unique_path=None):
     enum_name = enum_names_from_descriptor(desc_path)
     enum_defs = {}   # name -> {"type":"string","enum":[...]}
     unnamed = []
@@ -252,28 +323,34 @@ def main(src_dir, desc_path, out_file, required_path=None):
         d = strip_titles(json.load(open(f)))
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
-    defs = fix_string_null_default(open_messages(collapse_int_strings(hoist_enums(fix_refs(defs)))))
+    defs = fix_string_null_default(open_messages(collapse_numeric_strings(hoist_enums(fix_refs(defs)))))
     # hoist_enums has now populated enum_defs, so their names are known; close the
     # open name-OR-integer enum unions down to the closed string enum.
     defs = close_enum_unions(defs, set(enum_defs))
     if required_path:
         mark_required(defs, json.load(open(required_path)))
+    if unique_path:
+        mark_unique(defs, json.load(open(unique_path)))
     defs.update(enum_defs)
 
     combined = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$defs": {k: defs[k] for k in sorted(defs)},  # stable key order → stable codegen
     }
-    json.dump(combined, open(out_file, "w"), indent=2)
 
+    # Guards run BEFORE the write: a doc that fails one of them must never reach disk,
+    # where a later pipeline step would happily generate clients from it.
     leftover = sorted(set(re.findall(r'"\$ref":\s*"([^"#][^"]*)"', json.dumps(combined))))
     if leftover:
         sys.exit(f"unresolved external $refs (add to WKT map): {leftover}")
     if unnamed:
         sys.exit(f"inline enums with no descriptor match (value sets): {unnamed[:5]}")
+    assert_no_numeric_string_arms(combined)
+
+    json.dump(combined, open(out_file, "w"), indent=2)
     print(f"merged {len([k for k in defs if k not in enum_defs])} messages + "
           f"{len(enum_defs)} enums -> {out_file}")
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:5])
+    main(*sys.argv[1:6])

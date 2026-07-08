@@ -740,19 +740,15 @@ class Role(Enum):
 
 
 class SetReportingPolicyRequest(WireModel):
-    quantity_tolerance: (
-        confloat(ge=0.0, le=1.0)
-        | constr(pattern=r'^-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?$')
-        | None
-    ) = Field(
+    quantity_tolerance: confloat(ge=0.0, le=1.0) | None = Field(
         None,
-        description="Accepted relative deviation between estimated and reported quantity,\n as a fraction (0 = exact match required, 1 = any deviation accepted).\n Omitted: the consumer's default tolerance applies.",
+        description="Accepted relative deviation between estimated and reported quantity, as a\n fraction: 0 requires an exact match, 1 accepts any deviation. Omitted: the\n receiving Exchange's default tolerance applies.",
     )
     required_fields: (
         list[constr(pattern=r'^[A-Za-z0-9._:*-]+$', min_length=1, max_length=64)] | None
     ) = Field(
         None,
-        description='Report fields the usage-report validator requires. Which field names are\n meaningful is enforced by the consumer service-side (the known set may\n evolve without a contract change); the wire constrains only the token\n shape. Empty means no required fields.',
+        description='Report field names the usage-report validator requires. The wire constrains\n only the token shape; which names are meaningful is defined by the receiving\n Exchange and may change without a contract change. Names are a set: repeats\n are rejected. Empty means no required fields.',
         max_length=32,
     )
     tenant_id: constr(min_length=1, max_length=255) = Field(
@@ -761,18 +757,14 @@ class SetReportingPolicyRequest(WireModel):
     ver: str | None = Field('', description='RAMP protocol version.')
     window_seconds: conint(le=31536000, gt=0) | None = Field(
         None,
-        description="Reporting window in seconds for obligations minted after this change\n (the policy is snapshotted onto each obligation when the transaction\n executes). Capped at one year. Omitted: the consumer's default applies.",
+        description="Reporting window in seconds. Applies to obligations minted after this call;\n obligations already issued keep the window they were minted with. Capped at\n one year. Omitted: the receiving Exchange's default applies.",
     )
 
 
 class SetReportingPolicyResponse(WireModel):
-    quantity_tolerance: (
-        confloat(ge=0.0, le=1.0)
-        | constr(pattern=r'^-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?$')
-        | None
-    ) = Field(
+    quantity_tolerance: confloat(ge=0.0, le=1.0) | None = Field(
         None,
-        description="The quantity tolerance as persisted; absent when the policy leaves it\n to the consumer's default.",
+        description="The quantity tolerance as persisted; absent when the policy leaves it to\n the receiving Exchange's default.",
     )
     required_fields: (
         list[constr(pattern=r'^[A-Za-z0-9._:*-]+$', min_length=1, max_length=64)] | None
@@ -785,14 +777,14 @@ class SetReportingPolicyResponse(WireModel):
     ver: str | None = Field('', description='RAMP protocol version.')
     window_seconds: conint(le=31536000, gt=0) | None = Field(
         None,
-        description="The reporting window as persisted; absent when the policy leaves it to\n the consumer's default.",
+        description="The reporting window as persisted; absent when the policy leaves it to the\n receiving Exchange's default.",
     )
 
 
 class SetTenantFeeRateRequest(WireModel):
     fee_rate_bps: conint(ge=0, lt=10000) | None = Field(
         None,
-        description='Fee rate in basis points. Mirrors the consumer-side storage constraint:\n 0 <= fee_rate_bps < 10000 (a fee below 100%). 0 is a legitimate explicit\n value ("no fee"), not an unset sentinel.',
+        description='Fee rate in basis points of gross: fee = floor(gross * bps / 10000).\n Below 10000 keeps the fee strictly under 100%; integer basis points avoid\n float drift when aggregating many charges. 0 is a legitimate explicit\n value ("no fee"), not an unset sentinel.',
     )
     notes: constr(max_length=1024) | None = Field(
         None,
@@ -806,7 +798,7 @@ class SetTenantFeeRateRequest(WireModel):
 
 class SetTenantFeeRateResponse(WireModel):
     fee_rate_bps: conint(ge=0, lt=10000) | None = Field(
-        None, description='The fee rate as persisted.'
+        None, description='The fee rate as persisted, in basis points of gross.'
     )
     notes: constr(max_length=1024) | None = Field(
         None, description='The note as persisted; absent when the note is cleared.'

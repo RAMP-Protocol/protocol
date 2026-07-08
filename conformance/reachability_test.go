@@ -102,7 +102,7 @@ func allDefinedTypes() (msgs map[protoreflect.FullName]protoreflect.MessageDescr
 			walk(md.Messages())
 		}
 	}
-	for _, f := range contractFiles {
+	for _, f := range ContractFiles() {
 		walk(f.Messages())
 		for i := 0; i < f.Messages().Len(); i++ {
 			md := f.Messages().Get(i)
@@ -120,7 +120,7 @@ func allDefinedTypes() (msgs map[protoreflect.FullName]protoreflect.MessageDescr
 // across the contract files.
 func rpcRootMessages() []protoreflect.MessageDescriptor {
 	var roots []protoreflect.MessageDescriptor
-	for _, f := range contractFiles {
+	for _, f := range ContractFiles() {
 		svcs := f.Services()
 		for i := 0; i < svcs.Len(); i++ {
 			ms := svcs.Get(i).Methods()

@@ -2628,6 +2628,23 @@
     }
   },
   {
+    "id": "SetReportingPolicyRequest/required_fields/duplicate_item",
+    "message": "SetReportingPolicyRequest",
+    "valid": false,
+    "rules": [
+      "repeated.unique"
+    ],
+    "json": {
+      "quantity_tolerance": 0,
+      "required_fields": [
+        "x",
+        "x"
+      ],
+      "tenant_id": "x",
+      "window_seconds": 1
+    }
+  },
+  {
     "id": "SetReportingPolicyRequest/required_fields/item_pattern",
     "message": "SetReportingPolicyRequest",
     "valid": false,
@@ -2830,6 +2847,23 @@
     "json": {
       "quantity_tolerance": -1,
       "required_fields": [
+        "x"
+      ],
+      "tenant_id": "x",
+      "window_seconds": 1
+    }
+  },
+  {
+    "id": "SetReportingPolicyResponse/required_fields/duplicate_item",
+    "message": "SetReportingPolicyResponse",
+    "valid": false,
+    "rules": [
+      "repeated.unique"
+    ],
+    "json": {
+      "quantity_tolerance": 0,
+      "required_fields": [
+        "x",
         "x"
       ],
       "tenant_id": "x",

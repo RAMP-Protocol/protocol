@@ -26,22 +26,13 @@ import (
 // thisFieldRe extracts `this.<field>` references from a CEL expression.
 var thisFieldRe = regexp.MustCompile(`\bthis\.([a-z_]+)\b`)
 
-// eachMessage visits every message in the file, including nested messages.
-func eachMessage(fn func(protoreflect.MessageDescriptor)) {
-	var walk func(protoreflect.MessageDescriptors)
-	walk = func(ms protoreflect.MessageDescriptors) {
-		for i := 0; i < ms.Len(); i++ {
-			md := ms.Get(i)
-			fn(md)
-			walk(md.Messages())
-		}
-	}
-	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
-}
+// These guards walk EachMessage (contract.go) — every message of every contract
+// package, map entries excluded. A new contract package is in scope the moment it is
+// added to Contract; a new enum field / CEL is in scope the moment it exists.
 
-// eachEnumField visits every enum-typed field in the file.
+// eachEnumField visits every enum-typed field of the contract.
 func eachEnumField(fn func(protoreflect.MessageDescriptor, protoreflect.FieldDescriptor)) {
-	eachMessage(func(md protoreflect.MessageDescriptor) {
+	EachMessage(func(md protoreflect.MessageDescriptor) {
 		for j := 0; j < md.Fields().Len(); j++ {
 			fd := md.Fields().Get(j)
 			if fd.Kind() == protoreflect.EnumKind {
@@ -96,7 +87,6 @@ var zeroAllowed = map[string]string{
 	"WellKnownManifest.pricing_models_supported":   "capability advertisement, not a per-term discriminator",
 	"WellKnownManifest.delivery_methods_supported": "capability advertisement",
 	"WellKnownManifest.supported_auth_methods":     "capability advertisement",
-
 }
 
 // TestRequiredEnumDiscriminatorsRejectZero is the process guard for the
@@ -189,7 +179,7 @@ func fieldRejectsZero(md protoreflect.MessageDescriptor, fd protoreflect.FieldDe
 // attaches to the wrong message in a reader's mental model.
 func TestCELIDPrefixMatchesMessage(t *testing.T) {
 	checked := 0
-	eachMessage(func(md protoreflect.MessageDescriptor) {
+	EachMessage(func(md protoreflect.MessageDescriptor) {
 		want := messageSnake(string(md.Name()))
 		check := func(id string) {
 			if id == "" || !strings.Contains(id, ".") {

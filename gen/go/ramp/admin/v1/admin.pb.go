@@ -51,8 +51,9 @@ type SetTenantFeeRateRequest struct {
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The tenant whose fee rate is being set.
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Fee rate in basis points. Mirrors the consumer-side storage constraint:
-	// 0 <= fee_rate_bps < 10000 (a fee below 100%). 0 is a legitimate explicit
+	// Fee rate in basis points of gross: fee = floor(gross * bps / 10000).
+	// Below 10000 keeps the fee strictly under 100%; integer basis points avoid
+	// float drift when aggregating many charges. 0 is a legitimate explicit
 	// value ("no fee"), not an unset sentinel.
 	FeeRateBps int32 `protobuf:"varint,3,opt,name=fee_rate_bps,json=feeRateBps,proto3" json:"fee_rate_bps,omitempty"`
 	// Operator commentary on the rate (why it was set, by whom, ticket link).
@@ -126,7 +127,7 @@ type SetTenantFeeRateResponse struct {
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The tenant the rate was applied to.
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// The fee rate as persisted.
+	// The fee rate as persisted, in basis points of gross.
 	FeeRateBps int32 `protobuf:"varint,3,opt,name=fee_rate_bps,json=feeRateBps,proto3" json:"fee_rate_bps,omitempty"`
 	// The note as persisted; absent when the note is cleared.
 	Notes         *string `protobuf:"bytes,4,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
@@ -198,18 +199,18 @@ type SetReportingPolicyRequest struct {
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The tenant whose reporting policy is being replaced.
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Report fields the usage-report validator requires. Which field names are
-	// meaningful is enforced by the consumer service-side (the known set may
-	// evolve without a contract change); the wire constrains only the token
-	// shape. Empty means no required fields.
+	// Report field names the usage-report validator requires. The wire constrains
+	// only the token shape; which names are meaningful is defined by the receiving
+	// Exchange and may change without a contract change. Names are a set: repeats
+	// are rejected. Empty means no required fields.
 	RequiredFields []string `protobuf:"bytes,3,rep,name=required_fields,json=requiredFields,proto3" json:"required_fields,omitempty"`
-	// Accepted relative deviation between estimated and reported quantity,
-	// as a fraction (0 = exact match required, 1 = any deviation accepted).
-	// Omitted: the consumer's default tolerance applies.
+	// Accepted relative deviation between estimated and reported quantity, as a
+	// fraction: 0 requires an exact match, 1 accepts any deviation. Omitted: the
+	// receiving Exchange's default tolerance applies.
 	QuantityTolerance *float64 `protobuf:"fixed64,4,opt,name=quantity_tolerance,json=quantityTolerance,proto3,oneof" json:"quantity_tolerance,omitempty"`
-	// Reporting window in seconds for obligations minted after this change
-	// (the policy is snapshotted onto each obligation when the transaction
-	// executes). Capped at one year. Omitted: the consumer's default applies.
+	// Reporting window in seconds. Applies to obligations minted after this call;
+	// obligations already issued keep the window they were minted with. Capped at
+	// one year. Omitted: the receiving Exchange's default applies.
 	WindowSeconds *int32 `protobuf:"varint,5,opt,name=window_seconds,json=windowSeconds,proto3,oneof" json:"window_seconds,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -288,11 +289,11 @@ type SetReportingPolicyResponse struct {
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// The required report fields as persisted.
 	RequiredFields []string `protobuf:"bytes,3,rep,name=required_fields,json=requiredFields,proto3" json:"required_fields,omitempty"`
-	// The quantity tolerance as persisted; absent when the policy leaves it
-	// to the consumer's default.
+	// The quantity tolerance as persisted; absent when the policy leaves it to
+	// the receiving Exchange's default.
 	QuantityTolerance *float64 `protobuf:"fixed64,4,opt,name=quantity_tolerance,json=quantityTolerance,proto3,oneof" json:"quantity_tolerance,omitempty"`
-	// The reporting window as persisted; absent when the policy leaves it to
-	// the consumer's default.
+	// The reporting window as persisted; absent when the policy leaves it to the
+	// receiving Exchange's default.
 	WindowSeconds *int32 `protobuf:"varint,5,opt,name=window_seconds,json=windowSeconds,proto3,oneof" json:"window_seconds,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

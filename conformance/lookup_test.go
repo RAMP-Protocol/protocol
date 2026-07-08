@@ -4,33 +4,21 @@
 // The corpus (Case.Message) and the {/* ramp-validate: X */} doc markers carry
 // BARE message names — the same names the generated Pydantic/Zod classes use —
 // so resolution tries each contract package in order. Bare names are unique
-// across the packages (corpusgen guards this loudly at generation time).
+// across the packages; contract.go's AssertUniqueBareNames proves it (see
+// TestContractBareNamesUnique) and corpusgen re-checks it at generation time.
 package conformance
 
 import (
+	"testing"
+
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-
-	rampadminv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
-	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
-// contractPackages are the proto packages whose messages may appear in the
-// corpus and in doc-example markers, in resolution order.
-var contractPackages = []string{"ramp.v1", "ramp.admin.v1"}
-
-// contractFiles are the descriptor files that make up the wire contract, in
-// the same order as contractPackages. Descriptor-walking guards iterate these
-// so a newly added contract package is covered by adding one entry.
-var contractFiles = []protoreflect.FileDescriptor{
-	rampv1.File_ramp_v1_ramp_proto,
-	rampadminv1.File_ramp_admin_v1_admin_proto,
-}
-
-// findContractMessage resolves a bare message name against contractPackages.
+// findContractMessage resolves a bare message name against ContractPackages().
 func findContractMessage(short string) (protoreflect.MessageType, error) {
 	var firstErr error
-	for _, pkg := range contractPackages {
+	for _, pkg := range ContractPackages() {
 		mt, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(pkg + "." + short))
 		if err == nil {
 			return mt, nil
@@ -40,4 +28,19 @@ func findContractMessage(short string) (protoreflect.MessageType, error) {
 		}
 	}
 	return nil, firstErr
+}
+
+// contractPackages is the resolution order, materialized once for error messages.
+var contractPackages = ContractPackages()
+
+// TestContractBareNamesUnique exercises the guard corpusgen relies on, inside the test
+// binary too — so a cross-package name collision fails `go test ./...`, not only the
+// next `go run ./conformance/corpusgen`.
+func TestContractBareNamesUnique(t *testing.T) {
+	if err := AssertUniqueBareNames(); err != nil {
+		t.Fatal(err)
+	}
+	if len(Contract) == 0 {
+		t.Fatal("no contract files — the guard would be vacuous")
+	}
 }

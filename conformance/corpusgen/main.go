@@ -32,7 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	rampadminv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
+	"github.com/RAMP-Protocol/protocol/conformance"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
@@ -105,8 +105,14 @@ func main() {
 	must(err)
 	sd := seeds()
 
+	// The corpus keys messages by bare short name (Case.Message == the generated
+	// class/schema name), so bare names MUST stay unique across the contract packages.
+	if err := conformance.AssertUniqueBareNames(); err != nil {
+		die("%v", err)
+	}
+
 	var cases []Case
-	eachMessage(func(md protoreflect.MessageDescriptor) {
+	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
 		var constrained []protoreflect.FieldDescriptor
 		for i := 0; i < md.Fields().Len(); i++ {
 			fd := md.Fields().Get(i)
@@ -552,6 +558,14 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge 
 			}
 		}})
 	}
+	if r != nil && r.GetUnique() {
+		// The baseline seeds exactly one valid item (setValid), so appending it again
+		// yields [x, x]: two items, under any max_items, tripping ONLY repeated.unique.
+		// Without this the rule reaches no corpus case, and the Zod/Pydantic parity gate
+		// cannot see whether the clients enforce it.
+		es = append(es, edge{label: "duplicate_item", want: "repeated.unique",
+			apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(good) }})
+	}
 	if item != nil {
 		if s := item.GetString(); s != nil {
 			if p := s.GetPattern(); p != "" {
@@ -611,7 +625,7 @@ func hasConstraint(fr *validate.FieldRules) bool {
 		return true
 	}
 	if r := fr.GetRepeated(); r != nil {
-		if r.GetMaxItems() > 0 || r.GetMinItems() > 0 {
+		if r.GetMaxItems() > 0 || r.GetMinItems() > 0 || r.GetUnique() {
 			return true
 		}
 		if it := r.GetItems(); it != nil && it.GetString().GetPattern() != "" {
@@ -739,30 +753,6 @@ func dedupe(xs []string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func eachMessage(fn func(protoreflect.MessageDescriptor)) {
-	// The corpus keys messages by bare short name (Case.Message == the generated
-	// class/schema name), so bare names MUST stay unique across the walked
-	// packages — a cross-package duplicate would silently collide in the merged
-	// $defs and the parity lookups. Guard loudly.
-	seen := map[string]protoreflect.FullName{}
-	var walk func(protoreflect.MessageDescriptors)
-	walk = func(ms protoreflect.MessageDescriptors) {
-		for i := 0; i < ms.Len(); i++ {
-			md := ms.Get(i)
-			if !md.IsMapEntry() {
-				if prev, ok := seen[string(md.Name())]; ok && prev != md.FullName() {
-					die("duplicate bare message name %q (%s vs %s) — the corpus/parity bare-name scheme cannot represent it", md.Name(), prev, md.FullName())
-				}
-				seen[string(md.Name())] = md.FullName()
-				fn(md)
-			}
-			walk(md.Messages())
-		}
-	}
-	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
-	walk(rampadminv1.File_ramp_admin_v1_admin_proto.Messages())
 }
 
 func must(err error) {

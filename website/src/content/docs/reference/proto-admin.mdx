@@ -26,7 +26,7 @@ Exchange operator overrides: the tenant fee rate and the tenant reporting policy
 
 ### SetTenantFeeRateRequest
 
-Sets the tenant's fee rate in basis points (`0 <= fee_rate_bps < 10000`, mirroring the consumer-side storage constraint; `0` is a legitimate explicit value, not an unset sentinel) with an optional operator note. Omitting `notes` clears any existing note.
+Sets the tenant's fee rate in basis points of gross -- the fee is `floor(gross * bps / 10000)`, so a value below `10000` keeps it strictly under 100%, and integer basis points avoid float drift when aggregating many charges. `0` is a legitimate explicit value ("no fee"), not an unset sentinel. Omitting `notes` clears any existing note.
 
 ::proto-message{name=SetTenantFeeRateRequest}
 
@@ -40,7 +40,7 @@ The fee rate and note as persisted.
 
 ### SetReportingPolicyRequest
 
-Replaces the tenant's reporting policy: the report fields the usage-report validator requires, the accepted quantity tolerance (a fraction, `0`–`1`), and the reporting window in seconds (capped at one year). Omitted optional fields clear their key so the consumer's defaults apply. Which `required_fields` names are meaningful is enforced by the consumer service-side; the wire constrains only the token shape. The policy is snapshotted onto each obligation when a transaction executes, so a change affects **new** obligations only.
+Replaces the tenant's reporting policy: the report field names the usage-report validator requires, the accepted quantity tolerance (a fraction, `0`–`1`, where `0` requires an exact match), and the reporting window in seconds (capped at one year). Omitted optional fields clear their value so the receiving Exchange's defaults apply. The wire constrains only the token shape of `required_fields`; which names are meaningful is defined by the receiving Exchange and may change without a contract change, and names are a set (repeats are rejected). The window applies to obligations minted after the call -- obligations already issued keep the window they were minted with.
 
 ::proto-message{name=SetReportingPolicyRequest}
 

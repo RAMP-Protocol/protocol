@@ -22,21 +22,12 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
-
-	rampadminv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
-	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
-// refPages maps each contract descriptor file to the reference page that must
-// document it. Every pair is walked; the docCoverageExempt self-clean runs
-// ONCE after all pages so a shared exemption is not misflagged as stale.
-var refPages = []struct {
-	file protoreflect.FileDescriptor
-	path string
-}{
-	{rampv1.File_ramp_v1_ramp_proto, "../website/src/content/docs/reference/proto-ramp.mdx"},
-	{rampadminv1.File_ramp_admin_v1_admin_proto, "../website/src/content/docs/reference/proto-admin.mdx"},
-}
+// The (descriptor file, reference page) pairs come from contract.go's Contract —
+// the same list every other descriptor-walking guard iterates. Every pair is walked;
+// the docCoverageExempt self-clean runs ONCE after all pages so a shared exemption is
+// not misflagged as stale.
 
 // docCoverageExempt lists "Type" or "Type.field" symbols that are intentionally
 // not documented on the reference page, each with a reason. The test proves each
@@ -105,14 +96,14 @@ func TestReferencePageCoversContract(t *testing.T) {
 	directiveRe := regexp.MustCompile(`::proto-(?:message|service|enum)\{name=([A-Za-z0-9]+)`)
 
 	totalSvcs, totalMsgs, totalEnums := 0, 0, 0
-	for _, page := range refPages {
-		sections, whole := refSections(t, page.path)
+	for _, page := range Contract {
+		sections, whole := refSections(t, page.RefPage)
 		generated := map[string]bool{}
 		for _, m := range directiveRe.FindAllStringSubmatch(whole, -1) {
 			generated[m[1]] = true
 		}
 
-		f := page.file
+		f := page.File
 
 		// ── Services + methods ───────────────────────────────────────────────
 		svcs := f.Services()
@@ -124,7 +115,7 @@ func TestReferencePageCoversContract(t *testing.T) {
 			}
 			body, ok := sections[name]
 			if !ok {
-				flag("service "+name+" is neither generated (::proto-service) nor a `### "+name+"` section on "+page.path, name)
+				flag("service "+name+" is neither generated (::proto-service) nor a `### "+name+"` section on "+page.RefPage, name)
 				continue
 			}
 			ms := svc.Methods()
@@ -147,7 +138,7 @@ func TestReferencePageCoversContract(t *testing.T) {
 			}
 			body, ok := sections[name]
 			if !ok {
-				flag("message "+name+" is neither generated (::proto-message) nor a `### "+name+"` section on "+page.path, name)
+				flag("message "+name+" is neither generated (::proto-message) nor a `### "+name+"` section on "+page.RefPage, name)
 				continue
 			}
 			fs := md.Fields()
@@ -166,7 +157,7 @@ func TestReferencePageCoversContract(t *testing.T) {
 			name := string(enums.Get(i).Name())
 			_, hasHeading := sections[name]
 			if !generated[name] && !hasHeading && !exempt(name) {
-				flag("enum "+name+" is neither generated (::proto-enum) nor a `### "+name+"` section on "+page.path, name)
+				flag("enum "+name+" is neither generated (::proto-enum) nor a `### "+name+"` section on "+page.RefPage, name)
 			}
 		}
 
@@ -187,11 +178,11 @@ func TestReferencePageCoversContract(t *testing.T) {
 
 	sort.Strings(missing)
 	t.Logf("checked reference coverage for %d services, %d top-level messages, %d enums across %d pages",
-		totalSvcs, totalMsgs, totalEnums, len(refPages))
+		totalSvcs, totalMsgs, totalEnums, len(Contract))
 	for _, m := range missing {
 		t.Error("undocumented: " + m)
 	}
 }
 
 // guard against an unused import if the descriptor handle changes shape.
-var _ protoreflect.FileDescriptor = rampv1.File_ramp_v1_ramp_proto
+var _ protoreflect.FileDescriptor = Contract[0].File

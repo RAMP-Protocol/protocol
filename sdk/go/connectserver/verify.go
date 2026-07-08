@@ -130,9 +130,17 @@ func bufferBody(r *http.Request) ([]byte, error) {
 	return body, nil
 }
 
-// isRampProcedure reports whether r targets a ramp.v1 Connect procedure — the
-// signed surface. Health checks and well-known endpoints are intentionally left
-// unsigned and pass through unverified.
+// isRampProcedure reports whether r targets a RAMP Connect procedure — the signed
+// surface. Health checks and well-known endpoints are intentionally left unsigned and
+// pass through unverified.
+//
+// The prefix spans EVERY ramp.* package, so it also matches the operator plane
+// (/ramp.admin.v1.AdminService/...). That plane carries no RFC 9421 request signing by
+// design, and this gate is fail-closed — an AdminService handler mounted behind this
+// middleware would reject every call. It has no signer to verify. Mount the generated
+// rampadminv1connect handler directly, on its own internal listener, never behind this
+// seam (nor on a mux this middleware fronts). The SDK exports no AdminService handler for
+// exactly that reason.
 func isRampProcedure(r *http.Request) bool {
 	return r.URL != nil && strings.HasPrefix(r.URL.Path, "/ramp.")
 }

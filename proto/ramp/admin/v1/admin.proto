@@ -37,7 +37,7 @@ service AdminService {
   rpc SetTenantFeeRate(SetTenantFeeRateRequest) returns (SetTenantFeeRateResponse);
   // Replaces the tenant's reporting policy (required report fields, quantity
   // tolerance, reporting window). Full replace: omitted optional fields clear
-  // their key so the consumer's defaults apply.
+  // their value so the receiving Exchange's defaults apply.
   rpc SetReportingPolicy(SetReportingPolicyRequest) returns (SetReportingPolicyResponse);
 }
 
@@ -48,8 +48,9 @@ message SetTenantFeeRateRequest {
   // The tenant whose fee rate is being set.
   string tenant_id = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 
-  // Fee rate in basis points. Mirrors the consumer-side storage constraint:
-  // 0 <= fee_rate_bps < 10000 (a fee below 100%). 0 is a legitimate explicit
+  // Fee rate in basis points of gross: fee = floor(gross * bps / 10000).
+  // Below 10000 keeps the fee strictly under 100%; integer basis points avoid
+  // float drift when aggregating many charges. 0 is a legitimate explicit
   // value ("no fee"), not an unset sentinel.
   int32 fee_rate_bps = 3 [
     (buf.validate.field).int32.gte = 0,
@@ -68,7 +69,7 @@ message SetTenantFeeRateResponse {
   // The tenant the rate was applied to.
   string tenant_id = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 
-  // The fee rate as persisted.
+  // The fee rate as persisted, in basis points of gross.
   int32 fee_rate_bps = 3 [
     (buf.validate.field).int32.gte = 0,
     (buf.validate.field).int32.lt = 10000
@@ -85,10 +86,10 @@ message SetReportingPolicyRequest {
   // The tenant whose reporting policy is being replaced.
   string tenant_id = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 
-  // Report fields the usage-report validator requires. Which field names are
-  // meaningful is enforced by the consumer service-side (the known set may
-  // evolve without a contract change); the wire constrains only the token
-  // shape. Empty means no required fields.
+  // Report field names the usage-report validator requires. The wire constrains
+  // only the token shape; which names are meaningful is defined by the receiving
+  // Exchange and may change without a contract change. Names are a set: repeats
+  // are rejected. Empty means no required fields.
   repeated string required_fields = 3 [
     (buf.validate.field).repeated.max_items = 32,
     (buf.validate.field).repeated.unique = true,
@@ -97,17 +98,17 @@ message SetReportingPolicyRequest {
     (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
   ];
 
-  // Accepted relative deviation between estimated and reported quantity,
-  // as a fraction (0 = exact match required, 1 = any deviation accepted).
-  // Omitted: the consumer's default tolerance applies.
+  // Accepted relative deviation between estimated and reported quantity, as a
+  // fraction: 0 requires an exact match, 1 accepts any deviation. Omitted: the
+  // receiving Exchange's default tolerance applies.
   optional double quantity_tolerance = 4 [
     (buf.validate.field).double.gte = 0,
     (buf.validate.field).double.lte = 1
   ];
 
-  // Reporting window in seconds for obligations minted after this change
-  // (the policy is snapshotted onto each obligation when the transaction
-  // executes). Capped at one year. Omitted: the consumer's default applies.
+  // Reporting window in seconds. Applies to obligations minted after this call;
+  // obligations already issued keep the window they were minted with. Capped at
+  // one year. Omitted: the receiving Exchange's default applies.
   optional int32 window_seconds = 5 [
     (buf.validate.field).int32.gt = 0,
     (buf.validate.field).int32.lte = 31536000
@@ -130,15 +131,15 @@ message SetReportingPolicyResponse {
     (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
   ];
 
-  // The quantity tolerance as persisted; absent when the policy leaves it
-  // to the consumer's default.
+  // The quantity tolerance as persisted; absent when the policy leaves it to
+  // the receiving Exchange's default.
   optional double quantity_tolerance = 4 [
     (buf.validate.field).double.gte = 0,
     (buf.validate.field).double.lte = 1
   ];
 
-  // The reporting window as persisted; absent when the policy leaves it to
-  // the consumer's default.
+  // The reporting window as persisted; absent when the policy leaves it to the
+  // receiving Exchange's default.
   optional int32 window_seconds = 5 [
     (buf.validate.field).int32.gt = 0,
     (buf.validate.field).int32.lte = 31536000

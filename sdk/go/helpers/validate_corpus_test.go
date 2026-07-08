@@ -5,20 +5,21 @@ import (
 	"os"
 	"testing"
 
-	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	// Registers the ramp.admin.v1 types so corpus cases for the admin
-	// package resolve in protoregistry.GlobalTypes.
-	_ "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
+	// conformance owns the contract package list (contract.go) and, by importing the
+	// generated packages, registers their types in protoregistry.GlobalTypes so a
+	// corpus case for any contract package resolves here. Test-only dependency.
+	"github.com/RAMP-Protocol/protocol/conformance"
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
 // contractPackages are the proto packages a corpus message may come from, in
-// resolution order. Bare names are unique across them — corpusgen guards that
-// at generation time.
-var contractPackages = []string{"ramp.v1", "ramp.admin.v1"}
+// resolution order. Bare names are unique across them — conformance's
+// AssertUniqueBareNames guards that, and corpusgen re-checks it at generation time.
+var contractPackages = conformance.ContractPackages()
 
 type corpusCase struct {
 	ID      string          `json:"id"`

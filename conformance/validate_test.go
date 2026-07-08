@@ -277,7 +277,7 @@ var standardRuleIDs = map[string]bool{
 // every declared rule is claimed. Together: every declared CEL actually fires.
 func TestCELRuleCoverage(t *testing.T) {
 	declared := map[string]bool{}
-	eachMessage(func(md protoreflect.MessageDescriptor) {
+	EachMessage(func(md protoreflect.MessageDescriptor) {
 		if mr, err := protovalidate.ResolveMessageRules(md); err == nil && mr != nil {
 			for _, r := range mr.GetCel() {
 				declared[r.GetId()] = true

@@ -7,20 +7,24 @@
 //   ::proto-vocab{axis=function}               -> the registered token list for an axis
 // Then every `Message.field` / `Service.Method` / `ENUM_VALUE` / `Type` inline-code
 // reference (in prose and in the generated cells) is resolved against the descriptor:
-// resolved + documented on the reference page -> a link; a high-confidence dotted ref
-// whose proto type exists but member doesn't -> the build FAILS. Source of truth is
-// the descriptor (see proto-schema.mjs); the slug is github-slugger (Starlight's).
+// resolved + documented on SOME reference/proto-*.mdx -> a link to that page's anchor; a
+// high-confidence dotted ref whose proto type exists but member doesn't -> the build FAILS.
+// Source of truth is the descriptor (see proto-schema.mjs); the slug is github-slugger
+// (Starlight's).
 import { visit, SKIP } from 'unist-util-visit';
 import GithubSlugger from 'github-slugger';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmTable } from 'micromark-extension-gfm-table';
 import { gfmTableFromMarkdown } from 'mdast-util-gfm-table';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadSchema } from './proto-schema.mjs';
 
-const REF_PAGE = '/reference/proto-ramp/';
-const refPageFile = new URL('../src/content/docs/reference/proto-ramp.mdx', import.meta.url);
+// Reference pages are DISCOVERED, not listed: every reference/proto-*.mdx is a proto
+// package's page, and a new package's page registers itself. The descriptor already spans
+// every package (proto-schema.mjs walks all of fds.file), so a hardcoded single page meant
+// every symbol of a second package resolved yet silently linked nowhere.
+const refDir = new URL('../src/content/docs/reference/', import.meta.url);
 const ignoreFile = new URL('../proto-symbols-ignore.json', import.meta.url);
 
 const RE_MSG_FIELD = /^[A-Z][A-Za-z0-9]+\.[a-z][A-Za-z0-9_]+$/;
@@ -32,15 +36,31 @@ let state;
 function setup() {
   if (state) return state;
   const { enums, messages, services, symbols, vocab } = loadSchema();
-  // Reference-page heading slugs decide which symbols are linkable (no dead anchors).
-  const sl = new GithubSlugger();
-  const headings = new Set();
-  let fence = false;
-  for (const ln of readFileSync(fileURLToPath(refPageFile), 'utf8').split('\n')) {
-    if (ln.trimStart().startsWith('```')) { fence = !fence; continue; }
-    if (fence) continue;
-    const m = /^#{1,6}\s+(.+?)\s*$/.exec(ln);
-    if (m) headings.add(sl.slug(m[1]));
+  // A symbol is linkable iff some reference page carries a heading whose slug is the
+  // symbol's type name — pageOf maps that slug to the page owning it (no dead anchors, and
+  // no anchor on the WRONG page). Restricted to SYMBOL slugs: `## Services` is a heading on
+  // every proto page and is not a proto type, so it must not enter the map (nor collide).
+  const symSlugs = new Set(Object.values(symbols).map((s) => slug(s.type)));
+  const pageOf = new Map();
+  for (const file of readdirSync(refDir).filter((n) => /^proto-.*\.mdx$/.test(n)).sort()) {
+    // Per PAGE: a GithubSlugger instance dedupes across calls, so one shared instance would
+    // slug a heading repeated on a later page to `services-1`. Starlight slugs within a page.
+    const sl = new GithubSlugger();
+    const url = `/reference/${file.replace(/\.mdx$/, '')}/`; // trailing slash: starlight-links-validator
+    let fence = false;
+    for (const ln of readFileSync(new URL(file, refDir), 'utf8').split('\n')) {
+      if (ln.trimStart().startsWith('```')) { fence = !fence; continue; }
+      if (fence) continue;
+      const m = /^#{1,6}\s+(.+?)\s*$/.exec(ln);
+      if (!m) continue;
+      const s = sl.slug(m[1]);
+      if (!symSlugs.has(s)) continue;
+      if (pageOf.has(s)) {
+        throw new Error(`two proto reference pages document "${s}" (${pageOf.get(s)} and ${url}); ` +
+          `a symbol cannot have two anchors — rename one heading or split the symbol.`);
+      }
+      pageOf.set(s, url);
+    }
   }
   const ignore = new Set(JSON.parse(readFileSync(fileURLToPath(ignoreFile), 'utf8')).ignore ?? []);
   const stale = [...ignore].filter((k) => symbols[k]); // self-cleaning
@@ -52,7 +72,7 @@ function setup() {
   // value, so it must resolve (a renamed/removed value fails the build) — unlike a
   // bare short form (PER_UNIT) or a non-proto ALL_CAPS token (RFC_9421).
   const enumPrefixes = Object.keys(enums).map((n) => screamingSnake(n) + '_');
-  state = { enums, messages, services, symbols, vocab, headings, ignore, enumPrefixes };
+  state = { enums, messages, services, symbols, vocab, pageOf, ignore, enumPrefixes };
   return state;
 }
 
@@ -112,7 +132,7 @@ function directiveText(node) {
 
 export default function remarkProto() {
   return (tree, file) => {
-    const { enums, messages, services, symbols, vocab, headings, ignore, enumPrefixes } = setup();
+    const { enums, messages, services, symbols, vocab, pageOf, ignore, enumPrefixes } = setup();
     const where = file?.path ?? 'doc';
 
     // 1. expand directives into tables / token lists
@@ -175,8 +195,9 @@ export default function remarkProto() {
         return;
       }
       const s = slug(sym.type);
-      if (!headings.has(s)) return; // resolved but undocumented on the reference page → not linked
-      parent.children[index] = { type: 'link', url: `${REF_PAGE}#${s}`, children: [node] };
+      const page = pageOf.get(s);
+      if (!page) return; // resolved but undocumented on any reference page → not linked
+      parent.children[index] = { type: 'link', url: `${page}#${s}`, children: [node] };
       return [SKIP, index + 1];
     });
     if (unresolved.size) {

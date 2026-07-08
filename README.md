@@ -15,10 +15,11 @@ Built on [IAB Tech Lab CoMP v1.0](https://github.com/IABTechLab/CoMP) and [RSL 1
 ## What's in this repo
 
 ```
-proto/        Protocol buffer source — the wire format
-  ramp/v1/    RAMP messages and services
-  comp/v1/    IAB CoMP v1.0 (1:1 mapping; included for reference)
-  buf.yaml    Buf module config
+proto/          Protocol buffer source — the wire format
+  ramp/v1/      RAMP messages and services
+  ramp/admin/v1/  AdminService — the Exchange operator/config plane
+  comp/v1/      IAB CoMP v1.0 (1:1 mapping; included for reference)
+  buf.yaml      Buf module config
 
 gen/          Generated SDKs
   go/         Go types + Connect-Go client/server

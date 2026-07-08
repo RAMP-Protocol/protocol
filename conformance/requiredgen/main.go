@@ -23,8 +23,7 @@ import (
 	protovalidate "buf.build/go/protovalidate"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	rampadminv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
-	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/conformance"
 )
 
 func main() {
@@ -33,7 +32,7 @@ func main() {
 		out = os.Args[1]
 	}
 	req := map[string][]string{}
-	eachMessage(func(md protoreflect.MessageDescriptor) {
+	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
 		var names []string
 		for i := 0; i < md.Fields().Len(); i++ {
 			fd := md.Fields().Get(i)
@@ -123,19 +122,4 @@ func zeroRejected(fd protoreflect.FieldDescriptor) bool {
 		panic(fmt.Sprintf("requiredgen: unhandled numeric rule on field %s (kind %s) — extend zeroRejected to evaluate it", fd.FullName(), fd.Kind()))
 	}
 	return false
-}
-
-func eachMessage(fn func(protoreflect.MessageDescriptor)) {
-	var walk func(protoreflect.MessageDescriptors)
-	walk = func(ms protoreflect.MessageDescriptors) {
-		for i := 0; i < ms.Len(); i++ {
-			md := ms.Get(i)
-			if !md.IsMapEntry() {
-				fn(md)
-			}
-			walk(md.Messages())
-		}
-	}
-	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
-	walk(rampadminv1.File_ramp_admin_v1_admin_proto.Messages())
 }

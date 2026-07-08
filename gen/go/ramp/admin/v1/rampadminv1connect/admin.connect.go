@@ -71,7 +71,7 @@ type AdminServiceClient interface {
 	SetTenantFeeRate(context.Context, *connect.Request[v1.SetTenantFeeRateRequest]) (*connect.Response[v1.SetTenantFeeRateResponse], error)
 	// Replaces the tenant's reporting policy (required report fields, quantity
 	// tolerance, reporting window). Full replace: omitted optional fields clear
-	// their key so the consumer's defaults apply.
+	// their value so the receiving Exchange's defaults apply.
 	SetReportingPolicy(context.Context, *connect.Request[v1.SetReportingPolicyRequest]) (*connect.Response[v1.SetReportingPolicyResponse], error)
 }
 
@@ -124,7 +124,7 @@ type AdminServiceHandler interface {
 	SetTenantFeeRate(context.Context, *connect.Request[v1.SetTenantFeeRateRequest]) (*connect.Response[v1.SetTenantFeeRateResponse], error)
 	// Replaces the tenant's reporting policy (required report fields, quantity
 	// tolerance, reporting window). Full replace: omitted optional fields clear
-	// their key so the consumer's defaults apply.
+	// their value so the receiving Exchange's defaults apply.
 	SetReportingPolicy(context.Context, *connect.Request[v1.SetReportingPolicyRequest]) (*connect.Response[v1.SetReportingPolicyResponse], error)
 }
 
