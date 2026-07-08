@@ -1701,10 +1701,6 @@ message TransactionRequest {
   // single-offer mode was removed — a single offer is the degenerate 1-element
   // `items` list.
 
-  // Reserved: the removed single-offer fields `offer` and `agent_acceptance`.
-  // Never reuse these numbers.
-  reserved 8, 9;
-
   // Protocol version
   string ver = 1;
 
@@ -1763,9 +1759,6 @@ message TransactionItem {
 // degenerate 1-element `items`. The per-item denials remain in-body on
 // TransactionResultItem as partial results of a successful request.
 message TransactionResponse {
-  // Reserved: the removed single-offer result fields. Never reuse these numbers.
-  reserved 3, 4, 5, 6, 7, 8, 9, 12, 16, 18;
-
   // Protocol version
   string ver = 1;
 
