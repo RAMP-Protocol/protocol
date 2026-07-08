@@ -1,4 +1,4 @@
-// Scopes parity (TypeScript side) — TDD red for djeue.
+// Scopes parity (TypeScript side) (parity guard, djeue).
 //
 // sdk/ts `normalizeScopes`/`scopesSubset` MUST reproduce the sdk/go oracle
 // byte-for-byte. The shared vectors at
@@ -7,11 +7,8 @@
 //     (Go returns nil for empty/all-empty input → JSON null, R5)
 //   - subset:    {sub:string[], super:string[], expected:boolean}
 //
-// RED now purely because sdk/ts/src/scopes.ts does not exist yet (the import
-// below cannot resolve). The implement step adds that module, at which point
-// this goes green with NO change to the assertions.
+// These faces now exist; the suite is green and guards cross-language parity.
 import { describe, it, expect } from "vitest";
-// RED: sdk/ts/src/scopes.ts does not exist yet (TDD red — missing face).
 import { normalizeScopes, scopesSubset } from "../src/scopes.ts";
 import vectorsFile from "../../go/helpers/testdata/scopes-vectors.json";
 
