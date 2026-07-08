@@ -55,6 +55,16 @@ _REQUIRED_MATRIX = {
     "tamper_negative",
 }
 
+# The freshness dimension (M-7): the port must agree with the Go oracle on the
+# expires_at verdict, including the fail-closed cases. Pinned so a regenerated
+# corpus that silently drops the missing/expired vectors fails loudly here — a
+# port cannot revert to fail-open (missing expires_at ⇒ "fresh") undetected.
+_REQUIRED_FRESHNESS = {
+    "fresh_at_now_inclusive",
+    "expired_past",
+    "missing_expires_at",
+}
+
 
 def _b64url_nopad_decode(s: str) -> bytes:
     pad = "" if len(s) % 4 == 0 else "=" * (4 - len(s) % 4)
@@ -70,6 +80,14 @@ def test_offer_verify_matrix_covers_the_hard_jcs_encodings() -> None:
     # encoding / repeated-field ordering diverge silently. Pin the required matrix.
     names = {str(v["name"]) for v in _VECTORS}
     assert _REQUIRED_MATRIX <= names
+
+
+def test_offer_verify_matrix_covers_the_freshness_dimension() -> None:
+    # Guards M-7: the fail-closed expires_at contract must stay exercised across
+    # ports. If the corpus loses these, this suite goes red before a fail-open
+    # regression can ship.
+    names = {str(v["name"]) for v in _VECTORS}
+    assert _REQUIRED_FRESHNESS <= names
 
 
 @pytest.mark.parametrize("vector", _VECTORS, ids=[v["name"] for v in _VECTORS])

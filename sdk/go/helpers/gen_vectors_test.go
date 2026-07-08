@@ -384,7 +384,9 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 			tamper(offer)
 		}
 		verifyErr := VerifyOffer(offer, offer.GetSignature(), exPub)
-		expired := offer.GetExpiresAt() != nil && offer.GetExpiresAt().AsTime().Before(time.Unix(nowUnix, 0))
+		// Freshness is fail-closed and mirrors core.Verifier.expired: a missing
+		// expires_at is expired (not eternal); a present bound is inclusive at now.
+		expired := offer.GetExpiresAt() == nil || offer.GetExpiresAt().AsTime().Before(time.Unix(nowUnix, 0))
 		return offerVerifyVector{
 			Name:              name,
 			Exchange:          exchange,
@@ -396,7 +398,12 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 		}
 	}
 
-	minimal := &rampv1.Offer{OfferId: "offer-minimal"}
+	// A conformant offer is always minted now+TTL, so every positive (verified)
+	// fixture carries a future expires_at; the freshness dimension is exercised
+	// by the dedicated vectors appended below.
+	future := timestamppb.New(time.Unix(expUnix, 0).UTC())
+
+	minimal := &rampv1.Offer{OfferId: "offer-minimal", ExpiresAt: future}
 
 	structExt, err := structpb.NewStruct(map[string]any{
 		// >1 key, intentionally NOT in sorted order, to force JCS recursive key-sort.
@@ -407,7 +414,7 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 	if err != nil {
 		t.Fatalf("struct ext: %v", err)
 	}
-	structExtOffer := &rampv1.Offer{OfferId: "offer-struct", Ext: structExt}
+	structExtOffer := &rampv1.Offer{OfferId: "offer-struct", Ext: structExt, ExpiresAt: future}
 
 	twoTimestamps := &rampv1.Offer{
 		OfferId:   "offer-two-ts",
@@ -417,6 +424,7 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 
 	repeated := &rampv1.Offer{
 		OfferId:        "offer-repeated",
+		ExpiresAt:      future,
 		DeliveryMethod: rampv1.DeliveryMethod_DELIVERY_METHOD_DIRECT,
 		Pricing:        &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.05", Currency: "USD"},
 		Terms: []*rampv1.LicenseTerm{
@@ -438,11 +446,36 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 		// tamper_negative: sign a clean offer, then bump the price. The stored
 		// signature no longer matches the (tampered) offer_json, so the port rejects.
 		emit("tamper_negative", &rampv1.Offer{
-			OfferId: "offer-tamper",
-			Pricing: &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FLAT, Rate: "1.00", Currency: "USD"},
+			OfferId:   "offer-tamper",
+			ExpiresAt: future,
+			Pricing:   &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FLAT, Rate: "1.00", Currency: "USD"},
 		}, func(o *rampv1.Offer) {
 			o.Pricing.Rate = "999.00" // mutate AFTER signing → signature invalid
 		}),
+
+		// --- Freshness dimension (M-7): every port must agree token-for-token on
+		// the expires_at verdict against the injected clock. These lock the
+		// fail-closed contract so a port cannot silently regress to fail-open. ---
+
+		// fresh_at_now_inclusive: expires_at == now. Inclusive boundary → verified.
+		emit("fresh_at_now_inclusive", &rampv1.Offer{
+			OfferId:   "offer-fresh-now",
+			ExpiresAt: timestamppb.New(time.Unix(nowUnix, 0).UTC()),
+		}, nil),
+
+		// expired_past: valid signature, expires_at strictly before now → rejected
+		// on freshness (not signature).
+		emit("expired_past", &rampv1.Offer{
+			OfferId:   "offer-expired",
+			ExpiresAt: timestamppb.New(time.Unix(nowUnix-100, 0).UTC()),
+		}, nil),
+
+		// missing_expires_at: valid signature, NO expires_at. Fail-closed → rejected.
+		// This is the exact fail-open hole M-7 flagged: a port that returns "fresh"
+		// on a missing bound admits an unbounded bearer offer and breaks here.
+		emit("missing_expires_at", &rampv1.Offer{
+			OfferId: "offer-no-expiry",
+		}, nil),
 	}
 }
 

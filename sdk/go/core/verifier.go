@@ -130,11 +130,17 @@ func (v Verifier) check(ctx context.Context, off *rampv1.Offer) error {
 	return nil
 }
 
-// expired reports whether off carries an expires_at strictly in the past.
+// expired reports whether off is stale on freshness grounds. Fail-closed: an
+// offer that carries NO expires_at is treated as expired, not eternal — RAMP
+// offers are minted at discovery as now+TTL, so a missing bound is malformed
+// bearer state, never an open-ended grant. A present expires_at is inclusive:
+// now == expires_at is still fresh, only strictly-before is expired. The wire
+// Timestamp is always UTC (protobuf Timestamp.AsTime()), so there is no
+// host-local-vs-UTC ambiguity here — the string-parsing ports must match it.
 func expired(off *rampv1.Offer, now time.Time) bool {
 	ts := off.GetExpiresAt()
 	if ts == nil {
-		return false
+		return true
 	}
 	return ts.AsTime().Before(now)
 }
