@@ -42,6 +42,7 @@ import {
   type RejectReason,
   type RequestKeyResolver,
   type ReplayStore,
+  type VerifyRequestHeaders,
 } from "../core/verify-request.ts";
 import { signRequest } from "../core/sign-request.ts";
 import signRequestVectors from "../../go/helpers/testdata/sign-request-vectors.json";
@@ -93,6 +94,11 @@ type NegVerifyVector = {
   // for neg_replay: the same request is presented twice; the SECOND presentation
   // is the one that must be rejected as "replay".
   replay?: boolean;
+  // for neg_entitlement_uncovered: the value to put in the (uncovered)
+  // X-RAMP-Entitlement-Biscuit request header. Non-empty forces
+  // enforceEntitlementCoverage to reject "signature" since the base covered set
+  // does not commit to it.
+  entitlement?: string;
 };
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
@@ -178,6 +184,7 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
     expect(names.has("neg_expired")).toBe(true);
     expect(names.has("neg_wrong_key")).toBe(true);
     expect(names.has("neg_tampered_authorization")).toBe(true);
+    expect(names.has("neg_entitlement_uncovered")).toBe(true);
   });
 
   // POSITIVE: every sign-request oracle vector verifies through the server face
@@ -271,17 +278,24 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
       const store = memoryReplayStore();
       const now = fixedClock(v.now);
 
+      const headers: VerifyRequestHeaders = {
+        "content-digest": v.content_digest,
+        "signature-input": v.signature_input,
+        signature: v.signature,
+        authorization: v.authorization,
+        "signature-agent": v.signature_agent,
+      };
+      // neg_entitlement_uncovered: carry the entitlement-biscuit header the base
+      // covered set does NOT commit to, so enforceEntitlementCoverage rejects it.
+      if (v.entitlement) {
+        headers["x-ramp-entitlement-biscuit"] = v.entitlement;
+      }
+
       const req = {
         method: v.method,
         url: v.url,
         body: hexToBytes(v.body_hex),
-        headers: {
-          "content-digest": v.content_digest,
-          "signature-input": v.signature_input,
-          signature: v.signature,
-          authorization: v.authorization,
-          "signature-agent": v.signature_agent,
-        },
+        headers,
         resolve: resolver,
         replayStore: store,
         now,

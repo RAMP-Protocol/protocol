@@ -65,6 +65,12 @@ _REQUIRED_COVERED: frozenset[str] = frozenset(
     }
 )
 
+# The canonical entitlement-biscuit header (mirrors Go verify.go entitlementHeader
+# / entitlementHeaderLower). When the request carries it, the signature MUST commit
+# to its lowercase covered-component form, or a biscuit could be slipped under an
+# otherwise-valid signature.
+_ENTITLEMENT_HEADER = "x-ramp-entitlement-biscuit"
+
 # The connectserver reject-reason tokens (classify.go RejectReason.String()) for
 # the single-sig surface. Any signature-authenticity/freshness/key failure is the
 # default "signature"; a replayed nonce is "replay".
@@ -164,6 +170,19 @@ def _quoted_param(params: str, name: str) -> str | None:
     return params[value_start:end]
 
 
+def _has_entitlement_header(headers: dict[str, str]) -> bool:
+    """Return True if the entitlement-biscuit header is present (non-empty).
+
+    Header names are matched case-insensitively (mirrors Go http.Header.Get), so a
+    caller passing the canonical ``X-RAMP-Entitlement-Biscuit`` form is honoured
+    alongside the lowercased-key convention this face otherwise reads.
+    """
+    for name, value in headers.items():
+        if name.lower() == _ENTITLEMENT_HEADER and value != "":
+            return True
+    return False
+
+
 def _reject(reason: str) -> VerifiedRequest:
     return VerifiedRequest(valid=False, reason=reason)
 
@@ -226,6 +245,13 @@ def verify_request_server(
     # the five RAMP components must be declared, or a signer omitting a bound field
     # would slip through. Any gap is the default "signature" reason.
     if not parsed.covered >= _REQUIRED_COVERED:
+        return _reject(_REASON_SIGNATURE)
+
+    # Entitlement coverage (Go enforceEntitlementCoverage): if the request carries
+    # the entitlement-biscuit header, the signature MUST commit to it (its lowercase
+    # covered-component form) — else a biscuit could be slipped under a valid
+    # signature. Absent header → no constraint. Read the header case-insensitively.
+    if _has_entitlement_header(headers) and _ENTITLEMENT_HEADER not in parsed.covered:
         return _reject(_REASON_SIGNATURE)
 
     pub = resolver.resolve(parsed.keyid)

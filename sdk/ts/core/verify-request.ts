@@ -63,6 +63,12 @@ export interface VerifyRequestHeaders {
 	signature: string;
 	authorization: string;
 	"signature-agent": string;
+	/**
+	 * The entitlement-biscuit header (mirrors Go entitlementHeaderLower). When
+	 * present, the covered set MUST commit to it (enforceEntitlementCoverage);
+	 * omit/empty when the request carries no entitlement.
+	 */
+	"x-ramp-entitlement-biscuit"?: string;
 }
 
 /** Inputs for verifyRequestServer — the request material plus the injected boundary. */
@@ -90,6 +96,11 @@ const MAX_FUTURE_SKEW_SEC = 300;
 
 // The RAMP required covered set, lowercased (mirrors Go requiredCoveredComponents).
 const REQUIRED_COVERED: ReadonlySet<string> = new Set(COVERED_COMPONENTS);
+
+// The entitlement-biscuit header in covered-component (lowercased) form
+// (mirrors Go entitlementHeaderLower). When the request carries this header the
+// signature's covered set MUST commit to it; absent → no constraint.
+const ENTITLEMENT_COVERED = "x-ramp-entitlement-biscuit";
 
 const REASON_SIGNATURE: RejectReason = "signature";
 const REASON_REPLAY: RejectReason = "replay";
@@ -195,6 +206,13 @@ export interface RequestVerifyFields {
 	authorization: string;
 	signatureAgent: string;
 	body: Uint8Array<ArrayBuffer>;
+	/**
+	 * The entitlement-biscuit header value (empty/undefined when absent). When
+	 * non-empty, enforceEntitlementCoverage requires the covered set to commit to
+	 * "x-ramp-entitlement-biscuit" — a biscuit cannot be slipped under an
+	 * otherwise-valid signature.
+	 */
+	entitlementHeader?: string;
 }
 
 /** The parsed per-signature params the verify core judges (one hop). */
@@ -229,6 +247,12 @@ export async function verifyParsedSignature(
 	if (parsed.alg === null || parsed.alg.toLowerCase() !== "ed25519") return false;
 	for (const need of REQUIRED_COVERED) {
 		if (!parsed.covered.has(need)) return false;
+	}
+	// Entitlement coverage (mirrors Go enforceEntitlementCoverage, run right after
+	// enforceRequiredComponents): iff the request carries the entitlement-biscuit
+	// header, the covered set MUST commit to it; absent → no constraint.
+	if (fields.entitlementHeader && !parsed.covered.has(ENTITLEMENT_COVERED)) {
+		return false;
 	}
 	if (parsed.created === undefined || parsed.expires === undefined) return false;
 	if (parsed.expires < nowSec) return false;
@@ -285,6 +309,9 @@ export async function verifyRequestServer(
 			authorization: input.headers.authorization,
 			signatureAgent: input.headers["signature-agent"],
 			body: input.body,
+			...(input.headers["x-ramp-entitlement-biscuit"]
+				? { entitlementHeader: input.headers["x-ramp-entitlement-biscuit"] }
+				: {}),
 		},
 		parsed,
 		sigBytes,

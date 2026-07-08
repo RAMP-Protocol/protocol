@@ -710,6 +710,11 @@ type verifyRequestNegVector struct {
 	// Replay marks the neg_replay case: the same request is presented twice; the
 	// SECOND presentation is the one that must be rejected as "replay".
 	Replay bool `json:"replay,omitempty"`
+	// Entitlement, when non-empty, is set as the X-RAMP-Entitlement-Biscuit
+	// request header. The neg_entitlement_uncovered case carries it WITHOUT the
+	// signature covering x-ramp-entitlement-biscuit, so a conformant server-verify
+	// must reject an unsigned entitlement claim (enforceEntitlementCoverage).
+	Entitlement string `json:"entitlement,omitempty"`
 }
 
 // negRequest is one signed request the negative emitter mutates into a reject case.
@@ -782,6 +787,9 @@ func verifyNegReason(
 	req.Header.Set(SignatureAgentHeader, v.SignatureAgent)
 	req.Header.Set("Signature-Input", v.SignatureInput)
 	req.Header.Set("Signature", v.Signature)
+	if v.Entitlement != "" {
+		req.Header.Set(entitlementHeader, v.Entitlement)
+	}
 	resolver := NewStaticKeyResolver(map[string]ed25519.PublicKey{})
 	if resolverPub != nil {
 		resolver.Put(v.ResolverKeyID, resolverPub)
@@ -875,7 +883,14 @@ func buildVerifyRequestNegVectors(t *testing.T) []verifyRequestNegVector {
 	tampered := mk("neg_tampered_authorization", freshNow)
 	tampered.Authorization = base.authorization + "-tampered"
 
-	out := []verifyRequestNegVector{badSig, replay, expired, wrongKey, tampered}
+	// neg_entitlement_uncovered: a validly-signed request that ALSO carries the
+	// X-RAMP-Entitlement-Biscuit header WITHOUT the signature covering it. The
+	// entitlement claim is unsigned, so a conformant server-verify must reject it
+	// (enforceEntitlementCoverage) even though the Ed25519 check itself passes.
+	entitlement := mk("neg_entitlement_uncovered", freshNow)
+	entitlement.Entitlement = "biscuit:demo-unsigned-entitlement-token"
+
+	out := []verifyRequestNegVector{badSig, replay, expired, wrongKey, tampered, entitlement}
 	// Derive expected_reason from the REAL Go verify path — never hand-author it.
 	for i := range out {
 		out[i].ExpectedReason = oracleNegReason(t, out[i])
