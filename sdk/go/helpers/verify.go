@@ -43,6 +43,9 @@ var (
 	// ErrTooManyHops signals that the number of signatures on a request exceeds
 	// the verifier's configured MaxSignatures budget (Exchange hop bound).
 	ErrTooManyHops = errors.New("helpers: signature count exceeds hop budget")
+	// ErrSignatureLifetimeTooLong signals that a signature's declared window
+	// (expires − created) exceeds the verifier's MaxSignatureAge clamp.
+	ErrSignatureLifetimeTooLong = errors.New("helpers: signature lifetime exceeds max age")
 )
 
 // defaultMaxFutureSkew bounds how far a created timestamp may lead the verifier's
@@ -61,6 +64,14 @@ type VerifyOptions struct {
 	// carrying more signatures is rejected with ErrTooManyHops before any
 	// signature is cryptographically verified. Ignored by single-sig VerifyRequest.
 	MaxSignatures int
+	// MaxSignatureAge clamps a signature's declared lifetime (expires − created).
+	// MaxFutureSkew only bounds the future edge; without an upper bound on the
+	// window a signer can set expires = now + 10y and, if the replay store is
+	// absent or forgotten, keep replaying the same bytes for years. 0 (default)
+	// means unbounded — back-compatible; a server-terminal consumer sets it (the
+	// RAMP target is minutes). A signature whose window exceeds it is rejected
+	// with ErrSignatureLifetimeTooLong before the Ed25519 check.
+	MaxSignatureAge time.Duration
 }
 
 // VerifiedRequest carries the proven signature metadata. PublicKey is the key
@@ -129,7 +140,7 @@ func verifySingleSignature(
 	if err := enforceEntitlementCoverage(req.Header, params.Covered); err != nil {
 		return nil, err
 	}
-	if err := enforceCreatedExpires(params, now, maxSkew); err != nil {
+	if err := enforceCreatedExpires(params, now, maxSkew, opts.MaxSignatureAge); err != nil {
 		return nil, err
 	}
 	if err := verifyContentDigest(req.Header, body, params.Covered); err != nil {
@@ -203,7 +214,7 @@ func enforceEntitlementCoverage(h http.Header, covered []CoveredComponent) error
 	return fmt.Errorf("%w: %s", ErrMissingRequiredComponent, entitlementHeaderLower)
 }
 
-func enforceCreatedExpires(p sigParams, now time.Time, maxSkew time.Duration) error {
+func enforceCreatedExpires(p sigParams, now time.Time, maxSkew, maxAge time.Duration) error {
 	if p.Created == 0 {
 		return ErrMissingCreated
 	}
@@ -216,6 +227,12 @@ func enforceCreatedExpires(p sigParams, now time.Time, maxSkew time.Duration) er
 	}
 	if p.Created > nowUnix+int64(maxSkew.Seconds()) {
 		return fmt.Errorf("%w: created=%d now=%d", ErrFutureCreated, p.Created, nowUnix)
+	}
+	// Lifetime clamp: a signer-chosen far-future expires is a wide replay window
+	// (worst case when no replay store is wired). Reject a window longer than the
+	// verifier allows. 0 = unbounded (back-compat).
+	if maxAge > 0 && p.Expires-p.Created > int64(maxAge.Seconds()) {
+		return fmt.Errorf("%w: window=%ds max=%ds", ErrSignatureLifetimeTooLong, p.Expires-p.Created, int64(maxAge.Seconds()))
 	}
 	return nil
 }
