@@ -39,6 +39,12 @@ from ramp_sdk.thumbprint import thumbprint
 _WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory"
 _DEFAULT_TTL = timedelta(hours=1)
 _DEFAULT_POLL_INTERVAL = timedelta(seconds=300)
+# Throttle for the unknown-thumbprint force-refresh, per directory host. The
+# resolver runs BEFORE the ed25519 check and the fetch host is the caller-supplied
+# Signature-Agent, so this caps the outbound directory GETs an unauthenticated
+# caller can drive by presenting unknown thumbprints (reflection/amplification +
+# self-DoS). The SSRF guard blocks private TARGETS, not the fetch RATE.
+_DEFAULT_SYNC_DEBOUNCE = timedelta(seconds=5)
 # Bounds how far into the future a revocation snapshot's as_of may sit before it
 # is clamped, so a compromised origin cannot stamp a far-future baseline that
 # permanently freezes later (legitimately earlier) snapshots under the guard.
@@ -74,6 +80,17 @@ class _RevSet:
     as_of: datetime
 
 
+@dataclass
+class _Inflight:
+    """A single in-flight directory fetch for one host. Concurrent callers share
+    it (singleflight): the leader fetches and publishes ``file`` xor ``error``,
+    then sets ``event``; followers wait on ``event`` and read the shared result."""
+
+    event: threading.Event
+    file: WBAFile | None = None
+    error: Exception | None = None
+
+
 class WBAKeyResolver:
     """Resolve signing keys from WBA identity directories, matching by RFC 7638
     thumbprint and enforcing validity windows + the host's revocation snapshot."""
@@ -84,6 +101,7 @@ class WBAKeyResolver:
         scheme: str = "https",
         ttl: timedelta = _DEFAULT_TTL,
         poll_interval: timedelta = _DEFAULT_POLL_INTERVAL,
+        sync_debounce: timedelta = _DEFAULT_SYNC_DEBOUNCE,
         now: NowFn = _now_utc,
         after: AfterFn = _default_after,
         on_poll_armed: Hook | None = None,
@@ -95,6 +113,9 @@ class WBAKeyResolver:
         self._poll_interval = (
             poll_interval if poll_interval > timedelta(0) else _DEFAULT_POLL_INTERVAL
         )
+        self._sync_debounce = (
+            sync_debounce if sync_debounce > timedelta(0) else _DEFAULT_SYNC_DEBOUNCE
+        )
         self._now = now
         self._after = after
         self._on_poll_armed = on_poll_armed
@@ -104,6 +125,13 @@ class WBAKeyResolver:
         self._dir_cache: dict[str, _DirEntry] = {}
         self._rev_lock = threading.Lock()
         self._revoked: dict[str, _RevSet] = {}
+        # _last_sync throttles the unknown-thumbprint force-refresh to one per
+        # window per host (anti-amplification); _inflight coalesces a concurrent
+        # burst of directory fetches for one host to a single GET (singleflight).
+        self._sync_lock = threading.Lock()
+        self._last_sync: dict[str, datetime] = {}
+        self._inflight_lock = threading.Lock()
+        self._inflight: dict[str, _Inflight] = {}
 
     def resolve(self, keyid: str, directory: str) -> bytes:
         """Resolve ``keyid`` (a thumbprint) against ``directory``.
@@ -124,7 +152,14 @@ class WBAKeyResolver:
         file = self._wba_file(base, host)
         key = _key_by_thumbprint(file, keyid)
         if key is None:
-            file = self._sync_refresh(base, host)  # rotation self-heal
+            # The self-heal force-refresh bypasses the TTL cache — the lever an
+            # unauthenticated caller pulls once per unknown thumbprint. Gate it to
+            # one fetch per debounce window per host: outside the window the
+            # thumbprint is reported unknown WITHOUT a fetch (rotation self-heal
+            # still works — the first unknown lookup in each window refetches).
+            if not self._begin_sync(host):
+                raise UnknownKeyError(f"keyid={keyid!r} host={host!r} (refresh debounced)")
+            file = self._sync_refresh(base, host)
             key = _key_by_thumbprint(file, keyid)
             if key is None:
                 # Removal is fall-through (unknown), never revocation.
@@ -153,12 +188,49 @@ class WBAKeyResolver:
                 return entry.file
         return self._sync_refresh(base, host)
 
+    def _begin_sync(self, host: str) -> bool:
+        """Whether an unknown-thumbprint force-refresh for ``host`` may proceed
+        now, recording the attempt when it does — at most one per debounce window
+        per host, so N unknown thumbprints for one host drive ONE fetch, not N."""
+        now = self._now()
+        with self._sync_lock:
+            last = self._last_sync.get(host)
+            if last is not None and now - last < self._sync_debounce:
+                return False
+            self._last_sync[host] = now
+            return True
+
     def _sync_refresh(self, base: str, host: str) -> WBAFile:
-        file = self._fetch_directory(base)
-        with self._dir_lock:
-            self._dir_cache[host] = _DirEntry(file=file, exp=self._now() + self._ttl)
-        self._refresh_revocation_for(host, file)
-        return file
+        """Force-fetch ``host``'s directory, bypassing the TTL cache. A concurrent
+        burst for the same host coalesces to ONE in-flight GET: the first caller
+        leads the fetch, peers wait on its shared result (singleflight)."""
+        with self._inflight_lock:
+            pending = self._inflight.get(host)
+            if pending is not None:
+                leader = False
+            else:
+                pending = _Inflight(event=threading.Event())
+                self._inflight[host] = pending
+                leader = True
+        if not leader:
+            return _await_inflight(pending)
+        return self._lead_refresh(base, host, pending)
+
+    def _lead_refresh(self, base: str, host: str, pending: _Inflight) -> WBAFile:
+        try:
+            file = self._fetch_directory(base)
+            with self._dir_lock:
+                self._dir_cache[host] = _DirEntry(file=file, exp=self._now() + self._ttl)
+            self._refresh_revocation_for(host, file)
+            pending.file = file
+            return file
+        except Exception as exc:  # published to waiters, then re-raised
+            pending.error = exc
+            raise
+        finally:
+            with self._inflight_lock:
+                self._inflight.pop(host, None)
+            pending.event.set()
 
     def _fetch_directory(self, base: str) -> WBAFile:
         body = fetch_strict(self._http, base + _WBA_DIRECTORY_PATH)
@@ -231,6 +303,18 @@ class WBAKeyResolver:
             return base
         seconds = delta.total_seconds()
         return base + timedelta(seconds=random.uniform(-seconds, seconds))
+
+
+def _await_inflight(pending: _Inflight) -> WBAFile:
+    """Block on the leader's in-flight fetch and return its shared result, or
+    re-raise the leader's error. The leader publishes ``file`` xor ``error``
+    before setting ``event``."""
+    pending.event.wait()
+    if pending.error is not None:
+        raise pending.error
+    if pending.file is None:  # unreachable: leader sets file xor error
+        raise DirectoryUnavailableError("wba directory in-flight coalescing lost result")
+    return pending.file
 
 
 def _notify(hook: Hook | None) -> None:

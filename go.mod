@@ -15,6 +15,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/gowebpki/jcs v1.0.1
 	github.com/shopspring/decimal v1.4.0
+	golang.org/x/sync v0.22.0
 )
 
 require (

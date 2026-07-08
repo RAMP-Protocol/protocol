@@ -22,6 +22,7 @@ import { type FetchLike, defaultFetch, fetchSoft, fetchStrict } from "./http.ts"
 const WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory";
 const DEFAULT_TTL_MS = 3_600_000; // 1 hour
 const DEFAULT_POLL_MS = 300_000; // 300 s
+const DEFAULT_SYNC_DEBOUNCE_MS = 5_000; // unknown-thumbprint force-refresh throttle
 const AS_OF_SKEW_MS = 300_000; // far-future as_of clamp ceiling
 const ED25519_PUBLIC_KEY_BYTES = 32;
 
@@ -34,6 +35,12 @@ export interface WBAKeyResolverOptions {
   scheme?: string;
   ttlMs?: number;
   pollIntervalMs?: number;
+  /** Throttle for the unknown-thumbprint force-refresh, per directory host (≤0 →
+   * 5000). The resolver runs BEFORE the ed25519 check and the host is the
+   * caller-supplied Signature-Agent, so this caps the outbound directory GETs an
+   * unauthenticated caller can drive by presenting unknown thumbprints. The
+   * TTL-cache refresh path is NOT gated by it. */
+  syncDebounceMs?: number;
   now?: () => number;
   after?: (ms: number) => Promise<void>;
   onPollArmed?: () => void;
@@ -75,6 +82,7 @@ class WBAResolverImpl implements WBAKeyResolver {
   private readonly scheme: string;
   private readonly ttlMs: number;
   private readonly pollMs: number;
+  private readonly syncDebounceMs: number;
   private readonly now: () => number;
   private readonly after: (ms: number) => Promise<void>;
   private readonly onPollArmed: (() => void) | undefined;
@@ -82,11 +90,18 @@ class WBAResolverImpl implements WBAKeyResolver {
   private readonly fetchFn: FetchLike;
   private readonly dirCache = new Map<string, DirEntry>();
   private readonly revSnapshots = new Map<string, RevSet>();
+  // lastSync throttles the unknown-thumbprint force-refresh to one per debounce
+  // window per host (anti-amplification); inflight coalesces a concurrent burst
+  // of directory fetches for one host to a single in-flight GET (singleflight).
+  private readonly lastSync = new Map<string, number>();
+  private readonly inflight = new Map<string, Promise<WBAFile>>();
 
   constructor(opts: WBAKeyResolverOptions) {
     this.scheme = opts.scheme && opts.scheme !== "" ? opts.scheme : "https";
     this.ttlMs = opts.ttlMs && opts.ttlMs > 0 ? opts.ttlMs : DEFAULT_TTL_MS;
     this.pollMs = opts.pollIntervalMs && opts.pollIntervalMs > 0 ? opts.pollIntervalMs : DEFAULT_POLL_MS;
+    this.syncDebounceMs =
+      opts.syncDebounceMs && opts.syncDebounceMs > 0 ? opts.syncDebounceMs : DEFAULT_SYNC_DEBOUNCE_MS;
     this.now = opts.now ?? Date.now;
     this.after = opts.after ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.onPollArmed = opts.onPollArmed;
@@ -104,7 +119,13 @@ class WBAResolverImpl implements WBAKeyResolver {
     let file = await this.wbaFile(base, host);
     let key = await keyByThumbprint(file, keyID);
     if (!key) {
-      file = await this.syncRefresh(base, host); // rotation self-heal
+      // The self-heal force-refresh below bypasses the TTL cache — the lever an
+      // unauthenticated caller pulls once per unknown thumbprint. Gate it to one
+      // fetch per debounce window per host: outside the window the thumbprint is
+      // reported unknown WITHOUT a fetch (removal-vs-rotation self-heal still
+      // works — the first unknown lookup in each window refetches).
+      if (!this.beginSync(host)) return undefined;
+      file = await this.syncRefresh(base, host);
       key = await keyByThumbprint(file, keyID);
       if (!key) return undefined; // removal is fall-through, never revocation
     }
@@ -130,7 +151,32 @@ class WBAResolverImpl implements WBAKeyResolver {
     return this.syncRefresh(base, host);
   }
 
-  private async syncRefresh(base: string, host: string): Promise<WBAFile> {
+  // beginSync reports whether an unknown-thumbprint force-refresh for host may
+  // proceed now, recording the attempt when it does — at most one per debounce
+  // window per host, so N unknown thumbprints for one host drive ONE fetch, not N.
+  private beginSync(host: string): boolean {
+    const now = this.now();
+    const last = this.lastSync.get(host);
+    if (last !== undefined && now - last < this.syncDebounceMs) return false;
+    this.lastSync.set(host, now);
+    return true;
+  }
+
+  // syncRefresh force-fetches host's directory, bypassing the TTL cache. A
+  // concurrent burst for the same host coalesces to ONE in-flight GET: the first
+  // caller records the promise in `inflight` (synchronously, before any await),
+  // so peers awaiting the same host share it rather than each issuing a fetch.
+  private syncRefresh(base: string, host: string): Promise<WBAFile> {
+    const existing = this.inflight.get(host);
+    if (existing) return existing;
+    const pending = this.doRefresh(base, host).finally(() => {
+      this.inflight.delete(host);
+    });
+    this.inflight.set(host, pending);
+    return pending;
+  }
+
+  private async doRefresh(base: string, host: string): Promise<WBAFile> {
     const file = await this.fetchDirectory(base);
     this.dirCache.set(host, { file, exp: this.now() + this.ttlMs });
     await this.refreshRevocationFor(host, file);

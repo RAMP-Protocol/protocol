@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
@@ -53,6 +54,15 @@ const (
 	defaultWBADirectoryTTL = time.Hour
 	defaultWBAPollInterval = 300 * time.Second
 
+	// defaultWBASyncDebounce bounds how often the unknown-thumbprint force-refresh
+	// may fire per directory host. The key resolver runs BEFORE the ed25519
+	// signature check and the directory host is the caller-supplied
+	// Signature-Agent, so an unauthenticated caller can otherwise drive one
+	// outbound directory GET per unknown thumbprint (reflection/amplification +
+	// self-DoS). The SSRF-guarded dialer blocks private TARGETS, not the fetch
+	// RATE to public hosts — this window is the rate bound.
+	defaultWBASyncDebounce = 5 * time.Second
+
 	// wbaRevocationAsOfSkew bounds how far into the future a revocation
 	// snapshot's as_of may sit relative to the verifier's clock before it is
 	// clamped. A compromised or misconfigured origin cannot then stamp a
@@ -73,6 +83,13 @@ type WBAKeyResolverOptions struct {
 	TTL time.Duration
 	// PollInterval is the base revocation-poll cadence for Run (≤0 → 300s).
 	PollInterval time.Duration
+	// SyncDebounce bounds how often the unknown-thumbprint force-refresh may fire
+	// per directory host (≤0 → 5s). It caps the outbound directory fetches an
+	// unauthenticated caller can drive by presenting unknown thumbprints — the
+	// resolver runs before the ed25519 check and the host is the caller-supplied
+	// Signature-Agent. The TTL-cache refresh path is NOT gated by it; only the
+	// self-heal force-fetch on an unknown thumbprint is.
+	SyncDebounce time.Duration
 	// Now overrides the clock for TTL and validity-window comparisons (nil →
 	// time.Now). Tests inject.
 	Now func() time.Time
@@ -108,6 +125,7 @@ type WBAKeyResolver struct {
 	http         *http.Client
 	ttl          time.Duration
 	pollInterval time.Duration
+	syncDebounce time.Duration
 	now          func() time.Time
 	after        func(time.Duration) <-chan time.Time
 	scheme       string
@@ -118,6 +136,14 @@ type WBAKeyResolver struct {
 	dirMu    sync.Mutex
 	dirCache map[string]wbaDirEntry
 	dirBase  map[string]string // host → scheme://host base for poller re-fetch
+
+	// sf coalesces a concurrent burst of directory fetches for the same host into
+	// ONE in-flight GET (thundering-herd guard on the TTL-refresh AND unknown-
+	// thumbprint self-heal paths). syncMu/lastSync throttle the unknown-thumbprint
+	// force-refresh to one per SyncDebounce window per host (anti-amplification).
+	sf       singleflight.Group
+	syncMu   sync.Mutex
+	lastSync map[string]time.Time
 
 	revMu   sync.RWMutex
 	revoked map[string]wbaRevSet
@@ -147,6 +173,10 @@ func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 	if interval <= 0 {
 		interval = defaultWBAPollInterval
 	}
+	debounce := opts.SyncDebounce
+	if debounce <= 0 {
+		debounce = defaultWBASyncDebounce
+	}
 	now := opts.Now
 	if now == nil {
 		now = time.Now
@@ -167,6 +197,7 @@ func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 		http:         client,
 		ttl:          ttl,
 		pollInterval: interval,
+		syncDebounce: debounce,
 		now:          now,
 		after:        after,
 		scheme:       scheme,
@@ -175,6 +206,7 @@ func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 		onPollCycle:  opts.OnPollCycle,
 		dirCache:     map[string]wbaDirEntry{},
 		dirBase:      map[string]string{},
+		lastSync:     map[string]time.Time{},
 		revoked:      map[string]wbaRevSet{},
 	}
 }
@@ -203,6 +235,14 @@ func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.Pub
 	}
 	key, ok := wbaKeyByThumbprint(f, keyID)
 	if !ok {
+		// The force-refresh below bypasses the TTL cache, so it is the lever an
+		// unauthenticated caller could pull once per unknown thumbprint. Gate it
+		// to one fetch per SyncDebounce window per host: outside the window the
+		// thumbprint is reported unknown WITHOUT a fetch. Removal-vs-rotation
+		// self-heal still works — the first unknown lookup in each window refetches.
+		if !r.beginSync(host) {
+			return nil, fmt.Errorf("%w: keyid=%q host=%q (refresh debounced)", ErrUnknownKey, keyID, host)
+		}
 		if f, err = r.syncRefresh(ctx, base, host); err != nil {
 			return nil, err
 		}
@@ -272,18 +312,48 @@ func (r *WBAKeyResolver) wbaFile(ctx context.Context, base, host string) (*rampv
 	return r.syncRefresh(ctx, base, host)
 }
 
+// beginSync reports whether an unknown-thumbprint force-refresh for host may
+// proceed now, recording the attempt's timestamp when it does. It admits at most
+// one forced refresh per SyncDebounce window per host: an unauthenticated caller
+// presenting N unknown thumbprints for one host drives ONE outbound fetch, not N.
+// The TTL-cache refresh path (wbaFile) does not call it — a legitimately-expired
+// directory always re-fetches.
+func (r *WBAKeyResolver) beginSync(host string) bool {
+	now := r.now()
+	r.syncMu.Lock()
+	defer r.syncMu.Unlock()
+	if last, ok := r.lastSync[host]; ok && now.Sub(last) < r.syncDebounce {
+		return false
+	}
+	r.lastSync[host] = now
+	return true
+}
+
 // syncRefresh force-fetches host's WBA directory, bypassing the TTL cache, and
-// refreshes its revocation snapshot.
+// refreshes its revocation snapshot. A concurrent burst for the same host
+// coalesces to ONE in-flight fetch via singleflight — a thundering herd (many
+// callers crossing a TTL boundary, or an unknown-thumbprint burst) issues a
+// single GET and shares its result.
 func (r *WBAKeyResolver) syncRefresh(ctx context.Context, base, host string) (*rampv1.WBAFile, error) {
-	f, err := r.fetchDirectory(ctx, base)
+	v, err, _ := r.sf.Do(host, func() (any, error) {
+		f, ferr := r.fetchDirectory(ctx, base)
+		if ferr != nil {
+			return nil, ferr
+		}
+		r.dirMu.Lock()
+		r.dirCache[host] = wbaDirEntry{file: f, exp: r.now().Add(r.ttl)}
+		r.dirBase[host] = base
+		r.dirMu.Unlock()
+		r.refreshRevocationFor(ctx, host, f)
+		return f, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	r.dirMu.Lock()
-	r.dirCache[host] = wbaDirEntry{file: f, exp: r.now().Add(r.ttl)}
-	r.dirBase[host] = base
-	r.dirMu.Unlock()
-	r.refreshRevocationFor(ctx, host, f)
+	f, ok := v.(*rampv1.WBAFile)
+	if !ok {
+		return nil, fmt.Errorf("%w: internal fetch result type", ErrDirectoryUnavailable)
+	}
 	return f, nil
 }
 
