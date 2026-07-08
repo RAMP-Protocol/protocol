@@ -47,6 +47,13 @@ export interface WBAKeyResolverOptions {
 export interface WBAKeyResolver {
   resolve(thumbprint: string, directory: string): Promise<Uint8Array | undefined>;
   run(signal: AbortSignal): Promise<void>;
+  /** Whether `keyId` (a thumbprint) is in ANY host's fetched revocation snapshot,
+   * INDEPENDENT of WBA directory membership. `resolve` gates a key only when the
+   * directory lists it (removal is not revocation), so a key resolved from another
+   * source — e.g. a static bootstrap file — is invisible to that path; `revoked`
+   * is the fail-closed hook a composite consults to reject a broker-revoked,
+   * directory-absent thumbprint. False when no snapshot has been fetched. */
+  revoked(keyId: string): boolean;
 }
 
 /** Construct a WBA resolver with defaults applied. */
@@ -74,7 +81,7 @@ class WBAResolverImpl implements WBAKeyResolver {
   private readonly onPollCycle: (() => void) | undefined;
   private readonly fetchFn: FetchLike;
   private readonly dirCache = new Map<string, DirEntry>();
-  private readonly revoked = new Map<string, RevSet>();
+  private readonly revSnapshots = new Map<string, RevSet>();
 
   constructor(opts: WBAKeyResolverOptions) {
     this.scheme = opts.scheme && opts.scheme !== "" ? opts.scheme : "https";
@@ -140,7 +147,15 @@ class WBAResolverImpl implements WBAKeyResolver {
   }
 
   private isRevoked(host: string, thumbprintKey: string): boolean {
-    return this.revoked.get(host)?.thumbprints.has(thumbprintKey) ?? false;
+    return this.revSnapshots.get(host)?.thumbprints.has(thumbprintKey) ?? false;
+  }
+
+  revoked(keyId: string): boolean {
+    if (keyId === "") return false;
+    for (const set of this.revSnapshots.values()) {
+      if (set.thumbprints.has(keyId)) return true;
+    }
+    return false;
   }
 
   // Best-effort: a missing/cross-host/failed/undecodable revocation_url leaves the
@@ -169,12 +184,12 @@ class WBAResolverImpl implements WBAKeyResolver {
     const ceiling = this.now() + AS_OF_SKEW_MS;
     if (asOf > ceiling) asOf = ceiling; // clamp a far-future baseline (first-poll integrity)
     const next: RevSet = { thumbprints: new Set(list.revoked ?? []), asOf };
-    const prev = this.revoked.get(host);
+    const prev = this.revSnapshots.get(host);
     // Monotonic guard: a snapshot whose as_of is not STRICTLY newer than the one
     // held is a rollback and is ignored — a revoked thumbprint is never silently
     // un-revoked. The first seed is always accepted.
     if (prev !== undefined && asOf <= prev.asOf) return;
-    this.revoked.set(host, next);
+    this.revSnapshots.set(host, next);
   }
 
   private async refreshAllRevocations(): Promise<void> {

@@ -335,6 +335,31 @@ func (r *WBAKeyResolver) isRevoked(host, thumbprint string) bool {
 	return revoked
 }
 
+// Revoked reports whether keyID (an RFC 7638 thumbprint) is present in ANY
+// host's fetched revocation snapshot, INDEPENDENT of whether that thumbprint
+// appears in the corresponding WBA directory. Resolve gates a key only when the
+// directory lists it (removal is not revocation); a key resolved from a source
+// OTHER than the directory — e.g. a static bootstrap file — is invisible to that
+// path, so a composite resolver can still admit a broker-revoked, directory-
+// absent thumbprint. Revoked closes that gap: a caller that resolved a key
+// elsewhere consults it to fail closed against the revocation channel. It
+// returns false when no snapshot has been fetched (the snapshot is unavailable —
+// the caller decides whether an unavailable revocation channel is itself
+// fail-closed; this accessor reports membership only, never an outage).
+func (r *WBAKeyResolver) Revoked(keyID string) bool {
+	if keyID == "" {
+		return false
+	}
+	r.revMu.RLock()
+	defer r.revMu.RUnlock()
+	for _, set := range r.revoked {
+		if _, ok := set.thumbprints[keyID]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // refreshRevocationFor replaces host's revocation snapshot from f's
 // revocation_url. Best-effort: a fetch failure leaves the prior snapshot in
 // place and is logged, never propagated (a stale-but-present snapshot is safer

@@ -483,6 +483,60 @@ func TestWBAKeyResolver_FetchError(t *testing.T) {
 	}
 }
 
+// ── Test 15 ────────────────────────────────────────────────────────────────
+
+// TestWBAKeyResolver_Revoked verifies the revocation-set-membership accessor:
+// after the snapshot is primed, Revoked reports true for a thumbprint present in
+// the revocation list even when the directory never listed it (directory-absent-
+// but-revoked), false for a directory-listed key that is not revoked, and false
+// for a thumbprint unknown to both. The accessor is INDEPENDENT of directory
+// membership — it is the fail-closed hook a composite resolver uses to reject a
+// static-bootstrap-only key the broker has revoked.
+func TestWBAKeyResolver_Revoked(t *testing.T) {
+	t.Parallel()
+	presentPriv, presentJWK := newSigningKey("present.v1", wbaAnchor.Add(-time.Hour), wbaAnchor.Add(1000*time.Hour))
+	tpPresent := mustThumbprint(t, presentPriv.Public().(ed25519.PublicKey))
+	absentPriv, _ := newSigningKey("absent-revoked.v1", wbaAnchor.Add(-time.Hour), wbaAnchor.Add(1000*time.Hour))
+	tpAbsentRevoked := mustThumbprint(t, absentPriv.Public().(ed25519.PublicKey))
+	unknownPriv, _ := newSigningKey("unknown.v1", wbaAnchor.Add(-time.Hour), wbaAnchor.Add(1000*time.Hour))
+	tpUnknown := mustThumbprint(t, unknownPriv.Public().(ed25519.PublicKey))
+
+	origin := newWBAOrigin(nil)
+	defer origin.close()
+	// The directory lists only the present key; the revocation snapshot revokes
+	// the directory-ABSENT thumbprint.
+	origin.setWBA(marshalWBAWithRevocation(presentJWK, origin.revocationURL()))
+	origin.setRevocation(marshalRevocation(wbaAnchor, tpAbsentRevoked))
+
+	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
+	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+		Scheme: "http",
+		Now:    func() time.Time { return wbaAnchor },
+	})
+
+	// Before any fetch the snapshot is unavailable → membership is false.
+	if r.Revoked(tpAbsentRevoked) {
+		t.Fatal("Revoked before priming must be false (no snapshot)")
+	}
+	// Prime the snapshot by resolving the directory-present key.
+	if _, err := r.Resolve(ctx, tpPresent); err != nil {
+		t.Fatalf("prime resolve: %v", err)
+	}
+
+	if !r.Revoked(tpAbsentRevoked) {
+		t.Fatal("directory-absent-but-revoked thumbprint must report Revoked=true")
+	}
+	if r.Revoked(tpPresent) {
+		t.Fatal("directory-present, not-revoked thumbprint must report Revoked=false")
+	}
+	if r.Revoked(tpUnknown) {
+		t.Fatal("thumbprint unknown to directory and revocation must report Revoked=false")
+	}
+	if r.Revoked("") {
+		t.Fatal("empty keyID must report Revoked=false")
+	}
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Test-local fixtures
 // ════════════════════════════════════════════════════════════════════════════

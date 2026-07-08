@@ -172,6 +172,21 @@ class WBAKeyResolver:
             rev = self._revoked.get(host)
             return rev is not None and thumbprint_key in rev.thumbprints
 
+    def revoked(self, key_id: str) -> bool:
+        """Whether ``key_id`` (a thumbprint) is in ANY host's fetched revocation
+        snapshot, INDEPENDENT of WBA directory membership.
+
+        ``resolve`` gates a key only when the directory lists it (removal is not
+        revocation), so a key resolved from another source — e.g. a static
+        bootstrap file — is invisible to that path; ``revoked`` is the fail-closed
+        hook a composite consults to reject a broker-revoked, directory-absent
+        thumbprint. Returns False when no snapshot has been fetched.
+        """
+        if key_id == "":
+            return False
+        with self._rev_lock:
+            return any(key_id in rev.thumbprints for rev in self._revoked.values())
+
     def _refresh_revocation_for(self, host: str, file: WBAFile) -> None:
         rev_url = file.revocation_url
         # Anchor the revocation_url to the directory host (SSRF guard): a
