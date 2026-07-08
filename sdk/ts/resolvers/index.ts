@@ -6,7 +6,14 @@
 // identity-directory resolver + revocation poller. The typed error classes
 // preserve the oracle's errors.Is-DISTINCT fail-closed taxonomy.
 
-export { DirectoryUnavailable, KeyExpired, KeyRevoked, NoEndpoint, ResolverError } from "./errors.ts";
+export {
+  DirectoryUnavailable,
+  KeyExpired,
+  KeyRevoked,
+  NoEndpoint,
+  ResolverError,
+  RevocationUnevaluated,
+} from "./errors.ts";
 export type { FetchLike, FetchResponse } from "./http.ts";
 export { type StaticKeyResolver, newStaticKeyResolver } from "./static.ts";
 export {

@@ -16,7 +16,7 @@ import {
 } from "../../../gen/ts/wire/schemas.ts";
 import { decodeBase64Url } from "../src/base64url.ts";
 import { thumbprint } from "../src/thumbprint.ts";
-import { DirectoryUnavailable, KeyExpired, KeyRevoked } from "./errors.ts";
+import { DirectoryUnavailable, KeyExpired, KeyRevoked, RevocationUnevaluated } from "./errors.ts";
 import { type FetchLike, defaultFetch, fetchSoft, fetchStrict } from "./http.ts";
 
 const WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory";
@@ -41,6 +41,13 @@ export interface WBAKeyResolverOptions {
    * unauthenticated caller can drive by presenting unknown thumbprints. The
    * TTL-cache refresh path is NOT gated by it. */
   syncDebounceMs?: number;
+  /** When set, `resolve` fails closed with RevocationUnevaluated for a key whose
+   * directory declares a revocation_url but no snapshot has been fetched
+   * (unreachable or not host-anchored) — i.e. revocation could not be evaluated.
+   * Default false keeps the best-effort behavior (a declared-but-unreachable
+   * revocation channel does not block resolution). Set it where a revoked key
+   * must never resolve even if the revocation channel is down. */
+  requireRevocation?: boolean;
   now?: () => number;
   after?: (ms: number) => Promise<void>;
   onPollArmed?: () => void;
@@ -83,6 +90,7 @@ class WBAResolverImpl implements WBAKeyResolver {
   private readonly ttlMs: number;
   private readonly pollMs: number;
   private readonly syncDebounceMs: number;
+  private readonly requireRevocation: boolean;
   private readonly now: () => number;
   private readonly after: (ms: number) => Promise<void>;
   private readonly onPollArmed: (() => void) | undefined;
@@ -102,6 +110,7 @@ class WBAResolverImpl implements WBAKeyResolver {
     this.pollMs = opts.pollIntervalMs && opts.pollIntervalMs > 0 ? opts.pollIntervalMs : DEFAULT_POLL_MS;
     this.syncDebounceMs =
       opts.syncDebounceMs && opts.syncDebounceMs > 0 ? opts.syncDebounceMs : DEFAULT_SYNC_DEBOUNCE_MS;
+    this.requireRevocation = opts.requireRevocation ?? false;
     this.now = opts.now ?? Date.now;
     this.after = opts.after ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.onPollArmed = opts.onPollArmed;
@@ -130,6 +139,14 @@ class WBAResolverImpl implements WBAKeyResolver {
       if (!key) return undefined; // removal is fall-through, never revocation
     }
     if (this.isRevoked(host, keyID)) throw new KeyRevoked(`keyid=${keyID}`);
+    // Fail closed on unevaluated revocation: the directory advertises a
+    // revocation channel but we hold no snapshot for it, so we cannot assert the
+    // key is un-revoked. Only enforced when the caller opted into
+    // requireRevocation — a present-but-empty snapshot (revocation evaluated,
+    // nothing revoked) is DISTINCT from an absent one and passes.
+    if (this.requireRevocation && file.revocation_url && !this.revocationSnapshotPresent(host)) {
+      throw new RevocationUnevaluated(`keyid=${keyID} host=${host}`);
+    }
     if (!keyActiveAt(key, this.now())) throw new KeyExpired(`keyid=${keyID}`);
     return publicKeyOf(key);
   }
@@ -194,6 +211,15 @@ class WBAResolverImpl implements WBAKeyResolver {
 
   private isRevoked(host: string, thumbprintKey: string): boolean {
     return this.revSnapshots.get(host)?.thumbprints.has(thumbprintKey) ?? false;
+  }
+
+  // revocationSnapshotPresent reports whether a revocation snapshot has ever been
+  // fetched for host. DISTINCT from "the snapshot is empty": an empty snapshot
+  // means revocation WAS evaluated and nothing is revoked, whereas an absent
+  // snapshot means revocation was never evaluated (revocation_url unreachable /
+  // not host-anchored / not yet polled).
+  private revocationSnapshotPresent(host: string): boolean {
+    return this.revSnapshots.has(host);
   }
 
   revoked(keyId: string): boolean {

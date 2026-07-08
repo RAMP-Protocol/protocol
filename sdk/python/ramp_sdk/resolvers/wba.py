@@ -32,6 +32,7 @@ from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
     KeyExpiredError,
     KeyRevokedError,
+    RevocationUnevaluatedError,
     UnknownKeyError,
 )
 from ramp_sdk.thumbprint import thumbprint
@@ -104,6 +105,7 @@ class WBAKeyResolver:
         sync_debounce: timedelta = _DEFAULT_SYNC_DEBOUNCE,
         now: NowFn = _now_utc,
         after: AfterFn = _default_after,
+        require_revocation: bool = False,
         on_poll_armed: Hook | None = None,
         on_poll_cycle: Hook | None = None,
         http: HttpFetch = default_fetch,
@@ -118,6 +120,11 @@ class WBAKeyResolver:
         )
         self._now = now
         self._after = after
+        # When set, Resolve fails closed with RevocationUnevaluatedError when a
+        # key's directory declares a revocation_url but no snapshot has been
+        # fetched (unreachable or not host-anchored) — i.e. revocation could not
+        # be evaluated. Default keeps the best-effort behavior.
+        self._require_revocation = require_revocation
         self._on_poll_armed = on_poll_armed
         self._on_poll_cycle = on_poll_cycle
         self._http = http
@@ -139,7 +146,10 @@ class WBAKeyResolver:
         Returns the raw Ed25519 public key. Raises UnknownKeyError for an
         unknown/absent/malformed reference (fall-through), and the distinct
         KeyRevokedError / KeyExpiredError / DirectoryUnavailableError for the
-        fail-closed verdicts.
+        fail-closed verdicts. Under require_revocation, also raises
+        RevocationUnevaluatedError when the directory declares a revocation_url
+        but no snapshot has landed (revocation could not be evaluated) — DISTINCT
+        from KeyRevokedError ("evaluated and revoked").
         """
         if directory == "" or keyid == "":
             raise UnknownKeyError(f"no signature-agent directory for keyid={keyid!r}")
@@ -166,6 +176,15 @@ class WBAKeyResolver:
                 raise UnknownKeyError(f"keyid={keyid!r} host={host!r}")
         if self._is_revoked(host, keyid):
             raise KeyRevokedError(f"keyid={keyid!r}")
+        # Fail-closed on unevaluated revocation: the directory advertises a
+        # revocation channel but we hold no snapshot for it, so we cannot assert
+        # the key is un-revoked. Only enforced under require_revocation.
+        if (
+            self._require_revocation
+            and file.revocation_url
+            and not self._revocation_snapshot_present(host)
+        ):
+            raise RevocationUnevaluatedError(f"keyid={keyid!r} host={host!r}")
         if not _key_active_at(key, self._now()):
             raise KeyExpiredError(f"keyid={keyid!r}")
         return _public_key_of(key)
@@ -243,6 +262,16 @@ class WBAKeyResolver:
         with self._rev_lock:
             rev = self._revoked.get(host)
             return rev is not None and thumbprint_key in rev.thumbprints
+
+    def _revocation_snapshot_present(self, host: str) -> bool:
+        """Whether a revocation snapshot has EVER been fetched for ``host``.
+
+        DISTINCT from "the snapshot is empty": an empty snapshot means revocation
+        WAS evaluated and nothing is revoked, whereas an absent snapshot means
+        revocation was never evaluated (revocation_url unreachable / not
+        host-anchored / not yet polled)."""
+        with self._rev_lock:
+            return host in self._revoked
 
     def revoked(self, key_id: str) -> bool:
         """Whether ``key_id`` (a thumbprint) is in ANY host's fetched revocation

@@ -28,6 +28,19 @@ class KeyExpiredError(ResolverError):
     """The key exists but ``now`` is outside its [not_before, not_after) window."""
 
 
+class RevocationUnevaluatedError(ResolverError):
+    """The key resolved, but its directory declares a revocation_url whose
+    snapshot has never been fetched (unreachable or not host-anchored) — so
+    revocation was NEVER EVALUATED, which is DISTINCT from "evaluated and not
+    revoked" (:class:`KeyRevokedError` is the revoked verdict).
+
+    Only raised when the resolver is constructed with ``require_revocation=True``;
+    the default keeps the prior best-effort behavior (a declared-but-unreachable
+    revocation channel does not block resolution). It lets a caller that treats
+    revocation as mandatory fail closed instead of trusting an unevaluated key.
+    """
+
+
 class DirectoryUnavailableError(ResolverError):
     """A well-known directory/JWKS/manifest could not be fetched or decoded.
 
