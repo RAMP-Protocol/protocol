@@ -3,6 +3,14 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    // The generated wire schemas we compile live outside this package tree
+    // (../../../gen/ts/wire), so their bare `zod` import can't reach this
+    // package's node_modules by walking up. Pin it here (TS 6 resolves `paths`
+    // relative to this file, no baseUrl needed). vitest already resolves zod
+    // from the package root at runtime; this only closes the type-check gap.
+    "paths": {
+      "zod": ["./node_modules/zod"]
+    },
     "lib": ["ES2023", "DOM"],
     "types": ["vitest/globals", "node"],
     "strict": true,
