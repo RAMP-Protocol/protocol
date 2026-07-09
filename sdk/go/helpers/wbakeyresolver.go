@@ -100,8 +100,10 @@ var ssrfBlockedPrefixes = mustParsePrefixes(
 	"192.88.99.0/24", "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24",
 	"203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4", "255.255.255.255/32",
 	// IPv6
-	"::/128", "::1/128", "100::/64", "2001:db8::/32", "2001::/23",
+	"::/96", "::1/128", "100::/64", "2001:db8::/32", "2001::/23",
 	"fc00::/7", "fe80::/10", "ff00::/8",
+	// 6to4 (embeds a v4 in bits 16-48; block the block wholesale — RFC 3056)
+	"2002::/16",
 	// NAT64 (also unwrapped in ssrfBlocked so the embedded v4 is re-checked)
 	"64:ff9b::/96", "64:ff9b:1::/48",
 )
@@ -114,11 +116,14 @@ func mustParsePrefixes(cidrs ...string) []netip.Prefix {
 	return out
 }
 
-// ssrfBlocked reports whether addr is non-public. It first unwraps v4-mapped
-// (::ffff:a.b.c.d) and NAT64 (64:ff9b::a.b.c.d) forms and re-checks the embedded
-// v4, so an IPv6 literal embedding a private v4 cannot slip past a v6-only test.
+// ssrfBlocked reports whether addr is non-public. It first strips any IPv6 zone
+// (netip.Prefix.Contains is false for a zoned address, so a zoned literal like
+// fe80::1%eth0 would otherwise skip every prefix — a guard bypass) and unwraps
+// v4-mapped (::ffff:a.b.c.d) and NAT64 (64:ff9b::a.b.c.d) forms, re-checking the
+// embedded v4, so an IPv6 literal embedding a private v4 cannot slip past a
+// v6-only test.
 func ssrfBlocked(addr netip.Addr) bool {
-	addr = addr.Unmap() // v4-mapped ::ffff:a.b.c.d -> a.b.c.d
+	addr = addr.WithZone("").Unmap() // drop scope id, then v4-mapped ::ffff:a.b.c.d -> a.b.c.d
 	if addr.Is6() {
 		if v4, ok := nat64EmbeddedV4(addr); ok && ssrfBlocked(v4) {
 			return true
@@ -144,6 +149,23 @@ func nat64EmbeddedV4(addr netip.Addr) (netip.Addr, bool) {
 	b := addr.As16()
 	return netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}), true
 }
+
+// allowedScheme is the deny-by-default URL-scheme allowlist for the guarded
+// transport: only http/https may be dialed, on the initial request AND every
+// redirect target. A scheme denylist is unwinnable (ftp, ftps, telnet, gopher,
+// file, data, dict, …), so the policy is an allowlist. Case-insensitive per
+// RFC 3986. Shared, corpus-tested across the three SDKs.
+func allowedScheme(scheme string) bool {
+	switch strings.ToLower(scheme) {
+	case "http", "https":
+		return true
+	default:
+		return false
+	}
+}
+
+// maxWBARedirects bounds redirect following on the guarded transport.
+const maxWBARedirects = 5
 
 // newGuardedWBAClient is the HTTP client used when the caller injects none. It
 // refuses to dial any non-public address (see ssrfBlockedPrefixes). The directory
@@ -174,6 +196,20 @@ func newGuardedWBAClient() *http.Client {
 	return &http.Client{
 		Timeout:   defaultWBAHTTPTimeout,
 		Transport: &http.Transport{DialContext: dialer.DialContext},
+		// Every redirect target is re-vetted: the scheme against the allowlist
+		// (net/http already rejects non-http schemes, but assert it explicitly so
+		// the policy is enforced regardless of transport) and — because each
+		// redirect makes a fresh dial through the same guarded dialer — its
+		// resolved address against ssrfBlocked. Bounded to avoid loops.
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxWBARedirects {
+				return fmt.Errorf("helpers: too many redirects (SSRF guard)")
+			}
+			if !allowedScheme(req.URL.Scheme) {
+				return fmt.Errorf("helpers: refusing redirect to non-http(s) scheme %q (SSRF guard)", req.URL.Scheme)
+			}
+			return nil
+		},
 	}
 }
 
