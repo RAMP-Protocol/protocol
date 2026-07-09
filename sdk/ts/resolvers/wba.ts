@@ -17,7 +17,7 @@ import {
 import { decodeBase64Url } from "../src/base64url.ts";
 import { thumbprint } from "../src/thumbprint.ts";
 import { DirectoryUnavailable, KeyExpired, KeyRevoked, RevocationUnevaluated } from "./errors.ts";
-import { type FetchLike, defaultFetch, fetchSoft, fetchStrict } from "./http.ts";
+import { type FetchLike, guardedFetch, fetchSoft, fetchStrict } from "./http.ts";
 
 const WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory";
 const DEFAULT_TTL_MS = 3_600_000; // 1 hour
@@ -115,7 +115,9 @@ class WBAResolverImpl implements WBAKeyResolver {
     this.after = opts.after ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.onPollArmed = opts.onPollArmed;
     this.onPollCycle = opts.onPollCycle;
-    this.fetchFn = opts.fetch ?? defaultFetch;
+    // The WBA directory host comes from the request-supplied Signature-Agent and
+    // is fetched pre-auth, so the default is SSRF-guarded (matches the Go oracle).
+    this.fetchFn = opts.fetch ?? guardedFetch;
   }
 
   async resolve(keyID: string, directory: string): Promise<Uint8Array | undefined> {

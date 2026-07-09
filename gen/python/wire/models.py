@@ -148,12 +148,11 @@ class Delegation(WireModel):
         description="Scopes granted by this delegation. MUST be a subset of the\n principal's own scopes (attenuation — can only narrow, not widen).",
     )
     token: constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$') | None = Field(
-        '',
-        description='Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,\n base64-encoded) when token_format is "biscuit-v3".',
+        '', description='Token bytes. A JWT (base64url-encoded JWS).'
     )
     token_format: str | None = Field(
         '',
-        description='Token format: "jwt" (default) or "biscuit-v3" (optional, for deep\n multi-hop offline attenuation). Empty is treated as "jwt".',
+        description='Token format: "jwt" (default). Empty is treated as "jwt". The field stays\n open for a future format.',
     )
 
 
@@ -181,9 +180,6 @@ class DenialReason(Enum):
     DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 'DENIAL_REASON_ENTITLEMENT_WRONG_BUYER'
     DENIAL_REASON_SUBSCRIPTION_LAPSED = 'DENIAL_REASON_SUBSCRIPTION_LAPSED'
     DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 'DENIAL_REASON_ENTITLEMENT_NOT_GRANTED'
-    DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION = (
-        'DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION'
-    )
 
 
 class DiscoveryMethod(Enum):

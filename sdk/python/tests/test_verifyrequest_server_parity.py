@@ -143,9 +143,7 @@ def test_oracle_signed_request_verifies_through_server_face(vector: dict[str, ob
 
 def test_live_signed_request_roundtrips_through_server_face() -> None:
     # A request signed live by the request SIGNER verifies through the server face.
-    seed = bytes.fromhex(
-        "55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374"
-    )
+    seed = bytes.fromhex("55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374")
     pub = (
         Ed25519PrivateKey.from_private_bytes(seed)
         .public_key()
@@ -207,11 +205,11 @@ def test_negative_vector_rejected_with_correct_reason(vector: dict[str, object])
         "signature-agent": str(vector.get("signature_agent", "")),
     }
     # A vector carrying an "entitlement" value exercises entitlement-coverage
-    # enforcement: set the X-RAMP-Entitlement-Biscuit request header to it. The
-    # base request's covered set does not cover the header, so a conformant
-    # verifier must reject with reason "signature".
+    # enforcement: set the X-Entitlement-Token request header to it. The base
+    # request's covered set does not cover the header, so a conformant verifier
+    # must reject with reason "signature".
     if vector.get("entitlement"):
-        headers["X-RAMP-Entitlement-Biscuit"] = str(vector["entitlement"])
+        headers["X-Entitlement-Token"] = str(vector["entitlement"])
 
     def _verify() -> object:
         return verify_request_server(
@@ -266,3 +264,72 @@ def test_replay_uses_the_injected_store_only() -> None:
     )
     # The nonce landed in OUR store — the SDK held none of it.
     assert len(store.seen) == 1
+
+
+def _live_signed_call(*, max_signature_age: int, window: int = 600) -> object:
+    # Sign a request live over a `window`-second declared lifetime and verify it
+    # through the single-sig server face under the given max_signature_age clamp.
+    # Returns the verdict. Backs the R2-4 lifetime-clamp parity tests.
+    seed = bytes.fromhex("55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374")
+    pub = (
+        Ed25519PrivateKey.from_private_bytes(seed)
+        .public_key()
+        .public_bytes(Encoding.Raw, PublicFormat.Raw)
+    )
+    created = 1_700_000_000
+    expires = created + window
+    body = b'{"uri":"https://cdn.example/clamp"}'
+    signed = sign_request(
+        method="POST",
+        url="https://broker.example/ramp.v1.BrokerService/Fetch",
+        body=body,
+        authorization="Bearer clamp-token",
+        signer_seed=seed,
+        keyid="mcp.v1",
+        created=created,
+        expires=expires,
+        signature_agent="https://agent.example",
+    )
+    return verify_request_server(
+        method="POST",
+        url="https://broker.example/ramp.v1.BrokerService/Fetch",
+        body=body,
+        headers={
+            "content-digest": signed.content_digest,
+            "signature-input": signed.signature_input,
+            "signature": signed.signature,
+            "authorization": "Bearer clamp-token",
+            "signature-agent": "https://agent.example",
+        },
+        resolver=_RecordingResolver({"mcp.v1": pub}),
+        replay_store=_MemoryReplayStore(),
+        now=created + 100,
+        max_signature_age=max_signature_age,
+    )
+
+
+def test_single_sig_within_max_age_bound_verifies() -> None:
+    # R2-4 clamp — WITHIN the bound: a 600s window under a 700s clamp verifies.
+    verdict = _live_signed_call(max_signature_age=700)
+    assert verdict.valid is True  # type: ignore[attr-defined]
+
+
+def test_single_sig_equal_to_max_age_bound_verifies() -> None:
+    # R2-4 clamp — EQUAL to the bound (inclusive): 600s window under a 600s clamp
+    # verifies (mirrors Go's `> maxAge` reject — equality passes).
+    verdict = _live_signed_call(max_signature_age=600)
+    assert verdict.valid is True  # type: ignore[attr-defined]
+
+
+def test_single_sig_exceeding_max_age_bound_is_rejected() -> None:
+    # R2-4 clamp — EXCEEDING the bound: 600s window under a 500s clamp rejects with
+    # reason "signature" (mirrors Go ErrSignatureLifetimeTooLong).
+    verdict = _live_signed_call(max_signature_age=500)
+    assert verdict.valid is False  # type: ignore[attr-defined]
+    assert verdict.reason == "signature"  # type: ignore[attr-defined]
+
+
+def test_single_sig_unbounded_max_age_default_verifies() -> None:
+    # R2-4 clamp — UNBOUNDED default (0 / omitted): the 600s window is admitted.
+    verdict = _live_signed_call(max_signature_age=0)
+    assert verdict.valid is True  # type: ignore[attr-defined]

@@ -179,7 +179,7 @@ Delegation JWTs support offline narrowing — an agent can narrow a token's perm
 └─────────────────────────┘
 ```
 
-The narrowed token is a new child delegation JWT linked into the chain via `cnf`. The sub-agent **cannot** widen permissions — it can only further restrict the registered grant dimensions: scope, spend (`max_spend_cents`), access count (`max_accesses`), and time (`exp`). Resource/URI access is gated through *scopes* (each requested URI is checked against the token's scopes), so confining a sub-agent to `internal://tax/` is expressed as a narrower scope, not a separate URI claim. Per-URI pattern confinement that is independent of scopes is not part of the default JWT registered-claim set; deployments that need it use the optional `biscuit-v3` profile (whose check blocks can carry URI constraints) or a vendor-namespaced claim.
+The narrowed token is a new child delegation JWT linked into the chain via `cnf`. The sub-agent **cannot** widen permissions — it can only further restrict the registered grant dimensions: scope, spend (`max_spend_cents`), access count (`max_accesses`), and time (`exp`). Resource/URI access is gated through *scopes* (each requested URI is checked against the token's scopes), so confining a sub-agent to `internal://tax/` is expressed as a narrower scope, not a separate URI claim. Per-URI pattern confinement that is independent of scopes is not part of the JWT registered-claim set; deployments that need it use a vendor-namespaced claim.
 
 This happens entirely offline. No call to IAM. No network round-trip. No central bottleneck.
 

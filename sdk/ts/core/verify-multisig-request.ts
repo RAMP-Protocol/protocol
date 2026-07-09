@@ -48,6 +48,13 @@ export interface MultisigVerifyHeaders {
 	signature: string;
 	authorization: string;
 	"signature-agent": string;
+	/**
+	 * The entitlement-token header (mirrors Go entitlementHeaderLower). When
+	 * present, EVERY hop's covered set MUST commit to it (enforceEntitlementCoverage
+	 * runs per hop in Go's verifySingleSignature, which the multisig loop calls per
+	 * hop); omit/empty when the request carries no entitlement.
+	 */
+	"x-entitlement-token"?: string;
 }
 
 /** Inputs for verifyMultisigRequestServer. */
@@ -62,6 +69,10 @@ export interface VerifyMultisigRequestInput {
 	/** The Exchange hop bound: reject a chain longer than this BEFORE any crypto.
 	 * 0 / omitted means unbounded (mirrors Go opts.MaxSignatures). */
 	maxSignatures?: number;
+	/** The per-hop signature-lifetime clamp in SECONDS (mirrors Go
+	 * VerifyOptions.MaxSignatureAge), enforced on EVERY hop exactly like the
+	 * single-sig path. 0 / omitted means unbounded; the bound is inclusive. */
+	maxSignatureAge?: number;
 }
 
 /** The returned verdict: valid with the verified keyids in chain order, or invalid
@@ -137,6 +148,12 @@ export async function verifyMultisigRequestServer(
 		authorization: input.headers.authorization,
 		signatureAgent: input.headers["signature-agent"],
 		body: input.body,
+		// Thread the entitlement-token header so enforceEntitlementCoverage gates
+		// EVERY hop (Go runs it inside verifySingleSignature, called per hop). When
+		// present without per-hop coverage the hop is rejected "signature".
+		...(input.headers["x-entitlement-token"]
+			? { entitlementHeader: input.headers["x-entitlement-token"] }
+			: {}),
 	};
 
 	const keyids: string[] = [];
@@ -161,6 +178,7 @@ export async function verifyMultisigRequestServer(
 			input.resolve,
 			nowSec,
 			chainLink,
+			input.maxSignatureAge,
 		);
 		if (!ok || member.keyid === null) return rejectMultisig("signature");
 		keyids.push(member.keyid);

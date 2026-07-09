@@ -1,0 +1,34 @@
+{
+  "name": "@ramp-protocol/sdk-l1",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "RAMP L1 helpers (stateless, IO-free protocol mechanics), exposed at the repo root so plain npm — which has no git-subdirectory support — can pin the TS SDK by commit as a whole-repo git dependency (parity with the Go/pip git+subdir+rev pins). Re-exports sdk/ts, which compiles the in-repo gen/ts by relative path. Self-contained packaging + npm publish is tracked under RAMP-96.",
+  "files": [
+    "sdk/ts",
+    "gen/ts"
+  ],
+  "exports": {
+    "./base64url": "./sdk/ts/src/base64url.ts",
+    "./thumbprint": "./sdk/ts/src/thumbprint.ts",
+    "./verify": "./sdk/ts/src/verify.ts",
+    "./signurl": "./sdk/ts/src/signurl.ts",
+    "./offer-sign": "./sdk/ts/src/offer-sign.ts",
+    "./pop": "./sdk/ts/src/pop.ts",
+    "./crossfield": "./sdk/ts/src/crossfield.ts",
+    "./core": "./sdk/ts/core/verifier.ts",
+    "./core/sign": "./sdk/ts/core/sign.ts",
+    "./core/sign-request": "./sdk/ts/core/sign-request.ts",
+    "./core/verify-request": "./sdk/ts/core/verify-request.ts",
+    "./hono": "./sdk/ts/hono/middleware.ts",
+    "./acceptance": "./sdk/ts/src/acceptance.ts",
+    "./resolvers": "./sdk/ts/resolvers/index.ts"
+  },
+  "dependencies": {
+    "canonicalize": "^3.0.0"
+  },
+  "peerDependencies": {
+    "hono": "^4.7.0",
+    "zod": "^3.23.0 || ^4.0.0"
+  }
+}

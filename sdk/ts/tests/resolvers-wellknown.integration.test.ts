@@ -22,6 +22,7 @@ import {
 	makeKey,
 	manifestJson,
 	startOrigin,
+	loopbackFetch,
 } from "./resolvers-harness.ts";
 
 // RED: ../resolvers/index.ts does not exist yet (TDD red for bsh8k). The typed
@@ -60,7 +61,7 @@ describe("newWellKnownKeyResolver", () => {
 		origin = await startOrigin();
 		origin.setJwks(jwksKeyDocJson([jwksEntry("ex.v1", k.x)]));
 
-		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS });
+		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS, fetch: loopbackFetch });
 		expect(await r.resolve("ex.v1")).toEqual(k.rawPub);
 		// Cached: no second fetch.
 		expect(await r.resolve("ex.v1")).toEqual(k.rawPub);
@@ -79,6 +80,7 @@ describe("newWellKnownKeyResolver", () => {
 		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, {
 			ttlMs: 60_000,
 			now: () => now,
+			fetch: loopbackFetch,
 		});
 		expect(await r.resolve("ex.v1")).toEqual(k.rawPub);
 		now = ANCHOR_MS + 2 * 60_000; // expire the cache
@@ -90,7 +92,7 @@ describe("newWellKnownKeyResolver", () => {
 		origin = await startOrigin();
 		origin.setJwksStatus(500);
 
-		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS });
+		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS, fetch: loopbackFetch });
 		// The taxonomy the composite depends on: an outage is a thrown
 		// DirectoryUnavailable (fail-closed halt), never a silent undefined that
 		// a composite would treat as "unknown key, fall through".
@@ -117,7 +119,7 @@ describe("newWellKnownKeyResolver", () => {
 			]),
 		);
 
-		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS });
+		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, { ttlMs: HOUR_MS, fetch: loopbackFetch });
 		expect(await r.resolve("good.v1")).toEqual(good.rawPub);
 		// The skipped entries are unknown (undefined), NOT a thrown parse failure.
 		expect(await r.resolve("rsa.v1")).toBeUndefined();
@@ -134,7 +136,7 @@ describe("newWellKnownEndpointResolver", () => {
 		a.setManifest(manifestJson(epA));
 		b.setManifest(manifestJson(epB));
 		try {
-			const r = newWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http" });
+			const r = newWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http", fetch: loopbackFetch });
 			expect(await r.resolveEndpoint(a.host)).toBe(epA);
 			expect(await r.resolveEndpoint(b.host)).toBe(epB);
 			// Re-resolving A must never return B's endpoint — the cache is keyed
@@ -151,7 +153,7 @@ describe("newWellKnownEndpointResolver", () => {
 		const origin = await startOrigin();
 		origin.setManifest(manifestJson(ep));
 		try {
-			const r = newWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http" });
+			const r = newWellKnownEndpointResolver({ ttlMs: HOUR_MS, scheme: "http", fetch: loopbackFetch });
 			expect(await r.resolveEndpoint(origin.host)).toBe(ep);
 			expect(await r.resolveEndpoint(origin.host)).toBe(ep);
 			expect(origin.manifestHits()).toBe(1);
@@ -168,7 +170,7 @@ describe("newWellKnownEndpointResolver", () => {
 			let now = ANCHOR_MS;
 			const r = newWellKnownEndpointResolver({
 				ttlMs: 60_000,
-				scheme: "http",
+				scheme: "http", fetch: loopbackFetch,
 				now: () => now,
 			});
 			expect(await r.resolveEndpoint(origin.host)).toBe(ep);
@@ -184,7 +186,7 @@ describe("newWellKnownEndpointResolver", () => {
 		const origin = await startOrigin();
 		origin.setManifestStatus(503);
 		try {
-			const r = newWellKnownEndpointResolver({ scheme: "http" });
+			const r = newWellKnownEndpointResolver({ scheme: "http", fetch: loopbackFetch });
 			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(DirectoryUnavailable);
 		} finally {
 			await origin.close();
@@ -195,7 +197,7 @@ describe("newWellKnownEndpointResolver", () => {
 		const origin = await startOrigin();
 		origin.setManifest("{not json");
 		try {
-			const r = newWellKnownEndpointResolver({ scheme: "http" });
+			const r = newWellKnownEndpointResolver({ scheme: "http", fetch: loopbackFetch });
 			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(DirectoryUnavailable);
 		} finally {
 			await origin.close();
@@ -206,7 +208,7 @@ describe("newWellKnownEndpointResolver", () => {
 		const origin = await startOrigin();
 		origin.setManifest(manifestJson(undefined)); // valid manifest, no endpoint
 		try {
-			const r = newWellKnownEndpointResolver({ scheme: "http" });
+			const r = newWellKnownEndpointResolver({ scheme: "http", fetch: loopbackFetch });
 			// NoEndpoint must be DISTINCT from DirectoryUnavailable: the manifest
 			// was reachable and decoded, it simply advertises no endpoint.
 			await expect(r.resolveEndpoint(origin.host)).rejects.toBeInstanceOf(NoEndpoint);

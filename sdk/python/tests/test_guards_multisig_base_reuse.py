@@ -46,12 +46,11 @@ def _renders_request_base(source: str) -> bool:
 
 
 def _request_base_renderers() -> list[str]:
-    found = [
+    return [
         path.name
         for path in sorted(_RAMP_SDK.glob("*.py"))
         if _renders_request_base(path.read_text(encoding="utf8"))
     ]
-    return found
 
 
 class TestNoForkedRequestSignatureBase:

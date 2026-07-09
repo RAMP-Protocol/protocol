@@ -18,6 +18,7 @@ import {
 	startOrigin,
 	wbaFileJson,
 	wbaJwk,
+	loopbackFetch,
 } from "./resolvers-harness.ts";
 
 interface RevMembershipCase {
@@ -55,7 +56,7 @@ describe("sdk/ts revoked() matches the sdk/go revocation-membership oracle", () 
 		origin.setRevocation(revocationJson(vec.as_of, vec.revoked));
 
 		const r = newWBAKeyResolver({
-			scheme: "http",
+			scheme: "http", fetch: loopbackFetch,
 			now: () => Date.parse(vec.as_of),
 		});
 		// Prime the revocation snapshot by resolving the directory-listed key.

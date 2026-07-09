@@ -82,9 +82,9 @@ func TestSignRequest_bindsAuthorizationAbsence(t *testing.T) {
 	}
 }
 
-func TestSignRequest_bindsBiscuitWhenPresent(t *testing.T) {
+func TestSignRequest_bindsEntitlementTokenWhenPresent(t *testing.T) {
 	req, pub, params := newSignedReq(t, []byte("x"), func(r *http.Request) {
-		r.Header.Set(entitlementHeader, "biscuit-token")
+		r.Header.Set(entitlementHeader, "entitlement-token")
 	})
 	found := false
 	for _, c := range params.Covered {
@@ -95,13 +95,13 @@ func TestSignRequest_bindsBiscuitWhenPresent(t *testing.T) {
 	if !found {
 		t.Fatalf("entitlement header not covered: %v", params.Covered)
 	}
-	// And it actually verifies with the biscuit bound.
+	// And it actually verifies with the entitlement token bound.
 	sigHdr := req.Header.Get("Signature")
 	b64 := strings.TrimSuffix(strings.TrimPrefix(sigHdr, "sig1=:"), ":")
 	sig, _ := base64.StdEncoding.DecodeString(b64)
 	base, _ := buildSignatureBase(req, params)
 	if !ed25519.Verify(pub, []byte(base), sig) {
-		t.Error("signature with bound biscuit does not verify")
+		t.Error("signature with bound entitlement token does not verify")
 	}
 }
 

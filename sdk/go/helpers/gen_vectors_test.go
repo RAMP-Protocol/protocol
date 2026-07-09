@@ -577,8 +577,8 @@ func buildWireCanonicalVectors(t *testing.T) []wireCanonicalVector {
 
 // buildSignRequestVectors signs a fixed set of requests with the REAL Go
 // SignRequest and records the exact bytes it emits. Covered set is exactly
-// @method @target-uri content-digest authorization signature-agent (no biscuit
-// header present, so coveredFor never appends the conditional entitlement
+// @method @target-uri content-digest authorization signature-agent (no
+// entitlement-token header present, so coveredFor never appends the conditional entitlement
 // component). created/expires are the non-zero pinned window (reused from the
 // pop emitter) so renderParamsTail never drops them. One vector carries an
 // empty-authorization bound value; one carries an absent Signature-Agent so the
@@ -710,10 +710,11 @@ type verifyRequestNegVector struct {
 	// Replay marks the neg_replay case: the same request is presented twice; the
 	// SECOND presentation is the one that must be rejected as "replay".
 	Replay bool `json:"replay,omitempty"`
-	// Entitlement, when non-empty, is set as the X-RAMP-Entitlement-Biscuit
-	// request header. The neg_entitlement_uncovered case carries it WITHOUT the
-	// signature covering x-ramp-entitlement-biscuit, so a conformant server-verify
-	// must reject an unsigned entitlement claim (enforceEntitlementCoverage).
+	// Entitlement, when non-empty, is set as the X-Entitlement-Token request
+	// header. The neg_entitlement_uncovered case carries it WITHOUT the signature
+	// covering x-entitlement-token, so a conformant server-verify must reject an
+	// unsigned entitlement claim (enforceEntitlementCoverage). Format-neutral —
+	// the token value stands in for any JWT/opaque capability token.
 	Entitlement string `json:"entitlement,omitempty"`
 }
 
@@ -884,11 +885,11 @@ func buildVerifyRequestNegVectors(t *testing.T) []verifyRequestNegVector {
 	tampered.Authorization = base.authorization + "-tampered"
 
 	// neg_entitlement_uncovered: a validly-signed request that ALSO carries the
-	// X-RAMP-Entitlement-Biscuit header WITHOUT the signature covering it. The
-	// entitlement claim is unsigned, so a conformant server-verify must reject it
+	// X-Entitlement-Token header WITHOUT the signature covering it. The entitlement
+	// claim is unsigned, so a conformant server-verify must reject it
 	// (enforceEntitlementCoverage) even though the Ed25519 check itself passes.
 	entitlement := mk("neg_entitlement_uncovered", freshNow)
-	entitlement.Entitlement = "biscuit:demo-unsigned-entitlement-token"
+	entitlement.Entitlement = "jwt:demo-unsigned-entitlement-token"
 
 	out := []verifyRequestNegVector{badSig, replay, expired, wrongKey, tampered, entitlement}
 	// Derive expected_reason from the REAL Go verify path — never hand-author it.

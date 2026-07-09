@@ -254,4 +254,120 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
       expect(verdict.reason).toBe(v.expected_reason as MultisigRejectReason);
     });
   }
+
+  // SEC-NEW-2: entitlement coverage is enforced PER HOP on the multisig path,
+  // mirroring Go's verifySingleSignature (which runs enforceEntitlementCoverage)
+  // being called per hop by VerifyMultisigRequest. A live 2-hop chain — whose
+  // covered set is the RAMP required-5 and NEVER commits to x-entitlement-token —
+  // carrying an X-Entitlement-Token header MUST be rejected "signature", exactly
+  // like the single-sig neg_entitlement_uncovered vector. Without threading the
+  // header into the per-hop verify this gate is dead on the multisig path.
+  it("a 2-hop chain carrying an uncovered X-Entitlement-Token header is rejected (signature)", async () => {
+    const v = byName("positive_two_hop");
+    const h1 = hopAt(v, 0);
+    const h2 = hopAt(v, 1);
+    const body = hexToBytes(v.body_hex);
+    const shared = {
+      method: v.method,
+      url: v.url,
+      body,
+      authorization: v.authorization,
+      signatureAgent: v.signature_agent,
+      created: v.created,
+      expires: v.expires,
+    };
+
+    const sig1 = await signRequest(await importSigningKey(h1.seed_hex), {
+      ...shared,
+      keyid: h1.keyid,
+    });
+    const chained = await appendSignature(
+      await importSigningKey(h2.seed_hex),
+      { signatureInput: sig1.signatureInput, signature: sig1.signature },
+      { ...shared, keyid: h2.keyid },
+    );
+
+    const now = Math.floor((v.created + v.expires) / 2);
+    const base = {
+      method: v.method,
+      url: v.url,
+      body,
+      headers: {
+        "content-digest": chained.contentDigest,
+        "signature-input": chained.signatureInput,
+        signature: chained.signature,
+        authorization: v.authorization,
+        "signature-agent": v.signature_agent,
+      },
+      resolve: hopResolver(v.hops),
+      now: fixedClock(now),
+    };
+
+    // Control: without the header the same chain verifies (coverage constraint
+    // only bites when the entitlement header is present).
+    const ok = await verifyMultisigRequestServer(base);
+    expect(ok.valid).toBe(true);
+
+    // With the uncovered entitlement header present, EVERY hop's coverage gate
+    // fires and the chain is rejected "signature".
+    const verdict = await verifyMultisigRequestServer({
+      ...base,
+      headers: {
+        ...base.headers,
+        "x-entitlement-token": "jwt:demo-unsigned-entitlement-token",
+      },
+    });
+    expect(verdict.valid).toBe(false);
+    expect(verdict.reason).toBe("signature");
+  });
+
+  // R2-4: per-hop MaxSignatureAge lifetime clamp, enforced on EVERY hop exactly
+  // like the single-sig path (Go enforceCreatedExpires with maxAge, called per
+  // hop). The bound is inclusive: a window equal to it passes, one exceeding it is
+  // rejected "signature"; 0/undefined is unbounded.
+  describe("R2-4 per-hop MaxSignatureAge clamp on the multisig path", () => {
+    const v = () => byName("positive_two_hop");
+
+    async function verifyWithMaxAge(
+      maxSignatureAge: number | undefined,
+    ): Promise<MultisigRejectReason | "valid"> {
+      const vec = v();
+      const now = Math.floor((vec.created + vec.expires) / 2);
+      const verdict = await verifyMultisigRequestServer({
+        method: vec.method,
+        url: vec.url,
+        body: hexToBytes(vec.body_hex),
+        headers: {
+          "content-digest": vec.content_digest,
+          "signature-input": vec.signature_input,
+          signature: vec.signature,
+          authorization: vec.authorization,
+          "signature-agent": vec.signature_agent,
+        },
+        resolve: hopResolver(vec.hops),
+        now: fixedClock(now),
+        ...(maxSignatureAge !== undefined ? { maxSignatureAge } : {}),
+      });
+      return verdict.valid ? "valid" : (verdict.reason as MultisigRejectReason);
+    }
+
+    it("unbounded (undefined) accepts the chain's declared window", async () => {
+      expect(await verifyWithMaxAge(undefined)).toBe("valid");
+    });
+
+    it("maxAge exactly equal to the window is accepted (inclusive bound)", async () => {
+      const window = v().expires - v().created;
+      expect(await verifyWithMaxAge(window)).toBe("valid");
+    });
+
+    it("maxAge above the window is accepted", async () => {
+      const window = v().expires - v().created;
+      expect(await verifyWithMaxAge(window + 1)).toBe("valid");
+    });
+
+    it("maxAge below the window rejects the chain (signature)", async () => {
+      const window = v().expires - v().created;
+      expect(await verifyWithMaxAge(window - 1)).toBe("signature");
+    });
+  });
 });

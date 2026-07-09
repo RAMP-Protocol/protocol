@@ -16,6 +16,7 @@ from resolvers_harness import (
     HOUR,
     MutableClock,
     Origin,
+    loopback_fetch,
     make_key,
     revocation_json,
     wba_file_json,
@@ -47,12 +48,15 @@ def test_require_revocation_unevaluated_fails_closed() -> None:
         )
 
         # Default (best-effort): resolves despite the unevaluated revocation channel.
-        best = WBAKeyResolver(scheme="http", now=MutableClock(ANCHOR))
+        best = WBAKeyResolver(http=loopback_fetch, scheme="http", now=MutableClock(ANCHOR))
         assert best.resolve(key.tp, directory.url) == key.raw_pub
 
         # require_revocation: fail closed — revocation_url declared, no snapshot.
         strict = WBAKeyResolver(
-            scheme="http", now=MutableClock(ANCHOR), require_revocation=True
+            http=loopback_fetch,
+            scheme="http",
+            now=MutableClock(ANCHOR),
+            require_revocation=True,
         )
         with pytest.raises(RevocationUnevaluatedError) as excinfo:
             strict.resolve(key.tp, directory.url)

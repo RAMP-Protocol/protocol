@@ -199,9 +199,10 @@ func enforceRequiredComponents(covered []CoveredComponent) error {
 }
 
 // enforceEntitlementCoverage requires the signature to commit to the
-// entitlement-biscuit header iff it is present (absent → no constraint; present
-// without coverage → rejection, so a biscuit cannot be slipped under a valid
-// signature).
+// entitlement-token header iff it is present (absent → no constraint; present
+// without coverage → rejection, so an unsigned entitlement token cannot be
+// slipped under a valid signature). Format-neutral: it checks coverage, never
+// the token's contents, so it holds identically for JWT/opaque tokens.
 func enforceEntitlementCoverage(h http.Header, covered []CoveredComponent) error {
 	if h.Get(entitlementHeader) == "" {
 		return nil

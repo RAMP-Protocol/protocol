@@ -20,6 +20,7 @@ import {
 	startOrigin,
 	wbaFileJson,
 	wbaJwk,
+	loopbackFetch,
 } from "./resolvers-harness.ts";
 
 function longJwk(x: string): Record<string, unknown> {
@@ -42,7 +43,7 @@ describe("newWBAKeyResolver unknown-thumbprint debounce", () => {
 
 		let now = ANCHOR_MS;
 		const r = newWBAKeyResolver({
-			scheme: "http",
+			scheme: "http", fetch: loopbackFetch,
 			ttlMs: HOUR_MS,
 			syncDebounceMs: 5_000,
 			now: () => now,
@@ -76,7 +77,7 @@ describe("newWBAKeyResolver unknown-thumbprint debounce", () => {
 		o.setWBA(wbaFileJson([longJwk(known.x)]));
 
 		const r = newWBAKeyResolver({
-			scheme: "http",
+			scheme: "http", fetch: loopbackFetch,
 			ttlMs: HOUR_MS,
 			now: () => ANCHOR_MS,
 		});

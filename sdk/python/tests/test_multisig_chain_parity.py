@@ -145,17 +145,17 @@ def test_append_to_unsigned_request_equals_sign_request_n1() -> None:
     v = _by_name("positive_two_hop")
     h1 = v["hops"][0]  # type: ignore[index]
     body = bytes.fromhex(str(v["body_hex"]))
-    common = dict(
-        method=str(v["method"]),
-        url=str(v["url"]),
-        body=body,
-        authorization=str(v["authorization"]),
-        signature_agent=str(v["signature_agent"]),
-        signer_seed=bytes.fromhex(str(h1["seed_hex"])),
-        keyid=str(h1["keyid"]),
-        created=int(v["created"]),  # type: ignore[call-overload]
-        expires=int(v["expires"]),  # type: ignore[call-overload]
-    )
+    common = {
+        "method": str(v["method"]),
+        "url": str(v["url"]),
+        "body": body,
+        "authorization": str(v["authorization"]),
+        "signature_agent": str(v["signature_agent"]),
+        "signer_seed": bytes.fromhex(str(h1["seed_hex"])),
+        "keyid": str(h1["keyid"]),
+        "created": int(v["created"]),  # type: ignore[call-overload]
+        "expires": int(v["expires"]),  # type: ignore[call-overload]
+    }
     signed = sign_request(**common)  # type: ignore[arg-type]
     appended = append_signature(prev_signature_input="", prev_signature="", **common)  # type: ignore[arg-type]
     assert appended.signature_input == signed.signature_input
@@ -195,3 +195,79 @@ def test_negative_chain_case_rejects_with_go_reason(name: str) -> None:
     )
     assert verdict.valid is False  # type: ignore[attr-defined]
     assert verdict.reason == str(v["expected_reason"])  # type: ignore[attr-defined]
+
+
+def _positive_two_hop_call(
+    *, extra_headers: dict[str, str] | None = None, max_signature_age: int = 0
+) -> object:
+    # Build the verify_multisig_request_server call for the positive_two_hop chain,
+    # letting a test inject an extra header (e.g. an uncovered entitlement token) or
+    # a max_signature_age lifetime clamp. Returns the verdict.
+    v = _by_name("positive_two_hop")
+    now = (int(v["created"]) + int(v["expires"])) // 2  # type: ignore[call-overload]
+    headers = {
+        "content-digest": str(v["content_digest"]),
+        "signature-input": str(v["signature_input"]),
+        "signature": str(v["signature"]),
+        "authorization": str(v["authorization"]),
+        "signature-agent": str(v["signature_agent"]),
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+    return verify_multisig_request_server(
+        method=str(v["method"]),
+        url=str(v["url"]),
+        body=bytes.fromhex(str(v["body_hex"])),
+        headers=headers,
+        resolver=_resolver(v["hops"]),  # type: ignore[arg-type]
+        now=now,
+        max_signature_age=max_signature_age,
+    )
+
+
+def test_multisig_uncovered_entitlement_header_is_rejected_per_hop() -> None:
+    # SEC-NEW-2: a relayed 2-hop request carrying an uncovered X-Entitlement-Token
+    # header must be REJECTED with reason "signature" — the per-hop entitlement
+    # coverage check (mirrors the single-sig neg_entitlement_uncovered case). The
+    # positive chain's covered sets do NOT include x-entitlement-token, so slipping
+    # an unsigned entitlement token under the valid hop signatures must fail closed.
+    verdict = _positive_two_hop_call(
+        extra_headers={"X-Entitlement-Token": "jwt:demo-unsigned-entitlement-token"}
+    )
+    assert verdict.valid is False  # type: ignore[attr-defined]
+    assert verdict.reason == "signature"  # type: ignore[attr-defined]
+
+
+def test_multisig_covered_entitlement_absent_header_still_verifies() -> None:
+    # CONTROL: without the entitlement header, the positive chain verifies — the
+    # per-hop coverage check is a no-op when the header is absent.
+    verdict = _positive_two_hop_call()
+    assert verdict.valid is True  # type: ignore[attr-defined]
+
+
+def test_multisig_signature_within_max_age_bound_verifies() -> None:
+    # R2-4 clamp — WITHIN the bound: the positive chain's declared window is 600s;
+    # a 700s clamp admits it.
+    verdict = _positive_two_hop_call(max_signature_age=700)
+    assert verdict.valid is True  # type: ignore[attr-defined]
+
+
+def test_multisig_signature_equal_to_max_age_bound_verifies() -> None:
+    # R2-4 clamp — EQUAL to the bound (inclusive): a 600s clamp admits the 600s
+    # window (mirrors Go's `> maxAge` rejection — equality passes).
+    verdict = _positive_two_hop_call(max_signature_age=600)
+    assert verdict.valid is True  # type: ignore[attr-defined]
+
+
+def test_multisig_signature_exceeding_max_age_bound_is_rejected() -> None:
+    # R2-4 clamp — EXCEEDING the bound: a 500s clamp rejects the 600s window with
+    # reason "signature" (per-hop, mirrors Go ErrSignatureLifetimeTooLong).
+    verdict = _positive_two_hop_call(max_signature_age=500)
+    assert verdict.valid is False  # type: ignore[attr-defined]
+    assert verdict.reason == "signature"  # type: ignore[attr-defined]
+
+
+def test_multisig_unbounded_max_age_default_verifies() -> None:
+    # R2-4 clamp — UNBOUNDED default (0 / omitted): the 600s window is admitted.
+    verdict = _positive_two_hop_call(max_signature_age=0)
+    assert verdict.valid is True  # type: ignore[attr-defined]

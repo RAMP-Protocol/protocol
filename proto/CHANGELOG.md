@@ -25,6 +25,17 @@ doc-coverage guards, Zod/Pydantic types pipeline) now walks both contract
 packages, and the corpus generator gained int32/double boundary mutants for the
 payload messages' numeric rules.
 
+**Biscuits removed; entitlement mechanism kept for JWT (breaking).** The Biscuit
+token format leaves the protocol — JWT is the sole entitlement/capability token
+format. The entitlement MECHANISM is unchanged and format-neutral: a capability
+token rides a covered header (renamed `X-RAMP-Entitlement-Biscuit` →
+`X-Entitlement-Token`) whose signature-coverage the verifier enforces without
+ever parsing the token, so it holds identically for JWT. Removed only the
+biscuit-specific bits: the `token_format` value `"biscuit-v3"` (JWT stays the
+default), and `DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION` (18) — attenuation is
+a biscuit concept. The generic entitlement `DenialReason` family (12–17) stays.
+Pre-v1 breaking change; `buf breaking` reports the deltas as expected.
+
 **Protocol standardization — unified error/response contract + a Connect RPC for
 every role (breaking).** Three threads land together:
 

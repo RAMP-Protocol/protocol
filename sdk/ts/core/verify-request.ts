@@ -64,11 +64,12 @@ export interface VerifyRequestHeaders {
 	authorization: string;
 	"signature-agent": string;
 	/**
-	 * The entitlement-biscuit header (mirrors Go entitlementHeaderLower). When
+	 * The entitlement-token header (mirrors Go entitlementHeaderLower). When
 	 * present, the covered set MUST commit to it (enforceEntitlementCoverage);
-	 * omit/empty when the request carries no entitlement.
+	 * omit/empty when the request carries no entitlement. Format-neutral —
+	 * JWT/opaque token; coverage is enforced, contents are not.
 	 */
-	"x-ramp-entitlement-biscuit"?: string;
+	"x-entitlement-token"?: string;
 }
 
 /** Inputs for verifyRequestServer — the request material plus the injected boundary. */
@@ -82,6 +83,13 @@ export interface VerifyRequestServerInput {
 	replayStore?: ReplayStore;
 	/** Injected clock returning unix seconds — verify reads time ONLY through this. */
 	now: () => number;
+	/**
+	 * The per-hop signature-lifetime clamp in SECONDS (mirrors Go
+	 * VerifyOptions.MaxSignatureAge). When > 0, a signature whose declared window
+	 * (expires − created) EXCEEDS this is rejected as "signature"; the bound is
+	 * inclusive (a window exactly equal to it is accepted). 0/undefined = unbounded.
+	 */
+	maxSignatureAge?: number;
 }
 
 /** The returned verdict: valid, or invalid with the classified reason. */
@@ -97,10 +105,10 @@ const MAX_FUTURE_SKEW_SEC = 300;
 // The RAMP required covered set, lowercased (mirrors Go requiredCoveredComponents).
 const REQUIRED_COVERED: ReadonlySet<string> = new Set(COVERED_COMPONENTS);
 
-// The entitlement-biscuit header in covered-component (lowercased) form
+// The entitlement-token header in covered-component (lowercased) form
 // (mirrors Go entitlementHeaderLower). When the request carries this header the
 // signature's covered set MUST commit to it; absent → no constraint.
-const ENTITLEMENT_COVERED = "x-ramp-entitlement-biscuit";
+const ENTITLEMENT_COVERED = "x-entitlement-token";
 
 const REASON_SIGNATURE: RejectReason = "signature";
 const REASON_REPLAY: RejectReason = "replay";
@@ -207,9 +215,9 @@ export interface RequestVerifyFields {
 	signatureAgent: string;
 	body: Uint8Array<ArrayBuffer>;
 	/**
-	 * The entitlement-biscuit header value (empty/undefined when absent). When
+	 * The entitlement-token header value (empty/undefined when absent). When
 	 * non-empty, enforceEntitlementCoverage requires the covered set to commit to
-	 * "x-ramp-entitlement-biscuit" — a biscuit cannot be slipped under an
+	 * "x-entitlement-token" — an entitlement token cannot be slipped under an
 	 * otherwise-valid signature.
 	 */
 	entitlementHeader?: string;
@@ -233,7 +241,10 @@ export interface ParsedSignatureParams {
  * Ed25519 over the reconstructed base. Returns true iff the signature is authentic
  * and policy-valid. `chainLink`, when present, inserts the forwarding-chain base
  * line for a chained hop (sigN, N>1). NO replay — the caller owns that so the
- * multisig loop never touches a ReplayStore.
+ * multisig loop never touches a ReplayStore. `maxSignatureAge` (seconds, mirrors
+ * Go VerifyOptions.MaxSignatureAge) clamps the declared lifetime per hop: when
+ * > 0 a window (expires − created) EXCEEDING it is rejected; 0/undefined =
+ * unbounded, and the bound is inclusive.
  */
 export async function verifyParsedSignature(
 	fields: RequestVerifyFields,
@@ -242,6 +253,7 @@ export async function verifyParsedSignature(
 	resolve: RequestKeyResolver,
 	nowSec: number,
 	chainLink?: ChainLink,
+	maxSignatureAge?: number,
 ): Promise<boolean> {
 	if (parsed.keyid === null) return false;
 	if (parsed.alg === null || parsed.alg.toLowerCase() !== "ed25519") return false;
@@ -249,7 +261,7 @@ export async function verifyParsedSignature(
 		if (!parsed.covered.has(need)) return false;
 	}
 	// Entitlement coverage (mirrors Go enforceEntitlementCoverage, run right after
-	// enforceRequiredComponents): iff the request carries the entitlement-biscuit
+	// enforceRequiredComponents): iff the request carries the entitlement-token
 	// header, the covered set MUST commit to it; absent → no constraint.
 	if (fields.entitlementHeader && !parsed.covered.has(ENTITLEMENT_COVERED)) {
 		return false;
@@ -257,6 +269,16 @@ export async function verifyParsedSignature(
 	if (parsed.created === undefined || parsed.expires === undefined) return false;
 	if (parsed.expires < nowSec) return false;
 	if (parsed.created > nowSec + MAX_FUTURE_SKEW_SEC) return false;
+	// Lifetime clamp (mirrors Go enforceCreatedExpires MaxSignatureAge): reject a
+	// declared window longer than the verifier allows. 0/undefined = unbounded;
+	// the bound is inclusive (strictly-greater is rejected).
+	if (
+		maxSignatureAge !== undefined &&
+		maxSignatureAge > 0 &&
+		parsed.expires - parsed.created > maxSignatureAge
+	) {
+		return false;
+	}
 
 	const expectedDigest = await contentDigest(fields.body);
 	if (fields.digestHeader.trim() !== expectedDigest) return false;
@@ -309,14 +331,16 @@ export async function verifyRequestServer(
 			authorization: input.headers.authorization,
 			signatureAgent: input.headers["signature-agent"],
 			body: input.body,
-			...(input.headers["x-ramp-entitlement-biscuit"]
-				? { entitlementHeader: input.headers["x-ramp-entitlement-biscuit"] }
+			...(input.headers["x-entitlement-token"]
+				? { entitlementHeader: input.headers["x-entitlement-token"] }
 				: {}),
 		},
 		parsed,
 		sigBytes,
 		input.resolve,
 		nowSec,
+		undefined,
+		input.maxSignatureAge,
 	);
 	if (!ok || parsed.keyid === null || !sigBytes) return reject(REASON_SIGNATURE);
 
