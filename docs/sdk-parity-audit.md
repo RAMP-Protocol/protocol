@@ -80,9 +80,9 @@ oracle vectors), **guard** = structural/compile guard only, **—** = absent.
 | **RFC 9421 httpsig — verify** | `helpers.VerifyRequest` (verify.go:88) · T (`verify_test`) | `core/verify-request.ts verifyRequestServer` (single-sig verdict) + hono `rampVerify` (GET-PoP edge) · T (`verify-request.parity.test.ts`) | `httpsig.verify_request` + `server_verify.verify_request_server` · T (`test_verifyrequest_server_parity`) | **PARITY** (single-sig; full Connect handler binding still Go-only) |
 | **GET-PoP (agent binding) — sign** | via `AppendSignature`/transport · T | `core/sign.ts signInbound` | `pop.sign_agent_binding` (pop.py:159) · T (`test_pop_sign_helper`) | **PARITY** |
 | **GET-PoP — verify** | `VerifiedURL.CheckProofOfPossession` · T | `src/pop.ts verifyAgentBinding` · T (default+injected primitive) | `pop.verify_agent_binding` · T (default+injected) | **PARITY** |
-| **Ed25519 signed-URL — sign** | `helpers.SignURLEd25519` (signedurl.go:65) · T | **—** (edge verifies; Go signs) | `signedurl.sign_ed25519_signed_url` · T (`test_signedurl_sign_parity`) | **PARTIAL** (TS edge verifies only; Go+Python sign) |
+| **Ed25519 signed-URL — sign** | `helpers.SignURLEd25519` (signedurl.go:65) · T | `src/signurl.ts signEd25519SignedUrl` · T | `signedurl.sign_ed25519_signed_url` · T (`test_signedurl_sign_parity`) | **PARITY** |
 | **Ed25519 signed-URL — verify** | `helpers.VerifyURLEd25519` · T | `src/verify.ts verifyEd25519SignedUrl` (verify.ts:43) · T (`signedurl-pop.parity`) | `signedurl.verify_ed25519_signed_url` · T (`test_signedurl_pop_parity`) | **PARITY** |
-| **Offer signing (JCS/8785 + ed25519) — sign** | `helpers.SignOffer` (offer.go:30) · T (`offer_test`) | **—** | **—** | **PARTIAL** (Go-only; Exchange signs) |
+| **Offer signing (JCS/8785 + ed25519) — sign** | `helpers.SignOffer` (offer.go:30) · T (`offer_test`) | `src/offer-sign.ts signOffer` · T | `core.sign_offer_jcs` (core.py:158) · T | **PARITY** |
 | **Offer signing — verify** | `helpers.VerifyOffer` + `core.Verifier.Sort` · T | `core.canonicalOfferPayload` + `Verifier.sort` · T (`core-offer-verify.parity`) | `core.canonical_offer_payload` + `Verifier.sort` · T (`test_core_offer_verify_parity`) | **PARITY** |
 | **Offer-acceptance — sign** | `helpers.SignOfferAcceptance` · T | `src/acceptance.ts signOfferAcceptance` · T (byte-identical) | `core.sign_offer_acceptance_jcs` (+`acceptance` alias) · T | **PARITY** |
 | **Offer-acceptance — verify** | `helpers.VerifyOfferAcceptance` · T | `src/acceptance.ts verifyOfferAcceptance` · T (+tamper-negative) | `core.verify_offer_acceptance_jcs` · T | **PARITY** |
@@ -113,10 +113,10 @@ The crypto sign/verify surface is what the audit was asked to focus on. Present
 |---|---|---|---|
 | RFC 9421 HTTP message sig — **sign** | ✅ | ✅ (byte-identical to oracle) | ✅ (byte-identical to oracle) |
 | RFC 9421 HTTP message sig — **verify** | ✅ | ✅ single-sig `verifyRequestServer` (full RPC handler binding still Go-only) | ✅ single-sig `verify_request_server` |
-| Ed25519 signed-URL — **sign** | ✅ | ❌ (by design; TS edge verifies) | ✅ |
+| Ed25519 signed-URL — **sign** | ✅ | ✅ (`src/signurl.ts signEd25519SignedUrl`) | ✅ |
 | Ed25519 signed-URL — **verify** | ✅ | ✅ | ✅ |
 | GET-PoP agent binding — sign / verify | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
-| Offer signing (JCS/8785) — **sign** | ✅ | ❌ (Exchange-only) | ❌ (Exchange-only) |
+| Offer signing (JCS/8785) — **sign** | ✅ | ✅ (`src/offer-sign.ts signOffer`) | ✅ (`core.sign_offer_jcs`) |
 | Offer signing — **verify** | ✅ | ✅ | ✅ |
 | Offer-acceptance — **sign** | ✅ | ✅ | ✅ |
 | Offer-acceptance — **verify** | ✅ | ✅ | ✅ |
@@ -170,10 +170,12 @@ idempotency, HashURL, wire constants, injectable Window). The five gaps this sec
 flagged in the prior revision have **all landed** — see "Closed since last
 revision" below. What remains is narrow and mostly architectural.
 
-Note the "by design" non-gaps: **offer sign** is deliberately Go-only (the Exchange,
-written in Go, is the only offer signer; agents/edge only verify). **signed-URL
-sign** is Go+Python (the TS edge only verifies signed URLs); this is a role split,
-not a crypto hole.
+Both **offer sign** and **signed-URL sign** now reach full parity across Go/TS/Python
+(`SignOffer` / `src/offer-sign.ts signOffer` / `core.sign_offer_jcs`, and
+`SignURLEd25519` / `src/signurl.ts signEd25519SignedUrl` /
+`signedurl.sign_ed25519_signed_url`). The prior "Go-only" / "role-split" framing no
+longer holds — every SIGN face an agent, exchange, or edge component needs ships in
+all three languages.
 
 #### Closed since the last revision (were the prior Top-5)
 
@@ -192,7 +194,7 @@ not a crypto hole.
   constants, injectable Window all present with parity tests (djeue).
 - **Single-sig server-verify in TS + Python** — `verifyRequestServer` /
   `verify_request_server`, each enforcing the required-5 covered set,
-  **entitlement-coverage** (an unsigned `X-RAMP-Entitlement-Biscuit` is rejected,
+  **entitlement-coverage** (an unsigned `X-Entitlement-Token` is rejected,
   parity with Go `enforceEntitlementCoverage`), and a two-phase injected-store
   replay check.
 

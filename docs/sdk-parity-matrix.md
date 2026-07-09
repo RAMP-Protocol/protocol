@@ -32,7 +32,7 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | Codec (EmitUnpopulated JSON) | ✅ `connectserver.EmitUnpopulatedJSONCodec` / `WithEmitUnpopulated` | n/a (no Connect binding) | n/a |
 | Reject / error mapping | ✅ `connectserver` reject mapping, `connect.ErrorDetailFrom`, `helpers.*Detail` | ⚠️ reject-reason tokens only (`RejectReason` "signature"/"replay" on the verify verdict) — no ErrorDetail mapping | ⚠️ reject-reason tokens only (`VerifiedRequest.reason` "signature"/"replay") — no ErrorDetail mapping |
 | Replay window | ✅ `core.ReplayStore`, `core.MonotonicWindow` | ✅ `core/verify-request.ts ReplayStore` iface + two-phase replay (injected store, SDK owns no state) | ✅ `server_verify.ReplayStore` Protocol + two-phase replay (injected store, SDK owns no state) |
-| Entitlement-coverage enforcement (unsigned X-RAMP-Entitlement-Biscuit rejected) | ✅ `helpers.enforceEntitlementCoverage` (verify.go) | ✅ `core/verify-request.ts` (covered-set commit check) | ✅ `server_verify.verify_request_server` (covered-set commit check) |
+| Entitlement-coverage enforcement (unsigned X-Entitlement-Token rejected) | ✅ `helpers.enforceEntitlementCoverage` (verify.go) | ✅ `core/verify-request.ts` (covered-set commit check) | ✅ `server_verify.verify_request_server` (covered-set commit check) |
 | Validation interceptor (protovalidate) | ✅ `connect.NewValidateInterceptor`, `helpers.Validate`/`ValidationRuleIDs` | ❌ (crossfield layer only) | ❌ (crossfield layer only) |
 | Request-ID middleware | ✅ `core.RequestIDMiddleware` | ❌ | ❌ |
 
@@ -40,7 +40,7 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 
 | Operation | go | ts | python |
 |---|---|---|---|
-| Signed-URL sign | ✅ `helpers.SignURLEd25519` | n/a (edge verifies; Go signs) | ✅ `signedurl.sign_ed25519_signed_url` |
+| Signed-URL sign | ✅ `helpers.SignURLEd25519` | ✅ `src/signurl.ts signEd25519SignedUrl` | ✅ `signedurl.sign_ed25519_signed_url` |
 | Signed-URL verify | ✅ `helpers.VerifyURLEd25519` | ✅ `src/verify.ts verifyEd25519SignedUrl` | ✅ `signedurl.verify_ed25519_signed_url` |
 | GET-PoP verify | ✅ `VerifiedURL.CheckProofOfPossession` | ✅ `src/pop.ts verifyAgentBinding` (+`hono rampVerify` binding) | ✅ `pop.verify_agent_binding` |
 | Thumbprint (RFC 7638) | ✅ `helpers.Thumbprint` | ✅ `src/thumbprint.ts` | ✅ `thumbprint.thumbprint` |
@@ -102,7 +102,9 @@ CLOSED since the last revision (matrix rows now ✅): TS outbound request-sign
 (o3szv); TS+Python key/endpoint resolvers (bsh8k); TS+Python utility parity —
 scopes/money/idempotency/HashURL/wire constants/Window (djeue). Also DONE: TS
 acceptance sign/verify (src/acceptance.ts), TS canonical acceptance payload
-(`acceptancePayload`), Python signed-URL sign (`sign_ed25519_signed_url`).
+(`acceptancePayload`), signed-URL sign in TS + Python (`src/signurl.ts
+signEd25519SignedUrl`, `sign_ed25519_signed_url`), and offer sign in TS + Python
+(`src/offer-sign.ts signOffer`, `core.sign_offer_jcs`).
 
 Tracked elsewhere (not duplicated): TS agentHash→agentId rename (ov97t.14),
 CloudFront RSA TS helper (m8t96).
