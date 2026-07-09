@@ -17,8 +17,10 @@ import threading
 import pytest
 from conftest import GO_TESTDATA, load_json
 
-from ramp_sdk.resolvers._http import guarded_fetch
+from ramp_sdk.resolvers import _http
+from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_fetch
 from ramp_sdk.resolvers._ssrf import SsrfError, allowed_scheme, blocked_address
+from ramp_sdk.resolvers.errors import DirectoryUnavailableError
 
 # The shared adversarial corpora (Go emits, all SDKs consume — never edited here).
 _ADDRESS_VECTORS = load_json(GO_TESTDATA / "ssrf-address-vectors.json")["vectors"]
@@ -41,6 +43,7 @@ def test_scheme_corpus_parity(vec: dict) -> None:
     assert allowed_scheme(vec["scheme"]) is vec["allowed"], (
         f"{vec['name']} ({vec['scheme']}): expected allowed={vec['allowed']}"
     )
+
 
 # Mirrors TestSSRFBlocked_ReservedRanges (Go): each MUST be classified blocked.
 _BLOCKED = [
@@ -179,6 +182,50 @@ def test_guarded_fetch_refuses_redirect_to_internal_address() -> None:
         with pytest.raises(SsrfError) as excinfo:
             guarded_fetch(f"http://127.0.0.1:{port}/")
         assert "SSRF" in str(excinfo.value)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_guarded_fetch_non_2xx_returns_status_not_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-2xx from the guarded opener must be (status, b"") — never a crash.
+
+    Regression guard for the OpenerDirector wiring: because the guarded opener is
+    built by hand (to exclude FTP/File/Data handlers), it must still include
+    HTTPDefaultErrorHandler. Without it, HTTPErrorProcessor dispatches a 404/500
+    to parent.error() but no handler raises HTTPError, so open() returns None and
+    ``with None as resp`` raises a TypeError — which is NOT an OSError and so
+    escapes the fetch_strict/fetch_soft taxonomy AND breaks the revocation
+    poller's soft-fail. With the handler, a non-2xx raises HTTPError → caught →
+    returned as (status, b""), exactly like default_fetch.
+
+    The guard blocks loopback, so allow it for this one test to exercise the real
+    non-2xx path against an in-process origin (the wiring, not the classifier).
+    """
+    monkeypatch.setattr(_http, "blocked_address", lambda _ip: False)
+
+    class _NotFoundHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(404)
+            self.end_headers()
+
+        def log_message(self, *_a: object) -> None:
+            return
+
+    server, port = _serve(_NotFoundHandler)
+    url = f"http://127.0.0.1:{port}/"
+    try:
+        # Transport level: a clean (status, b""), not a raised TypeError.
+        status, body = guarded_fetch(url)
+        assert status == 404
+        assert body == b""
+        # Taxonomy level: the poller's soft-fail drops the refresh (None, not a
+        # crash) and the strict arm classifies it as a directory outage.
+        assert fetch_soft(guarded_fetch, url) is None
+        with pytest.raises(DirectoryUnavailableError):
+            fetch_strict(guarded_fetch, url)
     finally:
         server.shutdown()
         server.server_close()

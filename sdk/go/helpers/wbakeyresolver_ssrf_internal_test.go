@@ -84,3 +84,63 @@ func TestNewWBAKeyResolverDefaultsToGuardedClient(t *testing.T) {
 		t.Fatal("WBAKeyResolver has no HTTP client")
 	}
 }
+
+// allowLoopbackForWiringTest temporarily empties the reserved-prefix table so a
+// wiring test can reach a 127.0.0.1 httptest origin THROUGH the real guarded
+// client (whose dialer would otherwise refuse loopback — see
+// TestGuardedWBAClientBlocksLoopback). It restores the table on cleanup. This is
+// the transport-wiring seam the cross-language behavioral tests share: the
+// address decision is corpus-locked elsewhere; here we prove the client's
+// non-address wiring (status surfacing, redirect scheme re-vet) behaves.
+func allowLoopbackForWiringTest(t *testing.T) {
+	t.Helper()
+	saved := ssrfBlockedPrefixes
+	ssrfBlockedPrefixes = nil
+	t.Cleanup(func() { ssrfBlockedPrefixes = saved })
+}
+
+// TestGuardedWBAClientSurfacesNon2xx: a non-2xx directory response must surface
+// as an ordinary (StatusCode, nil-error) response, never a transport error — the
+// resolver classifies the status itself (a 404 directory is "unknown key", not an
+// outage). Parity with the Python (fetch_soft→None / fetch_strict→outage) and TS
+// (fetchStrict→DirectoryUnavailable) non-2xx behavioral tests; Go's path is stock
+// net/http, so this locks the contract rather than guarding custom wiring (the
+// non-2xx crash that motivated this suite was Python's hand-built opener).
+func TestGuardedWBAClientSurfacesNon2xx(t *testing.T) {
+	allowLoopbackForWiringTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	resp, err := newGuardedWBAClient().Get(srv.URL)
+	if err != nil {
+		t.Fatalf("non-2xx surfaced as a transport error, want a 404 response: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("StatusCode = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestGuardedWBAClientRefusesRedirectScheme: a 302 into a non-http(s) scheme
+// (ftp/…) must be refused by CheckRedirect BEFORE any dial to it — the guard is a
+// deny-by-default scheme allowlist, not an ftp-specific block (telnet, gopher,
+// file, data all follow the same rule). Parity with the Python
+// test_guarded_fetch_refuses_redirect_to_ftp behavioral test. Exercises the real
+// newGuardedWBAClient CheckRedirect; the ftp target is never contacted.
+func TestGuardedWBAClientRefusesRedirectScheme(t *testing.T) {
+	allowLoopbackForWiringTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "ftp://ftp.internal.example/secret", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	_, err := newGuardedWBAClient().Get(srv.URL)
+	if err == nil {
+		t.Fatal("guarded client followed a redirect into a non-http(s) scheme — CheckRedirect did not fire")
+	}
+	if !strings.Contains(err.Error(), "SSRF guard") {
+		t.Fatalf("redirect refused for the wrong reason (want SSRF guard): %v", err)
+	}
+}

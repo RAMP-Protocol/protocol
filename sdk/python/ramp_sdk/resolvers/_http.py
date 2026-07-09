@@ -154,9 +154,7 @@ class _GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
     ):
         scheme = urllib.parse.urlsplit(newurl).scheme
         if not allowed_scheme(scheme):
-            raise SsrfError(
-                f"refusing redirect to non-http(s) scheme {scheme!r} (SSRF guard)"
-            )
+            raise SsrfError(f"refusing redirect to non-http(s) scheme {scheme!r} (SSRF guard)")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -167,12 +165,23 @@ def _build_guarded_opener() -> urllib.request.OpenerDirector:
     # NOT merged in — a redirect (or a caller URL) to ftp://, file://, data:…
     # has no handler and is refused, rather than opening a fresh unguarded
     # window on a URL the guard never vetted.
+    #
+    # HTTPDefaultErrorHandler is REQUIRED even though we drop the transport
+    # handlers above: HTTPErrorProcessor only *dispatches* a non-2xx response to
+    # parent.error(); HTTPDefaultErrorHandler is the terminal handler that turns
+    # it into an HTTPError. Without it a 404/500 finds no http_error_default,
+    # error() returns None, open() returns None, and `with None as resp` raises a
+    # TypeError — which is NOT an OSError, so it escapes the fetch_strict/soft
+    # taxonomy and breaks the revocation poller's soft-fail. With it, a non-2xx
+    # raises HTTPError → caught below → returned as (status, b""), matching
+    # default_fetch exactly.
     context = ssl.create_default_context()
     opener = urllib.request.OpenerDirector()
     for handler in (
         _GuardedHTTPHandler(),
         _GuardedHTTPSHandler(context=context),
         _GuardedRedirectHandler(),
+        urllib.request.HTTPDefaultErrorHandler(),
         urllib.request.HTTPErrorProcessor(),
     ):
         opener.add_handler(handler)

@@ -156,6 +156,35 @@ byte-equality). The one "structural check IS the test" file
 covering a byte-parity-preserving library-adoption refactor, backed by the
 behavioral vector suites.
 
+### SSRF-guarded transport (WBA directory fetch)
+
+The WBA directory host is a caller-supplied `Signature-Agent` fetched BEFORE the
+ed25519 check, so the default transport is SSRF-guarded in all three SDKs. The
+guard is split into a **data** part (corpus-locked) and a **wiring** part
+(behaviorally tested), because only the former is expressible as vectors:
+
+| Concern | Shared corpus | Consumed by |
+|---|---|---|
+| Reserved / non-public address classification | `ssrf-address-vectors.json` (26) | Go (emit+self-check) · TS · Python |
+| URL-scheme allowlist (deny-by-default: http/https) | `ssrf-scheme-vectors.json` (11) | Go (emit+self-check) · TS · Python |
+
+**Transport-wiring conformance invariant (normative for any future SDK):** *every
+guarded transport MUST route each request — the initial URL and every redirect hop
+— through both the address check and the scheme allowlist, and MUST surface a
+non-2xx directory response as a status for the caller to classify (never as a
+crash or an unmapped error).* A redirect target is just a scheme + a host→address,
+so it is fully classified by the two corpora above; what the corpora cannot encode
+is that the transport actually *applies* them on the `Location` hop and does not
+crash on a non-2xx. That residual is covered behaviorally per language (the
+mechanisms differ intentionally — TS follows no redirects, which is strongest):
+
+| Behavior | Go | TS | Python |
+|---|---|---|---|
+| Refuses to dial loopback/private (initial URL) | `TestGuardedWBAClientBlocksLoopback` | `resolvers-ssrf.test.ts` (127.0.0.1 / [::1]) | `test_guarded_fetch_refuses_loopback` |
+| Redirect into a non-http(s) scheme refused | `TestGuardedWBAClientRefusesRedirectScheme` | no-follow (`resolvers-http-wiring.test.ts`) | `test_guarded_fetch_refuses_redirect_to_ftp` |
+| Redirect to an internal address refused | re-dial via `Control` (corpus) | no-follow (`resolvers-http-wiring.test.ts`) | `test_guarded_fetch_refuses_redirect_to_internal_address` |
+| Non-2xx surfaced as a status (no crash) | `TestGuardedWBAClientSurfacesNon2xx` | `resolvers-http-wiring.test.ts` | `test_guarded_fetch_non_2xx_returns_status_not_crash` |
+
 ---
 
 ## 4. Gap assessment (risk-ranked)
