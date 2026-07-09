@@ -10,6 +10,8 @@
 #            --datamodel-code-generator--> gen/python/wire/models.py (Pydantic v2,
 #                                       every model extends wire.base.WireModel)
 #            --json-schema-to-zod--------> gen/ts/wire/schemas.ts   (Zod)
+#            --gen_unique_py.py---------> gen/python/wire/unique.py (the repeated.unique
+#                                       rule datamodel-codegen drops; Zod gets it inline)
 #
 # gen/python/wire/base.py is hand-written (the seam) and NOT generated.
 # Prereqs: go, python3, node/npm. Provisions a throwaway venv + node_modules under
@@ -40,7 +42,13 @@ python3 -m venv "$WORK/venv"
 # required on the wire (their zero value is rejected). merge_schema marks those
 # `required` so the generated clients reject omission, matching the Go server.
 go run ./conformance/requiredgen "$WORK/required_fields.json"
-"$PY" scripts/sdk-types/merge_schema.py "$JS" gen/descriptor.binpb "$COMBINED" "$WORK/required_fields.json"
+# unique_items.json: the protovalidate repeated.unique view. protoschema emits no
+# `uniqueItems` keyword, so merge_schema injects it (json-schema-to-zod compiles it into a
+# .refine()) and gen_unique_py.py emits wire/unique.py for the wire/base.py seam, because
+# datamodel-codegen drops `uniqueItems` for pydantic v2.
+go run ./conformance/uniquegen "$WORK/unique_items.json"
+"$PY" scripts/sdk-types/merge_schema.py "$JS" gen/descriptor.binpb "$COMBINED" \
+  "$WORK/required_fields.json" "$WORK/unique_items.json"
 
 echo "==> 3/4 Pydantic v2 (datamodel-code-generator, --base-class + --collapse-root-models)"
 "$WORK/venv/bin/datamodel-codegen" \
@@ -59,6 +67,9 @@ s = re.sub(r"\n\nclass Model\(RootModel\[Any\]\):\n    root: Any\n", "\n", s, co
 open(p, "w").write(s)
 PYEOF
 
+# The repeated.unique field map the wire/base.py seam enforces (see gen_unique_py.py).
+"$PY" scripts/sdk-types/gen_unique_py.py "$WORK/unique_items.json" gen/python/wire/unique.py
+
 echo "==> 4/4 Zod (json-schema-to-zod)"
 # Pinned via a committed manifest + lockfile so `npm ci` installs the exact same
 # json-schema-to-zod/zod (and transitive) tree every run — the byte-compared
@@ -71,4 +82,4 @@ cp scripts/sdk-types/package.json scripts/sdk-types/package-lock.json "$WORK/"
 cp scripts/sdk-types/gen_zod.mjs "$WORK/gen_zod.mjs"
 node "$WORK/gen_zod.mjs" "$COMBINED" gen/ts/wire/schemas.ts
 
-echo "==> done: gen/python/wire/models.py, gen/ts/wire/schemas.ts"
+echo "==> done: gen/python/wire/models.py, gen/python/wire/unique.py, gen/ts/wire/schemas.ts"

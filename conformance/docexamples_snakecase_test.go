@@ -2,11 +2,9 @@ package conformance
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 // camelProtoFieldNames returns the set of camelCase json_names of every RAMP proto
@@ -18,29 +16,19 @@ import (
 func camelProtoFieldNames(t *testing.T) map[string]bool {
 	t.Helper()
 	out := map[string]bool{}
-	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		if !strings.HasPrefix(string(fd.Package()), "ramp.v1") {
-			return true
-		}
-		var visit func(msgs protoreflect.MessageDescriptors)
-		visit = func(msgs protoreflect.MessageDescriptors) {
-			for i := 0; i < msgs.Len(); i++ {
-				md := msgs.Get(i)
-				fields := md.Fields()
-				for j := 0; j < fields.Len(); j++ {
-					f := fields.Get(j)
-					if jn := f.JSONName(); jn != string(f.Name()) {
-						out[jn] = true
-					}
-				}
-				visit(md.Messages()) // nested
+	// EachMessage walks every message (nested included) of every contract package, so this
+	// stays in lockstep with contract.go — the next package is covered with no edit here.
+	EachMessage(func(md protoreflect.MessageDescriptor) {
+		fields := md.Fields()
+		for j := 0; j < fields.Len(); j++ {
+			f := fields.Get(j)
+			if jn := f.JSONName(); jn != string(f.Name()) {
+				out[jn] = true
 			}
 		}
-		visit(fd.Messages())
-		return true
 	})
 	if len(out) == 0 {
-		t.Fatal("no ramp.v1 multiword proto fields found — are the generated types imported/registered?")
+		t.Fatal("no contract multiword proto fields found — are the generated types imported/registered?")
 	}
 	return out
 }

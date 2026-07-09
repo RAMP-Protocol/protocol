@@ -32,6 +32,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/RAMP-Protocol/protocol/conformance"
+	rampadminv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
@@ -83,6 +85,12 @@ func seeds() map[string]proto.Message {
 		// items field is now repeated.min_items=1 (single-offer mode removed).
 		"Offer":              offer(),
 		"TransactionRequest": &rampv1.TransactionRequest{IdempotencyKey: "idem-tx", Items: []*rampv1.TransactionItem{{Offer: offer()}}},
+		// ramp.admin.v1 payloads embedded (required) in the setter request/response
+		// envelopes. RequiredFields MUST be exactly ["x"]: the repeated.unique
+		// duplicate_item edge appends the auto-filled good item (stringSamples[0]=="x")
+		// and relies on the baseline already holding it, so the mutant is ["x","x"].
+		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
+		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},
 	}
 }
 
@@ -104,8 +112,14 @@ func main() {
 	must(err)
 	sd := seeds()
 
+	// The corpus keys messages by bare short name (Case.Message == the generated
+	// class/schema name), so bare names MUST stay unique across the contract packages.
+	if err := conformance.AssertUniqueBareNames(); err != nil {
+		die("%v", err)
+	}
+
 	var cases []Case
-	eachMessage(func(md protoreflect.MessageDescriptor) {
+	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
 		var constrained []protoreflect.FieldDescriptor
 		for i := 0; i < md.Fields().Len(); i++ {
 			fd := md.Fields().Get(i)
@@ -316,7 +330,8 @@ func setValid(m protoreflect.Message, fd protoreflect.FieldDescriptor, fr *valid
 }
 
 // validScalar returns a valid value for fd given its rules (enum→first allowed,
-// string→first sample matching pattern+length, int64→its gte bound).
+// string→first sample matching pattern+length, int64/int32/double→their lower
+// bound, else zero).
 func validScalar(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) (protoreflect.Value, error) {
 	switch fd.Kind() {
 	case protoreflect.EnumKind:
@@ -329,6 +344,26 @@ func validScalar(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) (prot
 		return protoreflect.ValueOfString(s), nil
 	case protoreflect.Int64Kind:
 		return protoreflect.ValueOfInt64(int64(gte(fr.GetInt64()))), nil
+	case protoreflect.Int32Kind:
+		if r := fr.GetInt32(); r != nil {
+			switch x := r.GetGreaterThan().(type) {
+			case *validate.Int32Rules_Gte:
+				return protoreflect.ValueOfInt32(x.Gte), nil
+			case *validate.Int32Rules_Gt:
+				return protoreflect.ValueOfInt32(x.Gt + 1), nil
+			}
+		}
+		return protoreflect.ValueOfInt32(0), nil
+	case protoreflect.DoubleKind:
+		if r := fr.GetDouble(); r != nil {
+			switch x := r.GetGreaterThan().(type) {
+			case *validate.DoubleRules_Gte:
+				return protoreflect.ValueOfFloat64(x.Gte), nil
+			case *validate.DoubleRules_Gt:
+				return protoreflect.ValueOfFloat64(x.Gt + 1), nil
+			}
+		}
+		return protoreflect.ValueOfFloat64(0), nil
 	case protoreflect.MessageKind:
 		return protoreflect.Value{}, nil // handled by caller via seed
 	}
@@ -366,8 +401,83 @@ func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
 				}})
 			}
 		}
+	case protoreflect.Int32Kind:
+		if r := fr.GetInt32(); r != nil {
+			var lower, upper string
+			var lowerMutant, upperMutant int32
+			switch x := r.GetGreaterThan().(type) {
+			case *validate.Int32Rules_Gte:
+				lower, lowerMutant = "gte", x.Gte-1
+			case *validate.Int32Rules_Gt:
+				lower, lowerMutant = "gt", x.Gt
+			}
+			switch x := r.GetLessThan().(type) {
+			case *validate.Int32Rules_Lt:
+				upper, upperMutant = "lt", x.Lt
+			case *validate.Int32Rules_Lte:
+				upper, upperMutant = "lte", x.Lte+1
+			}
+			want := numericRuleID("int32", lower, upper)
+			if lower != "" {
+				n := lowerMutant
+				es = append(es, edge{label: "below_min", want: want, apply: func(m protoreflect.Message) {
+					m.Set(fd, protoreflect.ValueOfInt32(n))
+				}})
+			}
+			if upper != "" {
+				n := upperMutant
+				es = append(es, edge{label: "above_max", want: want, apply: func(m protoreflect.Message) {
+					m.Set(fd, protoreflect.ValueOfInt32(n))
+				}})
+			}
+		}
+	case protoreflect.DoubleKind:
+		if r := fr.GetDouble(); r != nil {
+			var lower, upper string
+			var lowerMutant, upperMutant float64
+			switch x := r.GetGreaterThan().(type) {
+			case *validate.DoubleRules_Gte:
+				lower, lowerMutant = "gte", x.Gte-1
+			case *validate.DoubleRules_Gt:
+				lower, lowerMutant = "gt", x.Gt
+			}
+			switch x := r.GetLessThan().(type) {
+			case *validate.DoubleRules_Lt:
+				upper, upperMutant = "lt", x.Lt
+			case *validate.DoubleRules_Lte:
+				upper, upperMutant = "lte", x.Lte+1
+			}
+			want := numericRuleID("double", lower, upper)
+			if lower != "" {
+				n := lowerMutant
+				es = append(es, edge{label: "below_min", want: want, apply: func(m protoreflect.Message) {
+					m.Set(fd, protoreflect.ValueOfFloat64(n))
+				}})
+			}
+			if upper != "" {
+				n := upperMutant
+				es = append(es, edge{label: "above_max", want: want, apply: func(m protoreflect.Message) {
+					m.Set(fd, protoreflect.ValueOfFloat64(n))
+				}})
+			}
+		}
 	}
 	return es
+}
+
+// numericRuleID is the protovalidate rule id a scalar bound violation reports.
+// With both bounds set, protovalidate checks the range as ONE rule whose id
+// joins the two bound names (e.g. int32.gte_lt) — both boundary mutants trip
+// that combined id; with a single bound, the id is just that bound's name.
+func numericRuleID(kind, lower, upper string) string {
+	switch {
+	case lower != "" && upper != "":
+		return kind + "." + lower + "_" + upper
+	case lower != "":
+		return kind + "." + lower
+	default:
+		return kind + "." + upper
+	}
 }
 
 func enumEdges(fd protoreflect.FieldDescriptor, r *validate.EnumRules) []edge {
@@ -455,6 +565,14 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge 
 			}
 		}})
 	}
+	if r != nil && r.GetUnique() {
+		// The baseline seeds exactly one valid item (setValid), so appending it again
+		// yields [x, x]: two items, under any max_items, tripping ONLY repeated.unique.
+		// Without this the rule reaches no corpus case, and the Zod/Pydantic parity gate
+		// cannot see whether the clients enforce it.
+		es = append(es, edge{label: "duplicate_item", want: "repeated.unique",
+			apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(good) }})
+	}
 	if item != nil {
 		if s := item.GetString(); s != nil {
 			if p := s.GetPattern(); p != "" {
@@ -507,8 +625,14 @@ func hasConstraint(fr *validate.FieldRules) bool {
 	if i := fr.GetInt64(); i != nil && i.GetGreaterThan() != nil {
 		return true
 	}
+	if i := fr.GetInt32(); i != nil && (i.GetGreaterThan() != nil || i.GetLessThan() != nil) {
+		return true
+	}
+	if d := fr.GetDouble(); d != nil && (d.GetGreaterThan() != nil || d.GetLessThan() != nil) {
+		return true
+	}
 	if r := fr.GetRepeated(); r != nil {
-		if r.GetMaxItems() > 0 || r.GetMinItems() > 0 {
+		if r.GetMaxItems() > 0 || r.GetMinItems() > 0 || r.GetUnique() {
 			return true
 		}
 		if it := r.GetItems(); it != nil && it.GetString().GetPattern() != "" {
@@ -636,20 +760,6 @@ func dedupe(xs []string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func eachMessage(fn func(protoreflect.MessageDescriptor)) {
-	var walk func(protoreflect.MessageDescriptors)
-	walk = func(ms protoreflect.MessageDescriptors) {
-		for i := 0; i < ms.Len(); i++ {
-			md := ms.Get(i)
-			if !md.IsMapEntry() {
-				fn(md)
-			}
-			walk(md.Messages())
-		}
-	}
-	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
 }
 
 func must(err error) {

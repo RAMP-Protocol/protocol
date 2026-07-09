@@ -1,0 +1,137 @@
+// RAMP Admin v1 — operator-plane configuration service.
+//
+// AdminService carries Exchange operator overrides: the tenant fee rate and
+// the tenant reporting policy. It is deliberately a separate package and
+// service from ramp.v1.ExchangeService — the operator/config plane is not
+// part of the agent hot-path contract, and keeping it out of ramp.v1 keeps
+// the agent-facing surface unchanged.
+//
+// Trust model: deployments MUST NOT expose AdminService on the public
+// agent-facing listener. Reachability is restricted at the network layer
+// (an internal listener plus a source allowlist); there is no per-operator
+// identity inside the service in v1. Because the admin plane carries no
+// RFC 9421 request signing, there is no verified signer to deduplicate
+// against — and both RPCs are full-replace overwrites, so they are naturally
+// idempotent and carry no idempotency_key.
+//
+// Message shape: each RPC takes a thin {ver, <payload>} envelope wrapping a
+// required payload message — TenantFeeRate or ReportingPolicy. The payload
+// type is shared by the request and its response, so every field rule is
+// stated ONCE; the read-back response cannot drift from the write. Responses
+// echo the payload as persisted, giving operator tooling a read-back
+// confirmation of the applied values.
+//
+// Validation: every constraint here is a FIELD-level protovalidate rule so it
+// flows into the generated Pydantic/Zod types. Cross-field (message-level CEL)
+// rules are intentionally absent from this package.
+
+syntax = "proto3";
+
+package ramp.admin.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1;rampadminv1";
+
+// Operator-plane configuration RPCs. See the file banner for the trust model
+// and why these setters carry no idempotency_key.
+service AdminService {
+  // Sets the tenant's fee rate (basis points) and optional operator note.
+  // Full replace: the previous rate and note are overwritten.
+  rpc SetTenantFeeRate(SetTenantFeeRateRequest) returns (SetTenantFeeRateResponse);
+  // Replaces the tenant's reporting policy (required report fields, quantity
+  // tolerance, reporting window). Full replace: omitted optional fields clear
+  // their value so the receiving Exchange's defaults apply.
+  rpc SetReportingPolicy(SetReportingPolicyRequest) returns (SetReportingPolicyResponse);
+}
+
+// TenantFeeRate is the fee-rate payload shared by SetTenantFeeRate's request
+// and response. The field rules live here once, so the write and the echoed
+// read-back stay in lockstep.
+message TenantFeeRate {
+  // The tenant whose fee rate is being set.
+  string tenant_id = 1 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
+
+  // Fee rate in basis points of gross: fee = floor(gross * bps / 10000).
+  // Below 10000 keeps the fee strictly under 100%; integer basis points avoid
+  // float drift when aggregating many charges. 0 is a legitimate explicit
+  // value ("no fee"), not an unset sentinel.
+  int32 fee_rate_bps = 2 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lt = 10000
+  ];
+
+  // Operator commentary on the rate (why it was set, by whom, ticket link).
+  // Omitted clears any existing note.
+  optional string notes = 3 [(buf.validate.field).string.max_len = 1024];
+}
+
+// ReportingPolicy is the reporting-policy payload shared by
+// SetReportingPolicy's request and response. The field rules live here once, so
+// the write and the echoed read-back stay in lockstep.
+message ReportingPolicy {
+  // The tenant whose reporting policy is being replaced.
+  string tenant_id = 1 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
+
+  // Report field names the usage-report validator requires. The wire constrains
+  // only the token shape; which names are meaningful is defined by the receiving
+  // Exchange and may change without a contract change. Names are a set: repeats
+  // are rejected. Empty means no required fields.
+  repeated string required_fields = 2 [
+    (buf.validate.field).repeated.max_items = 32,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 64,
+    (buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9._:*-]+$"
+  ];
+
+  // Accepted relative deviation between estimated and reported quantity, as a
+  // fraction: 0 requires an exact match, 1 accepts any deviation. Omitted: the
+  // receiving Exchange's default tolerance applies.
+  optional double quantity_tolerance = 3 [
+    (buf.validate.field).double.gte = 0,
+    (buf.validate.field).double.lte = 1
+  ];
+
+  // Reporting window in seconds. Applies to obligations minted after this call;
+  // obligations already issued keep the window they were minted with. Capped at
+  // one year. Omitted: the receiving Exchange's default applies.
+  optional int32 window_seconds = 4 [
+    (buf.validate.field).int32.gt = 0,
+    (buf.validate.field).int32.lte = 31536000
+  ];
+}
+
+message SetTenantFeeRateRequest {
+  // RAMP protocol version.
+  string ver = 1;
+
+  // The fee rate to apply. Required — an absent payload would otherwise skip
+  // validation of its fields.
+  TenantFeeRate rate = 2 [(buf.validate.field).required = true];
+}
+
+message SetTenantFeeRateResponse {
+  // RAMP protocol version.
+  string ver = 1;
+
+  // The fee rate as persisted.
+  TenantFeeRate rate = 2 [(buf.validate.field).required = true];
+}
+
+message SetReportingPolicyRequest {
+  // RAMP protocol version.
+  string ver = 1;
+
+  // The reporting policy to apply. Required — an absent payload would otherwise
+  // skip validation of its fields.
+  ReportingPolicy policy = 2 [(buf.validate.field).required = true];
+}
+
+message SetReportingPolicyResponse {
+  // RAMP protocol version.
+  string ver = 1;
+
+  // The reporting policy as persisted.
+  ReportingPolicy policy = 2 [(buf.validate.field).required = true];
+}

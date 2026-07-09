@@ -23,16 +23,23 @@ import (
 	protovalidate "buf.build/go/protovalidate"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/conformance"
 )
 
 func main() {
+	// Fail fast on a cross-package bare-name collision: this manifest (and merge_schema.py,
+	// which consumes it) key by bare message name, so a duplicate would silently clobber.
+	// corpusgen guards the same way; doing it here closes the standalone gen-sdk-types.sh
+	// path, which runs this generator but not corpusgen.
+	if err := conformance.AssertUniqueBareNames(); err != nil {
+		panic(err)
+	}
 	out := "required_fields.json"
 	if len(os.Args) > 1 {
 		out = os.Args[1]
 	}
 	req := map[string][]string{}
-	eachMessage(func(md protoreflect.MessageDescriptor) {
+	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
 		var names []string
 		for i := 0; i < md.Fields().Len(); i++ {
 			fd := md.Fields().Get(i)
@@ -98,29 +105,28 @@ func zeroRejected(fd protoreflect.FieldDescriptor) bool {
 			}
 		}
 	}
-	// Loud guard: only int64 numeric rules are evaluated above (Quota.limit today). A
-	// rule of another numeric kind would fall through as "zero is valid" — the field
-	// would not be marked required and the generated clients would accept an omission
-	// the Go server rejects. Fail instead of silently under-marking.
-	if fr.GetInt32() != nil || fr.GetUint64() != nil || fr.GetUint32() != nil ||
+	if i := fr.GetInt32(); i != nil {
+		switch x := i.GetGreaterThan().(type) {
+		case *validate.Int32Rules_Gte:
+			if x.Gte >= 1 {
+				return true
+			}
+		case *validate.Int32Rules_Gt:
+			if x.Gt >= 0 {
+				return true
+			}
+		}
+	}
+	// Loud guard: only int64 and int32 numeric rules are evaluated above (Quota.limit,
+	// the ramp.admin.v1 setters). A rule of another numeric kind would fall through as
+	// "zero is valid" — the field would not be marked required and the generated
+	// clients would accept an omission the Go server rejects. Fail instead of silently
+	// under-marking.
+	if fr.GetUint64() != nil || fr.GetUint32() != nil ||
 		fr.GetSint64() != nil || fr.GetSint32() != nil || fr.GetFixed64() != nil ||
 		fr.GetFixed32() != nil || fr.GetSfixed64() != nil || fr.GetSfixed32() != nil ||
 		fr.GetFloat() != nil || fr.GetDouble() != nil {
 		panic(fmt.Sprintf("requiredgen: unhandled numeric rule on field %s (kind %s) — extend zeroRejected to evaluate it", fd.FullName(), fd.Kind()))
 	}
 	return false
-}
-
-func eachMessage(fn func(protoreflect.MessageDescriptor)) {
-	var walk func(protoreflect.MessageDescriptors)
-	walk = func(ms protoreflect.MessageDescriptors) {
-		for i := 0; i < ms.Len(); i++ {
-			md := ms.Get(i)
-			if !md.IsMapEntry() {
-				fn(md)
-			}
-			walk(md.Messages())
-		}
-	}
-	walk(rampv1.File_ramp_v1_ramp_proto.Messages())
 }

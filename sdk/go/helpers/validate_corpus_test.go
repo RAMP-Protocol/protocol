@@ -5,11 +5,21 @@ import (
 	"os"
 	"testing"
 
-	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+
+	// conformance owns the contract package list (contract.go) and, by importing the
+	// generated packages, registers their types in protoregistry.GlobalTypes so a
+	// corpus case for any contract package resolves here. Test-only dependency.
+	"github.com/RAMP-Protocol/protocol/conformance"
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
+
+// contractPackages are the proto packages a corpus message may come from, in
+// resolution order. Bare names are unique across them — conformance's
+// AssertUniqueBareNames guards that, and corpusgen re-checks it at generation time.
+var contractPackages = conformance.ContractPackages()
 
 type corpusCase struct {
 	ID      string          `json:"id"`
@@ -37,9 +47,15 @@ func loadCorpusFile(t *testing.T, path string) []corpusCase {
 
 func unmarshalCase(t *testing.T, c corpusCase) protoreflect.ProtoMessage {
 	t.Helper()
-	mt, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName("ramp.v1." + c.Message))
+	var mt protoreflect.MessageType
+	var err error
+	for _, pkg := range contractPackages {
+		if mt, err = protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(pkg + "." + c.Message)); err == nil {
+			break
+		}
+	}
 	if err != nil {
-		t.Fatalf("unknown message ramp.v1.%s: %v", c.Message, err)
+		t.Fatalf("unknown message %s (tried %v): %v", c.Message, contractPackages, err)
 	}
 	m := mt.New().Interface()
 	if err := protojson.Unmarshal(c.JSON, m); err != nil {

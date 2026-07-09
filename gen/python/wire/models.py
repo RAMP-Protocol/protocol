@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from typing import Any
-from pydantic import AwareDatetime, Field, RootModel, conint, constr
+from pydantic import AwareDatetime, Field, RootModel, confloat, conint, constr
 from wire.base import WireModel
 from enum import Enum
 
@@ -589,6 +589,27 @@ class ReportingObligation(WireModel):
     )
 
 
+class ReportingPolicy(WireModel):
+    quantity_tolerance: confloat(ge=0.0, le=1.0) | None = Field(
+        None,
+        description="Accepted relative deviation between estimated and reported quantity, as a\n fraction: 0 requires an exact match, 1 accepts any deviation. Omitted: the\n receiving Exchange's default tolerance applies.",
+    )
+    required_fields: (
+        list[constr(pattern=r'^[A-Za-z0-9._:*-]+$', min_length=1, max_length=64)] | None
+    ) = Field(
+        None,
+        description='Report field names the usage-report validator requires. The wire constrains\n only the token shape; which names are meaningful is defined by the receiving\n Exchange and may change without a contract change. Names are a set: repeats\n are rejected. Empty means no required fields.',
+        max_length=32,
+    )
+    tenant_id: constr(min_length=1, max_length=255) = Field(
+        ..., description='The tenant whose reporting policy is being replaced.'
+    )
+    window_seconds: conint(le=31536000, gt=0) | None = Field(
+        None,
+        description="Reporting window in seconds. Applies to obligations minted after this call;\n obligations already issued keep the window they were minted with. Capped at\n one year. Omitted: the receiving Exchange's default applies.",
+    )
+
+
 class RequestConstraints(WireModel):
     budget_period: str | None = Field(
         None,
@@ -735,6 +756,21 @@ class Role(Enum):
     ROLE_PUBLISHER = 'ROLE_PUBLISHER'
 
 
+class SetReportingPolicyRequest(WireModel):
+    policy: ReportingPolicy = Field(
+        ...,
+        description='The reporting policy to apply. Required — an absent payload would otherwise\n skip validation of its fields.',
+    )
+    ver: str | None = Field('', description='RAMP protocol version.')
+
+
+class SetReportingPolicyResponse(WireModel):
+    policy: ReportingPolicy = Field(
+        ..., description='The reporting policy as persisted.'
+    )
+    ver: str | None = Field('', description='RAMP protocol version.')
+
+
 class SubscriptionQuotaInfo(WireModel):
     quota_limit: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Total allowed in the current period.'
@@ -754,6 +790,20 @@ class SubscriptionQuotaInfo(WireModel):
     unit: str | None = Field(
         None,
         description='What is being metered. Distinguishes access count quotas from\n spend quotas from burst limits.\n Standard values: "accesses", "tokens", "spend_cents", "burst"',
+    )
+
+
+class TenantFeeRate(WireModel):
+    fee_rate_bps: conint(ge=0, lt=10000) | None = Field(
+        None,
+        description='Fee rate in basis points of gross: fee = floor(gross * bps / 10000).\n Below 10000 keeps the fee strictly under 100%; integer basis points avoid\n float drift when aggregating many charges. 0 is a legitimate explicit\n value ("no fee"), not an unset sentinel.',
+    )
+    notes: constr(max_length=1024) | None = Field(
+        None,
+        description='Operator commentary on the rate (why it was set, by whom, ticket link).\n Omitted clears any existing note.',
+    )
+    tenant_id: constr(min_length=1, max_length=255) = Field(
+        ..., description='The tenant whose fee rate is being set.'
     )
 
 
@@ -1167,6 +1217,19 @@ class RetrievalAuthFailure(WireModel):
     reason: RetrievalAuthFailureReason = Field(
         ..., description='The failure reason (defined-only, non-zero)'
     )
+
+
+class SetTenantFeeRateRequest(WireModel):
+    rate: TenantFeeRate = Field(
+        ...,
+        description='The fee rate to apply. Required — an absent payload would otherwise skip\n validation of its fields.',
+    )
+    ver: str | None = Field('', description='RAMP protocol version.')
+
+
+class SetTenantFeeRateResponse(WireModel):
+    rate: TenantFeeRate = Field(..., description='The fee rate as persisted.')
+    ver: str | None = Field('', description='RAMP protocol version.')
 
 
 class TransactionResponse(WireModel):

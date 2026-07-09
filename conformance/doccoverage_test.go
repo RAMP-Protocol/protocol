@@ -22,11 +22,12 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
-
-	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
-const refPagePath = "../website/src/content/docs/reference/proto-ramp.mdx"
+// The (descriptor file, reference page) pairs come from contract.go's Contract —
+// the same list every other descriptor-walking guard iterates. Every pair is walked;
+// the docCoverageExempt self-clean runs ONCE after all pages so a shared exemption is
+// not misflagged as stale.
 
 // docCoverageExempt lists "Type" or "Type.field" symbols that are intentionally
 // not documented on the reference page, each with a reason. The test proves each
@@ -41,11 +42,11 @@ var headingRe = regexp.MustCompile(`(?m)^#{2,6}\s+(.+?)\s*$`)
 // text, each section's body running until the next heading of equal-or-higher
 // level. Fenced code blocks are stripped first so a `#` inside a fence is never
 // mistaken for a heading.
-func refSections(t *testing.T) (sections map[string]string, whole string) {
+func refSections(t *testing.T, path string) (sections map[string]string, whole string) {
 	t.Helper()
-	b, err := os.ReadFile(refPagePath)
+	b, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("reading reference page %s: %v (wrong working directory?)", refPagePath, err)
+		t.Fatalf("reading reference page %s: %v (wrong working directory?)", path, err)
 	}
 	whole = string(b)
 	// Strip fenced code blocks for heading detection.
@@ -62,7 +63,7 @@ func refSections(t *testing.T) (sections map[string]string, whole string) {
 		sections[name] = noFence[bodyStart:bodyEnd]
 	}
 	if len(sections) == 0 {
-		t.Fatalf("no headings parsed from %s — format drifted; this guard would be vacuous.", refPagePath)
+		t.Fatalf("no headings parsed from %s — format drifted; this guard would be vacuous.", path)
 	}
 	return
 }
@@ -74,7 +75,6 @@ func backticked(body, tok string) bool {
 }
 
 func TestReferencePageCoversContract(t *testing.T) {
-	sections, whole := refSections(t)
 	used := map[string]bool{}
 	exempt := func(key string) bool {
 		if _, ok := docCoverageExempt[key]; ok {
@@ -90,74 +90,83 @@ func TestReferencePageCoversContract(t *testing.T) {
 		_ = key
 	}
 
-	f := rampv1.File_ramp_v1_ramp_proto
-
 	// A `::proto-message|service|enum{name=X}` directive renders X (and ALL its
 	// members) straight from the descriptor — coverage by construction. Collect
 	// the generated targets; a generated type needs no per-member check.
 	directiveRe := regexp.MustCompile(`::proto-(?:message|service|enum)\{name=([A-Za-z0-9]+)`)
-	generated := map[string]bool{}
-	for _, m := range directiveRe.FindAllStringSubmatch(whole, -1) {
-		generated[m[1]] = true
-	}
 
-	// ── Services + methods ───────────────────────────────────────────────────
-	svcs := f.Services()
-	for i := 0; i < svcs.Len(); i++ {
-		svc := svcs.Get(i)
-		name := string(svc.Name())
-		if generated[name] || exempt(name) {
-			continue
+	totalSvcs, totalMsgs, totalEnums := 0, 0, 0
+	for _, page := range Contract {
+		sections, whole := refSections(t, page.RefPage)
+		generated := map[string]bool{}
+		for _, m := range directiveRe.FindAllStringSubmatch(whole, -1) {
+			generated[m[1]] = true
 		}
-		body, ok := sections[name]
-		if !ok {
-			flag("service "+name+" is neither generated (::proto-service) nor a `### "+name+"` section on the reference page", name)
-			continue
-		}
-		ms := svc.Methods()
-		for j := 0; j < ms.Len(); j++ {
-			m := string(ms.Get(j).Name())
-			key := name + "." + m
-			if !backticked(body, m) && !exempt(key) {
-				flag("RPC "+key+" is not listed in the `### "+name+"` section", key)
+
+		f := page.File
+
+		// ── Services + methods ───────────────────────────────────────────────
+		svcs := f.Services()
+		for i := 0; i < svcs.Len(); i++ {
+			svc := svcs.Get(i)
+			name := string(svc.Name())
+			if generated[name] || exempt(name) {
+				continue
+			}
+			body, ok := sections[name]
+			if !ok {
+				flag("service "+name+" is neither generated (::proto-service) nor a `### "+name+"` section on "+page.RefPage, name)
+				continue
+			}
+			ms := svc.Methods()
+			for j := 0; j < ms.Len(); j++ {
+				m := string(ms.Get(j).Name())
+				key := name + "." + m
+				if !backticked(body, m) && !exempt(key) {
+					flag("RPC "+key+" is not listed in the `### "+name+"` section", key)
+				}
 			}
 		}
-	}
 
-	// ── Top-level messages + fields ──────────────────────────────────────────
-	msgs := f.Messages()
-	for i := 0; i < msgs.Len(); i++ {
-		md := msgs.Get(i)
-		name := string(md.Name())
-		if generated[name] || exempt(name) {
-			continue
-		}
-		body, ok := sections[name]
-		if !ok {
-			flag("message "+name+" is neither generated (::proto-message) nor a `### "+name+"` section on the reference page", name)
-			continue
-		}
-		fs := md.Fields()
-		for j := 0; j < fs.Len(); j++ {
-			fname := string(fs.Get(j).Name())
-			key := name + "." + fname
-			if !backticked(body, fname) && !exempt(key) {
-				flag("field "+key+" is missing from the `### "+name+"` field table", key)
+		// ── Top-level messages + fields ──────────────────────────────────────
+		msgs := f.Messages()
+		for i := 0; i < msgs.Len(); i++ {
+			md := msgs.Get(i)
+			name := string(md.Name())
+			if generated[name] || exempt(name) {
+				continue
+			}
+			body, ok := sections[name]
+			if !ok {
+				flag("message "+name+" is neither generated (::proto-message) nor a `### "+name+"` section on "+page.RefPage, name)
+				continue
+			}
+			fs := md.Fields()
+			for j := 0; j < fs.Len(); j++ {
+				fname := string(fs.Get(j).Name())
+				key := name + "." + fname
+				if !backticked(body, fname) && !exempt(key) {
+					flag("field "+key+" is missing from the `### "+name+"` field table", key)
+				}
 			}
 		}
-	}
 
-	// ── Enums (generated via ::proto-enum, or a `### EnumName` heading) ───────
-	enums := f.Enums()
-	for i := 0; i < enums.Len(); i++ {
-		name := string(enums.Get(i).Name())
-		_, hasHeading := sections[name]
-		if !generated[name] && !hasHeading && !exempt(name) {
-			flag("enum "+name+" is neither generated (::proto-enum) nor a `### "+name+"` section on the reference page", name)
+		// ── Enums (generated via ::proto-enum, or a `### EnumName` heading) ───
+		enums := f.Enums()
+		for i := 0; i < enums.Len(); i++ {
+			name := string(enums.Get(i).Name())
+			_, hasHeading := sections[name]
+			if !generated[name] && !hasHeading && !exempt(name) {
+				flag("enum "+name+" is neither generated (::proto-enum) nor a `### "+name+"` section on "+page.RefPage, name)
+			}
 		}
+
+		totalSvcs += svcs.Len()
+		totalMsgs += msgs.Len()
+		totalEnums += enums.Len()
 	}
 
-	// ── Self-cleaning exemptions ─────────────────────────────────────────────
+	// ── Self-cleaning exemptions (ONCE, after every page) ────────────────────
 	for key, reason := range docCoverageExempt {
 		if strings.TrimSpace(reason) == "" {
 			t.Errorf("docCoverageExempt[%q] has an empty reason; every exemption must say why.", key)
@@ -168,12 +177,12 @@ func TestReferencePageCoversContract(t *testing.T) {
 	}
 
 	sort.Strings(missing)
-	t.Logf("checked reference coverage for %d services, %d top-level messages, %d enums",
-		svcs.Len(), msgs.Len(), enums.Len())
+	t.Logf("checked reference coverage for %d services, %d top-level messages, %d enums across %d pages",
+		totalSvcs, totalMsgs, totalEnums, len(Contract))
 	for _, m := range missing {
 		t.Error("undocumented: " + m)
 	}
 }
 
 // guard against an unused import if the descriptor handle changes shape.
-var _ protoreflect.FileDescriptor = rampv1.File_ramp_v1_ramp_proto
+var _ protoreflect.FileDescriptor = Contract[0].File

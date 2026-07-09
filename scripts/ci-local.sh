@@ -104,9 +104,14 @@ elif ! command -v python3 >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; t
 else
   step "regenerate SDK types export (Pydantic + Zod) + drift"
   ./scripts/gen-sdk-types.sh || fail=1
-  if ! git diff --quiet HEAD -- gen/python/wire/models.py gen/ts/wire/schemas.ts; then
-    echo "::error:: SDK types export out of sync — run scripts/gen-sdk-types.sh and commit gen/python/wire/models.py + gen/ts/wire/schemas.ts."
-    git status --short -- gen/python/wire/models.py gen/ts/wire/schemas.ts
+  # Whole directories, not a file list: a NEW generated file (e.g. wire/unique.py) is then
+  # gated the day it is emitted. The untracked sweep is load-bearing — `git diff` cannot see
+  # a file that was generated but never committed, so a file list alone would pass green.
+  # base.py / base.ts are hand-written seams and never regenerated, so they cannot drift.
+  if ! git diff --quiet HEAD -- gen/python/wire gen/ts/wire \
+     || [ -n "$(git ls-files --others --exclude-standard -- gen/python/wire gen/ts/wire)" ]; then
+    echo "::error:: SDK types export out of sync — run scripts/gen-sdk-types.sh and commit gen/python/wire/ + gen/ts/wire/."
+    git status --short -- gen/python/wire gen/ts/wire
     fail=1
   else
     note "no drift"

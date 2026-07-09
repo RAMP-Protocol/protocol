@@ -24,8 +24,6 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 type emittedCase struct {
@@ -85,9 +83,9 @@ func TestCanonicalRoundTrip(t *testing.T) {
 
 func newMessage(t *testing.T, short string) proto.Message {
 	t.Helper()
-	mt, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName("ramp.v1." + short))
+	mt, err := findContractMessage(short)
 	if err != nil {
-		t.Fatalf("unknown message ramp.v1.%s: %v", short, err)
+		t.Fatalf("unknown message %s (tried %v): %v", short, contractPackages, err)
 	}
 	return mt.New().Interface()
 }

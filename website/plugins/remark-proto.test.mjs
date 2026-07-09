@@ -17,6 +17,25 @@ test('resolved reference is autolinked to its anchor', () => {
     'a real Message.field should become a link to the message heading');
 });
 
+// The reference pages are discovered (reference/proto-*.mdx), and a symbol links to the
+// page that documents IT — not to a hardcoded page. Before this, every ramp.admin.v1 symbol
+// resolved in the descriptor yet linked nowhere, and nothing noticed.
+test('a symbol links to the page that documents it, per package', () => {
+  const rampSym = run(para('TransactionRequest'));
+  assert.ok(has(rampSym, (n) => n.type === 'link' && n.url === '/reference/proto-ramp/#transactionrequest'),
+    'a ramp.v1 symbol links to the ramp.v1 reference page');
+
+  const adminSym = run(para('SetReportingPolicyRequest'));
+  assert.ok(has(adminSym, (n) => n.type === 'link' && n.url === '/reference/proto-admin/#setreportingpolicyrequest'),
+    'a ramp.admin.v1 symbol links to the admin reference page, not to proto-ramp');
+});
+
+test('an admin Service.Method resolves and links to the admin page', () => {
+  const tree = run(para('AdminService.SetTenantFeeRate'));
+  assert.ok(has(tree, (n) => n.type === 'link' && n.url === '/reference/proto-admin/#adminservice'),
+    'a dotted Service.Method on a second package must resolve (no build failure) and link there');
+});
+
 test('unknown member of a real proto type FAILS the build', () => {
   assert.throws(() => run(para('TransactionRequest.bogus_field_zzz')), /unknown proto reference/,
     'the guard must throw on a known type with a nonexistent member');
