@@ -1736,6 +1736,212 @@
     }
   },
   {
+    "id": "ReportingPolicy/quantity_tolerance/above_max",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "double.gte_lte"
+    ],
+    "json": {
+      "quantity_tolerance": 2,
+      "required_fields": [
+        "x"
+      ],
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "ReportingPolicy/quantity_tolerance/below_min",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "double.gte_lte"
+    ],
+    "json": {
+      "quantity_tolerance": -1,
+      "required_fields": [
+        "x"
+      ],
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "ReportingPolicy/required_fields/duplicate_item",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "repeated.unique"
+    ],
+    "json": {
+      "required_fields": [
+        "x",
+        "x"
+      ],
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "ReportingPolicy/required_fields/item_pattern",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "required_fields": [
+        "x",
+        "two words"
+      ],
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "ReportingPolicy/required_fields/item_too_long",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "required_fields": [
+        "x",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "ReportingPolicy/required_fields/item_too_short",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {
+      "required_fields": [
+        "x",
+        ""
+      ],
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "ReportingPolicy/required_fields/too_many",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "repeated.max_items",
+      "repeated.unique"
+    ],
+    "json": {
+      "required_fields": [
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x",
+        "x"
+      ],
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "ReportingPolicy/tenant_id/too_long",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "required_fields": [
+        "x"
+      ],
+      "tenant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "ReportingPolicy/tenant_id/too_short",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "required_fields": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ReportingPolicy/valid",
+    "message": "ReportingPolicy",
+    "valid": true,
+    "json": {
+      "required_fields": [
+        "x"
+      ],
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "ReportingPolicy/window_seconds/above_max",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "int32.gt_lte"
+    ],
+    "json": {
+      "required_fields": [
+        "x"
+      ],
+      "tenant_id": "tenant-seed",
+      "window_seconds": 31536001
+    }
+  },
+  {
+    "id": "ReportingPolicy/window_seconds/below_min",
+    "message": "ReportingPolicy",
+    "valid": false,
+    "rules": [
+      "int32.gt_lte"
+    ],
+    "json": {
+      "required_fields": [
+        "x"
+      ],
+      "tenant_id": "tenant-seed",
+      "window_seconds": 0
+    }
+  },
+  {
     "id": "RequestConstraints/max_unit_cost/empty_ok",
     "message": "RequestConstraints",
     "valid": true,
@@ -2596,595 +2802,149 @@
     }
   },
   {
-    "id": "SetReportingPolicyRequest/quantity_tolerance/above_max",
+    "id": "SetReportingPolicyRequest/policy/missing",
     "message": "SetReportingPolicyRequest",
     "valid": false,
     "rules": [
-      "double.gte_lte"
+      "required"
     ],
-    "json": {
-      "quantity_tolerance": 2,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/quantity_tolerance/below_min",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "double.gte_lte"
-    ],
-    "json": {
-      "quantity_tolerance": -1,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/required_fields/duplicate_item",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "repeated.unique"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/required_fields/item_pattern",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        "two words"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/required_fields/item_too_long",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "string.max_len"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/required_fields/item_too_short",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "string.min_len",
-      "string.pattern"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        ""
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/required_fields/too_many",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "repeated.max_items",
-      "repeated.unique"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/tenant_id/too_long",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "string.max_len"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/tenant_id/too_short",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "string.min_len"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "window_seconds": 1
-    }
+    "json": {}
   },
   {
     "id": "SetReportingPolicyRequest/valid",
     "message": "SetReportingPolicyRequest",
     "valid": true,
     "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
+      "policy": {
+        "required_fields": [
+          "x"
+        ],
+        "tenant_id": "tenant-seed"
+      }
     }
   },
   {
-    "id": "SetReportingPolicyRequest/window_seconds/above_max",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "int32.gt_lte"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 31536001
-    }
-  },
-  {
-    "id": "SetReportingPolicyRequest/window_seconds/below_min",
-    "message": "SetReportingPolicyRequest",
-    "valid": false,
-    "rules": [
-      "int32.gt_lte"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 0
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/quantity_tolerance/above_max",
+    "id": "SetReportingPolicyResponse/policy/missing",
     "message": "SetReportingPolicyResponse",
     "valid": false,
     "rules": [
-      "double.gte_lte"
+      "required"
     ],
-    "json": {
-      "quantity_tolerance": 2,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/quantity_tolerance/below_min",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "double.gte_lte"
-    ],
-    "json": {
-      "quantity_tolerance": -1,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/required_fields/duplicate_item",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "repeated.unique"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/required_fields/item_pattern",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        "two words"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/required_fields/item_too_long",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "string.max_len"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/required_fields/item_too_short",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "string.min_len",
-      "string.pattern"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        ""
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/required_fields/too_many",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "repeated.max_items",
-      "repeated.unique"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x",
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/tenant_id/too_long",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "string.max_len"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "window_seconds": 1
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/tenant_id/too_short",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "string.min_len"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "window_seconds": 1
-    }
+    "json": {}
   },
   {
     "id": "SetReportingPolicyResponse/valid",
     "message": "SetReportingPolicyResponse",
     "valid": true,
     "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 1
+      "policy": {
+        "required_fields": [
+          "x"
+        ],
+        "tenant_id": "tenant-seed"
+      }
     }
   },
   {
-    "id": "SetReportingPolicyResponse/window_seconds/above_max",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "int32.gt_lte"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 31536001
-    }
-  },
-  {
-    "id": "SetReportingPolicyResponse/window_seconds/below_min",
-    "message": "SetReportingPolicyResponse",
-    "valid": false,
-    "rules": [
-      "int32.gt_lte"
-    ],
-    "json": {
-      "quantity_tolerance": 0,
-      "required_fields": [
-        "x"
-      ],
-      "tenant_id": "x",
-      "window_seconds": 0
-    }
-  },
-  {
-    "id": "SetTenantFeeRateRequest/fee_rate_bps/above_max",
+    "id": "SetTenantFeeRateRequest/rate/missing",
     "message": "SetTenantFeeRateRequest",
     "valid": false,
     "rules": [
-      "int32.gte_lt"
+      "required"
     ],
-    "json": {
-      "fee_rate_bps": 10000,
-      "notes": "x",
-      "tenant_id": "x"
-    }
-  },
-  {
-    "id": "SetTenantFeeRateRequest/fee_rate_bps/below_min",
-    "message": "SetTenantFeeRateRequest",
-    "valid": false,
-    "rules": [
-      "int32.gte_lt"
-    ],
-    "json": {
-      "fee_rate_bps": -1,
-      "notes": "x",
-      "tenant_id": "x"
-    }
-  },
-  {
-    "id": "SetTenantFeeRateRequest/notes/too_long",
-    "message": "SetTenantFeeRateRequest",
-    "valid": false,
-    "rules": [
-      "string.max_len"
-    ],
-    "json": {
-      "notes": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "tenant_id": "x"
-    }
-  },
-  {
-    "id": "SetTenantFeeRateRequest/tenant_id/too_long",
-    "message": "SetTenantFeeRateRequest",
-    "valid": false,
-    "rules": [
-      "string.max_len"
-    ],
-    "json": {
-      "notes": "x",
-      "tenant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    }
-  },
-  {
-    "id": "SetTenantFeeRateRequest/tenant_id/too_short",
-    "message": "SetTenantFeeRateRequest",
-    "valid": false,
-    "rules": [
-      "string.min_len"
-    ],
-    "json": {
-      "notes": "x"
-    }
+    "json": {}
   },
   {
     "id": "SetTenantFeeRateRequest/valid",
     "message": "SetTenantFeeRateRequest",
     "valid": true,
     "json": {
-      "notes": "x",
-      "tenant_id": "x"
+      "rate": {
+        "tenant_id": "tenant-seed"
+      }
     }
   },
   {
-    "id": "SetTenantFeeRateResponse/fee_rate_bps/above_max",
+    "id": "SetTenantFeeRateResponse/rate/missing",
     "message": "SetTenantFeeRateResponse",
     "valid": false,
     "rules": [
-      "int32.gte_lt"
+      "required"
     ],
-    "json": {
-      "fee_rate_bps": 10000,
-      "notes": "x",
-      "tenant_id": "x"
-    }
-  },
-  {
-    "id": "SetTenantFeeRateResponse/fee_rate_bps/below_min",
-    "message": "SetTenantFeeRateResponse",
-    "valid": false,
-    "rules": [
-      "int32.gte_lt"
-    ],
-    "json": {
-      "fee_rate_bps": -1,
-      "notes": "x",
-      "tenant_id": "x"
-    }
-  },
-  {
-    "id": "SetTenantFeeRateResponse/notes/too_long",
-    "message": "SetTenantFeeRateResponse",
-    "valid": false,
-    "rules": [
-      "string.max_len"
-    ],
-    "json": {
-      "notes": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "tenant_id": "x"
-    }
-  },
-  {
-    "id": "SetTenantFeeRateResponse/tenant_id/too_long",
-    "message": "SetTenantFeeRateResponse",
-    "valid": false,
-    "rules": [
-      "string.max_len"
-    ],
-    "json": {
-      "notes": "x",
-      "tenant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    }
-  },
-  {
-    "id": "SetTenantFeeRateResponse/tenant_id/too_short",
-    "message": "SetTenantFeeRateResponse",
-    "valid": false,
-    "rules": [
-      "string.min_len"
-    ],
-    "json": {
-      "notes": "x"
-    }
+    "json": {}
   },
   {
     "id": "SetTenantFeeRateResponse/valid",
     "message": "SetTenantFeeRateResponse",
     "valid": true,
     "json": {
-      "notes": "x",
-      "tenant_id": "x"
+      "rate": {
+        "tenant_id": "tenant-seed"
+      }
+    }
+  },
+  {
+    "id": "TenantFeeRate/fee_rate_bps/above_max",
+    "message": "TenantFeeRate",
+    "valid": false,
+    "rules": [
+      "int32.gte_lt"
+    ],
+    "json": {
+      "fee_rate_bps": 10000,
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "TenantFeeRate/fee_rate_bps/below_min",
+    "message": "TenantFeeRate",
+    "valid": false,
+    "rules": [
+      "int32.gte_lt"
+    ],
+    "json": {
+      "fee_rate_bps": -1,
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "TenantFeeRate/notes/too_long",
+    "message": "TenantFeeRate",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "notes": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "TenantFeeRate/tenant_id/too_long",
+    "message": "TenantFeeRate",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "tenant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "TenantFeeRate/tenant_id/too_short",
+    "message": "TenantFeeRate",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {}
+  },
+  {
+    "id": "TenantFeeRate/valid",
+    "message": "TenantFeeRate",
+    "valid": true,
+    "json": {
+      "tenant_id": "tenant-seed"
     }
   },
   {

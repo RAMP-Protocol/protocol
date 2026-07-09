@@ -14,7 +14,11 @@
 // against — and both RPCs are full-replace overwrites, so they are naturally
 // idempotent and carry no idempotency_key.
 //
-// Responses echo the state as persisted, giving operator tooling a read-back
+// Message shape: each RPC takes a thin {ver, <payload>} envelope wrapping a
+// required payload message — TenantFeeRate or ReportingPolicy. The payload
+// type is shared by the request and its response, so every field rule is
+// stated ONCE; the read-back response cannot drift from the write. Responses
+// echo the payload as persisted, giving operator tooling a read-back
 // confirmation of the applied values.
 //
 // Validation: every constraint here is a FIELD-level protovalidate rule so it
@@ -45,27 +49,172 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type SetTenantFeeRateRequest struct {
+// TenantFeeRate is the fee-rate payload shared by SetTenantFeeRate's request
+// and response. The field rules live here once, so the write and the echoed
+// read-back stay in lockstep.
+type TenantFeeRate struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// RAMP protocol version.
-	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The tenant whose fee rate is being set.
-	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// Fee rate in basis points of gross: fee = floor(gross * bps / 10000).
 	// Below 10000 keeps the fee strictly under 100%; integer basis points avoid
 	// float drift when aggregating many charges. 0 is a legitimate explicit
 	// value ("no fee"), not an unset sentinel.
-	FeeRateBps int32 `protobuf:"varint,3,opt,name=fee_rate_bps,json=feeRateBps,proto3" json:"fee_rate_bps,omitempty"`
+	FeeRateBps int32 `protobuf:"varint,2,opt,name=fee_rate_bps,json=feeRateBps,proto3" json:"fee_rate_bps,omitempty"`
 	// Operator commentary on the rate (why it was set, by whom, ticket link).
 	// Omitted clears any existing note.
-	Notes         *string `protobuf:"bytes,4,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
+	Notes         *string `protobuf:"bytes,3,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TenantFeeRate) Reset() {
+	*x = TenantFeeRate{}
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TenantFeeRate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TenantFeeRate) ProtoMessage() {}
+
+func (x *TenantFeeRate) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TenantFeeRate.ProtoReflect.Descriptor instead.
+func (*TenantFeeRate) Descriptor() ([]byte, []int) {
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *TenantFeeRate) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *TenantFeeRate) GetFeeRateBps() int32 {
+	if x != nil {
+		return x.FeeRateBps
+	}
+	return 0
+}
+
+func (x *TenantFeeRate) GetNotes() string {
+	if x != nil && x.Notes != nil {
+		return *x.Notes
+	}
+	return ""
+}
+
+// ReportingPolicy is the reporting-policy payload shared by
+// SetReportingPolicy's request and response. The field rules live here once, so
+// the write and the echoed read-back stay in lockstep.
+type ReportingPolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tenant whose reporting policy is being replaced.
+	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Report field names the usage-report validator requires. The wire constrains
+	// only the token shape; which names are meaningful is defined by the receiving
+	// Exchange and may change without a contract change. Names are a set: repeats
+	// are rejected. Empty means no required fields.
+	RequiredFields []string `protobuf:"bytes,2,rep,name=required_fields,json=requiredFields,proto3" json:"required_fields,omitempty"`
+	// Accepted relative deviation between estimated and reported quantity, as a
+	// fraction: 0 requires an exact match, 1 accepts any deviation. Omitted: the
+	// receiving Exchange's default tolerance applies.
+	QuantityTolerance *float64 `protobuf:"fixed64,3,opt,name=quantity_tolerance,json=quantityTolerance,proto3,oneof" json:"quantity_tolerance,omitempty"`
+	// Reporting window in seconds. Applies to obligations minted after this call;
+	// obligations already issued keep the window they were minted with. Capped at
+	// one year. Omitted: the receiving Exchange's default applies.
+	WindowSeconds *int32 `protobuf:"varint,4,opt,name=window_seconds,json=windowSeconds,proto3,oneof" json:"window_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportingPolicy) Reset() {
+	*x = ReportingPolicy{}
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportingPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportingPolicy) ProtoMessage() {}
+
+func (x *ReportingPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportingPolicy.ProtoReflect.Descriptor instead.
+func (*ReportingPolicy) Descriptor() ([]byte, []int) {
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ReportingPolicy) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *ReportingPolicy) GetRequiredFields() []string {
+	if x != nil {
+		return x.RequiredFields
+	}
+	return nil
+}
+
+func (x *ReportingPolicy) GetQuantityTolerance() float64 {
+	if x != nil && x.QuantityTolerance != nil {
+		return *x.QuantityTolerance
+	}
+	return 0
+}
+
+func (x *ReportingPolicy) GetWindowSeconds() int32 {
+	if x != nil && x.WindowSeconds != nil {
+		return *x.WindowSeconds
+	}
+	return 0
+}
+
+type SetTenantFeeRateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// RAMP protocol version.
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// The fee rate to apply. Required — an absent payload would otherwise skip
+	// validation of its fields.
+	Rate          *TenantFeeRate `protobuf:"bytes,2,opt,name=rate,proto3" json:"rate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetTenantFeeRateRequest) Reset() {
 	*x = SetTenantFeeRateRequest{}
-	mi := &file_ramp_admin_v1_admin_proto_msgTypes[0]
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -77,7 +226,7 @@ func (x *SetTenantFeeRateRequest) String() string {
 func (*SetTenantFeeRateRequest) ProtoMessage() {}
 
 func (x *SetTenantFeeRateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_admin_v1_admin_proto_msgTypes[0]
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -90,7 +239,7 @@ func (x *SetTenantFeeRateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTenantFeeRateRequest.ProtoReflect.Descriptor instead.
 func (*SetTenantFeeRateRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{0}
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SetTenantFeeRateRequest) GetVer() string {
@@ -100,44 +249,26 @@ func (x *SetTenantFeeRateRequest) GetVer() string {
 	return ""
 }
 
-func (x *SetTenantFeeRateRequest) GetTenantId() string {
+func (x *SetTenantFeeRateRequest) GetRate() *TenantFeeRate {
 	if x != nil {
-		return x.TenantId
+		return x.Rate
 	}
-	return ""
-}
-
-func (x *SetTenantFeeRateRequest) GetFeeRateBps() int32 {
-	if x != nil {
-		return x.FeeRateBps
-	}
-	return 0
-}
-
-func (x *SetTenantFeeRateRequest) GetNotes() string {
-	if x != nil && x.Notes != nil {
-		return *x.Notes
-	}
-	return ""
+	return nil
 }
 
 type SetTenantFeeRateResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// RAMP protocol version.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// The tenant the rate was applied to.
-	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// The fee rate as persisted, in basis points of gross.
-	FeeRateBps int32 `protobuf:"varint,3,opt,name=fee_rate_bps,json=feeRateBps,proto3" json:"fee_rate_bps,omitempty"`
-	// The note as persisted; absent when the note is cleared.
-	Notes         *string `protobuf:"bytes,4,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
+	// The fee rate as persisted.
+	Rate          *TenantFeeRate `protobuf:"bytes,2,opt,name=rate,proto3" json:"rate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetTenantFeeRateResponse) Reset() {
 	*x = SetTenantFeeRateResponse{}
-	mi := &file_ramp_admin_v1_admin_proto_msgTypes[1]
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -149,7 +280,7 @@ func (x *SetTenantFeeRateResponse) String() string {
 func (*SetTenantFeeRateResponse) ProtoMessage() {}
 
 func (x *SetTenantFeeRateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_admin_v1_admin_proto_msgTypes[1]
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -162,7 +293,7 @@ func (x *SetTenantFeeRateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTenantFeeRateResponse.ProtoReflect.Descriptor instead.
 func (*SetTenantFeeRateResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{1}
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SetTenantFeeRateResponse) GetVer() string {
@@ -172,53 +303,27 @@ func (x *SetTenantFeeRateResponse) GetVer() string {
 	return ""
 }
 
-func (x *SetTenantFeeRateResponse) GetTenantId() string {
+func (x *SetTenantFeeRateResponse) GetRate() *TenantFeeRate {
 	if x != nil {
-		return x.TenantId
+		return x.Rate
 	}
-	return ""
-}
-
-func (x *SetTenantFeeRateResponse) GetFeeRateBps() int32 {
-	if x != nil {
-		return x.FeeRateBps
-	}
-	return 0
-}
-
-func (x *SetTenantFeeRateResponse) GetNotes() string {
-	if x != nil && x.Notes != nil {
-		return *x.Notes
-	}
-	return ""
+	return nil
 }
 
 type SetReportingPolicyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// RAMP protocol version.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// The tenant whose reporting policy is being replaced.
-	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// Report field names the usage-report validator requires. The wire constrains
-	// only the token shape; which names are meaningful is defined by the receiving
-	// Exchange and may change without a contract change. Names are a set: repeats
-	// are rejected. Empty means no required fields.
-	RequiredFields []string `protobuf:"bytes,3,rep,name=required_fields,json=requiredFields,proto3" json:"required_fields,omitempty"`
-	// Accepted relative deviation between estimated and reported quantity, as a
-	// fraction: 0 requires an exact match, 1 accepts any deviation. Omitted: the
-	// receiving Exchange's default tolerance applies.
-	QuantityTolerance *float64 `protobuf:"fixed64,4,opt,name=quantity_tolerance,json=quantityTolerance,proto3,oneof" json:"quantity_tolerance,omitempty"`
-	// Reporting window in seconds. Applies to obligations minted after this call;
-	// obligations already issued keep the window they were minted with. Capped at
-	// one year. Omitted: the receiving Exchange's default applies.
-	WindowSeconds *int32 `protobuf:"varint,5,opt,name=window_seconds,json=windowSeconds,proto3,oneof" json:"window_seconds,omitempty"`
+	// The reporting policy to apply. Required — an absent payload would otherwise
+	// skip validation of its fields.
+	Policy        *ReportingPolicy `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetReportingPolicyRequest) Reset() {
 	*x = SetReportingPolicyRequest{}
-	mi := &file_ramp_admin_v1_admin_proto_msgTypes[2]
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -230,7 +335,7 @@ func (x *SetReportingPolicyRequest) String() string {
 func (*SetReportingPolicyRequest) ProtoMessage() {}
 
 func (x *SetReportingPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_admin_v1_admin_proto_msgTypes[2]
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -243,7 +348,7 @@ func (x *SetReportingPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetReportingPolicyRequest.ProtoReflect.Descriptor instead.
 func (*SetReportingPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{2}
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SetReportingPolicyRequest) GetVer() string {
@@ -253,55 +358,26 @@ func (x *SetReportingPolicyRequest) GetVer() string {
 	return ""
 }
 
-func (x *SetReportingPolicyRequest) GetTenantId() string {
+func (x *SetReportingPolicyRequest) GetPolicy() *ReportingPolicy {
 	if x != nil {
-		return x.TenantId
-	}
-	return ""
-}
-
-func (x *SetReportingPolicyRequest) GetRequiredFields() []string {
-	if x != nil {
-		return x.RequiredFields
+		return x.Policy
 	}
 	return nil
-}
-
-func (x *SetReportingPolicyRequest) GetQuantityTolerance() float64 {
-	if x != nil && x.QuantityTolerance != nil {
-		return *x.QuantityTolerance
-	}
-	return 0
-}
-
-func (x *SetReportingPolicyRequest) GetWindowSeconds() int32 {
-	if x != nil && x.WindowSeconds != nil {
-		return *x.WindowSeconds
-	}
-	return 0
 }
 
 type SetReportingPolicyResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// RAMP protocol version.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// The tenant the policy was applied to.
-	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// The required report fields as persisted.
-	RequiredFields []string `protobuf:"bytes,3,rep,name=required_fields,json=requiredFields,proto3" json:"required_fields,omitempty"`
-	// The quantity tolerance as persisted; absent when the policy leaves it to
-	// the receiving Exchange's default.
-	QuantityTolerance *float64 `protobuf:"fixed64,4,opt,name=quantity_tolerance,json=quantityTolerance,proto3,oneof" json:"quantity_tolerance,omitempty"`
-	// The reporting window as persisted; absent when the policy leaves it to the
-	// receiving Exchange's default.
-	WindowSeconds *int32 `protobuf:"varint,5,opt,name=window_seconds,json=windowSeconds,proto3,oneof" json:"window_seconds,omitempty"`
+	// The reporting policy as persisted.
+	Policy        *ReportingPolicy `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetReportingPolicyResponse) Reset() {
 	*x = SetReportingPolicyResponse{}
-	mi := &file_ramp_admin_v1_admin_proto_msgTypes[3]
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -313,7 +389,7 @@ func (x *SetReportingPolicyResponse) String() string {
 func (*SetReportingPolicyResponse) ProtoMessage() {}
 
 func (x *SetReportingPolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ramp_admin_v1_admin_proto_msgTypes[3]
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -326,7 +402,7 @@ func (x *SetReportingPolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetReportingPolicyResponse.ProtoReflect.Descriptor instead.
 func (*SetReportingPolicyResponse) Descriptor() ([]byte, []int) {
-	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{3}
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SetReportingPolicyResponse) GetVer() string {
@@ -336,75 +412,46 @@ func (x *SetReportingPolicyResponse) GetVer() string {
 	return ""
 }
 
-func (x *SetReportingPolicyResponse) GetTenantId() string {
+func (x *SetReportingPolicyResponse) GetPolicy() *ReportingPolicy {
 	if x != nil {
-		return x.TenantId
-	}
-	return ""
-}
-
-func (x *SetReportingPolicyResponse) GetRequiredFields() []string {
-	if x != nil {
-		return x.RequiredFields
+		return x.Policy
 	}
 	return nil
-}
-
-func (x *SetReportingPolicyResponse) GetQuantityTolerance() float64 {
-	if x != nil && x.QuantityTolerance != nil {
-		return *x.QuantityTolerance
-	}
-	return 0
-}
-
-func (x *SetReportingPolicyResponse) GetWindowSeconds() int32 {
-	if x != nil && x.WindowSeconds != nil {
-		return *x.WindowSeconds
-	}
-	return 0
 }
 
 var File_ramp_admin_v1_admin_proto protoreflect.FileDescriptor
 
 const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\n" +
-	"\x19ramp/admin/v1/admin.proto\x12\rramp.admin.v1\x1a\x1bbuf/validate/validate.proto\"\xb1\x01\n" +
+	"\x19ramp/admin/v1/admin.proto\x12\rramp.admin.v1\x1a\x1bbuf/validate/validate.proto\"\x95\x01\n" +
+	"\rTenantFeeRate\x12'\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\x12,\n" +
+	"\ffee_rate_bps\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x10\x90N(\x00R\n" +
+	"feeRateBps\x12#\n" +
+	"\x05notes\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\bH\x00R\x05notes\x88\x01\x01B\b\n" +
+	"\x06_notes\"\xbd\x02\n" +
+	"\x0fReportingPolicy\x12'\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\x12P\n" +
+	"\x0frequired_fields\x18\x02 \x03(\tB'\xbaH$\x92\x01!\x10 \x18\x01\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\x0erequiredFields\x12K\n" +
+	"\x12quantity_tolerance\x18\x03 \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00\xf0?)\x00\x00\x00\x00\x00\x00\x00\x00H\x00R\x11quantityTolerance\x88\x01\x01\x128\n" +
+	"\x0ewindow_seconds\x18\x04 \x01(\x05B\f\xbaH\t\x1a\a\x18\x80\xe7\x84\x0f \x00H\x01R\rwindowSeconds\x88\x01\x01B\x15\n" +
+	"\x13_quantity_toleranceB\x11\n" +
+	"\x0f_window_seconds\"e\n" +
 	"\x17SetTenantFeeRateRequest\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12'\n" +
-	"\ttenant_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\x12,\n" +
-	"\ffee_rate_bps\x18\x03 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x10\x90N(\x00R\n" +
-	"feeRateBps\x12#\n" +
-	"\x05notes\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\bH\x00R\x05notes\x88\x01\x01B\b\n" +
-	"\x06_notes\"\xb2\x01\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x128\n" +
+	"\x04rate\x18\x02 \x01(\v2\x1c.ramp.admin.v1.TenantFeeRateB\x06\xbaH\x03\xc8\x01\x01R\x04rate\"f\n" +
 	"\x18SetTenantFeeRateResponse\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12'\n" +
-	"\ttenant_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\x12,\n" +
-	"\ffee_rate_bps\x18\x03 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x10\x90N(\x00R\n" +
-	"feeRateBps\x12#\n" +
-	"\x05notes\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\bH\x00R\x05notes\x88\x01\x01B\b\n" +
-	"\x06_notes\"\xd9\x02\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x128\n" +
+	"\x04rate\x18\x02 \x01(\v2\x1c.ramp.admin.v1.TenantFeeRateB\x06\xbaH\x03\xc8\x01\x01R\x04rate\"m\n" +
 	"\x19SetReportingPolicyRequest\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12'\n" +
-	"\ttenant_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\x12P\n" +
-	"\x0frequired_fields\x18\x03 \x03(\tB'\xbaH$\x92\x01!\x10 \x18\x01\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\x0erequiredFields\x12K\n" +
-	"\x12quantity_tolerance\x18\x04 \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00\xf0?)\x00\x00\x00\x00\x00\x00\x00\x00H\x00R\x11quantityTolerance\x88\x01\x01\x128\n" +
-	"\x0ewindow_seconds\x18\x05 \x01(\x05B\f\xbaH\t\x1a\a\x18\x80\xe7\x84\x0f \x00H\x01R\rwindowSeconds\x88\x01\x01B\x15\n" +
-	"\x13_quantity_toleranceB\x11\n" +
-	"\x0f_window_seconds\"\xda\x02\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x12>\n" +
+	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"n\n" +
 	"\x1aSetReportingPolicyResponse\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12'\n" +
-	"\ttenant_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\x12P\n" +
-	"\x0frequired_fields\x18\x03 \x03(\tB'\xbaH$\x92\x01!\x10 \x18\x01\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\x0erequiredFields\x12K\n" +
-	"\x12quantity_tolerance\x18\x04 \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00\xf0?)\x00\x00\x00\x00\x00\x00\x00\x00H\x00R\x11quantityTolerance\x88\x01\x01\x128\n" +
-	"\x0ewindow_seconds\x18\x05 \x01(\x05B\f\xbaH\t\x1a\a\x18\x80\xe7\x84\x0f \x00H\x01R\rwindowSeconds\x88\x01\x01B\x15\n" +
-	"\x13_quantity_toleranceB\x11\n" +
-	"\x0f_window_seconds2\xde\x01\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x12>\n" +
+	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy2\xde\x01\n" +
 	"\fAdminService\x12c\n" +
 	"\x10SetTenantFeeRate\x12&.ramp.admin.v1.SetTenantFeeRateRequest\x1a'.ramp.admin.v1.SetTenantFeeRateResponse\x12i\n" +
 	"\x12SetReportingPolicy\x12(.ramp.admin.v1.SetReportingPolicyRequest\x1a).ramp.admin.v1.SetReportingPolicyResponseB\xb9\x01\n" +
@@ -423,23 +470,29 @@ func file_ramp_admin_v1_admin_proto_rawDescGZIP() []byte {
 	return file_ramp_admin_v1_admin_proto_rawDescData
 }
 
-var file_ramp_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_ramp_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_ramp_admin_v1_admin_proto_goTypes = []any{
-	(*SetTenantFeeRateRequest)(nil),    // 0: ramp.admin.v1.SetTenantFeeRateRequest
-	(*SetTenantFeeRateResponse)(nil),   // 1: ramp.admin.v1.SetTenantFeeRateResponse
-	(*SetReportingPolicyRequest)(nil),  // 2: ramp.admin.v1.SetReportingPolicyRequest
-	(*SetReportingPolicyResponse)(nil), // 3: ramp.admin.v1.SetReportingPolicyResponse
+	(*TenantFeeRate)(nil),              // 0: ramp.admin.v1.TenantFeeRate
+	(*ReportingPolicy)(nil),            // 1: ramp.admin.v1.ReportingPolicy
+	(*SetTenantFeeRateRequest)(nil),    // 2: ramp.admin.v1.SetTenantFeeRateRequest
+	(*SetTenantFeeRateResponse)(nil),   // 3: ramp.admin.v1.SetTenantFeeRateResponse
+	(*SetReportingPolicyRequest)(nil),  // 4: ramp.admin.v1.SetReportingPolicyRequest
+	(*SetReportingPolicyResponse)(nil), // 5: ramp.admin.v1.SetReportingPolicyResponse
 }
 var file_ramp_admin_v1_admin_proto_depIdxs = []int32{
-	0, // 0: ramp.admin.v1.AdminService.SetTenantFeeRate:input_type -> ramp.admin.v1.SetTenantFeeRateRequest
-	2, // 1: ramp.admin.v1.AdminService.SetReportingPolicy:input_type -> ramp.admin.v1.SetReportingPolicyRequest
-	1, // 2: ramp.admin.v1.AdminService.SetTenantFeeRate:output_type -> ramp.admin.v1.SetTenantFeeRateResponse
-	3, // 3: ramp.admin.v1.AdminService.SetReportingPolicy:output_type -> ramp.admin.v1.SetReportingPolicyResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: ramp.admin.v1.SetTenantFeeRateRequest.rate:type_name -> ramp.admin.v1.TenantFeeRate
+	0, // 1: ramp.admin.v1.SetTenantFeeRateResponse.rate:type_name -> ramp.admin.v1.TenantFeeRate
+	1, // 2: ramp.admin.v1.SetReportingPolicyRequest.policy:type_name -> ramp.admin.v1.ReportingPolicy
+	1, // 3: ramp.admin.v1.SetReportingPolicyResponse.policy:type_name -> ramp.admin.v1.ReportingPolicy
+	2, // 4: ramp.admin.v1.AdminService.SetTenantFeeRate:input_type -> ramp.admin.v1.SetTenantFeeRateRequest
+	4, // 5: ramp.admin.v1.AdminService.SetReportingPolicy:input_type -> ramp.admin.v1.SetReportingPolicyRequest
+	3, // 6: ramp.admin.v1.AdminService.SetTenantFeeRate:output_type -> ramp.admin.v1.SetTenantFeeRateResponse
+	5, // 7: ramp.admin.v1.AdminService.SetReportingPolicy:output_type -> ramp.admin.v1.SetReportingPolicyResponse
+	6, // [6:8] is the sub-list for method output_type
+	4, // [4:6] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_ramp_admin_v1_admin_proto_init() }
@@ -449,15 +502,13 @@ func file_ramp_admin_v1_admin_proto_init() {
 	}
 	file_ramp_admin_v1_admin_proto_msgTypes[0].OneofWrappers = []any{}
 	file_ramp_admin_v1_admin_proto_msgTypes[1].OneofWrappers = []any{}
-	file_ramp_admin_v1_admin_proto_msgTypes[2].OneofWrappers = []any{}
-	file_ramp_admin_v1_admin_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ramp_admin_v1_admin_proto_rawDesc), len(file_ramp_admin_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

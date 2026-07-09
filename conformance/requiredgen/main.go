@@ -27,6 +27,13 @@ import (
 )
 
 func main() {
+	// Fail fast on a cross-package bare-name collision: this manifest (and merge_schema.py,
+	// which consumes it) key by bare message name, so a duplicate would silently clobber.
+	// corpusgen guards the same way; doing it here closes the standalone gen-sdk-types.sh
+	// path, which runs this generator but not corpusgen.
+	if err := conformance.AssertUniqueBareNames(); err != nil {
+		panic(err)
+	}
 	out := "required_fields.json"
 	if len(os.Args) > 1 {
 		out = os.Args[1]

@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/RAMP-Protocol/protocol/conformance"
+	rampadminv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
@@ -84,6 +85,12 @@ func seeds() map[string]proto.Message {
 		// items field is now repeated.min_items=1 (single-offer mode removed).
 		"Offer":              offer(),
 		"TransactionRequest": &rampv1.TransactionRequest{IdempotencyKey: "idem-tx", Items: []*rampv1.TransactionItem{{Offer: offer()}}},
+		// ramp.admin.v1 payloads embedded (required) in the setter request/response
+		// envelopes. RequiredFields MUST be exactly ["x"]: the repeated.unique
+		// duplicate_item edge appends the auto-filled good item (stringSamples[0]=="x")
+		// and relies on the baseline already holding it, so the mutant is ["x","x"].
+		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
+		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},
 	}
 }
 

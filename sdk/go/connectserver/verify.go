@@ -136,11 +136,12 @@ func bufferBody(r *http.Request) ([]byte, error) {
 //
 // The prefix spans EVERY ramp.* package, so it also matches the operator plane
 // (/ramp.admin.v1.AdminService/...). That plane carries no RFC 9421 request signing by
-// design, and this gate is fail-closed — an AdminService handler mounted behind this
-// middleware would reject every call. It has no signer to verify. Mount the generated
-// rampadminv1connect handler directly, on its own internal listener, never behind this
-// seam (nor on a mux this middleware fronts). The SDK exports no AdminService handler for
-// exactly that reason.
+// design, and this gate is fail-closed — it denies any caller it cannot verify. Since an
+// admin request presents no signature, every admin call reaching this middleware is
+// rejected as unsigned (this is not an authz decision — the gate has no signer to verify).
+// Mount the generated rampadminv1connect handler directly, on its own internal listener,
+// never behind this seam (nor on a mux this middleware fronts). The SDK exports no
+// AdminService handler for exactly that reason.
 func isRampProcedure(r *http.Request) bool {
 	return r.URL != nil && strings.HasPrefix(r.URL.Path, "/ramp.")
 }

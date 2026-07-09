@@ -56,7 +56,9 @@ CASES = [
 @pytest.mark.parametrize(
     "field,value,accepted", CASES, ids=[f"{f}={v!r}" for f, v, _ in CASES]
 )
-@pytest.mark.parametrize("cls_name", ["SetReportingPolicyRequest", "SetReportingPolicyResponse"])
+# Request and Response now share one ReportingPolicy payload, so the bound is defined once
+# on that message — validate it directly rather than through each envelope.
+@pytest.mark.parametrize("cls_name", ["ReportingPolicy"])
 def test_numeric_bounds_apply_to_the_wire_string_form(cls_name, field, value, accepted):
     cls = getattr(models, cls_name)
     instance = {**BASE, field: value}
@@ -71,5 +73,5 @@ def test_no_field_admits_an_unbounded_string_arm():
     # Guard the guard: if the union ever comes back, the parametrized cases above would
     # still pass for the numeric form while silently accepting the string form. Assert the
     # annotation itself carries no `str` alternative.
-    annotation = repr(models.SetReportingPolicyRequest.model_fields["quantity_tolerance"].annotation)
+    annotation = repr(models.ReportingPolicy.model_fields["quantity_tolerance"].annotation)
     assert "str" not in annotation, f"quantity_tolerance regained a string arm: {annotation}"

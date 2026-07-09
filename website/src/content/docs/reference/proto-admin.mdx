@@ -9,7 +9,7 @@ Source: [`proto/ramp/admin/v1/admin.proto`](https://github.com/RAMP-Protocol/pro
 :::note[Operator plane, not agent wire]
 `ramp.admin.v1` is the Exchange **operator/config plane** — deliberately a separate package and service from `ExchangeService`, so the agent-facing contract is untouched. Deployments MUST NOT expose `AdminService` on the public agent-facing listener: reachability is restricted at the network layer (an internal listener plus a source allowlist), and there is no per-operator identity inside the service in v1.
 
-Both RPCs are **full-replace overwrites** and therefore idempotent — they carry no `idempotency_key` (the `ramp.v1` idempotency convention dedupes per verified RFC 9421 signer, and the admin plane has no request signing in v1) and no `ext`/`ext_critical` extension maps. Requests and responses carry `ver` (field 1, RAMP protocol version); responses echo the state **as persisted**, giving operator tooling a read-back confirmation.
+Both RPCs are **full-replace overwrites** and therefore idempotent — they carry no `idempotency_key` (the `ramp.v1` idempotency convention dedupes per verified RFC 9421 signer, and the admin plane has no request signing in v1) and no `ext`/`ext_critical` extension maps. Each request and response is a thin `{ver, payload}` envelope (`ver` is field 1, the RAMP protocol version) wrapping a required payload message — `TenantFeeRate` or `ReportingPolicy` — that is **shared by the request and its response**, so every field rule is stated once and the echoed read-back cannot drift from the write. Responses echo the payload **as persisted**, giving operator tooling a read-back confirmation.
 
 Every constraint is a **field-level** protovalidate rule, so it flows into the generated Pydantic/Zod types; this package defines no cross-field (message-level CEL) rules.
 :::
@@ -24,28 +24,40 @@ Exchange operator overrides: the tenant fee rate and the tenant reporting policy
 
 ## Messages -- Tenant Fee Rate
 
+### TenantFeeRate
+
+The fee-rate payload shared by the `SetTenantFeeRate` request and response, so its rules are stated once. The fee is in basis points of gross -- `floor(gross * bps / 10000)`, so a value below `10000` keeps it strictly under 100%, and integer basis points avoid float drift when aggregating many charges. `0` is a legitimate explicit value ("no fee"), not an unset sentinel. Omitting `notes` clears any existing note.
+
+::proto-message{name=TenantFeeRate}
+
 ### SetTenantFeeRateRequest
 
-Sets the tenant's fee rate in basis points of gross -- the fee is `floor(gross * bps / 10000)`, so a value below `10000` keeps it strictly under 100%, and integer basis points avoid float drift when aggregating many charges. `0` is a legitimate explicit value ("no fee"), not an unset sentinel. Omitting `notes` clears any existing note.
+A thin `{ver, rate}` envelope carrying the required `TenantFeeRate` to apply.
 
 ::proto-message{name=SetTenantFeeRateRequest}
 
 ### SetTenantFeeRateResponse
 
-The fee rate and note as persisted.
+Echoes the `TenantFeeRate` as persisted.
 
 ::proto-message{name=SetTenantFeeRateResponse}
 
 ## Messages -- Reporting Policy
 
+### ReportingPolicy
+
+The reporting-policy payload shared by the `SetReportingPolicy` request and response, so its rules are stated once: the report field names the usage-report validator requires, the accepted quantity tolerance (a fraction, `0`–`1`, where `0` requires an exact match), and the reporting window in seconds (capped at one year). Omitted optional fields clear their value so the receiving Exchange's defaults apply. The wire constrains only the token shape of `required_fields`; which names are meaningful is defined by the receiving Exchange and may change without a contract change, and names are a set (repeats are rejected). The window applies to obligations minted after the call -- obligations already issued keep the window they were minted with.
+
+::proto-message{name=ReportingPolicy}
+
 ### SetReportingPolicyRequest
 
-Replaces the tenant's reporting policy: the report field names the usage-report validator requires, the accepted quantity tolerance (a fraction, `0`–`1`, where `0` requires an exact match), and the reporting window in seconds (capped at one year). Omitted optional fields clear their value so the receiving Exchange's defaults apply. The wire constrains only the token shape of `required_fields`; which names are meaningful is defined by the receiving Exchange and may change without a contract change, and names are a set (repeats are rejected). The window applies to obligations minted after the call -- obligations already issued keep the window they were minted with.
+A thin `{ver, policy}` envelope carrying the required `ReportingPolicy` to apply.
 
 ::proto-message{name=SetReportingPolicyRequest}
 
 ### SetReportingPolicyResponse
 
-The reporting policy as persisted.
+Echoes the `ReportingPolicy` as persisted.
 
 ::proto-message{name=SetReportingPolicyResponse}

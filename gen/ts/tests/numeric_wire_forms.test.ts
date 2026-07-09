@@ -41,7 +41,9 @@ const CASES: Case[] = [
 ];
 
 describe("numeric bounds apply to the proto-JSON wire string form", () => {
-  for (const message of ["SetReportingPolicyRequest", "SetReportingPolicyResponse"]) {
+  // Request and Response now share one ReportingPolicy payload, so the bound lives once on
+  // that schema — exercise it directly.
+  for (const message of ["ReportingPolicy"]) {
     const schema = (schemas as Record<string, { safeParse: (v: unknown) => { success: boolean } }>)[
       `${message}Schema`
     ];

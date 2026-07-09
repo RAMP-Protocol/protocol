@@ -14,7 +14,11 @@
 // against — and both RPCs are full-replace overwrites, so they are naturally
 // idempotent and carry no idempotency_key.
 //
-// Responses echo the state as persisted, giving operator tooling a read-back
+// Message shape: each RPC takes a thin {ver, <payload>} envelope wrapping a
+// required payload message — TenantFeeRate or ReportingPolicy. The payload
+// type is shared by the request and its response, so every field rule is
+// stated ONCE; the read-back response cannot drift from the write. Responses
+// echo the payload as persisted, giving operator tooling a read-back
 // confirmation of the applied values.
 //
 // Validation: every constraint here is a FIELD-level protovalidate rule so it

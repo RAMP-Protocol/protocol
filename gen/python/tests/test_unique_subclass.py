@@ -10,26 +10,26 @@ proves ordinary inherited field bounds still fire on a subclass.
 import pytest
 from pydantic import ConfigDict, ValidationError
 
-from wire.models import SetReportingPolicyRequest
+from wire.models import ReportingPolicy
 
 VALID = {"tenant_id": "x", "quantity_tolerance": 0, "window_seconds": 1}
 
 
-class Plain(SetReportingPolicyRequest):
+class Plain(ReportingPolicy):
     pass
 
 
-class Strict(SetReportingPolicyRequest):
+class Strict(ReportingPolicy):
     model_config = ConfigDict(extra="forbid")  # the documented strictness seam
 
 
-@pytest.mark.parametrize("cls", [SetReportingPolicyRequest, Plain, Strict])
+@pytest.mark.parametrize("cls", [ReportingPolicy, Plain, Strict])
 def test_unique_enforced_on_class_and_subclasses(cls):
     with pytest.raises(ValidationError):
         cls.model_validate({**VALID, "required_fields": ["a", "a"]})
 
 
-@pytest.mark.parametrize("cls", [SetReportingPolicyRequest, Plain, Strict])
+@pytest.mark.parametrize("cls", [ReportingPolicy, Plain, Strict])
 def test_distinct_items_accepted(cls):
     cls.model_validate({**VALID, "required_fields": ["a", "b"]})
 

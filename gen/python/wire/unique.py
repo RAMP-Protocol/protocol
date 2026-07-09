@@ -8,6 +8,5 @@ duplicate item exactly where Go protovalidate does; the Zod client gets the same
 """
 
 UNIQUE_ITEM_FIELDS: dict[str, tuple[str, ...]] = {
-    "SetReportingPolicyRequest": ("required_fields",),
-    "SetReportingPolicyResponse": ("required_fields",),
+    "ReportingPolicy": ("required_fields",),
 }
