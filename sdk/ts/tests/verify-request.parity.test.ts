@@ -95,7 +95,7 @@ type NegVerifyVector = {
   // is the one that must be rejected as "replay".
   replay?: boolean;
   // for neg_entitlement_uncovered: the value to put in the (uncovered)
-  // X-RAMP-Entitlement-Biscuit request header. Non-empty forces
+  // X-Entitlement-Token request header. Non-empty forces
   // enforceEntitlementCoverage to reject "signature" since the base covered set
   // does not commit to it.
   entitlement?: string;
@@ -285,10 +285,10 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
         authorization: v.authorization,
         "signature-agent": v.signature_agent,
       };
-      // neg_entitlement_uncovered: carry the entitlement-biscuit header the base
+      // neg_entitlement_uncovered: carry the entitlement-token header the base
       // covered set does NOT commit to, so enforceEntitlementCoverage rejects it.
       if (v.entitlement) {
-        headers["x-ramp-entitlement-biscuit"] = v.entitlement;
+        headers["x-entitlement-token"] = v.entitlement;
       }
 
       const req = {
@@ -313,6 +313,71 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
       expect(verdict.reason).toBe(v.expected_reason);
     });
   }
+
+  // R2-4: the single-sig MaxSignatureAge lifetime clamp (mirrors Go
+  // enforceCreatedExpires with opts.MaxSignatureAge). A live-signed request with a
+  // known window is verified at several clamp settings: unbounded default, at the
+  // bound (inclusive → pass), above the bound (pass), below the bound (reject
+  // "signature"). Live-signing keeps the window a first-class test knob.
+  describe("R2-4 single-sig MaxSignatureAge clamp", () => {
+    const seedHex =
+      "55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374";
+    const created = 1_700_000_000;
+    const expires = 1_700_000_600; // window = 600s
+    const window = expires - created;
+
+    async function verifyWithMaxAge(
+      maxSignatureAge: number | undefined,
+    ): Promise<RejectReason | "valid"> {
+      const priv = await importSigningKey(seedHex);
+      const body = new TextEncoder().encode(
+        '{"uri":"https://cdn.example/live"}',
+      ) as Uint8Array<ArrayBuffer>;
+      const signed = await signRequest(priv, {
+        method: "POST",
+        url: "https://broker.example/ramp.v1.BrokerService/Fetch",
+        body,
+        authorization: "Bearer live-token",
+        signatureAgent: "https://agent.example",
+        keyid: "mcp.v1",
+        created,
+        expires,
+      });
+      const resolver = recordingResolver({
+        "mcp.v1": b64urlToBytes("rGv1a5oEriM-jaKs3KzrFzzn4Hb180dA4XuZ0bAs_gk"),
+      });
+      const verdict = await verifyRequestServer({
+        method: "POST",
+        url: "https://broker.example/ramp.v1.BrokerService/Fetch",
+        body,
+        headers: {
+          "content-digest": signed.contentDigest,
+          "signature-input": signed.signatureInput,
+          signature: signed.signature,
+          authorization: "Bearer live-token",
+          "signature-agent": "https://agent.example",
+        },
+        resolve: resolver,
+        replayStore: memoryReplayStore(),
+        now: fixedClock(created + 100),
+        ...(maxSignatureAge !== undefined ? { maxSignatureAge } : {}),
+      });
+      return verdict.valid ? "valid" : (verdict.reason as RejectReason);
+    }
+
+    it("unbounded (undefined) accepts the declared window", async () => {
+      expect(await verifyWithMaxAge(undefined)).toBe("valid");
+    });
+    it("maxAge equal to the window is accepted (inclusive bound)", async () => {
+      expect(await verifyWithMaxAge(window)).toBe("valid");
+    });
+    it("maxAge above the window is accepted", async () => {
+      expect(await verifyWithMaxAge(window + 1)).toBe("valid");
+    });
+    it("maxAge below the window rejects (signature)", async () => {
+      expect(await verifyWithMaxAge(window - 1)).toBe("signature");
+    });
+  });
 
   it("verify reads time ONLY through the injected clock (an expired vector at an in-window injected now would pass, proving the clock is honored)", () => {
     // Guard: the negative-window vectors are rejected because the INJECTED clock

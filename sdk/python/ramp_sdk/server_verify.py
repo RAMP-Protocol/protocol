@@ -65,11 +65,12 @@ _REQUIRED_COVERED: frozenset[str] = frozenset(
     }
 )
 
-# The canonical entitlement-biscuit header (mirrors Go verify.go entitlementHeader
-# / entitlementHeaderLower). When the request carries it, the signature MUST commit
-# to its lowercase covered-component form, or a biscuit could be slipped under an
-# otherwise-valid signature.
-_ENTITLEMENT_HEADER = "x-ramp-entitlement-biscuit"
+# The canonical entitlement-token header (mirrors Go verify.go entitlementHeader
+# / entitlementHeaderLower). Format-neutral — the value may be a JWT or an opaque
+# token; only its coverage is checked. When the request carries it, the signature
+# MUST commit to its lowercase covered-component form, or an unsigned entitlement
+# token could be slipped under an otherwise-valid signature.
+_ENTITLEMENT_HEADER = "x-entitlement-token"
 
 # The connectserver reject-reason tokens (classify.go RejectReason.String()) for
 # the single-sig surface. Any signature-authenticity/freshness/key failure is the
@@ -102,11 +103,17 @@ class ReplayStore(Protocol):
 
 @dataclass(frozen=True)
 class _ParsedInput:
-    """The parsed single-sig Signature-Input: label, covered names, keyid."""
+    """The parsed single-sig Signature-Input: label, covered names, keyid, window.
+
+    ``created``/``expires`` back the MaxSignatureAge lifetime clamp (R2-4); the
+    freshness/window check itself is re-parsed by ``verify_request`` from the
+    verbatim params tail, so these are consumed only for the clamp."""
 
     label: str
     covered: frozenset[str]
     keyid: str | None
+    created: int | None = None
+    expires: int | None = None
 
 
 def _parse_signature_input(signature_input: str) -> _ParsedInput | None:
@@ -132,7 +139,9 @@ def _parse_signature_input(signature_input: str) -> _ParsedInput | None:
     covered = frozenset(tok for tok in _quoted_tokens(inner))
     params = tail[close_paren + 1 :]
     keyid = _quoted_param(params, "keyid")
-    return _ParsedInput(label=label, covered=covered, keyid=keyid)
+    created = _int_param(params, "created")
+    expires = _int_param(params, "expires")
+    return _ParsedInput(label=label, covered=covered, keyid=keyid, created=created, expires=expires)
 
 
 def _quoted_tokens(inner: str) -> list[str]:
@@ -170,11 +179,31 @@ def _quoted_param(params: str, name: str) -> str | None:
     return params[value_start:end]
 
 
+def _int_param(params: str, name: str) -> int | None:
+    """Return the integer value of ``;name=<int>`` from an SFV params tail, or None.
+
+    Backs the MaxSignatureAge clamp: ``created``/``expires`` are bare SFV integers
+    (unquoted), so this reads the digit run after ``;name=`` up to the next ``;``.
+    """
+    needle = f";{name}="
+    start = params.find(needle)
+    if start < 0:
+        return None
+    value_start = start + len(needle)
+    end = value_start
+    n = len(params)
+    while end < n and params[end].isdigit():
+        end += 1
+    if end == value_start:
+        return None
+    return int(params[value_start:end])
+
+
 def _has_entitlement_header(headers: dict[str, str]) -> bool:
-    """Return True if the entitlement-biscuit header is present (non-empty).
+    """Return True if the entitlement-token header is present (non-empty).
 
     Header names are matched case-insensitively (mirrors Go http.Header.Get), so a
-    caller passing the canonical ``X-RAMP-Entitlement-Biscuit`` form is honoured
+    caller passing the canonical ``X-Entitlement-Token`` form is honoured
     alongside the lowercased-key convention this face otherwise reads.
     """
     for name, value in headers.items():
@@ -220,6 +249,7 @@ def verify_request_server(
     replay_store: ReplayStore | None = None,
     now: int,
     replay_ttl_seconds: int = _DEFAULT_REPLAY_TTL_SEC,
+    max_signature_age: int = 0,
 ) -> VerifiedRequest:
     """Verify an inbound single-signature RAMP request; return a reason-tagged verdict.
 
@@ -227,9 +257,11 @@ def verify_request_server(
     ``signature``, ``content-digest``, ``authorization``, and ``signature-agent``.
     Keys resolve ONLY through ``resolver`` (SDK owns no keys); replay state lives
     ONLY in ``replay_store`` when supplied (omit it to disable replay detection);
-    time is ``now`` (unix seconds — SDK owns no wall clock). The verdict's reason
-    mirrors the Go connectserver taxonomy: ``"signature"`` (the default —
-    authenticity/freshness/key/covered-set failures) or ``"replay"``.
+    time is ``now`` (unix seconds — SDK owns no wall clock). ``max_signature_age``
+    (seconds) clamps the declared lifetime (``expires - created``); 0 / omitted
+    means unbounded, inclusive at the bound (mirrors Go VerifyOptions.MaxSignatureAge).
+    The verdict's reason mirrors the Go connectserver taxonomy: ``"signature"`` (the
+    default — authenticity/freshness/key/covered-set/lifetime failures) or ``"replay"``.
     """
     signature_input = headers.get("signature-input", "")
     signature = headers.get("signature", "")
@@ -248,10 +280,22 @@ def verify_request_server(
         return _reject(_REASON_SIGNATURE)
 
     # Entitlement coverage (Go enforceEntitlementCoverage): if the request carries
-    # the entitlement-biscuit header, the signature MUST commit to it (its lowercase
-    # covered-component form) — else a biscuit could be slipped under a valid
-    # signature. Absent header → no constraint. Read the header case-insensitively.
+    # the entitlement-token header, the signature MUST commit to it (its lowercase
+    # covered-component form) — else an unsigned entitlement token could be slipped
+    # under a valid signature. Absent header → no constraint. Format-neutral (JWT /
+    # opaque). Read the header case-insensitively.
     if _has_entitlement_header(headers) and _ENTITLEMENT_HEADER not in parsed.covered:
+        return _reject(_REASON_SIGNATURE)
+
+    # Lifetime clamp (R2-4, mirrors Go enforceCreatedExpires MaxSignatureAge): reject
+    # a declared window longer than allowed — a far-future expires is a wide replay
+    # window. 0 = unbounded; inclusive at the bound (== max_signature_age passes).
+    if (
+        max_signature_age > 0
+        and parsed.created is not None
+        and parsed.expires is not None
+        and parsed.expires - parsed.created > max_signature_age
+    ):
         return _reject(_REASON_SIGNATURE)
 
     pub = resolver.resolve(parsed.keyid)
@@ -347,9 +391,12 @@ def _verify_member(
     resolver: KeyResolver,
     now: int,
     chain_link: tuple[str, str] | None,
+    headers: dict[str, str],
+    max_age: int = 0,
 ) -> bool:
     """The per-hop verify core shared by the multisig loop (mirrors Go
-    verifySingleSignature MINUS replay): alg + required covered set + window +
+    verifySingleSignature MINUS replay): alg + required covered set + entitlement
+    coverage + window (with the optional MaxSignatureAge lifetime clamp) +
     content-digest + key resolution + Ed25519 over the reconstructed base (which
     inserts the forwarding-chain line for a chained hop)."""
     if member.keyid is None:
@@ -358,9 +405,20 @@ def _verify_member(
         return False
     if not member.covered_names >= _REQUIRED_COVERED:
         return False
+    # Entitlement coverage per hop (SEC-NEW-2, mirrors Go verifySingleSignature's
+    # enforceEntitlementCoverage): if the relayed request carries the entitlement
+    # header, THIS member's covered set must include it, else an unsigned
+    # entitlement token could be slipped under an otherwise-valid hop signature.
+    if _has_entitlement_header(headers) and _ENTITLEMENT_HEADER not in member.covered_names:
+        return False
     if member.created is None or member.expires is None:
         return False
     if member.expires < now or member.created > now + _MAX_FUTURE_SKEW_SEC:
+        return False
+    # Lifetime clamp (R2-4, mirrors Go enforceCreatedExpires MaxSignatureAge): a
+    # signer-chosen far-future expires is a wide replay window. Reject a window
+    # longer than allowed. 0 = unbounded; inclusive at the bound (== max_age passes).
+    if max_age > 0 and member.expires - member.created > max_age:
         return False
     if fields.digest_header.strip() != content_digest(fields.body):
         return False
@@ -405,6 +463,7 @@ def verify_multisig_request_server(
     resolver: KeyResolver,
     now: int,
     max_signatures: int = 0,
+    max_signature_age: int = 0,
 ) -> MultisigVerdict:
     """Verify an inbound MULTISIG forwarding-chain RAMP request; return a
     reason-tagged verdict carrying the verified keyids in chain order.
@@ -412,7 +471,10 @@ def verify_multisig_request_server(
     Enforces the hop budget FIRST (``hop_budget``), then the structural chain
     (``broken_chain``), then every hop's signature (``signature``) — in that
     precedence (mirrors Go VerifyMultisigRequest). ``max_signatures`` 0 / omitted
-    means unbounded. Keys resolve ONLY through ``resolver``; time is ``now``.
+    means unbounded. ``max_signature_age`` (seconds) clamps each hop's declared
+    lifetime (``expires - created``); 0 / omitted means unbounded, inclusive at the
+    bound (mirrors Go VerifyOptions.MaxSignatureAge). Keys resolve ONLY through
+    ``resolver``; time is ``now``.
     """
     signature_input = headers.get("signature-input", "")
     signature = headers.get("signature", "")
@@ -441,7 +503,16 @@ def verify_multisig_request_server(
         keyid = member.keyid
         if keyid is None:
             return MultisigVerdict(False, _REASON_SIGNATURE)
-        if not _verify_member(fields, member, sig_map.get(member.label), resolver, now, chain_link):
+        if not _verify_member(
+            fields,
+            member,
+            sig_map.get(member.label),
+            resolver,
+            now,
+            chain_link,
+            headers,
+            max_signature_age,
+        ):
             return MultisigVerdict(False, _REASON_SIGNATURE)
         keyids.append(keyid)
     return MultisigVerdict(True, None, tuple(keyids))

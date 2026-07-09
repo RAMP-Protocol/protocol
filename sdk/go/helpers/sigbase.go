@@ -18,7 +18,7 @@ import (
 // Coverage is the RAMP-required set: @method and @target-uri (bind the verb and
 // destination so a signature cannot be replayed against another path),
 // content-digest (bind the body), and authorization (bind the bearer so a token
-// cannot be swapped under a signed envelope). x-ramp-entitlement-biscuit is
+// cannot be swapped under a signed envelope). x-entitlement-token is
 // bound additionally whenever it is present.
 
 // ComponentParam is a single RFC 9421 §2.4 parameter on a covered-component
