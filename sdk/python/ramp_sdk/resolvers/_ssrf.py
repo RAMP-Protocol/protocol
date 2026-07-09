@@ -63,6 +63,12 @@ _BLOCKED_PREFIXES: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = t
         "fc00::/7",
         "fe80::/10",
         "ff00::/8",
+        # 6to4 (RFC 3056): 2002:V4ADDR::/48 tunnels an embedded v4; block the
+        # whole 2002::/16 wholesale (any embedded v4, private or not).
+        "2002::/16",
+        # IPv4-compatible (deprecated ::a.b.c.d): the trailing v4 sits in ::/96,
+        # so ::a00:1 (== ::10.0.0.1) must not slip past a v6-only test.
+        "::/96",
         # NAT64 (the embedded v4 is also re-checked in blocked_address)
         "64:ff9b::/96",
         "64:ff9b:1::/48",
@@ -100,6 +106,13 @@ def blocked_address(ip: str | ipaddress._BaseAddress) -> bool:
     """
     addr: ipaddress.IPv4Address | ipaddress.IPv6Address
     if isinstance(ip, str):
+        # Strip any IPv6 zone id (everything from '%' onward) before parsing:
+        # a zoned literal like fe80::1%eth0 is not a member of any prefix, so a
+        # zone would otherwise skip every containment test — a guard bypass.
+        # Mirrors the Go oracle's addr.WithZone("").
+        zone = ip.find("%")
+        if zone != -1:
+            ip = ip[:zone]
         addr = ipaddress.ip_address(ip)
     elif isinstance(ip, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
         addr = ip
@@ -119,3 +132,15 @@ def blocked_address(ip: str | ipaddress._BaseAddress) -> bool:
             return True
 
     return any(addr in prefix for prefix in _BLOCKED_PREFIXES)
+
+
+def allowed_scheme(scheme: str) -> bool:
+    """Report whether ``scheme`` may be dialed by the guarded transport.
+
+    Deny-by-default allowlist: only http/https, enforced on the initial request
+    AND every redirect target. A scheme denylist is unwinnable (ftp, ftps,
+    telnet, gopher, file, data, dict, …), so the policy is an allowlist.
+    Case-insensitive per RFC 3986. Mirrors the Go oracle's ``allowedScheme`` and
+    is corpus-tested identically across the three SDKs.
+    """
+    return scheme.lower() in ("http", "https")

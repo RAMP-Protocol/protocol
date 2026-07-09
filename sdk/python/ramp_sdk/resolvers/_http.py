@@ -28,10 +28,11 @@ import http.client
 import socket
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 
-from ramp_sdk.resolvers._ssrf import SsrfError, blocked_address
+from ramp_sdk.resolvers._ssrf import SsrfError, allowed_scheme, blocked_address
 from ramp_sdk.resolvers.errors import DirectoryUnavailableError
 
 # An injected HTTP GET returning (status, body). Transport failures raise an
@@ -131,16 +132,51 @@ class _GuardedHTTPSHandler(urllib.request.HTTPSHandler):
         return self.do_open(_GuardedHTTPSConnection, req, context=self._context)
 
 
+_MAX_REDIRECTS = 5
+
+
+class _GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-vet every redirect target's scheme before it is followed.
+
+    A denylist of dangerous schemes is unwinnable (ftp/ftps/telnet/gopher/file/
+    data/…), so the guard is deny-by-default: a 3xx to anything other than
+    http/https is refused with an :class:`SsrfError`. The redirect is followed
+    through the SAME guarded opener, so its resolved address is re-checked on
+    connect (closing the rebinding window on the new host too). Mirrors the Go
+    oracle's ``CheckRedirect`` (scheme allowlist + bounded hop count).
+    """
+
+    max_repeats = _MAX_REDIRECTS
+    max_redirections = _MAX_REDIRECTS
+
+    def redirect_request(  # type: ignore[override]  # noqa: PLR0913 — signature fixed by HTTPRedirectHandler
+        self, req, fp, code, msg, headers, newurl
+    ):
+        scheme = urllib.parse.urlsplit(newurl).scheme
+        if not allowed_scheme(scheme):
+            raise SsrfError(
+                f"refusing redirect to non-http(s) scheme {scheme!r} (SSRF guard)"
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def _build_guarded_opener() -> urllib.request.OpenerDirector:
-    # No redirect handler: a 3xx to a fresh (possibly reserved) host would
-    # re-open the guard window with a new URL the guard never vetted. Well-known
-    # docs are served directly, so a redirect is treated as a non-200 by the
-    # caller (fetch_strict/soft) rather than followed.
+    # Deny-by-default transport: install ONLY the http/https handlers plus the
+    # re-vetting redirect handler. Constructed via OpenerDirector directly (not
+    # build_opener) so the stdlib's FTPHandler / FileHandler / DataHandler are
+    # NOT merged in — a redirect (or a caller URL) to ftp://, file://, data:…
+    # has no handler and is refused, rather than opening a fresh unguarded
+    # window on a URL the guard never vetted.
     context = ssl.create_default_context()
-    return urllib.request.build_opener(
+    opener = urllib.request.OpenerDirector()
+    for handler in (
         _GuardedHTTPHandler(),
         _GuardedHTTPSHandler(context=context),
-    )
+        _GuardedRedirectHandler(),
+        urllib.request.HTTPErrorProcessor(),
+    ):
+        opener.add_handler(handler)
+    return opener
 
 
 _GUARDED_OPENER = _build_guarded_opener()
@@ -175,7 +211,13 @@ def guarded_fetch(url: str) -> tuple[int, bytes]:
     ``fetch_strict`` / ``fetch_soft`` transport-failure arms map to
     ``DirectoryUnavailableError`` / a dropped refresh. Inject a custom ``http``
     callable to reach a private directory (tests, on-prem).
+
+    The initial URL's scheme is vetted deny-by-default (http/https only) before
+    any dial; every redirect target is re-vetted by the guarded opener.
     """
+    scheme = urllib.parse.urlsplit(url).scheme
+    if not allowed_scheme(scheme):
+        raise SsrfError(f"refusing to dial non-http(s) scheme {scheme!r} (SSRF guard)")
     req = urllib.request.Request(url, method="GET")
     try:
         with _GUARDED_OPENER.open(req, timeout=_TIMEOUT_S) as resp:

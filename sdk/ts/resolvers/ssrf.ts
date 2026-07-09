@@ -12,6 +12,16 @@
 // forms are unwrapped and their embedded v4 re-checked, so an IPv6 literal
 // cannot smuggle a private v4 past a v6-form-only test.
 
+/** The scheme allowlist the SSRF guard enforces: deny-by-default, only http and
+ * https may be dialed (mirrors the Go oracle's allowedScheme). Blocks
+ * file/data/gopher/dict/ftp/ldap and every other exotic scheme that would let a
+ * caller-supplied URL reach the local filesystem or unintended protocols. The
+ * comparison is case-insensitive (HTTPS ≡ https). */
+export function allowedScheme(scheme: string): boolean {
+  const s = scheme.toLowerCase();
+  return s === "http" || s === "https";
+}
+
 /** A parsed CIDR: the network bytes (4 or 16) and the prefix length in bits. */
 interface Cidr {
   bytes: Uint8Array;
@@ -41,9 +51,15 @@ const BLOCKED_CIDRS: readonly string[] = [
   // IPv6
   "::/128",
   "::1/128",
+  // IPv4-compatible IPv6 (::a.b.c.d) — deprecated; block the whole ::/96 so an
+  // embedded v4 cannot smuggle a reserved address through a v6 literal.
+  "::/96",
   "100::/64",
   "2001:db8::/32",
   "2001::/23",
+  // 6to4 (RFC 3056) — block wholesale; a 2002:V4ADDR:: literal embeds an
+  // arbitrary v4 in bits 16..48 and must never be dialed.
+  "2002::/16",
   "fc00::/7",
   "fe80::/10",
   "ff00::/8",

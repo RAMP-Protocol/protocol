@@ -11,7 +11,7 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest, type RequestOptions } from "node:https";
 
 import { DirectoryUnavailable } from "./errors.ts";
-import { blockedAddress } from "./ssrf.ts";
+import { allowedScheme, blockedAddress } from "./ssrf.ts";
 
 /** The minimal response shape the resolvers read — a structural subset of the
  * WHATWG `Response`, so the global `fetch` satisfies it without an adapter. */
@@ -58,10 +58,15 @@ export const guardedFetch: FetchLike = async (url) => {
   } catch (err) {
     throw new SsrfBlockedError(`SSRF guard: unparseable url ${url}: ${String(err)}`);
   }
-  const isHttps = parsed.protocol === "https:";
-  if (!isHttps && parsed.protocol !== "http:") {
+  // Deny-by-default scheme allowlist (only http/https). URL.protocol carries a
+  // trailing colon ("https:"), so strip it before the allowlist check. TS
+  // follows no redirects, so there is no redirect target to re-vet — the
+  // initial-URL scheme is the only one dialed.
+  const scheme = parsed.protocol.replace(/:$/, "");
+  if (!allowedScheme(scheme)) {
     throw new SsrfBlockedError(`SSRF guard: refusing non-http(s) scheme ${parsed.protocol}`);
   }
+  const isHttps = scheme.toLowerCase() === "https";
   const hostname = stripBrackets(parsed.hostname);
 
   // Resolve ONCE and vet every candidate address; pin to the first that passes.

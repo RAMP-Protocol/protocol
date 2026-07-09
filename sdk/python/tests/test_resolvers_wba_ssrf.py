@@ -15,9 +15,32 @@ import http.server
 import threading
 
 import pytest
+from conftest import GO_TESTDATA, load_json
 
 from ramp_sdk.resolvers._http import guarded_fetch
-from ramp_sdk.resolvers._ssrf import SsrfError, blocked_address
+from ramp_sdk.resolvers._ssrf import SsrfError, allowed_scheme, blocked_address
+
+# The shared adversarial corpora (Go emits, all SDKs consume — never edited here).
+_ADDRESS_VECTORS = load_json(GO_TESTDATA / "ssrf-address-vectors.json")["vectors"]
+_SCHEME_VECTORS = load_json(GO_TESTDATA / "ssrf-scheme-vectors.json")["vectors"]
+
+
+@pytest.mark.parametrize("vec", _ADDRESS_VECTORS, ids=lambda v: v["name"])
+def test_address_corpus_parity(vec: dict) -> None:
+    """blocked_address must agree with the Go oracle on EVERY address vector."""
+    assert _ADDRESS_VECTORS, "address corpus must be non-empty"
+    assert blocked_address(vec["addr"]) is vec["blocked"], (
+        f"{vec['name']} ({vec['addr']}): expected blocked={vec['blocked']}"
+    )
+
+
+@pytest.mark.parametrize("vec", _SCHEME_VECTORS, ids=lambda v: v["name"])
+def test_scheme_corpus_parity(vec: dict) -> None:
+    """allowed_scheme must agree with the Go oracle on EVERY scheme vector."""
+    assert _SCHEME_VECTORS, "scheme corpus must be non-empty"
+    assert allowed_scheme(vec["scheme"]) is vec["allowed"], (
+        f"{vec['name']} ({vec['scheme']}): expected allowed={vec['allowed']}"
+    )
 
 # Mirrors TestSSRFBlocked_ReservedRanges (Go): each MUST be classified blocked.
 _BLOCKED = [
@@ -86,6 +109,72 @@ def test_guarded_fetch_refuses_loopback() -> None:
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    try:
+        with pytest.raises(SsrfError) as excinfo:
+            guarded_fetch(f"http://127.0.0.1:{port}/")
+        assert "SSRF" in str(excinfo.value)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _serve(handler: type[http.server.BaseHTTPRequestHandler]):
+    """Start an in-process HTTP server on 127.0.0.1; return (server, port)."""
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, port
+
+
+def test_guarded_fetch_refuses_redirect_to_ftp() -> None:
+    """A 302 to an ftp:// target must be refused with an SsrfError.
+
+    A scheme denylist is unwinnable, so the guarded transport is deny-by-default:
+    only http/https redirects are followed. The ftp target is never dialed.
+    """
+    location = "ftp://ftp.example.com/secret"
+
+    class _RedirectHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(302)
+            self.send_header("Location", location)
+            self.end_headers()
+
+        def log_message(self, *_a: object) -> None:
+            return
+
+    server, port = _serve(_RedirectHandler)
+    try:
+        with pytest.raises(SsrfError) as excinfo:
+            guarded_fetch(f"http://127.0.0.1:{port}/")
+        assert "SSRF" in str(excinfo.value)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_guarded_fetch_refuses_redirect_to_internal_address() -> None:
+    """A 302 to an internal (loopback) address must be refused with an SsrfError.
+
+    The redirect scheme (http) is allowed, but the redirect is followed through
+    the SAME guarded opener, so the internal target is re-checked on connect and
+    rejected — the rebinding window is closed on the redirect host too.
+    """
+
+    class _RedirectHandler(http.server.BaseHTTPRequestHandler):
+        # Redirect to a well-known internal address (cloud IMDS) the guard blocks.
+        location = "http://169.254.169.254/latest/meta-data/"
+
+        def do_GET(self) -> None:
+            self.send_response(302)
+            self.send_header("Location", self.location)
+            self.end_headers()
+
+        def log_message(self, *_a: object) -> None:
+            return
+
+    server, port = _serve(_RedirectHandler)
     try:
         with pytest.raises(SsrfError) as excinfo:
             guarded_fetch(f"http://127.0.0.1:{port}/")
