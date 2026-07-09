@@ -897,7 +897,7 @@ const (
 	// Exchange's KindEntitlement* refusal taxonomy, which today is distinguishable
 	// only by a server-side tag (all collapse to UNAUTHENTICATED on the wire).
 	// Format-neutral: they classify a JWT/opaque entitlement-token failure, not a
-	// biscuit-specific one.
+	// format-specific one.
 	DenialReason_DENIAL_REASON_ENTITLEMENT_MISSING     DenialReason = 12 // no entitlement token presented for a subscription-only offer
 	DenialReason_DENIAL_REASON_ENTITLEMENT_MALFORMED   DenialReason = 13 // entitlement token failed to decode (malformed)
 	DenialReason_DENIAL_REASON_ENTITLEMENT_EXPIRED     DenialReason = 14 // entitlement token's validity window has passed
@@ -4170,10 +4170,9 @@ func (x *Requester) GetExtCritical() []string {
 
 // Delegation — Scoped, time-limited, spend-capped credential.
 //
-// The token is an opaque, signed credential. The DEFAULT and fully-specified
-// format is a JWT (token_format "jwt"); "biscuit-v3" remains a permitted
-// alternative for deployments that want deep multi-hop offline attenuation (see
-// the auth spec). Its claims are the AUTHORITATIVE source of the grant; the
+// The token is an opaque, signed credential. The format is a JWT (token_format
+// "jwt"); the field stays open for a future format. Its claims are the
+// AUTHORITATIVE source of the grant; the
 // plaintext fields below (scopes, expires_at, max_spend_cents, …) are a
 // convenience mirror the Exchange MAY use for fast pre-filtering before it
 // verifies the token.
@@ -4226,7 +4225,7 @@ type Delegation struct {
 	// Token bytes. A JWT (base64url-encoded JWS).
 	Token []byte `protobuf:"bytes,6,opt,name=token,proto3" json:"token,omitempty"`
 	// Token format: "jwt" (default). Empty is treated as "jwt". The field stays
-	// open for a future format; the biscuit-v3 option was removed pre-v1.
+	// open for a future format.
 	TokenFormat string `protobuf:"bytes,7,opt,name=token_format,json=tokenFormat,proto3" json:"token_format,omitempty"`
 	// Optional: URI for real-time revocation checking.
 	// Exchange MAY check this for high-value transactions.

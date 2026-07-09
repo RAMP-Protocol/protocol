@@ -40,8 +40,7 @@ import "ramp/v1/vocab.proto";
 // Authorization flows: GNAP (RFC 9635) recommended, OAuth 2.0 + DPoP
 // as enterprise adoption path. Exchange advertises supported methods.
 //
-// Token formats: JWT (universal default) or Biscuit (multi-hop attenuation).
-// Delegation message is format-agnostic.
+// Token format: JWT. The Delegation message is format-agnostic.
 //
 // Key announcement endpoint (RFC 7517 JWKs, inline) — unified across roles:
 //   Commercial overlay (all roles): {domain}/.well-known/ramp.json
@@ -1496,10 +1495,9 @@ enum RequesterType {
 
 // Delegation — Scoped, time-limited, spend-capped credential.
 //
-// The token is an opaque, signed credential. The DEFAULT and fully-specified
-// format is a JWT (token_format "jwt"); "biscuit-v3" remains a permitted
-// alternative for deployments that want deep multi-hop offline attenuation (see
-// the auth spec). Its claims are the AUTHORITATIVE source of the grant; the
+// The token is an opaque, signed credential. The format is a JWT (token_format
+// "jwt"); the field stays open for a future format. Its claims are the
+// AUTHORITATIVE source of the grant; the
 // plaintext fields below (scopes, expires_at, max_spend_cents, …) are a
 // convenience mirror the Exchange MAY use for fast pre-filtering before it
 // verifies the token.
@@ -1559,7 +1557,7 @@ message Delegation {
   bytes token = 6;
 
   // Token format: "jwt" (default). Empty is treated as "jwt". The field stays
-  // open for a future format; the biscuit-v3 option was removed pre-v1.
+  // open for a future format.
   string token_format = 7;
 
   // Optional: URI for real-time revocation checking.
@@ -1866,7 +1864,7 @@ enum DenialReason {
   // Exchange's KindEntitlement* refusal taxonomy, which today is distinguishable
   // only by a server-side tag (all collapse to UNAUTHENTICATED on the wire).
   // Format-neutral: they classify a JWT/opaque entitlement-token failure, not a
-  // biscuit-specific one.
+  // format-specific one.
   DENIAL_REASON_ENTITLEMENT_MISSING = 12;            // no entitlement token presented for a subscription-only offer
   DENIAL_REASON_ENTITLEMENT_MALFORMED = 13;          // entitlement token failed to decode (malformed)
   DENIAL_REASON_ENTITLEMENT_EXPIRED = 14;            // entitlement token's validity window has passed

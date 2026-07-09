@@ -152,7 +152,7 @@ class Delegation(WireModel):
     )
     token_format: str | None = Field(
         '',
-        description='Token format: "jwt" (default). Empty is treated as "jwt". The field stays\n open for a future format; the biscuit-v3 option was removed pre-v1.',
+        description='Token format: "jwt" (default). Empty is treated as "jwt". The field stays\n open for a future format.',
     )
 
 
