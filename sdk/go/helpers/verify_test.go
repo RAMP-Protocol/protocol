@@ -60,13 +60,13 @@ func TestVerifyRequest_roundTrip(t *testing.T) {
 	}
 }
 
-func TestVerifyRequest_roundTripWithBiscuit(t *testing.T) {
+func TestVerifyRequest_roundTripWithEntitlementToken(t *testing.T) {
 	body := []byte("x")
 	req, pub := signFixture(t, body, func(r *http.Request) {
-		r.Header.Set("X-RAMP-Entitlement-Biscuit", "tok")
+		r.Header.Set("X-Entitlement-Token", "tok")
 	})
 	if _, err := helpers.VerifyRequest(req, body, pub, helpers.VerifyOptions{Now: tNow}); err != nil {
-		t.Fatalf("VerifyRequest with biscuit: %v", err)
+		t.Fatalf("VerifyRequest with entitlement token: %v", err)
 	}
 }
 
@@ -108,12 +108,12 @@ func TestVerifyRequest_futureCreated(t *testing.T) {
 	}
 }
 
-func TestVerifyRequest_biscuitInjectionRejected(t *testing.T) {
-	// Sign without a biscuit, then inject the header post-signing. The signature
-	// does not cover it, so verification must reject (uncovered biscuit).
+func TestVerifyRequest_entitlementInjectionRejected(t *testing.T) {
+	// Sign without an entitlement token, then inject the header post-signing. The
+	// signature does not cover it, so verification must reject (uncovered token).
 	body := []byte("x")
 	req, pub := signFixture(t, body, nil)
-	req.Header.Set("X-RAMP-Entitlement-Biscuit", "injected")
+	req.Header.Set("X-Entitlement-Token", "injected")
 	_, err := helpers.VerifyRequest(req, body, pub, helpers.VerifyOptions{Now: tNow})
 	if !errors.Is(err, helpers.ErrMissingRequiredComponent) {
 		t.Errorf("err = %v, want ErrMissingRequiredComponent", err)

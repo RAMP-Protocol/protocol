@@ -891,18 +891,19 @@ const (
 	DenialReason_DENIAL_REASON_QUOTA_EXCEEDED            DenialReason = 9  // Subscription access count exhausted for this period
 	DenialReason_DENIAL_REASON_DELEGATION_INVALID        DenialReason = 10 // Delegation missing, unverifiable, expired, holder binding failed, or scopes/caps do not cover the request
 	DenialReason_DENIAL_REASON_SCOPE_INSUFFICIENT        DenialReason = 11 // Requester scopes don't cover this resource
-	// Entitlement family — subscription/biscuit access failures on a
+	// Entitlement family — subscription/entitlement access failures on a
 	// subscription-gated offer. Finer-grained than DELEGATION_INVALID so callers
 	// and operator tooling can triage each mode. These single-source the
 	// Exchange's KindEntitlement* refusal taxonomy, which today is distinguishable
 	// only by a server-side tag (all collapse to UNAUTHENTICATED on the wire).
-	DenialReason_DENIAL_REASON_ENTITLEMENT_MISSING           DenialReason = 12 // no entitlement token presented for a subscription-only offer
-	DenialReason_DENIAL_REASON_ENTITLEMENT_MALFORMED         DenialReason = 13 // entitlement token failed to decode (malformed)
-	DenialReason_DENIAL_REASON_ENTITLEMENT_EXPIRED           DenialReason = 14 // entitlement token's validity window has passed
-	DenialReason_DENIAL_REASON_ENTITLEMENT_WRONG_BUYER       DenialReason = 15 // token's subscriber_org does not match the asserted requester
-	DenialReason_DENIAL_REASON_SUBSCRIPTION_LAPSED           DenialReason = 16 // the covering subscription contract has lapsed
-	DenialReason_DENIAL_REASON_ENTITLEMENT_NOT_GRANTED       DenialReason = 17 // subscription exists but no buyer-side grant ties this caller to it
-	DenialReason_DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION DenialReason = 18 // token authority sound but the per-request attenuation is missing/stale
+	// Format-neutral: they classify a JWT/opaque entitlement-token failure, not a
+	// biscuit-specific one.
+	DenialReason_DENIAL_REASON_ENTITLEMENT_MISSING     DenialReason = 12 // no entitlement token presented for a subscription-only offer
+	DenialReason_DENIAL_REASON_ENTITLEMENT_MALFORMED   DenialReason = 13 // entitlement token failed to decode (malformed)
+	DenialReason_DENIAL_REASON_ENTITLEMENT_EXPIRED     DenialReason = 14 // entitlement token's validity window has passed
+	DenialReason_DENIAL_REASON_ENTITLEMENT_WRONG_BUYER DenialReason = 15 // token's subscriber_org does not match the asserted requester
+	DenialReason_DENIAL_REASON_SUBSCRIPTION_LAPSED     DenialReason = 16 // the covering subscription contract has lapsed
+	DenialReason_DENIAL_REASON_ENTITLEMENT_NOT_GRANTED DenialReason = 17 // subscription exists but no buyer-side grant ties this caller to it
 )
 
 // Enum value maps for DenialReason.
@@ -926,28 +927,26 @@ var (
 		15: "DENIAL_REASON_ENTITLEMENT_WRONG_BUYER",
 		16: "DENIAL_REASON_SUBSCRIPTION_LAPSED",
 		17: "DENIAL_REASON_ENTITLEMENT_NOT_GRANTED",
-		18: "DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION",
 	}
 	DenialReason_value = map[string]int32{
-		"DENIAL_REASON_UNSPECIFIED":                   0,
-		"DENIAL_REASON_BILLING_REF_INACTIVE":          1,
-		"DENIAL_REASON_INSUFFICIENT_BALANCE":          2,
-		"DENIAL_REASON_RATE_LIMITED":                  3,
-		"DENIAL_REASON_CONTENT_UNAVAILABLE":           4,
-		"DENIAL_REASON_RESTRICTION_NOT_SATISFIED":     5,
-		"DENIAL_REASON_REPORTING_OVERDUE":             6,
-		"DENIAL_REASON_OFFER_EXPIRED":                 7,
-		"DENIAL_REASON_SIGNATURE_INVALID":             8,
-		"DENIAL_REASON_QUOTA_EXCEEDED":                9,
-		"DENIAL_REASON_DELEGATION_INVALID":            10,
-		"DENIAL_REASON_SCOPE_INSUFFICIENT":            11,
-		"DENIAL_REASON_ENTITLEMENT_MISSING":           12,
-		"DENIAL_REASON_ENTITLEMENT_MALFORMED":         13,
-		"DENIAL_REASON_ENTITLEMENT_EXPIRED":           14,
-		"DENIAL_REASON_ENTITLEMENT_WRONG_BUYER":       15,
-		"DENIAL_REASON_SUBSCRIPTION_LAPSED":           16,
-		"DENIAL_REASON_ENTITLEMENT_NOT_GRANTED":       17,
-		"DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION": 18,
+		"DENIAL_REASON_UNSPECIFIED":               0,
+		"DENIAL_REASON_BILLING_REF_INACTIVE":      1,
+		"DENIAL_REASON_INSUFFICIENT_BALANCE":      2,
+		"DENIAL_REASON_RATE_LIMITED":              3,
+		"DENIAL_REASON_CONTENT_UNAVAILABLE":       4,
+		"DENIAL_REASON_RESTRICTION_NOT_SATISFIED": 5,
+		"DENIAL_REASON_REPORTING_OVERDUE":         6,
+		"DENIAL_REASON_OFFER_EXPIRED":             7,
+		"DENIAL_REASON_SIGNATURE_INVALID":         8,
+		"DENIAL_REASON_QUOTA_EXCEEDED":            9,
+		"DENIAL_REASON_DELEGATION_INVALID":        10,
+		"DENIAL_REASON_SCOPE_INSUFFICIENT":        11,
+		"DENIAL_REASON_ENTITLEMENT_MISSING":       12,
+		"DENIAL_REASON_ENTITLEMENT_MALFORMED":     13,
+		"DENIAL_REASON_ENTITLEMENT_EXPIRED":       14,
+		"DENIAL_REASON_ENTITLEMENT_WRONG_BUYER":   15,
+		"DENIAL_REASON_SUBSCRIPTION_LAPSED":       16,
+		"DENIAL_REASON_ENTITLEMENT_NOT_GRANTED":   17,
 	}
 )
 
@@ -4224,11 +4223,10 @@ type Delegation struct {
 	// Example: 720h (30 days) for monthly subscriptions.
 	// When absent, the quota is lifetime (bounded only by expires_at).
 	QuotaPeriod *durationpb.Duration `protobuf:"bytes,10,opt,name=quota_period,json=quotaPeriod,proto3,oneof" json:"quota_period,omitempty"`
-	// Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,
-	// base64-encoded) when token_format is "biscuit-v3".
+	// Token bytes. A JWT (base64url-encoded JWS).
 	Token []byte `protobuf:"bytes,6,opt,name=token,proto3" json:"token,omitempty"`
-	// Token format: "jwt" (default) or "biscuit-v3" (optional, for deep
-	// multi-hop offline attenuation). Empty is treated as "jwt".
+	// Token format: "jwt" (default). Empty is treated as "jwt". The field stays
+	// open for a future format; the biscuit-v3 option was removed pre-v1.
 	TokenFormat string `protobuf:"bytes,7,opt,name=token_format,json=tokenFormat,proto3" json:"token_format,omitempty"`
 	// Optional: URI for real-time revocation checking.
 	// Exchange MAY check this for high-value transactions.
@@ -9202,7 +9200,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x1fRESOURCE_MUTABILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aRESOURCE_MUTABILITY_STATIC\x10\x01\x12\x1f\n" +
 	"\x1bRESOURCE_MUTABILITY_DYNAMIC\x10\x02\x12\x1c\n" +
-	"\x18RESOURCE_MUTABILITY_LIVE\x10\x03*\xef\x05\n" +
+	"\x18RESOURCE_MUTABILITY_LIVE\x10\x03*\xbe\x05\n" +
 	"\fDenialReason\x12\x1d\n" +
 	"\x19DENIAL_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"DENIAL_REASON_BILLING_REF_INACTIVE\x10\x01\x12&\n" +
@@ -9222,8 +9220,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"!DENIAL_REASON_ENTITLEMENT_EXPIRED\x10\x0e\x12)\n" +
 	"%DENIAL_REASON_ENTITLEMENT_WRONG_BUYER\x10\x0f\x12%\n" +
 	"!DENIAL_REASON_SUBSCRIPTION_LAPSED\x10\x10\x12)\n" +
-	"%DENIAL_REASON_ENTITLEMENT_NOT_GRANTED\x10\x11\x12/\n" +
-	"+DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION\x10\x12*\x8c\x02\n" +
+	"%DENIAL_REASON_ENTITLEMENT_NOT_GRANTED\x10\x11*\x8c\x02\n" +
 	"\x0fIngestionSource\x12 \n" +
 	"\x1cINGESTION_SOURCE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dINGESTION_SOURCE_RAMP_SITEMAP\x10\x01\x12\x18\n" +

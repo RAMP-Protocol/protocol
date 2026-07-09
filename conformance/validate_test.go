@@ -225,7 +225,7 @@ func errorDetailCases() []validationCase {
 	return []validationCase{
 		// TransactionDenial — reuses DenialReason, including the entitlement family.
 		{"transaction_denial valid", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE}, true, ""},
-		{"transaction_denial entitlement valid", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION}, true, ""},
+		{"transaction_denial entitlement valid", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_ENTITLEMENT_NOT_GRANTED}, true, ""},
 		{"transaction_denial unspecified rejected", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_UNSPECIFIED}, false, "enum.not_in"},
 		{"transaction_denial undefined int rejected", &rampv1.TransactionDenial{Reason: rampv1.DenialReason(9999)}, false, "enum.defined_only"},
 

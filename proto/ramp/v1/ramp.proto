@@ -1555,12 +1555,11 @@ message Delegation {
   // When absent, the quota is lifetime (bounded only by expires_at).
   optional google.protobuf.Duration quota_period = 10;
 
-  // Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,
-  // base64-encoded) when token_format is "biscuit-v3".
+  // Token bytes. A JWT (base64url-encoded JWS).
   bytes token = 6;
 
-  // Token format: "jwt" (default) or "biscuit-v3" (optional, for deep
-  // multi-hop offline attenuation). Empty is treated as "jwt".
+  // Token format: "jwt" (default). Empty is treated as "jwt". The field stays
+  // open for a future format; the biscuit-v3 option was removed pre-v1.
   string token_format = 7;
 
   // Optional: URI for real-time revocation checking.
@@ -1861,18 +1860,19 @@ enum DenialReason {
   DENIAL_REASON_DELEGATION_INVALID = 10;  // Delegation missing, unverifiable, expired, holder binding failed, or scopes/caps do not cover the request
   DENIAL_REASON_SCOPE_INSUFFICIENT = 11;  // Requester scopes don't cover this resource
 
-  // Entitlement family — subscription/biscuit access failures on a
+  // Entitlement family — subscription/entitlement access failures on a
   // subscription-gated offer. Finer-grained than DELEGATION_INVALID so callers
   // and operator tooling can triage each mode. These single-source the
   // Exchange's KindEntitlement* refusal taxonomy, which today is distinguishable
   // only by a server-side tag (all collapse to UNAUTHENTICATED on the wire).
+  // Format-neutral: they classify a JWT/opaque entitlement-token failure, not a
+  // biscuit-specific one.
   DENIAL_REASON_ENTITLEMENT_MISSING = 12;            // no entitlement token presented for a subscription-only offer
   DENIAL_REASON_ENTITLEMENT_MALFORMED = 13;          // entitlement token failed to decode (malformed)
   DENIAL_REASON_ENTITLEMENT_EXPIRED = 14;            // entitlement token's validity window has passed
   DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;        // token's subscriber_org does not match the asserted requester
   DENIAL_REASON_SUBSCRIPTION_LAPSED = 16;            // the covering subscription contract has lapsed
   DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 17;        // subscription exists but no buyer-side grant ties this caller to it
-  DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION = 18;  // token authority sound but the per-request attenuation is missing/stale
 }
 
 // IngestionSource — How the catalog entry was discovered.

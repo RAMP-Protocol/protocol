@@ -91,14 +91,16 @@ type sigParams struct {
 }
 
 // requiredCoveredComponents is the minimum covered-component set (by name). The
-// biscuit header is appended conditionally (see coveredFor).
+// entitlement-token header is appended conditionally (see coveredFor).
 var requiredCoveredComponents = []string{"@method", "@target-uri", "content-digest", "authorization", signatureAgentLower}
 
-// entitlementHeader is the canonical entitlement-biscuit header; when present on
-// a request the signature MUST commit to it.
+// entitlementHeader is the canonical entitlement-token header (format-neutral —
+// the token inside is a JWT/opaque capability token; its format is out of scope
+// here). When present on a request the signature MUST commit to it, so an
+// unsigned entitlement claim cannot be slipped under a valid signature.
 const (
-	entitlementHeader      = "X-RAMP-Entitlement-Biscuit"
-	entitlementHeaderLower = "x-ramp-entitlement-biscuit"
+	entitlementHeader      = "X-Entitlement-Token"
+	entitlementHeaderLower = "x-entitlement-token"
 )
 
 // ContentDigest returns the RFC 9530 Content-Digest header value for body:
@@ -109,7 +111,7 @@ func ContentDigest(body []byte) string {
 }
 
 // coveredFor returns the covered-component set for a request: the RAMP minimum
-// plus the entitlement-biscuit header when it is populated on req. All names are
+// plus the entitlement-token header when it is populated on req. All names are
 // lowercase so the rendered byte output is preserved.
 func coveredFor(req *http.Request) []CoveredComponent {
 	names := append([]string(nil), requiredCoveredComponents...)

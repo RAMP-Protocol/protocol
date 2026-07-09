@@ -96,7 +96,7 @@
       "resolver_pubkey_b64url": "8maX3DmN9ac27XK1RyyagkWLzGBgVz1IGHOC0LrN_cA",
       "now": 1700000100,
       "expected_reason": "signature",
-      "entitlement": "biscuit:demo-unsigned-entitlement-token"
+      "entitlement": "jwt:demo-unsigned-entitlement-token"
     }
   ]
 }
