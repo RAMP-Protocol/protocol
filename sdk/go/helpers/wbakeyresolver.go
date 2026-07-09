@@ -11,6 +11,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -85,15 +86,74 @@ const (
 	defaultWBAHTTPTimeout = 10 * time.Second
 )
 
+// ssrfBlockedPrefixes is the reserved / non-public address set the WBA SSRF
+// guard rejects, built once. It replaces the net.IP.IsPrivate/IsLinkLocalUnicast
+// heuristic, which misses CGNAT (100.64.0.0/10), 0.0.0.0/8, the TEST-NETs,
+// benchmarking, protocol-assignment, and other reserved ranges that are still
+// IsGlobalUnicast()==true. IPv4-mapped and NAT64 forms are unwrapped separately
+// (see ssrfBlocked) so an IPv6 literal cannot smuggle a private v4 past a
+// v6-form-only check.
+var ssrfBlockedPrefixes = mustParsePrefixes(
+	// IPv4
+	"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
+	"169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24",
+	"192.88.99.0/24", "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24",
+	"203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4", "255.255.255.255/32",
+	// IPv6
+	"::/128", "::1/128", "100::/64", "2001:db8::/32", "2001::/23",
+	"fc00::/7", "fe80::/10", "ff00::/8",
+	// NAT64 (also unwrapped in ssrfBlocked so the embedded v4 is re-checked)
+	"64:ff9b::/96", "64:ff9b:1::/48",
+)
+
+func mustParsePrefixes(cidrs ...string) []netip.Prefix {
+	out := make([]netip.Prefix, 0, len(cidrs))
+	for _, c := range cidrs {
+		out = append(out, netip.MustParsePrefix(c).Masked())
+	}
+	return out
+}
+
+// ssrfBlocked reports whether addr is non-public. It first unwraps v4-mapped
+// (::ffff:a.b.c.d) and NAT64 (64:ff9b::a.b.c.d) forms and re-checks the embedded
+// v4, so an IPv6 literal embedding a private v4 cannot slip past a v6-only test.
+func ssrfBlocked(addr netip.Addr) bool {
+	addr = addr.Unmap() // v4-mapped ::ffff:a.b.c.d -> a.b.c.d
+	if addr.Is6() {
+		if v4, ok := nat64EmbeddedV4(addr); ok && ssrfBlocked(v4) {
+			return true
+		}
+	}
+	for _, p := range ssrfBlockedPrefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+// nat64EmbeddedV4 extracts the trailing 32 bits of a 64:ff9b::/96 (well-known
+// NAT64 prefix, RFC 6052) address as an IPv4 address so its reserved-ness can be
+// re-checked. Only the /96 well-known prefix is handled — the /48 local-use
+// prefix is caught directly by the prefix table.
+func nat64EmbeddedV4(addr netip.Addr) (netip.Addr, bool) {
+	nat64 := netip.MustParsePrefix("64:ff9b::/96")
+	if !nat64.Contains(addr) {
+		return netip.Addr{}, false
+	}
+	b := addr.As16()
+	return netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}), true
+}
+
 // newGuardedWBAClient is the HTTP client used when the caller injects none. It
-// refuses to dial any non-public address (loopback, RFC 1918 private, link-local,
-// unspecified, multicast). The directory host is derived from a caller-supplied
-// Signature-Agent and the fetch runs BEFORE the ed25519 signature check, so an
-// unguarded default is a pre-auth SSRF lever against internal networks. The IP
-// check runs in Dialer.Control against the ALREADY-RESOLVED address, so it also
-// closes the DNS-rebinding window (a public A record that resolves to 169.254.x
-// is rejected at connect time, not just at lookup time). A deployment that must
-// reach a private directory (tests, on-prem) injects its own HTTP client.
+// refuses to dial any non-public address (see ssrfBlockedPrefixes). The directory
+// host is derived from a caller-supplied Signature-Agent and the fetch runs
+// BEFORE the ed25519 signature check, so an unguarded default is a pre-auth SSRF
+// lever against internal networks. The check runs in Dialer.Control against the
+// ALREADY-RESOLVED address, so it also closes the DNS-rebinding window (a public
+// A record that resolves to 169.254.x is rejected at connect time, not just at
+// lookup time). A deployment that must reach a private directory (tests, on-prem)
+// injects its own HTTP client.
 func newGuardedWBAClient() *http.Client {
 	dialer := &net.Dialer{
 		Control: func(_, address string, _ syscall.RawConn) error {
@@ -101,12 +161,12 @@ func newGuardedWBAClient() *http.Client {
 			if err != nil {
 				return err
 			}
-			ip := net.ParseIP(host)
-			if ip == nil {
+			addr, perr := netip.ParseAddr(host)
+			if perr != nil {
 				return fmt.Errorf("helpers: refusing to dial unresolved address %q (SSRF guard)", address)
 			}
-			if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
-				return fmt.Errorf("helpers: refusing to dial non-public address %s (SSRF guard)", ip)
+			if ssrfBlocked(addr) {
+				return fmt.Errorf("helpers: refusing to dial non-public address %s (SSRF guard)", addr)
 			}
 			return nil
 		},
