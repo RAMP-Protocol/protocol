@@ -15,6 +15,8 @@ export {
   RevocationUnevaluated,
 } from "./errors.ts";
 export type { FetchLike, FetchResponse } from "./http.ts";
+export { SsrfBlockedError } from "./http.ts";
+export { blockedAddress } from "./ssrf.ts";
 export { type StaticKeyResolver, newStaticKeyResolver } from "./static.ts";
 export {
   type EndpointOptions,

@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 from conftest import GO_TESTDATA, load_json
-from resolvers_harness import MutableClock, Origin, revocation_json, wba_file_json
+from resolvers_harness import MutableClock, Origin, loopback_fetch, revocation_json, wba_file_json
 
 from ramp_sdk.resolvers import WBAKeyResolver
 
@@ -61,7 +61,7 @@ def test_revoked_matches_go_oracle(case: dict[str, Any]) -> None:
         origin.set_wba(wba_file_json(_directory_keys(), origin.revocation_url()))
         origin.set_revocation(revocation_json(_as_of(), list(_VECTOR["revoked"])))
 
-        r = WBAKeyResolver(scheme="http", now=MutableClock(_as_of()))
+        r = WBAKeyResolver(http=loopback_fetch, scheme="http", now=MutableClock(_as_of()))
         # Prime the revocation snapshot by resolving the directory-listed key.
         r.resolve(_VECTOR["prime_thumbprint"], origin.url)
 

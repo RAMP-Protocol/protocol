@@ -17,10 +17,13 @@ from __future__ import annotations
 import json
 import queue
 import threading
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -38,8 +41,30 @@ JWKS_PATH = "/keys.json"
 
 # The shared anchor sits well inside the validity windows the active-key builders
 # emit.
-ANCHOR = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
+ANCHOR = datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)
 HOUR = timedelta(hours=1)
+
+_FETCH_TIMEOUT_S = 10.0
+_MAX_DOC_BYTES = 1 << 20
+
+
+def loopback_fetch(url: str) -> tuple[int, bytes]:
+    """An UNGUARDED stdlib GET the resolver suites inject to reach the in-process
+    origin.
+
+    The Origin listens on 127.0.0.1, which the SDK's default SSRF-guarded
+    transport refuses to dial (loopback is a reserved target). Mirroring the Go
+    oracle — whose httptest suites inject their own client past the guarded
+    default — the integration suites inject this callable via ``http=`` to REACH
+    the private test directory. It is byte-for-byte the pre-guard ``default_fetch``
+    behavior: a bounded ``urllib.request`` GET returning ``(status, body)``.
+    """
+    req = urllib.request.Request(url, method="GET")  # noqa: S310 (fixed http scheme, test origin)
+    try:
+        with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT_S) as resp:  # noqa: S310
+            return int(resp.status), resp.read(_MAX_DOC_BYTES)
+    except urllib.error.HTTPError as exc:
+        return int(exc.code), b""
 
 
 @dataclass
@@ -62,7 +87,7 @@ def make_key() -> TestKey:
 
 def rfc3339(instant: datetime) -> str:
     """RFC3339-Z rendering of an aware instant."""
-    return instant.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return instant.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def wba_jwk(x: str, not_before: datetime, not_after: datetime) -> dict[str, Any]:
@@ -124,7 +149,7 @@ class _State:
     manifest_hits: int = 0
 
 
-def _resolve_route(state: _State, path: str) -> tuple[int, bytes] | None:
+def _resolve_route(state: _State, path: str) -> tuple[int, bytes] | None:  # noqa: PLR0911 — flat route table
     if path == WBA_DIR_PATH:
         if state.wba_status != 0:
             return state.wba_status, b""
@@ -162,7 +187,7 @@ class Origin:
         state = self._state
 
         class _Handler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler contract)
+            def do_GET(self) -> None:
                 hit = _resolve_route(state, self.path.split("?")[0])
                 if hit is None:
                     self.send_response(404)

@@ -21,6 +21,10 @@ from decimal import Decimal
 # matches the pattern but is rejected by parse_money as "unset".
 _MONEY_WIRE = re.compile(r"^([0-9]+([.][0-9]+)?)?$")
 
+# _MONEY_MAX_LEN mirrors the protovalidate string.max_len = 32 on
+# Pricing.rate/Cost.amount/unit_cost.
+_MONEY_MAX_LEN = 32
+
 
 def parse_money(s: str) -> Decimal:
     """Parse a canonical wire decimal string into an exact ``Decimal``.
@@ -34,8 +38,8 @@ def parse_money(s: str) -> Decimal:
         raise ValueError(msg)
     # Mirror protovalidate string.max_len = 32 (ramp.proto Pricing.rate) so a
     # pattern-valid but over-length value is rejected here, not only server-side.
-    if len(s) > 32:
-        msg = f"money: string length {len(s)} exceeds max 32"
+    if len(s) > _MONEY_MAX_LEN:
+        msg = f"money: string length {len(s)} exceeds max {_MONEY_MAX_LEN}"
         raise ValueError(msg)
     if not _MONEY_WIRE.match(s):
         msg = f"money: {s!r} is not a canonical money string"

@@ -225,3 +225,16 @@ export const ANCHOR_MS = Date.UTC(2026, 4, 1, 12, 0, 0); // 2026-05-01T12:00:00Z
 export function iso(ms: number): string {
 	return new Date(ms).toISOString();
 }
+
+/** The unguarded transport the integration suites inject to reach the in-process
+ * 127.0.0.1 origin. The SDK's DEFAULT transport is now SSRF-guarded (it refuses
+ * loopback / private targets — see resolvers/ssrf.ts), which is exactly the
+ * pre-auth SSRF lever these faces close. A test origin is loopback, so — like
+ * the Go oracle's tests, which inject an httptest client — the suites inject
+ * this bare global-fetch transport as the escape hatch, keeping the guard on the
+ * production default while still exercising the resolver logic against a real
+ * server. It is a REAL fetch, never a mock; only the clock/poll seams are stubbed. */
+export const loopbackFetch = (
+	url: string,
+): Promise<{ status: number; text(): Promise<string> }> =>
+	fetch(url) as unknown as Promise<{ status: number; text(): Promise<string> }>;

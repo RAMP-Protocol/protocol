@@ -111,8 +111,10 @@ def test_wellknown_key_skips_malformed_entries_resolves_survivors() -> None:
         jwks_key_doc_json(
             [
                 {"kty": "OKP", "crv": "Ed25519", "x": make_key().x},  # missing kid → skip
-                {"kid": "rsa.v1", "kty": "RSA", "crv": "Ed25519", "x": non_ed.x},  # non-Ed25519 → skip
-                {"kid": "short.v1", "kty": "OKP", "crv": "Ed25519", "x": "AAAA"},  # bad-length x → skip
+                # non-Ed25519 → skip
+                {"kid": "rsa.v1", "kty": "RSA", "crv": "Ed25519", "x": non_ed.x},
+                # bad-length x → skip
+                {"kid": "short.v1", "kty": "OKP", "crv": "Ed25519", "x": "AAAA"},
                 jwks_entry("good.v1", good.x),  # valid survivor
             ]
         )

@@ -21,7 +21,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import pytest
-from resolvers_harness import ANCHOR, HOUR, MutableClock, long_jwk, make_key, wba_file_json
+from resolvers_harness import (
+    ANCHOR,
+    HOUR,
+    MutableClock,
+    long_jwk,
+    loopback_fetch,
+    make_key,
+    wba_file_json,
+)
 
 from ramp_sdk.resolvers import UnknownKeyError, WBAKeyResolver
 
@@ -100,6 +108,7 @@ def test_unknown_thumbprint_burst_debounced() -> None:
     try:
         clock = MutableClock(ANCHOR)
         r = WBAKeyResolver(
+            http=loopback_fetch,
             scheme="http",
             ttl=HOUR,
             sync_debounce=timedelta(seconds=5),
@@ -136,7 +145,7 @@ def test_concurrent_refresh_singleflight() -> None:
     origin.gate = threading.Event()
     origin.arrived = queue.Queue()
     try:
-        r = WBAKeyResolver(scheme="http", ttl=HOUR, now=MutableClock(ANCHOR))
+        r = WBAKeyResolver(http=loopback_fetch, scheme="http", ttl=HOUR, now=MutableClock(ANCHOR))
 
         burst = 12
         barrier = threading.Barrier(burst)

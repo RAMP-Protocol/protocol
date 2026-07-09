@@ -27,7 +27,7 @@ from pydantic import ValidationError
 from wire.models import JsonWebKey, KeyRevocationList, WBAFile
 
 from ramp_sdk.b64 import b64url_decode
-from ramp_sdk.resolvers._http import HttpFetch, default_fetch, fetch_soft, fetch_strict
+from ramp_sdk.resolvers._http import HttpFetch, fetch_soft, fetch_strict, guarded_fetch
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
     KeyExpiredError,
@@ -108,7 +108,14 @@ class WBAKeyResolver:
         require_revocation: bool = False,
         on_poll_armed: Hook | None = None,
         on_poll_cycle: Hook | None = None,
-        http: HttpFetch = default_fetch,
+        # Safe by default: the SSRF-guarded transport. The directory host is
+        # derived from the caller-supplied Signature-Agent and fetched BEFORE the
+        # ed25519 check, so an unguarded default would be a pre-auth SSRF lever.
+        # ``guarded_fetch`` resolves + pins to a checked IP (closing the
+        # DNS-rebinding window) and refuses reserved / non-public targets. A
+        # deployment that must reach a private directory (tests, on-prem) injects
+        # its own callable here — the escape hatch, mirroring the Go client injection.
+        http: HttpFetch = guarded_fetch,
     ) -> None:
         self._scheme = scheme or "https"
         self._ttl = ttl if ttl > timedelta(0) else _DEFAULT_TTL

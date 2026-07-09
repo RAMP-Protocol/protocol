@@ -145,17 +145,17 @@ def test_append_to_unsigned_request_equals_sign_request_n1() -> None:
     v = _by_name("positive_two_hop")
     h1 = v["hops"][0]  # type: ignore[index]
     body = bytes.fromhex(str(v["body_hex"]))
-    common = dict(
-        method=str(v["method"]),
-        url=str(v["url"]),
-        body=body,
-        authorization=str(v["authorization"]),
-        signature_agent=str(v["signature_agent"]),
-        signer_seed=bytes.fromhex(str(h1["seed_hex"])),
-        keyid=str(h1["keyid"]),
-        created=int(v["created"]),  # type: ignore[call-overload]
-        expires=int(v["expires"]),  # type: ignore[call-overload]
-    )
+    common = {
+        "method": str(v["method"]),
+        "url": str(v["url"]),
+        "body": body,
+        "authorization": str(v["authorization"]),
+        "signature_agent": str(v["signature_agent"]),
+        "signer_seed": bytes.fromhex(str(h1["seed_hex"])),
+        "keyid": str(h1["keyid"]),
+        "created": int(v["created"]),  # type: ignore[call-overload]
+        "expires": int(v["expires"]),  # type: ignore[call-overload]
+    }
     signed = sign_request(**common)  # type: ignore[arg-type]
     appended = append_signature(prev_signature_input="", prev_signature="", **common)  # type: ignore[arg-type]
     assert appended.signature_input == signed.signature_input
