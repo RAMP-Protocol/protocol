@@ -31,6 +31,14 @@ extended `DenialReason` with
 values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
 breaking change; `buf breaking` reports the deltas as expected.
 
+Also removed the vestigial single-offer `offer_id` correlation scalar from
+`TransactionRequest` (field 3). It was left stranded by the items-only migration:
+never authoritative — the Exchange keys binding, billing, and audit off each
+item's signature-verified offer identity inside the signed `Offer`, never this
+scalar — and read by nothing. A single-offer transaction is the degenerate
+one-element `items` list. Deleted outright with no reserved (pre-v1); `buf
+breaking` reports the delta as expected.
+
 **Money as an exact decimal string + field validation as standard constraints (breaking).**
 
 - **Money is a decimal string, not a `double`.** `Pricing.rate`/`unit_cost`,
@@ -118,7 +126,7 @@ major design decisions is recorded in [`docs/design-history.md`](https://github.
 - **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers.
 - **DiscoveryRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
 - **Requester** — universal actor identity (AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH).
-- **Delegation** — holder-bound JWT by default (RFC 7800 `cnf`/`jkt` + RFC 9421 proof-of-possession; chain of `cnf`-linked JWTs), with `token_format: "biscuit-v3"` as an optional alternative. Scoped, time-limited, spend-capped, narrowable offline.
+- **Delegation** — holder-bound JWT (RFC 7800 `cnf`/`jkt` + RFC 9421 proof-of-possession; chain of `cnf`-linked JWTs). `token_format` is `"jwt"`. Scoped, time-limited, spend-capped, narrowable offline.
 - **Scope-based access control** — the Exchange filters its catalog by the requester's scopes; subscriptions are scopes.
 - **SubscriptionQuotaInfo** — proactive, multi-dimensional quota signaling on `Offer` and `TransactionResponse`.
 - **ResourceMutability** — STATIC (hash stable), DYNAMIC (hash drifts), LIVE (streaming, no content at offer time).

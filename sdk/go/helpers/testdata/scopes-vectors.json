@@ -1,0 +1,185 @@
+{
+  "normalize": [
+    {
+      "name": "empty_input",
+      "input": [],
+      "normalized": null
+    },
+    {
+      "name": "all_empty_strings",
+      "input": [
+        "",
+        "",
+        ""
+      ],
+      "normalized": null
+    },
+    {
+      "name": "single",
+      "input": [
+        "read"
+      ],
+      "normalized": [
+        "read"
+      ]
+    },
+    {
+      "name": "already_sorted",
+      "input": [
+        "read",
+        "write"
+      ],
+      "normalized": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "name": "unsorted",
+      "input": [
+        "write",
+        "read",
+        "admin"
+      ],
+      "normalized": [
+        "admin",
+        "read",
+        "write"
+      ]
+    },
+    {
+      "name": "duplicates",
+      "input": [
+        "read",
+        "read",
+        "write",
+        "read"
+      ],
+      "normalized": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "name": "drop_empty_entries",
+      "input": [
+        "write",
+        "",
+        "read",
+        ""
+      ],
+      "normalized": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "name": "dedup_then_sort",
+      "input": [
+        "zeta",
+        "alpha",
+        "zeta",
+        "mid"
+      ],
+      "normalized": [
+        "alpha",
+        "mid",
+        "zeta"
+      ]
+    },
+    {
+      "name": "case_sensitive_no_fold",
+      "input": [
+        "Read",
+        "read",
+        "READ"
+      ],
+      "normalized": [
+        "READ",
+        "Read",
+        "read"
+      ]
+    }
+  ],
+  "subset": [
+    {
+      "name": "empty_sub_is_subset",
+      "sub": null,
+      "super": [
+        "read",
+        "write"
+      ],
+      "expected": true
+    },
+    {
+      "name": "empty_of_empty",
+      "sub": null,
+      "super": null,
+      "expected": true
+    },
+    {
+      "name": "proper_subset",
+      "sub": [
+        "read"
+      ],
+      "super": [
+        "read",
+        "write"
+      ],
+      "expected": true
+    },
+    {
+      "name": "equal_sets",
+      "sub": [
+        "read",
+        "write"
+      ],
+      "super": [
+        "write",
+        "read"
+      ],
+      "expected": true
+    },
+    {
+      "name": "not_subset_missing_member",
+      "sub": [
+        "admin"
+      ],
+      "super": [
+        "read",
+        "write"
+      ],
+      "expected": false
+    },
+    {
+      "name": "partial_overlap_not_subset",
+      "sub": [
+        "read",
+        "admin"
+      ],
+      "super": [
+        "read",
+        "write"
+      ],
+      "expected": false
+    },
+    {
+      "name": "sub_nonempty_super_empty",
+      "sub": [
+        "read"
+      ],
+      "super": null,
+      "expected": false
+    },
+    {
+      "name": "case_sensitive_not_subset",
+      "sub": [
+        "Read"
+      ],
+      "super": [
+        "read"
+      ],
+      "expected": false
+    }
+  ]
+}

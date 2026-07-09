@@ -135,6 +135,23 @@
     }
   },
   {
+    "id": "AgentAcceptance/signature/too_short",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {}
+  },
+  {
+    "id": "AgentAcceptance/valid",
+    "message": "AgentAcceptance",
+    "valid": true,
+    "json": {
+      "signature": "x"
+    }
+  },
+  {
     "id": "AuthorizedExchange/relationship/not_in",
     "message": "AuthorizedExchange",
     "valid": false,
@@ -168,7 +185,7 @@
       "enum.defined_only"
     ],
     "json": {
-      "reason": 8
+      "reason": 10
     }
   },
   {
@@ -2595,7 +2612,7 @@
       "enum.defined_only"
     ],
     "json": {
-      "reason": 19
+      "reason": 18
     }
   },
   {
@@ -2607,6 +2624,29 @@
     }
   },
   {
+    "id": "TransactionItem/offer/missing",
+    "message": "TransactionItem",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {}
+  },
+  {
+    "id": "TransactionItem/valid",
+    "message": "TransactionItem",
+    "valid": true,
+    "json": {
+      "offer": {
+        "offer_id": "offer-seed",
+        "pricing": {
+          "model": "PRICING_MODEL_FREE",
+          "rate": "0"
+        }
+      }
+    }
+  },
+  {
     "id": "TransactionRequest/idempotency_key/too_long",
     "message": "TransactionRequest",
     "valid": false,
@@ -2614,7 +2654,18 @@
       "string.max_len"
     ],
     "json": {
-      "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "items": [
+        {
+          "offer": {
+            "offer_id": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
+        }
+      ]
     }
   },
   {
@@ -2624,14 +2675,37 @@
     "rules": [
       "string.min_len"
     ],
-    "json": {}
+    "json": {
+      "items": [
+        {
+          "offer": {
+            "offer_id": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
+        }
+      ]
+    }
   },
   {
     "id": "TransactionRequest/valid",
     "message": "TransactionRequest",
     "valid": true,
     "json": {
-      "idempotency_key": "x"
+      "idempotency_key": "idem-tx",
+      "items": [
+        {
+          "offer": {
+            "offer_id": "offer-seed",
+            "pricing": {
+              "model": "PRICING_MODEL_FREE",
+              "rate": "0"
+            }
+          }
+        }
+      ]
     }
   },
   {

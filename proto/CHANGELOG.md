@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+**Biscuits removed; entitlement mechanism kept for JWT (breaking).** The Biscuit
+token format leaves the protocol — JWT is the sole entitlement/capability token
+format. The entitlement MECHANISM is unchanged and format-neutral: a capability
+token rides a covered header (renamed `X-RAMP-Entitlement-Biscuit` →
+`X-Entitlement-Token`) whose signature-coverage the verifier enforces without
+ever parsing the token, so it holds identically for JWT. Removed only the
+biscuit-specific bits: the `token_format` value `"biscuit-v3"` (JWT stays the
+default), and `DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION` (18) — attenuation is
+a biscuit concept. The generic entitlement `DenialReason` family (12–17) stays.
+Pre-v1 breaking change; `buf breaking` reports the deltas as expected.
+
 **Protocol standardization — unified error/response contract + a Connect RPC for
 every role (breaking).** Three threads land together:
 
@@ -27,6 +38,14 @@ Also: renamed `PushContent` → `PushResources`; removed `AccessPolicy` /
 extended `DenialReason` with
 values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
 breaking change; `buf breaking` reports the deltas as expected.
+
+Also: removed the vestigial `TransactionRequest.offer_id` (field 3). It was a
+single-offer-era correlation scalar left stranded by the items-only migration —
+never authoritative (the Exchange keys binding, billing, and audit off each
+item's signature-verified `offer.offer_id`, never this scalar) and read by
+nothing. A single-offer transaction is the degenerate one-element `items` list;
+offer identity lives inside the signed Offer. Deleted outright with no reserved
+(pre-v1); `buf breaking` reports the delta as expected.
 
 **Money as an exact decimal string + field validation as standard constraints (breaking).**
 

@@ -1,0 +1,172 @@
+{
+  "canonicalization": "jcs",
+  "vectors": [
+    {
+      "name": "unspecified_enum_pruned",
+      "wire_json": {
+        "attestations": [],
+        "delivery_method": "DELIVERY_METHOD_UNSPECIFIED",
+        "exchange": "exchange.example.com",
+        "ext": null,
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-unspec",
+        "previews": [],
+        "pricing": null,
+        "signature": "",
+        "signature_algorithm": "",
+        "subscription_quota": [],
+        "terms": []
+      },
+      "canonical_json": {
+        "exchange": "exchange.example.com",
+        "offer_id": "offer-wire-unspec"
+      }
+    },
+    {
+      "name": "set_empty_optional_unit",
+      "wire_json": {
+        "attestations": [],
+        "delivery_method": "DELIVERY_METHOD_UNSPECIFIED",
+        "exchange": "exchange.example.com",
+        "ext": null,
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-unit",
+        "previews": [],
+        "pricing": {
+          "currency": "EUR",
+          "model": "PRICING_MODEL_FREE",
+          "rate": "",
+          "unit": ""
+        },
+        "signature": "",
+        "signature_algorithm": "",
+        "subscription_quota": [],
+        "terms": []
+      },
+      "canonical_json": {
+        "exchange": "exchange.example.com",
+        "offer_id": "offer-wire-unit",
+        "pricing": {
+          "currency": "EUR",
+          "model": "PRICING_MODEL_FREE",
+          "unit": ""
+        }
+      }
+    },
+    {
+      "name": "struct_ext_multi_key",
+      "wire_json": {
+        "attestations": [],
+        "delivery_method": "DELIVERY_METHOD_UNSPECIFIED",
+        "exchange": "exchange.example.com",
+        "ext": {
+          "alpha": "first",
+          "nested": {
+            "x": 1,
+            "y": 2
+          },
+          "zebra": "last"
+        },
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-struct",
+        "previews": [],
+        "pricing": null,
+        "signature": "",
+        "signature_algorithm": "",
+        "subscription_quota": [],
+        "terms": []
+      },
+      "canonical_json": {
+        "exchange": "exchange.example.com",
+        "ext": {
+          "alpha": "first",
+          "nested": {
+            "x": 1,
+            "y": 2
+          },
+          "zebra": "last"
+        },
+        "offer_id": "offer-wire-struct"
+      }
+    },
+    {
+      "name": "two_timestamps",
+      "wire_json": {
+        "attestations": [],
+        "data_as_of": "2023-11-14T19:26:40Z",
+        "delivery_method": "DELIVERY_METHOD_UNSPECIFIED",
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:28:20Z",
+        "ext": null,
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-two-ts",
+        "previews": [],
+        "pricing": null,
+        "signature": "",
+        "signature_algorithm": "",
+        "subscription_quota": [],
+        "terms": []
+      },
+      "canonical_json": {
+        "data_as_of": "2023-11-14T19:26:40Z",
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:28:20Z",
+        "offer_id": "offer-wire-two-ts"
+      }
+    },
+    {
+      "name": "repeated_terms_enum",
+      "wire_json": {
+        "attestations": [],
+        "delivery_method": "DELIVERY_METHOD_DIRECT",
+        "exchange": "exchange.example.com",
+        "ext": null,
+        "ext_critical": [],
+        "iab_categories": [],
+        "offer_id": "offer-wire-repeated",
+        "previews": [],
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.05"
+        },
+        "signature": "",
+        "signature_algorithm": "",
+        "subscription_quota": [],
+        "terms": [
+          {
+            "obligations": [],
+            "quotas": [],
+            "restrictions": [],
+            "scopes": [
+              "ai-train"
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      },
+      "canonical_json": {
+        "delivery_method": "DELIVERY_METHOD_DIRECT",
+        "exchange": "exchange.example.com",
+        "offer_id": "offer-wire-repeated",
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.05"
+        },
+        "terms": [
+          {
+            "scopes": [
+              "ai-train"
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          }
+        ]
+      }
+    }
+  ]
+}

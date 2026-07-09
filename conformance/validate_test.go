@@ -190,8 +190,9 @@ func TestIdempotencyKeyRequired(t *testing.T) {
 
 func idempotencyCases() []validationCase {
 	return []validationCase{
-		{"transaction empty key rejected", &rampv1.TransactionRequest{IdempotencyKey: ""}, false, "string.min_len"},
-		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1"}, true, ""},
+		{"transaction empty key rejected", &rampv1.TransactionRequest{IdempotencyKey: "", Items: []*rampv1.TransactionItem{{Offer: &rampv1.Offer{OfferId: "of_1", Pricing: freePricing()}}}}, false, "string.min_len"},
+		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1", Items: []*rampv1.TransactionItem{{Offer: &rampv1.Offer{OfferId: "of_1", Pricing: freePricing()}}}}, true, ""},
+		{"transaction empty items rejected", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-empty"}, false, "repeated.min_items"},
 		{"usage report empty key rejected", &rampv1.UsageReport{IdempotencyKey: ""}, false, "string.min_len"},
 		{"usage report key ok", &rampv1.UsageReport{IdempotencyKey: "idem-ur-1"}, true, ""},
 		{"dispute empty key rejected", &rampv1.DisputeRequest{IdempotencyKey: "", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, false, "string.min_len"},
@@ -224,7 +225,7 @@ func errorDetailCases() []validationCase {
 	return []validationCase{
 		// TransactionDenial — reuses DenialReason, including the entitlement family.
 		{"transaction_denial valid", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE}, true, ""},
-		{"transaction_denial entitlement valid", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION}, true, ""},
+		{"transaction_denial entitlement valid", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_ENTITLEMENT_NOT_GRANTED}, true, ""},
 		{"transaction_denial unspecified rejected", &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_UNSPECIFIED}, false, "enum.not_in"},
 		{"transaction_denial undefined int rejected", &rampv1.TransactionDenial{Reason: rampv1.DenialReason(9999)}, false, "enum.defined_only"},
 
@@ -259,6 +260,7 @@ var standardRuleIDs = map[string]bool{
 	"string.pattern":     true,
 	"required":           true,
 	"repeated.max_items": true,
+	"repeated.min_items": true,
 	"int64.gte":          true,
 	"string.min_len":     true,
 	"enum.not_in":        true,

@@ -53,7 +53,7 @@ The feed is a **transport convenience**, not a third licensing model: every line
 | `pricing` | `{model, unit, rate, currency}` | `LicenseTerm.pricing` (`model` ∈ `free` \| `per_unit` \| `flat`) |
 | `quotas` | `[{metric, limit, window}]` | `LicenseTerm.Quota[]` |
 | `obligations` | `[{kind, trigger, scope_license, detail}]` | `LicenseTerm.Obligation[]` |
-| `scopes` | string[] | `LicenseTerm.scopes` (Biscuit-gated, e.g. `subscription:premium`) |
+| `scopes` | string[] | `LicenseTerm.scopes` (entitlement-gated, e.g. `subscription:premium`) |
 
 Rules (enforced by protovalidate at the RPC boundary):
 

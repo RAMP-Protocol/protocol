@@ -1,0 +1,29 @@
+{
+  "vectors": [
+    {
+      "name": "empty",
+      "url": "",
+      "sha256_hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "simple_https",
+      "url": "https://cdn.example.com/a.jpg",
+      "sha256_hex": "e32fb90c42019277786be0aaccfc4a78c93d8f937342ef0aeae4e15dcd99675d"
+    },
+    {
+      "name": "with_query",
+      "url": "https://cdn.example.com/a.jpg?Expires=1700000000\u0026Signature=abc",
+      "sha256_hex": "9b21c3bd248f887fb291c37019e4170b80cf844caa26dfc8895ffa284e624962"
+    },
+    {
+      "name": "unicode_path",
+      "url": "https://cdn.example.com/naïve/résumé.pdf",
+      "sha256_hex": "f31a00ac72931d55f67a5fb57df7b7d8d0a2ba2895b51e93287eac0d1aedf159"
+    },
+    {
+      "name": "opaque_bytes_no_renorm",
+      "url": "https://cdn.example.com/a//b/../c?x=%20\u0026y=+",
+      "sha256_hex": "411e5f7b70fa4b1ca9dade5625b0535178484d946b8d189722a253c8cb78b804"
+    }
+  ]
+}

@@ -5,9 +5,37 @@ from __future__ import annotations
 
 from typing import Any
 from pydantic import AwareDatetime, Field, RootModel, conint, constr
-from enum import Enum
 from wire.base import WireModel
+from enum import Enum
 
+
+
+class AgentAcceptance(WireModel):
+    signature: constr(min_length=1) = Field(
+        ...,
+        description='Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes.',
+    )
+    signature_algorithm: str | None = Field(
+        '', description='Signature algorithm; "EdDSA" for Ed25519.'
+    )
+
+
+class AgentAcceptancePayload(WireModel):
+    idempotency_key: str | None = Field(
+        '',
+        description="The transaction's idempotency key — binds the acceptance to a single\n execute so it cannot be replayed under a different transaction.",
+    )
+    offer_sig: str | None = Field(
+        '',
+        description="The accepted Offer's signature (Offer.signature). Anchors the whole signed\n offer without re-serializing its terms/pricing/expiry.",
+    )
+    requester_domain: str | None = Field(
+        '',
+        description='Requester domain (Requester.domain) the acceptance is bound to.',
+    )
+    requester_id: str | None = Field(
+        '', description='Requester identity (Requester.id) the acceptance is bound to.'
+    )
 
 
 class AuthMethod(Enum):
@@ -55,6 +83,12 @@ class CatalogRejectionReason(Enum):
         'CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN'
     )
     CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 'CATALOG_REJECTION_REASON_QUOTA_EXCEEDED'
+    CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED = (
+        'CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED'
+    )
+    CATALOG_REJECTION_REASON_URI_UNAVAILABLE = (
+        'CATALOG_REJECTION_REASON_URI_UNAVAILABLE'
+    )
 
 
 class CitationFormat(Enum):
@@ -114,12 +148,11 @@ class Delegation(WireModel):
         description="Scopes granted by this delegation. MUST be a subset of the\n principal's own scopes (attenuation — can only narrow, not widen).",
     )
     token: constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$') | None = Field(
-        '',
-        description='Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,\n base64-encoded) when token_format is "biscuit-v3".',
+        '', description='Token bytes. A JWT (base64url-encoded JWS).'
     )
     token_format: str | None = Field(
         '',
-        description='Token format: "jwt" (default) or "biscuit-v3" (optional, for deep\n multi-hop offline attenuation). Empty is treated as "jwt".',
+        description='Token format: "jwt" (default). Empty is treated as "jwt". The field stays\n open for a future format.',
     )
 
 
@@ -147,9 +180,6 @@ class DenialReason(Enum):
     DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 'DENIAL_REASON_ENTITLEMENT_WRONG_BUYER'
     DENIAL_REASON_SUBSCRIPTION_LAPSED = 'DENIAL_REASON_SUBSCRIPTION_LAPSED'
     DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 'DENIAL_REASON_ENTITLEMENT_NOT_GRANTED'
-    DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION = (
-        'DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION'
-    )
 
 
 class DiscoveryMethod(Enum):
@@ -745,16 +775,6 @@ class TransactionDenial(WireModel):
     )
 
 
-class TransactionItem(WireModel):
-    offer_id: str | None = Field(
-        '', description='The offer_id from the selected Offer.'
-    )
-    offer_signature: str | None = Field(
-        '',
-        description="The selected Offer's `signature` (informally, the exchange signature).",
-    )
-
-
 class TransactionResultItem(WireModel):
     billing_id: str | None = Field('', description='Billing reference.')
     cost: Cost | None = Field(None, description='Cost for this item.')
@@ -1149,46 +1169,10 @@ class RetrievalAuthFailure(WireModel):
     )
 
 
-class TransactionRequest(WireModel):
-    ext: dict[str, Any] | None = Field(None, description='Extension point')
-    ext_critical: list[str] | None = Field(
-        None,
-        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
-    )
-    idempotency_key: constr(min_length=1, max_length=255) = Field(
-        ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
-    )
-    items: list[TransactionItem] | None = Field(
-        None,
-        description='Batch mode: commit to multiple offers in one request.\n When populated, `offer_id` and `offer_signature` SHOULD be empty.',
-    )
-    offer_id: str | None = Field(
-        None,
-        description='Single-offer mode. Use `items` for batch mode; `offer_id` +\n `offer_signature` for single.',
-    )
-    offer_signature: str | None = Field(None, description='Single-offer signature.')
-    requester: Requester | None = Field(
-        None, description='Requester identity — forwarded for authorization and audit.'
-    )
-    ver: str | None = Field('', description='Protocol version')
-
-
 class TransactionResponse(WireModel):
     agent_identity_hash: str | None = Field(
         '',
-        description='Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of\n the agent\'s Ed25519 request-signing key (see "Retrieval-URL identity binding"\n above). Empty string when absent; non-empty iff a signed retrieval_endpoint\n is present. Delivery-endpoint enforcement of the binding is OPTIONAL.',
-    )
-    billing_id: str | None = Field(None, description='Billing reference')
-    cost: Cost | None = Field(None, description='Transaction cost')
-    delivery_method: (
-        constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
-        | DeliveryMethod
-        | conint(ge=-2147483648, le=2147483647)
-        | None
-    ) = Field(0, description='How resource is delivered in this transaction.')
-    expires_at: AwareDatetime | None = Field(
-        None, description='When retrieval_endpoint expires.'
+        description='Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK\n Thumbprint of the agent\'s Ed25519 request-signing key (see "Retrieval-URL\n identity binding" above). Shared across the request; set once.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1196,36 +1180,15 @@ class TransactionResponse(WireModel):
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
     items: list[TransactionResultItem] | None = Field(
-        None, description='Batch mode: per-offer results.'
-    )
-    reporting_obligation: ReportingObligation | None = Field(
-        None, description='Reporting requirements attached to this delivery.'
-    )
-    resource_title: str | None = Field(
-        None, description='Resource title echoed from the Offer (for logging/display).'
-    )
-    retrieval_endpoint: str | None = Field(
         None,
-        description='Signed retrieval URL the agent uses to fetch the purchased resource.\n Bound to agent_identity_hash; expires at expires_at. Absent on denial\n and on transactions whose delivery_method is not signed-URL-based.',
-    )
-    subscription_id: str | None = Field(
-        None,
-        description='If set, this transaction was fulfilled under a subscription/deal.\n No per-request charge — usage tracked against subscription quota.',
+        description='Per-offer results (one entry per committed item, in original order).',
     )
     subscription_quota: list[SubscriptionQuotaInfo] | None = Field(
         None,
         description='Post-transaction quota state. Tells the agent how much quota remains\n after this transaction. Enables proactive throttling ("1 access left").\n Multiple entries for multi-dimensional quotas.',
     )
-    subscription_unit_value: Cost | None = Field(
-        None,
-        description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount="0" (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
-    )
     total_cost: Cost | None = Field(
-        None, description='Batch mode: aggregate cost across all items.'
-    )
-    transaction_id: str | None = Field(
-        None,
-        description='Single-offer result.\n For batch mode, these may be empty — check `items` instead.',
+        None, description='Aggregate cost across all items.'
     )
     ver: str | None = Field('', description='Protocol version')
 
@@ -1514,7 +1477,7 @@ class Offer(WireModel):
     ) = Field(0, description='How resource will be delivered.')
     exchange: str | None = Field(
         '',
-        description='Canonical domain of the Exchange that issued this offer (e.g.\n "exchange.example.com"). This is the execute-routing target: the agent (or\n a relaying Broker) sends the ExecuteTransaction call for this offer to this\n Exchange. Because it is an ordinary Offer field it falls inside the signed\n bytes (see `signature` below — the signature covers every field except\n `signature` / `signature_algorithm`), so an intermediary cannot redirect\n the execute call to a different Exchange without invalidating the offer.',
+        description='Canonical domain of the Exchange that issued this offer (e.g.\n "exchange.example.com"). This is the execute-routing target: the agent (or\n a relaying Broker) sends the ExecuteTransaction call for this offer to this\n Exchange. Because it is an ordinary Offer field it falls inside the signed\n bytes (see `signature` below — the signature covers every field except\n `signature` / `signature_algorithm`), so an intermediary cannot redirect\n the execute call to a different Exchange without invalidating the offer.\n (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,\n retiring the X-RAMP-Exchange-Endpoint transport header.)',
     )
     expires_at: AwareDatetime | None = Field(
         None, description='When this offer expires (ISO 8601).'
@@ -1548,7 +1511,7 @@ class Offer(WireModel):
     )
     signature: str | None = Field(
         '',
-        description="Because the signature covers `terms`, `pricing`, `expires_at`, and\n `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,\n quotas, obligations, the expiry, the execute-routing target, or any\n licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.",
+        description="CANONICAL SIGNING (RFC 8785 JCS over canonical proto-JSON). The signed bytes\n are:\n\n     signed_payload = JCS( protojson(msg with signature +\n                                      signature_algorithm cleared) )\n\n i.e. render the message to canonical proto-JSON with the PINNED option set\n below, then apply RFC 8785 (JSON Canonicalization Scheme). Deterministic\n protobuf BINARY marshaling is explicitly NOT canonical across languages and\n versions (protobuf's own caveat), so it cannot be a cross-language signing\n primitive; JCS over proto-JSON can be reproduced by ANY language (Go, TS,\n Python) without a protobuf binary codec, so a broker/exchange/client in any\n language signs and verifies byte-identically. This same definition applies to\n the agent offer-acceptance signature (AgentAcceptance.signature).\n\n PINNED proto-JSON option set (the arbiter is the Go-emitted golden vector —\n whatever these options render MUST be byte-identical across all languages):\n   - enum values as NAME strings (not numbers);\n   - int64 / uint64 / fixed64 as decimal STRINGS;\n   - bytes as standard (padded) base64;\n   - google.protobuf.Timestamp / Duration per the proto-JSON WKT rules\n     (RFC 3339 string for Timestamp);\n   - unpopulated fields are OMITTED (never emitted as defaults);\n   - field naming is snake_case (the proto field name, UseProtoNames=true),\n     the naming every SDK target shares — wire, corpus, and signed form are all\n     snake_case;\n   - google.protobuf.Struct (`ext`) → a plain JSON object; JCS then sorts its\n     keys recursively, so the Struct case needs no special handling.\n\n Because the signature covers `terms`, `pricing`, `expires_at`, and\n `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,\n quotas, obligations, the expiry, the execute-routing target, or any\n licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.",
     )
     signature_algorithm: str | None = Field(
         '',
@@ -1647,6 +1610,38 @@ class ResourceResponse(WireModel):
     rate_limit: RateLimitInfo | None = Field(
         None,
         description='Rate limit status for this caller.\n Present when the Exchange enforces per-caller rate limits on discovery.\n Enables agents/Brokers to throttle proactively rather than hitting\n hard limits. Particularly important when a Broker fans out the\n same batch query to multiple Exchanges — mid-batch rate limiting\n can cause partial results if not signaled early.',
+    )
+    ver: str | None = Field('', description='Protocol version')
+
+
+class TransactionItem(WireModel):
+    agent_acceptance: AgentAcceptance | None = Field(
+        None,
+        description="The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.",
+    )
+    offer: Offer = Field(
+        ...,
+        description='The FULL signed Offer for this batch entry, reflected back exactly as\n received at discovery. The Exchange verifies `offer.signature` over these\n presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every\n batch item carries its offer.',
+    )
+
+
+class TransactionRequest(WireModel):
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    ext_critical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
+    idempotency_key: constr(min_length=1, max_length=255) = Field(
+        ...,
+        description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
+    )
+    items: list[TransactionItem] | None = Field(
+        None,
+        description="The offers committed in this request (REQUIRED, min 1), each carrying its\n own reflected signed Offer + detached acceptance. A single offer is the\n degenerate 1-element list. The Exchange verifies each item's\n `offer.signature` (which covers pricing, terms, and expires_at) over the\n presented bytes against its own key — stateless, self-contained bearer\n tokens, with no reconstruct-from-catalog.",
+        min_length=1,
+    )
+    requester: Requester | None = Field(
+        None, description='Requester identity — forwarded for authorization and audit.'
     )
     ver: str | None = Field('', description='Protocol version')
 

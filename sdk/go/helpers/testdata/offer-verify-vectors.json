@@ -1,0 +1,175 @@
+{
+  "canonicalization": "jcs",
+  "vectors": [
+    {
+      "name": "minimal",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:28:20Z",
+        "offer_id": "offer-minimal",
+        "signature": "afeba444c237f2baf81881ad880f12613388f2081cba0a06693252ccd3f7891a49157e72d5617c9b61304f2399b1c4d7fb44f6807b074bd0d29054e1ecbeea09",
+        "signature_algorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    },
+    {
+      "name": "struct_ext_multi_key",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:28:20Z",
+        "ext": {
+          "alpha": "first",
+          "nested": {
+            "x": 1,
+            "y": 2
+          },
+          "zebra": "last"
+        },
+        "offer_id": "offer-struct",
+        "signature": "9a6bbfbc5449a2c2cc6759e481a2050fe8844b36d964ce752442289d2c0dd4e7c7f839e8d0951abf35a7cae86f8818c10934da618857203e3583eba4029cfe0f",
+        "signature_algorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    },
+    {
+      "name": "two_timestamps",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "data_as_of": "2023-11-14T19:26:40Z",
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:28:20Z",
+        "offer_id": "offer-two-ts",
+        "signature": "7a07cd88ec832d4dd630ff3c2aae40d6bdddcbe0536bdd60a05cdfb4b76808e6c00a1efd5185ff6ccd185dd0f29a5f64daef831c0b7434ec7670504aa4745706",
+        "signature_algorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    },
+    {
+      "name": "repeated_terms_enum",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "attestations": [
+          {
+            "keyid": "v1",
+            "uri": "https://verifier.example/a",
+            "verifier": "verifier.example"
+          },
+          {
+            "keyid": "v2",
+            "uri": "https://verifier2.example/b",
+            "verifier": "verifier2.example"
+          }
+        ],
+        "delivery_method": "DELIVERY_METHOD_DIRECT",
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:28:20Z",
+        "iab_categories": [
+          "IAB1",
+          "IAB2"
+        ],
+        "offer_id": "offer-repeated",
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "0.05"
+        },
+        "signature": "ca507ae0397fb07cfeabaa666a0a3e8a7f57c802bad14a331e6684897576674ad4455ec81df539398c726b2283cdd93aa6e8b01f88d5d5af2de77d4c8df5a40b",
+        "signature_algorithm": "EdDSA",
+        "terms": [
+          {
+            "scopes": [
+              "ai-train",
+              "ai-infer"
+            ],
+            "semantics": "TERM_SEMANTICS_ENUMERATED"
+          },
+          {
+            "scopes": [
+              "resell"
+            ],
+            "semantics": "TERM_SEMANTICS_REFERENCE_ONLY"
+          }
+        ]
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    },
+    {
+      "name": "tamper_negative",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:28:20Z",
+        "offer_id": "offer-tamper",
+        "pricing": {
+          "currency": "USD",
+          "model": "PRICING_MODEL_FLAT",
+          "rate": "999.00"
+        },
+        "signature": "7b9993d36d8b62c8a2e54d59f5cd0c57ad1fce0b4ca2cf6d7cf5d0a718031d5bfdf48e9ce713aa075f03306bf7187bae89d8febe0ca5701e162a2591be3c200f",
+        "signature_algorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": false,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    },
+    {
+      "name": "fresh_at_now_inclusive",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:15:00Z",
+        "offer_id": "offer-fresh-now",
+        "signature": "2d81be780cc0e7014419bfbbbcaa4207ed3ff65715ca906cf072768bcc9b41caa3aedf622ac104fe715b9afef8a8e1d1b44c18f5bd7b47bba41c9e6148110502",
+        "signature_algorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": true,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    },
+    {
+      "name": "expired_past",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "expires_at": "2023-11-14T22:13:20Z",
+        "offer_id": "offer-expired",
+        "signature": "895685627c864571bde837e91b171ec6260d9b8158afefecfeefc07735ca552fd48f5f1adf88b57ff2675e643b989a11dd1e84fc1beac521ed52f5f7fac2f40f",
+        "signature_algorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": false,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    },
+    {
+      "name": "missing_expires_at",
+      "exchange": "exchange.example.com",
+      "exchange_pub_b64url": "zpI5jIJHFJdW8sf3SDqL5IIPRMSe0MNkTrcaZJD7BKg",
+      "offer_json": {
+        "exchange": "exchange.example.com",
+        "offer_id": "offer-no-expiry",
+        "signature": "fdf8332534eebee4b072a342e72c1c509ee6ae4879b09228917065c028c75d645e58c7bd3d6eea0674d09b64ff38cc0f086f483528531827fb59d2c68843b605",
+        "signature_algorithm": "EdDSA"
+      },
+      "now_unix": 1700000100,
+      "expected_verified": false,
+      "exchange_seed_hex": "666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485"
+    }
+  ]
+}

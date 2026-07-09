@@ -1,0 +1,59 @@
+{
+  "vectors": [
+    {
+      "name": "http",
+      "scheme": "http",
+      "allowed": true
+    },
+    {
+      "name": "https",
+      "scheme": "https",
+      "allowed": true
+    },
+    {
+      "name": "https_upper",
+      "scheme": "HTTPS",
+      "allowed": true
+    },
+    {
+      "name": "ftp",
+      "scheme": "ftp",
+      "allowed": false
+    },
+    {
+      "name": "ftps",
+      "scheme": "ftps",
+      "allowed": false
+    },
+    {
+      "name": "telnet",
+      "scheme": "telnet",
+      "allowed": false
+    },
+    {
+      "name": "gopher",
+      "scheme": "gopher",
+      "allowed": false
+    },
+    {
+      "name": "file",
+      "scheme": "file",
+      "allowed": false
+    },
+    {
+      "name": "data",
+      "scheme": "data",
+      "allowed": false
+    },
+    {
+      "name": "dict",
+      "scheme": "dict",
+      "allowed": false
+    },
+    {
+      "name": "ldap",
+      "scheme": "ldap",
+      "allowed": false
+    }
+  ]
+}

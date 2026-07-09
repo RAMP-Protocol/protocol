@@ -1,0 +1,117 @@
+# sdk/python — RAMP L1 helper library (ADR-020 tree sdk/{go,ts,python}/).
+#
+# Stateless, IO-free protocol mechanics (thumbprint, signed-URL verify, RFC 9421
+# sign/verify + PoP, offer-acceptance, cross-field validation), byte-parity-guarded
+# against the sdk/go oracle. The import package is `ramp_sdk`; the PyPI dist name
+# defers to the L2/publish ticket.
+#
+# Vetted libs the port uses (the app is the quality bar — do NOT hand-roll
+# crypto/canonicalization): cryptography>=44, pydantic>=2.9. The generated Pydantic
+# types are consumed from gen/python (PYTHONPATH=gen/python at test time).
+
+# Ruff/mypy quality bar mirrors the app (src/mcp): line-length 100, strict typing.
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# The selector set is a SUPERSET of the consuming app's (src/mcp/pyproject.toml):
+# the canonical crypto library must never be linted more loosely than its
+# consumer. If the app gains a selector, add it here too.
+select = [
+  "E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "PERF", "FURB", "RUF",
+  "PL", "ASYNC", "S", "TCH", "ARG", "RET", "PTH", "TID",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The parity suites are TDD-authored (red step) and must not be restructured to
+# fit lint idiom: PLR2004 (vector magic values), S101 (asserts are the point),
+# PLC0415 (a deliberate in-function crypto import for a self-contained sanity
+# guard), PERF401 (an explicit vector-iteration loop), I001 (author's import
+# grouping), SIM300 (the offer-verify matrix guard asserts the required-name SET
+# is a subset via `_REQUIRED_MATRIX <= names` — deliberate set-subset phrasing the
+# TDD-red author pinned, not a Yoda numeric comparison) are the test-file idioms
+# this suite intentionally uses.
+"tests/**" = ["PLR2004", "S101", "PLC0415", "PERF401", "I001", "SIM300"]
+# The L1 crypto helpers expose keyword-only API surfaces whose shape (arg count,
+# early-return branch count) is pinned byte-for-byte by the shared Go-oracle
+# parity vectors and the tests that consume them — condensing them into a params
+# object or fewer returns would obscure the RFC 9421 / offer-acceptance contract
+# these functions transcribe. PLR0913 (arg count) and PLR0911 (return count) are
+# waived for exactly these crypto-primitive modules.
+"ramp_sdk/httpsig.py" = ["PLR0913", "PLR0911"]
+# The framework-agnostic server-verify entry mirrors the Go connectserver contract:
+# its keyword-only surface (method/url/body/headers + the injected resolver/replay
+# store/clock/ttl) is pinned by the parity test, and each fail-closed reject reason
+# (bad input, missing covered component, unresolvable key, crypto/window failure,
+# replay) is its own early return mirroring classify.go. Condensing either into a
+# params object or fewer returns would obscure the RFC 9421 verify contract it ports.
+"ramp_sdk/server_verify.py" = ["PLR0913", "PLR0911"]
+"ramp_sdk/pop.py" = ["PLR0913", "PLR0911"]
+"ramp_sdk/signedurl.py" = ["PLR0911"]
+"ramp_sdk/acceptance.py" = ["PLR0913"]
+# The L2 core mirrors the same crypto-primitive shape: the offer-verify _check
+# walks each fail-closed rejection reason as its own early return (resolver-miss,
+# bad-hex, sig-invalid, expired), and the acceptance verify keeps the four
+# offer/requester/idempotency binding fields as keyword args pinned by the shared
+# JCS oracle vectors. Condensing either would obscure the ADR-020 §4 contract.
+# PLR0911 (return count) and PLR0913 (arg count) are waived for exactly this module.
+"ramp_sdk/core.py" = ["PLR0911", "PLR0913"]
+# The WBA resolver's constructor mirrors the Go WBAKeyResolverOptions: each of its
+# keyword-only seams (scheme/ttl/poll_interval/now/after/on_poll_armed/
+# on_poll_cycle/http) is an INDEPENDENT injection point pinned by the parity tests
+# (the deterministic clock + poll seams drive the poller without sleeping), so it
+# cannot collapse into an options object without breaking the call sites the tests
+# fix. The poll jitter is not security-sensitive (mirrors Go math/rand). PLR0913
+# (arg count) and S311 (non-crypto random) are waived for exactly this module.
+"ramp_sdk/resolvers/wba.py" = ["PLR0913", "S311"]
+# The default transport is a bounded stdlib urllib GET. Per the Go SSRF contract
+# the SDK exposes the injection point and the SSRF guard stays with the caller;
+# S310 (urllib url-open) is the intended, documented shape here.
+"ramp_sdk/resolvers/_http.py" = ["S310"]
+# SigningTransport exposes the sign-window seam as an INJECTION point: signer_seed
+# and keyid are identity, now/ttl_sec are the default clock+TTL, signature_agent is
+# the covered directory, and window is the injectable Window (mirroring the Go
+# WithWindow transport option — a monotonic_window keeps back-to-back relay
+# signatures' expires cutoffs unique). Each is an independent seam the deterministic
+# regression pin fixes; collapsing them into an options object would break those
+# call sites. PLR0913 (arg count) is waived for exactly this constructor.
+"ramp_sdk/signing_transport.py" = ["PLR0913"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "../../gen/python"
+# gen/python/wire/models.py is generated (buf/datamodel-codegen) and uses
+# constr(...)/conint(...) call-form annotations mypy flags; it is exempt (generated
+# code), so imports of it are type-checked silently — ramp_sdk's own surface stays
+# under full --strict.
+follow_imports = "silent"
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ramp-protocol-sdk"
+version = "0.0.0"
+description = "RAMP L1 protocol-mechanics helpers (thumbprint, signed-URL, RFC 9421 sign/verify + PoP, offer-acceptance, key-resolution). GREENFIELD — under construction."
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "cryptography>=44",
+  "pydantic>=2.9",
+  # Vetted RFC 8785 JCS canonicalization for the offer/acceptance signed payload
+  # (never hand-roll canonicalization). The core composes it; it is the JSON
+  # canonicalizer half of the cross-language signing primitive.
+  "rfc8785>=0.1.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+# No httpx extra: ramp_sdk.signing_transport is a transport-neutral sign face —
+# it imports no httpx; the consumer owns its HTTP client. The ASGI server-binding
+# extra (FastAPI/Starlette) is deferred with its binding.
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ramp_sdk*"]

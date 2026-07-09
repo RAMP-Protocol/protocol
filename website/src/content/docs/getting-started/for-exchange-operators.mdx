@@ -154,7 +154,7 @@ When a request includes a `Delegation` message (nested inside `Requester`), your
 2. Verify the authority JWT is signed by the Ed25519 key published in the principal's WBA directory (the JWK Set at `{principal_domain}/.well-known/http-message-signatures-directory`, `role=ROLE_AGENT`)
 3. Verify each child delegation JWT's signature (each signed by the key its parent named in `cnf`)
 4. **Verify holder binding** — the key that signed the request (RFC 9421) MUST equal the key named in `cnf` (`cnf.jkt`); reject with `DENIAL_REASON_DELEGATION_INVALID` if they differ. This is mandatory: it is what makes a stolen token unusable, so a token possessed without its signing key grants nothing.
-5. Evaluate the grant's registered claims — scope restrictions, spend caps (`max_spend_cents`), access caps (`max_accesses`) — and confirm they cover the request (URI access is gated through scopes). For the optional `biscuit-v3` profile, this is evaluating the token's check blocks; for the default JWT, it is checking the registered claims along the `cnf` chain.
+5. Evaluate the grant's registered claims — scope restrictions, spend caps (`max_spend_cents`), access caps (`max_accesses`) — and confirm they cover the request (URI access is gated through scopes). For the JWT this means checking the registered claims along the `cnf` chain.
 6. Check `expires_at` against current time — reject expired tokens with `DENIAL_REASON_DELEGATION_INVALID`
 7. Optionally check `revocation_uri` for high-value transactions
 
@@ -201,7 +201,6 @@ And the entitlement/subscription family, for subscription-gated offers:
 | `DENIAL_REASON_ENTITLEMENT_WRONG_BUYER` | Token's `subscriber_org` does not match the asserted requester |
 | `DENIAL_REASON_SUBSCRIPTION_LAPSED` | The covering subscription contract has lapsed |
 | `DENIAL_REASON_ENTITLEMENT_NOT_GRANTED` | Subscription exists but no buyer-side grant ties this caller to it |
-| `DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION` | Token authority sound but the per-request attenuation is missing/stale |
 
 This is the identity/entitlement subset with operator guidance; the complete, authoritative `DenialReason` enum is rendered from the proto on the [proto reference](/reference/proto-ramp/). For the full identity model specification — Requester fields, the JWT chain, scope format, and key management — see [Authentication](/protocol/authentication/).
 

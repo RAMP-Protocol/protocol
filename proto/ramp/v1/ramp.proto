@@ -40,8 +40,7 @@ import "ramp/v1/vocab.proto";
 // Authorization flows: GNAP (RFC 9635) recommended, OAuth 2.0 + DPoP
 // as enterprise adoption path. Exchange advertises supported methods.
 //
-// Token formats: JWT (universal default) or Biscuit (multi-hop attenuation).
-// Delegation message is format-agnostic.
+// Token format: JWT. The Delegation message is format-agnostic.
 //
 // Key announcement endpoint (RFC 7517 JWKs, inline) — unified across roles:
 //   Commercial overlay (all roles): {domain}/.well-known/ramp.json
@@ -421,16 +420,46 @@ message Offer {
   // bytes (see `signature` below — the signature covers every field except
   // `signature` / `signature_algorithm`), so an intermediary cannot redirect
   // the execute call to a different Exchange without invalidating the offer.
+  // (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,
+  // retiring the X-RAMP-Exchange-Endpoint transport header.)
   string exchange = 8;
 
   // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
   // Offer — every field, including `pricing`, `terms` (the full licensing
-  // payload), `expires_at`, and `exchange`. Canonicalization is deterministic
-  // protobuf marshaling (lexicographic field order); only `signature` and
+  // payload), `expires_at`, and `exchange`. Only `signature` and
   // `signature_algorithm` are excluded from the signed bytes. `expires_at` is
   // signed so the offer's validity window is integrity-protected: a relaying
   // Broker cannot extend (or shorten) the TTL of a signed offer to replay it
   // outside the window the Exchange intended.
+  //
+  // CANONICAL SIGNING (RFC 8785 JCS over canonical proto-JSON). The signed bytes
+  // are:
+  //
+  //     signed_payload = JCS( protojson(msg with signature +
+  //                                      signature_algorithm cleared) )
+  //
+  // i.e. render the message to canonical proto-JSON with the PINNED option set
+  // below, then apply RFC 8785 (JSON Canonicalization Scheme). Deterministic
+  // protobuf BINARY marshaling is explicitly NOT canonical across languages and
+  // versions (protobuf's own caveat), so it cannot be a cross-language signing
+  // primitive; JCS over proto-JSON can be reproduced by ANY language (Go, TS,
+  // Python) without a protobuf binary codec, so a broker/exchange/client in any
+  // language signs and verifies byte-identically. This same definition applies to
+  // the agent offer-acceptance signature (AgentAcceptance.signature).
+  //
+  // PINNED proto-JSON option set (the arbiter is the Go-emitted golden vector —
+  // whatever these options render MUST be byte-identical across all languages):
+  //   - enum values as NAME strings (not numbers);
+  //   - int64 / uint64 / fixed64 as decimal STRINGS;
+  //   - bytes as standard (padded) base64;
+  //   - google.protobuf.Timestamp / Duration per the proto-JSON WKT rules
+  //     (RFC 3339 string for Timestamp);
+  //   - unpopulated fields are OMITTED (never emitted as defaults);
+  //   - field naming is snake_case (the proto field name, UseProtoNames=true),
+  //     the naming every SDK target shares — wire, corpus, and signed form are all
+  //     snake_case;
+  //   - google.protobuf.Struct (`ext`) → a plain JSON object; JCS then sorts its
+  //     keys recursively, so the Struct case needs no special handling.
   //
   // Because the signature covers `terms`, `pricing`, `expires_at`, and
   // `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,
@@ -1466,10 +1495,9 @@ enum RequesterType {
 
 // Delegation — Scoped, time-limited, spend-capped credential.
 //
-// The token is an opaque, signed credential. The DEFAULT and fully-specified
-// format is a JWT (token_format "jwt"); "biscuit-v3" remains a permitted
-// alternative for deployments that want deep multi-hop offline attenuation (see
-// the auth spec). Its claims are the AUTHORITATIVE source of the grant; the
+// The token is an opaque, signed credential. The format is a JWT (token_format
+// "jwt"); the field stays open for a future format. Its claims are the
+// AUTHORITATIVE source of the grant; the
 // plaintext fields below (scopes, expires_at, max_spend_cents, …) are a
 // convenience mirror the Exchange MAY use for fast pre-filtering before it
 // verifies the token.
@@ -1525,12 +1553,11 @@ message Delegation {
   // When absent, the quota is lifetime (bounded only by expires_at).
   optional google.protobuf.Duration quota_period = 10;
 
-  // Token bytes. A JWT (base64url-encoded JWS) by default, or a Biscuit (binary,
-  // base64-encoded) when token_format is "biscuit-v3".
+  // Token bytes. A JWT (base64url-encoded JWS).
   bytes token = 6;
 
-  // Token format: "jwt" (default) or "biscuit-v3" (optional, for deep
-  // multi-hop offline attenuation). Empty is treated as "jwt".
+  // Token format: "jwt" (default). Empty is treated as "jwt". The field stays
+  // open for a future format.
   string token_format = 7;
 
   // Optional: URI for real-time revocation checking.
@@ -1607,6 +1634,59 @@ enum ResourceMutability {
 // Transaction (Steps 4-5)
 // ============================================================================
 
+// AgentAcceptance — the agent's DETACHED acceptance signature over an accepted
+// Offer (RAMP-102 §1). Distinct from the transport (RFC 9421) request signature:
+// it is topology-independent and content-bound, so it stays valid no matter how
+// many brokers relay the request, and binds the agent to THIS specific offer +
+// requester + transaction. It travels in the execute body alongside the
+// reflected Offer; the Exchange verifies it and binds the delivery URL to the
+// agent's key (RFC 7638 thumbprint of the acceptance key).
+//
+// `signature` is a hex-encoded detached Ed25519 signature (NOT a JWS) over the
+// deterministic protobuf serialization of `AgentAcceptancePayload` — the same
+// hex/Ed25519 convention the SDK uses for Offer.signature. `signature_algorithm`
+// is "EdDSA".
+message AgentAcceptance {
+  // Hex-encoded detached Ed25519 signature over the deterministic-marshaled
+  // AgentAcceptancePayload bytes.
+  string signature = 1 [(buf.validate.field).string.min_len = 1];
+
+  // Signature algorithm; "EdDSA" for Ed25519.
+  string signature_algorithm = 2;
+}
+
+// AgentAcceptancePayload — the canonical signing structure for AgentAcceptance.
+// It is NEVER sent on the wire; it exists solely so the signer (SDK) and the
+// verifier (Exchange) derive BYTE-IDENTICAL signed bytes from the same proto
+// schema via `proto.Marshal(Deterministic: true)`. Underspecifying these bytes
+// is the top cross-implementation drift risk, so the field set is fixed here.
+//
+// Field provenance when building the payload for an execute request:
+//   - offer_sig         = the accepted Offer.signature (the Exchange's hex
+//                         signature; transitively binds pricing, terms,
+//                         expires_at, and — via the offer — the issuing Exchange)
+//   - requester_id      = TransactionRequest.requester.id
+//   - requester_domain  = TransactionRequest.requester.domain
+//   - idempotency_key   = TransactionRequest.idempotency_key
+// For batch mode, requester_* and idempotency_key come from the ENCLOSING
+// TransactionRequest (a TransactionItem carries neither); offer_sig is the
+// per-item Offer.signature.
+message AgentAcceptancePayload {
+  // The accepted Offer's signature (Offer.signature). Anchors the whole signed
+  // offer without re-serializing its terms/pricing/expiry.
+  string offer_sig = 1;
+
+  // Requester identity (Requester.id) the acceptance is bound to.
+  string requester_id = 2;
+
+  // Requester domain (Requester.domain) the acceptance is bound to.
+  string requester_domain = 3;
+
+  // The transaction's idempotency key — binds the acceptance to a single
+  // execute so it cannot be replayed under a different transaction.
+  string idempotency_key = 4;
+}
+
 // TransactionRequest — Commit to one or more offers.
 //
 // After selecting offers, the caller commits by sending this to the
@@ -1614,6 +1694,10 @@ enum ResourceMutability {
 // The Exchange validates eligibility, authorizes billing, creates
 // delivery, and logs each transaction.
 message TransactionRequest {
+  // A transaction carries one or more items (items-only, RAMP-102 / epic 6afpc):
+  // single-offer mode was removed — a single offer is the degenerate 1-element
+  // `items` list.
+
   // Protocol version
   string ver = 1;
 
@@ -1627,19 +1711,16 @@ message TransactionRequest {
     (buf.validate.field).string = {min_len: 1, max_len: 255}
   ];
 
-  // Single-offer mode. Use `items` for batch mode; `offer_id` +
-  // `offer_signature` for single.
-  optional string offer_id = 3;
-
   // Requester identity — forwarded for authorization and audit.
   Requester requester = 4;
 
-  // Single-offer signature.
-  optional string offer_signature = 6;
-
-  // Batch mode: commit to multiple offers in one request.
-  // When populated, `offer_id` and `offer_signature` SHOULD be empty.
-  repeated TransactionItem items = 7;
+  // The offers committed in this request (REQUIRED, min 1), each carrying its
+  // own reflected signed Offer + detached acceptance. A single offer is the
+  // degenerate 1-element list. The Exchange verifies each item's
+  // `offer.signature` (which covers pricing, terms, and expires_at) over the
+  // presented bytes against its own key — stateless, self-contained bearer
+  // tokens, with no reconstruct-from-catalog.
+  repeated TransactionItem items = 7 [(buf.validate.field).repeated.min_items = 1];
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -1653,70 +1734,40 @@ message TransactionRequest {
 
 // TransactionItem — A single offer commitment within a batch transaction.
 message TransactionItem {
-  // The offer_id from the selected Offer.
-  string offer_id = 1;
+  // The FULL signed Offer for this batch entry, reflected back exactly as
+  // received at discovery. The Exchange verifies `offer.signature` over these
+  // presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every
+  // batch item carries its offer.
+  Offer offer = 3 [(buf.validate.field).required = true];
 
-  // The selected Offer's `signature` (informally, the exchange signature).
-  string offer_signature = 2;
+  // The agent's detached acceptance signature over this item's `offer`
+  // (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per
+  // item at the service layer for relayed batches. Signed bytes =
+  // deterministic AgentAcceptancePayload, with requester_* and idempotency_key
+  // taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.
+  optional AgentAcceptance agent_acceptance = 4;
 }
 
 // TransactionResponse — Exchange confirms the transaction(s).
 //
-// For single-offer mode, the top-level fields are populated.
-// For batch mode, `items` contains per-offer results and `total_cost`
-// summarizes the aggregate cost.
+// Items-only (RAMP-102 / epic 6afpc): every per-result datum lives in `items`
+// (one TransactionResultItem per committed offer, in original order); the
+// top-level fields carry only the shared aggregate state. A single offer is the
+// degenerate 1-element `items`. The per-item denials remain in-body on
+// TransactionResultItem as partial results of a successful request.
 message TransactionResponse {
   // Protocol version
   string ver = 1;
 
-  // Single-offer result.
-  // For batch mode, these may be empty — check `items` instead.
-  optional string transaction_id = 3;
-  // Billing reference
-  optional string billing_id = 4;
-  // Resource title echoed from the Offer (for logging/display).
-  optional string resource_title = 5;
-  // Transaction cost
-  optional Cost cost = 6;
-
-  // How resource is delivered in this transaction.
-  DeliveryMethod delivery_method = 7;
-
-  // Reporting requirements attached to this delivery.
-  optional ReportingObligation reporting_obligation = 8;
-
-  // When retrieval_endpoint expires.
-  optional google.protobuf.Timestamp expires_at = 9;
-
-  // Identity that retrieval_endpoint is bound to: the RFC 7638 JWK Thumbprint of
-  // the agent's Ed25519 request-signing key (see "Retrieval-URL identity binding"
-  // above). Empty string when absent; non-empty iff a signed retrieval_endpoint
-  // is present. Delivery-endpoint enforcement of the binding is OPTIONAL.
+  // Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK
+  // Thumbprint of the agent's Ed25519 request-signing key (see "Retrieval-URL
+  // identity binding" above). Shared across the request; set once.
   string agent_identity_hash = 10;
 
-  // Signed retrieval URL the agent uses to fetch the purchased resource.
-  // Bound to agent_identity_hash; expires at expires_at. Absent on denial
-  // and on transactions whose delivery_method is not signed-URL-based.
-  optional string retrieval_endpoint = 18;
-
-  // A denied single transaction is not a success body: it travels as a non-OK
-  // transport error carrying ErrorDetail.transaction_denial (DenialReason +
-  // restriction_mismatches). Batch per-item denials remain in-body on
-  // TransactionResultItem, as partial results of a successful batch.
-
-  // If set, this transaction was fulfilled under a subscription/deal.
-  // No per-request charge — usage tracked against subscription quota.
-  optional string subscription_id = 12;
-
-  // Computed per-unit cost for financial attribution on subscription transactions.
-  // Even when cost.amount="0" (subscription), this field carries the value
-  // of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).
-  optional Cost subscription_unit_value = 16;
-
-  // Batch mode: per-offer results.
+  // Per-offer results (one entry per committed item, in original order).
   repeated TransactionResultItem items = 13;
 
-  // Batch mode: aggregate cost across all items.
+  // Aggregate cost across all items.
   optional Cost total_cost = 14;
 
   // Post-transaction quota state. Tells the agent how much quota remains
@@ -1807,18 +1858,19 @@ enum DenialReason {
   DENIAL_REASON_DELEGATION_INVALID = 10;  // Delegation missing, unverifiable, expired, holder binding failed, or scopes/caps do not cover the request
   DENIAL_REASON_SCOPE_INSUFFICIENT = 11;  // Requester scopes don't cover this resource
 
-  // Entitlement family — subscription/biscuit access failures on a
+  // Entitlement family — subscription/entitlement access failures on a
   // subscription-gated offer. Finer-grained than DELEGATION_INVALID so callers
   // and operator tooling can triage each mode. These single-source the
   // Exchange's KindEntitlement* refusal taxonomy, which today is distinguishable
   // only by a server-side tag (all collapse to UNAUTHENTICATED on the wire).
+  // Format-neutral: they classify a JWT/opaque entitlement-token failure, not a
+  // format-specific one.
   DENIAL_REASON_ENTITLEMENT_MISSING = 12;            // no entitlement token presented for a subscription-only offer
   DENIAL_REASON_ENTITLEMENT_MALFORMED = 13;          // entitlement token failed to decode (malformed)
   DENIAL_REASON_ENTITLEMENT_EXPIRED = 14;            // entitlement token's validity window has passed
   DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;        // token's subscriber_org does not match the asserted requester
   DENIAL_REASON_SUBSCRIPTION_LAPSED = 16;            // the covering subscription contract has lapsed
   DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 17;        // subscription exists but no buyer-side grant ties this caller to it
-  DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION = 18;  // token authority sound but the per-request attenuation is missing/stale
 }
 
 // IngestionSource — How the catalog entry was discovered.
@@ -3002,7 +3054,17 @@ enum CatalogRejectionReason {
   CATALOG_REJECTION_REASON_SIGNATURE_INVALID = 4;       // request signature missing or invalid
   CATALOG_REJECTION_REASON_MALFORMED_ENTRY = 5;         // a resource entry failed schema/validation
   CATALOG_REJECTION_REASON_UNKNOWN_VOCAB_TOKEN = 6;     // an unregistered vocab token in a restriction/term
-  CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 7;          // contributor push quota exceeded
+  CATALOG_REJECTION_REASON_QUOTA_EXCEEDED = 7;          // contributor push quota exceeded (per-caller)
+  CATALOG_REJECTION_REASON_TERMS_LIMIT_EXCEEDED = 8;    // a single entry carries more license terms than allowed (per-entry cap)
+  // The URI cannot be claimed by this caller's entries. Named from the caller's
+  // own perspective ON PURPOSE: it MUST NOT disclose that another resource/
+  // contributor already owns the URI. Within one publisher, mutually-untrusting
+  // contributors share a catalog, so an "owned by another" reason would be a
+  // confirmed-existence oracle a contributor could use to map a competitor's
+  // catalog. The conflict is resolvable only by the publisher (who is authorized
+  // to see full ownership); the human-readable message routes the caller there
+  // without confirming who, if anyone, holds the URI.
+  CATALOG_REJECTION_REASON_URI_UNAVAILABLE = 9;
 }
 
 // CatalogRejection — a CatalogService call could not be applied.

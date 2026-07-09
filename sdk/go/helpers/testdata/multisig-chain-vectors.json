@@ -1,0 +1,191 @@
+{
+  "vectors": [
+    {
+      "name": "positive_two_hop",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "Bearer chain-token",
+      "signature_agent": "https://agent.example",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig2=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig1\");keyid=\"broker.relay.a\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig1=:0qRXxXG54SUKDtWhYsn9x7ZTn2lsWqzj7xt3tOz6joTKv8Ufx8V2A36xeWQBf4aDcYRM1nDRBWCr2FFPAeZsCA==:, sig2=:BLrbl0o289i42DcSELpHoRgiFeeIYK97AbMgWBPAquTm1Ht4H0FqVnEXm8zl6pCrZ1E12ASqwr40uo45yxHXDQ==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        }
+      ],
+      "max_signatures": 0,
+      "expected_verified": true,
+      "expected_keyids": [
+        "agent-demo.v1",
+        "broker.relay.a"
+      ],
+      "expected_reason": ""
+    },
+    {
+      "name": "hop_budget_three_over_two",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "Bearer chain-token",
+      "signature_agent": "https://agent.example",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig2=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig1\");keyid=\"broker.relay.a\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig3=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig2\");keyid=\"broker.relay.b\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig1=:0qRXxXG54SUKDtWhYsn9x7ZTn2lsWqzj7xt3tOz6joTKv8Ufx8V2A36xeWQBf4aDcYRM1nDRBWCr2FFPAeZsCA==:, sig2=:BLrbl0o289i42DcSELpHoRgiFeeIYK97AbMgWBPAquTm1Ht4H0FqVnEXm8zl6pCrZ1E12ASqwr40uo45yxHXDQ==:, sig3=:NS11iZ/YPjcoq8ojrDrJ5vaCo8fX81Jo6GvrO7l8NOB3dK+beh6E3SqUWRmwBMRvj0Yjlg9zQq6HRogOwCazDA==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        },
+        {
+          "keyid": "broker.relay.b",
+          "pubkey_b64url": "TgbbPwgfiQd4wXPLrwdvbCv-on770J2Pk6IISpLAhaI",
+          "seed_hex": "92939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1"
+        }
+      ],
+      "max_signatures": 2,
+      "expected_verified": false,
+      "expected_keyids": null,
+      "expected_reason": "hop_budget"
+    },
+    {
+      "name": "broken_chain_reordered",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "Bearer chain-token",
+      "signature_agent": "https://agent.example",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig2=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig1\");keyid=\"broker.relay.a\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig2=:BLrbl0o289i42DcSELpHoRgiFeeIYK97AbMgWBPAquTm1Ht4H0FqVnEXm8zl6pCrZ1E12ASqwr40uo45yxHXDQ==:, sig1=:0qRXxXG54SUKDtWhYsn9x7ZTn2lsWqzj7xt3tOz6joTKv8Ufx8V2A36xeWQBf4aDcYRM1nDRBWCr2FFPAeZsCA==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        }
+      ],
+      "max_signatures": 0,
+      "expected_verified": false,
+      "expected_keyids": null,
+      "expected_reason": "broken_chain"
+    },
+    {
+      "name": "broken_chain_stripped_middle",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "Bearer chain-token",
+      "signature_agent": "https://agent.example",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig3=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig2\");keyid=\"broker.relay.b\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig1=:0qRXxXG54SUKDtWhYsn9x7ZTn2lsWqzj7xt3tOz6joTKv8Ufx8V2A36xeWQBf4aDcYRM1nDRBWCr2FFPAeZsCA==:, sig3=:NS11iZ/YPjcoq8ojrDrJ5vaCo8fX81Jo6GvrO7l8NOB3dK+beh6E3SqUWRmwBMRvj0Yjlg9zQq6HRogOwCazDA==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        },
+        {
+          "keyid": "broker.relay.b",
+          "pubkey_b64url": "TgbbPwgfiQd4wXPLrwdvbCv-on770J2Pk6IISpLAhaI",
+          "seed_hex": "92939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1"
+        }
+      ],
+      "max_signatures": 0,
+      "expected_verified": false,
+      "expected_keyids": null,
+      "expected_reason": "broken_chain"
+    },
+    {
+      "name": "broken_chain_missing_link",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "Bearer chain-token",
+      "signature_agent": "https://agent.example",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig2=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"broker.relay.a\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig1=:0qRXxXG54SUKDtWhYsn9x7ZTn2lsWqzj7xt3tOz6joTKv8Ufx8V2A36xeWQBf4aDcYRM1nDRBWCr2FFPAeZsCA==:, sig2=:FgX+KenfK55LXYfBg/M5Nh1Od76SaEE+VlQVSghzjCgBfDuxco5601xJ/dNvq1tG9iX9cb/xgnUG8rnyRKv3CA==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        }
+      ],
+      "max_signatures": 0,
+      "expected_verified": false,
+      "expected_keyids": null,
+      "expected_reason": "broken_chain"
+    },
+    {
+      "name": "tampered_predecessor",
+      "method": "POST",
+      "url": "https://exchange.example.com/ramp.v1.ExchangeService/ExecuteTransaction",
+      "body_hex": "7b226964656d706f74656e63795f6b6579223a226964656d2d31227d",
+      "authorization": "Bearer chain-token",
+      "signature_agent": "https://agent.example",
+      "created": 1700000000,
+      "expires": 1700000600,
+      "content_digest": "sha-256=:aqbQCL+PR0Yt3lChg8nyhajBCVVVwuDJL2CxMyU+zRg=:",
+      "signature_input": "sig1=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\");keyid=\"agent-demo.v1\";alg=\"ed25519\";created=1700000000;expires=1700000600, sig2=(\"@method\" \"@target-uri\" \"content-digest\" \"authorization\" \"signature-agent\" \"signature\";key=\"sig1\");keyid=\"broker.relay.a\";alg=\"ed25519\";created=1700000000;expires=1700000600",
+      "signature": "sig1=:AqRXxXG54SUKDtWhYsn9x7ZTn2lsWqzj7xt3tOz6joTKv8Ufx8V2A36xeWQBf4aDcYRM1nDRBWCr2FFPAeZsCA==:, sig2=:BLrbl0o289i42DcSELpHoRgiFeeIYK97AbMgWBPAquTm1Ht4H0FqVnEXm8zl6pCrZ1E12ASqwr40uo45yxHXDQ==:",
+      "hops": [
+        {
+          "keyid": "agent-demo.v1",
+          "pubkey_b64url": "0uuZO2MUNSjnDc3H65yiEBDddpvpUlDCxbq_rRXUWOI",
+          "seed_hex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+        },
+        {
+          "keyid": "broker.relay.a",
+          "pubkey_b64url": "ujxzXNvkI15srfgcQSuIOjRy0QRfrqGJ9YT4vspG40M",
+          "seed_hex": "9192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0"
+        }
+      ],
+      "max_signatures": 0,
+      "expected_verified": false,
+      "expected_keyids": null,
+      "expected_reason": "signature"
+    }
+  ]
+}

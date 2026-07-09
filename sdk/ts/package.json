@@ -1,0 +1,45 @@
+{
+  "name": "@ramp-protocol/sdk-l1",
+  "version": "0.0.0",
+  "private": true,
+  "description": "RAMP L1 helpers (stateless, IO-free protocol mechanics): RFC 7638 thumbprint, Ed25519 signed-URL verify, RFC 9421 GET PoP verify, and cross-field Zod refinements over gen/ts schemas. Byte-parity-guarded against the sdk/go oracle via shared vectors + the conformance corpus.",
+  "type": "module",
+  "exports": {
+    "./base64url": "./src/base64url.ts",
+    "./thumbprint": "./src/thumbprint.ts",
+    "./verify": "./src/verify.ts",
+    "./signurl": "./src/signurl.ts",
+    "./offer-sign": "./src/offer-sign.ts",
+    "./pop": "./src/pop.ts",
+    "./crossfield": "./src/crossfield.ts",
+    "./core": "./core/verifier.ts",
+    "./core/sign": "./core/sign.ts",
+    "./core/sign-request": "./core/sign-request.ts",
+    "./core/verify-request": "./core/verify-request.ts",
+    "./hono": "./hono/middleware.ts",
+    "./acceptance": "./src/acceptance.ts",
+    "./resolvers": "./resolvers/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --strict --noEmit",
+    "test": "tsc -p tsconfig.json --strict --noEmit && vitest run"
+  },
+  "dependencies": {
+    "canonicalize": "^3.0.0"
+  },
+  "peerDependencies": {
+    "hono": "^4.7.0",
+    "zod": "^3.23.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
+  }
+}

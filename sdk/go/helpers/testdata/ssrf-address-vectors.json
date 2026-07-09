@@ -1,0 +1,134 @@
+{
+  "vectors": [
+    {
+      "name": "public_v4_dns",
+      "addr": "8.8.8.8",
+      "blocked": false
+    },
+    {
+      "name": "public_v4_example",
+      "addr": "93.184.216.34",
+      "blocked": false
+    },
+    {
+      "name": "public_v6_cloudflare",
+      "addr": "2606:4700:4700::1111",
+      "blocked": false
+    },
+    {
+      "name": "v4mapped_public",
+      "addr": "::ffff:8.8.8.8",
+      "blocked": false
+    },
+    {
+      "name": "rfc1918_10",
+      "addr": "10.0.0.1",
+      "blocked": true
+    },
+    {
+      "name": "rfc1918_172",
+      "addr": "172.16.5.5",
+      "blocked": true
+    },
+    {
+      "name": "rfc1918_192",
+      "addr": "192.168.1.1",
+      "blocked": true
+    },
+    {
+      "name": "cgnat",
+      "addr": "100.64.0.1",
+      "blocked": true
+    },
+    {
+      "name": "zero_net",
+      "addr": "0.1.2.3",
+      "blocked": true
+    },
+    {
+      "name": "loopback_v4",
+      "addr": "127.0.0.1",
+      "blocked": true
+    },
+    {
+      "name": "link_local_v4_imds",
+      "addr": "169.254.169.254",
+      "blocked": true
+    },
+    {
+      "name": "test_net_1",
+      "addr": "192.0.2.7",
+      "blocked": true
+    },
+    {
+      "name": "benchmarking",
+      "addr": "198.18.0.1",
+      "blocked": true
+    },
+    {
+      "name": "multicast_v4",
+      "addr": "224.0.0.1",
+      "blocked": true
+    },
+    {
+      "name": "reserved_240",
+      "addr": "240.0.0.1",
+      "blocked": true
+    },
+    {
+      "name": "broadcast",
+      "addr": "255.255.255.255",
+      "blocked": true
+    },
+    {
+      "name": "loopback_v6",
+      "addr": "::1",
+      "blocked": true
+    },
+    {
+      "name": "ula",
+      "addr": "fc00::1",
+      "blocked": true
+    },
+    {
+      "name": "link_local_v6",
+      "addr": "fe80::1",
+      "blocked": true
+    },
+    {
+      "name": "link_local_v6_zoned",
+      "addr": "fe80::1%eth0",
+      "blocked": true
+    },
+    {
+      "name": "ula_imds_zoned",
+      "addr": "fd00:ec2::254%1",
+      "blocked": true
+    },
+    {
+      "name": "documentation_v6",
+      "addr": "2001:db8::1",
+      "blocked": true
+    },
+    {
+      "name": "v4mapped_private",
+      "addr": "::ffff:10.0.0.1",
+      "blocked": true
+    },
+    {
+      "name": "nat64_imds",
+      "addr": "64:ff9b::a9fe:a9fe",
+      "blocked": true
+    },
+    {
+      "name": "sixtofour_private",
+      "addr": "2002:0a00:0001::1",
+      "blocked": true
+    },
+    {
+      "name": "v4compat_private",
+      "addr": "::a00:1",
+      "blocked": true
+    }
+  ]
+}

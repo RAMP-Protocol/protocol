@@ -121,7 +121,7 @@ The token is carried in the `Delegation` message, nested inside `Requester`:
 | `expires_at` | `Timestamp` | When this delegation expires. Exchange MUST reject expired tokens |
 | `max_spend_cents` | `int64` (optional) | Maximum spend in currency minor units (e.g. cents for USD) |
 | `token` | `bytes` | Token bytes — a JWT (base64url JWS) by default |
-| `token_format` | `string` | Token format: `"jwt"` (default) or `"biscuit-v3"` (optional) |
+| `token_format` | `string` | Token format: `"jwt"` (the sole/default format) |
 | `revocation_uri` | `string` (optional) | URI for real-time revocation checking (high-value transactions) |
 | `max_accesses` | `int32` (optional) | Maximum number of accesses allowed under this delegation. Exchange tracks count and denies with `DENIAL_REASON_QUOTA_EXCEEDED` when count >= limit. |
 | `quota_period` | `Duration` (optional) | How often access/spend counters reset. E.g., `"720h"` for monthly subscriptions. When absent, quota is lifetime (bounded only by `expires_at`). |
@@ -152,7 +152,7 @@ Rules:
 - **Constraints fail closed.** A claim a verifier cannot evaluate is **binding by default** — it MUST reject rather than ignore (a dropped constraint would fail *open*, granting more than intended). This mirrors [`Restriction.advisory`](/protocol/licensing-terms/): the issuer may mark a custom claim *advisory* to downgrade it to ignorable. (The issuer lists the mandatory-to-understand claims; an unrecognized non-advisory claim is rejected.)
 - **`ramp_`-prefixed claim names are reserved** for this registry. Vendors MUST use their own `vendor:` namespace and MUST NOT define `ramp_*` names, so registered claims can never be shadowed.
 
-> **Biscuit alternative.** `token_format: "biscuit-v3"` remains a permitted alternative for deployments that want deep multi-hop, in-place offline attenuation across mutually-distrusting intermediaries. The same registered claim names map onto Biscuit facts, and the same holder binding applies (the request-signing key must match the holder the token is sealed to). JWT is the default and what conformant implementations must support; Biscuit is an optional profile.
+> **Token format.** The delegation token is a **holder-bound JWT** — `token_format: "jwt"` is the sole format conformant implementations support. Multi-hop attenuation is expressed as a chain of `cnf`-linked child JWTs (each signed by the key its parent named, each narrowing scope), and the holder binding always applies (the request-signing key must match the holder the token is sealed to).
 
 ### Delegation chain example
 

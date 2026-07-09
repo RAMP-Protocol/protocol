@@ -259,6 +259,13 @@ minimal and its signed offers stay price-comparable.
 
 ## JWT (holder-of-key) is the default delegation token; Biscuit is optional
 
+> **Biscuit removed pre-v1; superseded by JWT.** This section records the
+> transition from Biscuit-default to JWT-default. The optional `biscuit-v3`
+> profile it leaves in place was itself dropped before v1 shipped: JWT is now the
+> sole delegation `token_format`, and the entitlement *mechanism* (a
+> holder-bound capability token on a covered header) is unchanged — only the
+> Biscuit format is gone. Read the "still optional" language below as historical.
+
 The delegation token started as a Biscuit (`token_format` defaulted to
 `"biscuit-v3"`), chosen for offline attenuation. Modelling the holder-binding
 guarantee end to end surfaced that the property RAMP actually depends on — "a

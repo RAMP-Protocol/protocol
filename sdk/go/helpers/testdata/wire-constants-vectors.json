@@ -1,0 +1,28 @@
+{
+  "vectors": [
+    {
+      "name": "ContentTypeProto",
+      "value": "application/proto"
+    },
+    {
+      "name": "ContentTypeJSON",
+      "value": "application/json"
+    },
+    {
+      "name": "ConnectProtocolVersionHeader",
+      "value": "Connect-Protocol-Version"
+    },
+    {
+      "name": "ConnectProtocolVersion",
+      "value": "1"
+    },
+    {
+      "name": "RequestIDHeader",
+      "value": "X-Request-ID"
+    },
+    {
+      "name": "SignatureAgentHeader",
+      "value": "Signature-Agent"
+    }
+  ]
+}

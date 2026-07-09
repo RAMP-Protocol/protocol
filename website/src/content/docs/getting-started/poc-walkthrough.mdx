@@ -139,7 +139,7 @@ Key fields in each offer:
 
 ### Step 4: Execute Transaction ([ExecuteTransaction RPC](/components/exchange/request-flows))
 
-Commit to an offer. Pass the `offer_id` and `offer_signature` from Step 3. The Exchange [verifies the signature](/protocol/authentication), [authorizes billing](/components/exchange/billing-adapter), writes the [transaction log](/components/exchange/storage-model) (WAL — write-before-sign invariant), and returns a **[signed URL](/components/edge-function/signed-url-verification)**.
+Commit to an offer. Pass back the full signed `offer` from Step 3, reflected exactly as received. The Exchange [verifies the offer signature](/protocol/authentication) over the presented bytes (stateless — no reconstruct-from-catalog), [authorizes billing](/components/exchange/billing-adapter), writes the [transaction log](/components/exchange/storage-model) (WAL — write-before-sign invariant), and returns a **[signed URL](/components/edge-function/signed-url-verification)**.
 
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
@@ -147,12 +147,28 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
   -d '{
     "ver": "1.0",
     "idempotency_key": "demo-txn-001",
-    "offer_id": "<offer_id from Step 3>",
-    "offer_signature": "<signature from Step 3>",
-    "aisystem": {
-      "name": "DemoAgent",
-      "aisysuse": { "lid": "LIC-DEMO-001" }
-    }
+    "items": [
+      {
+        "offer": {
+          "offer_id": "offer-cdn.ramp-protocol.org-1773682699693224366",
+          "pricing": {
+            "model": "PRICING_MODEL_PER_UNIT",
+            "rate": "0.05",
+            "currency": "USD",
+            "estimated_quantity": 2000,
+            "unit": "accesses"
+          },
+          "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+          "expires_at": "2026-03-16T17:43:20Z",
+          "signature": "ae77b181...32607e08",
+          "signature_algorithm": "EdDSA"
+        },
+        "agent_acceptance": {
+          "signature": "base64-ed25519-acceptance-sig...",
+          "signature_algorithm": "EdDSA"
+        }
+      }
+    ]
   }' | jq
 ```
 
@@ -160,18 +176,22 @@ Response:
 ```json
 {
   "ver": "1.0",
-  "transaction_id": "txn-1773682700352684307",
-  "billing_id": "bill-000002",
-  "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307",
-  "cost": { "amount": "0.05", "currency": "USD" },
-  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-  "reporting_obligation": {
-    "required": true,
-    "window": "86400s",
-    "required_fields": ["consumed_quantity"]
-  },
-  "expires_at": "2026-03-16T17:43:20Z",
-  "agent_identity_hash": "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
+  "agent_identity_hash": "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs",
+  "items": [
+    {
+      "transaction_id": "txn-1773682700352684307",
+      "billing_id": "bill-000002",
+      "retrieval_endpoint": "https://cdn.ramp-protocol.org/premium/article.html?agent_id=NzbLsXh8...C9Xs&expires=1773683000&sig=3ab495e3...48823a14&txn_id=txn-1773682700352684307",
+      "cost": { "amount": "0.05", "currency": "USD" },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["consumed_quantity"]
+      },
+      "expires_at": "2026-03-16T17:43:20Z"
+    }
+  ]
 }
 ```
 
@@ -225,7 +245,7 @@ A denied single transaction is **not** a 200 success body — it travels as a no
 ```bash
 curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/ExecuteTransaction \
   -H "Content-Type: application/json" \
-  -d '{"ver":"0.2","idempotency_key":"deny-001","offer_id":"fake","aisystem":{"name":"DemoAgent","aisysuse":{"lid":"LIC-DEMO-001"}}}' | jq
+  -d '{"ver":"1.0","idempotency_key":"deny-001","items":[{"offer":{"offer_id":"fake"}}]}' | jq
 ```
 The Exchange returns a non-OK status (Connect maps this to HTTP 400 / `failed_precondition`) with an `ErrorDetail`:
 ```json

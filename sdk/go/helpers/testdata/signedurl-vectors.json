@@ -1,0 +1,98 @@
+[
+  {
+    "name": "valid_bearer_sorted_query",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/a?a=2\u0026doc=1\u0026exp=1700000300\u0026kid=ex.v1\u0026sig=OqCa87dZAOQir8gFsQBS6upPFe1A8N6q-4FZaa5g6pRzZgG30xz3D7Qx_ciejcxDGSvRLobIN1YEwavEUjyaBg\u0026z=9",
+    "now_unix": 1700000100,
+    "expected_valid": true,
+    "signer_seed_hex": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+    "source_url": "https://cdn.example/a?doc=1\u0026z=9\u0026a=2",
+    "agent_id": "",
+    "exp_unix": 1700000300
+  },
+  {
+    "name": "valid_agent_bound",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/b?agent_id=rPyqpnT-yK24VXThsYfUf70tnzuOzeZ-XO81BdiMqM8\u0026doc=7\u0026exp=1700000300\u0026kid=ex.v1\u0026sig=ZZZD3wUxAd0DLROnXsMTnwVa7bITF9d5jugIaIGstbh-kierar7gq5Ey6DrziwTxMZ0yksCUFWtW6N4D9D78Dg",
+    "now_unix": 1700000100,
+    "expected_valid": true,
+    "signer_seed_hex": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+    "source_url": "https://cdn.example/b?doc=7",
+    "agent_id": "rPyqpnT-yK24VXThsYfUf70tnzuOzeZ-XO81BdiMqM8",
+    "exp_unix": 1700000300
+  },
+  {
+    "name": "expired",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/c?exp=1700000300\u0026kid=ex.v1\u0026sig=PALUnH-mgaPjtOt9gKHJlUpFwwFowiX0EvRueBk4oWW91bLsk5CEtyFrnPMmVcwWCs690EWyIJ-vvNA93cRFAQ",
+    "now_unix": 1700000400,
+    "expected_valid": false,
+    "signer_seed_hex": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+    "source_url": "https://cdn.example/c",
+    "agent_id": "",
+    "exp_unix": 1700000300
+  },
+  {
+    "name": "tampered_path",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/x?a=2\u0026doc=1\u0026exp=1700000300\u0026kid=ex.v1\u0026sig=OqCa87dZAOQir8gFsQBS6upPFe1A8N6q-4FZaa5g6pRzZgG30xz3D7Qx_ciejcxDGSvRLobIN1YEwavEUjyaBg\u0026z=9",
+    "now_unix": 1700000100,
+    "expected_valid": false,
+    "signer_seed_hex": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+    "source_url": "https://cdn.example/a?doc=1\u0026z=9\u0026a=2",
+    "agent_id": "",
+    "exp_unix": 1700000300
+  },
+  {
+    "name": "tricky_mixed_case_host",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://CDN.Example/Doc?exp=1700000300\u0026kid=ex.v1\u0026sig=LRt1q1XCeXYgeQbxssm6doxYwBBym-pklqmW6KBnOCLXp0fswhe3ssKu_dU3hQO4sitsHpkJ_Emj_cHSqokKAA\u0026x=1",
+    "now_unix": 1700000100,
+    "expected_valid": true,
+    "signer_seed_hex": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+    "source_url": "https://CDN.Example/Doc?x=1",
+    "agent_id": "",
+    "exp_unix": 1700000300
+  },
+  {
+    "name": "tricky_explicit_default_port",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example:443/doc?exp=1700000300\u0026kid=ex.v1\u0026sig=X_Rtm_38WAdMXvb40p-0vRrTKKZrdPB1YhMREgQNouh-hGXaaWEmNVRoe7MNNhhVD2-dKpIimfpgOA2WGtNnBA\u0026x=1",
+    "now_unix": 1700000100,
+    "expected_valid": true,
+    "signer_seed_hex": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+    "source_url": "https://cdn.example:443/doc?x=1",
+    "agent_id": "",
+    "exp_unix": 1700000300
+  },
+  {
+    "name": "tricky_space_in_path",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/a path/doc?exp=1700000300\u0026kid=ex.v1\u0026sig=Qq8G7kdKPwdF9Sdj43foDMnMTGz-fjrCszcA1PttaxTM3n2b_8ceEwHiRrV3HUNY01zyVzdAtQZynQSFPtQFAQ\u0026x=1",
+    "now_unix": 1700000100,
+    "expected_valid": true,
+    "signer_seed_hex": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+    "source_url": "https://cdn.example/a path/doc?x=1",
+    "agent_id": "",
+    "exp_unix": 1700000300
+  },
+  {
+    "name": "tricky_percent_in_path",
+    "pub_b64url": "7VSln7GsOlEjk1E2KUG4aOhaYOPXskhdgogh3Hppwnk",
+    "kid": "ex.v1",
+    "signed_url": "https://cdn.example/Doc%2Fpart?a=2\u0026exp=1700000300\u0026kid=ex.v1\u0026sig=wqGlUlhkZEQR-E00hUn4SX_J6iOuLgnCBTya7PvSMn1soob9-MmL7XguiJ4mYEmzT9JTiixCc7SV0Gl94olGDA\u0026z=9",
+    "now_unix": 1700000100,
+    "expected_valid": true,
+    "signer_seed_hex": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+    "source_url": "https://cdn.example/Doc%2Fpart?z=9\u0026a=2",
+    "agent_id": "",
+    "exp_unix": 1700000300
+  }
+]

@@ -399,8 +399,37 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
 {
   "ver": "1.0",
   "idempotency_key": "tx-dnb-001",
-  "offer_id": "offer-dnb-acme-standard",
-  "offer_signature": "base64-ed25519-dnb-offer-std-sig...",
+  "items": [
+    {
+      "offer": {
+        "offer_id": "offer-dnb-acme-standard",
+        "title": "Acme Corporation — Standard Credit Report",
+        "pricing": {
+          "model": "PRICING_MODEL_PER_UNIT",
+          "rate": "61.99",
+          "currency": "USD",
+          "unit_cost": "61.99",
+          "estimated_quantity": 1,
+          "unit": "records"
+        },
+        "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "expires_at": "2026-03-19T12:05:00Z",
+        "data_as_of": "2026-03-18T23:59:59Z",
+        "identity": {
+          "canonical_url": "https://api.dnb.com/report/123456789/standard",
+          "content_hash": "sha256:2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890ab",
+          "hash_method": "sha256",
+          "resource_mutability": "RESOURCE_MUTABILITY_DYNAMIC"
+        },
+        "signature": "base64-ed25519-dnb-offer-std-sig...",
+        "signature_algorithm": "EdDSA"
+      },
+      "agent_acceptance": {
+        "signature": "base64-ed25519-acceptance-sig...",
+        "signature_algorithm": "EdDSA"
+      }
+    }
+  ],
   "requester": {
     "id": "due-diligence-bot",
     "domain": "legalcorp.com",
@@ -411,7 +440,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
 ```
 
 The Exchange performs:
-1. **Signature verification** — verifies the `offer_signature` is its own Ed25519 signature (stateless, no stored offers).
+1. **Signature verification** — verifies the `offer.signature` is its own Ed25519 signature over the reflected Offer (stateless, no stored offers).
 2. **Agent authentication** — verifies the request's RFC 9421 HTTP Message Signature (alg=ed25519, carried in HTTP headers) against the agent's published public key at `legalcorp.com/.well-known/ramp.json` (`role=ROLE_AGENT`).
 3. **Balance check** — confirms `due-diligence-bot@legalcorp.com` has sufficient balance ($61.99).
 4. **WAL write** — records the transaction in the write-ahead log before generating the signed URL (write-before-sign invariant).
@@ -422,21 +451,25 @@ Response:
 ```json
 {
   "ver": "1.0",
-  "transaction_id": "txn-dnb-acme-001",
-  "billing_id": "bill-dnb-acme-001",
-  "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1...",
-  "cost": {
-    "amount": "61.99",
-    "currency": "USD"
-  },
-  "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
-  "reporting_obligation": {
-    "required": true,
-    "window": "86400s",
-    "required_fields": ["consumed_quantity"]
-  },
-  "expires_at": "2026-03-19T12:05:00Z",
-  "agent_identity_hash": "9c5f0d3e..."
+  "agent_identity_hash": "9c5f0d3e...",
+  "items": [
+    {
+      "transaction_id": "txn-dnb-acme-001",
+      "billing_id": "bill-dnb-acme-001",
+      "retrieval_endpoint": "https://api.dnb.com/ramp/deliver/123456789/standard?expires=1742475900&agent_id=9c5f0d3e...&txn_id=txn-dnb-acme-001&sig=hmac-sha256-b8c9d0e1...",
+      "cost": {
+        "amount": "61.99",
+        "currency": "USD"
+      },
+      "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+      "reporting_obligation": {
+        "required": true,
+        "window": "86400s",
+        "required_fields": ["consumed_quantity"]
+      },
+      "expires_at": "2026-03-19T12:05:00Z"
+    }
+  ]
 }
 ```
 

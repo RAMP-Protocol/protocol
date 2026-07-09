@@ -1,0 +1,60 @@
+// Typed error surface for the fetching resolver faces (R4). The Go oracle uses
+// errors.Is-DISTINCT sentinels (ErrKeyRevoked / ErrKeyExpired /
+// ErrDirectoryUnavailable / ErrNoEndpoint) so a composite resolver can HALT on a
+// fail-closed verdict rather than fall through as if the key were merely unknown.
+// The TS port preserves that distinctness as distinct thrown classes; a plain
+// unknown key stays `undefined` (never a thrown error), matching the existing
+// RequestKeyResolver fail-closed-is-undefined convention.
+
+/** Base of every fail-closed resolver verdict. Unknown-key is NOT modelled here
+ * — it is the `undefined` return, deliberately outside this hierarchy. */
+export class ResolverError extends Error {}
+
+/** The WBA identity directory (or a well-known JWKS/manifest) could not be
+ * fetched, returned non-200, or failed to decode. DISTINCT from unknown-key so a
+ * fail-closed composite halts on an outage instead of falling through. */
+export class DirectoryUnavailable extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "DirectoryUnavailable";
+  }
+}
+
+/** The thumbprint is present in the directory host's current revocation snapshot. */
+export class KeyRevoked extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "KeyRevoked";
+  }
+}
+
+/** The key exists but `now` falls outside its [not_before, not_after) window. */
+export class KeyExpired extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "KeyExpired";
+  }
+}
+
+/** The key resolved, but its directory declares a revocation_url whose snapshot
+ * has never been fetched (unreachable or not host-anchored) — so revocation was
+ * NEVER EVALUATED, DISTINCT from KeyRevoked ("evaluated and revoked"). Only
+ * thrown when the resolver's `requireRevocation` option is set; the default
+ * keeps the prior best-effort behavior (a declared-but-unreachable revocation
+ * channel does not block resolution). It lets a caller that treats revocation as
+ * mandatory fail closed instead of trusting an unevaluated key. */
+export class RevocationUnevaluated extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "RevocationUnevaluated";
+  }
+}
+
+/** A well-known manifest was fetched and decoded, but advertises no endpoint.
+ * DISTINCT from DirectoryUnavailable: the manifest is reachable, simply inert. */
+export class NoEndpoint extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "NoEndpoint";
+  }
+}

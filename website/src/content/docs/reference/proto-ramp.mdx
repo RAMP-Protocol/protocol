@@ -74,7 +74,7 @@ Identity and entitlements only — who is asking and what they're entitled to. W
 
 ### Delegation
 
-Scoped, time-limited, spend-capped credential. The credential itself is opaque bytes carried in `token`, and `token_format` selects how to interpret them: `"jwt"` (default) or `"biscuit-v3"` (optional). The format is never encoded as a prefix inside the token bytes. The default is a **holder-bound JWT**: a chain of `cnf`-linked JWTs (RFC 7800 `cnf.jkt` = RFC 7638 thumbprint) where each child is signed by the key its parent named and narrows scope, and the holder proves possession by signing the request (RFC 9421). `"biscuit-v3"` remains a permitted alternative for deep multi-hop offline attenuation.
+Scoped, time-limited, spend-capped credential. The credential itself is opaque bytes carried in `token`, and `token_format` selects how to interpret them: `"jwt"` (the default and sole format; the field stays open for a future one). The format is never encoded as a prefix inside the token bytes. The token is a **holder-bound JWT**: a chain of `cnf`-linked JWTs (RFC 7800 `cnf.jkt` = RFC 7638 thumbprint) where each child is signed by the key its parent named and narrows scope, and the holder proves possession by signing the request (RFC 9421).
 
 ::proto-message{name=Delegation}
 
@@ -155,6 +155,18 @@ A denied single transaction is **not** returned in this body. It travels as a no
 A single offer commitment within a batch transaction.
 
 ::proto-message{name=TransactionItem}
+
+### AgentAcceptance
+
+The agent's detached acceptance signature over an accepted Offer (RAMP-102 §1). It travels in the execute body alongside the reflected Offer and is independent of the transport (RFC 9421) request signature, so it survives any number of broker relays. The Exchange verifies it and binds the delivery URL to the agent's key (RFC 7638 thumbprint). `signature` is a hex-encoded detached Ed25519 signature over the deterministically marshaled [`AgentAcceptancePayload`](#agentacceptancepayload); `signature_algorithm` is `EdDSA`.
+
+::proto-message{name=AgentAcceptance}
+
+### AgentAcceptancePayload
+
+The canonical signing structure for [`AgentAcceptance`](#agentacceptance). It is **never sent on the wire** — both the signer and the verifier marshal it deterministically (`proto.Marshal` with deterministic field order) to derive byte-identical signed bytes, so the contract cannot drift between implementations. `offer_sig` is the accepted `Offer.signature` (which transitively binds pricing, terms, and expiry); `requester_id`, `requester_domain`, and `idempotency_key` come from the enclosing `TransactionRequest`.
+
+::proto-message{name=AgentAcceptancePayload}
 
 ### TransactionResultItem
 

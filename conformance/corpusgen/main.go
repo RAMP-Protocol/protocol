@@ -62,6 +62,9 @@ func seeds() map[string]proto.Message {
 	pricing := func() *rampv1.Pricing {
 		return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 	}
+	offer := func() *rampv1.Offer {
+		return &rampv1.Offer{OfferId: "offer-seed", Pricing: pricing()}
+	}
 	return map[string]proto.Message{
 		"Pricing":     pricing(),
 		"License":     &rampv1.License{Id: proto.String("CC-BY-4.0")},
@@ -74,6 +77,12 @@ func seeds() map[string]proto.Message {
 		"LicenseTerm":           &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: pricing()},
 		"AcceptableRestriction": &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train"}},
 		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
+		// Reflected-Offer execute contract (RAMP-103 / items-only 6afpc): Offer is
+		// the required sub-message of TransactionItem (auto-fill needs its seed),
+		// and TransactionRequest needs a valid 1-item items[] baseline because its
+		// items field is now repeated.min_items=1 (single-offer mode removed).
+		"Offer":              offer(),
+		"TransactionRequest": &rampv1.TransactionRequest{IdempotencyKey: "idem-tx", Items: []*rampv1.TransactionItem{{Offer: offer()}}},
 	}
 }
 
@@ -158,7 +167,7 @@ func main() {
 // verdict. This is kept SEPARATE from cases.json on purpose — cases.json is the
 // FIELD-level corpus the generated Pydantic/Zod clients are tested against today,
 // and those clients do not yet enforce cross-field CEL (the symmetric gap noted
-// in ramp-sdk-api.md). The SDK L1 validator (ramphelpers.Validate) is tested
+// in ramp-sdk-api.md). The SDK L1 validator (helpers.Validate) is tested
 // against THIS file, and a future TS/Python L1 that authors the cross-field rules
 // by hand consumes it as their oracle — without breaking the field-level parity.
 func writeCrossField(v protovalidate.Validator) {
@@ -169,25 +178,38 @@ func writeCrossField(v protovalidate.Validator) {
 	}
 	freePricing := &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 	mutants := []mutant{
-		{"Pricing/cel/per_unit_requires_unit",
+		{
+			"Pricing/cel/per_unit_requires_unit",
 			&rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_PER_UNIT, Rate: "0.05", Currency: "USD"},
-			"pricing.per_unit.requires_unit"},
-		{"Pricing/cel/free_zero_rate",
+			"pricing.per_unit.requires_unit",
+		},
+		{
+			"Pricing/cel/free_zero_rate",
 			&rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "5"},
-			"pricing.free.zero_rate"},
-		{"License/cel/digest_required_with_uri",
+			"pricing.free.zero_rate",
+		},
+		{
+			"License/cel/digest_required_with_uri",
 			&rampv1.License{Id: proto.String("CC-BY-4.0"), Uri: proto.String("https://example.com/license")},
-			"license.digest_required_with_uri"},
-		{"Restriction/cel/permitted_prohibited_disjoint",
+			"license.digest_required_with_uri",
+		},
+		{
+			"Restriction/cel/permitted_prohibited_disjoint",
 			&rampv1.Restriction{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-train"}, Prohibited: []string{"ai-train"}},
-			"restriction.permitted_prohibited_disjoint"},
-		{"Obligation/cel/share_alike_requires_scope_license",
+			"restriction.permitted_prohibited_disjoint",
+		},
+		{
+			"Obligation/cel/share_alike_requires_scope_license",
 			&rampv1.Obligation{Kind: rampv1.ObligationKind_OBLIGATION_KIND_SHARE_ALIKE, Trigger: rampv1.ObligationTrigger_OBLIGATION_TRIGGER_ON_USE},
-			"obligation.share_alike.requires_scope_license"},
-		{"LicenseTerm/cel/reference_only_requires_uri",
+			"obligation.share_alike.requires_scope_license",
+		},
+		{
+			"LicenseTerm/cel/reference_only_requires_uri",
 			&rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_REFERENCE_ONLY},
-			"license_term.reference_only.requires_uri"},
-		{"LicenseTerm/cel/one_restriction_per_kind",
+			"license_term.reference_only.requires_uri",
+		},
+		{
+			"LicenseTerm/cel/one_restriction_per_kind",
 			&rampv1.LicenseTerm{
 				Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED,
 				Pricing:   freePricing,
@@ -196,7 +218,8 @@ func writeCrossField(v protovalidate.Validator) {
 					{Kind: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Permitted: []string{"ai-train"}},
 				},
 			},
-			"license_term.one_restriction_per_kind"},
+			"license_term.one_restriction_per_kind",
+		},
 	}
 
 	var cases []Case
