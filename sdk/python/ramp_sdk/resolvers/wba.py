@@ -514,6 +514,14 @@ def _parse_rfc3339(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return None
+    # A naive (offset-less) bound is not a valid RFC 3339 instant. Comparing it
+    # against the aware ``now`` in ``_key_active_at`` would raise TypeError and
+    # crash the selector; treat it as inactive instead (fail closed). This keeps
+    # parity with Go's time.Parse(time.RFC3339) and TS's offset-required parse,
+    # both of which reject an offset-less bound as inactive.
+    if parsed.tzinfo is None:
+        return None
+    return parsed

@@ -46,6 +46,17 @@ func longWindowJWK(seed string) (ed25519.PublicKey, *rampv1.JsonWebKey) {
 	return priv.Public().(ed25519.PublicKey), jwk
 }
 
+// naiveBoundsJWK builds a directory JWK whose validity bounds carry NO UTC
+// offset. The span (11:00..13:00) straddles wbaAnchor (12:00Z), so a parser that
+// wrongly accepted an offset-less bound would treat the key as active;
+// time.Parse(time.RFC3339) rejects it, so the key is inactive (fail closed).
+func naiveBoundsJWK(seed string) *rampv1.JsonWebKey {
+	_, jwk := newSigningKey(seed, wbaAnchor.Add(-time.Hour), wbaAnchor.Add(time.Hour))
+	jwk.NotBefore = "2026-05-01T11:00:00"
+	jwk.NotAfter = "2026-05-01T13:00:00"
+	return jwk
+}
+
 func wbaDirectory(keys ...*rampv1.JsonWebKey) *rampv1.WBAFile {
 	return &rampv1.WBAFile{Keys: keys}
 }
@@ -84,6 +95,29 @@ func TestActiveEd25519Key_SkipsFutureThenSelectsActive(t *testing.T) {
 	}
 	if !got.Equal(pub) {
 		t.Fatal("not-yet-valid key ahead of the active one must be skipped")
+	}
+}
+
+func TestActiveEd25519Key_SkipsOffsetLessBoundThenSelectsActive(t *testing.T) {
+	t.Parallel()
+	pub, active := activeWindowJWK("live")
+	got, err := resolvers.ActiveEd25519Key(wbaDirectory(naiveBoundsJWK("naive"), active), wbaAnchor)
+	if err != nil {
+		t.Fatalf("ActiveEd25519Key: %v", err)
+	}
+	if !got.Equal(pub) {
+		t.Fatal("a key with offset-less window bounds must be skipped as inactive")
+	}
+}
+
+func TestActiveEd25519Key_OffsetLessBoundOnlyNoneQualifies(t *testing.T) {
+	t.Parallel()
+	got, err := resolvers.ActiveEd25519Key(wbaDirectory(naiveBoundsJWK("naive")), wbaAnchor)
+	if got != nil {
+		t.Fatal("expected a nil key when the only member has offset-less bounds")
+	}
+	if !errors.Is(err, resolvers.ErrKeyExpired) {
+		t.Fatalf("want ErrKeyExpired, got %v", err)
 	}
 }
 

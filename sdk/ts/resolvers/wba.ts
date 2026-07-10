@@ -412,19 +412,32 @@ function selectActiveEd25519Key(
     if (!raw) continue;
     // not_after is guaranteed finite: keyActiveAt above rejects any key whose
     // window bounds do not parse, so the selected key always has one.
-    const notAfter = Date.parse(key.not_after);
+    const notAfter = parseRfc3339Ms(key.not_after);
     if (Number.isNaN(notAfter)) continue; // unreachable: keyActiveAt required a parseable bound
     return { key: raw, notAfter };
   }
   return null;
 }
 
+/** Parse an RFC 3339 instant to epoch-ms, REQUIRING an explicit UTC offset
+ * (`Z`/`z` or `±HH:MM`). An offset-less string — which bare `Date.parse` would
+ * silently interpret in the host's LOCAL zone — returns `NaN`, so the key is
+ * treated as inactive. This keeps parity with Go's time.Parse(time.RFC3339) and
+ * Python's offset-required `_parse_rfc3339`, both of which reject an offset-less
+ * bound rather than guessing a zone. */
+function parseRfc3339Ms(value: string | undefined): number {
+  if (!value) return Number.NaN;
+  // RFC 3339 mandates a time-offset after the time component: 'Z'/'z' or ±HH:MM.
+  if (!/([Zz]|[+-]\d{2}:\d{2})$/.test(value)) return Number.NaN;
+  return Date.parse(value);
+}
+
 /** Whether `now` (epoch-ms) is inside `key`'s [not_before, not_after) half-open
- * window. A missing/unparseable bound makes the key inactive — validity must be
- * explicit. */
+ * window. A missing/unparseable/offset-less bound makes the key inactive —
+ * validity must be explicit. */
 function keyActiveAt(key: WBAJwk, now: number): boolean {
-  const notBefore = Date.parse(key.not_before);
-  const notAfter = Date.parse(key.not_after);
+  const notBefore = parseRfc3339Ms(key.not_before);
+  const notAfter = parseRfc3339Ms(key.not_after);
   if (Number.isNaN(notBefore) || Number.isNaN(notAfter)) return false;
   return now >= notBefore && now < notAfter;
 }

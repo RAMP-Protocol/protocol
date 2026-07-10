@@ -34,6 +34,17 @@ def _future_jwk(x: str) -> dict[str, Any]:
     return wba_jwk(x, ANCHOR + HOUR, ANCHOR + 2 * HOUR)
 
 
+# Bounds carrying NO UTC offset (naive/local time). The instant span
+# (11:00..13:00) straddles ANCHOR (12:00Z), so a parser that wrongly accepted
+# an offset-less bound would treat this key as ACTIVE — the test proves it is
+# rejected (fail closed) rather than selected or crashing on the compare.
+def _naive_bounds_jwk(x: str) -> dict[str, Any]:
+    return active_jwk(x) | {
+        "not_before": "2026-05-01T11:00:00",
+        "not_after": "2026-05-01T13:00:00",
+    }
+
+
 def _directory(keys: list[dict[str, Any]]) -> WBAFile:
     return WBAFile.model_validate({"keys": keys})
 
@@ -60,6 +71,24 @@ def test_future_key_ahead_is_skipped() -> None:
     active = make_key()
     directory = _directory([_future_jwk(future.x), active_jwk(active.x)])
     assert active_ed25519_key(directory, ANCHOR) == active.raw_pub
+
+
+def test_offset_less_bound_is_inactive_not_crash() -> None:
+    # A key whose window bounds carry no UTC offset must be treated as inactive
+    # (fail closed), never crash the selector; iteration continues to the next.
+    naive = make_key()
+    good = make_key()
+    directory = _directory([_naive_bounds_jwk(naive.x), active_jwk(good.x)])
+    assert active_ed25519_key(directory, ANCHOR) == good.raw_pub
+
+
+def test_offset_less_bound_only_yields_none() -> None:
+    # A directory whose only key has offset-less bounds resolves to nothing —
+    # on both the plain and with-expiry faces — instead of raising.
+    naive = make_key()
+    directory = _directory([_naive_bounds_jwk(naive.x)])
+    assert active_ed25519_key(directory, ANCHOR) is None
+    assert active_ed25519_key_with_expiry(directory, ANCHOR) is None
 
 
 def test_skip_non_okp_and_continue() -> None:

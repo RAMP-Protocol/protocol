@@ -23,6 +23,17 @@ function expiredJwk(x: string): Record<string, unknown> {
 function futureJwk(x: string): Record<string, unknown> {
 	return wbaJwk(x, iso(ANCHOR_MS + HOUR_MS), iso(ANCHOR_MS + 2 * HOUR_MS));
 }
+// Bounds with NO UTC offset (naive/local time). The span straddles ANCHOR, so a
+// parser that wrongly accepted an offset-less bound (as bare Date.parse does,
+// interpreting it in the host's local zone) would treat this key as ACTIVE —
+// the test proves it is rejected (fail closed) rather than selected.
+function naiveBoundsJwk(x: string): Record<string, unknown> {
+	return {
+		...activeJwk(x),
+		not_before: "2026-05-01T11:00:00",
+		not_after: "2026-05-01T13:00:00",
+	};
+}
 // A long-window active key: active at ANCHOR with a FAR not_after, so a
 // with-expiry test can assert a not_after distinct from activeJwk's bound.
 function longJwk(x: string): Record<string, unknown> {
@@ -52,6 +63,20 @@ describe("activeEd25519Key", () => {
 		const active = await makeKey();
 		const dir = directory([futureJwk(future.x), activeJwk(active.x)]);
 		expect(activeEd25519Key(dir, ANCHOR_MS)).toEqual(active.rawPub);
+	});
+
+	it("treats an offset-less bound as inactive and continues", async () => {
+		const naive = await makeKey();
+		const good = await makeKey();
+		const dir = directory([naiveBoundsJwk(naive.x), activeJwk(good.x)]);
+		expect(activeEd25519Key(dir, ANCHOR_MS)).toEqual(good.rawPub);
+	});
+
+	it("yields null when the only key has offset-less bounds", async () => {
+		const naive = await makeKey();
+		const dir = directory([naiveBoundsJwk(naive.x)]);
+		expect(activeEd25519Key(dir, ANCHOR_MS)).toBeNull();
+		expect(activeEd25519KeyWithExpiry(dir, ANCHOR_MS)).toBeNull();
 	});
 
 	it("skips a non-OKP key and continues", async () => {
