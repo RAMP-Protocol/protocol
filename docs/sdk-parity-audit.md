@@ -159,11 +159,24 @@ behavioral vector suites.
 ### SSRF-guarded transport (WBA directory fetch)
 
 The WBA directory host is a caller-supplied `Signature-Agent` fetched BEFORE the
-ed25519 check, so the default transport is SSRF-guarded in all three SDKs. The
-guard is split into a **data** part (corpus-locked) and a **wiring** part
+ed25519 check, so the default transport is SSRF-guarded in all three SDKs. Per
+issue #20 the transport lives in the **I/O layer** (L2) — Go `sdk/go/resolvers`,
+TS `sdk/ts/resolvers`, Python `ramp_sdk.resolvers` — never the pure trust core,
+and it runs on a **maintained HTTP client** (Go `net/http`, TS `undici`, Python
+`httpx`) rather than a hand-rolled transport: the client owns the response state
+machine (status, redirects, 1xx, decompression) and the SDK owns only the SSRF
+check, injected as a **connection-level hook**:
+
+| SDK | Client | Injectable guard | DX |
+|---|---|---|---|
+| Go | `net/http` | `SSRFGuard(*http.Transport)` + `SSRFCheckRedirect` | `&http.Client{Transport: resolvers.SSRFGuard(nil), CheckRedirect: resolvers.SSRFCheckRedirect}` |
+| Python | `httpx` | `ssrf_guard() -> httpx.HTTPTransport` | `httpx.Client(transport=ssrf_guard())` |
+| TS | `undici` | `ssrfGuard(): buildConnector.connector` | `new Agent({ connect: ssrfGuard() })` |
+
+The guard is split into a **data** part (corpus-locked) and a **wiring** part
 (behaviorally tested), because only the former is expressible as vectors:
 
-| Concern | Shared corpus | Consumed by |
+| Concern | Shared corpus (`sdk/go/resolvers/testdata`) | Consumed by |
 |---|---|---|
 | Reserved / non-public address classification | `ssrf-address-vectors.json` (26) | Go (emit+self-check) · TS · Python |
 | URL-scheme allowlist (deny-by-default: http/https) | `ssrf-scheme-vectors.json` (11) | Go (emit+self-check) · TS · Python |
@@ -175,15 +188,22 @@ non-2xx directory response as a status for the caller to classify (never as a
 crash or an unmapped error).* A redirect target is just a scheme + a host→address,
 so it is fully classified by the two corpora above; what the corpora cannot encode
 is that the transport actually *applies* them on the `Location` hop and does not
-crash on a non-2xx. That residual is covered behaviorally per language (the
-mechanisms differ intentionally — TS follows no redirects, which is strongest):
+crash on a non-2xx. That residual is covered behaviorally per language. With the
+move to maintained clients the redirect mechanism is now **uniform**: all three
+follow redirects and re-dial each hop through the same guarded connection, so
+every hop is re-vetted (previously TS followed none — that divergence is gone):
 
 | Behavior | Go | TS | Python |
 |---|---|---|---|
-| Refuses to dial loopback/private (initial URL) | `TestGuardedWBAClientBlocksLoopback` | `resolvers-ssrf.test.ts` (127.0.0.1 / [::1]) | `test_guarded_fetch_refuses_loopback` |
-| Redirect into a non-http(s) scheme refused | `TestGuardedWBAClientRefusesRedirectScheme` | no-follow (`resolvers-http-wiring.test.ts`) | `test_guarded_fetch_refuses_redirect_to_ftp` |
-| Redirect to an internal address refused | re-dial via `Control` (corpus) | no-follow (`resolvers-http-wiring.test.ts`) | `test_guarded_fetch_refuses_redirect_to_internal_address` |
-| Non-2xx surfaced as a status (no crash) | `TestGuardedWBAClientSurfacesNon2xx` | `resolvers-http-wiring.test.ts` | `test_guarded_fetch_non_2xx_returns_status_not_crash` |
+| Refuses to dial loopback/private (initial URL) | `TestGuardedWBAClientBlocksLoopback` | `resolvers-ssrf.test.ts` (127.0.0.1 / [::1]) | `test_guarded_client_refuses_loopback` |
+| Redirect into a non-http(s) scheme refused | `TestGuardedWBAClientRefusesRedirectScheme` | `resolvers-http-wiring.test.ts` | `test_guarded_client_refuses_redirect_to_ftp` |
+| Redirect to an internal address refused (per-hop re-vet) | re-dial via `Dialer.Control` (corpus) | `resolvers-http-wiring.test.ts` (blocks only 169.254/16) | `test_guarded_client_refuses_redirect_to_internal_address` (blocks only 169.254/16) |
+| Non-2xx surfaced as a status (no crash) | `TestGuardedWBAClientSurfacesNon2xx` | `resolvers-http-wiring.test.ts` | `test_guarded_client_non_2xx_returns_status_not_crash` |
+
+A structural **io-leaf guard** in each SDK keeps this dependency scoped: the pure
+trust core may not import the resolvers module or the HTTP client (`undici` in TS,
+`httpx`/`httpcore` in Python), so the maintained-client dependency cannot leak
+back into L1.
 
 ---
 
