@@ -342,6 +342,31 @@ class DomainVerificationResult(WireModel):
     ver: str | None = Field('', description='Protocol version')
 
 
+class GetAccountStatusRequest(WireModel):
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    ext_critical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
+    ver: str | None = Field('', description='Protocol version')
+
+
+class GetAccountStatusResponse(WireModel):
+    active: bool | None = Field(
+        False, description='Whether the account is currently active.'
+    )
+    billing_ref: str | None = Field(
+        '',
+        description='The account handle minted at registration (see RegisterResponse.billing_ref).\n Empty when the calling agent has no account yet.',
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    ext_critical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
+    ver: str | None = Field('', description='Protocol version')
+
+
 class IngestionSource(Enum):
     INGESTION_SOURCE_RAMP_SITEMAP = 'INGESTION_SOURCE_RAMP_SITEMAP'
     INGESTION_SOURCE_RSL = 'INGESTION_SOURCE_RSL'
@@ -535,6 +560,36 @@ class RefreshCatalogRequest(WireModel):
 
 class RefreshCatalogResponse(WireModel):
     started: bool | None = Field(False, description='Whether the refresh was started')
+    ver: str | None = Field('', description='Protocol version')
+
+
+class RegisterRequest(WireModel):
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    ext_critical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
+    registration_data: dict[str, Any] | None = Field(
+        None,
+        description="Operator-defined registration payload; the business fields are not fixed\n in the wire contract. The Exchange passes it through to its system of\n record without inspecting it. The caller's identity is taken from the\n verified request signature, never from this payload.",
+    )
+    ver: str | None = Field('', description='Protocol version')
+
+
+class RegisterResponse(WireModel):
+    active: bool | None = Field(
+        False,
+        description='Whether the account is currently active. Accounts may start inactive\n and be activated out-of-band by the Exchange operator.',
+    )
+    billing_ref: str | None = Field(
+        '',
+        description='Opaque, long-lived, per-Exchange account handle minted by the Exchange.\n Means nothing on its own and is never accepted as caller input. A repeat\n Register for the same agent returns the same value.',
+    )
+    ext: dict[str, Any] | None = Field(None, description='Extension point')
+    ext_critical: list[str] | None = Field(
+        None,
+        description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
+    )
     ver: str | None = Field('', description='Protocol version')
 
 

@@ -71,6 +71,12 @@ const (
 	// ExchangeServiceConfirmDomainVerificationProcedure is the fully-qualified name of the
 	// ExchangeService's ConfirmDomainVerification RPC.
 	ExchangeServiceConfirmDomainVerificationProcedure = "/ramp.v1.ExchangeService/ConfirmDomainVerification"
+	// ExchangeServiceRegisterProcedure is the fully-qualified name of the ExchangeService's Register
+	// RPC.
+	ExchangeServiceRegisterProcedure = "/ramp.v1.ExchangeService/Register"
+	// ExchangeServiceGetAccountStatusProcedure is the fully-qualified name of the ExchangeService's
+	// GetAccountStatus RPC.
+	ExchangeServiceGetAccountStatusProcedure = "/ramp.v1.ExchangeService/GetAccountStatus"
 	// CatalogServicePushResourcesProcedure is the fully-qualified name of the CatalogService's
 	// PushResources RPC.
 	CatalogServicePushResourcesProcedure = "/ramp.v1.CatalogService/PushResources"
@@ -109,6 +115,18 @@ type ExchangeServiceClient interface {
 	// Confirm domain verification and register a signing key.
 	// Called after the challenge token is placed at the provider's domain.
 	ConfirmDomainVerification(context.Context, *connect.Request[v1.DomainVerificationConfirmation]) (*connect.Response[v1.DomainVerificationResult], error)
+	// Create the calling agent's account with the Exchange.
+	// The caller's identity is proven by the request signature — the Exchange
+	// derives who is registering from the verified signature, never from the
+	// request body. Registering again for the same agent returns the same
+	// billing_ref (idempotent by design), which is why this RPC carries no
+	// idempotency_key. A refused registration travels as a non-OK transport
+	// error carrying ErrorDetail.registration_failure.
+	Register(context.Context, *connect.Request[v1.RegisterRequest]) (*connect.Response[v1.RegisterResponse], error)
+	// Read-only check of whether the calling agent's account is active.
+	// Identity comes from the request signature, so the request carries no
+	// identifying field.
+	GetAccountStatus(context.Context, *connect.Request[v1.GetAccountStatusRequest]) (*connect.Response[v1.GetAccountStatusResponse], error)
 }
 
 // NewExchangeServiceClient constructs a client for the ramp.v1.ExchangeService service. By default,
@@ -158,6 +176,18 @@ func NewExchangeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(exchangeServiceMethods.ByName("ConfirmDomainVerification")),
 			connect.WithClientOptions(opts...),
 		),
+		register: connect.NewClient[v1.RegisterRequest, v1.RegisterResponse](
+			httpClient,
+			baseURL+ExchangeServiceRegisterProcedure,
+			connect.WithSchema(exchangeServiceMethods.ByName("Register")),
+			connect.WithClientOptions(opts...),
+		),
+		getAccountStatus: connect.NewClient[v1.GetAccountStatusRequest, v1.GetAccountStatusResponse](
+			httpClient,
+			baseURL+ExchangeServiceGetAccountStatusProcedure,
+			connect.WithSchema(exchangeServiceMethods.ByName("GetAccountStatus")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -169,6 +199,8 @@ type exchangeServiceClient struct {
 	disputeTransaction        *connect.Client[v1.DisputeRequest, v1.DisputeResponse]
 	requestDomainVerification *connect.Client[v1.DomainVerificationRequest, v1.DomainVerificationChallenge]
 	confirmDomainVerification *connect.Client[v1.DomainVerificationConfirmation, v1.DomainVerificationResult]
+	register                  *connect.Client[v1.RegisterRequest, v1.RegisterResponse]
+	getAccountStatus          *connect.Client[v1.GetAccountStatusRequest, v1.GetAccountStatusResponse]
 }
 
 // DiscoverResources calls ramp.v1.ExchangeService.DiscoverResources.
@@ -201,6 +233,16 @@ func (c *exchangeServiceClient) ConfirmDomainVerification(ctx context.Context, r
 	return c.confirmDomainVerification.CallUnary(ctx, req)
 }
 
+// Register calls ramp.v1.ExchangeService.Register.
+func (c *exchangeServiceClient) Register(ctx context.Context, req *connect.Request[v1.RegisterRequest]) (*connect.Response[v1.RegisterResponse], error) {
+	return c.register.CallUnary(ctx, req)
+}
+
+// GetAccountStatus calls ramp.v1.ExchangeService.GetAccountStatus.
+func (c *exchangeServiceClient) GetAccountStatus(ctx context.Context, req *connect.Request[v1.GetAccountStatusRequest]) (*connect.Response[v1.GetAccountStatusResponse], error) {
+	return c.getAccountStatus.CallUnary(ctx, req)
+}
+
 // ExchangeServiceHandler is an implementation of the ramp.v1.ExchangeService service.
 type ExchangeServiceHandler interface {
 	// Discover available resource offers matching the query.
@@ -226,6 +268,18 @@ type ExchangeServiceHandler interface {
 	// Confirm domain verification and register a signing key.
 	// Called after the challenge token is placed at the provider's domain.
 	ConfirmDomainVerification(context.Context, *connect.Request[v1.DomainVerificationConfirmation]) (*connect.Response[v1.DomainVerificationResult], error)
+	// Create the calling agent's account with the Exchange.
+	// The caller's identity is proven by the request signature — the Exchange
+	// derives who is registering from the verified signature, never from the
+	// request body. Registering again for the same agent returns the same
+	// billing_ref (idempotent by design), which is why this RPC carries no
+	// idempotency_key. A refused registration travels as a non-OK transport
+	// error carrying ErrorDetail.registration_failure.
+	Register(context.Context, *connect.Request[v1.RegisterRequest]) (*connect.Response[v1.RegisterResponse], error)
+	// Read-only check of whether the calling agent's account is active.
+	// Identity comes from the request signature, so the request carries no
+	// identifying field.
+	GetAccountStatus(context.Context, *connect.Request[v1.GetAccountStatusRequest]) (*connect.Response[v1.GetAccountStatusResponse], error)
 }
 
 // NewExchangeServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -271,6 +325,18 @@ func NewExchangeServiceHandler(svc ExchangeServiceHandler, opts ...connect.Handl
 		connect.WithSchema(exchangeServiceMethods.ByName("ConfirmDomainVerification")),
 		connect.WithHandlerOptions(opts...),
 	)
+	exchangeServiceRegisterHandler := connect.NewUnaryHandler(
+		ExchangeServiceRegisterProcedure,
+		svc.Register,
+		connect.WithSchema(exchangeServiceMethods.ByName("Register")),
+		connect.WithHandlerOptions(opts...),
+	)
+	exchangeServiceGetAccountStatusHandler := connect.NewUnaryHandler(
+		ExchangeServiceGetAccountStatusProcedure,
+		svc.GetAccountStatus,
+		connect.WithSchema(exchangeServiceMethods.ByName("GetAccountStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/ramp.v1.ExchangeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ExchangeServiceDiscoverResourcesProcedure:
@@ -285,6 +351,10 @@ func NewExchangeServiceHandler(svc ExchangeServiceHandler, opts ...connect.Handl
 			exchangeServiceRequestDomainVerificationHandler.ServeHTTP(w, r)
 		case ExchangeServiceConfirmDomainVerificationProcedure:
 			exchangeServiceConfirmDomainVerificationHandler.ServeHTTP(w, r)
+		case ExchangeServiceRegisterProcedure:
+			exchangeServiceRegisterHandler.ServeHTTP(w, r)
+		case ExchangeServiceGetAccountStatusProcedure:
+			exchangeServiceGetAccountStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -316,6 +386,14 @@ func (UnimplementedExchangeServiceHandler) RequestDomainVerification(context.Con
 
 func (UnimplementedExchangeServiceHandler) ConfirmDomainVerification(context.Context, *connect.Request[v1.DomainVerificationConfirmation]) (*connect.Response[v1.DomainVerificationResult], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ramp.v1.ExchangeService.ConfirmDomainVerification is not implemented"))
+}
+
+func (UnimplementedExchangeServiceHandler) Register(context.Context, *connect.Request[v1.RegisterRequest]) (*connect.Response[v1.RegisterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ramp.v1.ExchangeService.Register is not implemented"))
+}
+
+func (UnimplementedExchangeServiceHandler) GetAccountStatus(context.Context, *connect.Request[v1.GetAccountStatusRequest]) (*connect.Response[v1.GetAccountStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ramp.v1.ExchangeService.GetAccountStatus is not implemented"))
 }
 
 // CatalogServiceClient is a client for the ramp.v1.CatalogService service.

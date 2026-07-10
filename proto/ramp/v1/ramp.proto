@@ -110,6 +110,20 @@ service ExchangeService {
   // Confirm domain verification and register a signing key.
   // Called after the challenge token is placed at the provider's domain.
   rpc ConfirmDomainVerification(DomainVerificationConfirmation) returns (DomainVerificationResult);
+
+  // Create the calling agent's account with the Exchange.
+  // The caller's identity is proven by the request signature — the Exchange
+  // derives who is registering from the verified signature, never from the
+  // request body. Registering again for the same agent returns the same
+  // billing_ref (idempotent by design), which is why this RPC carries no
+  // idempotency_key. A refused registration travels as a non-OK transport
+  // error carrying ErrorDetail.registration_failure.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Read-only check of whether the calling agent's account is active.
+  // Identity comes from the request signature, so the request carries no
+  // identifying field.
+  rpc GetAccountStatus(GetAccountStatusRequest) returns (GetAccountStatusResponse);
 }
 
 // ============================================================================
@@ -2946,6 +2960,109 @@ message DomainVerificationResult {
 
   // Verification is valid until this time. Provider must re-verify periodically.
   optional google.protobuf.Timestamp valid_until = 4;
+
+  // Extension point
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// ============================================================================
+// Agent Account Registration
+//
+// An agent becomes KNOWN to an Exchange just by sending a signed request.
+// To transact for paid content it must REGISTER: the Exchange creates the
+// agent's account and mints billing_ref — the opaque, long-lived,
+// per-Exchange account handle. The agent never has to carry billing_ref
+// afterwards; the Exchange resolves the account from the verified request
+// signature on every call, never from anything the caller sends.
+//
+// The Exchange does not inspect or validate the business payload
+// (registration_data): its contents are operator-defined and enforced by the
+// registration front-end, not by this contract.
+// ============================================================================
+
+// RegisterRequest — Agent asks the Exchange to create its account.
+message RegisterRequest {
+  // Protocol version
+  string ver = 1;
+
+  // Operator-defined registration payload; the business fields are not fixed
+  // in the wire contract. The Exchange passes it through to its system of
+  // record without inspecting it. The caller's identity is taken from the
+  // verified request signature, never from this payload.
+  google.protobuf.Struct registration_data = 2;
+
+  // Extension point
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// RegisterResponse — Exchange returns the minted account handle.
+message RegisterResponse {
+  // A successful response means the account exists; a refused registration
+  // travels as a non-OK transport error carrying ErrorDetail.registration_failure.
+
+  // Protocol version
+  string ver = 1;
+
+  // Opaque, long-lived, per-Exchange account handle minted by the Exchange.
+  // Means nothing on its own and is never accepted as caller input. A repeat
+  // Register for the same agent returns the same value.
+  string billing_ref = 2;
+
+  // Whether the account is currently active. Accounts may start inactive
+  // and be activated out-of-band by the Exchange operator.
+  bool active = 3;
+
+  // Extension point
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// GetAccountStatusRequest — Agent asks whether its account is active.
+message GetAccountStatusRequest {
+  // Deliberately carries no identifying field: the Exchange resolves the
+  // account from the verified request signature.
+
+  // Protocol version
+  string ver = 1;
+
+  // Extension point
+  google.protobuf.Struct ext = 15;
+
+  // Critical extension keys (COSE crit pattern, RFC 9052).
+  // Lists keys within ext that the consumer MUST understand.
+  // Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.
+  // Empty (default) → all ext keys are safe to ignore.
+  repeated string ext_critical = 90;
+}
+
+// GetAccountStatusResponse — Exchange reports the account's current state.
+message GetAccountStatusResponse {
+  // Protocol version
+  string ver = 1;
+
+  // The account handle minted at registration (see RegisterResponse.billing_ref).
+  // Empty when the calling agent has no account yet.
+  string billing_ref = 2;
+
+  // Whether the account is currently active.
+  bool active = 3;
 
   // Extension point
   google.protobuf.Struct ext = 15;
