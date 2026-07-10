@@ -254,6 +254,32 @@ A successful response means verification succeeded; a failure travels as a non-O
 
 ::proto-message{name=DomainVerificationResult}
 
+## Messages -- Agent Account Registration
+
+### RegisterRequest
+
+Agent asks the Exchange to create its account. The caller's identity is proven by the verified request signature, never asserted in the body; the operator-defined business payload rides in `registration_data` and is passed through to the Exchange's system of record uninspected.
+
+::proto-message{name=RegisterRequest}
+
+### RegisterResponse
+
+Exchange returns the minted `billing_ref` — the opaque, long-lived, per-Exchange account handle — and the account's current active state. A repeat `Register` for the same agent returns the same `billing_ref`; a refused registration travels as a non-OK transport error carrying [`ErrorDetail.registration_failure`](#unified-error-model).
+
+::proto-message{name=RegisterResponse}
+
+### GetAccountStatusRequest
+
+Read-only check of whether the calling agent's account is active. Deliberately carries no identifying field — the Exchange resolves the account from the verified request signature.
+
+::proto-message{name=GetAccountStatusRequest}
+
+### GetAccountStatusResponse
+
+The account's current state. `billing_ref` is empty when the calling agent has no account yet.
+
+::proto-message{name=GetAccountStatusResponse}
+
 ## Messages -- Discovery
 
 ### WellKnownManifest
