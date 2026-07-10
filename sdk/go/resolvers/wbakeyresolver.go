@@ -768,6 +768,31 @@ const defaultActiveKeyScan = 10
 // an out-of-window key. Byte-parity with the Python active_ed25519_key / TS
 // activeEd25519Key oracles.
 func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, error) {
+	pub, _, err := selectActiveEd25519Key(directory, now, maxScan...)
+	return pub, err
+}
+
+// ActiveEd25519KeyWithExpiry runs the IDENTICAL document-order selection as
+// ActiveEd25519Key but ALSO returns the selected key's not_after (its
+// [not_before, not_after) upper bound). A downstream caller — e.g. an offer-key
+// cache — clamps its cache TTL to min(now+ttl, not_after) with the returned
+// time.Time so a cached key never outlives its validity window; the plain
+// ActiveEd25519Key drops it. The not_after is guaranteed parseable because
+// selection required it (wbaKeyActiveAt rejects a key whose window bounds do not
+// parse). It returns (nil, time.Time{}, ErrKeyExpired) when no examined key
+// qualifies — the same not-found sentinel ActiveEd25519Key surfaces. Byte-parity
+// with the Python active_ed25519_key_with_expiry / TS activeEd25519KeyWithExpiry
+// oracles.
+func ActiveEd25519KeyWithExpiry(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
+	return selectActiveEd25519Key(directory, now, maxScan...)
+}
+
+// selectActiveEd25519Key is the shared selector behind the two active-key faces:
+// the FIRST window-active, well-formed OKP/Ed25519 key in document order (cap
+// maxScan, default defaultActiveKeyScan), returned with its not_after. It parses
+// not_after with the SAME time.Parse(RFC3339) wbaKeyActiveAt used, so the two
+// faces never disagree on the selected key.
+func selectActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
 	scan := defaultActiveKeyScan
 	if len(maxScan) > 0 {
 		scan = maxScan[0]
@@ -776,7 +801,7 @@ func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) 
 		scan = 0
 	}
 	if directory == nil {
-		return nil, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
+		return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
 	}
 	keys := directory.GetKeys()
 	if len(keys) < scan {
@@ -790,9 +815,15 @@ func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) 
 		if err != nil {
 			continue
 		}
-		return pub, nil
+		// not_after is guaranteed parseable: wbaKeyActiveAt above rejects any key
+		// whose window bounds do not parse, so the selected key always has one.
+		notAfter, err := time.Parse(time.RFC3339, k.GetNotAfter())
+		if err != nil { // unreachable: wbaKeyActiveAt required a parseable bound
+			continue
+		}
+		return pub, notAfter, nil
 	}
-	return nil, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
+	return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
 }
 
 // wbaKeyActiveAt reports whether now falls inside k's [not_before, not_after)

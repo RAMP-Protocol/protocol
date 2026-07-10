@@ -38,6 +38,14 @@ func futureWindowJWK(seed string) *rampv1.JsonWebKey {
 	return jwk
 }
 
+// longWindowJWK is window-active at wbaAnchor with a FAR not_after (anchor +
+// 1000h), so a with-expiry test can assert a not_after distinct from the short
+// activeWindowJWK bound.
+func longWindowJWK(seed string) (ed25519.PublicKey, *rampv1.JsonWebKey) {
+	priv, jwk := newSigningKey(seed, wbaAnchor.Add(-time.Hour), wbaAnchor.Add(1000*time.Hour))
+	return priv.Public().(ed25519.PublicKey), jwk
+}
+
 func wbaDirectory(keys ...*rampv1.JsonWebKey) *rampv1.WBAFile {
 	return &rampv1.WBAFile{Keys: keys}
 }
@@ -165,5 +173,75 @@ func TestActiveEd25519Key_NoneQualifies(t *testing.T) {
 				t.Fatalf("want ErrKeyExpired, got %v", err)
 			}
 		})
+	}
+}
+
+// ── ActiveEd25519KeyWithExpiry — the key + not_after variant ─────────────────
+
+func TestActiveEd25519KeyWithExpiry_ReturnsKeyAndNotAfter(t *testing.T) {
+	t.Parallel()
+	pub1, k1 := activeWindowJWK("a1")
+	_, k2 := activeWindowJWK("a2")
+	got, notAfter, err := resolvers.ActiveEd25519KeyWithExpiry(wbaDirectory(k1, k2), wbaAnchor)
+	if err != nil {
+		t.Fatalf("ActiveEd25519KeyWithExpiry: %v", err)
+	}
+	if !got.Equal(pub1) {
+		t.Fatal("expected the FIRST active key in document order")
+	}
+	want := wbaAnchor.Add(time.Hour) // activeWindowJWK's not_after
+	if !notAfter.Equal(want) {
+		t.Fatalf("not_after = %v, want %v", notAfter, want)
+	}
+}
+
+func TestActiveEd25519KeyWithExpiry_SkipsInactiveAndReturnsNextNotAfter(t *testing.T) {
+	t.Parallel()
+	// A retired and a not-yet-valid key are skipped; the returned not_after is the
+	// NEXT (selected) active key's — a long window, distinct from the skipped bounds.
+	pub, selected := longWindowJWK("live")
+	dir := wbaDirectory(expiredWindowJWK("dead"), futureWindowJWK("early"), selected)
+	got, notAfter, err := resolvers.ActiveEd25519KeyWithExpiry(dir, wbaAnchor)
+	if err != nil {
+		t.Fatalf("ActiveEd25519KeyWithExpiry: %v", err)
+	}
+	if !got.Equal(pub) {
+		t.Fatal("inactive keys ahead of the active one must be skipped")
+	}
+	want := wbaAnchor.Add(1000 * time.Hour) // longWindowJWK's not_after
+	if !notAfter.Equal(want) {
+		t.Fatalf("not_after = %v, want %v", notAfter, want)
+	}
+}
+
+func TestActiveEd25519KeyWithExpiry_NoneQualifies(t *testing.T) {
+	t.Parallel()
+	// No qualifying key → (nil, zero time, ErrKeyExpired), the not-found sentinel.
+	got, notAfter, err := resolvers.ActiveEd25519KeyWithExpiry(
+		wbaDirectory(expiredWindowJWK("x"), futureWindowJWK("y")), wbaAnchor)
+	if got != nil {
+		t.Fatal("expected a nil key when none qualifies")
+	}
+	if !notAfter.IsZero() {
+		t.Fatalf("expected a zero not_after when none qualifies, got %v", notAfter)
+	}
+	if !errors.Is(err, resolvers.ErrKeyExpired) {
+		t.Fatalf("want ErrKeyExpired, got %v", err)
+	}
+}
+
+func TestActiveEd25519KeyWithExpiry_AgreesWithPlainSelector(t *testing.T) {
+	t.Parallel()
+	// Regression: both faces select the SAME key. The with-expiry variant only
+	// adds not_after; it never changes the selection.
+	_, selected := longWindowJWK("live")
+	dir := wbaDirectory(expiredWindowJWK("dead"), selected)
+	plain, err1 := resolvers.ActiveEd25519Key(dir, wbaAnchor)
+	withExp, _, err2 := resolvers.ActiveEd25519KeyWithExpiry(dir, wbaAnchor)
+	if err1 != nil || err2 != nil {
+		t.Fatalf("selection errored: plain=%v withExpiry=%v", err1, err2)
+	}
+	if !plain.Equal(withExp) {
+		t.Fatal("both faces must agree on the selected key")
 	}
 }

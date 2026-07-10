@@ -30,5 +30,6 @@ export {
   type WBAKeyResolver,
   type WBAKeyResolverOptions,
   activeEd25519Key,
+  activeEd25519KeyWithExpiry,
   newWBAKeyResolver,
 } from "./wba.ts";

@@ -370,12 +370,52 @@ def active_ed25519_key(
     is unreachable. Returns ``None`` when no examined key qualifies. Byte-parity with
     the Go ``ActiveEd25519Key`` / TS ``activeEd25519Key`` oracles.
     """
+    selected = _select_active_ed25519_key(directory, now, max_scan)
+    return None if selected is None else selected[0]
+
+
+def active_ed25519_key_with_expiry(
+    directory: WBAFile,
+    now: datetime,
+    max_scan: int = _DEFAULT_ACTIVE_KEY_SCAN,
+) -> tuple[bytes, datetime] | None:
+    """Like :func:`active_ed25519_key`, but ALSO returns the selected key's expiry.
+
+    Runs the IDENTICAL document-order selection as :func:`active_ed25519_key` and
+    returns a ``(raw_public_key, not_after)`` pair for the FIRST qualifying key — the
+    raw 32 bytes plus the SAME ``not_after`` the window check parsed, as an aware
+    :class:`~datetime.datetime`. A downstream caller (e.g. an offer-key cache) uses
+    ``not_after`` to clamp its cache TTL to ``min(now + ttl, not_after)`` so a cached
+    key never outlives its validity window. The ``not_after`` is guaranteed
+    parseable — selection required it (a key with a missing/unparseable bound is
+    inactive and skipped). Returns ``None`` when no examined key qualifies.
+    """
+    return _select_active_ed25519_key(directory, now, max_scan)
+
+
+def _select_active_ed25519_key(
+    directory: WBAFile,
+    now: datetime,
+    max_scan: int,
+) -> tuple[bytes, datetime] | None:
+    """Shared selector for the two active-key faces: the FIRST window-active,
+    well-formed Ed25519 key in document order (cap ``max_scan``), as a
+    ``(raw_public_key, not_after)`` pair, or ``None``. ``active_ed25519_key`` drops
+    the expiry; ``active_ed25519_key_with_expiry`` returns it. ``not_after`` reuses
+    the SAME parser :func:`_key_active_at` used, so the two faces never disagree on
+    the selected key."""
     for key in (directory.keys or [])[:max_scan]:
         if not _key_active_at(key, now):
             continue
         raw = _public_key_of_safe(key)
-        if raw is not None:
-            return raw
+        if raw is None:
+            continue
+        # not_after is guaranteed present + parseable: _key_active_at above rejects
+        # any key whose window bounds do not parse, so the selected key always has one.
+        not_after = _parse_rfc3339(key.not_after)
+        if not_after is None:  # unreachable: _key_active_at required a parseable bound
+            continue
+        return raw, not_after
     return None
 
 

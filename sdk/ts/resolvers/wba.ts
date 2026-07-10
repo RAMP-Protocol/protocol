@@ -375,10 +375,46 @@ export function activeEd25519Key(
   now: number,
   maxScan: number = DEFAULT_ACTIVE_KEY_SCAN,
 ): Uint8Array | null {
+  return selectActiveEd25519Key(directory, now, maxScan)?.key ?? null;
+}
+
+/** Like {@link activeEd25519Key}, but ALSO returns the selected key's expiry.
+ * Runs the IDENTICAL document-order selection and returns `{ key, notAfter }` for
+ * the FIRST qualifying key — the raw 32 bytes plus the SAME `not_after` the window
+ * check parsed, as epoch-ms (the module's time convention). A downstream caller
+ * (e.g. an offer-key cache) clamps its cache TTL to `min(now + ttl, notAfter)` so
+ * a cached key never outlives its validity window. `notAfter` is guaranteed
+ * finite — selection required it (a key with a missing/unparseable bound is
+ * inactive and skipped). Returns `null` when no examined key qualifies.
+ * Byte-parity with the Go `ActiveEd25519KeyWithExpiry` / Python
+ * `active_ed25519_key_with_expiry` oracles. */
+export function activeEd25519KeyWithExpiry(
+  directory: WBAFile,
+  now: number,
+  maxScan: number = DEFAULT_ACTIVE_KEY_SCAN,
+): { key: Uint8Array; notAfter: number } | null {
+  return selectActiveEd25519Key(directory, now, maxScan);
+}
+
+/** Shared selector behind the two active-key faces: the FIRST window-active,
+ * well-formed Ed25519 key in document order (cap `maxScan`), as `{ key, notAfter }`
+ * (notAfter epoch-ms), or `null`. `activeEd25519Key` drops the expiry;
+ * `activeEd25519KeyWithExpiry` returns it. `notAfter` reuses the SAME `Date.parse`
+ * {@link keyActiveAt} used, so the two faces never disagree on the selected key. */
+function selectActiveEd25519Key(
+  directory: WBAFile,
+  now: number,
+  maxScan: number,
+): { key: Uint8Array; notAfter: number } | null {
   for (const key of (directory.keys ?? []).slice(0, maxScan)) {
     if (!keyActiveAt(key, now)) continue;
     const raw = publicKeyOfSafe(key);
-    if (raw) return raw;
+    if (!raw) continue;
+    // not_after is guaranteed finite: keyActiveAt above rejects any key whose
+    // window bounds do not parse, so the selected key always has one.
+    const notAfter = Date.parse(key.not_after);
+    if (Number.isNaN(notAfter)) continue; // unreachable: keyActiveAt required a parseable bound
+    return { key: raw, notAfter };
   }
   return null;
 }

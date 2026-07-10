@@ -19,13 +19,15 @@ from resolvers_harness import (
     HOUR,
     active_jwk,
     expired_jwk,
+    long_jwk,
     make_key,
     wba_jwk,
 )
 from wire.models import WBAFile
 
 from ramp_sdk.b64 import b64url_nopad
-from ramp_sdk.resolvers import active_ed25519_key
+from ramp_sdk.resolvers import active_ed25519_key, active_ed25519_key_with_expiry
+
 
 # A future (not-yet-valid) window: entirely after the anchor.
 def _future_jwk(x: str) -> dict[str, Any]:
@@ -129,3 +131,58 @@ def test_no_active_key_returns_none() -> None:
     # A directory of only inactive keys yields None (parity: Go ErrKeyExpired).
     directory = _directory([expired_jwk(make_key().x), _future_jwk(make_key().x)])
     assert active_ed25519_key(directory, ANCHOR) is None
+
+
+# ── active_ed25519_key_with_expiry — the key + not_after variant ──────────────
+
+
+def test_with_expiry_returns_selected_key_and_its_not_after() -> None:
+    # The FIRST active key wins and its not_after (active_jwk's window upper bound)
+    # is returned as an aware datetime alongside the raw key.
+    k1 = make_key()
+    k2 = make_key()
+    directory = _directory([active_jwk(k1.x), active_jwk(k2.x)])
+    result = active_ed25519_key_with_expiry(directory, ANCHOR)
+    assert result is not None
+    key, not_after = result
+    assert key == k1.raw_pub
+    assert not_after == ANCHOR + HOUR  # active_jwk's not_after
+
+
+def test_with_expiry_skips_inactive_and_returns_next_active_not_after() -> None:
+    # A retired, a future, and a window-active-but-malformed key are all skipped;
+    # the returned not_after is the NEXT (selected) active key's — a long window
+    # so it is distinct from the skipped keys' bounds.
+    retired = make_key()
+    future = make_key()
+    selected = make_key()
+    directory = _directory(
+        [
+            expired_jwk(retired.x),
+            _future_jwk(future.x),
+            active_jwk("AAAAA"),  # active window but x is undecodable base64url
+            long_jwk(selected.x),
+        ]
+    )
+    result = active_ed25519_key_with_expiry(directory, ANCHOR)
+    assert result is not None
+    key, not_after = result
+    assert key == selected.raw_pub
+    assert not_after == ANCHOR + 1000 * HOUR  # long_jwk's not_after
+
+
+def test_with_expiry_returns_none_when_no_key_qualifies() -> None:
+    directory = _directory([expired_jwk(make_key().x), _future_jwk(make_key().x)])
+    assert active_ed25519_key_with_expiry(directory, ANCHOR) is None
+
+
+def test_with_expiry_agrees_with_plain_selector_on_the_key() -> None:
+    # Regression: both faces select the SAME key from the same directory. The
+    # with-expiry variant only adds not_after; it never changes the selection.
+    retired = make_key()
+    selected = make_key()
+    directory = _directory([expired_jwk(retired.x), long_jwk(selected.x)])
+    plain = active_ed25519_key(directory, ANCHOR)
+    with_expiry = active_ed25519_key_with_expiry(directory, ANCHOR)
+    assert with_expiry is not None
+    assert plain == with_expiry[0]

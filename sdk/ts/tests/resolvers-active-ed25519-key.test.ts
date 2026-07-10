@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { WBAFileSchema } from "../../../gen/ts/wire/schemas.ts";
 import { encodeBase64Url } from "../src/base64url.ts";
-import { activeEd25519Key } from "../resolvers/index.ts";
+import { activeEd25519Key, activeEd25519KeyWithExpiry } from "../resolvers/index.ts";
 import { ANCHOR_MS, HOUR_MS, iso, makeKey, wbaJwk } from "./resolvers-harness.ts";
 
 type WBAFile = ReturnType<typeof WBAFileSchema.parse>;
@@ -22,6 +22,11 @@ function expiredJwk(x: string): Record<string, unknown> {
 }
 function futureJwk(x: string): Record<string, unknown> {
 	return wbaJwk(x, iso(ANCHOR_MS + HOUR_MS), iso(ANCHOR_MS + 2 * HOUR_MS));
+}
+// A long-window active key: active at ANCHOR with a FAR not_after, so a
+// with-expiry test can assert a not_after distinct from activeJwk's bound.
+function longJwk(x: string): Record<string, unknown> {
+	return wbaJwk(x, iso(ANCHOR_MS - HOUR_MS), iso(ANCHOR_MS + 1000 * HOUR_MS));
 }
 function directory(keys: Record<string, unknown>[]): WBAFile {
 	return WBAFileSchema.parse({ keys });
@@ -114,5 +119,48 @@ describe("activeEd25519Key", () => {
 			futureJwk((await makeKey()).x),
 		]);
 		expect(activeEd25519Key(dir, ANCHOR_MS)).toBeNull();
+	});
+});
+
+describe("activeEd25519KeyWithExpiry", () => {
+	it("returns the selected key and its exact not_after", async () => {
+		const k1 = await makeKey();
+		const k2 = await makeKey();
+		const dir = directory([activeJwk(k1.x), activeJwk(k2.x)]);
+		const result = activeEd25519KeyWithExpiry(dir, ANCHOR_MS);
+		expect(result).not.toBeNull();
+		expect(result?.key).toEqual(k1.rawPub);
+		expect(result?.notAfter).toBe(ANCHOR_MS + HOUR_MS); // activeJwk's not_after
+	});
+
+	it("skips inactive/malformed keys and returns the next active key's not_after", async () => {
+		const future = await makeKey();
+		const selected = await makeKey();
+		const dir = directory([
+			expiredJwk((await makeKey()).x),
+			futureJwk(future.x),
+			activeJwk("!!!!"), // active window but x is undecodable base64url
+			longJwk(selected.x),
+		]);
+		const result = activeEd25519KeyWithExpiry(dir, ANCHOR_MS);
+		expect(result?.key).toEqual(selected.rawPub);
+		expect(result?.notAfter).toBe(ANCHOR_MS + 1000 * HOUR_MS); // longJwk's not_after
+	});
+
+	it("returns null when no key qualifies", async () => {
+		const dir = directory([
+			expiredJwk((await makeKey()).x),
+			futureJwk((await makeKey()).x),
+		]);
+		expect(activeEd25519KeyWithExpiry(dir, ANCHOR_MS)).toBeNull();
+	});
+
+	it("agrees with activeEd25519Key on the selected key", async () => {
+		const selected = await makeKey();
+		const dir = directory([expiredJwk((await makeKey()).x), longJwk(selected.x)]);
+		const plain = activeEd25519Key(dir, ANCHOR_MS);
+		const withExpiry = activeEd25519KeyWithExpiry(dir, ANCHOR_MS);
+		expect(withExpiry).not.toBeNull();
+		expect(plain).toEqual(withExpiry?.key);
 	});
 });
