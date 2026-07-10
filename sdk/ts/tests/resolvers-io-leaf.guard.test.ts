@@ -5,12 +5,14 @@ import { describe, expect, it } from "vitest";
 // Structural guard for the resolver IO-leaf invariant (bsh8k).
 //
 // The resolver faces (sdk/ts/resolvers/) are the SDK's ONLY IO-bearing tree: they
-// fetch JWKS / WBA directories / ramp.json over an injected transport. The pure
-// L1/L2 tree (sdk/ts/core + sdk/ts/src) is transport-neutral by contract — it owns
-// no keys, opens no sockets, and MUST NOT depend on the IO tree. Dependency flows
-// one way only: resolvers/ -> {core,src} (it reuses thumbprint + base64url), never
-// the reverse. A pure-tree file that imports from resolvers/ would drag IO into the
-// transport-neutral core and is exactly the regression this guard bans.
+// fetch JWKS / WBA directories / ramp.json over an injected transport (default a
+// maintained undici client with the SSRF guard). The pure L1/L2 tree (sdk/ts/core
+// + sdk/ts/src) is transport-neutral by contract — it owns no keys, opens no
+// sockets, and MUST NOT depend on the IO tree. Dependency flows one way only:
+// resolvers/ -> {core,src} (it reuses thumbprint + base64url), never the reverse.
+// A pure-tree file that imports from resolvers/ OR pulls in the undici client
+// directly would drag IO into the transport-neutral core — the undici dependency
+// is scoped to the IO tree — and is exactly the regression this guard bans.
 //
 // This complements the existing core transport-neutrality guard (which bans
 // framework imports); here we ban the IO module from leaking UP into the pure tree.
@@ -22,6 +24,10 @@ const dirPath = (name: string): string =>
 
 const PURE_DIRS = ["core", "src"];
 const RESOLVERS_IMPORT = /from\s+["'][^"']*\/resolvers\//;
+// The maintained HTTP client is scoped to the IO tree; a pure-tree file importing
+// undici directly is the same IO leak as importing resolvers/ (parity with the
+// Python io-leaf guard, which bans httpx/httpcore in the pure core).
+const UNDICI_IMPORT = /from\s+["']undici["']/;
 
 function tsFilesUnder(dir: string): string[] {
   return readdirSync(dirPath(dir), { withFileTypes: true })
@@ -29,17 +35,18 @@ function tsFilesUnder(dir: string): string[] {
     .map((e) => `${dir}/${e.name}`);
 }
 
-// importsResolvers is the pure predicate (extracted so meta-tests can exercise it).
-function importsResolvers(source: string): boolean {
-  return RESOLVERS_IMPORT.test(source);
+// importsIo is the pure predicate (extracted so meta-tests can exercise it): a
+// pure-tree file leaks IO if it imports the resolvers module OR the undici client.
+function importsIo(source: string): boolean {
+  return RESOLVERS_IMPORT.test(source) || UNDICI_IMPORT.test(source);
 }
 
 describe("resolver IO-leaf structural guard", () => {
-  it("no file in the pure IO-free tree (core/src) imports the IO resolvers module", () => {
+  it("no file in the pure IO-free tree (core/src) imports the IO resolvers module or undici", () => {
     const offenders: string[] = [];
     for (const dir of PURE_DIRS) {
       for (const rel of tsFilesUnder(dir)) {
-        if (importsResolvers(readFileSync(dirPath(rel), "utf8"))) offenders.push(rel);
+        if (importsIo(readFileSync(dirPath(rel), "utf8"))) offenders.push(rel);
       }
     }
     expect(offenders).toEqual([]);
@@ -54,15 +61,19 @@ describe("resolver IO-leaf structural guard", () => {
 
   // --- meta-tests: exercise the detector against synthetic source ------------
   it("[meta positive] catches a pure-tree file importing resolvers", () => {
-    expect(importsResolvers('import { newWBAKeyResolver } from "../resolvers/index.ts";')).toBe(true);
+    expect(importsIo('import { newWBAKeyResolver } from "../resolvers/index.ts";')).toBe(true);
+  });
+
+  it("[meta positive] catches a pure-tree file importing the undici client", () => {
+    expect(importsIo('import { fetch } from "undici";')).toBe(true);
   });
 
   it("[meta negative] passes a pure-tree file importing only pure primitives", () => {
-    expect(importsResolvers('import { thumbprint } from "../src/thumbprint.ts";')).toBe(false);
+    expect(importsIo('import { thumbprint } from "../src/thumbprint.ts";')).toBe(false);
   });
 
   it("[meta would-be-missed] catches a reformatted import a naive substring would slip", () => {
     const reformatted = 'import {\n  newWBAKeyResolver,\n}\n  from   "../resolvers/wba.ts";';
-    expect(importsResolvers(reformatted)).toBe(true);
+    expect(importsIo(reformatted)).toBe(true);
   });
 });

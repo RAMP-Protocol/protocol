@@ -25,7 +25,8 @@
     "test": "tsc -p tsconfig.json --strict --noEmit && vitest run"
   },
   "dependencies": {
-    "canonicalize": "^3.0.0"
+    "canonicalize": "^3.0.0",
+    "undici": "^6.27.0"
   },
   "peerDependencies": {
     "hono": "^4.7.0",

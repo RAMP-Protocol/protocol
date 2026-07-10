@@ -1,20 +1,21 @@
 // The one HTTP transport seam the fetching resolvers share. Transport-neutral
-// per the SDK dependency policy (no framework HTTP client): the resolvers accept
-// an injected fetch-compatible callable and default to an SSRF-GUARDED transport
-// (see guardedFetch) — matching the Go oracle's safe-by-default guarded client.
-// Integration tests / on-prem deployments that must reach a private origin
-// inject their own FetchLike (the escape hatch); the injected callable is never
-// mocked, only pointed at a real in-process origin.
+// per the SDK dependency policy (the resolvers accept an injected fetch-compatible
+// callable) but the DEFAULT transport now runs on a maintained HTTP client
+// (undici) instead of a hand-rolled node:http request. undici owns the response
+// state machine — status, redirects, 1xx, decompression — so this module owns
+// only the SSRF guard (an injectable connection-level connector) and the
+// fail-closed status→body taxonomy. Integration tests / on-prem deployments that
+// must reach a private origin inject their own FetchLike (the escape hatch).
 
 import { lookup as dnsLookup } from "node:dns/promises";
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest, type RequestOptions } from "node:https";
+
+import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 
 import { DirectoryUnavailable } from "./errors.ts";
 import { allowedScheme, blockedAddress } from "./ssrf.ts";
 
 /** The minimal response shape the resolvers read — a structural subset of the
- * WHATWG `Response`, so the global `fetch` satisfies it without an adapter. */
+ * WHATWG `Response`, so the global `fetch` (and undici's) satisfies it. */
 export interface FetchResponse {
   status: number;
   text(): Promise<string>;
@@ -40,17 +41,77 @@ export class SsrfBlockedError extends Error {
   }
 }
 
-/** The SSRF-guarded default transport. Ports sdk/go/helpers newGuardedWBAClient.
+/** An SSRF-guarded undici connector, injectable into any undici Dispatcher.
  *
- * The directory host is derived from a caller-supplied Signature-Agent and the
- * fetch runs BEFORE the ed25519 signature check, so an unguarded default is a
- * pre-auth SSRF lever. This transport closes the DNS-REBINDING window: it
- * resolves the host ONCE, checks EVERY resolved address against blockedAddress,
- * and then connects PINNED to a checked IP — the request dials the IP directly
- * while the TLS `servername` (and `Host` header) carry the original hostname, so
- * the host is NOT re-resolved between the check and the connect. A resolve →
- * check → fetch-by-hostname sequence would re-resolve at connect time and reopen
- * the window; pinning to the already-checked address forecloses it. */
+ * DX: `new Agent({ connect: ssrfGuard() })`. The guard runs at the CONNECTION
+ * (dial) seam — the only place the DNS-REBINDING window is actually closed: it
+ * resolves the host, checks EVERY resolved address against blockedAddress, and
+ * pins the dial to a checked IP literal (undici does not re-resolve it), while
+ * the TLS `servername` keeps the original hostname so cert/SNI validation is
+ * unaffected. Because undici re-dials every followed redirect through the same
+ * connector, each redirect hop is re-vetted too (consistent with the Go and
+ * Python guards); a redirect into a non-http(s) scheme is a WHATWG-fetch network
+ * error, so the scheme allowlist is deny-by-default without a redirect handler. */
+export function ssrfGuard(): buildConnector.connector {
+  const base = buildConnector({});
+  return (opts, cb) => {
+    const originalHostname = opts.hostname;
+    dnsLookup(originalHostname, { all: true })
+      .then((records) => {
+        if (records.length === 0) {
+          cb(new SsrfBlockedError(`SSRF guard: no address for ${originalHostname}`), null);
+          return;
+        }
+        for (const { address } of records) {
+          if (blockedAddress(address)) {
+            cb(
+              new SsrfBlockedError(
+                `SSRF guard: refusing to dial non-public address ${address} for ${originalHostname}`,
+              ),
+              null,
+            );
+            return;
+          }
+        }
+        // Every address passed; pin to the first (all public) checked IP literal
+        // — no re-resolution at connect — and keep servername = original host.
+        base(
+          { ...opts, hostname: records[0]?.address ?? originalHostname, servername: opts.servername || originalHostname },
+          cb,
+        );
+      })
+      .catch((err: unknown) => {
+        cb(new SsrfBlockedError(`SSRF guard: cannot resolve ${originalHostname}: ${String(err)}`), null);
+      });
+  };
+}
+
+/** The single guarded Dispatcher backing the default guarded transport. */
+const guardedAgent = new Agent({ connect: ssrfGuard() });
+
+/** Reads an undici response body as text, bounded to MAX_DOC_BYTES. Iterates the
+ * body stream (async-iterable in Node) so a hostile origin cannot force an
+ * unbounded read; breaking the loop cancels the stream once the cap is hit. */
+async function readBounded(body: AsyncIterable<Uint8Array> | null): Promise<string> {
+  if (body === null) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of body) {
+    chunks.push(chunk);
+    total += chunk.length;
+    if (total >= MAX_DOC_BYTES) break;
+  }
+  const buf = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  return buf.subarray(0, MAX_DOC_BYTES).toString("utf8");
+}
+
+/** The SSRF-guarded default transport. The directory host is derived from a
+ * caller-supplied Signature-Agent and the fetch runs BEFORE the ed25519 check,
+ * so an unguarded default would be a pre-auth SSRF lever. Runs on undici through
+ * the guarded connector (see ssrfGuard): the initial URL's scheme is vetted
+ * deny-by-default, every dial (initial + each redirect hop) is address-checked
+ * and pinned, and undici owns status/redirect/1xx so a non-2xx is an ordinary
+ * response, never a crash. */
 export const guardedFetch: FetchLike = async (url) => {
   let parsed: URL;
   try {
@@ -58,88 +119,31 @@ export const guardedFetch: FetchLike = async (url) => {
   } catch (err) {
     throw new SsrfBlockedError(`SSRF guard: unparseable url ${url}: ${String(err)}`);
   }
-  // Deny-by-default scheme allowlist (only http/https). URL.protocol carries a
-  // trailing colon ("https:"), so strip it before the allowlist check. TS
-  // follows no redirects, so there is no redirect target to re-vet — the
-  // initial-URL scheme is the only one dialed.
+  // Deny-by-default scheme allowlist (only http/https) on the initial URL.
+  // URL.protocol carries a trailing colon ("https:"); strip it before the check.
   const scheme = parsed.protocol.replace(/:$/, "");
   if (!allowedScheme(scheme)) {
     throw new SsrfBlockedError(`SSRF guard: refusing non-http(s) scheme ${parsed.protocol}`);
   }
-  const isHttps = scheme.toLowerCase() === "https";
-  const hostname = stripBrackets(parsed.hostname);
-
-  // Resolve ONCE and vet every candidate address; pin to the first that passes.
-  const pinnedIp = await resolveAndVet(hostname);
-
-  const port = parsed.port !== "" ? Number(parsed.port) : isHttps ? 443 : 80;
-  const requestFn = isHttps ? httpsRequest : httpRequest;
-  const options: RequestOptions = {
-    host: pinnedIp, // dial the CHECKED address — no hostname re-resolution
-    port,
-    method: "GET",
-    path: `${parsed.pathname}${parsed.search}`,
-    // Carry the original hostname so vhost routing (Host) and TLS cert
-    // validation (servername/SNI) still target the intended origin.
-    headers: { Host: parsed.host },
-    servername: hostname,
-    timeout: DEFAULT_HTTP_TIMEOUT_MS,
-  };
-
-  return await new Promise<FetchResponse>((resolve, reject) => {
-    const req = requestFn(options, (res) => {
-      const status = res.statusCode ?? 0;
-      const chunks: Buffer[] = [];
-      let total = 0;
-      res.on("data", (chunk: Buffer) => {
-        total += chunk.length;
-        if (total > MAX_DOC_BYTES) {
-          res.destroy();
-          return;
-        }
-        chunks.push(chunk);
-      });
-      res.on("end", () => {
-        const body = Buffer.concat(chunks).toString("utf8");
-        resolve({ status, text: () => Promise.resolve(body) });
-      });
-      res.on("error", reject);
-    });
-    req.on("timeout", () => req.destroy(new Error("SSRF guard: request timeout")));
-    req.on("error", reject);
-    req.end();
-  });
-};
-
-/** Resolve `hostname` and return one address that passed the SSRF check. When
- * the input is already a numeric literal, dns.lookup returns it verbatim; either
- * way EVERY resolved address is vetted and a blocked one aborts the dial. */
-async function resolveAndVet(hostname: string): Promise<string> {
-  let records: { address: string }[];
+  let resp: Awaited<ReturnType<typeof undiciFetch>>;
   try {
-    records = await dnsLookup(hostname, { all: true });
+    resp = await undiciFetch(url, {
+      dispatcher: guardedAgent,
+      redirect: "follow",
+      signal: AbortSignal.timeout(DEFAULT_HTTP_TIMEOUT_MS),
+    });
   } catch (err) {
-    throw new SsrfBlockedError(`SSRF guard: cannot resolve ${hostname}: ${String(err)}`);
+    // undici wraps a connector error; surface the precise SsrfBlockedError so a
+    // blocked target is a clear, SSRF-labelled failure (fetchStrict/fetchSoft map
+    // it the same way regardless). Non-guard transport errors propagate unchanged.
+    if (err instanceof SsrfBlockedError) throw err;
+    const cause = (err as { cause?: unknown }).cause;
+    if (cause instanceof SsrfBlockedError) throw cause;
+    throw err;
   }
-  if (records.length === 0) {
-    throw new SsrfBlockedError(`SSRF guard: no address for ${hostname}`);
-  }
-  for (const { address } of records) {
-    if (blockedAddress(address)) {
-      throw new SsrfBlockedError(
-        `SSRF guard: refusing to dial non-public address ${address} for ${hostname}`,
-      );
-    }
-  }
-  // Every address passed; pin to the first (all are public, so any is safe).
-  return records[0]?.address as string;
-}
-
-function stripBrackets(hostname: string): string {
-  return hostname.startsWith("[") && hostname.endsWith("]")
-    ? hostname.slice(1, -1)
-    : hostname;
-}
+  const body = await readBounded(resp.body as AsyncIterable<Uint8Array> | null);
+  return { status: resp.status, text: () => Promise.resolve(body) };
+};
 
 /** Default transport for a resolver whose URL is caller-configured (well-known
  * JWKS / ramp.json): a plain fetch. It is NOT SSRF-guarded — the operator, not an
