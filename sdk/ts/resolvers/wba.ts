@@ -352,6 +352,37 @@ function publicKeyOf(key: WBAJwk): Uint8Array {
   return raw;
 }
 
+// Document-order scan cap for activeEd25519Key: a WBA directory padded with junk
+// entries beyond this many keys cannot force unbounded selection work (a DoS cap);
+// a valid key listed past the first DEFAULT_ACTIVE_KEY_SCAN positions is unreachable.
+const DEFAULT_ACTIVE_KEY_SCAN = 10;
+
+/** First window-active, well-formed Ed25519 key (raw 32 bytes) from `directory`,
+ * or `null`. Selects an identity's CURRENT signing key BY DOCUMENT ORDER when its
+ * thumbprint is not known ahead of time — complementing WBAKeyResolver, which
+ * matches a KNOWN thumbprint. Iterates the directory's keys in document order,
+ * examining AT MOST the first `maxScan` (default 10 — a DoS cap so a padded
+ * directory cannot force unbounded work), and returns the FIRST key that passes
+ * ALL of: window-active ([not_before, not_after) half-open covers `now` (epoch-ms),
+ * both bounds RFC 3339-parseable — a missing/unparseable bound makes the key
+ * inactive); `kty === "OKP"` and `crv === "Ed25519"`; and a present `x` that
+ * base64url-decodes to exactly 32 bytes. Any key failing any check is skipped and
+ * iteration continues; a valid key listed beyond the first `maxScan` positions is
+ * unreachable. Returns `null` when no examined key qualifies. Byte-parity with the
+ * Go `ActiveEd25519Key` / Python `active_ed25519_key` oracles. */
+export function activeEd25519Key(
+  directory: WBAFile,
+  now: number,
+  maxScan: number = DEFAULT_ACTIVE_KEY_SCAN,
+): Uint8Array | null {
+  for (const key of (directory.keys ?? []).slice(0, maxScan)) {
+    if (!keyActiveAt(key, now)) continue;
+    const raw = publicKeyOfSafe(key);
+    if (raw) return raw;
+  }
+  return null;
+}
+
 /** Whether `now` (epoch-ms) is inside `key`'s [not_before, not_after) half-open
  * window. A missing/unparseable bound makes the key inactive — validity must be
  * explicit. */

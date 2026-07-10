@@ -725,6 +725,53 @@ func wbaPublicKey(k *rampv1.JsonWebKey) (ed25519.PublicKey, error) {
 	return ed25519.PublicKey(raw), nil
 }
 
+// defaultActiveKeyScan bounds how many keys ActiveEd25519Key examines in document
+// order. A WBA directory padded with junk entries beyond this many keys cannot
+// force unbounded selection work (a denial-of-service cap): a valid key listed
+// past the first defaultActiveKeyScan positions is unreachable.
+const defaultActiveKeyScan = 10
+
+// ActiveEd25519Key selects an identity's CURRENT window-active Ed25519 signing key
+// from a WBA directory BY DOCUMENT ORDER, complementing WBAKeyResolver (which
+// matches a KNOWN thumbprint). It iterates directory.GetKeys() in document order,
+// examining AT MOST the first maxScan (omit → defaultActiveKeyScan of 10, the DoS
+// cap), and returns the FIRST key that passes ALL of: window-active
+// ([not_before, not_after) half-open covers now, both bounds RFC 3339-parseable —
+// a missing/unparseable bound makes the key inactive); kty=="OKP" && crv=="Ed25519";
+// and a present x that base64url-decodes to exactly 32 bytes. Any key failing any
+// check is skipped and iteration continues; a valid key listed beyond the first
+// maxScan positions is unreachable. It returns (nil, ErrKeyExpired) when no
+// examined key qualifies — the same not-found sentinel WBAKeyResolver surfaces for
+// an out-of-window key. Byte-parity with the Python active_ed25519_key / TS
+// activeEd25519Key oracles.
+func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, error) {
+	scan := defaultActiveKeyScan
+	if len(maxScan) > 0 {
+		scan = maxScan[0]
+	}
+	if scan < 0 {
+		scan = 0
+	}
+	if directory == nil {
+		return nil, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
+	}
+	keys := directory.GetKeys()
+	if len(keys) < scan {
+		scan = len(keys)
+	}
+	for _, k := range keys[:scan] {
+		if !wbaKeyActiveAt(k, now) {
+			continue
+		}
+		pub, err := wbaPublicKey(k)
+		if err != nil {
+			continue
+		}
+		return pub, nil
+	}
+	return nil, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
+}
+
 // wbaKeyActiveAt reports whether now falls inside k's [not_before, not_after)
 // half-open validity window. A missing or unparseable bound makes the key
 // inactive — validity must be explicit.

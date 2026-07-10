@@ -51,6 +51,10 @@ _DEFAULT_SYNC_DEBOUNCE = timedelta(seconds=5)
 # permanently freezes later (legitimately earlier) snapshots under the guard.
 _AS_OF_SKEW = timedelta(seconds=300)
 _ED25519_PUBLIC_KEY_BYTES = 32
+# Document-order scan cap for active_ed25519_key: a WBA directory padded with junk
+# entries beyond this many keys cannot force unbounded selection work (a DoS cap);
+# a valid key listed past the first _DEFAULT_ACTIVE_KEY_SCAN positions is unreachable.
+_DEFAULT_ACTIVE_KEY_SCAN = 10
 
 NowFn = Callable[[], datetime]
 AfterFn = Callable[[timedelta], "queue.Queue[datetime]"]
@@ -339,6 +343,35 @@ class WBAKeyResolver:
             return base
         seconds = delta.total_seconds()
         return base + timedelta(seconds=random.uniform(-seconds, seconds))
+
+
+def active_ed25519_key(
+    directory: WBAFile,
+    now: datetime,
+    max_scan: int = _DEFAULT_ACTIVE_KEY_SCAN,
+) -> bytes | None:
+    """First window-active, well-formed Ed25519 key (raw 32 bytes) from ``directory``.
+
+    Selects an identity's CURRENT signing key BY DOCUMENT ORDER when its thumbprint
+    is not known ahead of time — complementing :meth:`WBAKeyResolver.resolve`, which
+    matches a KNOWN thumbprint. Iterates the directory's keys in document order,
+    examining AT MOST the first ``max_scan`` (default 10 — a DoS cap so a padded
+    directory cannot force unbounded work), and returns the FIRST key that passes
+    ALL of: window-active ([not_before, not_after) half-open covers ``now``, both
+    bounds RFC 3339-parseable — a missing/unparseable bound makes the key inactive);
+    ``kty == "OKP"`` and ``crv == "Ed25519"``; and a present ``x`` that
+    base64url-decodes to exactly 32 bytes. Any key failing any check is skipped and
+    iteration continues; a valid key listed beyond the first ``max_scan`` positions
+    is unreachable. Returns ``None`` when no examined key qualifies. Byte-parity with
+    the Go ``ActiveEd25519Key`` / TS ``activeEd25519Key`` oracles.
+    """
+    for key in (directory.keys or [])[:max_scan]:
+        if not _key_active_at(key, now):
+            continue
+        raw = _public_key_of_safe(key)
+        if raw is not None:
+            return raw
+    return None
 
 
 def _await_inflight(pending: _Inflight) -> WBAFile:
