@@ -14,11 +14,12 @@ from __future__ import annotations
 import http.server
 import threading
 
+import httpx
 import pytest
 from conftest import GO_RESOLVERS_TESTDATA, load_json
 
-from ramp_sdk.resolvers import _http
-from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_fetch
+from ramp_sdk.resolvers import _ssrf
+from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_client
 from ramp_sdk.resolvers._ssrf import SsrfError, allowed_scheme, blocked_address
 from ramp_sdk.resolvers.errors import DirectoryUnavailableError
 
@@ -101,22 +102,21 @@ def test_blocked_address_accepts_ipaddress_object() -> None:
     assert blocked_address(ipaddress.ip_address("8.8.8.8")) is False
 
 
-def test_guarded_fetch_refuses_loopback() -> None:
+def test_guarded_client_refuses_loopback() -> None:
     """The guarded default transport must refuse a loopback target.
 
     Port of TestGuardedWBAClientBlocksLoopback: an in-process server listens on
     127.0.0.1, so a successful GET would prove the guard is absent. The refusal is
-    an ``SsrfError`` (an ``OSError``) whose message mentions the SSRF guard.
+    an ``SsrfError`` (an ``OSError``) raised at the dial seam, mentioning the guard.
     """
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _OkHandler)
-    port = server.server_address[1]
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
+    server, port = _serve(_OkHandler)
+    client = guarded_client()
     try:
         with pytest.raises(SsrfError) as excinfo:
-            guarded_fetch(f"http://127.0.0.1:{port}/")
+            client.get(f"http://127.0.0.1:{port}/")
         assert "SSRF" in str(excinfo.value)
     finally:
+        client.close()
         server.shutdown()
         server.server_close()
 
@@ -130,43 +130,56 @@ def _serve(handler: type[http.server.BaseHTTPRequestHandler]):
     return server, port
 
 
-def test_guarded_fetch_refuses_redirect_to_ftp() -> None:
-    """A 302 to an ftp:// target must be refused with an SsrfError.
+def test_guarded_client_refuses_redirect_to_ftp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 302 into a non-http(s) scheme must be refused deny-by-default.
 
-    A scheme denylist is unwinnable, so the guarded transport is deny-by-default:
-    only http/https redirects are followed. The ftp target is never dialed.
+    httpx has no transport for ftp/telnet/gopher/…, so following such a redirect
+    raises ``httpx.UnsupportedProtocol`` — the maintained-client form of the
+    deny-by-default scheme allowlist, no hand-rolled redirect handler needed. The
+    ftp target is never dialed; ``fetch_strict`` maps it to a directory outage.
+    Allow loopback so the initial hop reaches the in-process origin that redirects.
     """
-    location = "ftp://ftp.example.com/secret"
+    monkeypatch.setattr(_ssrf, "blocked_address", lambda _ip: False)
 
     class _RedirectHandler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             self.send_response(302)
-            self.send_header("Location", location)
+            self.send_header("Location", "ftp://ftp.example.com/secret")
             self.end_headers()
 
         def log_message(self, *_a: object) -> None:
             return
 
     server, port = _serve(_RedirectHandler)
+    client = guarded_client()
+    url = f"http://127.0.0.1:{port}/"
     try:
-        with pytest.raises(SsrfError) as excinfo:
-            guarded_fetch(f"http://127.0.0.1:{port}/")
-        assert "SSRF" in str(excinfo.value)
+        with pytest.raises(httpx.UnsupportedProtocol):
+            client.get(url)
+        with pytest.raises(DirectoryUnavailableError):
+            fetch_strict(client, url)
     finally:
+        client.close()
         server.shutdown()
         server.server_close()
 
 
-def test_guarded_fetch_refuses_redirect_to_internal_address() -> None:
-    """A 302 to an internal (loopback) address must be refused with an SsrfError.
+def test_guarded_client_refuses_redirect_to_internal_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 302 to an internal address must be refused because EACH redirect hop is
+    re-vetted at the dial seam.
 
-    The redirect scheme (http) is allowed, but the redirect is followed through
-    the SAME guarded opener, so the internal target is re-checked on connect and
-    rejected — the rebinding window is closed on the redirect host too.
+    Allow the loopback origin but block only 169.254.0.0/16, so the refusal can
+    ONLY come from re-checking the redirect target (not the initial hop): httpx
+    follows the 302 and re-dials through the same guarded backend, which rejects
+    the IMDS address. This proves the rebinding window is closed on the redirect
+    host too — a stronger claim than the old test, which really only exercised the
+    initial loopback block.
     """
+    monkeypatch.setattr(_ssrf, "blocked_address", lambda ip: str(ip).startswith("169.254"))
 
     class _RedirectHandler(http.server.BaseHTTPRequestHandler):
-        # Redirect to a well-known internal address (cloud IMDS) the guard blocks.
         location = "http://169.254.169.254/latest/meta-data/"
 
         def do_GET(self) -> None:
@@ -178,33 +191,29 @@ def test_guarded_fetch_refuses_redirect_to_internal_address() -> None:
             return
 
     server, port = _serve(_RedirectHandler)
+    client = guarded_client()
     try:
         with pytest.raises(SsrfError) as excinfo:
-            guarded_fetch(f"http://127.0.0.1:{port}/")
+            client.get(f"http://127.0.0.1:{port}/")
         assert "SSRF" in str(excinfo.value)
     finally:
+        client.close()
         server.shutdown()
         server.server_close()
 
 
-def test_guarded_fetch_non_2xx_returns_status_not_crash(
+def test_guarded_client_non_2xx_returns_status_not_crash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A non-2xx from the guarded opener must be (status, b"") — never a crash.
+    """A non-2xx from the guarded client must be an ordinary status — never a crash.
 
-    Regression guard for the OpenerDirector wiring: because the guarded opener is
-    built by hand (to exclude FTP/File/Data handlers), it must still include
-    HTTPDefaultErrorHandler. Without it, HTTPErrorProcessor dispatches a 404/500
-    to parent.error() but no handler raises HTTPError, so open() returns None and
-    ``with None as resp`` raises a TypeError — which is NOT an OSError and so
-    escapes the fetch_strict/fetch_soft taxonomy AND breaks the revocation
-    poller's soft-fail. With the handler, a non-2xx raises HTTPError → caught →
-    returned as (status, b""), exactly like default_fetch.
-
-    The guard blocks loopback, so allow it for this one test to exercise the real
-    non-2xx path against an in-process origin (the wiring, not the classifier).
+    Because httpx owns the response state machine, a 404/500 is a normal Response
+    (no hand-rolled handler chain to forget, unlike the old urllib opener). The
+    fail-closed taxonomy still holds: fetch_soft drops the refresh (None, keeping
+    the poller's soft-fail intact) and fetch_strict classifies it as an outage.
+    Allow loopback for this one test to exercise the real non-2xx path.
     """
-    monkeypatch.setattr(_http, "blocked_address", lambda _ip: False)
+    monkeypatch.setattr(_ssrf, "blocked_address", lambda _ip: False)
 
     class _NotFoundHandler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -216,17 +225,16 @@ def test_guarded_fetch_non_2xx_returns_status_not_crash(
 
     server, port = _serve(_NotFoundHandler)
     url = f"http://127.0.0.1:{port}/"
+    client = guarded_client()
     try:
-        # Transport level: a clean (status, b""), not a raised TypeError.
-        status, body = guarded_fetch(url)
-        assert status == 404
-        assert body == b""
-        # Taxonomy level: the poller's soft-fail drops the refresh (None, not a
-        # crash) and the strict arm classifies it as a directory outage.
-        assert fetch_soft(guarded_fetch, url) is None
+        # Transport level: httpx returns the status; no crash.
+        assert client.get(url).status_code == 404
+        # Taxonomy level: soft-fail → None (poller safe), strict → outage.
+        assert fetch_soft(client, url) is None
         with pytest.raises(DirectoryUnavailableError):
-            fetch_strict(guarded_fetch, url)
+            fetch_strict(client, url)
     finally:
+        client.close()
         server.shutdown()
         server.server_close()
 

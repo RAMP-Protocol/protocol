@@ -99,6 +99,13 @@ requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
   "cryptography>=44",
+  # Maintained HTTP client for the L2 fetching resolvers (WBA / well-known
+  # directory GETs). It owns the response state machine (status, redirects, 1xx,
+  # decompression) so the SDK never hand-rolls a transport; the SSRF guard is
+  # injected as an httpx transport (ramp_sdk.resolvers.ssrf_guard). The pure
+  # signing core (ramp_sdk.signing_transport) remains transport-neutral and
+  # imports no httpx — the dependency is scoped to the I/O layer.
+  "httpx>=0.27",
   "pydantic>=2.9",
   # Vetted RFC 8785 JCS canonicalization for the offer/acceptance signed payload
   # (never hand-roll canonicalization). The core composes it; it is the JSON
@@ -108,9 +115,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
-# No httpx extra: ramp_sdk.signing_transport is a transport-neutral sign face —
-# it imports no httpx; the consumer owns its HTTP client. The ASGI server-binding
-# extra (FastAPI/Starlette) is deferred with its binding.
+# The ASGI server-binding extra (FastAPI/Starlette) is deferred with its binding.
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -22,12 +22,16 @@ import urllib.parse
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 from wire.models import JsonWebKey, KeyRevocationList, WBAFile
 
+if TYPE_CHECKING:
+    import httpx
+
 from ramp_sdk.b64 import b64url_decode
-from ramp_sdk.resolvers._http import HttpFetch, fetch_soft, fetch_strict, guarded_fetch
+from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_client
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
     KeyExpiredError,
@@ -112,14 +116,15 @@ class WBAKeyResolver:
         require_revocation: bool = False,
         on_poll_armed: Hook | None = None,
         on_poll_cycle: Hook | None = None,
-        # Safe by default: the SSRF-guarded transport. The directory host is
+        # Safe by default: an SSRF-guarded httpx.Client. The directory host is
         # derived from the caller-supplied Signature-Agent and fetched BEFORE the
         # ed25519 check, so an unguarded default would be a pre-auth SSRF lever.
-        # ``guarded_fetch`` resolves + pins to a checked IP (closing the
+        # ``guarded_client()`` resolves + pins to a checked IP (closing the
         # DNS-rebinding window) and refuses reserved / non-public targets. A
         # deployment that must reach a private directory (tests, on-prem) injects
-        # its own callable here — the escape hatch, mirroring the Go client injection.
-        http: HttpFetch = guarded_fetch,
+        # its own httpx.Client here — the escape hatch, mirroring the Go client
+        # injection.
+        http: httpx.Client | None = None,
     ) -> None:
         self._scheme = scheme or "https"
         self._ttl = ttl if ttl > timedelta(0) else _DEFAULT_TTL
@@ -138,7 +143,7 @@ class WBAKeyResolver:
         self._require_revocation = require_revocation
         self._on_poll_armed = on_poll_armed
         self._on_poll_cycle = on_poll_cycle
-        self._http = http
+        self._http = http if http is not None else guarded_client()
         self._dir_lock = threading.Lock()
         self._dir_cache: dict[str, _DirEntry] = {}
         self._rev_lock = threading.Lock()
