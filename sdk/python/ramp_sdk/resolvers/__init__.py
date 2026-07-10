@@ -21,7 +21,7 @@ from ramp_sdk.resolvers.errors import (
     RevocationUnevaluatedError,
     UnknownKeyError,
 )
-from ramp_sdk.resolvers.wba import WBAKeyResolver
+from ramp_sdk.resolvers.wba import WBAKeyResolver, active_ed25519_key
 from ramp_sdk.resolvers.wellknown import WellKnownEndpointResolver, WellKnownKeyResolver
 
 __all__ = [
@@ -36,5 +36,6 @@ __all__ = [
     "WBAKeyResolver",
     "WellKnownEndpointResolver",
     "WellKnownKeyResolver",
+    "active_ed25519_key",
     "blocked_address",
 ]
