@@ -1,4 +1,4 @@
-package helpers_test
+package resolvers_test
 
 // wbakeyresolver_debounce_test.go — RAMP-24 anti-amplification: the
 // unknown-thumbprint force-refresh is throttled to one directory fetch per
@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
 // ── countingOrigin ───────────────────────────────────────────────────────────
@@ -94,7 +95,7 @@ func TestWBAKeyResolver_UnknownThumbprintBurstDebounced(t *testing.T) {
 
 	now := wbaAnchor
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.URL)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme:       "http",
 		HTTP:         origin.Client(),
 		TTL:          time.Hour,
@@ -151,7 +152,7 @@ func TestWBAKeyResolver_ConcurrentRefreshSingleflight(t *testing.T) {
 	origin.arrived = make(chan struct{}, 1)
 
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.URL)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		TTL:    time.Hour,

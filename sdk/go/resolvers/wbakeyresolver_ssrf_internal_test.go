@@ -1,4 +1,4 @@
-package helpers
+package resolvers
 
 // Internal test: the SSRF guard on the built-in WBA HTTP client lives on an
 // unexported constructor, so it is exercised from inside the package.

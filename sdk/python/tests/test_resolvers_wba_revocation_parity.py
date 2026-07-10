@@ -19,12 +19,12 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-from conftest import GO_TESTDATA, load_json
+from conftest import GO_RESOLVERS_TESTDATA, load_json
 from resolvers_harness import MutableClock, Origin, loopback_fetch, revocation_json, wba_file_json
 
 from ramp_sdk.resolvers import WBAKeyResolver
 
-_VECTOR = load_json(GO_TESTDATA / "revocation-membership-vectors.json")
+_VECTOR = load_json(GO_RESOLVERS_TESTDATA / "revocation-membership-vectors.json")
 
 
 def _as_of() -> datetime:

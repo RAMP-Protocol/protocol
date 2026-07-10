@@ -15,7 +15,7 @@ import http.server
 import threading
 
 import pytest
-from conftest import GO_TESTDATA, load_json
+from conftest import GO_RESOLVERS_TESTDATA, load_json
 
 from ramp_sdk.resolvers import _http
 from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_fetch
@@ -23,8 +23,8 @@ from ramp_sdk.resolvers._ssrf import SsrfError, allowed_scheme, blocked_address
 from ramp_sdk.resolvers.errors import DirectoryUnavailableError
 
 # The shared adversarial corpora (Go emits, all SDKs consume — never edited here).
-_ADDRESS_VECTORS = load_json(GO_TESTDATA / "ssrf-address-vectors.json")["vectors"]
-_SCHEME_VECTORS = load_json(GO_TESTDATA / "ssrf-scheme-vectors.json")["vectors"]
+_ADDRESS_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "ssrf-address-vectors.json")["vectors"]
+_SCHEME_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "ssrf-scheme-vectors.json")["vectors"]
 
 
 @pytest.mark.parametrize("vec", _ADDRESS_VECTORS, ids=lambda v: v["name"])

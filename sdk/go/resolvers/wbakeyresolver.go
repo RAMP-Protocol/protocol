@@ -1,4 +1,4 @@
-package helpers
+package resolvers
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
 // WBA-resolution sentinels. AUTHORITY CONTRACT: the resolver surfaces these
@@ -167,49 +168,71 @@ func allowedScheme(scheme string) bool {
 // maxWBARedirects bounds redirect following on the guarded transport.
 const maxWBARedirects = 5
 
-// newGuardedWBAClient is the HTTP client used when the caller injects none. It
-// refuses to dial any non-public address (see ssrfBlockedPrefixes). The directory
-// host is derived from a caller-supplied Signature-Agent and the fetch runs
-// BEFORE the ed25519 signature check, so an unguarded default is a pre-auth SSRF
-// lever against internal networks. The check runs in Dialer.Control against the
-// ALREADY-RESOLVED address, so it also closes the DNS-rebinding window (a public
-// A record that resolves to 169.254.x is rejected at connect time, not just at
-// lookup time). A deployment that must reach a private directory (tests, on-prem)
-// injects its own HTTP client.
-func newGuardedWBAClient() *http.Client {
-	dialer := &net.Dialer{
-		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return err
-			}
-			addr, perr := netip.ParseAddr(host)
-			if perr != nil {
-				return fmt.Errorf("helpers: refusing to dial unresolved address %q (SSRF guard)", address)
-			}
-			if ssrfBlocked(addr) {
-				return fmt.Errorf("helpers: refusing to dial non-public address %s (SSRF guard)", addr)
-			}
-			return nil
-		},
+// SSRFGuard returns base with an SSRF-guarded dialer installed: it refuses to
+// connect to any reserved / non-public address (see ssrfBlockedPrefixes). It is
+// the INJECTABLE form of the WBA default client's dial-seam guard — drop it into
+// any *http.Client so a fetch of a caller-supplied host cannot reach an internal
+// target. base==nil yields a fresh, minimal transport (no proxy — a proxied CONNECT
+// would tunnel past the dial check); a non-nil base is cloned and only its
+// DialContext is replaced, so the caller's other transport settings are kept.
+//
+// The check runs in the dialer's Control callback against the ALREADY-RESOLVED
+// address, so it also shuts the DNS-rebinding window: a public A record that
+// re-resolves to 169.254.x is rejected at connect time, not merely at lookup.
+// Pair it with SSRFCheckRedirect on the *http.Client to also vet redirect schemes.
+func SSRFGuard(base *http.Transport) *http.Transport {
+	if base == nil {
+		base = &http.Transport{}
+	} else {
+		base = base.Clone()
 	}
+	base.DialContext = (&net.Dialer{Control: ssrfDialControl}).DialContext
+	return base
+}
+
+// ssrfDialControl is the net.Dialer.Control callback that rejects a dial whose
+// resolved peer is a reserved / non-public address.
+func ssrfDialControl(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	addr, perr := netip.ParseAddr(host)
+	if perr != nil {
+		return fmt.Errorf("resolvers: refusing to dial unresolved address %q (SSRF guard)", address)
+	}
+	if ssrfBlocked(addr) {
+		return fmt.Errorf("resolvers: refusing to dial non-public address %s (SSRF guard)", addr)
+	}
+	return nil
+}
+
+// SSRFCheckRedirect is an http.Client.CheckRedirect that bounds redirect depth
+// and re-vets every redirect target's scheme against the deny-by-default
+// http/https allowlist (a scheme denylist is unwinnable — ftp, file, data, …).
+// Redirect ADDRESS re-vetting is automatic when the client's transport is
+// SSRFGuard-wrapped: each redirect makes a fresh guarded dial.
+func SSRFCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxWBARedirects {
+		return fmt.Errorf("resolvers: too many redirects (SSRF guard)")
+	}
+	if !allowedScheme(req.URL.Scheme) {
+		return fmt.Errorf("resolvers: refusing redirect to non-http(s) scheme %q (SSRF guard)", req.URL.Scheme)
+	}
+	return nil
+}
+
+// newGuardedWBAClient is the HTTP client used when the caller injects none: the
+// exported SSRFGuard + SSRFCheckRedirect composed onto a client with the default
+// timeout. The directory host is derived from a caller-supplied Signature-Agent
+// and the fetch runs BEFORE the ed25519 signature check, so an unguarded default
+// is a pre-auth SSRF lever against internal networks. A deployment that must reach
+// a private directory (tests, on-prem) injects its own HTTP client.
+func newGuardedWBAClient() *http.Client {
 	return &http.Client{
-		Timeout:   defaultWBAHTTPTimeout,
-		Transport: &http.Transport{DialContext: dialer.DialContext},
-		// Every redirect target is re-vetted: the scheme against the allowlist
-		// (net/http already rejects non-http schemes, but assert it explicitly so
-		// the policy is enforced regardless of transport) and — because each
-		// redirect makes a fresh dial through the same guarded dialer — its
-		// resolved address against ssrfBlocked. Bounded to avoid loops.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= maxWBARedirects {
-				return fmt.Errorf("helpers: too many redirects (SSRF guard)")
-			}
-			if !allowedScheme(req.URL.Scheme) {
-				return fmt.Errorf("helpers: refusing redirect to non-http(s) scheme %q (SSRF guard)", req.URL.Scheme)
-			}
-			return nil
-		},
+		Timeout:       defaultWBAHTTPTimeout,
+		Transport:     SSRFGuard(nil),
+		CheckRedirect: SSRFCheckRedirect,
 	}
 }
 
@@ -373,15 +396,15 @@ func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 // removal is not revocation — the authoritative revocation channel is the
 // revocation list, so a composite resolver falls through on a removed key.
 func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.PublicKey, error) {
-	dir := SignatureAgentFromContext(ctx)
+	dir := helpers.SignatureAgentFromContext(ctx)
 	if dir == "" || keyID == "" {
-		return nil, fmt.Errorf("%w: no signature-agent directory for keyid=%q", ErrUnknownKey, keyID)
+		return nil, fmt.Errorf("%w: no signature-agent directory for keyid=%q", helpers.ErrUnknownKey, keyID)
 	}
 	base, host, err := r.directoryBase(dir)
 	if err != nil {
 		// A malformed Signature-Agent cannot name a directory: the key is
 		// unresolvable here, not "the directory is down" — fall-through verdict.
-		return nil, fmt.Errorf("%w: unparseable signature-agent %q: %w", ErrUnknownKey, dir, err)
+		return nil, fmt.Errorf("%w: unparseable signature-agent %q: %w", helpers.ErrUnknownKey, dir, err)
 	}
 	f, err := r.wbaFile(ctx, base, host)
 	if err != nil {
@@ -395,13 +418,13 @@ func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.Pub
 		// thumbprint is reported unknown WITHOUT a fetch. Removal-vs-rotation
 		// self-heal still works — the first unknown lookup in each window refetches.
 		if !r.beginSync(host) {
-			return nil, fmt.Errorf("%w: keyid=%q host=%q (refresh debounced)", ErrUnknownKey, keyID, host)
+			return nil, fmt.Errorf("%w: keyid=%q host=%q (refresh debounced)", helpers.ErrUnknownKey, keyID, host)
 		}
 		if f, err = r.syncRefresh(ctx, base, host); err != nil {
 			return nil, err
 		}
 		if key, ok = wbaKeyByThumbprint(f, keyID); !ok {
-			return nil, fmt.Errorf("%w: keyid=%q host=%q", ErrUnknownKey, keyID, host)
+			return nil, fmt.Errorf("%w: keyid=%q host=%q", helpers.ErrUnknownKey, keyID, host)
 		}
 	}
 	if r.isRevoked(host, keyID) {
@@ -698,7 +721,7 @@ func wbaKeyByThumbprint(f *rampv1.WBAFile, thumbprint string) (*rampv1.JsonWebKe
 		if err != nil {
 			continue
 		}
-		tp, err := Thumbprint(pub)
+		tp, err := helpers.Thumbprint(pub)
 		if err != nil {
 			continue
 		}

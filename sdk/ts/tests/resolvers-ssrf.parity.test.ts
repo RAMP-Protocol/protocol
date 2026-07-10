@@ -2,10 +2,10 @@
 // oracle: sdk/go emits them, every SDK consumes them, and this guard MUST fail
 // if a prefix, an IPv6 zone strip, or a v4-mapped/NAT64 unwrap is missing.
 //
-//   sdk/go/helpers/testdata/ssrf-address-vectors.json  {vectors:[{name,addr,blocked}]}
+//   sdk/go/resolvers/testdata/ssrf-address-vectors.json  {vectors:[{name,addr,blocked}]}
 //     hostile/benign resolved addresses and whether blockedAddress MUST refuse
 //     each (zoned IPv6, v4-mapped, NAT64, 6to4, IPv4-compatible, CGNAT, TEST-NETs).
-//   sdk/go/helpers/testdata/ssrf-scheme-vectors.json   {vectors:[{name,scheme,allowed}]}
+//   sdk/go/resolvers/testdata/ssrf-scheme-vectors.json   {vectors:[{name,scheme,allowed}]}
 //     deny-by-default scheme allowlist — only http/https may be dialed.
 //
 // Both corpora are read-only; do NOT edit them here. This file is the parity
@@ -14,8 +14,8 @@
 import { describe, expect, it } from "vitest";
 
 import { allowedScheme, blockedAddress } from "../resolvers/ssrf.ts";
-import addressVectorsFile from "../../go/helpers/testdata/ssrf-address-vectors.json";
-import schemeVectorsFile from "../../go/helpers/testdata/ssrf-scheme-vectors.json";
+import addressVectorsFile from "../../go/resolvers/testdata/ssrf-address-vectors.json";
+import schemeVectorsFile from "../../go/resolvers/testdata/ssrf-scheme-vectors.json";
 
 type AddressVector = { name: string; addr: string; blocked: boolean };
 type AddressVectorsFile = { vectors: AddressVector[] };

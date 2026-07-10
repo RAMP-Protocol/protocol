@@ -1,4 +1,4 @@
-package helpers_test
+package resolvers_test
 
 // wbakeyresolver_active_key_test.go — behavior suite for ActiveEd25519Key, the
 // document-order active-key selector that complements the thumbprint-keyed
@@ -18,7 +18,7 @@ import (
 	"time"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
-	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
 // activeWindowJWK / expiredWindowJWK / futureWindowJWK build a directory JWK
@@ -46,7 +46,7 @@ func TestActiveEd25519Key_SelectsFirstActive(t *testing.T) {
 	t.Parallel()
 	pub1, k1 := activeWindowJWK("a1")
 	_, k2 := activeWindowJWK("a2")
-	got, err := helpers.ActiveEd25519Key(wbaDirectory(k1, k2), wbaAnchor)
+	got, err := resolvers.ActiveEd25519Key(wbaDirectory(k1, k2), wbaAnchor)
 	if err != nil {
 		t.Fatalf("ActiveEd25519Key: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestActiveEd25519Key_SelectsFirstActive(t *testing.T) {
 func TestActiveEd25519Key_SkipsRetiredThenSelectsActive(t *testing.T) {
 	t.Parallel()
 	pub, active := activeWindowJWK("live")
-	got, err := helpers.ActiveEd25519Key(wbaDirectory(expiredWindowJWK("dead"), active), wbaAnchor)
+	got, err := resolvers.ActiveEd25519Key(wbaDirectory(expiredWindowJWK("dead"), active), wbaAnchor)
 	if err != nil {
 		t.Fatalf("ActiveEd25519Key: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestActiveEd25519Key_SkipsRetiredThenSelectsActive(t *testing.T) {
 func TestActiveEd25519Key_SkipsFutureThenSelectsActive(t *testing.T) {
 	t.Parallel()
 	pub, active := activeWindowJWK("live")
-	got, err := helpers.ActiveEd25519Key(wbaDirectory(futureWindowJWK("early"), active), wbaAnchor)
+	got, err := resolvers.ActiveEd25519Key(wbaDirectory(futureWindowJWK("early"), active), wbaAnchor)
 	if err != nil {
 		t.Fatalf("ActiveEd25519Key: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestActiveEd25519Key_SkipsMalformedAndContinues(t *testing.T) {
 			_, bad := activeWindowJWK("bad")
 			tc.mutate(bad)
 			pub, good := activeWindowJWK("good")
-			got, err := helpers.ActiveEd25519Key(wbaDirectory(bad, good), wbaAnchor)
+			got, err := resolvers.ActiveEd25519Key(wbaDirectory(bad, good), wbaAnchor)
 			if err != nil {
 				t.Fatalf("ActiveEd25519Key: %v", err)
 			}
@@ -117,7 +117,7 @@ func TestActiveEd25519Key_CapBoundary(t *testing.T) {
 		nineFillers = append(nineFillers, expiredWindowJWK(string(rune('A'+i))))
 	}
 	pub, target := activeWindowJWK("target")
-	got, err := helpers.ActiveEd25519Key(wbaDirectory(append(nineFillers, target)...), wbaAnchor)
+	got, err := resolvers.ActiveEd25519Key(wbaDirectory(append(nineFillers, target)...), wbaAnchor)
 	if err != nil {
 		t.Fatalf("position 10 must be within the default cap: %v", err)
 	}
@@ -128,13 +128,13 @@ func TestActiveEd25519Key_CapBoundary(t *testing.T) {
 	// Ten inactive fillers then a valid active key at position 11 (0-indexed 10):
 	// beyond the default scan cap of 10, so it is UNREACHABLE → ErrKeyExpired.
 	tenFillers := append(nineFillers, expiredWindowJWK("J"))
-	_, err = helpers.ActiveEd25519Key(wbaDirectory(append(tenFillers, target)...), wbaAnchor)
-	if !errors.Is(err, helpers.ErrKeyExpired) {
+	_, err = resolvers.ActiveEd25519Key(wbaDirectory(append(tenFillers, target)...), wbaAnchor)
+	if !errors.Is(err, resolvers.ErrKeyExpired) {
 		t.Fatalf("valid key at position 11 must be unreachable under the cap; got %v", err)
 	}
 
 	// The cap is a parameter: raising maxScan past the padding reaches the key.
-	got, err = helpers.ActiveEd25519Key(wbaDirectory(append(tenFillers, target)...), wbaAnchor, 11)
+	got, err = resolvers.ActiveEd25519Key(wbaDirectory(append(tenFillers, target)...), wbaAnchor, 11)
 	if err != nil {
 		t.Fatalf("raising maxScan to 11 must reach position 11: %v", err)
 	}
@@ -157,11 +157,11 @@ func TestActiveEd25519Key_NoneQualifies(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := helpers.ActiveEd25519Key(tc.dir, wbaAnchor)
+			got, err := resolvers.ActiveEd25519Key(tc.dir, wbaAnchor)
 			if got != nil {
 				t.Fatal("expected a nil key when none qualifies")
 			}
-			if !errors.Is(err, helpers.ErrKeyExpired) {
+			if !errors.Is(err, resolvers.ErrKeyExpired) {
 				t.Fatalf("want ErrKeyExpired, got %v", err)
 			}
 		})

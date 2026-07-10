@@ -1,4 +1,4 @@
-package helpers_test
+package resolvers_test
 
 // wbakeyresolver_test.go — TDD red for WBAKeyResolver (sdk/go WBA directory
 // resolution, revocation poller, ErrKeyRevoked/ErrKeyExpired,
@@ -22,6 +22,7 @@ import (
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -51,7 +52,7 @@ func TestWBAKeyResolver_Active(t *testing.T) {
 	tp := mustThumbprint(t, priv.Public().(ed25519.PublicKey))
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
@@ -79,13 +80,13 @@ func TestWBAKeyResolver_ErrKeyExpired(t *testing.T) {
 	tp := mustThumbprint(t, priv.Public().(ed25519.PublicKey))
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
 
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
 	})
 	_, err := r.Resolve(ctx, tp)
-	if !errors.Is(err, helpers.ErrKeyExpired) {
+	if !errors.Is(err, resolvers.ErrKeyExpired) {
 		t.Fatalf("want ErrKeyExpired, got %v", err)
 	}
 }
@@ -103,7 +104,7 @@ func TestWBAKeyResolver_ErrUnknownKey(t *testing.T) {
 	origin.setWBA(marshalWBA(jwk))
 
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
@@ -128,13 +129,13 @@ func TestWBAKeyResolver_ErrKeyRevoked(t *testing.T) {
 	origin.setRevocation(marshalRevocation(wbaAnchor, tp))
 
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
 	})
 	_, err := r.Resolve(ctx, tp)
-	if !errors.Is(err, helpers.ErrKeyRevoked) {
+	if !errors.Is(err, resolvers.ErrKeyRevoked) {
 		t.Fatalf("want ErrKeyRevoked, got %v", err)
 	}
 }
@@ -155,7 +156,7 @@ func TestWBAKeyResolver_RotationSelfHeal(t *testing.T) {
 
 	now := wbaAnchor
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		TTL:    time.Hour,
@@ -197,20 +198,20 @@ func TestWBAKeyResolver_RevocationRollbackIgnored(t *testing.T) {
 
 	now := wbaAnchor
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return now },
 	})
-	if _, err := r.Resolve(ctx, tp); !errors.Is(err, helpers.ErrKeyRevoked) {
+	if _, err := r.Resolve(ctx, tp); !errors.Is(err, resolvers.ErrKeyRevoked) {
 		t.Fatalf("precondition: want ErrKeyRevoked, got %v", err)
 	}
 	// Publish a rolled-back (older as_of) snapshot that does not revoke the key.
 	origin.setRevocation(marshalRevocation(wbaAnchor.Add(-time.Hour)))
 	// Expire the TTL so the directory is re-fetched and revocation is refreshed.
 	now = wbaAnchor.Add(2 * time.Hour)
-	if _, err := r.Resolve(ctx, tp); !errors.Is(err, helpers.ErrKeyRevoked) {
+	if _, err := r.Resolve(ctx, tp); !errors.Is(err, resolvers.ErrKeyRevoked) {
 		t.Fatalf("rollback list (older as_of) must not un-revoke; got %v", err)
 	}
 }
@@ -231,13 +232,13 @@ func TestWBAKeyResolver_RevocationForwardProgressApplied(t *testing.T) {
 
 	now := wbaAnchor
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		TTL:    time.Hour,
 		Now:    func() time.Time { return now },
 	})
-	if _, err := r.Resolve(ctx, tp); !errors.Is(err, helpers.ErrKeyRevoked) {
+	if _, err := r.Resolve(ctx, tp); !errors.Is(err, resolvers.ErrKeyRevoked) {
 		t.Fatalf("precondition: want ErrKeyRevoked, got %v", err)
 	}
 	// Strictly-newer snapshot that drops the thumbprint legitimately un-revokes.
@@ -270,7 +271,7 @@ func TestWBAKeyResolver_FirstPollFarFutureAsOfClamp(t *testing.T) {
 
 	now := wbaAnchor
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		TTL:    time.Hour,
@@ -283,7 +284,7 @@ func TestWBAKeyResolver_FirstPollFarFutureAsOfClamp(t *testing.T) {
 	// Advance past TTL; publish a real revocation snapshot.
 	now = wbaAnchor.Add(2 * time.Hour)
 	origin.setRevocation(marshalRevocation(wbaAnchor.Add(2*time.Hour), tp))
-	if _, err := r.Resolve(ctx, tp); !errors.Is(err, helpers.ErrKeyRevoked) {
+	if _, err := r.Resolve(ctx, tp); !errors.Is(err, resolvers.ErrKeyRevoked) {
 		t.Fatalf("far-future first as_of must not freeze later revocations; got %v", err)
 	}
 }
@@ -304,7 +305,7 @@ func TestWBAKeyResolver_RemovalIsNotRevocation(t *testing.T) {
 
 	now := wbaAnchor
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		TTL:    time.Hour,
@@ -320,7 +321,7 @@ func TestWBAKeyResolver_RemovalIsNotRevocation(t *testing.T) {
 	if !errors.Is(err, helpers.ErrUnknownKey) {
 		t.Fatalf("removed key must be ErrUnknownKey, got %v", err)
 	}
-	if errors.Is(err, helpers.ErrKeyRevoked) {
+	if errors.Is(err, resolvers.ErrKeyRevoked) {
 		t.Fatal("removal must not be reported as revocation")
 	}
 }
@@ -347,7 +348,7 @@ func TestWBAKeyResolver_RevocationURLHostNotAnchored(t *testing.T) {
 	dirOrigin.setWBA(marshalWBAWithRevocation(jwk, evilOrigin.revocationURL()))
 
 	ctx := helpers.WithSignatureAgent(context.Background(), dirOrigin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   dirOrigin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
@@ -381,7 +382,7 @@ func TestWBAKeyResolver_RequireRevocationUnevaluated(t *testing.T) {
 	ctx := helpers.WithSignatureAgent(context.Background(), dirOrigin.url)
 
 	// Default (best-effort): resolves despite the unevaluated revocation channel.
-	best := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	best := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   dirOrigin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
@@ -391,17 +392,17 @@ func TestWBAKeyResolver_RequireRevocationUnevaluated(t *testing.T) {
 	}
 
 	// RequireRevocation: fail closed — revocation_url declared, no snapshot.
-	strict := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	strict := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme:            "http",
 		HTTP:              dirOrigin.Client(),
 		RequireRevocation: true,
 		Now:               func() time.Time { return wbaAnchor },
 	})
 	_, err := strict.Resolve(ctx, tp)
-	if !errors.Is(err, helpers.ErrRevocationUnevaluated) {
+	if !errors.Is(err, resolvers.ErrRevocationUnevaluated) {
 		t.Fatalf("RequireRevocation must fail closed with ErrRevocationUnevaluated; got %v", err)
 	}
-	if errors.Is(err, helpers.ErrKeyRevoked) {
+	if errors.Is(err, resolvers.ErrKeyRevoked) {
 		t.Fatal("unevaluated must be distinct from revoked")
 	}
 }
@@ -425,7 +426,7 @@ func TestWBAKeyResolver_Run_PollerAppliesRevocation(t *testing.T) {
 	clk := newPollClock(wbaAnchor)
 	poll := newPollSignals()
 
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme:       "http",
 		HTTP:         origin.Client(),
 		TTL:          100 * time.Hour, // never expires during the test → isolate poller
@@ -453,7 +454,7 @@ func TestWBAKeyResolver_Run_PollerAppliesRevocation(t *testing.T) {
 	origin.setRevocation(marshalRevocation(wbaAnchor, tp))
 	poll.crossOne(t, clk, 2*pollInterval)
 
-	if _, err := r.Resolve(ctxDir, tp); !errors.Is(err, helpers.ErrKeyRevoked) {
+	if _, err := r.Resolve(ctxDir, tp); !errors.Is(err, resolvers.ErrKeyRevoked) {
 		t.Fatalf("running poller did not apply the revocation; got %v", err)
 	}
 }
@@ -464,7 +465,7 @@ func TestWBAKeyResolver_Run_PollerAppliesRevocation(t *testing.T) {
 // in ctx (no directory URL) returns ErrUnknownKey.
 func TestWBAKeyResolver_NoSignatureAgent(t *testing.T) {
 	t.Parallel()
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		Now:    func() time.Time { return wbaAnchor },
 	})
@@ -489,7 +490,7 @@ func TestWBAKeyResolver_TTLCacheHit(t *testing.T) {
 
 	now := wbaAnchor
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		TTL:    time.Hour,
@@ -522,7 +523,7 @@ func TestWBAKeyResolver_FetchError(t *testing.T) {
 	origin.setWBAStatus(http.StatusInternalServerError) // force 500
 
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
@@ -531,7 +532,7 @@ func TestWBAKeyResolver_FetchError(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error from 500 origin, got nil")
 	}
-	if !errors.Is(err, helpers.ErrDirectoryUnavailable) {
+	if !errors.Is(err, resolvers.ErrDirectoryUnavailable) {
 		t.Fatalf("want error wrapping ErrDirectoryUnavailable, got %v", err)
 	}
 	// CRITICAL: fetch failure MUST NOT be confused with an unknown key; the
@@ -567,7 +568,7 @@ func TestWBAKeyResolver_Revoked(t *testing.T) {
 	origin.setRevocation(marshalRevocation(wbaAnchor, tpAbsentRevoked))
 
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		Now:    func() time.Time { return wbaAnchor },
