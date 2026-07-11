@@ -145,6 +145,76 @@ export const guardedFetch: FetchLike = async (url) => {
   return { status: resp.status, text: () => Promise.resolve(body) };
 };
 
+// ---------------------------------------------------------------------------
+// The ONE env-driven, best-effort guarded fetch factory.
+// ---------------------------------------------------------------------------
+
+/** Read a boolean env flag: true iff the value is "true" (any case) or "1". Every
+ * other value (including unset and "0") is false. */
+function envFlag(name: string): boolean {
+  return ["true", "1"].includes((process.env[name] ?? "").toLowerCase());
+}
+
+/** Whether the dial-time address guard is disabled (SKIP_SSRF). Default: off. */
+function skipSSRF(): boolean {
+  return envFlag("SKIP_SSRF");
+}
+
+/** Whether plaintext http is permitted (ALLOW_INSECURE); else https-only. Default: off. */
+function allowInsecure(): boolean {
+  return envFlag("ALLOW_INSECURE");
+}
+
+/** The two-flag scheme decision: https always, http only under ALLOW_INSECURE,
+ * everything else denied (a scheme denylist is unwinnable — ftp, telnet, gopher,
+ * file, data, …). Case-insensitive. */
+function schemeGuardAllows(scheme: string): boolean {
+  const s = scheme.toLowerCase();
+  if (s === "https") return true;
+  return s === "http" && allowInsecure();
+}
+
+/** The ONE public env-driven best-effort guarded fetch factory — every consumer's
+ * fetch for any third-party-influenceable request. Two orthogonal env flags drive
+ * it: SKIP_SSRF toggles the dial-time address guard (default: on), ALLOW_INSECURE
+ * toggles the scheme guard (default: https-only). There is no deployment-stack
+ * allow-list and no config error. Both paths use a per-factory undici Agent that
+ * ignores HTTP(S)_PROXY env, so a proxied CONNECT cannot tunnel a private target
+ * past the (guarded) dial guard, and both carry the same request timeout. Returns
+ * a FetchLike closing over one dispatcher. */
+export function guardedFetchFromEnv(): FetchLike {
+  const dispatcher = skipSSRF() ? new Agent() : new Agent({ connect: ssrfGuard() });
+  return async (url) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch (err) {
+      throw new SsrfBlockedError(`SSRF guard: unparseable url ${url}: ${String(err)}`);
+    }
+    // Gate the scheme synchronously, BEFORE any dial: https always, http only
+    // under ALLOW_INSECURE. URL.protocol carries a trailing colon ("https:").
+    const scheme = parsed.protocol.replace(/:$/, "");
+    if (!schemeGuardAllows(scheme)) {
+      throw new SsrfBlockedError(`SSRF guard: refusing disallowed scheme ${parsed.protocol}`);
+    }
+    let resp: Awaited<ReturnType<typeof undiciFetch>>;
+    try {
+      resp = await undiciFetch(url, {
+        dispatcher,
+        redirect: "follow",
+        signal: AbortSignal.timeout(DEFAULT_HTTP_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (err instanceof SsrfBlockedError) throw err;
+      const cause = (err as { cause?: unknown }).cause;
+      if (cause instanceof SsrfBlockedError) throw cause;
+      throw err;
+    }
+    const body = await readBounded(resp.body as AsyncIterable<Uint8Array> | null);
+    return { status: resp.status, text: () => Promise.resolve(body) };
+  };
+}
+
 /** Default transport for a resolver whose URL is caller-configured (well-known
  * JWKS / ramp.json): a plain fetch. It is NOT SSRF-guarded — the operator, not an
  * attacker, chooses that URL, and an on-prem JWKS may legitimately be private.

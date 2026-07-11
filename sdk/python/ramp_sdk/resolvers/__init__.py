@@ -11,7 +11,12 @@ errors.Is-DISTINCT fail-closed taxonomy. The static face stays in
 
 from __future__ import annotations
 
-from ramp_sdk.resolvers._http import ssrf_guard
+from ramp_sdk.resolvers._http import (
+    async_ssrf_guard,
+    guarded_async_client,
+    guarded_client,
+    ssrf_guard,
+)
 from ramp_sdk.resolvers._ssrf import SsrfError, blocked_address
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
@@ -43,6 +48,9 @@ __all__ = [
     "WellKnownKeyResolver",
     "active_ed25519_key",
     "active_ed25519_key_with_expiry",
+    "async_ssrf_guard",
     "blocked_address",
+    "guarded_async_client",
+    "guarded_client",
     "ssrf_guard",
 ]

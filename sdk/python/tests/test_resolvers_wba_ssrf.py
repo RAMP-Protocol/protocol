@@ -11,6 +11,7 @@ and (2) that the guarded default transport refuses a loopback target.
 
 from __future__ import annotations
 
+import asyncio
 import http.server
 import threading
 
@@ -19,7 +20,13 @@ import pytest
 from conftest import GO_RESOLVERS_TESTDATA, load_json
 
 from ramp_sdk.resolvers import _ssrf
-from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_client
+from ramp_sdk.resolvers._http import (
+    fetch_soft,
+    fetch_strict,
+    guarded_async_client,
+    guarded_client,
+    ssrf_guard,
+)
 from ramp_sdk.resolvers._ssrf import SsrfError, allowed_scheme, blocked_address
 from ramp_sdk.resolvers.errors import DirectoryUnavailableError
 
@@ -121,6 +128,33 @@ def test_guarded_client_refuses_loopback() -> None:
         server.server_close()
 
 
+def test_guarded_async_client_refuses_loopback() -> None:
+    """The guarded ASYNC transport must refuse a loopback target at the dial seam.
+
+    Async twin of test_guarded_client_refuses_loopback: an in-process server
+    listens on 127.0.0.1, so a successful GET would prove the guard is absent. The
+    refusal is an ``SsrfError`` raised at the connect seam — the connect-time
+    closure of the DNS-rebinding window the async path previously lacked. Driven
+    via ``asyncio.run`` so the suite needs no async-test plugin.
+    """
+    server, port = _serve(_OkHandler)
+
+    async def _attempt() -> None:
+        client = guarded_async_client()
+        try:
+            await client.get(f"http://127.0.0.1:{port}/")
+        finally:
+            await client.aclose()
+
+    try:
+        with pytest.raises(SsrfError) as excinfo:
+            asyncio.run(_attempt())
+        assert "SSRF" in str(excinfo.value)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def _serve(handler: type[http.server.BaseHTTPRequestHandler]):
     """Start an in-process HTTP server on 127.0.0.1; return (server, port)."""
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -151,7 +185,12 @@ def test_guarded_client_refuses_redirect_to_ftp(monkeypatch: pytest.MonkeyPatch)
             return
 
     server, port = _serve(_RedirectHandler)
-    client = guarded_client()
+    # The scheme+address re-vetting on each redirect hop is a property of the
+    # guard-ALWAYS transport (ssrf_guard), not the env-gated public factory (which
+    # is https-only in secure mode and would refuse this plaintext-http initial
+    # hop). Exercise the transport primitive directly so the http-loopback wiring
+    # this test asserts is reachable.
+    client = httpx.Client(transport=ssrf_guard(), follow_redirects=True)
     url = f"http://127.0.0.1:{port}/"
     try:
         with pytest.raises(httpx.UnsupportedProtocol):
@@ -191,7 +230,12 @@ def test_guarded_client_refuses_redirect_to_internal_address(
             return
 
     server, port = _serve(_RedirectHandler)
-    client = guarded_client()
+    # Redirect-hop ADDRESS re-vetting is a property of the guard-ALWAYS transport
+    # (ssrf_guard re-dials every hop through the pinning backend), not the env-gated
+    # public factory (https-only in secure mode would refuse this http initial hop
+    # for scheme, never reaching the redirect). Exercise the transport directly so
+    # the refusal provably comes from re-checking the 169.254 REDIRECT target.
+    client = httpx.Client(transport=ssrf_guard(), follow_redirects=True)
     try:
         with pytest.raises(SsrfError) as excinfo:
             client.get(f"http://127.0.0.1:{port}/")
@@ -225,7 +269,10 @@ def test_guarded_client_non_2xx_returns_status_not_crash(
 
     server, port = _serve(_NotFoundHandler)
     url = f"http://127.0.0.1:{port}/"
-    client = guarded_client()
+    # Non-2xx surfacing is a property of the guard-ALWAYS transport (ssrf_guard);
+    # the env-gated public factory is https-only in secure mode and would refuse
+    # this plaintext-http loopback hop for scheme. Exercise the transport directly.
+    client = httpx.Client(transport=ssrf_guard(), follow_redirects=True)
     try:
         # Transport level: httpx returns the status; no crash.
         assert client.get(url).status_code == 404

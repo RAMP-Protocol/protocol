@@ -222,12 +222,14 @@ func SSRFCheckRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// newGuardedWBAClient is the HTTP client used when the caller injects none: the
-// exported SSRFGuard + SSRFCheckRedirect composed onto a client with the default
-// timeout. The directory host is derived from a caller-supplied Signature-Agent
-// and the fetch runs BEFORE the ed25519 signature check, so an unguarded default
-// is a pre-auth SSRF lever against internal networks. A deployment that must reach
-// a private directory (tests, on-prem) injects its own HTTP client.
+// newGuardedWBAClient is the HTTP client used when the caller injects none. It
+// installs the dial-time address guard (SSRFGuard, no proxy) and the redirect
+// scheme+depth guard (SSRFCheckRedirect, http+https), so it refuses reserved /
+// non-public targets by default. The directory host is derived from a
+// caller-supplied Signature-Agent and the fetch runs BEFORE the ed25519 signature
+// check, so an unguarded default is a pre-auth SSRF lever against internal
+// networks. A deployment that must reach a private directory (tests, on-prem)
+// injects its own HTTP client.
 func newGuardedWBAClient() *http.Client {
 	return &http.Client{
 		Timeout:       defaultWBAHTTPTimeout,

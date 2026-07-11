@@ -106,13 +106,17 @@ func allowLoopbackForWiringTest(t *testing.T) {
 // (fetchStrict→DirectoryUnavailable) non-2xx behavioral tests; Go's path is stock
 // net/http, so this locks the contract rather than guarding custom wiring (the
 // non-2xx crash that motivated this suite was Python's hand-built opener).
-func TestGuardedWBAClientSurfacesNon2xx(t *testing.T) {
+func TestGuardedClientSurfacesNon2xx(t *testing.T) {
 	allowLoopbackForWiringTest(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
+	// The httptest origin is plaintext http on loopback. newGuardedWBAClient allows
+	// http+https (SSRFCheckRedirect), and allowLoopbackForWiringTest empties the
+	// address table, so the request reaches the origin — the address decision is
+	// corpus-locked elsewhere; here we prove status surfacing.
 	resp, err := newGuardedWBAClient().Get(srv.URL)
 	if err != nil {
 		t.Fatalf("non-2xx surfaced as a transport error, want a 404 response: %v", err)
@@ -129,13 +133,16 @@ func TestGuardedWBAClientSurfacesNon2xx(t *testing.T) {
 // file, data all follow the same rule). Parity with the Python
 // test_guarded_fetch_refuses_redirect_to_ftp behavioral test. Exercises the real
 // newGuardedWBAClient CheckRedirect; the ftp target is never contacted.
-func TestGuardedWBAClientRefusesRedirectScheme(t *testing.T) {
+func TestGuardedClientRefusesRedirectScheme(t *testing.T) {
 	allowLoopbackForWiringTest(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "ftp://ftp.internal.example/secret", http.StatusFound)
 	}))
 	defer srv.Close()
 
+	// The initial hop is plaintext http on loopback; newGuardedWBAClient allows
+	// http+https so the request reaches the redirect. ftp is denied on EVERY hop
+	// regardless, so this proves redirect scheme re-vetting.
 	_, err := newGuardedWBAClient().Get(srv.URL)
 	if err == nil {
 		t.Fatal("guarded client followed a redirect into a non-http(s) scheme — CheckRedirect did not fire")
