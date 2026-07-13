@@ -5,9 +5,13 @@ an exchange, or an edge verifier in any of Go/TS/Python. This matrix is the
 committed inventory of the intended surface per role, the per-language state,
 and the gap list. Update it when a face lands or a gap ticket closes.
 
-Surveyed at: sdk/go (helpers, core, connect, connectserver), sdk/ts (src, core,
-hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ partial ·
-❌ absent.
+Surveyed at: sdk/go (helpers, resolvers, core, connect, connectserver), sdk/ts
+(src, resolvers, core, hono), sdk/python (ramp_sdk incl. `ramp_sdk.resolvers`).
+Legend: ✅ present (symbol named) · ⚠️ partial · ❌ absent. **Layer note:** the
+network-fetching resolvers are the **L2 I/O** tier (Go `sdk/go/resolvers`, moved
+out of `sdk/go/helpers` this cycle); `helpers` is the pure, IO-free L1 tier.
+Consumers import the moved Go resolvers from `sdk/go/resolvers`, not `sdk/go/helpers`
+(no alias shim).
 
 ## AGENT role
 
@@ -17,10 +21,14 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | PoP sign (GET agent binding) | ⚠️ via `AppendSignature` 2-component set; no dedicated face | ✅ `core/sign.ts signInbound` | ✅ `pop.sign_agent_binding` |
 | Acceptance sign / verify | ✅ `helpers.SignOfferAcceptance` / `VerifyOfferAcceptance` | ✅ `src/acceptance.ts signOfferAcceptance` / `verifyOfferAcceptance` | ✅ `core.sign_offer_acceptance_jcs` / `verify_offer_acceptance_jcs` (+`acceptance` aliases) |
 | Offer verify ({verified, rejected}, unforgeable VerifiedOffer) | ✅ `core.Verifier.Sort` + brand | ✅ `core/verifier.ts Verifier.sort` + brand | ✅ `core.Verifier.sort` + token-gated brand |
-| Key resolution — static | ✅ `helpers.NewStaticKeyResolver` | ✅ `resolvers.newStaticKeyResolver` | ✅ `keyresolver.StaticKeyResolver` |
-| Key resolution — well-known JWKS | ✅ `helpers.NewWellKnownKeyResolver` | ✅ `resolvers.newWellKnownKeyResolver` | ✅ `resolvers.WellKnownKeyResolver` |
-| Key resolution — WBA directory (revocation-aware) | ✅ `helpers.NewWBAKeyResolver` (+`Run` poller) | ✅ `resolvers.newWBAKeyResolver` (+`run` poller) | ✅ `resolvers.WBAKeyResolver` (+`run` poller) |
-| Endpoint resolution — well-known ramp.json | ✅ `helpers.NewWellKnownEndpointResolver` | ✅ `resolvers.newWellKnownEndpointResolver` | ✅ `resolvers.WellKnownEndpointResolver` |
+| Key resolution — static (pure L1) | ✅ `helpers.NewStaticKeyResolver` | ✅ `resolvers.newStaticKeyResolver` | ✅ `keyresolver.StaticKeyResolver` |
+| Key resolution — well-known JWKS (L2 I/O) | ✅ `resolvers.NewWellKnownKeyResolver` | ✅ `resolvers.newWellKnownKeyResolver` | ✅ `resolvers.WellKnownKeyResolver` |
+| Key resolution — WBA directory (revocation-aware, L2 I/O) | ✅ `resolvers.NewWBAKeyResolver` (+`Run` poller) | ✅ `resolvers.newWBAKeyResolver` (+`run` poller) | ✅ `resolvers.WBAKeyResolver` (+`run` poller) |
+| Endpoint resolution — well-known ramp.json (L2 I/O) | ✅ `resolvers.NewWellKnownEndpointResolver` (`WellKnownOptions`, `ErrNoEndpoint`) | ✅ `resolvers.newWellKnownEndpointResolver` | ✅ `resolvers.WellKnownEndpointResolver` |
+| Active-key selection — window-active, document order | ✅ `resolvers.ActiveEd25519Key` / `ActiveEd25519KeyWithExpiry` | ✅ `resolvers.activeEd25519Key` / `activeEd25519KeyWithExpiry` | ✅ `resolvers.active_ed25519_key` / `active_ed25519_key_with_expiry` |
+| Active-key selection — revocation-aware (screened) | ✅ `resolvers.ActiveEd25519KeyScreened` / `ActiveEd25519KeyWithExpiryScreened` | ✅ `resolvers.activeEd25519KeyScreened` / `activeEd25519KeyWithExpiryScreened` | ✅ `resolvers.active_ed25519_key_screened` / `active_ed25519_key_with_expiry_screened` |
+| Cached offer-key resolver (clamps TTL to key `not_after`) | ✅ `resolvers.NewCachedOfferKeyResolver` | ❌ (not intended; TS edge composes the selector directly) | ✅ `resolvers.CachedOfferKeyResolver` |
+| SSRF-guarded fetch client (env-driven: `SKIP_SSRF`, `ALLOW_INSECURE`) | ✅ `resolvers.NewGuardedClientFromEnv` (+`SSRFGuard`/`SSRFCheckRedirect`) | ✅ `resolvers.guardedFetchFromEnv` (+`ssrfGuard`/`SsrfBlockedError`) | ✅ `resolvers.guarded_client` (+`ssrf_guard`/`async_ssrf_guard`) |
 | Signed-URL fetch binding (3-way PoP against URL agent_id) | ✅ `helpers.VerifiedURL.CheckProofOfPossession` | ✅ `src/pop.ts verifyAgentBinding` | ✅ `pop.verify_agent_binding` |
 
 ## SERVER role (broker / exchange)
@@ -30,7 +38,8 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | Server-verify middleware (all /ramp. procedures) | ✅ `connectserver.New{Exchange,Broker}ServiceHandler` + options | ⚠️ `core/verify-request.ts verifyRequestServer` (framework-agnostic single-sig verdict) + `hono rampVerify` edge GET-PoP binding — no full Connect handler binding | ⚠️ `server_verify.verify_request_server` (framework-agnostic single-sig verdict) — no full Connect/ASGI handler binding |
 | Multisig append / verify (+hop budget) | ✅ `helpers.AppendSignature` / `VerifyMultisigRequest[Resolved]`, `core.WithAppendSigner` | ✅ `appendSignature` (core/sign-request.ts) / `verifyMultisigRequestServer` (core/verify-multisig-request.ts) | ✅ `append_signature` (httpsig) / `verify_multisig_request_server` (server_verify) |
 | Codec (EmitUnpopulated JSON) | ✅ `connectserver.EmitUnpopulatedJSONCodec` / `WithEmitUnpopulated` | n/a (no Connect binding) | n/a |
-| Reject / error mapping | ✅ `connectserver` reject mapping, `connect.ErrorDetailFrom`, `helpers.*Detail` | ⚠️ reject-reason tokens only (`RejectReason` "signature"/"replay" on the verify verdict) — no ErrorDetail mapping | ⚠️ reject-reason tokens only (`VerifiedRequest.reason` "signature"/"replay") — no ErrorDetail mapping |
+| Reject / error mapping (emit) | ✅ `connectserver` reject mapping, `connect.ErrorDetailFrom`, `connectserver.AttachErrorDetail`/`AttachDetail`, `helpers.*Detail` | ⚠️ reject-reason tokens only (`RejectReason` "signature"/"replay" on the verify verdict) — no ErrorDetail emit mapping | ⚠️ reject-reason tokens only (`VerifiedRequest.reason` "signature"/"replay") — no ErrorDetail emit mapping |
+| ErrorDetail readers (decode a typed failure) | ✅ `connect.ErrorDetailFrom` | ✅ `src/errordetail.ts parseErrorDetail` / `errorDetailFrom` | ✅ `errordetail.parse_error_detail` / `error_detail_from` |
 | Replay window | ✅ `core.ReplayStore`, `core.MonotonicWindow` | ✅ `core/verify-request.ts ReplayStore` iface + two-phase replay (injected store, SDK owns no state) | ✅ `server_verify.ReplayStore` Protocol + two-phase replay (injected store, SDK owns no state) |
 | Entitlement-coverage enforcement (unsigned X-Entitlement-Token rejected) | ✅ `helpers.enforceEntitlementCoverage` (verify.go) | ✅ `core/verify-request.ts` (covered-set commit check) | ✅ `server_verify.verify_request_server` (covered-set commit check) |
 | Validation interceptor (protovalidate) | ✅ `connect.NewValidateInterceptor`, `helpers.Validate`/`ValidationRuleIDs` | ❌ (crossfield layer only) | ❌ (crossfield layer only) |
@@ -41,7 +50,7 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | Operation | go | ts | python |
 |---|---|---|---|
 | Signed-URL sign | ✅ `helpers.SignURLEd25519` | ✅ `src/signurl.ts signEd25519SignedUrl` | ✅ `signedurl.sign_ed25519_signed_url` |
-| Signed-URL verify | ✅ `helpers.VerifyURLEd25519` | ✅ `src/verify.ts verifyEd25519SignedUrl` | ✅ `signedurl.verify_ed25519_signed_url` |
+| Signed-URL verify | ✅ `helpers.VerifyURLEd25519` | ✅ `src/verify.ts verifyEd25519SignedUrl` (injectable `Ed25519Verifier` primitive for runtimes without native Ed25519) | ✅ `signedurl.verify_ed25519_signed_url` |
 | GET-PoP verify | ✅ `VerifiedURL.CheckProofOfPossession` | ✅ `src/pop.ts verifyAgentBinding` (+`hono rampVerify` binding) | ✅ `pop.verify_agent_binding` |
 | Thumbprint (RFC 7638) | ✅ `helpers.Thumbprint` | ✅ `src/thumbprint.ts` | ✅ `thumbprint.thumbprint` |
 | HashURL (audit hash) | ✅ `helpers.HashURL` | ✅ `src/hashurl.ts hashUrl` | ✅ `hashurl.hash_url` |
@@ -61,7 +70,20 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | Wire constants (headers, content types) | ✅ `helpers` constants | ✅ `src/wire.ts` | ✅ `wire` |
 | Window (created/expires source) | ✅ `core.Window`/`ClockWindow`/`MonotonicWindow` | ✅ `core/window.ts {clock,monotonic}Window` | ✅ `window.{clock,monotonic}_window` |
 
-## Conformance-vector consumption (oracle: sdk/go/helpers/testdata)
+## Conformance-vector consumption (oracle: sdk/go/helpers/testdata + sdk/go/resolvers/testdata)
+
+Vectors live in two homes: the L1 crypto corpora under `sdk/go/helpers/testdata` and
+the L2 I/O corpora under `sdk/go/resolvers/testdata`. **Completeness ratchet (binding
+— the standing rule for adding SDK behavior):** every committed
+`testdata/*-vectors.json` MUST be replayed by all three SDKs. This is enforced by
+`sdk/python/tests/test_corpus_replay_completeness.py`, which enumerates every corpus in
+both homes and fails CI unless each is referenced by a Go emitter/consumer AND a Python
+replay AND a TS replay — so an emitted-but-unreplayed corpus (an "orphan" that silently
+asserts nothing) cannot ship. The gate carries a single **shrink-only** exemption:
+`(wire-canonical-vectors.json, ts)`, re-verified on every run to still be genuinely
+absent, so it must be deleted the moment TS gains a wire-canonical replay. Whenever you
+add a behavior with a byte-deterministic oracle, add its corpus AND all three replays in
+the same change — the ratchet will otherwise reject it.
 
 | Vector | go | ts | python |
 |---|---|---|---|
@@ -79,6 +101,14 @@ hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ parti
 | idempotency-validate-vectors.json | ✅ emit+consume | ✅ | ✅ |
 | hashurl-vectors.json | ✅ emit+consume | ✅ | ✅ |
 | wire-constants-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| verify-request-neg-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| error-detail-vectors.json (`sdk/go/helpers/testdata`) | ✅ emit+consume | ✅ | ✅ |
+| resolvers/active-ed25519-key-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| resolvers/revocation-membership-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| resolvers/ssrf-address-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| resolvers/ssrf-scheme-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| resolvers/ssrf-hostset-vectors.json | ✅ emit+consume | ✅ | ✅ |
+| resolvers/ssrf-redirect-vectors.json | ✅ emit+consume | ✅ | ✅ |
 
 ## Gap tickets
 

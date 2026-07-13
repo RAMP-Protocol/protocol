@@ -1,6 +1,8 @@
 # RAMP SDK Cross-Language Parity Audit
 
-**Scope:** `sdk/go`, `sdk/ts`, `sdk/python` on branch `feature/go-sdk-extraction`.
+**Scope:** `sdk/go`, `sdk/ts`, `sdk/python` (the active-key-consolidation revision:
+the network-fetching resolvers now live in `sdk/go/resolvers`, split out of
+`sdk/go/helpers`).
 **Method:** code + test files are the source of truth. The pre-existing
 `docs/sdk-parity-matrix.md` was read first, then every claim was verified against
 the actual source. Where the doc and code diverge, this audit records the code.
@@ -33,10 +35,8 @@ files (relative-path import in TS, `GO_TESTDATA` in Python `conftest.py`).
 | `SignOfferAcceptance` / `VerifyOfferAcceptance` | acceptance.go:67,81 | Agent offer-acceptance detached sig (JCS + ed25519) |
 | `VerifyPresentedOffer` | presented_offer.go:32 | Exchange-presented offer verify (freshness + sig) |
 | `Thumbprint` / `ThumbprintBytes` | thumbprint.go:37,48 | RFC 7638 JWK thumbprint |
-| `KeyResolver` iface, `NewStaticKeyResolver` | keyresolver.go:21,38 | Static key map resolver |
-| `NewWellKnownKeyResolver` | keyresolver.go:107 | Well-known JWKS fetch resolver (TTL cache) |
-| `NewWBAKeyResolver` (+`Run` poller) | wbakeyresolver.go:137,225 | WBA directory resolver, revocation/expiry-aware |
-| `NewWellKnownEndpointResolver` | endpointresolver.go:88 | `ramp.json` endpoint discovery |
+| `KeyResolver` iface, `NewStaticKeyResolver` | keyresolver.go:21,38 | Static key map resolver (the pure resolver kept in L1; the IO-fetching resolvers moved to `resolvers` — see below) |
+| `VerifyRequestResolved` / `VerifyMultisigRequestResolved` | keyresolver.go:67,91 | Verify via an injected `KeyResolver` |
 | `ContentDigest`, `CoveredComponent`, `ComponentParam` | sigbase.go:106,35,26 | RFC 9421 signature-base construction |
 | `canonicalSignPayload` (unexported) | canonicalsign.go | `JCS(protojson(msg, snake, no-emit))` — the pinned canonical signing bytes for BOTH offer + acceptance |
 | `NormalizeScopes`, `ApplyScopes`, `ScopesSubset` | scopes.go:25,50,61 | Scope algebra |
@@ -44,6 +44,24 @@ files (relative-path import in TS, `GO_TESTDATA` in Python `conftest.py`).
 | `NewIdempotencyKey`, `ValidateIdempotencyKey` | idempotency.go:26,36 | Idempotency keys |
 | `SharedValidator`, `Validate`, `ValidationRuleIDs` | validate.go:31,39,50 | protovalidate oracle + stable rule-ids |
 | wire constants | constants.go | Header names, content types, algorithm strings |
+
+### package `resolvers` (L2 I/O — the network-fetching tier)
+
+Split out of `helpers` this cycle. This is the **only** SDK tier that dials the
+network: every third-party-influenceable fetch runs here behind one SSRF-guarded
+HTTP client (Go `net/http`), so the pure L1 trust core holds no client to be tricked
+into an SSRF. It composes `helpers`, never the reverse (io-leaf guard enforced).
+
+| Symbol | File | Purpose |
+|---|---|---|
+| `NewWellKnownKeyResolver`, `WellKnownOptions` | wellknownkeyresolver.go:64,39 | Well-known JWKS fetch resolver (TTL cache) |
+| `NewWBAKeyResolver` (+`Run` poller) | wbakeyresolver.go:410,521 | WBA directory resolver, revocation/expiry-aware |
+| `NewWellKnownEndpointResolver`, `WellKnownEndpointResolver`, `ErrNoEndpoint` | endpointresolver.go:106,78,28 | `ramp.json` endpoint discovery |
+| `ActiveEd25519Key` / `ActiveEd25519KeyWithExpiry` (+`ActiveKeyScanOptions`) | wbakeyresolver.go:893,913 | Window-active Ed25519 key by document order (unbounded scan by default) |
+| `ActiveEd25519KeyScreened` / `ActiveEd25519KeyWithExpiryScreened` | wbakeyresolver.go:932,945 | The two active-key faces made revocation-aware (skip revoked thumbprints) |
+| `NewCachedOfferKeyResolver` | cachedofferkeyresolver.go:70 | Offer-key cache; TTL clamped to the selected key's `not_after` |
+| `NewGuardedClientFromEnv` | guardedclient_fromenv.go:57 | The single env-driven guarded client (`SKIP_SSRF`, `ALLOW_INSECURE`) |
+| `SSRFGuard`, `SSRFCheckRedirect` | wbakeyresolver.go:219,286 | Injectable dial-time address guard + redirect re-vet for a custom `http.Client` |
 
 ### package `core` (L2 composition)
 
@@ -65,7 +83,8 @@ files (relative-path import in TS, `GO_TESTDATA` in Python `conftest.py`).
 | `EmitUnpopulatedJSONCodec`, `WithEmitUnpopulated` | connectserver/codec.go:32,39 | Connect JSON codec, EmitUnpopulated snake wire |
 | `ClassifyReject`, `RejectReason` | connectserver/classify.go:53,14 | Reject classification |
 | `AsConnectError` | connectserver/reject.go:56 | Domain reject → `connect.Code` + `ErrorDetail` |
-| `NewValidateInterceptor`, `ErrorDetailFrom` (connect pkg) | connect/interceptors.go, errordetail.go | Validation interceptor + error-detail extraction |
+| `AttachErrorDetail`, `AttachDetail` | connectserver/errordetail.go:28,46 | Attach a typed `ErrorDetail` to a Connect error (server emits) |
+| `NewValidateInterceptor`, `ErrorDetailFrom` (connect pkg) | connect/interceptors.go, errordetail.go | Validation interceptor + error-detail extraction (decode) |
 
 ---
 
@@ -91,10 +110,15 @@ oracle vectors), **guard** = structural/compile guard only, **—** = absent.
 | **JCS canonical acceptance payload** | unexported; sign/verify public · T | `src/acceptance.ts acceptancePayload` (exported) · T | `core.jcs_acceptance_payload` · T | **PARITY** |
 | **JWK thumbprint (RFC 7638)** | `helpers.Thumbprint` · T | `src/thumbprint.ts thumbprint` · T (`thumbprint.parity`) | `thumbprint.thumbprint` · T (`test_thumbprint_parity`) | **PARITY** |
 | **base64url codec** | stdlib inline (no exported face) | `src/base64url.ts` (+`utf8Bytes`) · T (indirect) | `b64` · T (`test_b64_public_home`) | **PARITY** (Go needs none) |
-| **Key resolver — static** | `NewStaticKeyResolver` · T | `resolvers.newStaticKeyResolver` · T | `keyresolver.StaticKeyResolver` · T | **PARITY** |
-| **Key resolver — well-known JWKS** | `NewWellKnownKeyResolver` · T (httptest) | `resolvers.newWellKnownKeyResolver` · T (`resolvers-wellknown.integration`) | `resolvers.WellKnownKeyResolver` · T | **PARITY** |
-| **Key resolver — WBA (revocation-aware)** | `NewWBAKeyResolver` (+poller) · T (14 tests, httptest) | `resolvers.newWBAKeyResolver` (+`run` poller) · T (`resolvers-wba*`) | `resolvers.WBAKeyResolver` (+`run` poller) · T | **PARITY** |
-| **Endpoint resolver — ramp.json** | `NewWellKnownEndpointResolver` · T | `resolvers.newWellKnownEndpointResolver` · T | `resolvers.WellKnownEndpointResolver` · T | **PARITY** |
+| **Key resolver — static** (pure L1) | `helpers.NewStaticKeyResolver` · T | `resolvers.newStaticKeyResolver` · T | `keyresolver.StaticKeyResolver` · T | **PARITY** |
+| **Key resolver — well-known JWKS** (L2 I/O) | `resolvers.NewWellKnownKeyResolver` · T (httptest) | `resolvers.newWellKnownKeyResolver` · T (`resolvers-wellknown.integration`) | `resolvers.WellKnownKeyResolver` · T | **PARITY** |
+| **Key resolver — WBA (revocation-aware)** (L2 I/O) | `resolvers.NewWBAKeyResolver` (+poller) · T (httptest) | `resolvers.newWBAKeyResolver` (+`run` poller) · T (`resolvers-wba*`) | `resolvers.WBAKeyResolver` (+`run` poller) · T | **PARITY** |
+| **Endpoint resolver — ramp.json** (L2 I/O) | `resolvers.NewWellKnownEndpointResolver` · T | `resolvers.newWellKnownEndpointResolver` · T | `resolvers.WellKnownEndpointResolver` · T | **PARITY** |
+| **Active-key selection (window-active, doc order)** | `resolvers.ActiveEd25519Key[WithExpiry]` · T (`active-ed25519-key-vectors`) | `resolvers.activeEd25519Key[WithExpiry]` · T | `resolvers.active_ed25519_key[_with_expiry]` · T | **PARITY** |
+| **Active-key selection — revocation-aware (screened)** | `resolvers.ActiveEd25519Key[WithExpiry]Screened` · T | `resolvers.activeEd25519Key[WithExpiry]Screened` · T | `resolvers.active_ed25519_key[_with_expiry]_screened` · T | **PARITY** |
+| **Cached offer-key resolver** | `resolvers.NewCachedOfferKeyResolver` · T | **—** (TS composes the selector directly) | `resolvers.CachedOfferKeyResolver` · T | **PARITY** (Go+Py; TS n/a by design) |
+| **SSRF-guarded fetch client (env-driven)** | `resolvers.NewGuardedClientFromEnv` (+`SSRFGuard`/`SSRFCheckRedirect`) · T | `resolvers.guardedFetchFromEnv` (+`ssrfGuard`) · T | `resolvers.guarded_client` (+`ssrf_guard`) · T | **PARITY** |
+| **ErrorDetail reader (decode typed failure)** | `connect.ErrorDetailFrom` · T | `src/errordetail.ts parseErrorDetail`/`errorDetailFrom` · T (`error-detail-vectors`) | `errordetail.parse_error_detail`/`error_detail_from` · T | **PARITY** |
 | **Reject classification** | `ClassifyReject` · T (`classify_test`) | reject-reason tokens on the verify verdict (`RejectReason`) — no `ClassifyReject` face | reject-reason tokens on the verdict (`VerifiedRequest.reason`) — no `ClassifyReject` face | **PARTIAL** (Go-only classifier; TS/Python emit the reason tokens) |
 | **Connect JSON codec / snake wire** | `EmitUnpopulatedJSONCodec` · T (`codec_test`) | n/a (no Connect binding) | n/a | **PARTIAL** (Go-only, n/a others) |
 | **Server-verify middleware (all RPCs)** | `New{Exchange,Broker}ServiceHandler` · T | `core/verify-request.ts verifyRequestServer` (framework-agnostic single-sig verdict) + hono `rampVerify` GET-PoP edge · T (`verify-request.parity`, smoke) | `server_verify.verify_request_server` (framework-agnostic single-sig verdict) · T (`test_verifyrequest_server_parity`) | **PARTIAL** (single-sig verdict in all 3; full Connect handler binding still Go-only) |
@@ -124,8 +148,9 @@ The crypto sign/verify surface is what the audit was asked to focus on. Present
 
 ### Cross-language conformance vectors
 
-Oracle vectors live in `sdk/go/helpers/testdata/*.json`, emitted by
-`helpers/gen_vectors_test.go` (`TestGenerateVectors`, line 737). Consumption:
+Oracle vectors live in two homes — `sdk/go/helpers/testdata/*.json` (L1 crypto) and
+`sdk/go/resolvers/testdata/*.json` (L2 I/O), emitted by the respective `gen_*_test.go`
+generators. Consumption:
 
 | Vector | Go (emit+consume) | TS consumes | Python consumes |
 |---|---|---|---|
@@ -135,9 +160,27 @@ Oracle vectors live in `sdk/go/helpers/testdata/*.json`, emitted by
 | offer-verify-vectors.json | ✅ | ✅ | ✅ |
 | acceptance-vectors.json (`"canonicalization":"jcs"`) | ✅ | ✅ (byte-identical sig) | ✅ |
 | **sign-request-vectors.json** | ✅ | ✅ (`sign-request.parity.test.ts`, byte-identical) | ✅ (byte-identical) |
+| verify-request-neg-vectors.json | ✅ | ✅ | ✅ |
 | multisig-chain-vectors.json | ✅ | ✅ (`multisig-chain.parity.test.ts`) | ✅ |
-| wire-canonical-vectors.json | ✅ | **❌** (no TS from-wire face) | ✅ |
+| error-detail-vectors.json | ✅ | ✅ (`errordetail.parity.test.ts`) | ✅ |
+| wire-canonical-vectors.json | ✅ | **❌** (no TS from-wire face; the one documented ratchet exemption) | ✅ |
 | conformance/corpus/crossfield.json | ✅ | ✅ | ✅ |
+| resolvers: active-ed25519-key-vectors.json | ✅ | ✅ | ✅ |
+| resolvers: revocation-membership-vectors.json | ✅ | ✅ | ✅ |
+| resolvers: ssrf-{address,scheme,hostset,redirect}-vectors.json | ✅ | ✅ | ✅ |
+
+**Corpus-completeness ratchet (the standing rule for adding SDK behavior).** The
+shared-corpus convention only prevents divergence if EVERY committed corpus is actually
+replayed by all three languages — an emitted-but-unreplayed corpus is an *orphan* that
+silently asserts nothing (exactly how the SSRF redirect-depth and multi-address gaps
+once slipped through: their vector files existed but no test read them). This is now a
+hard gate: `sdk/python/tests/test_corpus_replay_completeness.py` enumerates every
+`testdata/*-vectors.json` in both homes and fails CI unless each is referenced by a Go
+emitter/consumer AND a Python replay AND a TS replay. It carries a single **shrink-only**
+exemption — `(wire-canonical-vectors.json, ts)` — re-verified each run to still be
+genuinely absent, so it must be deleted the day TS gains that replay (a ratchet, not an
+escape hatch). **Rule:** whenever a new SDK behavior has a byte-deterministic oracle, add
+its corpus AND all three replays in the same change, or the gate rejects it.
 
 The parity-doc claim "TS consumes acceptance vectors byte-identical" is **verified
 true** (`acceptance.parity.test.ts:100,105` assert `canonical_jcs` and
@@ -180,6 +223,19 @@ The guard is split into a **data** part (corpus-locked) and a **wiring** part
 |---|---|---|
 | Reserved / non-public address classification | `ssrf-address-vectors.json` (26) | Go (emit+self-check) · TS · Python |
 | URL-scheme allowlist (deny-by-default: http/https) | `ssrf-scheme-vectors.json` (11) | Go (emit+self-check) · TS · Python |
+| Multi-address host decision (fail-closed if ANY resolved address is reserved) | `ssrf-hostset-vectors.json` (8) | Go (emit+self-check) · TS · Python |
+| Redirect-hop policy (re-vet each `Location`; depth cap = 5) | `ssrf-redirect-vectors.json` (6) | Go (emit+self-check) · TS · Python |
+
+**Transport policy now locked by corpus (normative for any future SDK):** one
+env-driven guarded client per SDK (`NewGuardedClientFromEnv` / `guarded_client` /
+`guardedFetchFromEnv`), governed by exactly two orthogonal flags — `SKIP_SSRF` (drop
+the dial-time address guard) and `ALLOW_INSECURE` (permit plaintext http) — both
+defaulting to the guarded posture. Fixed caps, identical across languages:
+redirect-depth cap **5**, well-known/JWKS body cap **1 MiB**, and **fail-closed if any**
+resolved address of a host is reserved. Python additionally imposes an overall
+wall-clock deadline on one guarded GET (its per-phase `httpx` timeout cannot bound a
+hostile `getaddrinfo`). The default `WellKnownEndpointResolver` client is guarded too
+(`NewGuardedClientFromEnv`), not an unguarded stock client.
 
 **Transport-wiring conformance invariant (normative for any future SDK):** *every
 guarded transport MUST route each request — the initial URL and every redirect hop
