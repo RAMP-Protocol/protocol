@@ -2,17 +2,18 @@
 selector that complements the thumbprint-keyed ``WBAKeyResolver.resolve``.
 
 Byte-parity with the Go ``ActiveEd25519Key`` / TS ``activeEd25519Key`` oracles:
-iterate the directory's keys in DOCUMENT ORDER, examine at most the first
-``max_scan`` (default 10, a DoS cap), and return the FIRST key that is
-window-active AND a well-formed OKP/Ed25519 JWK whose ``x`` base64url-decodes to
-exactly 32 bytes; skip-and-continue past any failing key; ``None`` when none
-qualifies. Pure logic over a parsed ``WBAFile`` — no HTTP origin needed. Keys are
-minted through the SDK's own byte-parity primitives via the shared harness.
+iterate the directory's keys in DOCUMENT ORDER — UNBOUNDED by default (``max_scan``
+is an OPTIONAL cap) — and return the FIRST key that is window-active AND a well-formed
+OKP/Ed25519 JWK whose ``x`` base64url-decodes to exactly 32 bytes; skip-and-continue
+past any failing key; ``None`` when none qualifies. Pure logic over a parsed
+``WBAFile`` — no HTTP origin needed. Keys are minted through the SDK's own
+byte-parity primitives via the shared harness.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import TYPE_CHECKING, Any
 
 from resolvers_harness import (
     ANCHOR,
@@ -24,6 +25,9 @@ from resolvers_harness import (
     wba_jwk,
 )
 from wire.models import WBAFile
+
+if TYPE_CHECKING:
+    import pytest
 
 from ramp_sdk.b64 import b64url_nopad
 from ramp_sdk.resolvers import active_ed25519_key, active_ed25519_key_with_expiry
@@ -126,30 +130,54 @@ def test_skip_wrong_length_x_and_continue() -> None:
     assert active_ed25519_key(directory, ANCHOR) == good.raw_pub
 
 
-def test_cap_boundary_valid_key_at_position_ten_is_selected() -> None:
-    # Nine inactive fillers then a valid active key at position 10 (0-indexed 9):
-    # within the default scan cap of 10, so it IS selected.
-    fillers = [expired_jwk(make_key().x) for _ in range(9)]
+def test_unbounded_default_reaches_high_index_key() -> None:
+    # Ten inactive fillers then a valid active key at position 11 (0-indexed 10):
+    # the former default cap of 10 would have hidden it, but the UNBOUNDED default
+    # now reaches it — the DoS-by-directory-padding footgun is gone.
+    fillers = [expired_jwk(make_key().x) for _ in range(10)]
     target = make_key()
     directory = _directory([*fillers, active_jwk(target.x)])
     assert active_ed25519_key(directory, ANCHOR) == target.raw_pub
-
-
-def test_cap_boundary_valid_key_at_position_eleven_is_unreachable() -> None:
-    # Ten inactive fillers then a valid active key at position 11 (0-indexed 10):
-    # beyond the default scan cap of 10, so it is UNREACHABLE → None.
-    fillers = [expired_jwk(make_key().x) for _ in range(10)]
-    target = make_key()
-    directory = _directory([*fillers, active_jwk(target.x)])
-    assert active_ed25519_key(directory, ANCHOR) is None
-
-
-def test_cap_boundary_position_eleven_reachable_with_raised_max_scan() -> None:
-    # The cap is a parameter: raising max_scan past the padding reaches the key.
-    fillers = [expired_jwk(make_key().x) for _ in range(10)]
-    target = make_key()
-    directory = _directory([*fillers, active_jwk(target.x)])
+    # An explicit bound large enough still reaches it.
     assert active_ed25519_key(directory, ANCHOR, max_scan=11) == target.raw_pub
+
+
+def test_explicit_bound_exhaustion_returns_none_and_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # An explicit max_scan of 10 is exhausted over the 10 expired fillers before the
+    # index-10 key: None is returned AND the exhaustion is logged (a valid key beyond
+    # the cap is unreachable) — never silently indistinguishable from a genuine miss.
+    fillers = [expired_jwk(make_key().x) for _ in range(10)]
+    target = make_key()
+    directory = _directory([*fillers, active_jwk(target.x)])
+    with caplog.at_level(logging.WARNING, logger="ramp_sdk.resolvers.wba"):
+        assert active_ed25519_key(directory, ANCHOR, max_scan=10) is None
+    assert any("max_scan" in r.getMessage() for r in caplog.records)
+
+
+def test_negative_max_scan_clamps_to_scan_none() -> None:
+    # A negative max_scan clamps to zero (scan none): None even with an active key
+    # present. Parity with Go clamp-to-zero / TS Math.max(0, n).
+    active = make_key()
+    directory = _directory([active_jwk(active.x)])
+    assert active_ed25519_key(directory, ANCHOR, max_scan=-1) is None
+
+
+def test_mixed_case_kty_crv_is_accepted() -> None:
+    # Case-insensitive kty/crv is a DELIBERATE lenient SDK convention (RFC 7517/8037
+    # want exact-case OKP / Ed25519). A window-active key with mixed-case kty/crv is
+    # accepted and selected, identically across the three SDKs.
+    k = make_key()
+    jwk = active_jwk(k.x) | {"kty": "oKp", "crv": "ed25519"}
+    directory = _directory([jwk])
+    assert active_ed25519_key(directory, ANCHOR) == k.raw_pub
+
+
+def test_none_directory_returns_none_not_raise() -> None:
+    # A None directory is guarded (returns None, never raises), matching Go's nil guard.
+    assert active_ed25519_key(None, ANCHOR) is None  # type: ignore[arg-type]
+    assert active_ed25519_key_with_expiry(None, ANCHOR) is None  # type: ignore[arg-type]
 
 
 def test_empty_directory_returns_none() -> None:

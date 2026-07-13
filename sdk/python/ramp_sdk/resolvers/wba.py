@@ -15,6 +15,7 @@ the sync directory-fetch path AND the Run poller — never poller-only.
 
 from __future__ import annotations
 
+import logging
 import queue
 import random
 import threading
@@ -55,10 +56,11 @@ _DEFAULT_SYNC_DEBOUNCE = timedelta(seconds=5)
 # permanently freezes later (legitimately earlier) snapshots under the guard.
 _AS_OF_SKEW = timedelta(seconds=300)
 _ED25519_PUBLIC_KEY_BYTES = 32
-# Document-order scan cap for active_ed25519_key: a WBA directory padded with junk
-# entries beyond this many keys cannot force unbounded selection work (a DoS cap);
-# a valid key listed past the first _DEFAULT_ACTIVE_KEY_SCAN positions is unreachable.
-_DEFAULT_ACTIVE_KEY_SCAN = 10
+
+# Diagnostics for the active-key selector's bounded-scan exhaustion (see
+# _select_active_ed25519_key). The unbounded default never logs; only an explicit
+# max_scan that is exhausted while more keys remain emits a warning.
+_logger = logging.getLogger(__name__)
 
 NowFn = Callable[[], datetime]
 AfterFn = Callable[[timedelta], "queue.Queue[datetime]"]
@@ -353,22 +355,34 @@ class WBAKeyResolver:
 def active_ed25519_key(
     directory: WBAFile,
     now: datetime,
-    max_scan: int = _DEFAULT_ACTIVE_KEY_SCAN,
+    max_scan: int | None = None,
 ) -> bytes | None:
     """First window-active, well-formed Ed25519 key (raw 32 bytes) from ``directory``.
 
-    Selects an identity's CURRENT signing key BY DOCUMENT ORDER when its thumbprint
-    is not known ahead of time — complementing :meth:`WBAKeyResolver.resolve`, which
-    matches a KNOWN thumbprint. Iterates the directory's keys in document order,
-    examining AT MOST the first ``max_scan`` (default 10 — a DoS cap so a padded
-    directory cannot force unbounded work), and returns the FIRST key that passes
-    ALL of: window-active ([not_before, not_after) half-open covers ``now``, both
-    bounds RFC 3339-parseable — a missing/unparseable bound makes the key inactive);
-    ``kty == "OKP"`` and ``crv == "Ed25519"``; and a present ``x`` that
-    base64url-decodes to exactly 32 bytes. Any key failing any check is skipped and
-    iteration continues; a valid key listed beyond the first ``max_scan`` positions
-    is unreachable. Returns ``None`` when no examined key qualifies. Byte-parity with
-    the Go ``ActiveEd25519Key`` / TS ``activeEd25519Key`` oracles.
+    Selects an identity's signing key BY DOCUMENT ORDER when its thumbprint is not
+    known ahead of time — complementing :meth:`WBAKeyResolver.resolve`, which matches
+    a KNOWN thumbprint. Iterates the directory's keys in document order and returns
+    the FIRST key that passes ALL of: window-active ([not_before, not_after) half-open
+    covers ``now``, both bounds RFC 3339-parseable — a missing/unparseable bound makes
+    the key inactive); ``kty == "OKP"`` and ``crv == "Ed25519"`` matched
+    CASE-INSENSITIVELY (a deliberate lenient SDK convention: RFC 7517/8037 specify the
+    exact-case ``"OKP"`` / ``"Ed25519"``, but all three SDKs accept any case
+    IDENTICALLY so a case-varying directory resolves the SAME key everywhere); and a
+    present ``x`` that base64url-decodes to exactly 32 bytes. Any key failing any check
+    is skipped and iteration continues.
+
+    The result is the first window-active key in document order — this SDK's
+    deterministic tie-break, NOT a normative "current" key: the protocol permits
+    several simultaneously-active keys during overlap rotation and defines no "first".
+
+    ``max_scan`` is an OPTIONAL document-order bound. ``None`` (the default) scans the
+    WHOLE directory — unbounded, so a valid key at any position is reachable; a silent
+    cap would make a high-position key indistinguishable from "no active key" (a
+    DoS-by-directory-padding footgun). A non-``None`` bound caps the scan at
+    ``max(0, max_scan)`` keys (0 or negative scans none); when a positive bound is
+    exhausted while more keys remain, the exhaustion is logged. Returns ``None`` when
+    no examined key qualifies (or ``directory`` is ``None``). Byte-parity with the Go
+    ``ActiveEd25519Key`` / TS ``activeEd25519Key`` oracles.
 
     REVOCATION: this selector screens ONLY validity windows and key well-formedness —
     it does NOT consult any revocation channel. A key that was emergency-revoked but
@@ -387,7 +401,7 @@ def active_ed25519_key(
 def active_ed25519_key_with_expiry(
     directory: WBAFile,
     now: datetime,
-    max_scan: int = _DEFAULT_ACTIVE_KEY_SCAN,
+    max_scan: int | None = None,
 ) -> tuple[bytes, datetime] | None:
     """Like :func:`active_ed25519_key`, but ALSO returns the selected key's expiry.
 
@@ -411,7 +425,7 @@ def active_ed25519_key_screened(
     directory: WBAFile,
     now: datetime,
     revoked: Callable[[str], bool],
-    max_scan: int = _DEFAULT_ACTIVE_KEY_SCAN,
+    max_scan: int | None = None,
 ) -> bytes | None:
     """:func:`active_ed25519_key` made REVOCATION-AWARE.
 
@@ -436,7 +450,7 @@ def active_ed25519_key_with_expiry_screened(
     directory: WBAFile,
     now: datetime,
     revoked: Callable[[str], bool],
-    max_scan: int = _DEFAULT_ACTIVE_KEY_SCAN,
+    max_scan: int | None = None,
 ) -> tuple[bytes, datetime] | None:
     """:func:`active_ed25519_key_with_expiry` made REVOCATION-AWARE.
 
@@ -454,18 +468,26 @@ def active_ed25519_key_with_expiry_screened(
 def _select_active_ed25519_key(
     directory: WBAFile,
     now: datetime,
-    max_scan: int,
+    max_scan: int | None,
     revoked: Callable[[str], bool] | None = None,
 ) -> tuple[bytes, datetime] | None:
     """Shared selector behind all four active-key faces: the FIRST window-active,
-    well-formed Ed25519, non-revoked key in document order (cap ``max_scan``), as a
-    ``(raw_public_key, not_after)`` pair, or ``None``. ``active_ed25519_key`` drops
-    the expiry; ``active_ed25519_key_with_expiry`` returns it. ``not_after`` reuses
-    the SAME parser :func:`_key_active_at` used, so the faces never disagree on the
-    selected key. ``revoked`` None disables revocation screening (the bare faces);
-    a predicate skips any key whose RFC 7638 thumbprint it reports true (the screened
-    faces)."""
-    for key in (directory.keys or [])[:max_scan]:
+    well-formed Ed25519, non-revoked key in document order (UNBOUNDED by default;
+    ``max_scan`` optionally caps it), as a ``(raw_public_key, not_after)`` pair, or
+    ``None``. ``active_ed25519_key`` drops the expiry; ``active_ed25519_key_with_expiry``
+    returns it. ``not_after`` reuses the SAME parser :func:`_key_active_at` used, so the
+    faces never disagree on the selected key. ``revoked`` None disables revocation
+    screening (the bare faces); a predicate skips any key whose RFC 7638 thumbprint it
+    reports true (the screened faces). A ``None`` ``directory`` returns ``None`` (guarded,
+    never raises), matching Go."""
+    if directory is None:
+        return None
+    keys = directory.keys or []
+    # max_scan None scans every key (unbounded); a bound clamps to max(0, n) — Go's
+    # clamp-to-zero / TS's Math.max(0, n) — since a bare keys[:negative] would wrongly
+    # slice from the end.
+    scanned = keys if max_scan is None else keys[: max(0, max_scan)]
+    for key in scanned:
         if not _key_active_at(key, now):
             continue
         raw = _public_key_of_safe(key)
@@ -483,6 +505,17 @@ def _select_active_ed25519_key(
         if not_after is None:  # unreachable: _key_active_at required a parseable bound
             continue
         return raw, not_after
+    # Bounded-scan exhaustion signal: a positive explicit bound was exhausted while the
+    # directory held MORE keys than the bound, so a valid key beyond the cap is
+    # unreachable. Log it rather than let a bounded miss masquerade as a genuine "no
+    # active key" — the DoS-by-padding footgun the unbounded default avoids.
+    if max_scan is not None and max_scan > 0 and max_scan < len(keys):
+        _logger.warning(
+            "active-key scan hit explicit max_scan bound without selecting a key; "
+            "a valid key beyond the cap is unreachable (max_scan=%d, total_keys=%d)",
+            max_scan,
+            len(keys),
+        )
     return None
 
 
@@ -549,6 +582,9 @@ def _key_by_thumbprint(file: WBAFile, keyid: str) -> JsonWebKey | None:
 
 
 def _public_key_of_safe(key: JsonWebKey) -> bytes | None:
+    # kty/crv are matched CASE-INSENSITIVELY — a deliberate lenient SDK convention
+    # (RFC 7517/8037 specify the exact-case "OKP" / "Ed25519"); the three SDKs accept
+    # any case identically so a case-varying directory resolves the SAME key.
     if (key.kty or "").upper() != "OKP" or (key.crv or "").lower() != "ed25519":
         return None
     try:
