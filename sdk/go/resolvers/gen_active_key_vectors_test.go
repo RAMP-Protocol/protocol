@@ -54,13 +54,18 @@ type activeKeyJWK struct {
 
 // activeKeyVector is one served directory + the oracle's selection verdict.
 type activeKeyVector struct {
-	Label            string         `json:"label"`
-	Note             string         `json:"note"`
-	MaxScan          *int           `json:"max_scan"` // null → the selector's default cap
-	Keys             []activeKeyJWK `json:"keys"`
-	ExpectedIndex    int            `json:"expected_index"`     // -1 = no key qualifies
-	ExpectedPub      string         `json:"expected_pub"`       // base64url raw pub; "" when none
-	ExpectedNotAfter string         `json:"expected_not_after"` // RFC3339; "" when none
+	Label   string         `json:"label"`
+	Note    string         `json:"note"`
+	MaxScan *int           `json:"max_scan"` // null → the selector's default cap
+	Keys    []activeKeyJWK `json:"keys"`
+	// Revoked is the RFC 7638 thumbprint set the SCREENED selector treats as revoked
+	// (empty for the window/base64/timestamp/cap vectors). A replay builds a predicate
+	// from it and runs the revocation-aware face; an empty set makes the screened
+	// selection identical to the bare one, so those vectors also lock the bare path.
+	Revoked          []string `json:"revoked"`
+	ExpectedIndex    int      `json:"expected_index"`     // -1 = no key qualifies
+	ExpectedPub      string   `json:"expected_pub"`       // base64url raw pub; "" when none
+	ExpectedNotAfter string   `json:"expected_not_after"` // RFC3339; "" when none
 }
 
 // activeKeyCorpus is the whole served-doc + verdicts corpus.
@@ -150,11 +155,21 @@ func mutateActive(seed string, mutate func(*activeKeyJWK)) kb {
 
 func intp(v int) *int { return &v }
 
-// buildVector assembles the directory, runs the real Go selector as the oracle,
-// asserts it selected wantIndex (the sanity gate), and returns the vector with
-// oracle-produced verdict fields. Both the plain and with-expiry faces are run and
-// asserted to agree.
+// buildVector is buildScreenedVector with an EMPTY revoked set: it exercises the
+// bare selection path (screened selection over an empty revoked set is identical to
+// the bare face). Most vectors — window, base64, timestamp, cap — take this form.
 func buildVector(t *testing.T, label, note string, maxScan *int, keys []kb, wantIndex int) activeKeyVector {
+	t.Helper()
+	return buildScreenedVector(t, label, note, maxScan, keys, nil, wantIndex)
+}
+
+// buildScreenedVector assembles the directory, runs the real Go REVOCATION-AWARE
+// selector as the oracle (screening the given revoked thumbprint set), asserts it
+// selected wantIndex (the sanity gate), and returns the vector with oracle-produced
+// verdict fields. The plain and with-expiry screened faces are asserted to agree;
+// when the revoked set is empty, the BARE face is asserted to agree too, so the
+// non-screened path stays locked by the same vector.
+func buildScreenedVector(t *testing.T, label, note string, maxScan *int, keys []kb, revoked []string, wantIndex int) activeKeyVector {
 	t.Helper()
 	jwks := make([]*rampv1.JsonWebKey, len(keys))
 	aks := make([]activeKeyJWK, len(keys))
@@ -167,16 +182,59 @@ func buildVector(t *testing.T, label, note string, maxScan *int, keys []kb, want
 	if maxScan != nil {
 		scanArgs = []int{*maxScan}
 	}
+	pred := revokedPredicate(revoked)
 
-	pub, notAfter, err := resolvers.ActiveEd25519KeyWithExpiry(dir, wbaAnchor, scanArgs...)
-	plain, plainErr := resolvers.ActiveEd25519Key(dir, wbaAnchor, scanArgs...)
+	pub, notAfter, err := resolvers.ActiveEd25519KeyWithExpiryScreened(dir, wbaAnchor, pred, scanArgs...)
+	plain, plainErr := resolvers.ActiveEd25519KeyScreened(dir, wbaAnchor, pred, scanArgs...)
 	assertFacesAgree(t, label, pub, err, plain, plainErr)
+	if len(revoked) == 0 {
+		// Empty screening degrades to the bare selector — lock that too.
+		barePub, bareErr := resolvers.ActiveEd25519Key(dir, wbaAnchor, scanArgs...)
+		assertFacesAgree(t, label+"/bare", pub, err, barePub, bareErr)
+	}
 
 	gotIndex, expPub, expNotAfter := oracleVerdict(keys, pub, notAfter, err)
 	if gotIndex != wantIndex {
 		t.Fatalf("%s: oracle selected index %d, vector was built for %d", label, gotIndex, wantIndex)
 	}
-	return activeKeyVector{Label: label, Note: note, MaxScan: maxScan, Keys: aks, ExpectedIndex: gotIndex, ExpectedPub: expPub, ExpectedNotAfter: expNotAfter}
+	return activeKeyVector{Label: label, Note: note, MaxScan: maxScan, Keys: aks, Revoked: normalizeRevoked(revoked), ExpectedIndex: gotIndex, ExpectedPub: expPub, ExpectedNotAfter: expNotAfter}
+}
+
+// revokedPredicate builds the thumbprint-revocation predicate the screened selector
+// takes. An empty set yields a nil predicate, which disables screening entirely so
+// the screened selection is byte-identical to the bare one.
+func revokedPredicate(revoked []string) func(string) bool {
+	if len(revoked) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(revoked))
+	for _, tp := range revoked {
+		set[tp] = struct{}{}
+	}
+	return func(tp string) bool {
+		_, ok := set[tp]
+		return ok
+	}
+}
+
+// normalizeRevoked maps a nil revoked slice to a non-nil empty slice so the emitted
+// JSON always carries "revoked": [] (never null) for the replays to build a set from.
+func normalizeRevoked(revoked []string) []string {
+	if revoked == nil {
+		return []string{}
+	}
+	return revoked
+}
+
+// revokedThumbprints returns the RFC 7638 thumbprints of keys — the revoked set a
+// revocation vector screens against.
+func revokedThumbprints(t *testing.T, keys ...kb) []string {
+	t.Helper()
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, mustThumbprint(t, ed25519.PublicKey(k.pub)))
+	}
+	return out
 }
 
 // oracleVerdict turns the selector's (pub, notAfter, err) into the recorded
@@ -296,12 +354,32 @@ func buildCapVectors(t *testing.T) []activeKeyVector {
 	}
 }
 
+// buildRevocationVectors exercises the REVOCATION-AWARE selector: a window-active
+// key whose thumbprint is revoked is skipped, and the next active non-revoked key
+// (if any) wins. These are the vectors the bare selector CANNOT produce — they lock
+// the screened faces the offer-key cache verification path depends on.
+func buildRevocationVectors(t *testing.T) []activeKeyVector {
+	t.Helper()
+	r1 := activeKB("rev-1")
+	r2 := activeKB("rev-2")
+	solo := activeKB("rev-solo")
+	return []activeKeyVector{
+		buildScreenedVector(t, "revoked-active-key-skipped-then-next",
+			"a window-active key whose thumbprint is in the revoked set is skipped; the next active non-revoked key wins",
+			nil, []kb{r1, r2}, revokedThumbprints(t, r1), 1),
+		buildScreenedVector(t, "revoked-only-active-key-none",
+			"the only window-active key is revoked → none qualifies",
+			nil, []kb{solo}, revokedThumbprints(t, solo), -1),
+	}
+}
+
 func buildActiveKeyCorpus(t *testing.T) activeKeyCorpus {
 	t.Helper()
 	vectors := buildBasicVectors(t)
 	vectors = append(vectors, buildBase64Vectors(t)...)
 	vectors = append(vectors, buildTimestampVectors(t)...)
 	vectors = append(vectors, buildCapVectors(t)...)
+	vectors = append(vectors, buildRevocationVectors(t)...)
 	return activeKeyCorpus{
 		Note:    "active_ed25519_key document-order selection verdicts produced by the sdk/go oracle; py/ts replay and must match every vector",
 		Now:     rfc(wbaAnchor),

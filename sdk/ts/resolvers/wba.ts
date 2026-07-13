@@ -372,7 +372,17 @@ const DEFAULT_ACTIVE_KEY_SCAN = 10;
  * base64url-decodes to exactly 32 bytes. Any key failing any check is skipped and
  * iteration continues; a valid key listed beyond the first `maxScan` positions is
  * unreachable. Returns `null` when no examined key qualifies. Byte-parity with the
- * Go `ActiveEd25519Key` / Python `active_ed25519_key` oracles. */
+ * Go `ActiveEd25519Key` / Python `active_ed25519_key` oracles.
+ *
+ * REVOCATION: this selector screens ONLY validity windows and key well-formedness —
+ * it does NOT consult any revocation channel. A key that was emergency-revoked but
+ * is still window-active in a (possibly CDN-cached) directory WILL be selected. A
+ * caller on a VERIFICATION path MUST NOT trust the result until it has screened the
+ * selected key's RFC 7638 thumbprint against the resolver's revoked-thumbprint set
+ * (`WBAKeyResolver.revoked` / a revocation snapshot); otherwise adopting this
+ * selector defeats emergency revocation. Prefer {@link activeEd25519KeyScreened},
+ * which folds that screen into selection. This bare form is for non-verification
+ * callers only. */
 export function activeEd25519Key(
   directory: WBAFile,
   now: number,
@@ -390,13 +400,77 @@ export function activeEd25519Key(
  * finite — selection required it (a key with a missing/unparseable bound is
  * inactive and skipped). Returns `null` when no examined key qualifies.
  * Byte-parity with the Go `ActiveEd25519KeyWithExpiry` / Python
- * `active_ed25519_key_with_expiry` oracles. */
+ * `active_ed25519_key_with_expiry` oracles.
+ *
+ * REVOCATION: like {@link activeEd25519Key}, this bare form does NOT consult
+ * revocation — it can return a window-active-but-revoked key. A VERIFICATION path
+ * MUST screen the result, or use the revocation-aware
+ * {@link activeEd25519KeyWithExpiryScreened} instead. */
 export function activeEd25519KeyWithExpiry(
   directory: WBAFile,
   now: number,
   maxScan: number = DEFAULT_ACTIVE_KEY_SCAN,
 ): { key: Uint8Array; notAfter: number } | null {
   return selectActiveEd25519Key(directory, now, maxScan);
+}
+
+/** {@link activeEd25519Key} made REVOCATION-AWARE. Runs the same document-order
+ * window + well-formedness selection but ALSO skips any key whose RFC 7638
+ * thumbprint `revoked` reports true, so a window-active-but-revoked key is never
+ * returned. It is the selector a VERIFICATION path adopts — folding the revoked-set
+ * screen the bare {@link activeEd25519Key} leaves to the caller into selection
+ * itself, so an emergency-revoked key still listed in a CDN-cached directory is
+ * passed over for the next active, non-revoked key. `revoked` is REQUIRED: pass a
+ * predicate over the resolver's revoked-thumbprint set (e.g. `WBAKeyResolver.revoked`)
+ * or, for a caller with no revocation channel, an explicit `() => false` to make the
+ * waiver visible. It is ASYNC because screening computes each candidate's RFC 7638
+ * thumbprint (the SAME `crypto.subtle` primitive `WBAKeyResolver.resolve` keys on).
+ * Returns `null` when no examined, non-revoked key qualifies. */
+export async function activeEd25519KeyScreened(
+  directory: WBAFile,
+  now: number,
+  revoked: (thumbprint: string) => boolean,
+  maxScan: number = DEFAULT_ACTIVE_KEY_SCAN,
+): Promise<Uint8Array | null> {
+  return (await selectActiveEd25519KeyScreened(directory, now, revoked, maxScan))?.key ?? null;
+}
+
+/** {@link activeEd25519KeyWithExpiry} made REVOCATION-AWARE (see
+ * {@link activeEd25519KeyScreened}): the same selection, plus a skip of any key whose
+ * RFC 7638 thumbprint `revoked` reports true, returned with the selected key's
+ * `notAfter` for cache-TTL clamping. `revoked` is REQUIRED; ASYNC for the same
+ * thumbprint reason. Returns `null` when no examined, non-revoked key qualifies. */
+export async function activeEd25519KeyWithExpiryScreened(
+  directory: WBAFile,
+  now: number,
+  revoked: (thumbprint: string) => boolean,
+  maxScan: number = DEFAULT_ACTIVE_KEY_SCAN,
+): Promise<{ key: Uint8Array; notAfter: number } | null> {
+  return selectActiveEd25519KeyScreened(directory, now, revoked, maxScan);
+}
+
+/** Shared REVOCATION-AWARE selector behind the two screened faces: the FIRST
+ * window-active, well-formed, non-revoked Ed25519 key in document order (cap
+ * `maxScan`), as `{ key, notAfter }`, or `null`. Mirrors {@link selectActiveEd25519Key}
+ * with the added thumbprint-revocation skip; async because the thumbprint is. */
+async function selectActiveEd25519KeyScreened(
+  directory: WBAFile,
+  now: number,
+  revoked: (thumbprint: string) => boolean,
+  maxScan: number,
+): Promise<{ key: Uint8Array; notAfter: number } | null> {
+  for (const key of (directory.keys ?? []).slice(0, maxScan)) {
+    if (!keyActiveAt(key, now)) continue;
+    const raw = publicKeyOfSafe(key);
+    if (!raw) continue;
+    // Revocation screen: skip a window-active key whose thumbprint is revoked, so an
+    // emergency-revoked key still listed in a CDN-cached directory is never selected.
+    if (revoked(await thumbprint(raw))) continue;
+    const notAfter = parseRfc3339Ms(key.not_after);
+    if (Number.isNaN(notAfter)) continue; // unreachable: keyActiveAt required a parseable bound
+    return { key: raw, notAfter };
+  }
+  return null;
 }
 
 /** Shared selector behind the two active-key faces: the FIRST window-active,

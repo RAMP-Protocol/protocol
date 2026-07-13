@@ -369,6 +369,16 @@ def active_ed25519_key(
     iteration continues; a valid key listed beyond the first ``max_scan`` positions
     is unreachable. Returns ``None`` when no examined key qualifies. Byte-parity with
     the Go ``ActiveEd25519Key`` / TS ``activeEd25519Key`` oracles.
+
+    REVOCATION: this selector screens ONLY validity windows and key well-formedness —
+    it does NOT consult any revocation channel. A key that was emergency-revoked but
+    is still window-active in a (possibly CDN-cached) directory WILL be selected. A
+    caller on a VERIFICATION path MUST NOT trust the result until it has screened the
+    selected key's RFC 7638 thumbprint against the resolver's revoked-thumbprint set
+    (:meth:`WBAKeyResolver.revoked` / a revocation snapshot); otherwise adopting this
+    selector defeats emergency revocation. Prefer :func:`active_ed25519_key_screened`,
+    which folds that screen into selection. This bare form is for non-verification
+    callers only.
     """
     selected = _select_active_ed25519_key(directory, now, max_scan)
     return None if selected is None else selected[0]
@@ -389,26 +399,83 @@ def active_ed25519_key_with_expiry(
     key never outlives its validity window. The ``not_after`` is guaranteed
     parseable — selection required it (a key with a missing/unparseable bound is
     inactive and skipped). Returns ``None`` when no examined key qualifies.
+
+    REVOCATION: like :func:`active_ed25519_key`, this bare form does NOT consult
+    revocation — it can return a window-active-but-revoked key. A VERIFICATION path
+    MUST screen the result, or use :func:`active_ed25519_key_with_expiry_screened`.
     """
     return _select_active_ed25519_key(directory, now, max_scan)
+
+
+def active_ed25519_key_screened(
+    directory: WBAFile,
+    now: datetime,
+    revoked: Callable[[str], bool],
+    max_scan: int = _DEFAULT_ACTIVE_KEY_SCAN,
+) -> bytes | None:
+    """:func:`active_ed25519_key` made REVOCATION-AWARE.
+
+    Runs the same document-order window + well-formedness selection but ALSO skips
+    any key whose RFC 7638 thumbprint ``revoked`` reports true, so a
+    window-active-but-revoked key is never returned. It is the selector a
+    VERIFICATION path adopts — folding the revoked-set screen the bare
+    :func:`active_ed25519_key` leaves to the caller into selection itself, so an
+    emergency-revoked key still listed in a CDN-cached directory is passed over for
+    the next active, non-revoked key. ``revoked`` is REQUIRED: pass a predicate over
+    the resolver's revoked-thumbprint set (e.g. :meth:`WBAKeyResolver.revoked`) or,
+    for a caller with no revocation channel, an explicit ``lambda _tp: False`` to make
+    the waiver visible. The thumbprint is computed with :func:`ramp_sdk.thumbprint`
+    (RFC 7638) — the SAME primitive :meth:`WBAKeyResolver.resolve` keys on. Returns
+    ``None`` when no examined, non-revoked key qualifies.
+    """
+    selected = _select_active_ed25519_key(directory, now, max_scan, revoked)
+    return None if selected is None else selected[0]
+
+
+def active_ed25519_key_with_expiry_screened(
+    directory: WBAFile,
+    now: datetime,
+    revoked: Callable[[str], bool],
+    max_scan: int = _DEFAULT_ACTIVE_KEY_SCAN,
+) -> tuple[bytes, datetime] | None:
+    """:func:`active_ed25519_key_with_expiry` made REVOCATION-AWARE.
+
+    The same document-order selection as :func:`active_ed25519_key_with_expiry`, plus
+    a skip of any key whose RFC 7638 thumbprint ``revoked`` reports true, returned
+    with the selected key's ``not_after`` for cache-TTL clamping. This is the selector
+    :class:`~ramp_sdk.resolvers.CachedOfferKeyResolver` composes so a cached
+    offer-signing key is both window-active AND not revoked. ``revoked`` is REQUIRED
+    (see :func:`active_ed25519_key_screened`). Returns ``None`` when no examined,
+    non-revoked key qualifies.
+    """
+    return _select_active_ed25519_key(directory, now, max_scan, revoked)
 
 
 def _select_active_ed25519_key(
     directory: WBAFile,
     now: datetime,
     max_scan: int,
+    revoked: Callable[[str], bool] | None = None,
 ) -> tuple[bytes, datetime] | None:
-    """Shared selector for the two active-key faces: the FIRST window-active,
-    well-formed Ed25519 key in document order (cap ``max_scan``), as a
+    """Shared selector behind all four active-key faces: the FIRST window-active,
+    well-formed Ed25519, non-revoked key in document order (cap ``max_scan``), as a
     ``(raw_public_key, not_after)`` pair, or ``None``. ``active_ed25519_key`` drops
     the expiry; ``active_ed25519_key_with_expiry`` returns it. ``not_after`` reuses
-    the SAME parser :func:`_key_active_at` used, so the two faces never disagree on
-    the selected key."""
+    the SAME parser :func:`_key_active_at` used, so the faces never disagree on the
+    selected key. ``revoked`` None disables revocation screening (the bare faces);
+    a predicate skips any key whose RFC 7638 thumbprint it reports true (the screened
+    faces)."""
     for key in (directory.keys or [])[:max_scan]:
         if not _key_active_at(key, now):
             continue
         raw = _public_key_of_safe(key)
         if raw is None:
+            continue
+        # Revocation screen (verification-path callers): skip a window-active key
+        # whose thumbprint is revoked, so an emergency-revoked key still listed in a
+        # CDN-cached directory is never selected. Thumbprint via the RFC 7638
+        # primitive _key_by_thumbprint uses; raw is already length-checked to 32 bytes.
+        if revoked is not None and revoked(thumbprint(raw)):
             continue
         # not_after is guaranteed present + parseable: _key_active_at above rejects
         # any key whose window bounds do not parse, so the selected key always has one.

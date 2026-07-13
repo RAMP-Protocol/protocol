@@ -18,14 +18,22 @@ divergence the byte-parity contract exists to forbid.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from conftest import GO_RESOLVERS_TESTDATA, load_json
 from wire.models import WBAFile
 
 from ramp_sdk.b64 import b64url_decode_strict
-from ramp_sdk.resolvers import active_ed25519_key, active_ed25519_key_with_expiry
+from ramp_sdk.resolvers import (
+    active_ed25519_key,
+    active_ed25519_key_screened,
+    active_ed25519_key_with_expiry,
+    active_ed25519_key_with_expiry_screened,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _CORPUS = load_json(GO_RESOLVERS_TESTDATA / "active-ed25519-key-vectors.json")
 _NOW = datetime.fromisoformat(_CORPUS["now"])
@@ -40,6 +48,12 @@ def _scan_kwargs(vec: dict[str, Any]) -> dict[str, int]:
     return {} if vec["max_scan"] is None else {"max_scan": vec["max_scan"]}
 
 
+def _revoked_predicate(vec: dict[str, Any]) -> Callable[[str], bool]:
+    """A predicate over the vector's revoked-thumbprint set (empty for most)."""
+    revoked = set(vec["revoked"])
+    return lambda tp: tp in revoked
+
+
 def test_active_key_corpus_nonempty() -> None:
     assert len(_CORPUS["vectors"]) > 0
 
@@ -52,9 +66,18 @@ def test_active_key_corpus_nonempty() -> None:
 def test_active_key_matches_go_oracle(vec: dict[str, Any]) -> None:
     directory = _directory(vec["keys"])
     kwargs = _scan_kwargs(vec)
+    revoked = _revoked_predicate(vec)
 
-    result = active_ed25519_key(directory, _NOW, **kwargs)
-    with_expiry = active_ed25519_key_with_expiry(directory, _NOW, **kwargs)
+    # The corpus verdict is produced by the Go REVOCATION-AWARE oracle, so replay the
+    # screened faces with the vector's revoked set.
+    result = active_ed25519_key_screened(directory, _NOW, revoked, **kwargs)
+    with_expiry = active_ed25519_key_with_expiry_screened(directory, _NOW, revoked, **kwargs)
+
+    # Empty revoked set: screened selection must equal the bare face — so these
+    # vectors also lock the non-screened path (as they did before revocation existed).
+    if not vec["revoked"]:
+        assert result == active_ed25519_key(directory, _NOW, **kwargs)
+        assert with_expiry == active_ed25519_key_with_expiry(directory, _NOW, **kwargs)
 
     if vec["expected_index"] == -1:
         assert result is None

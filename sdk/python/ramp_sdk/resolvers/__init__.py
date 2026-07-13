@@ -30,7 +30,9 @@ from ramp_sdk.resolvers.errors import (
 from ramp_sdk.resolvers.wba import (
     WBAKeyResolver,
     active_ed25519_key,
+    active_ed25519_key_screened,
     active_ed25519_key_with_expiry,
+    active_ed25519_key_with_expiry_screened,
 )
 from ramp_sdk.resolvers.wellknown import WellKnownEndpointResolver, WellKnownKeyResolver
 
@@ -47,7 +49,9 @@ __all__ = [
     "WellKnownEndpointResolver",
     "WellKnownKeyResolver",
     "active_ed25519_key",
+    "active_ed25519_key_screened",
     "active_ed25519_key_with_expiry",
+    "active_ed25519_key_with_expiry_screened",
     "async_ssrf_guard",
     "blocked_address",
     "guarded_async_client",

@@ -22,6 +22,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 0,
       "expected_pub": "igg_gqBryFMoFzRRGt3o5heyxCMZnwvmo_QnVDOMhq4",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -46,6 +47,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "-3RaMXQ-TPRYKeoM8OpPZ0_2NaOeoPuD55TFmOL5DHU",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -70,6 +72,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "-3RaMXQ-TPRYKeoM8OpPZ0_2NaOeoPuD55TFmOL5DHU",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -79,6 +82,7 @@
       "note": "an empty directory selects nothing",
       "max_scan": null,
       "keys": [],
+      "revoked": [],
       "expected_index": -1,
       "expected_pub": "",
       "expected_not_after": ""
@@ -103,6 +107,7 @@
           "not_after": "2026-05-01T14:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": -1,
       "expected_pub": "",
       "expected_not_after": ""
@@ -120,6 +125,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 0,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -144,6 +150,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -161,6 +168,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": -1,
       "expected_pub": "",
       "expected_not_after": ""
@@ -185,6 +193,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -202,6 +211,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": -1,
       "expected_pub": "",
       "expected_not_after": ""
@@ -226,6 +236,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -250,6 +261,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -274,6 +286,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -298,6 +311,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -322,6 +336,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -339,6 +354,7 @@
           "not_after": "2026-05-01T13:00:00"
         }
       ],
+      "revoked": [],
       "expected_index": -1,
       "expected_pub": "",
       "expected_not_after": ""
@@ -363,6 +379,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -380,6 +397,7 @@
           "not_after": "2026-05-02"
         }
       ],
+      "revoked": [],
       "expected_index": -1,
       "expected_pub": "",
       "expected_not_after": ""
@@ -404,6 +422,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -421,6 +440,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 0,
       "expected_pub": "RCpsLgWEVtyagXGaK5FfrDpI9XCH2_NL3Rlqi3n7R6s",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -438,6 +458,7 @@
           "not_after": "2026-05-01T12:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": -1,
       "expected_pub": "",
       "expected_not_after": ""
@@ -462,6 +483,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 1,
       "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -542,6 +564,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 9,
       "expected_pub": "cvi1u--Vo8dPa4zoH9zZa1hpXxqR7jjcQAqjARVwzYo",
       "expected_not_after": "2026-05-01T13:00:00Z"
@@ -629,6 +652,7 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": -1,
       "expected_pub": "",
       "expected_not_after": ""
@@ -716,9 +740,57 @@
           "not_after": "2026-05-01T13:00:00Z"
         }
       ],
+      "revoked": [],
       "expected_index": 10,
       "expected_pub": "cvi1u--Vo8dPa4zoH9zZa1hpXxqR7jjcQAqjARVwzYo",
       "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "revoked-active-key-skipped-then-next",
+      "note": "a window-active key whose thumbprint is in the revoked set is skipped; the next active non-revoked key wins",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "tiMNBFetA9cP2TIoNzDyuSGUhEaSRtJ-huaZIVykdC4",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "juqeMSQE3dCrIbzE9hsFs8TgSbiqBJHdMsFOXIGRUgc",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "revoked": [
+        "I71zysRn0l_-dx9KrsWoh2pCb2sp4W6odTS_dVR2lcY"
+      ],
+      "expected_index": 1,
+      "expected_pub": "juqeMSQE3dCrIbzE9hsFs8TgSbiqBJHdMsFOXIGRUgc",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "revoked-only-active-key-none",
+      "note": "the only window-active key is revoked → none qualifies",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "VhGtJ0FS2d97o1Xl0Je1hH3b-bL65UOHpO9KYVPyGvQ",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "revoked": [
+        "zZbFGB3J0sCgMrrDdF49R_9pWmgP9pbkBs-33nOd7OY"
+      ],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
     }
   ]
 }

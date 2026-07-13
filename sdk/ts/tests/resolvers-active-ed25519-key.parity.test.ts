@@ -18,7 +18,12 @@ import { describe, expect, it } from "vitest";
 import { WBAFileSchema } from "../../../gen/ts/wire/schemas.ts";
 import corpus from "../../go/resolvers/testdata/active-ed25519-key-vectors.json";
 import { decodeBase64UrlStrict } from "../src/base64url.ts";
-import { activeEd25519Key, activeEd25519KeyWithExpiry } from "../resolvers/index.ts";
+import {
+	activeEd25519Key,
+	activeEd25519KeyScreened,
+	activeEd25519KeyWithExpiry,
+	activeEd25519KeyWithExpiryScreened,
+} from "../resolvers/index.ts";
 
 interface ActiveKeyJwk {
 	kty: string;
@@ -32,6 +37,7 @@ interface ActiveKeyVector {
 	note: string;
 	max_scan: number | null;
 	keys: ActiveKeyJwk[];
+	revoked: string[];
 	expected_index: number;
 	expected_pub: string;
 	expected_not_after: string;
@@ -60,16 +66,45 @@ function selectWithExpiry(dir: ReturnType<typeof WBAFileSchema.parse>, v: Active
 		: activeEd25519KeyWithExpiry(dir, NOW, v.max_scan);
 }
 
+// A predicate over the vector's revoked-thumbprint set (empty for most vectors).
+function revokedPredicate(v: ActiveKeyVector): (tp: string) => boolean {
+	const set = new Set(v.revoked);
+	return (tp) => set.has(tp);
+}
+
+// Call the REVOCATION-AWARE (async) faces with the vector's revoked set.
+function selectScreened(dir: ReturnType<typeof WBAFileSchema.parse>, v: ActiveKeyVector) {
+	const revoked = revokedPredicate(v);
+	return v.max_scan === null
+		? activeEd25519KeyScreened(dir, NOW, revoked)
+		: activeEd25519KeyScreened(dir, NOW, revoked, v.max_scan);
+}
+function selectWithExpiryScreened(dir: ReturnType<typeof WBAFileSchema.parse>, v: ActiveKeyVector) {
+	const revoked = revokedPredicate(v);
+	return v.max_scan === null
+		? activeEd25519KeyWithExpiryScreened(dir, NOW, revoked)
+		: activeEd25519KeyWithExpiryScreened(dir, NOW, revoked, v.max_scan);
+}
+
 describe("sdk/ts activeEd25519Key matches the sdk/go active-key oracle", () => {
 	it("has a non-empty vector corpus", () => {
 		expect(c.vectors.length).toBeGreaterThan(0);
 	});
 
 	for (const v of c.vectors) {
-		it(v.label, () => {
+		it(v.label, async () => {
 			const dir = directory(v.keys);
-			const result = select(dir, v);
-			const withExpiry = selectWithExpiry(dir, v);
+			// The corpus verdict is produced by the Go REVOCATION-AWARE oracle, so replay
+			// the screened faces with the vector's revoked set.
+			const result = await selectScreened(dir, v);
+			const withExpiry = await selectWithExpiryScreened(dir, v);
+
+			// Empty revoked set: screened selection must equal the bare face — so these
+			// vectors also lock the non-screened path.
+			if (v.revoked.length === 0) {
+				expect(result).toEqual(select(dir, v));
+				expect(withExpiry).toEqual(selectWithExpiry(dir, v));
+			}
 
 			if (v.expected_index === -1) {
 				expect(result).toBeNull();

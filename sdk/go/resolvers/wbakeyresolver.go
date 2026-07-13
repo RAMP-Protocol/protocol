@@ -546,7 +546,20 @@ func (r *WBAKeyResolver) syncRefresh(ctx context.Context, base, host string) (*r
 // status, or decode failure wraps ErrDirectoryUnavailable — see the sentinel
 // contract: a directory outage must stay distinguishable from an unknown key.
 func (r *WBAKeyResolver) fetchDirectory(ctx context.Context, base string) (*rampv1.WBAFile, error) {
-	raw, err := r.getDoc(ctx, base+WBADirectoryPath)
+	return fetchWBAFile(ctx, r.http, base)
+}
+
+// getDoc GETs a small well-known document, bounding the body read.
+func (r *WBAKeyResolver) getDoc(ctx context.Context, docURL string) ([]byte, error) {
+	return fetchWBADoc(ctx, r.http, docURL)
+}
+
+// fetchWBAFile GETs base+WBADirectoryPath through client and protojson-decodes the
+// WBAFile, wrapping any transport/status/decode failure in ErrDirectoryUnavailable.
+// It is the one fetch+decode path shared by WBAKeyResolver.fetchDirectory and the
+// domain-keyed offer-key fetcher (NewWBADirectoryFetcher), so the two never drift.
+func fetchWBAFile(ctx context.Context, client *http.Client, base string) (*rampv1.WBAFile, error) {
+	raw, err := fetchWBADoc(ctx, client, base+WBADirectoryPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrDirectoryUnavailable, err)
 	}
@@ -557,13 +570,13 @@ func (r *WBAKeyResolver) fetchDirectory(ctx context.Context, base string) (*ramp
 	return &f, nil
 }
 
-// getDoc GETs a small well-known document, bounding the body read.
-func (r *WBAKeyResolver) getDoc(ctx context.Context, docURL string) ([]byte, error) {
+// fetchWBADoc GETs a small well-known document through client, bounding the body read.
+func fetchWBADoc(ctx context.Context, client *http.Client, docURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, docURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request: %w", err)
 	}
-	resp, err := r.http.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
@@ -769,8 +782,17 @@ const defaultActiveKeyScan = 10
 // examined key qualifies — the same not-found sentinel WBAKeyResolver surfaces for
 // an out-of-window key. Byte-parity with the Python active_ed25519_key / TS
 // activeEd25519Key oracles.
+//
+// REVOCATION: this selector screens ONLY validity windows and key well-formedness —
+// it does NOT consult any revocation channel. A key that was emergency-revoked but
+// is still window-active in a (possibly CDN-cached) directory WILL be selected. A
+// caller on a VERIFICATION path MUST NOT trust the result until it has screened the
+// selected key's RFC 7638 thumbprint against the resolver's revoked-thumbprint set
+// (WBAKeyResolver.Revoked / a revocation snapshot); otherwise adopting this selector
+// defeats emergency revocation. Prefer ActiveEd25519KeyScreened, which folds that
+// screen into selection. This bare form is for non-verification callers only.
 func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, error) {
-	pub, _, err := selectActiveEd25519Key(directory, now, maxScan...)
+	pub, _, err := selectActiveEd25519Key(directory, now, nil, maxScan...)
 	return pub, err
 }
 
@@ -785,16 +807,54 @@ func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) 
 // qualifies — the same not-found sentinel ActiveEd25519Key surfaces. Byte-parity
 // with the Python active_ed25519_key_with_expiry / TS activeEd25519KeyWithExpiry
 // oracles.
+//
+// REVOCATION: like ActiveEd25519Key, this bare form does NOT consult revocation —
+// it can return a window-active-but-revoked key. A VERIFICATION path MUST screen
+// the result against the revoked-thumbprint set, or use the revocation-aware
+// ActiveEd25519KeyWithExpiryScreened instead.
 func ActiveEd25519KeyWithExpiry(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
-	return selectActiveEd25519Key(directory, now, maxScan...)
+	return selectActiveEd25519Key(directory, now, nil, maxScan...)
 }
 
-// selectActiveEd25519Key is the shared selector behind the two active-key faces:
-// the FIRST window-active, well-formed OKP/Ed25519 key in document order (cap
-// maxScan, default defaultActiveKeyScan), returned with its not_after. It parses
-// not_after with the SAME time.Parse(RFC3339) wbaKeyActiveAt used, so the two
-// faces never disagree on the selected key.
-func selectActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
+// ActiveEd25519KeyScreened is ActiveEd25519Key made REVOCATION-AWARE: it runs the
+// same document-order window + well-formedness selection but ALSO skips any key
+// whose RFC 7638 thumbprint `revoked` reports true, so a window-active-but-revoked
+// key is never returned. It is the selector a VERIFICATION path adopts — folding
+// the revoked-set screen the bare ActiveEd25519Key leaves to the caller into
+// selection itself, so an emergency-revoked key still listed in a CDN-cached
+// directory is passed over for the next active, non-revoked key. `revoked` is
+// REQUIRED: a nil predicate screens nothing (equivalent to the bare selector and
+// unsafe on a verification path). Pass one over the resolver's revoked-thumbprint
+// set (e.g. WBAKeyResolver.Revoked) or, for a caller with no revocation channel, an
+// explicit func(string) bool { return false } to make the waiver visible. The
+// thumbprint is computed with helpers.Thumbprint (RFC 7638) — the SAME primitive
+// WBAKeyResolver.Resolve keys on. Returns (nil, ErrKeyExpired) when no examined,
+// non-revoked key qualifies.
+func ActiveEd25519KeyScreened(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, maxScan ...int) (ed25519.PublicKey, error) {
+	pub, _, err := selectActiveEd25519Key(directory, now, revoked, maxScan...)
+	return pub, err
+}
+
+// ActiveEd25519KeyWithExpiryScreened is ActiveEd25519KeyWithExpiry made
+// REVOCATION-AWARE (see ActiveEd25519KeyScreened): the same document-order
+// selection, plus a skip of any key whose RFC 7638 thumbprint `revoked` reports
+// true, returned with the selected key's not_after for cache-TTL clamping. This is
+// the selector CachedOfferKeyResolver composes so a cached offer-signing key is
+// both window-active AND not revoked. `revoked` is REQUIRED (see the screened plain
+// face). Returns (nil, time.Time{}, ErrKeyExpired) when no examined, non-revoked key
+// qualifies.
+func ActiveEd25519KeyWithExpiryScreened(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
+	return selectActiveEd25519Key(directory, now, revoked, maxScan...)
+}
+
+// selectActiveEd25519Key is the shared selector behind all four active-key faces:
+// the FIRST window-active, well-formed OKP/Ed25519, non-revoked key in document
+// order (cap maxScan, default defaultActiveKeyScan), returned with its not_after. It
+// parses not_after with the SAME time.Parse(RFC3339) wbaKeyActiveAt used, so the
+// faces never disagree on the selected key. `revoked` nil disables revocation
+// screening (the bare faces); non-nil skips any key whose RFC 7638 thumbprint it
+// reports true (the screened faces).
+func selectActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
 	scan := defaultActiveKeyScan
 	if len(maxScan) > 0 {
 		scan = maxScan[0]
@@ -816,6 +876,20 @@ func selectActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ..
 		pub, err := wbaPublicKey(k)
 		if err != nil {
 			continue
+		}
+		// Revocation screen (verification-path callers): skip a window-active key
+		// whose thumbprint is revoked, so an emergency-revoked key still listed in a
+		// CDN-cached directory is never selected. Thumbprint via helpers.Thumbprint
+		// (RFC 7638) — the SAME keying WBAKeyResolver.Resolve uses. A key whose
+		// thumbprint cannot be computed cannot be proven un-revoked, so it is skipped.
+		if revoked != nil {
+			tp, err := helpers.Thumbprint(pub)
+			if err != nil {
+				continue
+			}
+			if revoked(tp) {
+				continue
+			}
 		}
 		// not_after is guaranteed parseable: wbaKeyActiveAt above rejects any key
 		// whose window bounds do not parse, so the selected key always has one.

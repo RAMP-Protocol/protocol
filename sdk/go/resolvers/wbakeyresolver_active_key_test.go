@@ -279,3 +279,71 @@ func TestActiveEd25519KeyWithExpiry_AgreesWithPlainSelector(t *testing.T) {
 		t.Fatal("both faces must agree on the selected key")
 	}
 }
+
+// ── Revocation-aware faces — ActiveEd25519Key(WithExpiry)Screened ─────────────
+
+func TestActiveEd25519KeyScreened_SkipsRevokedThenSelectsNext(t *testing.T) {
+	t.Parallel()
+	// A window-active key whose thumbprint is revoked must be skipped even though it
+	// is otherwise selectable; the next active, non-revoked key wins. This is the
+	// emergency-revocation guard the bare selector deliberately omits.
+	pub1, k1 := activeWindowJWK("rev-1")
+	pub2, k2 := activeWindowJWK("rev-2")
+	tp1 := mustThumbprint(t, pub1)
+	got, err := resolvers.ActiveEd25519KeyScreened(wbaDirectory(k1, k2), wbaAnchor,
+		func(tp string) bool { return tp == tp1 })
+	if err != nil {
+		t.Fatalf("ActiveEd25519KeyScreened: %v", err)
+	}
+	if !got.Equal(pub2) {
+		t.Fatal("a revoked window-active key must be skipped for the next active one")
+	}
+}
+
+func TestActiveEd25519KeyScreened_OnlyKeyRevokedNone(t *testing.T) {
+	t.Parallel()
+	pub1, k1 := activeWindowJWK("rev-only")
+	tp1 := mustThumbprint(t, pub1)
+	got, err := resolvers.ActiveEd25519KeyScreened(wbaDirectory(k1), wbaAnchor,
+		func(tp string) bool { return tp == tp1 })
+	if got != nil {
+		t.Fatal("expected a nil key when the only active key is revoked")
+	}
+	if !errors.Is(err, resolvers.ErrKeyExpired) {
+		t.Fatalf("want ErrKeyExpired, got %v", err)
+	}
+}
+
+func TestActiveEd25519KeyScreened_NilPredicateEqualsBare(t *testing.T) {
+	t.Parallel()
+	// A nil predicate screens nothing — the screened face degrades exactly to the
+	// bare selector (which is why nil is unsafe on a verification path).
+	pub1, k1 := activeWindowJWK("nil-pred")
+	got, err := resolvers.ActiveEd25519KeyScreened(wbaDirectory(k1), wbaAnchor, nil)
+	if err != nil {
+		t.Fatalf("ActiveEd25519KeyScreened(nil): %v", err)
+	}
+	if !got.Equal(pub1) {
+		t.Fatal("a nil revoked predicate must select exactly what the bare face does")
+	}
+}
+
+func TestActiveEd25519KeyWithExpiryScreened_SkipsRevokedReturnsNextNotAfter(t *testing.T) {
+	t.Parallel()
+	// The revoked first key is skipped; the returned not_after is the NEXT
+	// (selected) key's — a long window, distinct from the skipped key's bound.
+	pub1, k1 := activeWindowJWK("we-rev")
+	pub2, k2 := longWindowJWK("we-live")
+	tp1 := mustThumbprint(t, pub1)
+	got, notAfter, err := resolvers.ActiveEd25519KeyWithExpiryScreened(
+		wbaDirectory(k1, k2), wbaAnchor, func(tp string) bool { return tp == tp1 })
+	if err != nil {
+		t.Fatalf("ActiveEd25519KeyWithExpiryScreened: %v", err)
+	}
+	if !got.Equal(pub2) {
+		t.Fatal("revoked key ahead of the active one must be skipped")
+	}
+	if want := wbaAnchor.Add(1000 * time.Hour); !notAfter.Equal(want) {
+		t.Fatalf("not_after = %v, want %v", notAfter, want)
+	}
+}
