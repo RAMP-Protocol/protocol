@@ -31,6 +31,13 @@ import (
 // next delegate, e.g. a lazy-registration path) is the CALLER's decision —
 // composite ordering and any masking live in the application.
 var (
+	// ErrUnknownKey re-exports helpers.ErrUnknownKey so the active-key selectors'
+	// "no candidate" verdict (empty / nil / all-malformed directory, or a bound that
+	// scanned none) is checkable from this package — errors.Is-identical to the
+	// sentinel WBAKeyResolver.Resolve surfaces for an unknown thumbprint — without a
+	// caller importing helpers directly. It is the DISTINCT counterpart to
+	// ErrKeyExpired: no candidate at all, versus a candidate that was out of window.
+	ErrUnknownKey = helpers.ErrUnknownKey
 	// ErrKeyRevoked signals the thumbprint is present in the directory host's
 	// current revocation snapshot.
 	ErrKeyRevoked = errors.New("resolvers: key revoked")
@@ -827,25 +834,53 @@ func wbaPublicKey(k *rampv1.JsonWebKey) (ed25519.PublicKey, error) {
 	return ed25519.PublicKey(raw), nil
 }
 
-// defaultActiveKeyScan bounds how many keys ActiveEd25519Key examines in document
-// order. A WBA directory padded with junk entries beyond this many keys cannot
-// force unbounded selection work (a denial-of-service cap): a valid key listed
-// past the first defaultActiveKeyScan positions is unreachable.
-const defaultActiveKeyScan = 10
+// ActiveKeyScanOptions tunes the document-order scan the ActiveEd25519Key* faces
+// perform. The zero value — and omitting it entirely — scans the WHOLE directory,
+// UNBOUNDED, which is the safe default: a silent cap makes a valid key at a high
+// document position permanently unselectable AND indistinguishable from "no active
+// key" (a DoS-by-directory-padding footgun), so a bound is now opt-IN, never the
+// default.
+//
+// It follows the file's options-struct convention (cf. WBAKeyResolverOptions),
+// replacing the former variadic maxScan ...int that silently honored only its first
+// argument. The faces still accept it variadically (opts ...ActiveKeyScanOptions) so
+// the common unbounded call omits it entirely; at most ONE options value is honored
+// (the first).
+type ActiveKeyScanOptions struct {
+	// MaxScan optionally bounds how many keys are examined in document order. nil
+	// (the zero value) scans EVERY key — unbounded. A non-nil bound caps the scan at
+	// max(0, *MaxScan) keys: 0 or negative scans none. When a non-nil positive bound
+	// is exhausted without selecting a key AND the directory holds MORE keys than the
+	// bound, the exhaustion is LOGGED (a valid key beyond the cap is unreachable), so a
+	// bounded miss is never silently indistinguishable from a genuine "no active key".
+	MaxScan *int
+	// Logger receives the explicit-bound exhaustion warning (nil → slog.Default()).
+	// Consulted ONLY on the bounded-exhaustion path; the unbounded default never logs.
+	Logger *slog.Logger
+}
 
-// ActiveEd25519Key selects an identity's CURRENT window-active Ed25519 signing key
-// from a WBA directory BY DOCUMENT ORDER, complementing WBAKeyResolver (which
-// matches a KNOWN thumbprint). It iterates directory.GetKeys() in document order,
-// examining AT MOST the first maxScan (omit → defaultActiveKeyScan of 10, the DoS
-// cap), and returns the FIRST key that passes ALL of: window-active
-// ([not_before, not_after) half-open covers now, both bounds RFC 3339-parseable —
-// a missing/unparseable bound makes the key inactive); kty=="OKP" && crv=="Ed25519";
-// and a present x that base64url-decodes to exactly 32 bytes. Any key failing any
-// check is skipped and iteration continues; a valid key listed beyond the first
-// maxScan positions is unreachable. It returns (nil, ErrKeyExpired) when no
-// examined key qualifies — the same not-found sentinel WBAKeyResolver surfaces for
-// an out-of-window key. Byte-parity with the Python active_ed25519_key / TS
-// activeEd25519Key oracles.
+// ActiveEd25519Key selects an identity's window-active Ed25519 signing key from a WBA
+// directory BY DOCUMENT ORDER, complementing WBAKeyResolver (which matches a KNOWN
+// thumbprint). It iterates directory.GetKeys() in document order and returns the
+// FIRST key that passes ALL of: window-active ([not_before, not_after) half-open
+// covers now, both bounds RFC 3339-parseable — a missing/unparseable bound makes the
+// key inactive); kty=="OKP" && crv=="Ed25519" (matched CASE-INSENSITIVELY — a
+// deliberate lenient SDK convention: RFC 7517/8037 specify the exact-case "OKP" /
+// "Ed25519", but all three SDKs accept any case IDENTICALLY so a case-varying
+// directory resolves the SAME key everywhere); and a present x that base64url-decodes
+// to exactly 32 bytes. Any key failing any check is skipped and iteration continues.
+//
+// SELECTION IS NOT NORMATIVE: the result is the first window-active key in document
+// order, which is this SDK's deterministic tie-break — NOT "the current key". The
+// protocol permits several simultaneously-active keys during overlap rotation and
+// defines no "first", so callers must not read a normative meaning into the choice.
+//
+// By default the WHOLE directory is scanned; pass ActiveKeyScanOptions.MaxScan to
+// bound it. It returns (nil, ErrUnknownKey) when NO well-formed candidate key exists
+// in the scanned range (empty / nil / all-malformed / bound scans none), or
+// (nil, ErrKeyExpired) when a well-formed candidate existed but none was selectable
+// (all out of window / all revoked). Byte-parity with the Python active_ed25519_key /
+// TS activeEd25519Key oracles.
 //
 // REVOCATION: this selector screens ONLY validity windows and key well-formedness —
 // it does NOT consult any revocation channel. A key that was emergency-revoked but
@@ -855,8 +890,8 @@ const defaultActiveKeyScan = 10
 // (WBAKeyResolver.Revoked / a revocation snapshot); otherwise adopting this selector
 // defeats emergency revocation. Prefer ActiveEd25519KeyScreened, which folds that
 // screen into selection. This bare form is for non-verification callers only.
-func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, error) {
-	pub, _, err := selectActiveEd25519Key(directory, now, nil, maxScan...)
+func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, error) {
+	pub, _, err := selectActiveEd25519Key(directory, now, nil, opts...)
 	return pub, err
 }
 
@@ -867,17 +902,16 @@ func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, maxScan ...int) 
 // time.Time so a cached key never outlives its validity window; the plain
 // ActiveEd25519Key drops it. The not_after is guaranteed parseable because
 // selection required it (wbaKeyActiveAt rejects a key whose window bounds do not
-// parse). It returns (nil, time.Time{}, ErrKeyExpired) when no examined key
-// qualifies — the same not-found sentinel ActiveEd25519Key surfaces. Byte-parity
-// with the Python active_ed25519_key_with_expiry / TS activeEd25519KeyWithExpiry
-// oracles.
+// parse). It returns the same (ErrUnknownKey / ErrKeyExpired) not-found sentinels
+// ActiveEd25519Key surfaces when no key qualifies. Byte-parity with the Python
+// active_ed25519_key_with_expiry / TS activeEd25519KeyWithExpiry oracles.
 //
 // REVOCATION: like ActiveEd25519Key, this bare form does NOT consult revocation —
 // it can return a window-active-but-revoked key. A VERIFICATION path MUST screen
 // the result against the revoked-thumbprint set, or use the revocation-aware
 // ActiveEd25519KeyWithExpiryScreened instead.
-func ActiveEd25519KeyWithExpiry(directory *rampv1.WBAFile, now time.Time, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
-	return selectActiveEd25519Key(directory, now, nil, maxScan...)
+func ActiveEd25519KeyWithExpiry(directory *rampv1.WBAFile, now time.Time, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, time.Time, error) {
+	return selectActiveEd25519Key(directory, now, nil, opts...)
 }
 
 // ActiveEd25519KeyScreened is ActiveEd25519Key made REVOCATION-AWARE: it runs the
@@ -892,10 +926,11 @@ func ActiveEd25519KeyWithExpiry(directory *rampv1.WBAFile, now time.Time, maxSca
 // set (e.g. WBAKeyResolver.Revoked) or, for a caller with no revocation channel, an
 // explicit func(string) bool { return false } to make the waiver visible. The
 // thumbprint is computed with helpers.Thumbprint (RFC 7638) — the SAME primitive
-// WBAKeyResolver.Resolve keys on. Returns (nil, ErrKeyExpired) when no examined,
-// non-revoked key qualifies.
-func ActiveEd25519KeyScreened(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, maxScan ...int) (ed25519.PublicKey, error) {
-	pub, _, err := selectActiveEd25519Key(directory, now, revoked, maxScan...)
+// WBAKeyResolver.Resolve keys on. Returns (nil, ErrUnknownKey) when no well-formed
+// candidate existed, else (nil, ErrKeyExpired) when every candidate was out of window
+// or revoked.
+func ActiveEd25519KeyScreened(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, error) {
+	pub, _, err := selectActiveEd25519Key(directory, now, revoked, opts...)
 	return pub, err
 }
 
@@ -905,41 +940,55 @@ func ActiveEd25519KeyScreened(directory *rampv1.WBAFile, now time.Time, revoked 
 // true, returned with the selected key's not_after for cache-TTL clamping. This is
 // the selector CachedOfferKeyResolver composes so a cached offer-signing key is
 // both window-active AND not revoked. `revoked` is REQUIRED (see the screened plain
-// face). Returns (nil, time.Time{}, ErrKeyExpired) when no examined, non-revoked key
-// qualifies.
-func ActiveEd25519KeyWithExpiryScreened(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
-	return selectActiveEd25519Key(directory, now, revoked, maxScan...)
+// face). Returns the same (ErrUnknownKey / ErrKeyExpired) not-found sentinels when no
+// examined, non-revoked key qualifies.
+func ActiveEd25519KeyWithExpiryScreened(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, time.Time, error) {
+	return selectActiveEd25519Key(directory, now, revoked, opts...)
 }
 
 // selectActiveEd25519Key is the shared selector behind all four active-key faces:
 // the FIRST window-active, well-formed OKP/Ed25519, non-revoked key in document
-// order (cap maxScan, default defaultActiveKeyScan), returned with its not_after. It
-// parses not_after with the SAME time.Parse(RFC3339) wbaKeyActiveAt used, so the
-// faces never disagree on the selected key. `revoked` nil disables revocation
-// screening (the bare faces); non-nil skips any key whose RFC 7638 thumbprint it
-// reports true (the screened faces).
-func selectActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, maxScan ...int) (ed25519.PublicKey, time.Time, error) {
-	scan := defaultActiveKeyScan
-	if len(maxScan) > 0 {
-		scan = maxScan[0]
-	}
-	if scan < 0 {
-		scan = 0
+// order (UNBOUNDED by default; ActiveKeyScanOptions.MaxScan caps it), returned with
+// its not_after. It parses not_after with the SAME time.Parse(RFC3339) wbaKeyActiveAt
+// used, so the faces never disagree on the selected key. `revoked` nil disables
+// revocation screening (the bare faces); non-nil skips any key whose RFC 7638
+// thumbprint it reports true (the screened faces).
+//
+// A nil directory yields ErrUnknownKey, never a panic. Well-formedness (kty/crv/x)
+// is checked BEFORE the window so the not-found sentinel can distinguish "no
+// candidate" (ErrUnknownKey) from "a candidate existed but none was selectable"
+// (ErrKeyExpired) — mirroring WBAKeyResolver.Resolve's ErrUnknownKey/ErrKeyExpired
+// split. Reordering the two checks does NOT change WHICH key is selected (a selected
+// key must pass both regardless of order), so byte-parity with py/ts holds.
+func selectActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, time.Time, error) {
+	var opt ActiveKeyScanOptions
+	if len(opts) > 0 {
+		opt = opts[0]
 	}
 	if directory == nil {
-		return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
+		return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", helpers.ErrUnknownKey)
 	}
 	keys := directory.GetKeys()
-	if len(keys) < scan {
-		scan = len(keys)
-	}
-	for _, k := range keys[:scan] {
-		if !wbaKeyActiveAt(k, now) {
-			continue
+	scan := len(keys) // unbounded default: scan every key
+	bounded := opt.MaxScan != nil
+	if bounded {
+		scan = *opt.MaxScan
+		if scan < 0 {
+			scan = 0 // negative bound scans none (clamp), matching py max(0,n) / ts Math.max(0,n)
 		}
+		if scan > len(keys) {
+			scan = len(keys)
+		}
+	}
+	sawCandidate := false
+	for _, k := range keys[:scan] {
 		pub, err := wbaPublicKey(k)
 		if err != nil {
-			continue
+			continue // malformed / wrong key type — not a candidate
+		}
+		sawCandidate = true // a well-formed OKP/Ed25519 key, in or out of window
+		if !wbaKeyActiveAt(k, now) {
+			continue // a candidate, but outside its validity window
 		}
 		// Revocation screen (verification-path callers): skip a window-active key
 		// whose thumbprint is revoked, so an emergency-revoked key still listed in a
@@ -963,7 +1012,33 @@ func selectActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, revoked fu
 		}
 		return pub, notAfter, nil
 	}
-	return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
+	// Bounded-scan exhaustion signal: a positive explicit bound was exhausted while
+	// the directory held MORE keys than the bound, so a valid key beyond the cap is
+	// unreachable. Log it rather than let a bounded miss masquerade as a genuine "no
+	// active key" — the DoS-by-padding footgun the unbounded default now avoids. The
+	// unbounded default never reaches here with keys left unexamined.
+	if bounded && *opt.MaxScan > 0 && *opt.MaxScan < len(keys) {
+		activeKeyScanLogger(opt).Warn(
+			"active-key scan hit explicit max_scan bound without selecting a key; a valid key beyond the cap is unreachable",
+			"max_scan", *opt.MaxScan, "total_keys", len(keys))
+	}
+	if sawCandidate {
+		// A well-formed key existed but none was selectable (all out of window / all
+		// revoked): the "expired" sentinel, matching Resolve's out-of-window verdict.
+		return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
+	}
+	// No well-formed candidate at all (empty / nil / all-malformed / bound scanned
+	// none): the "unknown" sentinel, matching Resolve's no-such-key verdict.
+	return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", helpers.ErrUnknownKey)
+}
+
+// activeKeyScanLogger resolves the logger for the bounded-exhaustion warning,
+// defaulting to slog.Default() when the caller injected none.
+func activeKeyScanLogger(opt ActiveKeyScanOptions) *slog.Logger {
+	if opt.Logger != nil {
+		return opt.Logger
+	}
+	return slog.Default()
 }
 
 // wbaKeyActiveAt reports whether now falls inside k's [not_before, not_after)

@@ -13,12 +13,14 @@ package resolvers_test
 // asserts the oracle picked the index the vector was constructed to exercise.
 //
 // COVERAGE (the edges the three languages must agree on): the H2 base64 edges
-// (standard-alphabet `x`, `=`-padded `x`, valid unpadded `x`), the C1 timestamp
-// edges (offset-less/naive bounds, date-only bounds, empty/missing bounds, the
-// not_before==now and not_after==now half-open boundaries), and the max_scan DoS
-// cap (winner just inside the cap, just past it, and reachable once the cap is
-// raised). Replaying it in all three languages is what LOCKS parity and would
-// have caught the H2/C1 divergences.
+// (standard-alphabet `x`, `=`-padded `x`, valid unpadded `x`), the mixed-case
+// kty/crv lenient-accept, the C1 timestamp edges (offset-less/naive bounds,
+// date-only bounds, empty/missing bounds, the not_before==now and not_after==now
+// half-open boundaries), and the document-order scan bound — now UNBOUNDED by
+// default (an index-10 key the old cap-of-10 hid is selected), with an explicit
+// bound that reaches the key, an exhausted explicit bound that returns none (and
+// logs), and a negative bound that clamps to scan-none. Replaying it in all three
+// languages is what LOCKS parity and would have caught the H2/C1 divergences.
 //
 // DETERMINISM: every key is derived from a FIXED seed and every instant is a
 // FIXED offset from wbaAnchor, so re-running reproduces byte-identical output.
@@ -32,6 +34,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,6 +45,13 @@ import (
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
+
+// discardActiveKeyLog silences the selector's bounded-exhaustion warning during
+// emit: the corpus locks the RETURN verdict, and each language asserts the log
+// separately, so the emitter itself must stay quiet.
+func discardActiveKeyLog() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 // activeKeyJWK is one served directory key (snake_case, protojson shape). Only
 // the members the selector reads are emitted; use/alg are irrelevant to selection.
@@ -153,6 +164,15 @@ func mutateActive(seed string, mutate func(*activeKeyJWK)) kb {
 	return base
 }
 
+// mutateActiveSelectable clones a window-active key and applies a mutation that
+// leaves it SELECTABLE (pub kept) — for the case-insensitive kty/crv vector, where
+// a mixed-case kty/crv is a deliberate lenient-accept, not a rejection.
+func mutateActiveSelectable(seed string, mutate func(*activeKeyJWK)) kb {
+	base := activeKB(seed)
+	mutate(&base.jwk)
+	return base
+}
+
 func intp(v int) *int { return &v }
 
 // buildVector is buildScreenedVector with an EMPTY revoked set: it exercises the
@@ -178,18 +198,18 @@ func buildScreenedVector(t *testing.T, label, note string, maxScan *int, keys []
 		aks[i] = k.jwk
 	}
 	dir := &rampv1.WBAFile{Keys: jwks}
-	var scanArgs []int
+	var opts []resolvers.ActiveKeyScanOptions
 	if maxScan != nil {
-		scanArgs = []int{*maxScan}
+		opts = []resolvers.ActiveKeyScanOptions{{MaxScan: maxScan, Logger: discardActiveKeyLog()}}
 	}
 	pred := revokedPredicate(revoked)
 
-	pub, notAfter, err := resolvers.ActiveEd25519KeyWithExpiryScreened(dir, wbaAnchor, pred, scanArgs...)
-	plain, plainErr := resolvers.ActiveEd25519KeyScreened(dir, wbaAnchor, pred, scanArgs...)
+	pub, notAfter, err := resolvers.ActiveEd25519KeyWithExpiryScreened(dir, wbaAnchor, pred, opts...)
+	plain, plainErr := resolvers.ActiveEd25519KeyScreened(dir, wbaAnchor, pred, opts...)
 	assertFacesAgree(t, label, pub, err, plain, plainErr)
 	if len(revoked) == 0 {
 		// Empty screening degrades to the bare selector — lock that too.
-		barePub, bareErr := resolvers.ActiveEd25519Key(dir, wbaAnchor, scanArgs...)
+		barePub, bareErr := resolvers.ActiveEd25519Key(dir, wbaAnchor, opts...)
 		assertFacesAgree(t, label+"/bare", pub, err, barePub, bareErr)
 	}
 
@@ -299,6 +319,9 @@ func buildBase64Vectors(t *testing.T) []activeKeyVector {
 			[]kb{mutateActive("short", func(j *activeKeyJWK) { j.X = base64.RawURLEncoding.EncodeToString(make([]byte, 31)) }), activeKB("valid")}, 1),
 		buildVector(t, "undecodable-x-then-valid", "a window-active key whose x is not base64url is skipped", nil,
 			[]kb{mutateActive("junk", func(j *activeKeyJWK) { j.X = "!!!!" }), activeKB("valid")}, 1),
+		buildVector(t, "mixed-case-kty-crv-selected",
+			"a window-active key with mixed-case kty/crv (oKp / ed25519) is ACCEPTED and selected — case-insensitive kty/crv is a deliberate lenient SDK convention (RFC 7517/8037 specify exact-case OKP / Ed25519); all three SDKs accept it identically", nil,
+			[]kb{mutateActiveSelectable("mixedcase", func(j *activeKeyJWK) { j.Kty = "oKp"; j.Crv = "ed25519" })}, 0),
 	}
 }
 
@@ -333,7 +356,11 @@ func buildTimestampVectors(t *testing.T) []activeKeyVector {
 	}
 }
 
-func buildCapVectors(t *testing.T) []activeKeyVector {
+// buildScanVectors exercises the document-order scan bound now that the default is
+// UNBOUNDED: a key the old cap-of-10 hid is reachable by default; an explicit bound
+// caps the scan; an exhausted explicit bound returns none (and logs); a negative
+// bound clamps to scan-none.
+func buildScanVectors(t *testing.T) []activeKeyVector {
 	t.Helper()
 	fillers := func(n int) []kb {
 		out := make([]kb, 0, n)
@@ -342,15 +369,20 @@ func buildCapVectors(t *testing.T) []activeKeyVector {
 		}
 		return out
 	}
-	winnerAt9 := append(fillers(9), activeKB("target"))
-	winnerAt10 := append(fillers(10), activeKB("target"))
+	winnerAt10 := append(fillers(10), activeKB("target")) // 11 keys; the active key is at index 10
 	return []activeKeyVector{
-		buildVector(t, "winner-within-default-cap", "a valid key at index 9 is within the default scan cap → selected", nil,
-			winnerAt9, 9),
-		buildVector(t, "winner-past-default-cap-none", "a valid key at index 10 is past the default cap → unreachable → none", nil,
-			winnerAt10, -1),
-		buildVector(t, "winner-reached-with-raised-cap", "raising max_scan to 11 reaches the index-10 key", intp(11),
+		buildVector(t, "winner-at-index-10-selected-unbounded",
+			"with the cap dropped, a valid key at index 10 (the 11th) is reachable by DEFAULT → selected; the old cap-of-10 would have hidden it", nil,
 			winnerAt10, 10),
+		buildVector(t, "winner-reached-with-explicit-bound",
+			"an explicit max_scan of 11 examines index 10 → selected", intp(11),
+			winnerAt10, 10),
+		buildVector(t, "explicit-bound-exhausted-none",
+			"an explicit max_scan of 10 is exhausted over the 10 expired fillers before the index-10 key → none; the exhaustion is logged (a valid key beyond the cap is unreachable), asserted per-language", intp(10),
+			winnerAt10, -1),
+		buildVector(t, "negative-bound-scans-none",
+			"a negative max_scan clamps to zero (scan none) → none even though an active key is present (parity: py max(0,n) / ts Math.max(0,n) / Go clamp-to-zero)", intp(-1),
+			[]kb{activeKB("present-but-unscanned")}, -1),
 	}
 }
 
@@ -378,7 +410,7 @@ func buildActiveKeyCorpus(t *testing.T) activeKeyCorpus {
 	vectors := buildBasicVectors(t)
 	vectors = append(vectors, buildBase64Vectors(t)...)
 	vectors = append(vectors, buildTimestampVectors(t)...)
-	vectors = append(vectors, buildCapVectors(t)...)
+	vectors = append(vectors, buildScanVectors(t)...)
 	vectors = append(vectors, buildRevocationVectors(t)...)
 	return activeKeyCorpus{
 		Note:    "active_ed25519_key document-order selection verdicts produced by the sdk/go oracle; py/ts replay and must match every vector",

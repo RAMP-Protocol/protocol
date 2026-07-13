@@ -3,17 +3,21 @@ package resolvers_test
 // wbakeyresolver_active_key_test.go — behavior suite for ActiveEd25519Key, the
 // document-order active-key selector that complements the thumbprint-keyed
 // WBAKeyResolver.Resolve. Byte-parity with the Python active_ed25519_key / TS
-// activeEd25519Key oracles and the internal rampwellknown.ActiveKey it ports:
-// iterate the directory's keys in DOCUMENT ORDER, examine at most the first
-// maxScan (default 10, a DoS cap), return the FIRST window-active well-formed
-// OKP/Ed25519 key whose x decodes to 32 bytes; skip-and-continue past any failing
-// key; (nil, ErrKeyExpired) when none qualifies. Pure logic over a *rampv1.WBAFile
-// — no HTTP origin. Reuses the file-local newSigningKey / wbaAnchor fixtures.
+// activeEd25519Key oracles: iterate the directory's keys in DOCUMENT ORDER —
+// UNBOUNDED by default (ActiveKeyScanOptions.MaxScan is an OPTIONAL cap) — return the
+// FIRST window-active well-formed OKP/Ed25519 key whose x decodes to 32 bytes;
+// skip-and-continue past any failing key; ErrUnknownKey when no well-formed candidate
+// exists, ErrKeyExpired when a candidate existed but none was selectable. Pure logic
+// over a *rampv1.WBAFile — no HTTP origin. Reuses the file-local newSigningKey /
+// wbaAnchor fixtures; intp lives in gen_active_key_vectors_test.go (same package).
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -150,52 +154,111 @@ func TestActiveEd25519Key_SkipsMalformedAndContinues(t *testing.T) {
 	}
 }
 
-func TestActiveEd25519Key_CapBoundary(t *testing.T) {
+func tenExpiredFillers() []*rampv1.JsonWebKey {
+	fillers := make([]*rampv1.JsonWebKey, 0, 10)
+	for i := range 10 {
+		fillers = append(fillers, expiredWindowJWK(string(rune('A'+i))))
+	}
+	return fillers
+}
+
+func TestActiveEd25519Key_UnboundedByDefaultReachesHighIndex(t *testing.T) {
 	t.Parallel()
-	// Nine inactive fillers then a valid active key at position 10 (0-indexed 9):
-	// within the default scan cap of 10, so it IS selected.
-	nineFillers := make([]*rampv1.JsonWebKey, 0, 9)
-	for i := range 9 {
-		nineFillers = append(nineFillers, expiredWindowJWK(string(rune('A'+i))))
-	}
+	// Ten inactive fillers then a valid active key at position 11 (0-indexed 10).
+	// The former default cap of 10 would have hidden it; the UNBOUNDED default now
+	// reaches it — the DoS-by-directory-padding footgun is gone.
 	pub, target := activeWindowJWK("target")
-	got, err := resolvers.ActiveEd25519Key(wbaDirectory(append(nineFillers, target)...), wbaAnchor)
+	dir := wbaDirectory(append(tenExpiredFillers(), target)...)
+
+	got, err := resolvers.ActiveEd25519Key(dir, wbaAnchor)
 	if err != nil {
-		t.Fatalf("position 10 must be within the default cap: %v", err)
+		t.Fatalf("the unbounded default must reach index 10: %v", err)
 	}
 	if !got.Equal(pub) {
-		t.Fatal("valid key at position 10 (0-indexed 9) must be selected")
+		t.Fatal("a valid key at index 10 must be selected by the unbounded default")
 	}
 
-	// Ten inactive fillers then a valid active key at position 11 (0-indexed 10):
-	// beyond the default scan cap of 10, so it is UNREACHABLE → ErrKeyExpired.
-	tenFillers := append(nineFillers, expiredWindowJWK("J"))
-	_, err = resolvers.ActiveEd25519Key(wbaDirectory(append(tenFillers, target)...), wbaAnchor)
+	// An explicit bound large enough still reaches it.
+	got, err = resolvers.ActiveEd25519Key(dir, wbaAnchor, resolvers.ActiveKeyScanOptions{MaxScan: intp(11)})
+	if err != nil {
+		t.Fatalf("an explicit max_scan of 11 must reach index 10: %v", err)
+	}
+	if !got.Equal(pub) {
+		t.Fatal("with an explicit max_scan of 11 the index-10 key must be selected")
+	}
+}
+
+func TestActiveEd25519Key_ExplicitBoundExhaustionReturnsNoneAndLogs(t *testing.T) {
+	t.Parallel()
+	// An explicit max_scan of 10 is exhausted over the 10 expired fillers before the
+	// index-10 key: none is selected AND the exhaustion is logged (a valid key beyond
+	// the cap is unreachable) — never silently indistinguishable from a genuine miss.
+	_, target := activeWindowJWK("target")
+	dir := wbaDirectory(append(tenExpiredFillers(), target)...)
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	got, err := resolvers.ActiveEd25519Key(dir, wbaAnchor,
+		resolvers.ActiveKeyScanOptions{MaxScan: intp(10), Logger: logger})
+	if got != nil {
+		t.Fatal("an exhausted explicit bound must return a nil key")
+	}
+	// The 10 fillers are well-formed candidates (out of window), so the sentinel is
+	// ErrKeyExpired, not ErrUnknownKey.
 	if !errors.Is(err, resolvers.ErrKeyExpired) {
-		t.Fatalf("valid key at position 11 must be unreachable under the cap; got %v", err)
+		t.Fatalf("want ErrKeyExpired on bounded exhaustion, got %v", err)
 	}
+	if !strings.Contains(buf.String(), "max_scan") {
+		t.Fatalf("expected a bounded-exhaustion warning to be logged, got %q", buf.String())
+	}
+}
 
-	// The cap is a parameter: raising maxScan past the padding reaches the key.
-	got, err = resolvers.ActiveEd25519Key(wbaDirectory(append(tenFillers, target)...), wbaAnchor, 11)
+func TestActiveEd25519Key_NegativeBoundScansNone(t *testing.T) {
+	t.Parallel()
+	// A negative max_scan clamps to zero (scan none): no key is examined even though
+	// one is active. Parity with py max(0, n) / ts Math.max(0, n).
+	_, active := activeWindowJWK("present")
+	got, err := resolvers.ActiveEd25519Key(wbaDirectory(active), wbaAnchor,
+		resolvers.ActiveKeyScanOptions{MaxScan: intp(-1)})
+	if got != nil {
+		t.Fatal("a negative max_scan must scan none → nil key")
+	}
+	// Nothing was examined, so there is no candidate → the ErrUnknownKey sentinel.
+	if !errors.Is(err, resolvers.ErrUnknownKey) {
+		t.Fatalf("want ErrUnknownKey when the bound scans no candidate, got %v", err)
+	}
+}
+
+func TestActiveEd25519Key_MixedCaseKtyCrvAccepted(t *testing.T) {
+	t.Parallel()
+	// Case-insensitive kty/crv is a DELIBERATE lenient SDK convention (RFC 7517/8037
+	// specify exact-case OKP / Ed25519). A window-active key with mixed-case kty/crv
+	// is accepted and selected — locked identically across the three SDKs.
+	pub, k := activeWindowJWK("mixed")
+	k.Kty = "oKp"
+	k.Crv = "ed25519"
+	got, err := resolvers.ActiveEd25519Key(wbaDirectory(k), wbaAnchor)
 	if err != nil {
-		t.Fatalf("raising maxScan to 11 must reach position 11: %v", err)
+		t.Fatalf("mixed-case kty/crv must be accepted: %v", err)
 	}
 	if !got.Equal(pub) {
-		t.Fatal("with maxScan=11 the key at position 11 must be selected")
+		t.Fatal("a window-active key with mixed-case kty/crv must be selected")
 	}
 }
 
 func TestActiveEd25519Key_NoneQualifies(t *testing.T) {
 	t.Parallel()
-	// Empty directory, nil directory, and an all-inactive directory each return
-	// (nil, ErrKeyExpired) — the not-found sentinel WBAKeyResolver surfaces.
+	// The not-found sentinel splits like WBAKeyResolver.Resolve: no well-formed
+	// candidate → ErrUnknownKey; a well-formed candidate that is merely out of window
+	// → ErrKeyExpired. A nil directory is guarded (ErrUnknownKey, never a panic).
 	for _, tc := range []struct {
-		name string
-		dir  *rampv1.WBAFile
+		name    string
+		dir     *rampv1.WBAFile
+		wantErr error
 	}{
-		{"empty", wbaDirectory()},
-		{"nil", nil},
-		{"all-inactive", wbaDirectory(expiredWindowJWK("x"), futureWindowJWK("y"))},
+		{"empty", wbaDirectory(), resolvers.ErrUnknownKey},
+		{"nil", nil, resolvers.ErrUnknownKey},
+		{"all-inactive", wbaDirectory(expiredWindowJWK("x"), futureWindowJWK("y")), resolvers.ErrKeyExpired},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -203,8 +266,8 @@ func TestActiveEd25519Key_NoneQualifies(t *testing.T) {
 			if got != nil {
 				t.Fatal("expected a nil key when none qualifies")
 			}
-			if !errors.Is(err, resolvers.ErrKeyExpired) {
-				t.Fatalf("want ErrKeyExpired, got %v", err)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("want %v, got %v", tc.wantErr, err)
 			}
 		})
 	}
