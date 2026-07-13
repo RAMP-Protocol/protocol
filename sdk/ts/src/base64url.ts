@@ -23,6 +23,21 @@ export function decodeBase64Url(input: string): Uint8Array<ArrayBuffer> | undefi
   }
 }
 
+/** Strict base64url decode for JWK OKP `x` key material (RFC 8037: key material
+ * MUST be unpadded base64url). Rejects `=` padding and the standard (`+`/`/`)
+ * alphabet that {@link decodeBase64Url} silently tolerates, mirroring Go's
+ * `base64.RawURLEncoding` byte-for-byte so the tri-language WBA active-key
+ * selector / thumbprint resolver picks the SAME key on a directory holding a
+ * standard-alphabet or padded `x`. Returns `undefined` on any non-urlsafe
+ * character, `=` padding, or an invalid unpadded length (`len % 4 === 1`). */
+export function decodeBase64UrlStrict(input: string): Uint8Array<ArrayBuffer> | undefined {
+  if (!/^[A-Za-z0-9_-]*$/.test(input)) return undefined;
+  if (input.length % 4 === 1) return undefined;
+  // Input is now guaranteed unpadded url-alphabet, so the lenient path decodes it
+  // exactly (its `-_`->`+/` remap + re-pad is the identity transform here).
+  return decodeBase64Url(input);
+}
+
 /** UTF-8 encode, pinned ArrayBuffer-backed. TextEncoder.encode always allocates
  * a fresh ArrayBuffer, but some lib typings widen the return to ArrayBufferLike;
  * pin it once here so consumers on any TS/lib version feed WebCrypto without

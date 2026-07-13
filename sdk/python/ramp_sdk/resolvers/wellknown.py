@@ -21,7 +21,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from ramp_sdk.b64 import b64url_decode
+from ramp_sdk.b64 import b64url_decode_strict
 from ramp_sdk.resolvers._http import default_client, fetch_strict
 from ramp_sdk.resolvers.errors import DirectoryUnavailableError, NoEndpointError
 
@@ -64,7 +64,9 @@ def _extract_ed25519(entry: object) -> tuple[str, bytes] | None:
     if entry.get("kty") != "OKP" or entry.get("crv") != "Ed25519":
         return None
     try:
-        raw = b64url_decode(x)
+        # JWK OKP `x` is UNPADDED base64url (RFC 8037); reject padding / the
+        # standard alphabet to match Go's go-jose JWKS parse (RawURLEncoding).
+        raw = b64url_decode_strict(x)
     except ValueError:
         return None
     if len(raw) != _ED25519_PUBLIC_KEY_BYTES:

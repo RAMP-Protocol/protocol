@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from ramp_sdk.b64 import b64url_decode, b64url_nopad
+import base64
+
+import pytest
+
+from ramp_sdk.b64 import b64url_decode, b64url_decode_strict, b64url_nopad
 
 
 # ---- round-trip parity ---------------------------------------------------
@@ -31,6 +35,45 @@ def test_b64url_decode_handles_missing_padding() -> None:
 def test_b64url_nopad_empty_bytes() -> None:
     assert b64url_nopad(b"") == ""
     assert b64url_decode("") == b""
+
+
+# ---- strict JWK-x decode (RFC 8037) --------------------------------------
+
+
+def test_b64url_decode_strict_accepts_valid_unpadded_urlsafe() -> None:
+    """A valid unpadded base64url string decodes identically to the lenient path."""
+    raw = bytes(range(32))
+    encoded = b64url_nopad(raw)  # unpadded urlsafe, the JWK `x` wire form
+    assert b64url_decode_strict(encoded) == raw
+    assert b64url_decode_strict(encoded) == b64url_decode(encoded)
+
+
+def test_b64url_decode_strict_rejects_padding() -> None:
+    """`=` padding — which the lenient path re-adds/tolerates — is rejected."""
+    raw = b"\x00" * 32
+    padded = base64.urlsafe_b64encode(raw).decode()  # carries trailing '='
+    assert "=" in padded
+    with pytest.raises(ValueError, match="non-urlsafe alphabet or padding"):
+        b64url_decode_strict(padded)
+
+
+def test_b64url_decode_strict_rejects_standard_alphabet() -> None:
+    """Standard-alphabet (`+`/`/`) input that the lenient path silently accepts
+    (via its `-_`->`+/` remap) is rejected — matching Go's RawURLEncoding."""
+    # Bytes whose standard base64 encoding contains both '+' and '/'.
+    raw = bytes([0xFB, 0xFF, 0xBF])
+    std = base64.standard_b64encode(raw).decode().rstrip("=")
+    assert "+" in std or "/" in std
+    # The lenient decoder accepts it; the strict one rejects it.
+    assert b64url_decode(std) == raw
+    with pytest.raises(ValueError, match="non-urlsafe alphabet or padding"):
+        b64url_decode_strict(std)
+
+
+def test_b64url_decode_strict_rejects_invalid_length() -> None:
+    """A length ≡ 1 (mod 4) is structurally invalid unpadded base64url."""
+    with pytest.raises(ValueError, match="invalid unpadded base64url length"):
+        b64url_decode_strict("A")
 
 
 # ---- top-level re-export -------------------------------------------------

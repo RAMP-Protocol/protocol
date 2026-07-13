@@ -30,7 +30,7 @@ from wire.models import JsonWebKey, KeyRevocationList, WBAFile
 if TYPE_CHECKING:
     import httpx
 
-from ramp_sdk.b64 import b64url_decode
+from ramp_sdk.b64 import b64url_decode_strict
 from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_client
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
@@ -485,7 +485,10 @@ def _public_key_of_safe(key: JsonWebKey) -> bytes | None:
     if (key.kty or "").upper() != "OKP" or (key.crv or "").lower() != "ed25519":
         return None
     try:
-        raw = b64url_decode(key.x or "")
+        # JWK OKP `x` is UNPADDED base64url (RFC 8037); reject padding / the
+        # standard alphabet so this matches Go's base64.RawURLEncoding and the
+        # tri-language selector picks the SAME key on a malformed-`x` directory.
+        raw = b64url_decode_strict(key.x or "")
     except ValueError:
         return None
     if len(raw) != _ED25519_PUBLIC_KEY_BYTES:

@@ -14,7 +14,7 @@ import {
   KeyRevocationListSchema,
   WBAFileSchema,
 } from "../../../gen/ts/wire/schemas.ts";
-import { decodeBase64Url } from "../src/base64url.ts";
+import { decodeBase64UrlStrict } from "../src/base64url.ts";
 import { thumbprint } from "../src/thumbprint.ts";
 import { DirectoryUnavailable, KeyExpired, KeyRevoked, RevocationUnevaluated } from "./errors.ts";
 import { type FetchLike, guardedFetch, fetchSoft, fetchStrict } from "./http.ts";
@@ -339,7 +339,10 @@ async function keyByThumbprint(file: WBAFile, keyID: string): Promise<WBAJwk | u
 /** Decode `key`'s Ed25519 public key, or `undefined` on any field/length fault. */
 function publicKeyOfSafe(key: WBAJwk): Uint8Array | undefined {
   if (key.kty.toUpperCase() !== "OKP" || key.crv.toLowerCase() !== "ed25519") return undefined;
-  const raw = decodeBase64Url(key.x);
+  // JWK OKP `x` is UNPADDED base64url (RFC 8037); reject padding / the standard
+  // alphabet so this matches Go's base64.RawURLEncoding and the tri-language
+  // selector picks the SAME key on a malformed-`x` directory.
+  const raw = decodeBase64UrlStrict(key.x);
   if (!raw || raw.length !== ED25519_PUBLIC_KEY_BYTES) return undefined;
   return raw;
 }
