@@ -27,6 +27,7 @@ from ramp_sdk.resolvers.errors import (
     RevocationUnevaluatedError,
     UnknownKeyError,
 )
+from ramp_sdk.resolvers.offer_key_cache import CachedOfferKeyResolver, DirectoryFetch
 from ramp_sdk.resolvers.wba import (
     WBAKeyResolver,
     active_ed25519_key,
@@ -37,6 +38,8 @@ from ramp_sdk.resolvers.wba import (
 from ramp_sdk.resolvers.wellknown import WellKnownEndpointResolver, WellKnownKeyResolver
 
 __all__ = [
+    "CachedOfferKeyResolver",
+    "DirectoryFetch",
     "DirectoryUnavailableError",
     "KeyExpiredError",
     "KeyRevokedError",
