@@ -27,12 +27,19 @@ from ramp_sdk.resolvers._http import (
     guarded_client,
     ssrf_guard,
 )
-from ramp_sdk.resolvers._ssrf import SsrfError, allowed_scheme, blocked_address
+from ramp_sdk.resolvers._ssrf import (
+    SsrfError,
+    allowed_scheme,
+    blocked_address,
+    redirect_chain_refused,
+)
 from ramp_sdk.resolvers.errors import DirectoryUnavailableError
 
 # The shared adversarial corpora (Go emits, all SDKs consume — never edited here).
 _ADDRESS_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "ssrf-address-vectors.json")["vectors"]
 _SCHEME_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "ssrf-scheme-vectors.json")["vectors"]
+_REDIRECT_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "ssrf-redirect-vectors.json")["vectors"]
+_HOSTSET_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "ssrf-hostset-vectors.json")["vectors"]
 
 
 @pytest.mark.parametrize("vec", _ADDRESS_VECTORS, ids=lambda v: v["name"])
@@ -50,6 +57,26 @@ def test_scheme_corpus_parity(vec: dict) -> None:
     assert _SCHEME_VECTORS, "scheme corpus must be non-empty"
     assert allowed_scheme(vec["scheme"]) is vec["allowed"], (
         f"{vec['name']} ({vec['scheme']}): expected allowed={vec['allowed']}"
+    )
+
+
+@pytest.mark.parametrize("vec", _REDIRECT_VECTORS, ids=lambda v: v["name"])
+def test_redirect_corpus_parity(vec: dict) -> None:
+    """redirect_chain_refused must agree with the Go oracle on EVERY hop count."""
+    assert _REDIRECT_VECTORS, "redirect corpus must be non-empty"
+    assert redirect_chain_refused(vec["hops"]) is vec["refused"], (
+        f"{vec['name']} (hops={vec['hops']}): expected refused={vec['refused']}"
+    )
+
+
+@pytest.mark.parametrize("vec", _HOSTSET_VECTORS, ids=lambda v: v["name"])
+def test_hostset_corpus_parity(vec: dict) -> None:
+    """The multi-address rule (fail closed if ANY resolved address is reserved) must
+    agree with the Go oracle on EVERY host-set vector."""
+    assert _HOSTSET_VECTORS, "host-set corpus must be non-empty"
+    any_blocked = any(blocked_address(addr) for addr in vec["addrs"])
+    assert any_blocked is vec["blocked"], (
+        f"{vec['name']} ({vec['addrs']}): expected blocked={vec['blocked']}"
     )
 
 

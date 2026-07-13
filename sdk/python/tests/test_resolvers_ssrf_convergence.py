@@ -1,11 +1,11 @@
-"""Cross-language convergence for the SSRF guard's redirect-depth cap, its
-multi-address (host-set) rule, and its overall wall-clock budget — the sdk/python
-half of the shared corpus + the targeted deadline fix.
+"""Real-dial behavioral convergence for the SSRF guard's redirect-depth cap and its
+overall wall-clock budget — the sdk/python behavioral half (the input->verdict
+predicate parity for redirect + host-set lives in test_resolvers_wba_ssrf.py, next
+to the address/scheme replays).
 
-The redirect and host-set corpora are the SHARED oracle (sdk/go emits, every SDK
-replays); the predicate replays here must agree with the Go verdicts, and the REAL
-httpx client is configured to the same redirect cap (max_redirects). The deadline
-test proves a slow resolution is bounded rather than pinning the caller forever.
+The real httpx client is configured to the same redirect cap the shared corpus
+pins (max_redirects), and the deadline test proves a slow resolution is bounded
+rather than pinning the caller forever.
 """
 
 from __future__ import annotations
@@ -17,36 +17,11 @@ import time
 
 import httpx
 import pytest
-from conftest import GO_RESOLVERS_TESTDATA, load_json
 
 from ramp_sdk.resolvers import _http, _ssrf
 from ramp_sdk.resolvers._http import fetch_strict, guarded_client, ssrf_guard
-from ramp_sdk.resolvers._ssrf import MAX_REDIRECTS, blocked_address, redirect_chain_refused
+from ramp_sdk.resolvers._ssrf import MAX_REDIRECTS
 from ramp_sdk.resolvers.errors import DirectoryUnavailableError
-
-# The shared adversarial corpora (Go emits, all SDKs consume — never edited here).
-_REDIRECT_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "ssrf-redirect-vectors.json")["vectors"]
-_HOSTSET_VECTORS = load_json(GO_RESOLVERS_TESTDATA / "ssrf-hostset-vectors.json")["vectors"]
-
-
-@pytest.mark.parametrize("vec", _REDIRECT_VECTORS, ids=lambda v: v["name"])
-def test_redirect_corpus_parity(vec: dict) -> None:
-    """redirect_chain_refused must agree with the Go oracle on EVERY hop count."""
-    assert _REDIRECT_VECTORS, "redirect corpus must be non-empty"
-    assert redirect_chain_refused(vec["hops"]) is vec["refused"], (
-        f"{vec['name']} (hops={vec['hops']}): expected refused={vec['refused']}"
-    )
-
-
-@pytest.mark.parametrize("vec", _HOSTSET_VECTORS, ids=lambda v: v["name"])
-def test_hostset_corpus_parity(vec: dict) -> None:
-    """The multi-address rule (fail closed if ANY resolved address is reserved)
-    must agree with the Go oracle on EVERY host-set vector."""
-    assert _HOSTSET_VECTORS, "host-set corpus must be non-empty"
-    any_blocked = any(blocked_address(addr) for addr in vec["addrs"])
-    assert any_blocked is vec["blocked"], (
-        f"{vec['name']} ({vec['addrs']}): expected blocked={vec['blocked']}"
-    )
 
 
 class _RedirectChainHandler(http.server.BaseHTTPRequestHandler):
