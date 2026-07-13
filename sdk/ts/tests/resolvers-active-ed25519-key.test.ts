@@ -1,16 +1,25 @@
 // Behavior suite for activeEd25519Key — the document-order active-key selector
 // that complements the thumbprint-keyed WBAKeyResolver.resolve. Byte-parity with
 // the Go ActiveEd25519Key / Python active_ed25519_key oracles: iterate the
-// directory's keys in DOCUMENT ORDER, examine at most the first maxScan (default
-// 10, a DoS cap), return the FIRST window-active well-formed OKP/Ed25519 key whose
-// x base64url-decodes to exactly 32 bytes; skip-and-continue past any failing key;
+// directory's keys in DOCUMENT ORDER — UNBOUNDED by default (maxScan is an OPTIONAL
+// cap) — return the FIRST window-active well-formed OKP/Ed25519 key whose x
+// base64url-decodes to exactly 32 bytes; skip-and-continue past any failing key;
 // null when none qualifies. Pure logic over a parsed WBAFile — no HTTP origin.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { WBAFileSchema } from "../../../gen/ts/wire/schemas.ts";
+import {
+	activeEd25519Key,
+	activeEd25519KeyWithExpiry,
+} from "../resolvers/index.ts";
 import { encodeBase64Url } from "../src/base64url.ts";
-import { activeEd25519Key, activeEd25519KeyWithExpiry } from "../resolvers/index.ts";
-import { ANCHOR_MS, HOUR_MS, iso, makeKey, wbaJwk } from "./resolvers-harness.ts";
+import {
+	ANCHOR_MS,
+	HOUR_MS,
+	iso,
+	makeKey,
+	wbaJwk,
+} from "./resolvers-harness.ts";
 
 type WBAFile = ReturnType<typeof WBAFileSchema.parse>;
 
@@ -82,14 +91,20 @@ describe("activeEd25519Key", () => {
 	it("skips a non-OKP key and continues", async () => {
 		const bad = await makeKey();
 		const good = await makeKey();
-		const dir = directory([{ ...activeJwk(bad.x), kty: "RSA" }, activeJwk(good.x)]);
+		const dir = directory([
+			{ ...activeJwk(bad.x), kty: "RSA" },
+			activeJwk(good.x),
+		]);
 		expect(activeEd25519Key(dir, ANCHOR_MS)).toEqual(good.rawPub);
 	});
 
 	it("skips a wrong-crv key and continues", async () => {
 		const bad = await makeKey();
 		const good = await makeKey();
-		const dir = directory([{ ...activeJwk(bad.x), crv: "P-256" }, activeJwk(good.x)]);
+		const dir = directory([
+			{ ...activeJwk(bad.x), crv: "P-256" },
+			activeJwk(good.x),
+		]);
 		expect(activeEd25519Key(dir, ANCHOR_MS)).toEqual(good.rawPub);
 	});
 
@@ -107,31 +122,58 @@ describe("activeEd25519Key", () => {
 		expect(activeEd25519Key(dir, ANCHOR_MS)).toEqual(good.rawPub);
 	});
 
-	it("selects a valid key at position 10 (0-indexed 9) within the default cap", async () => {
+	it("reaches a valid key at index 10 by the unbounded default", async () => {
+		// The former default cap of 10 would have hidden the 11th key; the unbounded
+		// default now reaches it — the DoS-by-directory-padding footgun is gone.
 		const fillers = await Promise.all(
-			Array.from({ length: 9 }, async () => expiredJwk((await makeKey()).x)),
+			Array.from({ length: 10 }, async () => expiredJwk((await makeKey()).x)),
 		);
 		const target = await makeKey();
 		const dir = directory([...fillers, activeJwk(target.x)]);
 		expect(activeEd25519Key(dir, ANCHOR_MS)).toEqual(target.rawPub);
-	});
-
-	it("cannot reach a valid key at position 11 (0-indexed 10) under the default cap", async () => {
-		const fillers = await Promise.all(
-			Array.from({ length: 10 }, async () => expiredJwk((await makeKey()).x)),
-		);
-		const target = await makeKey();
-		const dir = directory([...fillers, activeJwk(target.x)]);
-		expect(activeEd25519Key(dir, ANCHOR_MS)).toBeNull();
-	});
-
-	it("reaches position 11 when maxScan is raised past the padding", async () => {
-		const fillers = await Promise.all(
-			Array.from({ length: 10 }, async () => expiredJwk((await makeKey()).x)),
-		);
-		const target = await makeKey();
-		const dir = directory([...fillers, activeJwk(target.x)]);
+		// An explicit bound large enough still reaches it.
 		expect(activeEd25519Key(dir, ANCHOR_MS, 11)).toEqual(target.rawPub);
+	});
+
+	it("returns null and logs when an explicit maxScan is exhausted", async () => {
+		const fillers = await Promise.all(
+			Array.from({ length: 10 }, async () => expiredJwk((await makeKey()).x)),
+		);
+		const target = await makeKey();
+		const dir = directory([...fillers, activeJwk(target.x)]);
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			// maxScan 10 is exhausted over the fillers before the index-10 key → null,
+			// AND the exhaustion is logged (a valid key beyond the cap is unreachable).
+			expect(activeEd25519Key(dir, ANCHOR_MS, 10)).toBeNull();
+			expect(warn).toHaveBeenCalledWith(expect.stringContaining("max_scan"));
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it("clamps a negative maxScan to scan-none", async () => {
+		// Parity with Go clamp-to-zero / Python max(0, n): a negative bound scans no key
+		// even though one is active.
+		const active = await makeKey();
+		const dir = directory([activeJwk(active.x)]);
+		expect(activeEd25519Key(dir, ANCHOR_MS, -1)).toBeNull();
+	});
+
+	it("accepts a window-active key with mixed-case kty/crv", async () => {
+		// Case-insensitive kty/crv is a deliberate lenient SDK convention (RFC 7517/8037
+		// want exact-case OKP / Ed25519); all three SDKs accept it identically.
+		const k = await makeKey();
+		const dir = directory([{ ...activeJwk(k.x), kty: "oKp", crv: "ed25519" }]);
+		expect(activeEd25519Key(dir, ANCHOR_MS)).toEqual(k.rawPub);
+	});
+
+	it("returns null for a null directory instead of throwing", () => {
+		// A null directory is guarded (returns null, never throws), matching Go's nil guard.
+		expect(activeEd25519Key(null as unknown as WBAFile, ANCHOR_MS)).toBeNull();
+		expect(
+			activeEd25519KeyWithExpiry(null as unknown as WBAFile, ANCHOR_MS),
+		).toBeNull();
 	});
 
 	it("returns null for an empty directory", () => {
@@ -182,7 +224,10 @@ describe("activeEd25519KeyWithExpiry", () => {
 
 	it("agrees with activeEd25519Key on the selected key", async () => {
 		const selected = await makeKey();
-		const dir = directory([expiredJwk((await makeKey()).x), longJwk(selected.x)]);
+		const dir = directory([
+			expiredJwk((await makeKey()).x),
+			longJwk(selected.x),
+		]);
 		const plain = activeEd25519Key(dir, ANCHOR_MS);
 		const withExpiry = activeEd25519KeyWithExpiry(dir, ANCHOR_MS);
 		expect(withExpiry).not.toBeNull();
