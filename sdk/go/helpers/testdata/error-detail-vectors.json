@@ -1,0 +1,100 @@
+{
+  "canonicalization": "proto-json-snake",
+  "vectors": [
+    {
+      "name": "domain_message_only",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "internal error",
+      "metadata": null,
+      "reason_field": "",
+      "reason_enum": "",
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "internal error"
+      }
+    },
+    {
+      "name": "with_single_metadata",
+      "domain": "ramp.v1.CatalogService",
+      "message": "quota exceeded",
+      "metadata": {
+        "limit": "100"
+      },
+      "reason_field": "",
+      "reason_enum": "",
+      "wire_json": {
+        "domain": "ramp.v1.CatalogService",
+        "message": "quota exceeded",
+        "metadata": {
+          "limit": "100"
+        }
+      }
+    },
+    {
+      "name": "empty_metadata_omitted",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "no metadata here",
+      "metadata": {},
+      "reason_field": "",
+      "reason_enum": "",
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "no metadata here"
+      }
+    },
+    {
+      "name": "transaction_denial_reason",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "balance too low",
+      "metadata": null,
+      "reason_field": "transaction_denial",
+      "reason_enum": "DENIAL_REASON_INSUFFICIENT_BALANCE",
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "balance too low",
+        "transaction_denial": {
+          "reason": "DENIAL_REASON_INSUFFICIENT_BALANCE"
+        }
+      }
+    },
+    {
+      "name": "retrieval_auth_failure_reason",
+      "domain": "ramp.v1.Edge",
+      "message": "signed URL expired",
+      "metadata": null,
+      "reason_field": "retrieval_auth_failure",
+      "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED",
+      "wire_json": {
+        "domain": "ramp.v1.Edge",
+        "message": "signed URL expired",
+        "retrieval_auth_failure": {
+          "reason": "RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED"
+        }
+      }
+    },
+    {
+      "name": "multi_key_metadata_with_reason",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "rate limited",
+      "metadata": {
+        "alpha": "1",
+        "mid": "2",
+        "zeta": "3"
+      },
+      "reason_field": "transaction_denial",
+      "reason_enum": "DENIAL_REASON_RATE_LIMITED",
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "rate limited",
+        "metadata": {
+          "alpha": "1",
+          "mid": "2",
+          "zeta": "3"
+        },
+        "transaction_denial": {
+          "reason": "DENIAL_REASON_RATE_LIMITED"
+        }
+      }
+    }
+  ]
+}
