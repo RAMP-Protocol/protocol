@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+**Go SDK: the network-fetching resolvers move `sdk/go/helpers` → `sdk/go/resolvers`
+(source move, no wire change).** The IO-bearing key/endpoint resolvers — the
+well-known JWKS resolver (`NewWellKnownKeyResolver`), the revocation-aware WBA
+directory resolver (`NewWBAKeyResolver`), the `ramp.json` endpoint resolver
+(`WellKnownEndpointResolver` / `NewWellKnownEndpointResolver` / `WellKnownOptions` /
+`ErrNoEndpoint`), and the SSRF-guarded fetch client — now live in the new L2 I/O
+package `sdk/go/resolvers`, one tier above the pure, IO-free `sdk/go/helpers`. This
+keeps every network dial out of the trust core (enforced by an io-leaf guard).
+Migration: import these from `github.com/RAMP-Protocol/protocol/sdk/go/resolvers`
+instead of `.../sdk/go/helpers`. **No alias shim is provided** — the move is a hard
+rename and the downstream app already compiles against the moved layout; consumers
+import the resolvers from `sdk/go/resolvers`. The pure `KeyResolver` interface and
+the static `NewStaticKeyResolver` stay in `helpers`.
+
+**SDK (all 3 languages): new public faces this cycle (additive, no wire change).**
+Document-order active-key selection — `ActiveEd25519Key` /
+`ActiveEd25519KeyWithExpiry` and their revocation-aware `…Screened` variants
+(`active_ed25519_key*` in Python, `activeEd25519Key*` in TS) — plus a
+`CachedOfferKeyResolver` (Go + Python), an injectable Ed25519 verify primitive on
+the TS signed-URL verify (`Ed25519Verifier`), and cross-language `ErrorDetail`
+readers: Go `AttachErrorDetail` / `AttachDetail` on the server binding, and
+`parse_error_detail` / `error_detail_from` (Python) and `parseErrorDetail` /
+`errorDetailFrom` (TS) decoders, all pinned to the shared `error-detail-vectors.json`
+oracle. The SSRF-guarded transport is now a single env-driven client
+(`NewGuardedClientFromEnv` / `guarded_client` / `guardedFetchFromEnv`) governed by
+two flags (`SKIP_SSRF`, `ALLOW_INSECURE`). See `docs/sdk-parity-matrix.md` for the
+per-language surface.
+
 **Operator plane: new `ramp.admin.v1` package with `AdminService` (additive).**
 Two full-replace, idempotent setters for Exchange operators —
 `SetTenantFeeRate(SetTenantFeeRateRequest) → SetTenantFeeRateResponse` and
