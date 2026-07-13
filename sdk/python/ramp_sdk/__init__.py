@@ -28,6 +28,13 @@ from .core import (
     verify_offer_acceptance_jcs,
 )
 from .crossfield import cross_field_rule_ids
+from .errordetail import (
+    ERROR_DETAIL_TYPE,
+    REASON_FIELDS,
+    error_detail_from,
+    parse_error_detail,
+    reason,
+)
 from .hashurl import hash_url
 from .httpsig import (
     MultisigVerdict,
@@ -67,6 +74,8 @@ from .wire import (
 )
 
 __all__ = [
+    "ERROR_DETAIL_TYPE",
+    "REASON_FIELDS",
     "ConnectProtocolVersion",
     "ConnectProtocolVersionHeader",
     "ContentTypeJSON",
@@ -96,13 +105,16 @@ __all__ = [
     "canonicalize_money",
     "clock_window",
     "cross_field_rule_ids",
+    "error_detail_from",
     "format_money",
     "hash_url",
     "jcs_acceptance_payload",
     "monotonic_window",
     "new_idempotency_key",
     "normalize_scopes",
+    "parse_error_detail",
     "parse_money",
+    "reason",
     "scopes_subset",
     "sign_agent_binding",
     "sign_ed25519_signed_url",

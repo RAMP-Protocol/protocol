@@ -59,6 +59,7 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
     (GO_TESTDATA / "verify-request-neg-vectors.json", _vectors, "verify-request-neg"),
     (GO_TESTDATA / "wire-canonical-vectors.json", _vectors, "wire-canonical"),
     (GO_TESTDATA / "wire-constants-vectors.json", _vectors, "wire-constants"),
+    (GO_TESTDATA / "error-detail-vectors.json", _vectors, "error-detail"),
     (GO_TESTDATA / "pop-vectors.json", _whole, "pop"),
     (GO_TESTDATA / "signedurl-vectors.json", _whole, "signedurl"),
     (GO_TESTDATA / "scopes-vectors.json", lambda d: d["normalize"], "scopes-normalize"),
