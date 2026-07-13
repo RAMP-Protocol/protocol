@@ -1,0 +1,724 @@
+{
+  "note": "active_ed25519_key document-order selection verdicts produced by the sdk/go oracle; py/ts replay and must match every vector",
+  "now": "2026-05-01T12:00:00Z",
+  "vectors": [
+    {
+      "label": "selects-first-active",
+      "note": "two active keys: the first in document order wins",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "igg_gqBryFMoFzRRGt3o5heyxCMZnwvmo_QnVDOMhq4",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "JiUbf54JyZn3awykj3RgqdrqNuOceIpJK5wPLcPJgLY",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 0,
+      "expected_pub": "igg_gqBryFMoFzRRGt3o5heyxCMZnwvmo_QnVDOMhq4",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "skips-retired-then-active",
+      "note": "a retired key ahead of the active one is skipped",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "gtNY_-4usOxrmJ7xrF9zRiMQfpNx7e9HHvWQUGnt2dw",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "-3RaMXQ-TPRYKeoM8OpPZ0_2NaOeoPuD55TFmOL5DHU",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "-3RaMXQ-TPRYKeoM8OpPZ0_2NaOeoPuD55TFmOL5DHU",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "skips-future-then-active",
+      "note": "a not-yet-valid key ahead of the active one is skipped",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5o3TeoY_C4lxpswlMMZ1czV3gXoUs4Q_2oDHFm9misI",
+          "not_before": "2026-05-01T13:00:00Z",
+          "not_after": "2026-05-01T14:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "-3RaMXQ-TPRYKeoM8OpPZ0_2NaOeoPuD55TFmOL5DHU",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "-3RaMXQ-TPRYKeoM8OpPZ0_2NaOeoPuD55TFmOL5DHU",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "empty-directory-none",
+      "note": "an empty directory selects nothing",
+      "max_scan": null,
+      "keys": [],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
+    },
+    {
+      "label": "all-inactive-none",
+      "note": "a directory of only retired/future keys selects nothing",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "SOEtUbcKGPVfSNhL6uMuU6oEcDDUcIHrRhHPR2BBbDQ",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "E07KwGAAO5QawbFrEdC-jh69L1-3i4xhCqRX9c6RkGs",
+          "not_before": "2026-05-01T13:00:00Z",
+          "not_after": "2026-05-01T14:00:00Z"
+        }
+      ],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
+    },
+    {
+      "label": "valid-unpadded-x-selected",
+      "note": "a valid unpadded-urlsafe x decodes and is selected (H2 unchanged path)",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 0,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "standard-alphabet-x-then-valid",
+      "note": "an active key with a STANDARD-alphabet x (+//) is skipped; the next valid key wins (H2)",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "A+cD+DZoj2MYxGV2Rz9izwS7smshrBH2WGIuM4b48Dw",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "standard-alphabet-x-only-none",
+      "note": "the only key has a STANDARD-alphabet x; Go rejects it → none (H2: py/ts once selected it)",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "A+cD+DZoj2MYxGV2Rz9izwS7smshrBH2WGIuM4b48Dw",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
+    },
+    {
+      "label": "padded-x-then-valid",
+      "note": "an active key with a '='-PADDED urlsafe x is skipped; the next valid key wins (H2)",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "OzH3dMxQOI8ycOWJm-WpS0F5ZuW5Ggxz4--fBR0pMyg=",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "padded-x-only-none",
+      "note": "the only key has a '='-PADDED x; Go rejects it → none (H2: py/ts once selected it)",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "OzH3dMxQOI8ycOWJm-WpS0F5ZuW5Ggxz4--fBR0pMyg=",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
+    },
+    {
+      "label": "non-okp-then-valid",
+      "note": "a window-active non-OKP key is skipped; the next valid key wins",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "RSA",
+          "crv": "Ed25519",
+          "x": "_o8nTQN9oFZovyQqymzHsjUnjdOVDNqNRD2cS2riWcU",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "wrong-crv-then-valid",
+      "note": "a window-active non-Ed25519 key is skipped; the next valid key wins",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "P-256",
+          "x": "rG52wxr0vjuAShbIiKyrdEWH2vzpzxv6WEzJhbZR9NU",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "wrong-length-x-then-valid",
+      "note": "a window-active key whose x decodes to 31 bytes is skipped",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "undecodable-x-then-valid",
+      "note": "a window-active key whose x is not base64url is skipped",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "!!!!",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "offset-less-bound-then-valid",
+      "note": "an offset-less (naive) window is inactive; the next valid key wins (C1)",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "bGh9DL1Lq5TF5xS74R9JC7f50QnL5FPwJ6qj3v1FirM",
+          "not_before": "2026-05-01T11:00:00",
+          "not_after": "2026-05-01T13:00:00"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "offset-less-bound-only-none",
+      "note": "the only key has offset-less bounds → none (C1)",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "bGh9DL1Lq5TF5xS74R9JC7f50QnL5FPwJ6qj3v1FirM",
+          "not_before": "2026-05-01T11:00:00",
+          "not_after": "2026-05-01T13:00:00"
+        }
+      ],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
+    },
+    {
+      "label": "date-only-bound-then-valid",
+      "note": "a date-only (no time) bound is unparseable → inactive; the next valid key wins",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "BX7xEgmautdwTbR74eGAyq5B4fREYZQYaBcn4115XhU",
+          "not_before": "2026-05-01",
+          "not_after": "2026-05-02"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "date-only-bound-only-none",
+      "note": "the only key has date-only bounds → none",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "BX7xEgmautdwTbR74eGAyq5B4fREYZQYaBcn4115XhU",
+          "not_before": "2026-05-01",
+          "not_after": "2026-05-02"
+        }
+      ],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
+    },
+    {
+      "label": "empty-bounds-then-valid",
+      "note": "empty/missing window bounds are inactive; the next valid key wins",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "3Wq9FJZoMvCFAHF0aPEXXstaqNIg7hwQyYT36X4NcY0",
+          "not_before": "",
+          "not_after": ""
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "boundary-not-before-equals-now",
+      "note": "not_before==now is INSIDE the half-open window → selected",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "RCpsLgWEVtyagXGaK5FfrDpI9XCH2_NL3Rlqi3n7R6s",
+          "not_before": "2026-05-01T12:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 0,
+      "expected_pub": "RCpsLgWEVtyagXGaK5FfrDpI9XCH2_NL3Rlqi3n7R6s",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "boundary-not-after-equals-now-none",
+      "note": "not_after==now is OUTSIDE the half-open window → none",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "-n7IPXckzq-RgiSFIkTMjU_9T6cgjlMWo1NVei9SX6Q",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T12:00:00Z"
+        }
+      ],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
+    },
+    {
+      "label": "boundary-not-after-equals-now-then-valid",
+      "note": "a not_after==now key is inactive; the next valid key wins",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "-n7IPXckzq-RgiSFIkTMjU_9T6cgjlMWo1NVei9SX6Q",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T12:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 1,
+      "expected_pub": "GsUyO8BtnHtofO-Vb12WgVcBYfnFvKptDYNedDZ2TWA",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "winner-within-default-cap",
+      "note": "a valid key at index 9 is within the default scan cap → selected",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ps49R0qs4F4ZAGFirXXsgvmYEN1BIUMBIB4KsCQ8Kss",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "U7Y55cwIHCI1lbxsD4It_6soPh2EWzZIvks9FWjh7kg",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "I_y64FPbf6laKjtADeTkBjwigf409nT9EA-MtW4reNc",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "L-vo-dxPtgdX1yC2zbWDd2ARErBs1XadG1rlBUDLiRM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "wdAvu76EbKlJmYPZJV1bAoF0dVReL1iG9WDCfFpCINs",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "AlAb55kaJv81mc4iaeI2GzAx7lVCZRJ3yaEp-OYwFZM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "iyLxjRz_YUjT8HE2jN940ggc34T-_eqvMma4_1eZ_-c",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "P48YLpBMMLH-KIFrnQtqYLFApvSQmqyxm_ukuVEXJbM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ZPdu2U2jgKgcG70xi9ZVdqmSA8mmuc9QLfWG_crYOw4",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "cvi1u--Vo8dPa4zoH9zZa1hpXxqR7jjcQAqjARVwzYo",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 9,
+      "expected_pub": "cvi1u--Vo8dPa4zoH9zZa1hpXxqR7jjcQAqjARVwzYo",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    },
+    {
+      "label": "winner-past-default-cap-none",
+      "note": "a valid key at index 10 is past the default cap → unreachable → none",
+      "max_scan": null,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ps49R0qs4F4ZAGFirXXsgvmYEN1BIUMBIB4KsCQ8Kss",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "U7Y55cwIHCI1lbxsD4It_6soPh2EWzZIvks9FWjh7kg",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "I_y64FPbf6laKjtADeTkBjwigf409nT9EA-MtW4reNc",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "L-vo-dxPtgdX1yC2zbWDd2ARErBs1XadG1rlBUDLiRM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "wdAvu76EbKlJmYPZJV1bAoF0dVReL1iG9WDCfFpCINs",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "AlAb55kaJv81mc4iaeI2GzAx7lVCZRJ3yaEp-OYwFZM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "iyLxjRz_YUjT8HE2jN940ggc34T-_eqvMma4_1eZ_-c",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "P48YLpBMMLH-KIFrnQtqYLFApvSQmqyxm_ukuVEXJbM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ZPdu2U2jgKgcG70xi9ZVdqmSA8mmuc9QLfWG_crYOw4",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "i2s_b-3npsAKyhCHIUweVzU0UpxNr0daPHuv4azozwo",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "cvi1u--Vo8dPa4zoH9zZa1hpXxqR7jjcQAqjARVwzYo",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": -1,
+      "expected_pub": "",
+      "expected_not_after": ""
+    },
+    {
+      "label": "winner-reached-with-raised-cap",
+      "note": "raising max_scan to 11 reaches the index-10 key",
+      "max_scan": 11,
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ps49R0qs4F4ZAGFirXXsgvmYEN1BIUMBIB4KsCQ8Kss",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "U7Y55cwIHCI1lbxsD4It_6soPh2EWzZIvks9FWjh7kg",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "I_y64FPbf6laKjtADeTkBjwigf409nT9EA-MtW4reNc",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "L-vo-dxPtgdX1yC2zbWDd2ARErBs1XadG1rlBUDLiRM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "wdAvu76EbKlJmYPZJV1bAoF0dVReL1iG9WDCfFpCINs",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "AlAb55kaJv81mc4iaeI2GzAx7lVCZRJ3yaEp-OYwFZM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "iyLxjRz_YUjT8HE2jN940ggc34T-_eqvMma4_1eZ_-c",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "P48YLpBMMLH-KIFrnQtqYLFApvSQmqyxm_ukuVEXJbM",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ZPdu2U2jgKgcG70xi9ZVdqmSA8mmuc9QLfWG_crYOw4",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "i2s_b-3npsAKyhCHIUweVzU0UpxNr0daPHuv4azozwo",
+          "not_before": "2026-05-01T10:00:00Z",
+          "not_after": "2026-05-01T11:00:00Z"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "cvi1u--Vo8dPa4zoH9zZa1hpXxqR7jjcQAqjARVwzYo",
+          "not_before": "2026-05-01T11:00:00Z",
+          "not_after": "2026-05-01T13:00:00Z"
+        }
+      ],
+      "expected_index": 10,
+      "expected_pub": "cvi1u--Vo8dPa4zoH9zZa1hpXxqR7jjcQAqjARVwzYo",
+      "expected_not_after": "2026-05-01T13:00:00Z"
+    }
+  ]
+}
