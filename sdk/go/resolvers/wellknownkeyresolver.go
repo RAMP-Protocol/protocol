@@ -37,7 +37,12 @@ type WellKnownKeyResolver struct {
 
 // WellKnownOptions tune the resolver. Zero values are safe defaults.
 type WellKnownOptions struct {
-	// HTTP overrides the client used to fetch the JWKS (nil → http.DefaultClient).
+	// HTTP overrides the client used to fetch. The nil-default differs by resolver
+	// because the URL's provenance differs: WellKnownKeyResolver fetches a
+	// fixed, operator-chosen JWKS URL, so it defaults to the unguarded
+	// http.DefaultClient; WellKnownEndpointResolver fetches a REQUEST-DERIVED
+	// Offer.exchange host, so it defaults to the SSRF-guarded
+	// NewGuardedClientFromEnv (same threat shape as the WBA directory fetch).
 	HTTP *http.Client
 	// TTL is how long a successful fetch is cached (≤0 → 5 minutes).
 	TTL time.Duration

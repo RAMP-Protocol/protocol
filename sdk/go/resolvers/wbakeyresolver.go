@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -34,15 +33,15 @@ import (
 var (
 	// ErrKeyRevoked signals the thumbprint is present in the directory host's
 	// current revocation snapshot.
-	ErrKeyRevoked = errors.New("helpers: key revoked")
+	ErrKeyRevoked = errors.New("resolvers: key revoked")
 	// ErrKeyExpired signals the key exists but is outside its
 	// [not_before, not_after) validity window.
-	ErrKeyExpired = errors.New("helpers: key outside validity window")
+	ErrKeyExpired = errors.New("resolvers: key outside validity window")
 	// ErrDirectoryUnavailable signals the WBA directory could not be fetched or
 	// parsed. It is deliberately errors.Is-DISTINCT from ErrUnknownKey: a
 	// fail-closed composite must be able to halt on a directory outage rather
 	// than fall through as if the key were merely unknown.
-	ErrDirectoryUnavailable = errors.New("helpers: WBA directory unavailable")
+	ErrDirectoryUnavailable = errors.New("resolvers: WBA directory unavailable")
 	// ErrRevocationUnevaluated signals that the key resolved, but its directory
 	// declares a revocation_url whose snapshot has never been fetched (unreachable
 	// or not host-anchored) — so revocation was NEVER EVALUATED, which is distinct
@@ -50,7 +49,7 @@ var (
 	// set; the default keeps the prior best-effort behavior. It lets a caller that
 	// treats revocation as mandatory fail closed instead of trusting an
 	// unevaluated key.
-	ErrRevocationUnevaluated = errors.New("helpers: key revocation unevaluated")
+	ErrRevocationUnevaluated = errors.New("resolvers: key revocation unevaluated")
 )
 
 // WBADirectoryPath is the well-known path a WBA identity directory is served
@@ -165,55 +164,120 @@ func allowedScheme(scheme string) bool {
 	}
 }
 
-// maxWBARedirects bounds redirect following on the guarded transport.
+// maxWBARedirects bounds redirect following on the guarded transport: the guard
+// follows at most this many redirect hops and refuses the next. Shared, corpus-
+// tested across the three SDKs (redirectChainRefused): the Go CheckRedirect,
+// httpx max_redirects, and undici maxRedirections all honor this SAME cap.
 const maxWBARedirects = 5
 
-// SSRFGuard returns base with an SSRF-guarded dialer installed: it refuses to
-// connect to any reserved / non-public address (see ssrfBlockedPrefixes). It is
-// the INJECTABLE form of the WBA default client's dial-seam guard — drop it into
-// any *http.Client so a fetch of a caller-supplied host cannot reach an internal
-// target. base==nil yields a fresh, minimal transport (no proxy — a proxied CONNECT
-// would tunnel past the dial check); a non-nil base is cloned and only its
-// DialContext is replaced, so the caller's other transport settings are kept.
+// redirectChainRefused is the shared redirect-depth policy: a chain of hops
+// redirects is refused iff it EXCEEDS maxWBARedirects (deny-by-default parity).
+// Called with len(via) (the requests already made when a redirect is offered), so
+// the guard follows the first maxWBARedirects hops and refuses the next. The
+// shared corpus pins this predicate across the three SDKs so no language inherits
+// its HTTP library's looser default (~20 hops).
+func redirectChainRefused(hops int) bool { return hops > maxWBARedirects }
+
+// anyAddrBlocked reports whether ANY address in addrs is reserved / non-public.
+// It is the multi-address fail-closed rule the three SDKs share: a host that
+// resolves to a MIXED public/reserved set is refused OUTRIGHT, so a rebinding or
+// round-robin DNS answer cannot land a later connect on the reserved member. The
+// corpus emitter self-checks against this predicate so the Go dialer and the
+// cross-language vectors agree on the whole-set verdict.
+func anyAddrBlocked(addrs []netip.Addr) bool {
+	for _, a := range addrs {
+		if ssrfBlocked(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// SSRFGuard returns base with an SSRF-guarded dialer installed: it resolves every
+// candidate address for the target host, refuses OUTRIGHT if ANY of them is a
+// reserved / non-public address (anyAddrBlocked — fail-closed on a mixed set),
+// and otherwise dials PINNED to a checked address literal. No re-resolution
+// happens at connect, so a rebinding DNS cannot steer the connect onto a reserved
+// address after the check. It is the INJECTABLE form of the WBA default client's
+// dial-seam guard — drop it into any *http.Client so a fetch of a caller-supplied
+// host cannot reach an internal target.
 //
-// The check runs in the dialer's Control callback against the ALREADY-RESOLVED
-// address, so it also shuts the DNS-rebinding window: a public A record that
-// re-resolves to 169.254.x is rejected at connect time, not merely at lookup.
-// Pair it with SSRFCheckRedirect on the *http.Client to also vet redirect schemes.
+// base==nil yields a fresh, minimal transport; a non-nil base is cloned so the
+// caller's other transport settings are kept. In BOTH cases the guard forces
+// Proxy=nil: a proxied transport dials the PROXY, so the dial-time check would vet
+// the proxy's address instead of the true target — a full bypass. The dial-time
+// SSRF pin and an egress proxy are therefore mutually exclusive by construction.
+// Pair it with SSRFCheckRedirect on the *http.Client to also vet redirect schemes
+// and bound redirect depth.
 func SSRFGuard(base *http.Transport) *http.Transport {
 	if base == nil {
 		base = &http.Transport{}
 	} else {
 		base = base.Clone()
 	}
-	base.DialContext = (&net.Dialer{Control: ssrfDialControl}).DialContext
+	// A proxied CONNECT would tunnel past the dial-time address check (the dialer
+	// would resolve+check the PROXY, not the destination). Force it off so the
+	// guard always vets the real target.
+	base.Proxy = nil
+	base.DialContext = guardedDialContext
 	return base
 }
 
-// ssrfDialControl is the net.Dialer.Control callback that rejects a dial whose
-// resolved peer is a reserved / non-public address.
-func ssrfDialControl(_, address string, _ syscall.RawConn) error {
-	host, _, err := net.SplitHostPort(address)
+// guardedDialContext is the http.Transport.DialContext that closes the SSRF and
+// DNS-rebinding windows: it resolves the target host, refuses if ANY resolved
+// address is reserved (fail-closed on a mixed set), then dials PINNED to a checked
+// address literal so the connection lands on a vetted peer and no second lookup
+// can steer it. TLS SNI is unaffected — http.Transport sets the server name from
+// the request URL, not from the dialed address.
+func guardedDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	addr, perr := netip.ParseAddr(host)
-	if perr != nil {
-		return fmt.Errorf("resolvers: refusing to dial unresolved address %q (SSRF guard)", address)
+	addrs, err := ssrfResolveChecked(ctx, host)
+	if err != nil {
+		return nil, err
 	}
-	if ssrfBlocked(addr) {
-		return fmt.Errorf("resolvers: refusing to dial non-public address %s (SSRF guard)", addr)
+	var d net.Dialer
+	var dialErr error
+	for _, a := range addrs {
+		conn, cerr := d.DialContext(ctx, network, net.JoinHostPort(a.String(), port))
+		if cerr == nil {
+			return conn, nil
+		}
+		dialErr = cerr
 	}
-	return nil
+	return nil, dialErr
+}
+
+// ssrfResolveChecked resolves host and returns its candidate addresses ONLY if
+// every one is public; otherwise it returns a GENERIC refusal. A bare IP literal
+// is checked directly (no lookup). The error deliberately neither echoes the
+// resolved address nor distinguishes an unresolvable host from a resolved-reserved
+// one, so it cannot serve as a pre-auth DNS oracle against internal networks.
+func ssrfResolveChecked(ctx context.Context, host string) ([]netip.Addr, error) {
+	refuse := fmt.Errorf("resolvers: refusing to dial %q (SSRF guard)", host)
+	if addr, perr := netip.ParseAddr(host); perr == nil {
+		if ssrfBlocked(addr) {
+			return nil, refuse
+		}
+		return []netip.Addr{addr}, nil
+	}
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	if err != nil || len(addrs) == 0 || anyAddrBlocked(addrs) {
+		return nil, refuse
+	}
+	return addrs, nil
 }
 
 // SSRFCheckRedirect is an http.Client.CheckRedirect that bounds redirect depth
-// and re-vets every redirect target's scheme against the deny-by-default
-// http/https allowlist (a scheme denylist is unwinnable — ftp, file, data, …).
-// Redirect ADDRESS re-vetting is automatic when the client's transport is
-// SSRFGuard-wrapped: each redirect makes a fresh guarded dial.
+// (redirectChainRefused, the shared cap) and re-vets every redirect target's
+// scheme against the deny-by-default http/https allowlist (a scheme denylist is
+// unwinnable — ftp, file, data, …). Redirect ADDRESS re-vetting is automatic when
+// the client's transport is SSRFGuard-wrapped: each redirect makes a fresh guarded
+// dial.
 func SSRFCheckRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) >= maxWBARedirects {
+	if redirectChainRefused(len(via)) {
 		return fmt.Errorf("resolvers: too many redirects (SSRF guard)")
 	}
 	if !allowedScheme(req.URL.Scheme) {
@@ -751,14 +815,14 @@ func wbaKeyByThumbprint(f *rampv1.WBAFile, thumbprint string) (*rampv1.JsonWebKe
 // checks (kty/crv/x length) stand in for schema validation of the wire doc.
 func wbaPublicKey(k *rampv1.JsonWebKey) (ed25519.PublicKey, error) {
 	if !strings.EqualFold(k.GetKty(), "OKP") || !strings.EqualFold(k.GetCrv(), "Ed25519") {
-		return nil, fmt.Errorf("helpers: unsupported key type kty=%q crv=%q", k.GetKty(), k.GetCrv())
+		return nil, fmt.Errorf("resolvers: unsupported key type kty=%q crv=%q", k.GetKty(), k.GetCrv())
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(k.GetX())
 	if err != nil {
-		return nil, fmt.Errorf("helpers: decode jwk x: %w", err)
+		return nil, fmt.Errorf("resolvers: decode jwk x: %w", err)
 	}
 	if len(raw) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("helpers: jwk x length %d != %d", len(raw), ed25519.PublicKeySize)
+		return nil, fmt.Errorf("resolvers: jwk x length %d != %d", len(raw), ed25519.PublicKeySize)
 	}
 	return ed25519.PublicKey(raw), nil
 }

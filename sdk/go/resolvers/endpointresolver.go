@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -12,13 +13,19 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 )
 
+// maxWellKnownDocBytes bounds the well-known / JWKS response body read. A hostile
+// or misconfigured origin cannot force an unbounded read into the JSON decoder;
+// well-known documents are small. Mirrors the WBA fetch's maxDocBytes cap and the
+// Python / TS 1 MiB well-known bound so the three SDKs agree on the ceiling.
+const maxWellKnownDocBytes = 1 << 20 // 1 MiB
+
 // ErrNoEndpoint signals that an Exchange's /.well-known/ramp.json was fetched and
 // decoded successfully but advertises no endpoint (WellKnownManifest.endpoint,
 // proto field 12, absent). It is deliberately distinct from a transport or
 // decode failure: the manifest exists, the Exchange simply has not closed the
 // "defined-but-inert endpoint" gap. Callers can tell "Exchange unreachable" from
 // "Exchange reachable but not self-advertising an endpoint".
-var ErrNoEndpoint = errors.New("helpers: well-known manifest has no endpoint")
+var ErrNoEndpoint = errors.New("resolvers: well-known manifest has no endpoint")
 
 // wellKnownDoc is the JSON projection of the subset of WellKnownManifest the SDK
 // resolvers read: the RFC 7517 key set (field 5) and the self-advertised
@@ -42,19 +49,20 @@ type wellKnownDoc struct {
 func fetchWellKnownDoc(ctx context.Context, client *http.Client, url string) (*wellKnownDoc, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("helpers: well-known request: %w", err)
+		return nil, fmt.Errorf("resolvers: well-known request: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("helpers: well-known fetch: %w", err)
+		return nil, fmt.Errorf("resolvers: well-known fetch: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("helpers: well-known status %d", resp.StatusCode)
+		return nil, fmt.Errorf("resolvers: well-known status %d", resp.StatusCode)
 	}
+	// Bound the body read so a hostile origin cannot force an unbounded decode.
 	var doc wellKnownDoc
-	if decErr := json.NewDecoder(resp.Body).Decode(&doc); decErr != nil {
-		return nil, fmt.Errorf("helpers: well-known decode: %w", decErr)
+	if decErr := json.NewDecoder(io.LimitReader(resp.Body, maxWellKnownDocBytes)).Decode(&doc); decErr != nil {
+		return nil, fmt.Errorf("resolvers: well-known decode: %w", decErr)
 	}
 	return &doc, nil
 }
@@ -84,11 +92,21 @@ type endpointEntry struct {
 }
 
 // NewWellKnownEndpointResolver returns a host-keyed resolver. Zero-value options
-// are safe defaults (https scheme, 5-minute TTL, real clock, default client).
+// are safe defaults (https scheme, 5-minute TTL, real clock, SSRF-GUARDED client).
+//
+// The endpoint host is REQUEST-DERIVED: a Broker resolves a per-request,
+// signature-covered Offer.exchange host and this resolver fetches that host's
+// /.well-known/ramp.json. That is the same threat shape as the WBA directory
+// fetch — a caller-influenced host reached over the network — so the default
+// client is SSRF-guarded (NewGuardedClientFromEnv), NOT the unguarded
+// http.DefaultClient. (The fixed-URL WellKnownKeyResolver stays on
+// http.DefaultClient: its URL is an operator-chosen constant, not request-derived.)
+// A deployment that must reach a private/loopback exchange (tests, on-prem) injects
+// its own client via opts.HTTP or opts out via the SKIP_SSRF / ALLOW_INSECURE env flags.
 func NewWellKnownEndpointResolver(opts WellKnownOptions) *WellKnownEndpointResolver {
 	client := opts.HTTP
 	if client == nil {
-		client = http.DefaultClient
+		client = NewGuardedClientFromEnv()
 	}
 	ttl := opts.TTL
 	if ttl <= 0 {

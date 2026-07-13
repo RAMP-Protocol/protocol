@@ -124,8 +124,96 @@ func buildSSRFSchemeVectors() []ssrfSchemeVector {
 	return out
 }
 
-// TestGenerateSSRFVectors emits the shared SSRF address + scheme corpora.
-// Verification no-op by default, (re)writes under RAMP_UPDATE_VECTORS=1.
+// ssrfRedirectVector is one redirect-depth case: a chain of `hops` redirects and
+// whether the guard MUST refuse to follow it. The cap is deny-by-default and
+// SHARED — no SDK may inherit its HTTP library's looser default (~20 hops). The Go
+// emitter self-checks redirectChainRefused; the TS/Python transports replay the
+// exact same verdicts (predicate parity) AND configure their real clients
+// (undici maxRedirections / httpx max_redirects) to the same cap.
+type ssrfRedirectVector struct {
+	Name    string `json:"name"`
+	Hops    int    `json:"hops"`
+	Refused bool   `json:"refused"`
+}
+
+// buildSSRFRedirectVectors is the shared redirect-depth corpus. A chain is
+// followed up to maxWBARedirects hops and refused beyond it; the boundary cases
+// (exactly at, one over) are the ones a per-language default would silently get
+// wrong. The emitter self-checks the Go predicate so a drift fails HERE.
+func buildSSRFRedirectVectors() []ssrfRedirectVector {
+	cases := []struct {
+		name    string
+		hops    int
+		refused bool
+	}{
+		{"no_redirect", 0, false},
+		{"one_hop", 1, false},
+		{"under_cap", 4, false},
+		{"at_cap", maxWBARedirects, false},          // exactly the cap: followed
+		{"one_over_cap", maxWBARedirects + 1, true}, // the next hop: refused
+		{"library_default_20", 20, true},            // the loose library default must be refused
+	}
+	out := make([]ssrfRedirectVector, 0, len(cases))
+	for _, c := range cases {
+		if got := redirectChainRefused(c.hops); got != c.refused {
+			panic(fmt.Sprintf("ssrf redirect drift: %s (hops=%d) redirectChainRefused=%v want %v", c.name, c.hops, got, c.refused))
+		}
+		out = append(out, ssrfRedirectVector{Name: c.name, Hops: c.hops, Refused: c.refused})
+	}
+	return out
+}
+
+// ssrfHostSetVector is one MULTI-ADDRESS host case: the set of addresses a single
+// hostname resolves to and whether the guard MUST refuse the WHOLE host. The
+// oracle is conservative and single-rule: fail closed if ANY resolved address is
+// reserved (so a rebinding / round-robin DNS answer cannot land a later connect on
+// the reserved member). The Go emitter self-checks anyAddrBlocked; TS/Python replay it.
+type ssrfHostSetVector struct {
+	Name    string   `json:"name"`
+	Addrs   []string `json:"addrs"`
+	Blocked bool     `json:"blocked"`
+}
+
+// buildSSRFHostSetVectors is the shared multi-address corpus. The interesting
+// cases are the MIXED sets: a hostname that resolves to [public, reserved] must be
+// refused outright, matching the conservative single-rule oracle all three SDKs
+// converge on. The emitter self-checks anyAddrBlocked against the intended verdict.
+func buildSSRFHostSetVectors(t *testing.T) []ssrfHostSetVector {
+	cases := []struct {
+		name    string
+		addrs   []string
+		blocked bool
+	}{
+		{"all_public", []string{"8.8.8.8", "2606:4700:4700::1111"}, false},
+		{"single_public", []string{"93.184.216.34"}, false},
+		{"single_reserved", []string{"127.0.0.1"}, true},
+		{"public_then_loopback", []string{"93.184.216.34", "127.0.0.1"}, true}, // mixed: fail closed
+		{"loopback_then_public", []string{"127.0.0.1", "8.8.8.8"}, true},       // order-independent
+		{"public_then_imds", []string{"8.8.8.8", "169.254.169.254"}, true},     // rebinding/round-robin evasion
+		{"dual_stack_public", []string{"93.184.216.34", "2001:4860:4860::8888"}, false},
+		{"public_v6_then_ula", []string{"2606:4700:4700::1111", "fc00::1"}, true},
+	}
+	out := make([]ssrfHostSetVector, 0, len(cases))
+	for _, c := range cases {
+		addrs := make([]netip.Addr, 0, len(c.addrs))
+		for _, s := range c.addrs {
+			a, err := netip.ParseAddr(s)
+			if err != nil {
+				t.Fatalf("hostset vector %s: parse %q: %v", c.name, s, err)
+			}
+			addrs = append(addrs, a)
+		}
+		if got := anyAddrBlocked(addrs); got != c.blocked {
+			t.Fatalf("ssrf hostset drift: %s anyAddrBlocked=%v want %v", c.name, got, c.blocked)
+		}
+		out = append(out, ssrfHostSetVector{Name: c.name, Addrs: c.addrs, Blocked: c.blocked})
+	}
+	return out
+}
+
+// TestGenerateSSRFVectors emits the shared SSRF address + scheme + redirect +
+// host-set corpora. Verification no-op by default, (re)writes under
+// RAMP_UPDATE_VECTORS=1.
 func TestGenerateSSRFVectors(t *testing.T) {
 	docs := []struct {
 		file string
@@ -133,6 +221,8 @@ func TestGenerateSSRFVectors(t *testing.T) {
 	}{
 		{"ssrf-address-vectors.json", map[string]any{"vectors": buildSSRFAddressVectors(t)}},
 		{"ssrf-scheme-vectors.json", map[string]any{"vectors": buildSSRFSchemeVectors()}},
+		{"ssrf-redirect-vectors.json", map[string]any{"vectors": buildSSRFRedirectVectors()}},
+		{"ssrf-hostset-vectors.json", map[string]any{"vectors": buildSSRFHostSetVectors(t)}},
 	}
 	for _, d := range docs {
 		path := filepath.Join("testdata", d.file)

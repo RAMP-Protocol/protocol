@@ -104,7 +104,7 @@ func schemeGuardAllows(scheme string) bool {
 // ALLOW_INSECURE); the redirect target's ADDRESS is re-pinned automatically by
 // the guarded dialer when the address guard is on.
 func schemeCheckRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) >= maxWBARedirects {
+	if redirectChainRefused(len(via)) {
 		return fmt.Errorf("resolvers: too many redirects (SSRF guard)")
 	}
 	if !schemeGuardAllows(req.URL.Scheme) {

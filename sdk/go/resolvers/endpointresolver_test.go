@@ -56,7 +56,8 @@ func TestWellKnownEndpointResolver_perHostIsolation(t *testing.T) {
 
 	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{
 		TTL:    time.Hour,
-		Scheme: "http", // httptest serves plain HTTP; production default is https
+		Scheme: "http",             // httptest serves plain HTTP; production default is https
+		HTTP:   http.DefaultClient, // default is now SSRF-guarded; inject unguarded for loopback
 	})
 
 	gotA, err := r.ResolveEndpoint(context.Background(), hostOf(t, srvA))
@@ -85,6 +86,7 @@ func TestWellKnownEndpointResolver_cacheHit(t *testing.T) {
 	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{
 		TTL:    time.Hour,
 		Scheme: "http",
+		HTTP:   http.DefaultClient,
 	})
 	host := hostOf(t, srv)
 	if got, err := r.ResolveEndpoint(context.Background(), host); err != nil || got != ep {
@@ -111,6 +113,7 @@ func TestWellKnownEndpointResolver_ttlRefresh(t *testing.T) {
 		TTL:    time.Minute,
 		Scheme: "http",
 		Now:    func() time.Time { return now },
+		HTTP:   http.DefaultClient,
 	})
 	host := hostOf(t, srv)
 	if _, err := r.ResolveEndpoint(context.Background(), host); err != nil {
@@ -133,7 +136,9 @@ func TestWellKnownEndpointResolver_non200(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{Scheme: "http"})
+	// Inject an unguarded client: the default is now SSRF-guarded (would refuse the
+	// loopback httptest origin); this test exercises the fetch/decode path, not the guard.
+	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{Scheme: "http", HTTP: http.DefaultClient})
 	if got, err := r.ResolveEndpoint(context.Background(), hostOf(t, srv)); err == nil {
 		t.Errorf("ResolveEndpoint = %q, nil; want error on non-200", got)
 	}
@@ -147,7 +152,9 @@ func TestWellKnownEndpointResolver_decodeFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{Scheme: "http"})
+	// Inject an unguarded client: the default is now SSRF-guarded (would refuse the
+	// loopback httptest origin); this test exercises the fetch/decode path, not the guard.
+	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{Scheme: "http", HTTP: http.DefaultClient})
 	if got, err := r.ResolveEndpoint(context.Background(), hostOf(t, srv)); err == nil {
 		t.Errorf("ResolveEndpoint = %q, nil; want error on malformed body", got)
 	}
@@ -162,7 +169,9 @@ func TestWellKnownEndpointResolver_missingEndpointField(t *testing.T) {
 	srv := httptest.NewServer(manifestHandler(nil, &hits)) // valid manifest, no endpoint
 	defer srv.Close()
 
-	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{Scheme: "http"})
+	// Inject an unguarded client: the default is now SSRF-guarded (would refuse the
+	// loopback httptest origin); this test exercises the fetch/decode path, not the guard.
+	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{Scheme: "http", HTTP: http.DefaultClient})
 	got, err := r.ResolveEndpoint(context.Background(), hostOf(t, srv))
 	if err == nil {
 		t.Fatalf("ResolveEndpoint = %q, nil; want error on missing endpoint field", got)
