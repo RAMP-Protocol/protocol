@@ -36,6 +36,7 @@ from __future__ import annotations
 import asyncio
 import os
 import socket
+import threading
 from typing import Any
 
 import httpcore
@@ -47,6 +48,17 @@ from ramp_sdk.resolvers.errors import DirectoryUnavailableError
 _MAX_DOC_BYTES = 1 << 20  # 1 MiB — well-known documents are small
 _TIMEOUT_S = 10.0
 _HTTP_OK = 200
+
+# Overall wall-clock budget for ONE guarded GET. httpx's timeout is PER-PHASE
+# (connect / read / write / pool) and does NOT cover the getaddrinfo the guarded
+# backend runs before handing off to httpcore, so a slow or hostile DNS answer
+# could otherwise pin a Resolve call or the revocation poller with no total bound.
+# This caps the whole operation: the blocking work runs in a daemon thread the
+# caller abandons on timeout (see _call_with_deadline), so a stuck getaddrinfo
+# leaks a harmless daemon thread rather than blocking forever. Module-level so a
+# test can shrink it. Generous vs _TIMEOUT_S so a genuinely slow-but-alive fetch is
+# not cut, yet the previously-unbounded resolution now has a ceiling.
+_TOTAL_FETCH_DEADLINE_S = 30.0
 
 # The two orthogonal env flags the ONE guarded-client factory reads. Both default
 # off (the guarded posture); an operator opts out of a guard by setting its flag.
@@ -87,20 +99,16 @@ class _GuardedBackend(httpcore.SyncBackend):
     """
 
     def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        # Every refuse reason raises the SAME generic error (see _ssrf.refusal): it
+        # neither echoes the resolved IP nor distinguishes an unresolvable host from
+        # a resolved-reserved one, so it cannot be a pre-auth DNS oracle.
         try:
             infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
         except OSError as exc:
-            raise _ssrf.SsrfError(
-                f"refusing to dial {host!r}: resolution failed (SSRF guard)"
-            ) from exc
-        if not infos:
-            raise _ssrf.SsrfError(f"refusing to dial {host!r}: no addresses (SSRF guard)")
-        for info in infos:
-            ip = info[4][0]
-            if _ssrf.blocked_address(ip):
-                raise _ssrf.SsrfError(
-                    f"refusing to dial non-public address {ip} for host {host!r} (SSRF guard)"
-                )
+            raise _ssrf.refusal(host) from exc
+        if not infos or any(_ssrf.blocked_address(info[4][0]) for info in infos):
+            # Fail closed on a MIXED public/reserved answer too (any-reserved rule).
+            raise _ssrf.refusal(host)
         pinned = infos[0][4][0]  # checked IP literal → no re-resolution at connect
         return super().connect_tcp(pinned, port, timeout, local_address, socket_options)
 
@@ -192,6 +200,7 @@ def guarded_client(**httpx_kwargs: Any) -> httpx.Client:
     tunnel a private target past the dial guard. Extra kwargs pass to
     ``httpx.Client``."""
     httpx_kwargs.setdefault("follow_redirects", True)
+    httpx_kwargs.setdefault("max_redirects", _ssrf.MAX_REDIRECTS)  # shared deny-by-default cap
     httpx_kwargs.setdefault("timeout", _TIMEOUT_S)
     httpx_kwargs.setdefault("trust_env", False)  # no env proxy tunnels past the dial guard
     inner = httpx.HTTPTransport() if _skip_ssrf() else ssrf_guard()
@@ -220,20 +229,21 @@ class _AsyncGuardedBackend(httpcore.AnyIOBackend):
     # a knob of ours to redesign as asyncio.timeout — hence the ASYNC109 waiver.
     async def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):  # noqa: ASYNC109
         loop = asyncio.get_running_loop()
+        # Bound the resolution: httpx's per-phase timeout does not cover our
+        # getaddrinfo, so cap it explicitly (an overall wall-clock budget) — a slow
+        # or hostile DNS answer cannot stall the loop past the deadline. Every refuse
+        # reason raises the SAME generic error (no resolved IP, no NXDOMAIN-vs-private
+        # distinction) so it cannot be a pre-auth DNS oracle.
         try:
-            infos = await loop.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-        except OSError as exc:
-            raise _ssrf.SsrfError(
-                f"refusing to dial {host!r}: resolution failed (SSRF guard)"
-            ) from exc
-        if not infos:
-            raise _ssrf.SsrfError(f"refusing to dial {host!r}: no addresses (SSRF guard)")
-        for info in infos:
-            ip = info[4][0]
-            if _ssrf.blocked_address(ip):
-                raise _ssrf.SsrfError(
-                    f"refusing to dial non-public address {ip} for host {host!r} (SSRF guard)"
-                )
+            infos = await asyncio.wait_for(
+                loop.getaddrinfo(host, port, proto=socket.IPPROTO_TCP),
+                timeout=_TOTAL_FETCH_DEADLINE_S,
+            )
+        except OSError as exc:  # OSError covers TimeoutError (asyncio.wait_for) too
+            raise _ssrf.refusal(host) from exc
+        if not infos or any(_ssrf.blocked_address(info[4][0]) for info in infos):
+            # Fail closed on a MIXED public/reserved answer too (any-reserved rule).
+            raise _ssrf.refusal(host)
         pinned = infos[0][4][0]  # checked IP literal → no re-resolution at connect
         return await super().connect_tcp(pinned, port, timeout, local_address, socket_options)
 
@@ -277,6 +287,7 @@ def guarded_async_client(**httpx_kwargs: Any) -> httpx.AsyncClient:
     dials through a no-proxy transport (``trust_env=False``). Extra keyword
     arguments pass through to ``httpx.AsyncClient``."""
     httpx_kwargs.setdefault("follow_redirects", True)
+    httpx_kwargs.setdefault("max_redirects", _ssrf.MAX_REDIRECTS)  # shared deny-by-default cap
     httpx_kwargs.setdefault("timeout", _TIMEOUT_S)
     httpx_kwargs.setdefault("trust_env", False)  # no env proxy tunnels past the dial guard
     inner = httpx.AsyncHTTPTransport() if _skip_ssrf() else async_ssrf_guard()
@@ -292,10 +303,42 @@ def default_client() -> httpx.Client:
     SSRF guard is not warranted — matching the Go oracle, which guards only the
     WBA client.
     """
-    return httpx.Client(follow_redirects=True, timeout=_TIMEOUT_S)
+    return httpx.Client(
+        follow_redirects=True, max_redirects=_ssrf.MAX_REDIRECTS, timeout=_TIMEOUT_S
+    )
 
 
-def _get_bounded(client: httpx.Client, url: str) -> tuple[int, bytes]:
+def _call_with_deadline(fn: Any, deadline_s: float, url: str) -> tuple[int, bytes]:
+    """Run ``fn`` under an OVERALL wall-clock budget and return its result.
+
+    The blocking work (getaddrinfo + the httpx stream) runs in a DAEMON thread; if
+    it has not finished within ``deadline_s`` the caller returns with a
+    ``TimeoutError`` (an ``OSError``, so it flows through fetch_strict/fetch_soft's
+    transport-failure arms) and the stuck thread is abandoned — a hostile DNS /
+    origin cannot pin the caller past the budget. A daemon thread never blocks
+    interpreter exit, so an abandoned getaddrinfo leaks harmlessly.
+    """
+    box: dict[str, Any] = {}
+    done = threading.Event()
+
+    def _worker() -> None:
+        try:
+            box["value"] = fn()
+        except Exception as exc:  # captured and re-raised on the caller thread
+            box["error"] = exc
+        finally:
+            done.set()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    if not done.wait(deadline_s):
+        raise TimeoutError(f"guarded fetch exceeded {deadline_s}s budget for {url}")
+    if "error" in box:
+        raise box["error"]
+    result: tuple[int, bytes] = box["value"]
+    return result
+
+
+def _stream_bounded(client: httpx.Client, url: str) -> tuple[int, bytes]:
     """GET ``url`` → (status, body), the body bounded to ``_MAX_DOC_BYTES``.
 
     Streams so a hostile origin cannot force an unbounded read; a non-2xx returns
@@ -313,6 +356,16 @@ def _get_bounded(client: httpx.Client, url: str) -> tuple[int, bytes]:
             if total >= _MAX_DOC_BYTES:
                 break
         return _HTTP_OK, b"".join(chunks)[:_MAX_DOC_BYTES]
+
+
+def _get_bounded(client: httpx.Client, url: str) -> tuple[int, bytes]:
+    """GET ``url`` → (status, body) under the overall wall-clock budget.
+
+    Wraps :func:`_stream_bounded` in :func:`_call_with_deadline` so the whole GET —
+    including the getaddrinfo the guarded backend runs, which httpx's per-phase
+    timeout does not cover — is bounded by ``_TOTAL_FETCH_DEADLINE_S``.
+    """
+    return _call_with_deadline(lambda: _stream_bounded(client, url), _TOTAL_FETCH_DEADLINE_S, url)
 
 
 def fetch_strict(client: httpx.Client, url: str) -> bytes:

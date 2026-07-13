@@ -76,10 +76,6 @@ select = [
 # fix. The poll jitter is not security-sensitive (mirrors Go math/rand). PLR0913
 # (arg count) and S311 (non-crypto random) are waived for exactly this module.
 "ramp_sdk/resolvers/wba.py" = ["PLR0913", "S311"]
-# The default transport is a bounded stdlib urllib GET. Per the Go SSRF contract
-# the SDK exposes the injection point and the SSRF guard stays with the caller;
-# S310 (urllib url-open) is the intended, documented shape here.
-"ramp_sdk/resolvers/_http.py" = ["S310"]
 # SigningTransport exposes the sign-window seam as an INJECTION point: signer_seed
 # and keyid are identity, now/ttl_sec are the default clock+TTL, signature_agent is
 # the covered directory, and window is the injectable Window (mirroring the Go
