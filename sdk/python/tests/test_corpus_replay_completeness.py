@@ -54,18 +54,9 @@ _SKIP_DIR_PARTS = frozenset(
 
 # Documented, shrink-only exemptions: (corpus basename, language) that is KNOWN to
 # lack a replay, with the reason. Each is re-verified below to STILL be missing, so
-# it fails (and must be deleted) once the replay is added.
-_EXEMPT: dict[tuple[str, str], str] = {
-    (
-        "wire-canonical-vectors.json",
-        "ts",
-    ): (
-        "TS has no wire-canonicalization replay of this corpus: sdk/ts's wire parity "
-        "(wire.parity.test.ts) covers the wire-CONSTANTS corpus, and the canonical-bytes "
-        "path is exercised Go+Python only (test_wire_canon.py). Remove this exemption when "
-        "sdk/ts gains a wire-canonical replay."
-    ),
-}
+# it fails (and must be deleted) once the replay is added. Now EMPTY: every shared
+# corpus is replayed by all three SDKs.
+_EXEMPT: dict[tuple[str, str], str] = {}
 
 
 def _corpus_files() -> list[pathlib.Path]:

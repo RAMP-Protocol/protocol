@@ -14,6 +14,7 @@
     "./crossfield": "./src/crossfield.ts",
     "./errordetail": "./src/errordetail.ts",
     "./core": "./core/verifier.ts",
+    "./core/wire-canon": "./core/wire-canon.ts",
     "./core/sign": "./core/sign.ts",
     "./core/sign-request": "./core/sign-request.ts",
     "./core/verify-request": "./core/verify-request.ts",
