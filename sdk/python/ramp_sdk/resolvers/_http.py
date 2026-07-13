@@ -1,9 +1,13 @@
 """The one HTTP transport seam the fetching resolvers share.
 
 The resolvers do their network I/O through ``httpx`` — an L2 runtime dependency.
-The SDK's trust core (``ramp_sdk.core`` / the signing primitives) stays
-dependency-free and IO-free; only these fetching faces take a maintained HTTP
-client. httpx owns the response state machine — status codes, redirects, 1xx,
+The SDK's trust core (``ramp_sdk.core`` / the signing primitives) IMPORTS no
+third-party HTTP client and is IO-free; only these fetching faces take a
+maintained one. (httpx/httpcore are still HARD package dependencies — the L1 and
+L2 tiers ship as one distribution and the version ceilings that guard the
+private-internals SSRF seam must bind every install — so "dependency-free"
+scopes the CORE IMPORT surface, not the wheel; see pyproject.) httpx owns the
+response state machine — status codes, redirects, 1xx,
 decompression — so this module owns only two things: the SSRF guard (a
 connection-level hook) and the fail-closed status→body taxonomy the resolvers
 rely on. There is no hand-rolled ``urllib`` handler chain to keep correct.
@@ -101,6 +105,37 @@ class _GuardedBackend(httpcore.SyncBackend):
         return super().connect_tcp(pinned, port, timeout, local_address, socket_options)
 
 
+def _install_guarded_backend(
+    transport: httpx.HTTPTransport | httpx.AsyncHTTPTransport, backend: object
+) -> None:
+    """Swap ``transport``'s httpcore network backend for ``backend``, FAILING CLOSED
+    if the private seam this depends on has moved.
+
+    The guard attaches via ``transport._pool._network_backend`` — httpx/httpcore
+    PRIVATE internals with no stability contract. A future release that renamed
+    them would make a bare assignment a silent no-op (Python creates a dead
+    attribute, no error) and leave the fetch path UNGUARDED — a pre-auth SSRF
+    regression that ships green. So: verify the attribute EXISTS before assigning
+    (a rename of ``_pool`` or ``_network_backend`` raises here, loudly, rather than
+    dialing unguarded), then verify the swap actually took the object AFTER. The
+    upper version pin (pyproject) keeps us on verified internals; this is the
+    runtime backstop if the pin is ever loosened past a breaking release.
+    """
+    pool = getattr(transport, "_pool", None)
+    if pool is None or not hasattr(pool, "_network_backend"):
+        raise RuntimeError(
+            "SSRF guard cannot attach: httpx transport no longer exposes "
+            "_pool._network_backend (httpx/httpcore internals changed). Refusing to "
+            "return an UNGUARDED client — verify the internals and pin httpx<0.29, httpcore<2."
+        )
+    pool._network_backend = backend
+    if pool._network_backend is not backend:
+        raise RuntimeError(
+            "SSRF guard install did not take effect: transport._pool._network_backend "
+            "did not accept the guarded backend (httpx/httpcore internals changed)."
+        )
+
+
 def ssrf_guard() -> httpx.HTTPTransport:
     """An SSRF-guarded httpx transport, injectable into any ``httpx.Client``.
 
@@ -116,7 +151,8 @@ def ssrf_guard() -> httpx.HTTPTransport:
     # httpx.HTTPTransport builds an httpcore ConnectionPool with all the right ssl
     # context/limits; we only swap its network backend so every connection dials
     # through the SSRF check. Set before first use so all connections pick it up.
-    transport._pool._network_backend = _GuardedBackend()
+    # Fail-closed if the private seam moved — never return an unguarded transport.
+    _install_guarded_backend(transport, _GuardedBackend())
     return transport
 
 
@@ -211,7 +247,8 @@ def async_ssrf_guard() -> httpx.AsyncHTTPTransport:
     :class:`~ramp_sdk.resolvers._ssrf.SsrfError` (an ``OSError``).
     """
     transport = httpx.AsyncHTTPTransport()
-    transport._pool._network_backend = _AsyncGuardedBackend()
+    # Fail-closed if the private seam moved — never return an unguarded transport.
+    _install_guarded_backend(transport, _AsyncGuardedBackend())
     return transport
 
 
