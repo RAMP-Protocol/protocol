@@ -12,6 +12,7 @@
     "./offer-sign": "./src/offer-sign.ts",
     "./pop": "./src/pop.ts",
     "./crossfield": "./src/crossfield.ts",
+    "./errordetail": "./src/errordetail.ts",
     "./core": "./core/verifier.ts",
     "./core/sign": "./core/sign.ts",
     "./core/sign-request": "./core/sign-request.ts",
