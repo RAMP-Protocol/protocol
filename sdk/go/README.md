@@ -7,14 +7,25 @@ directly with no `replace` directive.
 | Layer | Package | What it is |
 |---|---|---|
 | **L0** | `gen/go/ramp/v1`, `gen/go/vocab/*` | generated wire types (consumed, never rebuilt) |
-| **L1** | **`sdk/go/helpers`** | stateless protocol helpers — **this is what ships in RAMP-96** |
-| L2 | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + client options + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + server options + `AsConnectError` + reject→code) | transport-neutral core + Connect client/server bindings (state injected) |
+| **L1** | **`sdk/go/helpers`** | stateless, **IO-free** protocol helpers — RFC 9421/7638 crypto, offer/acceptance verify, static key resolution, validation |
+| L2 · I/O | **`sdk/go/resolvers`** | the network-fetching tier: well-known JWKS / WBA directory / `ramp.json` endpoint / offer-key resolvers + the SSRF-guarded HTTP client. Runs on a maintained `net/http` client behind the SSRF guard; composes L1, never the reverse |
+| L2 · transport | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + client options + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + server options + `AsConnectError` + `AttachErrorDetail`/`AttachDetail` + reject→code) | transport-neutral core + Connect client/server bindings (state injected) |
 | L3 | separate packages | framework adapters (convert, never replace) — later |
+
+The `L2` tier is split by kind: the **I/O** package (`resolvers`) is the only tier
+that dials the network (it holds the maintained HTTP client and the SSRF guard),
+while the **transport** packages (`core` / `connect` / `connectserver`) are
+transport-neutral composition and Connect bindings with no network fetch of their
+own. An io-leaf guard (`helpers/io_leaf_guard_test.go`) fails the build if any pure
+L1 file drags in a dialing surface, so the fetch surface cannot leak back down.
 
 ## L1 — `helpers`
 
-Stateless, no IO (except the well-known fetch), no secret custody, no state. The
-same code the Broker, Exchange, MCP, Edge, and external implementors build on.
+Stateless, **no network IO** (no HTTP client, no dial), no secret custody, no state.
+The same code the Broker, Exchange, MCP, Edge, and external implementors build on.
+(The well-known JWKS, WBA-directory, and `ramp.json` endpoint fetches moved one tier
+up into `sdk/go/resolvers`; `helpers` keeps only the pure `KeyResolver` interface and
+the static resolver.)
 
 ```go
 import "github.com/RAMP-Protocol/protocol/sdk/go/helpers"
@@ -30,7 +41,7 @@ _ = helpers.SignRequest(ctx, req, body, signer,
 
 // verify with the key injected (pure) ...
 vr, err := helpers.VerifyRequest(req, body, pub, helpers.VerifyOptions{})
-// ... or resolve the key via a KeyResolver (well-known / static / custom):
+// ... or resolve the key via a KeyResolver (static in L1; well-known/WBA in L2 resolvers):
 vr, err = helpers.VerifyRequestResolved(ctx, req, body, resolver, helpers.VerifyOptions{})
 ```
 
@@ -65,6 +76,35 @@ if err := helpers.Validate(req); err != nil { /* helpers.ValidationRuleIDs(err) 
 
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers.
+
+## L2 · I/O — `resolvers`
+
+The network-fetching tier. Everything that dials a third-party-influenceable host
+lives here, behind a single SSRF-guarded HTTP client, so the pre-auth-reachable
+network surface never enters the pure trust core:
+
+```go
+import "github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
+```
+
+- **Key resolvers** — `NewWellKnownKeyResolver` (well-known JWKS, TTL cache),
+  `NewWBAKeyResolver` (WBA directory, revocation/expiry-aware, with a `Run` poller).
+- **Endpoint resolver** — `NewWellKnownEndpointResolver` discovers an Exchange's
+  `retrieval_endpoint` from `/.well-known/ramp.json` (`ErrNoEndpoint` when absent).
+- **Active-key selection** — `ActiveEd25519Key` / `ActiveEd25519KeyWithExpiry` pick
+  an identity's window-active key by document order; the `…Screened` variants fold in
+  a revoked-thumbprint screen. `NewCachedOfferKeyResolver` caches the selected offer
+  key with an expiry clamped to the key's `not_after`.
+- **SSRF-guarded client** — `NewGuardedClientFromEnv` is the single construction path
+  every fetch uses; `SSRFGuard` / `SSRFCheckRedirect` are the injectable dial-time
+  address guard and redirect re-vet for callers wiring their own `http.Client`.
+
+The guard is driven by exactly two orthogonal env flags — `SKIP_SSRF` (drop the
+dial-time address guard) and `ALLOW_INSECURE` (permit plaintext http) — both
+defaulting to the guarded posture. The transport caps redirect depth at 5, caps
+well-known/JWKS bodies at 1 MiB, and fails closed if **any** resolved address of a
+host is reserved. The address/scheme decisions are corpus-locked
+(`resolvers/testdata/ssrf-*-vectors.json`).
 
 ## Guarantees
 
