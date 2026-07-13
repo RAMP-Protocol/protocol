@@ -1,4 +1,4 @@
-"""Durable ratchet: every shared corpus MUST be replayed by ALL THREE SDKs.
+"""Hard gate: every shared corpus MUST be replayed by ALL THREE SDKs. No exemptions.
 
 The shared-corpus convention (sdk/go emits a *-vectors.json oracle; sdk/python and
 sdk/ts replay it) only prevents divergence if EVERY committed corpus is actually
@@ -14,9 +14,10 @@ committed ``testdata/*-vectors.json`` and asserts each is referenced by a Go
 emitter/consumer AND a Python replay AND a TS replay — so an emitted-but-unreplayed
 corpus fails CI the moment it is committed.
 
-Exemptions are an explicit, documented allowlist that may only SHRINK: each entry is
-re-verified to STILL be genuinely unreferenced, so the day a language adds the missing
-replay the now-stale exemption fails and must be removed (a ratchet, not an escape hatch).
+There is deliberately NO exemption mechanism — no allowlist, no opt-out, no per-corpus
+waiver. A new shared corpus is replayed in all three languages in the same change, or
+it does not land. The count of un-replayed corpora is zero, always, with no way to
+make it anything else.
 """
 
 from __future__ import annotations
@@ -52,12 +53,6 @@ _SKIP_DIR_PARTS = frozenset(
     }
 )
 
-# Documented, shrink-only exemptions: (corpus basename, language) that is KNOWN to
-# lack a replay, with the reason. Each is re-verified below to STILL be missing, so
-# it fails (and must be deleted) once the replay is added. Now EMPTY: every shared
-# corpus is replayed by all three SDKs.
-_EXEMPT: dict[tuple[str, str], str] = {}
-
 
 def _corpus_files() -> list[pathlib.Path]:
     """Every committed shared corpus (both the L1 helpers and L2 resolvers homes)."""
@@ -89,37 +84,14 @@ def test_corpus_enumeration_is_nonempty() -> None:
 
 
 def test_every_corpus_is_replayed_by_all_three_sdks() -> None:
-    """Each committed corpus must be consumed by go + python + ts (or be exempt)."""
+    """Each committed corpus MUST be consumed by go + python + ts. No exemptions."""
     orphans: list[str] = []
     for corpus in _corpus_files():
         basename = corpus.name
         for lang, (tree, ext) in _LANG_TREES.items():
-            if (basename, lang) in _EXEMPT:
-                continue
             if not _is_referenced(basename, tree, ext):
                 orphans.append(
                     f"{basename}: no {lang} replay — an orphaned corpus asserts nothing; "
-                    f"add a {lang} replay or an _EXEMPT entry (with a reason)"
+                    f"add the {lang} replay (there is no exemption)"
                 )
     assert not orphans, "orphaned shared corpora (emitted but not replayed):\n" + "\n".join(orphans)
-
-
-def test_exemptions_are_still_needed() -> None:
-    """The exemption allowlist may only SHRINK: each entry must name a corpus that
-    STILL exists and is STILL genuinely unreferenced in that language. When the
-    replay is added, its exemption goes stale and this test fails until it is removed."""
-    present = {c.name for c in _corpus_files()}
-    stale: list[str] = []
-    for (basename, lang), reason in _EXEMPT.items():
-        assert reason.strip(), f"exemption ({basename}, {lang}) must carry a reason"
-        if basename not in present:
-            stale.append(f"({basename}, {lang}): corpus no longer exists — drop the exemption")
-            continue
-        tree, ext = _LANG_TREES[lang]
-        if _is_referenced(basename, tree, ext):
-            stale.append(
-                f"({basename}, {lang}): a {lang} replay now exists — drop this stale exemption"
-            )
-    assert not stale, "stale corpus-replay exemptions (the ratchet must shrink):\n" + "\n".join(
-        stale
-    )

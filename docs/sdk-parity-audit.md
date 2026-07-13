@@ -163,7 +163,7 @@ generators. Consumption:
 | verify-request-neg-vectors.json | ✅ | ✅ | ✅ |
 | multisig-chain-vectors.json | ✅ | ✅ (`multisig-chain.parity.test.ts`) | ✅ |
 | error-detail-vectors.json | ✅ | ✅ (`errordetail.parity.test.ts`) | ✅ |
-| wire-canonical-vectors.json | ✅ | **❌** (no TS from-wire face; the one documented ratchet exemption) | ✅ |
+| wire-canonical-vectors.json | ✅ | ✅ (`wire-canonical.parity.test.ts`, `fromWireOffer`) | ✅ |
 | conformance/corpus/crossfield.json | ✅ | ✅ | ✅ |
 | resolvers: active-ed25519-key-vectors.json | ✅ | ✅ | ✅ |
 | resolvers: revocation-membership-vectors.json | ✅ | ✅ | ✅ |
@@ -176,11 +176,11 @@ silently asserts nothing (exactly how the SSRF redirect-depth and multi-address 
 once slipped through: their vector files existed but no test read them). This is now a
 hard gate: `sdk/python/tests/test_corpus_replay_completeness.py` enumerates every
 `testdata/*-vectors.json` in both homes and fails CI unless each is referenced by a Go
-emitter/consumer AND a Python replay AND a TS replay. It carries a single **shrink-only**
-exemption — `(wire-canonical-vectors.json, ts)` — re-verified each run to still be
-genuinely absent, so it must be deleted the day TS gains that replay (a ratchet, not an
-escape hatch). **Rule:** whenever a new SDK behavior has a byte-deterministic oracle, add
-its corpus AND all three replays in the same change, or the gate rejects it.
+emitter/consumer AND a Python replay AND a TS replay. There is deliberately **NO
+exemption mechanism** — no allowlist, no opt-out, no per-corpus waiver: the count of
+un-replayed corpora is zero, always, with no way to make it anything else. **Rule:**
+whenever a new SDK behavior has a byte-deterministic oracle, add its corpus AND all
+three replays in the same change, or the gate rejects it.
 
 The parity-doc claim "TS consumes acceptance vectors byte-identical" is **verified
 true** (`acceptance.parity.test.ts:100,105` assert `canonical_jcs` and

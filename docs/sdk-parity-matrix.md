@@ -79,9 +79,10 @@ the L2 I/O corpora under `sdk/go/resolvers/testdata`. **Completeness ratchet (bi
 `sdk/python/tests/test_corpus_replay_completeness.py`, which enumerates every corpus in
 both homes and fails CI unless each is referenced by a Go emitter/consumer AND a Python
 replay AND a TS replay — so an emitted-but-unreplayed corpus (an "orphan" that silently
-asserts nothing) cannot ship. The gate carries a single **shrink-only** exemption:
-`(wire-canonical-vectors.json, ts)`, re-verified on every run to still be genuinely
-absent, so it must be deleted the moment TS gains a wire-canonical replay. Whenever you
+asserts nothing) cannot ship. There is deliberately **NO exemption mechanism** — no
+allowlist, no opt-out, no per-corpus waiver: a new corpus is replayed in all three
+languages in the same change or it does not land; the count of un-replayed corpora is
+zero, always. Whenever you
 add a behavior with a byte-deterministic oracle, add its corpus AND all three replays in
 the same change — the ratchet will otherwise reject it.
 
