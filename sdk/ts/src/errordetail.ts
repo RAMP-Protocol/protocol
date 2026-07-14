@@ -1,24 +1,42 @@
 import type { z } from "zod";
+import type {
+	CatalogRejectionReasonSchema,
+	DenialReasonSchema,
+	DisputeFailureReasonSchema,
+	DomainVerificationFailureReasonSchema,
+	RegistrationFailureReasonSchema,
+	RetrievalAuthFailureReasonSchema,
+	UsageReportRejectionReasonSchema,
+} from "../../../gen/ts/wire/schemas.ts";
 import { ErrorDetailSchema } from "../../../gen/ts/wire/schemas.ts";
 
-// ADR-019 ErrorDetail reader (the READ half of the error contract).
+// ADR-019 ErrorDetail reader + typed detail builders (both halves of the contract).
 //
 // RAMP's failure envelope is a typed ErrorDetail attached to the transport error:
 // the Connect/gRPC Code is the coarse class, the ErrorDetail oneof carries the
 // precise machine-readable reason. Clients branch on the typed reason, never on the
 // human `message` string.
 //
-// The edge worker is a CONSUMER of Connect error envelopes emitted by the
-// Broker / Exchange, so it needs the READ direction: extract the ErrorDetail
-// (domain, message, metadata, and the typed reason if present) and branch on the
-// reason enum. This is the TS peer of the Go client binding's ErrorDetailFrom plus
-// the transport-neutral helpers.Reason accessor (sdk/go/connect + sdk/go/helpers).
+// READ half — the edge worker is a CONSUMER of Connect error envelopes emitted by
+// the Broker / Exchange, so it extracts the ErrorDetail (domain, message, metadata,
+// and the typed reason if present) and branches on the reason enum. This is the TS
+// peer of the Go client binding's ErrorDetailFrom plus the transport-neutral
+// helpers.Reason accessor (sdk/go/connect + sdk/go/helpers).
 //
-// Reader-only by design: the EMIT/attach half (build an ErrorDetail and stamp it
-// onto a *connect.Error) lives server-side in the Go connectserver binding, which
-// is where RAMP services classify and emit errors. No TS service currently emits
-// ErrorDetail, so a TS builder would have no consumer; the byte-parity that matters
-// here is the decode, gated by error-detail-vectors.json.
+// WRITE half — the seven typed *Detail builders below are the TS peers of the Go
+// helpers.*Detail constructors (sdk/go/helpers/errordetail.go). Each builds an
+// ErrorDetail carrying exactly one typed reason oneof block from
+// (domain, message, reason), mirroring Go one-for-one: the builder sets ONLY the
+// reason block and omits the reason message's extra sub-fields (offer_id,
+// rejected_paths, …) — a caller that needs them, or metadata, mutates the returned
+// object post-construction, exactly as the Go emitter does. A TS service (RAMP-24)
+// now emits the same typed envelope a Go service does; byte-parity of both halves is
+// gated by error-detail-vectors.json, replayed in Go + Python + TS.
+//
+// Construction goes through ErrorDetailSchema.parse (the same generated-schema
+// surface parseErrorDetail uses), so the generated schema owns field names, enum
+// NAME strings, and the proto3 omit-unpopulated shape — the builders never hand-roll
+// canonicalization.
 //
 // The ErrorDetail wire form is canonical proto-JSON (snake_case field names, enums
 // as NAME strings) — the exact shape the generated ErrorDetailSchema parses. Binary
@@ -112,4 +130,146 @@ export function errorDetailFrom(err: unknown): ErrorDetail | null {
 		if (parsed.success) return parsed.data;
 	}
 	return null;
+}
+
+/** ExecuteTransaction denial reason (the DenialReason enum NAME set). */
+export type DenialReason = z.infer<typeof DenialReasonSchema>;
+/** Signed-URL / proof-of-possession failure reason. */
+export type RetrievalAuthFailureReason = z.infer<
+	typeof RetrievalAuthFailureReasonSchema
+>;
+/** CatalogService rejection reason. */
+export type CatalogRejectionReason = z.infer<
+	typeof CatalogRejectionReasonSchema
+>;
+/** Agent/provider registration failure reason. */
+export type RegistrationFailureReason = z.infer<
+	typeof RegistrationFailureReasonSchema
+>;
+/** DisputeTransaction filing failure reason. */
+export type DisputeFailureReason = z.infer<typeof DisputeFailureReasonSchema>;
+/** Domain-verification failure reason. */
+export type DomainVerificationFailureReason = z.infer<
+	typeof DomainVerificationFailureReasonSchema
+>;
+/** ReportUsage rejection reason. */
+export type UsageReportRejectionReason = z.infer<
+	typeof UsageReportRejectionReasonSchema
+>;
+
+/**
+ * Build an ErrorDetail carrying a typed DenialReason (ExecuteTransaction denial).
+ * TS peer of Go `helpers.TransactionDenialDetail`. Sets only the `transaction_denial`
+ * reason block; the message's extra sub-fields (offer_id, restriction_mismatches) and
+ * metadata are omitted — mutate the returned object post-construction if needed.
+ */
+export function transactionDenialDetail(
+	domain: string,
+	message: string,
+	reason: DenialReason,
+): ErrorDetail {
+	return ErrorDetailSchema.parse({
+		domain,
+		message,
+		transaction_denial: { reason },
+	});
+}
+
+/**
+ * Build an ErrorDetail carrying a typed RetrievalAuthFailureReason.
+ * TS peer of Go `helpers.RetrievalAuthFailureDetail` (signed-URL / proof-of-possession
+ * check failed).
+ */
+export function retrievalAuthFailureDetail(
+	domain: string,
+	message: string,
+	reason: RetrievalAuthFailureReason,
+): ErrorDetail {
+	return ErrorDetailSchema.parse({
+		domain,
+		message,
+		retrieval_auth_failure: { reason },
+	});
+}
+
+/**
+ * Build an ErrorDetail carrying a typed CatalogRejectionReason.
+ * TS peer of Go `helpers.CatalogRejectionDetail`. Sets only the `catalog_rejection`
+ * reason block; `rejected_paths` is omitted.
+ */
+export function catalogRejectionDetail(
+	domain: string,
+	message: string,
+	reason: CatalogRejectionReason,
+): ErrorDetail {
+	return ErrorDetailSchema.parse({
+		domain,
+		message,
+		catalog_rejection: { reason },
+	});
+}
+
+/**
+ * Build an ErrorDetail carrying a typed RegistrationFailureReason.
+ * TS peer of Go `helpers.RegistrationFailureDetail` (agent/provider registration
+ * refused).
+ */
+export function registrationFailureDetail(
+	domain: string,
+	message: string,
+	reason: RegistrationFailureReason,
+): ErrorDetail {
+	return ErrorDetailSchema.parse({
+		domain,
+		message,
+		registration_failure: { reason },
+	});
+}
+
+/**
+ * Build an ErrorDetail carrying a typed DisputeFailureReason.
+ * TS peer of Go `helpers.DisputeFailureDetail` (DisputeTransaction filing refused).
+ */
+export function disputeFailureDetail(
+	domain: string,
+	message: string,
+	reason: DisputeFailureReason,
+): ErrorDetail {
+	return ErrorDetailSchema.parse({
+		domain,
+		message,
+		dispute_failure: { reason },
+	});
+}
+
+/**
+ * Build an ErrorDetail carrying a typed DomainVerificationFailureReason.
+ * TS peer of Go `helpers.DomainVerificationFailureDetail` (domain verification failed).
+ */
+export function domainVerificationFailureDetail(
+	domain: string,
+	message: string,
+	reason: DomainVerificationFailureReason,
+): ErrorDetail {
+	return ErrorDetailSchema.parse({
+		domain,
+		message,
+		domain_verification_failure: { reason },
+	});
+}
+
+/**
+ * Build an ErrorDetail carrying a typed UsageReportRejectionReason.
+ * TS peer of Go `helpers.UsageReportRejectionDetail` (ReportUsage filing rejected).
+ */
+export function usageReportRejectionDetail(
+	domain: string,
+	message: string,
+	reason: UsageReportRejectionReason,
+): ErrorDetail {
+	return ErrorDetailSchema.parse({
+		domain,
+		message,
+		usage_report_rejection: { reason },
+	});
 }

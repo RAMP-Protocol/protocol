@@ -95,6 +95,81 @@
           "reason": "DENIAL_REASON_RATE_LIMITED"
         }
       }
+    },
+    {
+      "name": "catalog_rejection_reason",
+      "domain": "ramp.v1.CatalogService",
+      "message": "not your tenant",
+      "metadata": null,
+      "reason_field": "catalog_rejection",
+      "reason_enum": "CATALOG_REJECTION_REASON_TENANT_MISMATCH",
+      "wire_json": {
+        "catalog_rejection": {
+          "reason": "CATALOG_REJECTION_REASON_TENANT_MISMATCH"
+        },
+        "domain": "ramp.v1.CatalogService",
+        "message": "not your tenant"
+      }
+    },
+    {
+      "name": "registration_failure_reason",
+      "domain": "ramp.v1.RegistrationService",
+      "message": "domain not verified",
+      "metadata": null,
+      "reason_field": "registration_failure",
+      "reason_enum": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED",
+      "wire_json": {
+        "domain": "ramp.v1.RegistrationService",
+        "message": "domain not verified",
+        "registration_failure": {
+          "reason": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED"
+        }
+      }
+    },
+    {
+      "name": "dispute_failure_reason",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "no such transaction",
+      "metadata": null,
+      "reason_field": "dispute_failure",
+      "reason_enum": "DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND",
+      "wire_json": {
+        "dispute_failure": {
+          "reason": "DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND"
+        },
+        "domain": "ramp.v1.ExchangeService",
+        "message": "no such transaction"
+      }
+    },
+    {
+      "name": "domain_verification_failure_reason",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "challenge mismatch",
+      "metadata": null,
+      "reason_field": "domain_verification_failure",
+      "reason_enum": "DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH",
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "domain_verification_failure": {
+          "reason": "DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH"
+        },
+        "message": "challenge mismatch"
+      }
+    },
+    {
+      "name": "usage_report_rejection_reason",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "duplicate report",
+      "metadata": null,
+      "reason_field": "usage_report_rejection",
+      "reason_enum": "USAGE_REPORT_REJECTION_REASON_DUPLICATE",
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "duplicate report",
+        "usage_report_rejection": {
+          "reason": "USAGE_REPORT_REJECTION_REASON_DUPLICATE"
+        }
+      }
     }
   ]
 }

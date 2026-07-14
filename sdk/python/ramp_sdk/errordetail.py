@@ -1,22 +1,29 @@
-"""ADR-019 ErrorDetail reader (the READ half of the error contract).
+"""ADR-019 ErrorDetail reader + typed detail builders (both halves of the contract).
 
 RAMP's failure envelope is a typed ``ErrorDetail`` attached to the transport
 error: the Connect/gRPC ``Code`` is the coarse class, the ``ErrorDetail`` oneof
 carries the precise machine-readable reason. Clients branch on the typed reason,
 never on the human ``message`` string.
 
-The mcp shim is a CONSUMER of Connect error envelopes emitted by the Broker /
-Exchange, so it needs the READ direction: extract the ``ErrorDetail`` (domain,
-message, metadata, and the typed reason if present) from an error and branch on
-the reason enum. This is the Python peer of the Go client binding's
-``ErrorDetailFrom`` + the transport-neutral ``helpers.Reason`` accessor
-(sdk/go/connect + sdk/go/helpers).
+READ half — the mcp shim is a CONSUMER of Connect error envelopes emitted by the
+Broker / Exchange, so it needs to extract the ``ErrorDetail`` (domain, message,
+metadata, and the typed reason if present) from an error and branch on the reason
+enum. That is the Python peer of the Go client binding's ``ErrorDetailFrom`` + the
+transport-neutral ``helpers.Reason`` accessor (sdk/go/connect + sdk/go/helpers).
 
-Reader-only by design: the EMIT/attach half (build an ``ErrorDetail`` and stamp it
-onto a ``*connect.Error``) lives server-side in the Go ``connectserver`` binding,
-which is where RAMP services classify and emit errors. No Python service currently
-emits ``ErrorDetail``, so a Python builder would have no consumer; the byte-parity
-that matters here is the decode, gated by ``error-detail-vectors.json``.
+WRITE half — the seven typed ``*_detail`` builders below are the Python peers of the
+Go ``helpers.*Detail`` constructors (sdk/go/helpers/errordetail.go). Each builds an
+``ErrorDetail`` carrying exactly one typed reason oneof block from
+``(domain, message, reason)``, mirroring Go one-for-one: the builder sets ONLY the
+reason block and omits the reason message's extra sub-fields (``offer_id``,
+``rejected_paths``, …) — a caller that needs them, or metadata, mutates the returned
+model post-construction, exactly as the Go emitter does. A Python service (RAMP-24)
+now emits the same typed envelope a Go service does; byte-parity of both halves is
+gated by ``error-detail-vectors.json``, replayed in Go + Python + TS.
+
+Serialization is delegated to the generated model: ``WireModel.model_dump`` forces
+``exclude_none=True`` (proto3 omit-unpopulated) and ``mode="json"`` renders each enum
+as its NAME string — the builders never hand-roll field names or enum strings.
 
 The ``ErrorDetail`` wire form is canonical proto-JSON (snake_case field names,
 enums as NAME strings) — the exact shape the generated ``wire.models.ErrorDetail``
@@ -29,7 +36,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from wire.models import ErrorDetail
+from wire.models import (
+    CatalogRejectionReason,
+    DenialReason,
+    DisputeFailureReason,
+    DomainVerificationFailureReason,
+    ErrorDetail,
+    RegistrationFailureReason,
+    RetrievalAuthFailureReason,
+    UsageReportRejectionReason,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -101,3 +117,91 @@ def error_detail_from(err: Mapping[str, Any] | Iterable[Any]) -> ErrorDetail | N
         if isinstance(payload, dict):
             return parse_error_detail(payload)
     return None
+
+
+def _reason_detail(domain: str, message: str, reason_field: str, reason: Enum) -> ErrorDetail:
+    """Build an ErrorDetail carrying exactly one typed reason oneof block.
+
+    The single place the WRITE half constructs the generated model — the analogue of
+    Go's private ``base()`` plus a oneof assignment. Construction goes through
+    ``ErrorDetail.model_validate`` (the same generated-model surface the READ half's
+    :func:`parse_error_detail` uses), so the generated schema owns field names, enum
+    coercion, and — via :meth:`WireModel.model_dump` — the canonical proto-JSON. Only
+    the reason block is set; the reason message's extra sub-fields (``offer_id``,
+    ``rejected_paths``, …) and ``metadata`` are omitted, mirroring the Go builders. A
+    caller that needs them mutates the returned model post-construction.
+    """
+    return ErrorDetail.model_validate(
+        {"domain": domain, "message": message, reason_field: {"reason": reason}}
+    )
+
+
+def transaction_denial_detail(domain: str, message: str, reason: DenialReason) -> ErrorDetail:
+    """Build an ErrorDetail carrying a typed DenialReason (ExecuteTransaction denial).
+
+    Python peer of Go ``helpers.TransactionDenialDetail``.
+    """
+    return _reason_detail(domain, message, "transaction_denial", reason)
+
+
+def retrieval_auth_failure_detail(
+    domain: str, message: str, reason: RetrievalAuthFailureReason
+) -> ErrorDetail:
+    """Build an ErrorDetail carrying a typed RetrievalAuthFailureReason.
+
+    Python peer of Go ``helpers.RetrievalAuthFailureDetail`` (signed-URL /
+    proof-of-possession check failed).
+    """
+    return _reason_detail(domain, message, "retrieval_auth_failure", reason)
+
+
+def catalog_rejection_detail(
+    domain: str, message: str, reason: CatalogRejectionReason
+) -> ErrorDetail:
+    """Build an ErrorDetail carrying a typed CatalogRejectionReason.
+
+    Python peer of Go ``helpers.CatalogRejectionDetail``.
+    """
+    return _reason_detail(domain, message, "catalog_rejection", reason)
+
+
+def registration_failure_detail(
+    domain: str, message: str, reason: RegistrationFailureReason
+) -> ErrorDetail:
+    """Build an ErrorDetail carrying a typed RegistrationFailureReason.
+
+    Python peer of Go ``helpers.RegistrationFailureDetail`` (agent/provider
+    registration refused).
+    """
+    return _reason_detail(domain, message, "registration_failure", reason)
+
+
+def dispute_failure_detail(domain: str, message: str, reason: DisputeFailureReason) -> ErrorDetail:
+    """Build an ErrorDetail carrying a typed DisputeFailureReason.
+
+    Python peer of Go ``helpers.DisputeFailureDetail`` (DisputeTransaction filing
+    refused).
+    """
+    return _reason_detail(domain, message, "dispute_failure", reason)
+
+
+def domain_verification_failure_detail(
+    domain: str, message: str, reason: DomainVerificationFailureReason
+) -> ErrorDetail:
+    """Build an ErrorDetail carrying a typed DomainVerificationFailureReason.
+
+    Python peer of Go ``helpers.DomainVerificationFailureDetail`` (domain
+    verification failed).
+    """
+    return _reason_detail(domain, message, "domain_verification_failure", reason)
+
+
+def usage_report_rejection_detail(
+    domain: str, message: str, reason: UsageReportRejectionReason
+) -> ErrorDetail:
+    """Build an ErrorDetail carrying a typed UsageReportRejectionReason.
+
+    Python peer of Go ``helpers.UsageReportRejectionDetail`` (ReportUsage filing
+    rejected).
+    """
+    return _reason_detail(domain, message, "usage_report_rejection", reason)

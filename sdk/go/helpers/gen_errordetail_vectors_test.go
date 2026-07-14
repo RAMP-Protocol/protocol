@@ -143,10 +143,10 @@ func vectorFrom(t *testing.T, name string, d *rampv1.ErrorDetail) errorDetailVec
 
 // buildErrorDetailVectors emits the ErrorDetail corpus, covering: domain+message
 // only; a single metadata pair; an explicitly-empty metadata map (proto3 omits it
-// on the wire); two distinct typed-reason families (TransactionDenial and
-// RetrievalAuthFailure); and multi-key metadata combined with a typed reason (the
-// ordering case — a reader must extract the same key/value map regardless of
-// encoding order).
+// on the wire); multi-key metadata combined with a typed reason (the ordering case
+// — a reader must extract the same key/value map regardless of encoding order); and
+// all seven typed-reason families, each built via its REAL typed *Detail builder so
+// the corpus proves the CONSTRUCT half in every language, not just the read half.
 func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 	t.Helper()
 
@@ -184,6 +184,29 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 		rampv1.DenialReason_DENIAL_REASON_RATE_LIMITED)
 	multiKey.Metadata = map[string]string{"zeta": "3", "alpha": "1", "mid": "2"}
 
+	// The remaining five reason families, each built via its REAL typed *Detail
+	// builder so the corpus exercises the construct half of all seven families
+	// (transaction_denial + retrieval_auth_failure above complete the set).
+	catalogRejection := CatalogRejectionDetail(
+		"ramp.v1.CatalogService", "not your tenant",
+		rampv1.CatalogRejectionReason_CATALOG_REJECTION_REASON_TENANT_MISMATCH)
+
+	registrationFailure := RegistrationFailureDetail(
+		"ramp.v1.RegistrationService", "domain not verified",
+		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED)
+
+	disputeFailure := DisputeFailureDetail(
+		"ramp.v1.ExchangeService", "no such transaction",
+		rampv1.DisputeFailureReason_DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND)
+
+	domainVerificationFailure := DomainVerificationFailureDetail(
+		"ramp.v1.ExchangeService", "challenge mismatch",
+		rampv1.DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH)
+
+	usageReportRejection := UsageReportRejectionDetail(
+		"ramp.v1.ExchangeService", "duplicate report",
+		rampv1.UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_DUPLICATE)
+
 	cases := []struct {
 		name string
 		d    *rampv1.ErrorDetail
@@ -194,6 +217,11 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 		{"transaction_denial_reason", denial},
 		{"retrieval_auth_failure_reason", retrievalAuth},
 		{"multi_key_metadata_with_reason", multiKey},
+		{"catalog_rejection_reason", catalogRejection},
+		{"registration_failure_reason", registrationFailure},
+		{"dispute_failure_reason", disputeFailure},
+		{"domain_verification_failure_reason", domainVerificationFailure},
+		{"usage_report_rejection_reason", usageReportRejection},
 	}
 	out := make([]errorDetailVector, 0, len(cases))
 	for _, c := range cases {
