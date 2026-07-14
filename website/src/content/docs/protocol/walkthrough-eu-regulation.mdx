@@ -74,9 +74,10 @@ Both Exchanges declare `ramp-legal-v1`, signaling support for legislation-specif
 
 The Broker fans out the same query to both Exchanges. The agent identifies the resource by its ELI URI and requests legal-profile metadata:
 
-```json
-POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+`POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
@@ -89,7 +90,7 @@ POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/DiscoverR
     "http://data.europa.eu/eli/reg/2024/1689/oj"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }
   ],
   "supported_profiles": ["ramp-legal-v1"],
   "ext": {
@@ -331,9 +332,10 @@ The Broker presents both offers. The agent's choice depends on context:
 
 Assume the agent chooses EUR-Lex (free). The `ExecuteTransaction` follows the standard pattern:
 
-```json
-POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-eli-001",
@@ -427,9 +429,10 @@ If the agent had chosen the Wolters Kluwer offer instead, the signed URL would p
 
 Even for free access, usage reporting is required for transparency:
 
-```json
-POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+`POST https://exchange.eurlex.europa.eu/ramp/v1/ramp.v1.ExchangeService/ReportUsage`
 
+{/* ramp-validate: UsageReport */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "ur-eli-001",

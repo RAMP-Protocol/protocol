@@ -822,9 +822,10 @@ CDN access log records:
 
 The SDK auto-submits a usage report (background, non-blocking). Usage reporting is mandatory for subscription transactions -- failure to report within the window triggers `DENIAL_REASON_REPORTING_OVERDUE` on subsequent transactions.
 
-```json
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+`POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage`
 
+{/* ramp-validate: UsageReport */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "ur-claude-001",

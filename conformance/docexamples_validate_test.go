@@ -77,12 +77,22 @@ func TestDocMarkedExamplesValidate(t *testing.T) {
 		for _, m := range markedFenceRe.FindAllStringSubmatch(content, -1) {
 			name, body := m[1], m[2]
 			if name == "" {
-				// Candidate detector: a pure-JSON transaction-request example
-				// must be marked, so it cannot silently escape validation.
-				var top map[string]json.RawMessage
-				if json.Unmarshal([]byte(body), &top) == nil {
+				// Candidate detector: a transaction-request example must be
+				// marked, so it cannot silently escape validation. Scan the
+				// balanced {...} spans, not the whole fence — a `POST /path`
+				// verb line before the body makes a whole-fence json.Unmarshal
+				// fail and let the example opt out silently (the same hole
+				// balancedJSONObjects already closes for the items-only guard
+				// below). A marked fence must be pure JSON, so a flagged fence
+				// also needs its verb line lifted out of the fence.
+				for _, obj := range balancedJSONObjects(body) {
+					var top map[string]json.RawMessage
+					if json.Unmarshal([]byte(obj), &top) != nil {
+						continue
+					}
 					if _, ok := top["idempotency_key"]; ok {
-						flag(path, "unmarked ```json request example (has idempotency_key) — add {/* ramp-validate: <MessageName> */} above the fence")
+						flag(path, "unmarked ```json request example (has idempotency_key) — add {/* ramp-validate: <MessageName> */} above the fence (and move any POST/verb line out of the fence)")
+						break
 					}
 				}
 				continue
