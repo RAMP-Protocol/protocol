@@ -1133,10 +1133,6 @@ class RegistrationFailure(WireModel):
 
 
 class Requester(WireModel):
-    billing_ref: str | None = Field(
-        None,
-        description="Opaque billing reference linking this requester to the Exchange's (and,\n through the Exchange, the publisher's) billing/accounting systems — e.g. a\n billing account, PO number, or cost center. NOT an entitlement or\n subscription credential: access is governed by scopes and delegation, and\n identity by the request signature. The Exchange uses it only for invoicing\n and cost attribution.",
-    )
     delegation: Delegation | None = Field(
         None,
         description='Optional delegation — present when the requester acts on behalf of\n another entity (user, organization, upstream agent).',
