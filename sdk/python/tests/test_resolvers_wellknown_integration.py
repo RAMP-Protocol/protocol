@@ -16,7 +16,11 @@ on the missing faces, not on a fixture error.
 
 from __future__ import annotations
 
+import queue
+import threading
 from datetime import timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 import pytest
 from resolvers_harness import (
@@ -208,5 +212,108 @@ def test_endpoint_missing_field_raises_no_endpoint() -> None:
         with pytest.raises(NoEndpointError):
             r.resolve_endpoint(origin.host)
         assert origin.manifest_hits() == 1
+    finally:
+        origin.close()
+
+
+class _GatedJwksOrigin:
+    """A real in-process origin serving ONE JWKS document and counting every fetch,
+    with a gate that holds each response in-flight until released (and an ``arrived``
+    queue signalling each blocked arrival) so a concurrent burst's single-flight
+    coalescing is OBSERVABLE — the JWKS analogue of the WBA-debounce CountingOrigin.
+
+    The shared ``Origin`` harness counts jwks_hits but cannot hold a fetch open, so a
+    coalescing test needs this gated variant to park the leader in-flight while its
+    followers pile onto the resolver's refresh lock."""
+
+    def __init__(self) -> None:
+        self._doc: bytes | None = None
+        self._hits_lock = threading.Lock()
+        self._hits = 0
+        self.gate = threading.Event()
+        self.arrived: queue.Queue[bool] = queue.Queue()
+        origin = self
+
+        class _Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # BaseHTTPRequestHandler method contract
+                origin._record_hit()
+                origin.arrived.put(True)
+                origin.gate.wait()
+                doc = origin._doc
+                if doc is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(doc)
+
+            def log_message(self, *_args: Any) -> None:  # silence the test server
+                return
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        self.url = f"http://127.0.0.1:{self._server.server_address[1]}"
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+
+    def _record_hit(self) -> None:
+        with self._hits_lock:
+            self._hits += 1
+
+    def hits(self) -> int:
+        with self._hits_lock:
+            return self._hits
+
+    def set_jwks(self, body: str) -> None:
+        self._doc = body.encode()
+
+    def close(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+
+
+def test_wellknown_key_concurrent_refresh_singleflight() -> None:
+    """A concurrent burst of cold resolves for one JWKS URL coalesces to exactly ONE
+    upstream fetch (independent of burst size). The origin holds the leader's fetch on
+    a gate; followers park on the resolver's refresh lock and, once the leader fills
+    the cache, return the cached key without a second fetch.
+
+    Guards the resolver's existing single-flight (WellKnownKeyResolver._refresh holds
+    _lock and double-checks freshness) — the same shape asserted for Go and TS. RED if
+    single-flight regresses: a burst of N cold resolves would drive N JWKS fetches.
+    """
+    k = make_key()
+    origin = _GatedJwksOrigin()
+    origin.set_jwks(jwks_key_doc_json([jwks_entry("ex.v1", k.x)]))
+    try:
+        r = WellKnownKeyResolver(f"{origin.url}/keys.json", ttl=HOUR, now=MutableClock(ANCHOR))
+
+        burst = 12
+        barrier = threading.Barrier(burst)
+        results: list[bytes | None] = [None] * burst
+        errors: list[Exception | None] = [None] * burst
+
+        def worker(i: int) -> None:
+            barrier.wait()  # release all workers together
+            try:
+                results[i] = r.resolve("ex.v1")
+            except Exception as exc:  # recorded per-worker, asserted after join
+                errors[i] = exc
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(burst)]
+        for t in threads:
+            t.start()
+
+        # The leader is parked in the origin holding the refresh lock; followers
+        # coalesce behind it. Release only after the leader has arrived.
+        origin.arrived.get(timeout=5)
+        origin.gate.set()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert errors == [None] * burst
+        assert results == [k.raw_pub] * burst
+        assert origin.hits() == 1
     finally:
         origin.close()

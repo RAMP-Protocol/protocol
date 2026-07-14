@@ -99,6 +99,31 @@ describe("newWellKnownKeyResolver", () => {
 		await expect(r.resolve("ex.v1")).rejects.toBeInstanceOf(DirectoryUnavailable);
 	});
 
+	it("coalesces a concurrent burst of cold resolves into a single JWKS fetch", async () => {
+		// Single-flight parity (Core Invariant: same shape in Go/Python/TS). The
+		// resolver's `inflight` guard collapses a concurrent burst of cold resolves
+		// into ONE upstream fetch. Every resolve is started before any is awaited, so
+		// each observes the leader's in-flight refresh and coalesces onto it — mirrors
+		// the WBA + offer-cache single-flight assertions. RED if single-flight
+		// regresses: a burst of N cold resolves would drive N JWKS fetches.
+		const k = await makeKey();
+		origin = await startOrigin();
+		origin.setJwks(jwksKeyDocJson([jwksEntry("ex.v1", k.x)]));
+
+		const r = newWellKnownKeyResolver(`${origin.url}/keys.json`, {
+			ttlMs: HOUR_MS,
+			now: () => ANCHOR_MS,
+			fetch: loopbackFetch,
+		});
+
+		const burst = 12;
+		const results = await Promise.all(
+			Array.from({ length: burst }, () => r.resolve("ex.v1")),
+		);
+		for (const got of results) expect(got).toEqual(k.rawPub);
+		expect(origin.jwksHits()).toBe(1);
+	});
+
 	// R2: JWKS extraction is skip-not-fail — one malformed key must not kill the
 	// whole publisher key set; survivors still resolve, bad entries become
 	// unknown (undefined).
