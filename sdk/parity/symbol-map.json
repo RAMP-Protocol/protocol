@@ -20,6 +20,7 @@
     "connectserver.ClassifyReject": "Go-only reject classifier; part of the Go Connect handler binding (connectserver-handler DECISION).",
     "connectserver.EmitUnpopulatedJSONCodec": "Go connect-go codec; n/a for TS/Python (no Connect binding) per the matrix Codec row.",
     "connectserver.ErrReplayed": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "connectserver.NewErrorDetail": "Go-only Connect ErrorDetail envelope build (the build half of AttachErrorDetail, exposed for callers that set a typed reason before attaching); TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
     "connectserver.ServerOption": "Part of the Go-only Connect handler binding; see the connectserver-handler DECISION in docs/sdk-parity-matrix.md.",
     "connectserver.WithEmitUnpopulated": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connectserver.WithHandlerOptions": "Go functional-option builder; py/ts pass options via kwargs/options objects.",

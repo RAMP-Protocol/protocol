@@ -69,6 +69,33 @@ func TestAttachErrorDetail_EmptyMetadataIsAbsent(t *testing.T) {
 	}
 }
 
+func TestNewErrorDetail_BuildHalfMatchesAttachAndStaysMutable(t *testing.T) {
+	t.Parallel()
+	// The exposed build half stamps metadata only when non-empty…
+	if d := rampserver.NewErrorDetail(testServiceDomain, "boom", nil); len(d.GetMetadata()) != 0 {
+		t.Fatalf("Metadata = %v, want absent for nil input", d.GetMetadata())
+	}
+	meta := map[string]string{"field": "quantity"}
+	d := rampserver.NewErrorDetail(testServiceDomain, "bad quantity", meta)
+	if got := d.GetMetadata()["field"]; got != "quantity" {
+		t.Fatalf("Metadata[field] = %q, want %q", got, "quantity")
+	}
+	// …and returns a MUTABLE detail: a caller that owns a typed reason sets the
+	// oneof on the returned value before attaching. That mutability is the whole
+	// point of exposing the build half separately from AttachErrorDetail.
+	d.Reason = &rampv1.ErrorDetail_TransactionDenial{
+		TransactionDenial: &rampv1.TransactionDenial{Reason: rampv1.DenialReason_DENIAL_REASON_OFFER_EXPIRED},
+	}
+	cerr := connectrpc.NewError(connectrpc.CodeFailedPrecondition, errors.New("bad quantity"))
+	ed, ok := rampconnect.ErrorDetailFrom(rampserver.AttachDetail(cerr, d))
+	if !ok {
+		t.Fatal("ErrorDetailFrom returned false")
+	}
+	if reason, _ := helpers.Reason(ed).(rampv1.DenialReason); reason != rampv1.DenialReason_DENIAL_REASON_OFFER_EXPIRED {
+		t.Fatalf("Reason = %v, want OFFER_EXPIRED (typed reason set post-build must survive the attach)", reason)
+	}
+}
+
 func TestAttachDetail_RoundTripsTypedReason(t *testing.T) {
 	t.Parallel()
 	// A caller that needs a typed reason builds the detail via the helpers.*Detail

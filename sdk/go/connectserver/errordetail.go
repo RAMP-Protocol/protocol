@@ -30,11 +30,23 @@ func AttachErrorDetail(
 	domain, message string,
 	metadata map[string]string,
 ) error {
+	return AttachDetail(cerr, NewErrorDetail(domain, message, metadata))
+}
+
+// NewErrorDetail builds the ADR-019 ErrorDetail envelope — the stable service
+// domain, the non-authoritative developer message, and structured field
+// metadata stamped only when non-empty (a nil map and an empty map are both
+// absent on the wire; keeping the field nil avoids allocating an empty map the
+// caller never populated). It is the build half of AttachErrorDetail, exposed
+// so a caller that owns a typed reason oneof can set it on the RETURNED
+// (mutable) detail before attaching via AttachDetail — the envelope body then
+// has exactly one source across every service, whichever attach path follows.
+func NewErrorDetail(domain, message string, metadata map[string]string) *rampv1.ErrorDetail {
 	d := &rampv1.ErrorDetail{Domain: domain, Message: message}
 	if len(metadata) > 0 {
 		d.Metadata = metadata
 	}
-	return AttachDetail(cerr, d)
+	return d
 }
 
 // AttachDetail attaches the proto ErrorDetail d to cerr and returns it. The
