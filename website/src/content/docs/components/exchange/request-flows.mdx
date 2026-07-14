@@ -434,7 +434,9 @@ func (h *ExchangeHandler) ExecuteTransaction(
     singleItem := len(req.Msg.Items) == 1
     agentHash := sha256Hex(requester.Id + ":" + requester.Domain)
     // The account handle (the billing_ref minted at Register) is resolved from
-    // the verified requester identity — never from anything the caller sends.
+    // the signature-bound requester identity — the claimed id/domain is only
+    // used after the RFC 9421 verification in step 1 bound it to the signing
+    // key. The request carries no caller-written billing field.
     billingRef := h.accounts.ResolveBillingRef(ctx, requester.Id, requester.Domain)
     var resultItems []*rampv1.TransactionResultItem
     var totalAmount float64

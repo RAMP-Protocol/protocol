@@ -241,11 +241,10 @@ Step 3: Prepare RFC 9421 HTTP Message Signature (alg=ed25519)
 
 ## Phase 2: Supply Discovery (Requester Identity, Subscription Detection, Content Attestations, Ed25519 Verification)
 
-The SDK sends `DiscoverResources` to SSP-Alpha:
+The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`:
 
+{/* ramp-validate: ResourceQuery */}
 ```json
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
-
 {
   "ver": "1.0",
   "requester": {
@@ -255,7 +254,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "scopes": ["*"]
   },
   "uris": ["https://techcrunch.com/premium/ai-regulation-2026.html"],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
+  "acceptable_restrictions": [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }],
   "deadline": "0.5s"
 }
 ```
@@ -431,10 +430,10 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 ## Phase 2b: Cross-Provider via Broker (Header Signature Chain, OfferGroups, SimHash)
 
-If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `DiscoveryRequest` to the Broker with multiple URIs (`BrokerService.Resolve` is discovery-only — it returns offers grouped by URI; execution happens later via a separate `ExecuteTransaction` call):
+If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `DiscoveryRequest` to the Broker with multiple URIs (`BrokerService.Resolve` is discovery-only — it returns offers grouped by URI; execution happens later via a separate `ExecuteTransaction` call). Agent → Broker:
 
+{/* ramp-validate: DiscoveryRequest */}
 ```json
-// Agent -> Broker
 {
   "ver": "1.0",
   "requester": {
@@ -447,7 +446,7 @@ If Anthropic uses its hosted Broker instead of the SDK directly, the Broker prov
     "https://techcrunch.com/premium/ai-regulation-2026.html",
     "https://theverge.com/premium/ai-regulation-republish.html"
   ],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
+  "acceptable_restrictions": [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }],
   "constraints": {
     "preferred_exchanges": ["exchange.ssp-alpha.com"],
     "max_unit_cost": "0.00005",
@@ -466,10 +465,10 @@ The Broker queries both Exchanges. For each forwarded request, the Broker:
 2. Preserves the agent's RFC 9421 HTTP Message Signature (its labeled signature stays in the `Signature`/`Signature-Input` headers)
 3. Adds its own labeled RFC 9421 HTTP Message Signature, covering the request plus the agent's prior signature (the ordered set of header signatures is the chain that proves the Broker forwarded it)
 
-```json
-// Broker -> SSP-Alpha (multi-URI batch query)
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+Broker → SSP-Alpha (multi-URI batch query) — `POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`:
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
@@ -482,7 +481,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "https://techcrunch.com/premium/ai-regulation-2026.html",
     "https://theverge.com/premium/ai-regulation-republish.html"
   ],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
+  "acceptable_restrictions": [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }],
   "deadline": "0.4s"
 }
 ```
@@ -608,9 +607,10 @@ SDK or Broker commits to the subscription offer.
 
 ### Direct (SDK) request -- single signature in the headers:
 
-```json
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-claude-001",
@@ -639,7 +639,8 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
           "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
           "content_hash": "a1b2c3d4e5f6...",
-          "hash_method": "simhash-v1"
+          "hash_method": "simhash-v1",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
         "signature": "base64-ed25519-sig-B...",
         "signature_algorithm": "EdDSA"
@@ -655,9 +656,10 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 ### Orchestrated request -- forwarding chain in the headers:
 
-```json
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-claude-001",
@@ -686,7 +688,8 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
           "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
           "content_hash": "a1b2c3d4e5f6...",
-          "hash_method": "simhash-v1"
+          "hash_method": "simhash-v1",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
         "signature": "base64-ed25519-sig-B...",
         "signature_algorithm": "EdDSA"

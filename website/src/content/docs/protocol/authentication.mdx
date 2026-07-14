@@ -370,6 +370,7 @@ See [Signed URL Verification](/components/edge-function/signed-url-verification)
 
 A research bot queries a public Exchange. No delegation token, no special scopes — it gets whatever is publicly available.
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -384,7 +385,7 @@ A research bot queries a public Exchange. No delegation token, no special scopes
     "https://cdn.ramp-protocol.org/premium/ai-funding-roundup"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["SUMMARIZE"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["SUMMARIZE"] }
   ]
 }
 ```
@@ -393,8 +394,9 @@ The Exchange verifies the signature by fetching the public key from `research.ac
 
 ### Subscription Agent (MarketData JWT)
 
-A financial analysis agent carries a MarketData-issued delegation JWT that grants access to subscription-tier data.
+A financial analysis agent carries a MarketData-issued delegation JWT that grants access to subscription-tier data. `delegation.token` is a `bytes` field, so proto-JSON carries the compact JWS base64-encoded (decoded here for illustration: `eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>`).
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -414,7 +416,7 @@ A financial analysis agent carries a MarketData-issued delegation JWT that grant
       "scopes": ["quote:*", "earnings:*"],
       "expires_at": "2026-03-20T18:00:00Z",
       "max_spend_cents": 50000,
-      "token": "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token": "ZXlKaGJHY2lPaUpGWkVSVFFTSjkuPGNsYWltczogaXNzLCBzY29wZSwgZXhwLCBjbmYuamt0Pi48c2lnPg",
       "token_format": "jwt"
     }
   },
@@ -423,7 +425,7 @@ A financial analysis agent carries a MarketData-issued delegation JWT that grant
     "marketdata://earnings/NVDA/2025-Q4"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["RETRIEVE"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["RETRIEVE"] }
   ]
 }
 ```
@@ -438,6 +440,7 @@ The Exchange:
 
 An internal agent at a law firm carries a delegation JWT issued by the firm's IAM system, granting access to legal and credit resources.
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -456,7 +459,7 @@ An internal agent at a law firm carries a delegation JWT issued by the firm's IA
       "scopes": ["legal:case-law", "legal:statutes", "credit:read"],
       "expires_at": "2026-03-20T20:00:00Z",
       "max_spend_cents": 100000,
-      "token": "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token": "ZXlKaGJHY2lPaUpGWkVSVFFTSjkuPGNsYWltczogaXNzLCBzY29wZSwgZXhwLCBjbmYuamt0Pi48c2lnPg",
       "token_format": "jwt"
     }
   },
@@ -465,7 +468,7 @@ An internal agent at a law firm carries a delegation JWT issued by the firm's IA
     "duns://credit/123456789"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["RETRIEVE", "SUMMARIZE"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["RETRIEVE", "SUMMARIZE"] }
   ]
 }
 ```
@@ -476,6 +479,7 @@ The internal Exchange verifies the delegation JWT against `iam.kirkland.com`'s p
 
 The Kirkland legal agent from the previous example delegates to a sub-agent that only needs credit data. It issues a child delegation JWT (bound to the sub-agent's key) that removes legal access and lowers the spend cap.
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -493,7 +497,7 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
       "scopes": ["credit:read"],
       "expires_at": "2026-03-20T19:00:00Z",
       "max_spend_cents": 20000,
-      "token": "eyJhbGciOiJFZERTQSJ9.<child claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token": "ZXlKaGJHY2lPaUpGWkVSVFFTSjkuPGNoaWxkIGNsYWltczogaXNzLCBzY29wZSwgZXhwLCBjbmYuamt0Pi48c2lnPg",
       "token_format": "jwt"
     }
   },
@@ -501,7 +505,7 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
     "duns://credit/123456789"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["RETRIEVE"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["RETRIEVE"] }
   ]
 }
 ```

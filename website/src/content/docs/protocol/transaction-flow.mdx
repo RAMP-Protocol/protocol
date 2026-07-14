@@ -37,6 +37,7 @@ Content-Type: application/json
 
 ### Request (`ResourceQuery`)
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -47,7 +48,7 @@ Content-Type: application/json
     "scopes": ["*"]
   },
   "uris": ["https://cdn.ramp-protocol.org/premium/ai-infrastructure.html"],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }]
+  "acceptable_restrictions": [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }]
 }
 ```
 
