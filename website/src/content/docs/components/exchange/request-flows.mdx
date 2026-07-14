@@ -142,7 +142,7 @@ func (h *ExchangeHandler) DiscoverResources(
     //     ExecuteTransaction time — DiscoverResources checks subscription status
     //     and populates quota visibility. Subscription/entitlement is resolved
     //     from the verified requester identity (requester.id + domain, and any
-    //     delegation) — NOT from billing_ref, which only attributes cost.
+    //     delegation).
     var subStatus *SubscriptionStatus
     if sub, err := h.billing.CheckSubscription(ctx, requester.Id, tenantCfg.ID); err == nil && sub.Active {
         subStatus = sub
@@ -433,10 +433,9 @@ func (h *ExchangeHandler) ExecuteTransaction(
     //    resource unavailable, billing denied) while others succeed.
     singleItem := len(req.Msg.Items) == 1
     agentHash := sha256Hex(requester.Id + ":" + requester.Domain)
-    billingRef := requester.Id
-    if requester.BillingRef != nil {
-        billingRef = *requester.BillingRef
-    }
+    // The account handle (the billing_ref minted at Register) is resolved from
+    // the verified requester identity — never from anything the caller sends.
+    billingRef := h.accounts.ResolveBillingRef(ctx, requester.Id, requester.Domain)
     var resultItems []*rampv1.TransactionResultItem
     var totalAmount float64
     var currency string

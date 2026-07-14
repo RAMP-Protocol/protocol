@@ -156,7 +156,7 @@ At $0.05/article average transaction value, the infrastructure cost is **0.1% of
 | TLS version | **1.3 minimum** | All Exchange communication |
 | Signed URL TTL | **5 minutes maximum** | Prevents URL sharing window |
 | Key rotation | **90-day maximum** | Limits blast radius of key compromise |
-| Rate limiting | **Per verified requester identity (domain/key) + per IP** | Prevents DoS and metadata harvesting; keyed on the RFC 9421 request signature, not the self-declared `billing_ref` (which is for cost attribution only) |
+| Rate limiting | **Per verified requester identity (domain/key) + per IP** | Prevents DoS and metadata harvesting; keyed on the RFC 9421 request signature |
 | Partner key logging | **Redacted** (last 4 chars only) | Prevents credential leakage in logs |
 | Idempotency enforcement | **Required** on ExecuteTransaction | Prevents double-billing |
 | Agent identity binding | **Required** in signed URLs | Prevents URL sharing |

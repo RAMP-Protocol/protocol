@@ -25,7 +25,6 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 | `domain` | `string` | Domain for public key lookup — keys at `{domain}/.well-known/ramp.json` (`WellKnownManifest`, `role=ROLE_AGENT`) |
 | `type` | `RequesterType` | What kind of entity is making the request |
 | `name` | `string` (optional) | Human-readable name (e.g., `"Acme Research Assistant"`) |
-| `billing_ref` | `string` (optional) | Opaque billing reference for invoicing / cost attribution (not an entitlement; access is via scopes/delegation) |
 | `scopes` | `repeated string` | Entitlement scopes — what the requester can access |
 | `delegation` | `Delegation` (optional) | Holder-bound JWT delegation token from a principal |
 | `ext` | `Struct` | Implementer-specific extensions |
@@ -404,7 +403,6 @@ A financial analysis agent carries a MarketData-issued delegation JWT that grant
     "domain": "fintech.example.com",
     "type": "REQUESTER_TYPE_AGENT",
     "name": "FinBot Alpha",
-    "billing_ref": "lic-marketdata-fintech-2026",
     "scopes": [
       "subscription:marketdata-2026",
       "quote:*",
@@ -448,7 +446,6 @@ An internal agent at a law firm carries a delegation JWT issued by the firm's IA
     "domain": "agents.kirkland.com",
     "type": "REQUESTER_TYPE_SERVICE",
     "name": "Kirkland Legal Research",
-    "billing_ref": "lic-kirkland-enterprise-2026",
     "scopes": [
       "legal:case-law",
       "credit:read"
@@ -487,7 +484,6 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
     "domain": "agents.kirkland.com",
     "type": "REQUESTER_TYPE_DELEGATED",
     "name": "Kirkland Credit Sub-Agent",
-    "billing_ref": "lic-kirkland-enterprise-2026",
     "scopes": [
       "credit:read"
     ],

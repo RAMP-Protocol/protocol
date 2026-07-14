@@ -252,7 +252,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": ["https://techcrunch.com/premium/ai-regulation-2026.html"],
@@ -272,8 +271,7 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 3. Resolve tenant: techcrunch.com -> Hearst Media tenant
 4. Find offers: lookup "/premium/ai-regulation-2026.html" in radix trie -> match
 5. Check subscription with quota (keyed on the requester's VERIFIED IDENTITY
-   from step 2 — requester.id + domain, via the RFC 9421 signature; entitlement
-   is NOT derived from billing_ref, which only attributes cost):
+   from step 2 — requester.id + domain, via the RFC 9421 signature):
    BillingAdapter.CheckSubscription("claude-agent-001@claude.ai", "hearst-media")
      -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026",
           active: true,
@@ -443,7 +441,6 @@ If Anthropic uses its hosted Broker instead of the SDK directly, the Broker prov
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": [
@@ -479,7 +476,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": [
@@ -622,7 +618,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "items": [
@@ -670,7 +665,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "items": [

@@ -30,7 +30,7 @@ Loss is acceptable -- this is telemetry, not financial data.
 | `event_type` | `EventType` | yes | `EVENT_SUPPLY_QUERY_RECEIVED` |
 | `timestamp` | `time.Time` | yes | Server receipt time (UTC, nanosecond precision) |
 | `query_id` | `string` | yes | The supply query's `X-Request-ID` header (correlation left the proto body) |
-| `buyer_lid` | `string` | yes | CoMP's `aisystem.aisysuse.lid`, mapped to `Requester.billing_ref` |
+| `buyer_lid` | `string` | yes | CoMP's `aisystem.aisysuse.lid`; for RAMP requests, the caller's account handle (`RegisterResponse.billing_ref`) resolved from the verified request signature |
 | `buyer_name` | `string` | yes | `aisystem.name` (e.g. "claude.ai") |
 | `requested_uris` | `[]string` | yes | `aisystem.aisysuse.uri` |
 | `requested_functions` | `[]string` | yes | `aisystem.aisysuse.function` |
@@ -50,7 +50,7 @@ Rebuildable from supply query + catalog state.
 | `event_type` | `EventType` | yes | `EVENT_OFFERS_PRESENTED` |
 | `timestamp` | `time.Time` | yes | Server response time |
 | `query_id` | `string` | yes | Correlates to the supply query's `X-Request-ID` |
-| `buyer_lid` | `string` | yes | Billing reference of the requester (`Requester.billing_ref`) |
+| `buyer_lid` | `string` | yes | The requester's account handle (`RegisterResponse.billing_ref`), resolved from the verified request signature |
 | `offer_count` | `int32` | yes | Number of offers returned |
 | `offers` | `[]OfferSummary` | yes | Summarized offer data |
 | `exchange_id` | `string` | yes | This Exchange's identity |
@@ -99,7 +99,7 @@ Logged after the Billing Adapter returns its authorization decision. Captures bo
 | `timestamp` | `time.Time` | yes | Authorization decision time |
 | `idempotency_key` | `string` | yes | Corresponding `TransactionRequest.idempotency_key` |
 | `offer_id` | `string` | yes | The offer being authorized |
-| `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
+| `buyer_lid` | `string` | yes | The requester's account handle (`RegisterResponse.billing_ref`) |
 | `authorized` | `bool` | yes | Whether billing was approved |
 | `denial_reason` | `DenialReason` | cond | Required when `authorized=false` |
 | `billing_id` | `string` | cond | Assigned by billing adapter (only on approval) |
@@ -131,7 +131,7 @@ The Exchange MUST NOT return the `TransactionResponse` until this event is durab
 | `billing_id` | `string` | yes | `TransactionResultItem.billing_id` |
 | `idempotency_key` | `string` | yes | `TransactionRequest.idempotency_key` (the request's idempotency key) |
 | `offer_id` | `string` | yes | Selected offer |
-| `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
+| `buyer_lid` | `string` | yes | The requester's account handle (`RegisterResponse.billing_ref`) |
 | `buyer_name` | `string` | yes | AI system name |
 | `provider_domain` | `string` | yes | Content owner domain |
 | `content_url` | `string` | yes | Canonical URL of content |
@@ -225,7 +225,7 @@ Logged when a dispute reaches a resolution state (`AUTO_RESOLVED`, `RESOLVED`, o
 | `dispute_id` | `string` | yes | The resolved dispute |
 | `transaction_id` | `string` | yes | The original transaction |
 | `report_id` | `string` | yes | The linked usage report |
-| `buyer_lid` | `string` | yes | Billing reference (`Requester.billing_ref`) |
+| `buyer_lid` | `string` | yes | The requester's account handle (`RegisterResponse.billing_ref`) |
 | `status` | `DisputeStatus` | yes | Final status (e.g., `AUTO_RESOLVED`, `RESOLVED`, `SETTLED`) |
 | `resolution` | `ResolutionType` | yes | Resolution outcome (`CREDIT`, `REDELIVERY`, `REJECTED`, `INVESTIGATION`) |
 | `credit_amount` | `float64` | no | Credit amount if resolution is `CREDIT` |

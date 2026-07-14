@@ -16,6 +16,11 @@ patterns=(
   # Requester reshape
   'license_id' 'licenseId' 'BuyerLicenseID'
   'IntermediaryHop' '"intermediaries"'
+  # Requester.billing_ref dropped (RAMP-155): billing keys on the verified
+  # caller identity and the account minted at Register, never on a request
+  # field. Only the Requester-scoped forms are banned — the bare identifier
+  # stays live (RegisterResponse / GetAccountStatusResponse account handle).
+  '[Rr]equester\.billing_ref' '[Rr]equester\.[Bb]illingRef'
   # request signatures live in HTTP headers (RFC 9421), not message fields
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   # the scalar offer_signature pair is gone: the execute-request now reflects the

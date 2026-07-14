@@ -5,6 +5,15 @@ description: "RAMP protocol changelog"
 
 ## Unreleased
 
+**`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
+billing label on `Requester` is gone; field number 5 and the name are
+`reserved` so they can never be reused with a different meaning. Nothing read
+it: billing and cost attribution key on the verified caller identity and the
+account handle minted at `Register` (`RegisterResponse.billing_ref`), which the
+Exchange resolves from the request signature — never from anything the caller
+sends. An old caller still sending field 5 (binary) or a JSON `billing_ref`
+inside `requester` has it ignored as an unknown field.
+
 **Operator plane: new `ramp.admin.v1` package with `AdminService` (additive).**
 Two full-replace, idempotent setters for Exchange operators: `SetTenantFeeRate`
 and `SetReportingPolicy`. Each request and response is a thin `{ver, <payload>}`

@@ -67,11 +67,12 @@ The SDK is not yet published to package registries. Use the working implementati
 - **Python**: Parse messages with the generated Pydantic models from [`gen/python/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/python/). The PyPI package is not yet published.
 </Aside>
 
-Configure it with your billing reference, signing key, and budget:
+Configure it with your agent identity, signing key, and budget:
 
 ```go
 client, _ := ramp.NewClient(ramp.Config{
-    BillingRef:  "ACME-COST-CENTER-001",
+    AgentID:     "acme-research-bot",
+    AgentDomain: "agents.acme.com",
     SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
     SupportedProfiles: []string{
         "ramp-news-v1",       // articles, podcasts, broadcasting
