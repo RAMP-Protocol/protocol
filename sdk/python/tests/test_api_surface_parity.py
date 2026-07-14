@@ -29,8 +29,7 @@ The gate then asserts four properties:
                        allowlist_reason is an UNDOCUMENTED gap and fails CI. Presence
                        only asserts non-null names, so a bare null is invisible to it;
                        this property forces every gap to be RESOLVED (name filled) or
-                       DOCUMENTED (reason). The TS direction is held at hard zero; the
-                       Python direction is ratcheted shrink-only.
+                       DOCUMENTED (reason). BOTH directions are held at hard zero.
 
 The Go surface is read with ``go doc``; the TS surface is read by scanning every module
 listed in ``sdk/ts/package.json`` ``exports`` for BOTH inline
@@ -71,23 +70,33 @@ _GO_PACKAGES = ("helpers", "resolvers", "core", "connect", "connectserver")
 #     docs/sdk-parity-matrix.md reached via decision_anchor (connect.Client /
 #     connect.NewClient and the two connectserver handler bindings).
 #   * PARTIAL gap (one language present, the other genuinely absent) — backed by an
-#     inline allowlist_reason naming a tracked follow-up. The two ErrUnknownKey entries
-#     (helpers/resolvers) are the only ones: TS ships no UnknownKey error class while
-#     Python/Go do, and the rest of the resolver error taxonomy is at parity.
+#     inline allowlist_reason naming the one-sided divergence. The 12 partial gaps:
+#     the two ErrUnknownKey entries (helpers/resolvers — TS ships no UnknownKey error
+#     class while Python/Go do; the rest of the resolver error taxonomy is at parity)
+#     plus the ten language-idiom folds absorbed from the old BASELINE_PY_ONLY_GAP
+#     ratchet — seven Go NewX constructor funcs that fold into Python class
+#     constructors, and three Go/TS options types that fold into Python constructor
+#     kwargs. Each carries a per-entry reason; none is a symbol Python is missing.
 # A change that RAISES this number adds a new silent divergence and MUST be reviewed as
 # such: bumping the constant is the whole tell. Never raise it to make a red gate green —
-# map the symbol (fill the name) or record the divergence. Grown 4 -> 6 only for the two
-# ErrUnknownKey partial gaps.
-BASELINE_ALLOWLIST = 6
+# map the symbol (fill the name) or record the divergence. Grown 6 -> 16 ONLY by
+# documenting the ten previously-OPAQUE Python-null gaps (BASELINE_PY_ONLY_GAP 19 -> 0
+# in the same change): net, 19 undocumented divergences became 10 documented ones and
+# 9 exported Python symbols. That trade is the one sanctioned growth shape — every
+# entry must arrive with its reason, never bare.
+BASELINE_ALLOWLIST = 16
 
-# RATCHET (symmetric, shrink-only) — the pre-existing TS-present / Python-null gaps: Go
-# constructor funcs (New*) that Python folds into class constructors, and Go value types
-# (Result / Mode / Verifier / VerifiedOffer / RejectedOffer / RejectReason / *Options /
-# *Algorithm / contentDigest) that Python expresses as native objects. The PRESENCE check
-# skips nulls, so absent this ceiling a NEW Python-null gap would ship GREEN — the exact
-# blind spot this gate closes, in the Python direction. This number may only ever
-# DECREASE: resolve the Python face or document the divergence, never raise it.
-BASELINE_PY_ONLY_GAP = 19
+# HARD ZERO (was a shrink-only ratchet at 19) — undocumented TS-present / Python-null
+# gaps. The PRESENCE check skips nulls, so absent this ceiling a NEW Python-null gap
+# would ship GREEN — the exact blind spot this gate closes, in the Python direction.
+# The original 19 were resolved to zero: 9 became exported Python symbols (the
+# Verifier/Result/Mode/VerifiedOffer/RejectedOffer family, the two *_SIGNATURE_ALGORITHM
+# constants, content_digest, and the RejectReason Literal), and 10 genuine language-idiom
+# folds (Go NewX -> Python class ctor; Go/TS options types -> Python ctor kwargs) moved
+# under BASELINE_ALLOWLIST with per-entry reasons. Both directions now sit at hard zero:
+# every new gap must be RESOLVED (fill the python name) or DOCUMENTED (allowlist_reason),
+# never left bare. Do not raise this from 0.
+BASELINE_PY_ONLY_GAP = 0
 
 
 # --------------------------------------------------------------------------- #
@@ -381,8 +390,9 @@ def test_every_gap_is_resolved_or_documented() -> None:
     verify-multisig-request / verify-request) and the only genuine TS-absent symbols
     (helpers.ErrUnknownKey / resolvers.ErrUnknownKey) are allowlisted-with-reason.
 
-    Python direction (ts present, python null): SHRINK-ONLY against BASELINE_PY_ONLY_GAP.
-    The pre-existing Python-side gaps are ratcheted so a NEW one cannot slip in green.
+    Python direction (ts present, python null): HARD zero (BASELINE_PY_ONLY_GAP = 0) —
+    the original 19 gaps were each resolved (Python face exported) or documented
+    (per-entry allowlist_reason), so a NEW undocumented one cannot slip in green.
     """
     symbols = _load_map()["symbols"]
     ts_gaps, py_gaps = undocumented_gaps(symbols)

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -46,11 +46,20 @@ from .multisig_parse import (
 if TYPE_CHECKING:
     from .keyresolver import KeyResolver
 
+# RejectReason — the classified verify-gate reject vocabulary, mirroring the Go
+# connectserver taxonomy (classify.go RejectReason.String()). The tokens are stable
+# audit values a consumer's log / dashboards key on; do not rename them. The
+# single-sig face (verify_request_server) emits "signature"/"replay"; the multisig
+# face (verify_multisig_request_server) emits "hop_budget"/"broken_chain"/
+# "signature". TS splits the same vocabulary by face (RejectReason /
+# MultisigRejectReason); Python mirrors Go's single four-token domain.
+RejectReason = Literal["signature", "replay", "broken_chain", "hop_budget"]
+
 # The connectserver multisig reject-reason tokens (mirrors Go verify.go): a chain
 # longer than the budget is "hop_budget"; a structurally-broken chain is
 # "broken_chain"; any per-hop authenticity failure collapses to "signature".
-_REASON_HOP_BUDGET = "hop_budget"
-_REASON_BROKEN_CHAIN = "broken_chain"
+_REASON_HOP_BUDGET: RejectReason = "hop_budget"
+_REASON_BROKEN_CHAIN: RejectReason = "broken_chain"
 
 # The RAMP required covered set, mirroring Go helpers.requiredCoveredComponents.
 # The presented Signature-Input MUST declare all five, or the request is rejected
@@ -75,8 +84,8 @@ _ENTITLEMENT_HEADER = "x-entitlement-token"
 # The connectserver reject-reason tokens (classify.go RejectReason.String()) for
 # the single-sig surface. Any signature-authenticity/freshness/key failure is the
 # default "signature"; a replayed nonce is "replay".
-_REASON_SIGNATURE = "signature"
-_REASON_REPLAY = "replay"
+_REASON_SIGNATURE: RejectReason = "signature"
+_REASON_REPLAY: RejectReason = "replay"
 
 # Default replay TTL, mirroring connectserver WithReplayTTL(5m). The injected
 # store may ignore it; it is passed through unchanged.
@@ -351,7 +360,7 @@ class MultisigVerdict:
     or invalid with the classified reason. Never raised — always returned."""
 
     valid: bool
-    reason: str | None = None
+    reason: RejectReason | None = None
     keyids: tuple[str, ...] = ()
 
 

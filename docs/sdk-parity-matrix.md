@@ -41,6 +41,15 @@ factories carry the `create*` prefix (`createStaticKeyResolver`,
 generators the `generate*` prefix (`generateIdempotencyKey`; Python
 `generate_idempotency_key`).
 
+Python folds both shapes away instead of exporting a counterpart symbol: a Go
+`NewX` factory becomes the class constructor itself (`Verifier(...)`,
+`WBAKeyResolver(...)`), and a Go/TS options type (`WellKnownOptions`,
+`WBAKeyResolverOptions`, `CachedOfferKeyResolverConfig`) becomes constructor
+keyword arguments. These are the only sanctioned Python-null entries in
+`sdk/parity/symbol-map.json`, each carrying a per-entry `allowlist_reason`; the
+undocumented-gap count is held at hard zero in both directions by
+`test_api_surface_parity.py`.
+
 The SSRF-guarded fetch client is the one **intentional idiomatic divergence**, not a
 transliteration: Python exposes a sync/async pair (`guarded_client` returns an
 `httpx.Client`, `guarded_async_client` returns an `httpx.AsyncClient`) while TS
@@ -56,7 +65,7 @@ across all three.
 | Server-verify middleware (all /ramp. procedures) | ✅ `connectserver.New{Exchange,Broker}ServiceHandler` + options | ⚠️ `core/verify-request.ts verifyRequestServer` (framework-agnostic single-sig verdict) + `hono rampVerify` edge GET-PoP binding — no full Connect handler binding | ⚠️ `server_verify.verify_request_server` (framework-agnostic single-sig verdict) — no full Connect/ASGI handler binding |
 | Multisig append / verify (+hop budget) | ✅ `helpers.AppendSignature` / `VerifyMultisigRequest[Resolved]`, `core.WithAppendSigner` | ✅ `appendSignature` (core/sign-request.ts) / `verifyMultisigRequestServer` (core/verify-multisig-request.ts) | ✅ `append_signature` (httpsig) / `verify_multisig_request_server` (server_verify) |
 | Codec (EmitUnpopulated JSON) | ✅ `connectserver.EmitUnpopulatedJSONCodec` / `WithEmitUnpopulated` | n/a (no Connect binding) | n/a |
-| Reject / error mapping (emit) | ✅ `connectserver` reject mapping, `connect.ErrorDetailFrom`, `connectserver.AttachErrorDetail`/`AttachDetail`, `helpers.*Detail` | ⚠️ reject-reason tokens only (`RejectReason` "signature"/"replay" on the verify verdict) — no ErrorDetail emit mapping | ⚠️ reject-reason tokens only (`VerifiedRequest.reason` "signature"/"replay") — no ErrorDetail emit mapping |
+| Reject / error mapping (emit) | ✅ `connectserver` reject mapping, `connect.ErrorDetailFrom`, `connectserver.AttachErrorDetail`/`AttachDetail`, `helpers.*Detail` | ⚠️ reject-reason tokens only (`RejectReason` "signature"/"replay" on the verify verdict) — no ErrorDetail emit mapping | ⚠️ reject-reason tokens only (exported `RejectReason` Literal — the four `classify.go` tokens — typing `MultisigVerdict.reason`; `VerifiedRequest.reason` carries them on the single-sig verdict) — no ErrorDetail emit mapping |
 | ErrorDetail readers (decode a typed failure) | ✅ `connect.ErrorDetailFrom` | ✅ `src/errordetail.ts parseErrorDetail` / `errorDetailFrom` | ✅ `errordetail.parse_error_detail` / `error_detail_from` |
 | Replay window | ✅ `core.ReplayStore`, `core.MonotonicWindow` | ✅ `core/verify-request.ts ReplayStore` iface + two-phase replay (injected store, SDK owns no state) | ✅ `server_verify.ReplayStore` Protocol + two-phase replay (injected store, SDK owns no state) |
 | Entitlement-coverage enforcement (unsigned X-Entitlement-Token rejected) | ✅ `helpers.enforceEntitlementCoverage` (verify.go) | ✅ `core/verify-request.ts` (covered-set commit check) | ✅ `server_verify.verify_request_server` (covered-set commit check) |

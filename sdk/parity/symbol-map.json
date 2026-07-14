@@ -131,7 +131,7 @@
     },
     "connectserver.RejectReason": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "RejectReason",
       "ts": "RejectReason"
     },
     "core.ClockWindow": {
@@ -141,7 +141,7 @@
     },
     "core.Mode": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "Mode",
       "ts": "Mode"
     },
     "core.MonotonicWindow": {
@@ -155,13 +155,13 @@
       "ts": "createSigningTransport"
     },
     "core.NewVerifier": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory.",
       "python": null,
       "ts": "createVerifier"
     },
     "core.RejectedOffer": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "RejectedOffer",
       "ts": "RejectedOffer"
     },
     "core.ReplayStore": {
@@ -176,17 +176,17 @@
     },
     "core.Result": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "Result",
       "ts": "Result"
     },
     "core.VerifiedOffer": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "VerifiedOffer",
       "ts": "VerifiedOffer"
     },
     "core.Verifier": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "Verifier",
       "ts": "Verifier"
     },
     "core.Window": {
@@ -196,7 +196,7 @@
     },
     "helpers.AcceptanceSignatureAlgorithm": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "ACCEPTANCE_SIGNATURE_ALGORITHM",
       "ts": "ACCEPTANCE_SIGNATURE_ALGORITHM"
     },
     "helpers.AppendSignature": {
@@ -231,7 +231,7 @@
     },
     "helpers.ContentDigest": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "content_digest",
       "ts": "contentDigest"
     },
     "helpers.ContentTypeJSON": {
@@ -280,7 +280,7 @@
       "ts": "generateIdempotencyKey"
     },
     "helpers.NewStaticKeyResolver": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go NewStaticKeyResolver factory folds into the Python class constructor (StaticKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createStaticKeyResolver factory.",
       "python": null,
       "ts": "createStaticKeyResolver"
     },
@@ -291,7 +291,7 @@
     },
     "helpers.OfferSignatureAlgorithm": {
       "allowlist_reason": null,
-      "python": null,
+      "python": "OFFER_SIGNATURE_ALGORITHM",
       "ts": "OFFER_SIGNATURE_ALGORITHM"
     },
     "helpers.ParseMoney": {
@@ -425,7 +425,7 @@
       "ts": "CachedOfferKeyResolver"
     },
     "resolvers.CachedOfferKeyResolverConfig": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go config struct / TS options object folds into Python constructor keyword arguments (CachedOfferKeyResolver(...)); idiomatic Python has no separate options type.",
       "python": null,
       "ts": "CachedOfferKeyResolverOptions"
     },
@@ -460,7 +460,7 @@
       "ts": null
     },
     "resolvers.NewCachedOfferKeyResolver": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go NewCachedOfferKeyResolver factory folds into the Python class constructor (CachedOfferKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createCachedOfferKeyResolver factory.",
       "python": null,
       "ts": "createCachedOfferKeyResolver"
     },
@@ -470,22 +470,22 @@
       "ts": "guardedFetchFromEnv"
     },
     "resolvers.NewWBADirectoryFetcher": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go's default OfferDirectoryFetcher factory folds into the Python WBAKeyResolver's injected directory-fetch seam (constructor default); no separate public factory symbol exists. TS keeps the createWBAOfferDirectoryFetch factory.",
       "python": null,
       "ts": "createWBAOfferDirectoryFetch"
     },
     "resolvers.NewWBAKeyResolver": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go NewWBAKeyResolver factory folds into the Python class constructor (WBAKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWBAKeyResolver factory.",
       "python": null,
       "ts": "createWBAKeyResolver"
     },
     "resolvers.NewWellKnownEndpointResolver": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go NewWellKnownEndpointResolver factory folds into the Python class constructor (WellKnownEndpointResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownEndpointResolver factory.",
       "python": null,
       "ts": "createWellKnownEndpointResolver"
     },
     "resolvers.NewWellKnownKeyResolver": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go NewWellKnownKeyResolver factory folds into the Python class constructor (WellKnownKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownKeyResolver factory.",
       "python": null,
       "ts": "createWellKnownKeyResolver"
     },
@@ -515,7 +515,7 @@
       "ts": "WBAKeyResolver"
     },
     "resolvers.WBAKeyResolverOptions": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go options struct / TS options object folds into Python constructor keyword arguments (WBAKeyResolver(...)); idiomatic Python has no separate options type.",
       "python": null,
       "ts": "WBAKeyResolverOptions"
     },
@@ -530,7 +530,7 @@
       "ts": "WellKnownKeyResolver"
     },
     "resolvers.WellKnownOptions": {
-      "allowlist_reason": null,
+      "allowlist_reason": "Go options struct (shared by the well-known key/endpoint resolvers) / TS options object folds into Python constructor keyword arguments (WellKnownKeyResolver(...) / WellKnownEndpointResolver(...)); idiomatic Python has no separate options type.",
       "python": null,
       "ts": "WellKnownOptions"
     }

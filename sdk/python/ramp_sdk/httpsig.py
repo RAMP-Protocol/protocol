@@ -308,6 +308,7 @@ def verify_request(
 # request-verify surface — primitive + server entry — from ramp_sdk.httpsig.
 from .server_verify import (  # noqa: E402
     MultisigVerdict,
+    RejectReason,
     ReplayStore,
     verify_multisig_request_server,
     verify_request_server,
@@ -315,6 +316,7 @@ from .server_verify import (  # noqa: E402
 
 __all__ = [
     "MultisigVerdict",
+    "RejectReason",
     "ReplayStore",
     "SignedRequest",
     "VerifiedRequest",

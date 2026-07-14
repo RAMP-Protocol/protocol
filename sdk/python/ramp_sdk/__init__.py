@@ -21,6 +21,13 @@ from .acceptance import (
 )
 from .b64 import b64url_decode, b64url_nopad
 from .core import (
+    ACCEPTANCE_SIGNATURE_ALGORITHM,
+    OFFER_SIGNATURE_ALGORITHM,
+    Mode,
+    RejectedOffer,
+    Result,
+    VerifiedOffer,
+    Verifier,
     canonical_offer_payload,
     jcs_acceptance_payload,
     sign_offer_acceptance_jcs,
@@ -45,8 +52,10 @@ from .errordetail import (
 from .hashurl import hash_url
 from .httpsig import (
     MultisigVerdict,
+    RejectReason,
     ReplayStore,
     append_signature,
+    content_digest,
     sign_request,
     verify_multisig_request_server,
     verify_request,
@@ -84,7 +93,9 @@ from .wire import (
 )
 
 __all__ = [
+    "ACCEPTANCE_SIGNATURE_ALGORITHM",
     "ERROR_DETAIL_TYPE",
+    "OFFER_SIGNATURE_ALGORITHM",
     "REASON_FIELDS",
     "WBA_DIRECTORY_PATH",
     "ConnectProtocolVersion",
@@ -95,16 +106,22 @@ __all__ = [
     "KeyExpiredError",
     "KeyResolver",
     "KeyRevokedError",
+    "Mode",
     "MultisigVerdict",
     "NoEndpointError",
+    "RejectReason",
+    "RejectedOffer",
     "ReplayStore",
     "RequestIDHeader",
     "ResolverError",
+    "Result",
     "SignatureAgentHeader",
     "SignedOutbound",
     "SigningTransport",
     "StaticKeyResolver",
     "UnknownKeyError",
+    "VerifiedOffer",
+    "Verifier",
     "WBAKeyResolver",
     "WellKnownEndpointResolver",
     "WellKnownKeyResolver",
@@ -118,6 +135,7 @@ __all__ = [
     "canonicalize_money",
     "catalog_rejection_detail",
     "clock_window",
+    "content_digest",
     "cross_field_rule_ids",
     "dispute_failure_detail",
     "domain_verification_failure_detail",
