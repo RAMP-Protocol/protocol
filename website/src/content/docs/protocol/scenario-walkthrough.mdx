@@ -165,7 +165,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
 SSP-Alpha also knows about Anthropic's subscription, looked up by Anthropic's account handle (minted at registration):
 
 ```
-BillingAdapter.CheckSubscription("acct-anthropic-7f3e", "hearst-media")
+BillingAdapter.CheckSubscription("acct_7f3e21c9", "hearst-media")
   -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026", active: true, quota_remaining: 850000 }
 ```
 
@@ -272,7 +272,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
 5. Check subscription with quota (the account handle is resolved from the
    requester's VERIFIED IDENTITY from step 2 — requester.id + domain, via the
    RFC 9421 signature — never from the request body):
-   BillingAdapter.CheckSubscription("acct-anthropic-7f3e", "hearst-media")
+   BillingAdapter.CheckSubscription("acct_7f3e21c9", "hearst-media")
      -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026",
           active: true,
           quota_remaining: 850000 }
@@ -722,7 +722,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
    - Reconstruct offer data from signed token (stateless, no offer storage)
 5. subscription_id present on offer -> SKIP billing.Authorize (already paid under subscription)
 6. Quota check:
-   - BillingAdapter.CheckSubscription("acct-anthropic-7f3e", "hearst-media")
+   - BillingAdapter.CheckSubscription("acct_7f3e21c9", "hearst-media")
      -> quota_remaining: 850000 tokens
    - Estimated consumption: 3300 tokens
    - 850000 > 3300 -> sufficient quota, proceed

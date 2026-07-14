@@ -150,6 +150,7 @@ Rules:
 - **Vendors MAY add namespaced claims** (`vendor:claim`).
 - **Constraints fail closed.** A claim a verifier cannot evaluate is **binding by default** — it MUST reject rather than ignore (a dropped constraint would fail *open*, granting more than intended). This mirrors [`Restriction.advisory`](/protocol/licensing-terms/): the issuer may mark a custom claim *advisory* to downgrade it to ignorable. (The issuer lists the mandatory-to-understand claims; an unrecognized non-advisory claim is rejected.)
 - **`ramp_`-prefixed claim names are reserved** for this registry. Vendors MUST use their own `vendor:` namespace and MUST NOT define `ramp_*` names, so registered claims can never be shadowed.
+- **Claim values keep their home encoding.** RFC-registered claims use the encoding their RFC defines — `exp` is a NumericDate (seconds since epoch, RFC 7519). `ramp_*` claims mirror a `Delegation` field and use that field's proto-JSON encoding — for example, `ramp_quota_period` is a Duration string in seconds (`"2592000s"`), the same form the [`quota_period` field](/reference/proto-ramp/#delegation) carries on the wire.
 
 > **Token format.** The delegation token is a **holder-bound JWT** — `token_format: "jwt"` is the sole format conformant implementations support. Multi-hop attenuation is expressed as a chain of `cnf`-linked child JWTs (each signed by the key its parent named, each narrowing scope), and the holder binding always applies (the request-signing key must match the holder the token is sealed to).
 
