@@ -159,6 +159,23 @@ is byte-deterministic). Genuinely-open items only:
   POST. REOPEN iff a Python or TS consumer needs the multi-RPC Discover→Execute
   offer-lifecycle **orchestration** (not a single usage report), or `gen/` begins
   emitting `connect-python` / `connect-es` client stubs.
+- DECISION (resolved): `CachedOfferKeyResolver` concurrent-resolve **single-flight**
+  is **TS-native, formally WAIVED as a deliberate divergence**. TS coalesces N
+  concurrent misses for the same domain into one upstream fetch
+  (`offer-key-cache.ts`); Go releases its map mutex before the fetch and Python
+  `prefetch` has no in-flight table, so both issue one fetch per concurrent resolve.
+  This is an **efficiency optimization, not a correctness property** — every runtime
+  still never serves an expired/revoked key. Parity is **not** required here: the Go
+  and Python oracles were written without it and are correct as-is. (Contrast:
+  `WellKnownKeyResolver` single-flight IS real and tested in all three.) Do NOT add
+  single-flight to the Go/Python offer caches for parity's sake.
+- DECISION (accepted): IPv6 host-port join in the WBA directory **fetchers** is a
+  no-op divergence, **ACCEPTED**. Go uses `net.JoinHostPort` (brackets IPv6); TS does
+  raw `${domain}[:${port}]`; Python has no default fetcher. This only matters for an
+  IPv6-literal host **with a port**, which a RAMP `offer.exchange` never is — the
+  protocol host field is a bare domain name (no port, no IPv6 literal). Go is already
+  correct via the stdlib; no custom port-join parity work is warranted. Revisit only
+  if the protocol ever admits IPv6-literal exchange hosts.
 - TS wire→canonical from-wire face: Python has `wire_canon.from_wire_offer` (and
   consumes wire-canonical-vectors); TS has no from-wire face and does not consume
   those vectors (TS edge consumes canonical input today).
