@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+**`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
+billing label on `Requester` is gone; field number 5 and the name are
+`reserved` so they can never be reused with a different meaning. Nothing read
+it: billing and cost attribution key on the verified caller identity and the
+account handle minted at `Register` (`RegisterResponse.billing_ref`), which the
+Exchange resolves from the request signature — never from anything the caller
+sends. Dropping the field also removes the name collision between the
+caller-written label and the authoritative account handle. Wire-compatible in
+practice: an old caller still sending field 5 (binary) or a JSON `billing_ref`
+inside `requester` has it ignored as an unknown field.
+
 **Agent account registration + status RPCs (additive).** `ExchangeService`
 gains `Register(RegisterRequest) → RegisterResponse` and
 `GetAccountStatus(GetAccountStatusRequest) → GetAccountStatusResponse` — the
