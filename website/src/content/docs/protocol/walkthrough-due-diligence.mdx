@@ -37,12 +37,12 @@ The agent does not know individual document URIs — it knows a company name and
 
 The agent sends a single high-level request to its Broker. The key field is `budget_scope` — it ties all costs across every Exchange to a single deal identifier:
 
-```json
-POST https://broker.lawfirm.com/ramp/v1
+`POST https://broker.lawfirm.com/ramp/v1`
 
+{/* ramp-validate: DiscoveryRequest */}
+```json
 {
   "ver": "1.0",
-  "id": "ramp-dd-001",
   "requester": {
     "id": "dd-analyst",
     "domain": "lawfirm.com",
