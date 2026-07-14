@@ -114,14 +114,24 @@ func (r *CachedOfferKeyResolver) Resolve(ctx context.Context, domain string) (ed
 	// Clamp so a key is never served past its validity window: with a plain now+ttl
 	// the window is only re-checked on a cache miss, so a key could keep verifying up
 	// to a full TTL beyond its not_after.
-	exp := now.Add(r.ttl)
-	if notAfter.Before(exp) {
-		exp = notAfter
-	}
+	exp := clampOfferKeyExpiry(now, r.ttl, notAfter)
 	r.mu.Lock()
 	r.cache[domain] = offerKeyEntry{key: key, exp: exp}
 	r.mu.Unlock()
 	return key, nil
+}
+
+// clampOfferKeyExpiry bounds a cache entry's expiry to the key's validity window:
+// the entry expires at min(now+ttl, notAfter), so a key is never served past its
+// not_after even within the TTL. Extracted as a pure helper so the tri-language
+// clamp corpus (offer-key-clamp-vectors.json) replays the SAME arithmetic the
+// resolver runs, rather than a re-inlined copy that could silently drift.
+func clampOfferKeyExpiry(now time.Time, ttl time.Duration, notAfter time.Time) time.Time {
+	exp := now.Add(ttl)
+	if notAfter.Before(exp) {
+		return notAfter
+	}
+	return exp
 }
 
 // NewWBADirectoryFetcher returns the default OfferDirectoryFetcher: it GETs

@@ -1,0 +1,26 @@
+{
+  "note": "offer-key cache expiry = min(now+ttl, not_after), produced by the sdk/go clampOfferKeyExpiry oracle; py/ts replay and must match every vector",
+  "vectors": [
+    {
+      "label": "ttl-expires-first",
+      "now": "2026-05-01T12:00:00Z",
+      "ttl_seconds": 300,
+      "not_after": "2026-05-01T13:00:00Z",
+      "expected_expiry": "2026-05-01T12:05:00Z"
+    },
+    {
+      "label": "not-after-clamps-first",
+      "now": "2026-05-01T12:00:00Z",
+      "ttl_seconds": 3600,
+      "not_after": "2026-05-01T12:10:00Z",
+      "expected_expiry": "2026-05-01T12:10:00Z"
+    },
+    {
+      "label": "exact-equality-now-plus-ttl-equals-not-after",
+      "now": "2026-05-01T12:00:00Z",
+      "ttl_seconds": 600,
+      "not_after": "2026-05-01T12:10:00Z",
+      "expected_expiry": "2026-05-01T12:10:00Z"
+    }
+  ]
+}

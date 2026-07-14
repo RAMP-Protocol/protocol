@@ -7,31 +7,40 @@
 // preserve the oracle's errors.Is-DISTINCT fail-closed taxonomy.
 
 export {
-  DirectoryUnavailable,
-  KeyExpired,
-  KeyRevoked,
-  NoEndpoint,
-  ResolverError,
-  RevocationUnevaluated,
+	DirectoryUnavailable,
+	KeyExpired,
+	KeyRevoked,
+	NoEndpoint,
+	ResolverError,
+	RevocationUnevaluated,
 } from "./errors.ts";
 export type { FetchLike, FetchResponse } from "./http.ts";
 export { guardedFetchFromEnv, SsrfBlockedError, ssrfGuard } from "./http.ts";
+export {
+	type CachedOfferKeyResolver,
+	type CachedOfferKeyResolverOptions,
+	clampOfferKeyExpiry,
+	newCachedOfferKeyResolver,
+	newWBAOfferDirectoryFetch,
+	type OfferDirectoryFetch,
+	WBA_OFFER_DIRECTORY_PATH,
+} from "./offer-key-cache.ts";
 export { allowedScheme, blockedAddress } from "./ssrf.ts";
-export { type StaticKeyResolver, newStaticKeyResolver } from "./static.ts";
+export { newStaticKeyResolver, type StaticKeyResolver } from "./static.ts";
 export {
-  type EndpointOptions,
-  type WellKnownEndpointResolver,
-  type WellKnownKeyResolver,
-  type WellKnownOptions,
-  newWellKnownEndpointResolver,
-  newWellKnownKeyResolver,
-} from "./wellknown.ts";
-export {
-  type WBAKeyResolver,
-  type WBAKeyResolverOptions,
-  activeEd25519Key,
-  activeEd25519KeyScreened,
-  activeEd25519KeyWithExpiry,
-  activeEd25519KeyWithExpiryScreened,
-  newWBAKeyResolver,
+	activeEd25519Key,
+	activeEd25519KeyScreened,
+	activeEd25519KeyWithExpiry,
+	activeEd25519KeyWithExpiryScreened,
+	newWBAKeyResolver,
+	type WBAKeyResolver,
+	type WBAKeyResolverOptions,
 } from "./wba.ts";
+export {
+	type EndpointOptions,
+	newWellKnownEndpointResolver,
+	newWellKnownKeyResolver,
+	type WellKnownEndpointResolver,
+	type WellKnownKeyResolver,
+	type WellKnownOptions,
+} from "./wellknown.ts";

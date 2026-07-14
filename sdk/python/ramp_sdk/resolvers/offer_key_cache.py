@@ -46,6 +46,17 @@ def _never_revoked(_thumbprint: str) -> bool:
     return False
 
 
+def _clamp_expiry(now: float, ttl_seconds: float, not_after: float) -> float:
+    """Bound a cache entry's expiry to the key's validity window.
+
+    The entry expires at ``min(now + ttl, not_after)`` (all epoch seconds), so a key
+    is never served past its ``not_after`` even within the TTL. Extracted as a pure
+    helper so the tri-language clamp corpus (``offer-key-clamp-vectors.json``) replays
+    the SAME arithmetic the resolver runs, not a re-inlined copy that could drift.
+    """
+    return min(now + ttl_seconds, not_after)
+
+
 class CachedOfferKeyResolver:
     """domain → exchange offer-signing key, via an injected WBA-directory fetch,
     TTL-cached with a not_after clamp and revocation-aware selection."""
@@ -108,7 +119,7 @@ class CachedOfferKeyResolver:
             # past its not_after, even within the TTL (mirrors the Go resolver's
             # exp = min(now+ttl, not_after)). The read check above then evicts the key
             # at not_after and a refetch fails closed once the key is inactive.
-            expiry = min(now + self._ttl, not_after.timestamp())
+            expiry = _clamp_expiry(now, self._ttl, not_after.timestamp())
             self._cache[ex] = (key, expiry)
             out[ex] = key
         return out
