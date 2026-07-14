@@ -199,7 +199,7 @@ type FetchResult struct {
     Content        string           // Fetched content (HTML, JSON, or text)
     ContentType    string           // Content type from CDN (e.g. "text/html")
     Cost           Cost             // Transaction cost. Zero for subscription-based access
-    BillingID      string           // Exchange-assigned billing reference
+    BillingID      string           // Billing record for this transaction (not the account handle)
     TransactionID  string           // Exchange-assigned transaction identifier
     ReportID       string           // Exchange-assigned report ID (from UsageReportResponse)
     Exchange    string           // Which Exchange fulfilled this request

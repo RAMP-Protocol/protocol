@@ -112,7 +112,7 @@ The Broker sends a `ResourceQuery` with the resolved D-U-N-S number as a `duns:`
 
 **Key fields:**
 - **`ResourceQuery.uris: ["duns:123456789"]`** — the D-U-N-S number as a URI. RAMP is URI-centric; the Broker performed entity resolution before this step.
-- **`acceptable_restrictions: [{ "axis": "FUNCTION", "values": ["ai-input"] }]`** — the function restrictions the agent is willing to accept. Here it accepts inference (`ai-input`) use.
+- **`acceptable_restrictions: [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }]`** — the function restrictions the agent is willing to accept. Here it accepts inference (`ai-input`) use.
 - **`supported_profiles: ["ramp-credit-v1"]`** — the Broker declares it understands the credit extension profile. The Exchange includes credit-specific `ext` fields (PAYDEX, trade count, score model) in the response.
 - **`ext.max_data_age: "604800s"`** — freshness constraint. The agent needs a report updated within the last 7 days (604,800 seconds). The Exchange SHOULD exclude offers whose `data_as_of` is older than this threshold.
 - **`scopes: ["credit:read"]`** — the agent is authorized to read credit data. No subscription — pay-per-report pricing.

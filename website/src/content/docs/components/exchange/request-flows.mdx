@@ -140,12 +140,28 @@ func (h *ExchangeHandler) DiscoverResources(
     //     subscription offer variant (rate=0) for each catalog offer with
     //     SubscriptionQuotaInfo attached. Quota enforcement is deferred to
     //     ExecuteTransaction time — DiscoverResources checks subscription status
-    //     and populates quota visibility. Subscription/entitlement is resolved
-    //     from the verified requester identity (requester.id + domain, and any
-    //     delegation).
+    //     and populates quota visibility. The billing adapter is keyed by the
+    //     account handle resolved from the verified requester identity
+    //     (requester.id + domain) — this lookup covers subscriptions held by
+    //     the caller's own account. A subscription held by a delegation
+    //     principal is an entitlement, not an account lookup: it surfaces
+    //     through the delegation's subscription scopes during catalog
+    //     filtering, and never touches this code path.
     var subStatus *SubscriptionStatus
-    if sub, err := h.billing.CheckSubscription(ctx, requester.Id, tenantCfg.ID); err == nil && sub.Active {
-        subStatus = sub
+    ref, err := h.accounts.ResolveBillingRef(ctx, requester.Id, requester.Domain)
+    if err != nil {
+        // Degrade to pay-per-use offers, but never silently: a subscriber
+        // priced per-request because the account store hiccuped must be
+        // diagnosable from the logs.
+        slog.Warn("account lookup failed during discovery — subscription offers suppressed",
+            slog.String("requester_id", requester.Id),
+            slog.String("requester_domain", requester.Domain),
+            slog.Any("error", err),
+        )
+    } else if ref != "" {
+        if sub, err := h.billing.CheckSubscription(ctx, ref, tenantCfg.ID); err == nil && sub.Active {
+            subStatus = sub
+        }
     }
 
     // Build subscription offer variants per catalog offer (if subscription active).
@@ -436,8 +452,24 @@ func (h *ExchangeHandler) ExecuteTransaction(
     // The account handle (the billing_ref minted at Register) is resolved from
     // the signature-bound requester identity — the claimed id/domain is only
     // used after the RFC 9421 verification in step 1 bound it to the signing
-    // key. The request carries no caller-written billing field.
-    billingRef := h.accounts.ResolveBillingRef(ctx, requester.Id, requester.Domain)
+    // key. The request carries no caller-written billing field. An agent with
+    // no registered (or no active) account cannot transact at all — including
+    // subscription items, which skip per-item billing authorization in 4b —
+    // so every item is denied up front, following the same single-vs-batch
+    // shape as the reporting gate above: a lone item bubbles up as a transport
+    // error, a batch returns 200 with denial_reason on every item.
+    billingRef, err := h.accounts.ResolveBillingRef(ctx, requester.Id, requester.Domain)
+    if err != nil || billingRef == "" {
+        slog.Warn("no active account for caller",
+            slog.String("requester_id", requester.Id),
+            slog.String("requester_domain", requester.Domain),
+            slog.Any("error", err),
+        )
+        if singleItem {
+            return nil, transactionDenied(rampv1.DenialReason_DENIAL_REASON_BILLING_REF_INACTIVE)
+        }
+        return connect.NewResponse(denyAllItems(req, rampv1.DenialReason_DENIAL_REASON_BILLING_REF_INACTIVE)), nil
+    }
     var resultItems []*rampv1.TransactionResultItem
     var totalAmount float64
     var currency string

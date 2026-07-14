@@ -77,21 +77,29 @@ func TestDocMarkedExamplesValidate(t *testing.T) {
 		for _, m := range markedFenceRe.FindAllStringSubmatch(content, -1) {
 			name, body := m[1], m[2]
 			if name == "" {
-				// Candidate detector: a transaction-request example must be
-				// marked, so it cannot silently escape validation. Scan the
-				// balanced {...} spans, not the whole fence — a `POST /path`
-				// verb line before the body makes a whole-fence json.Unmarshal
-				// fail and let the example opt out silently (the same hole
-				// balancedJSONObjects already closes for the items-only guard
-				// below). A marked fence must be pure JSON, so a flagged fence
-				// also needs its verb line lifted out of the fence.
+				// Candidate detector: a request example must be marked, so it
+				// cannot silently escape validation. Two positive keys: a
+				// top-level idempotency_key marks a transaction/report/dispute
+				// request, and a top-level requester marks a discovery request
+				// (ResourceQuery / DiscoveryRequest carry no idempotency_key —
+				// without this key the removed Requester.billing_ref could walk
+				// back into an unmarked discovery fence with no gate firing).
+				// Scan the balanced {...} spans, not the whole fence — a
+				// `POST /path` verb line before the body makes a whole-fence
+				// json.Unmarshal fail and let the example opt out silently (the
+				// same hole balancedJSONObjects already closes for the
+				// items-only guard below). A marked fence must be pure JSON, so
+				// a flagged fence also needs its verb line lifted out of the
+				// fence.
 				for _, obj := range balancedJSONObjects(body) {
 					var top map[string]json.RawMessage
 					if json.Unmarshal([]byte(obj), &top) != nil {
 						continue
 					}
-					if _, ok := top["idempotency_key"]; ok {
-						flag(path, "unmarked ```json request example (has idempotency_key) — add {/* ramp-validate: <MessageName> */} above the fence (and move any POST/verb line out of the fence)")
+					_, isTxShaped := top["idempotency_key"]
+					_, isDiscoveryShaped := top["requester"]
+					if isTxShaped || isDiscoveryShaped {
+						flag(path, "unmarked ```json request example (has idempotency_key or requester) — add {/* ramp-validate: <MessageName> */} above the fence (and move any POST/verb line out of the fence)")
 						break
 					}
 				}

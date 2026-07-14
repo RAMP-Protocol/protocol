@@ -78,7 +78,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T13: Credential sharing / proxy laundering
 **Attack**: One agent identity (signing key) shared across organizations.
-**Countermeasure (protocol)**: Anti-abuse is anchored on the **verified requester identity** (domain/key); the request carries no self-supplied billing field, and the Exchange resolves the account from the verified signature. Exchange monitors usage patterns (IP diversity, volume spikes). Ed25519 agent signatures bind requests to specific key pairs.
+**Countermeasure (protocol + operational)**: Sharing a key cannot redirect costs: the request carries no self-supplied billing field, so every request signed with the shared key bills the one account the Exchange resolves from that key — the abuse lands on the sharer's own bill. Detection is behavioral, not cryptographic: the Exchange monitors usage patterns per verified identity (IP diversity, volume spikes, impossible concurrency) and can deactivate the account. The signature binding does not prevent sharing. It concentrates all shared usage under one identity so it can be seen and priced.
 
 ## 3. Provider-Side Threats (Dishonest Provider)
 
