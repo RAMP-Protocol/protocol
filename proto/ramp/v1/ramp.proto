@@ -1807,7 +1807,8 @@ message TransactionResultItem {
   // Exchange-assigned transaction identifier.
   string transaction_id = 2;
 
-  // Billing reference.
+  // Billing record identifier minted by the Exchange's billing adapter for
+  // this transaction (not the account handle — see RegisterResponse.billing_ref).
   string billing_id = 3;
 
   // Resource title echoed from the Offer.
@@ -2115,7 +2116,7 @@ message UsageReport {
   // Transaction ID from the delivery.
   string transaction_id = 3;
 
-  // Billing reference from the delivery.
+  // Billing record identifier from the delivery (TransactionResultItem.billing_id).
   string billing_id = 4;
 
   // How the resource was actually used.
@@ -2712,7 +2713,8 @@ message DisputeRequest {
   // Transaction being disputed.
   string transaction_id = 3;
 
-  // Billing reference from the transaction.
+  // Billing record identifier from the disputed transaction
+  // (TransactionResultItem.billing_id).
   string billing_id = 4;
 
   // Reason for the dispute.
