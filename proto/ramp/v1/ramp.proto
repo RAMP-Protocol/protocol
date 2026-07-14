@@ -2077,7 +2077,8 @@ message ReportingObligation {
   // Whether post-usage reporting is required.
   bool required = 1;
 
-  // Duration within which the report must be submitted (e.g. 24h).
+  // Duration within which the report must be submitted (e.g. "86400s" = 24
+  // hours; proto-JSON encodes Duration as seconds).
   optional google.protobuf.Duration window = 2;
 
   // URL to submit the usage report to (if different from Exchange).
