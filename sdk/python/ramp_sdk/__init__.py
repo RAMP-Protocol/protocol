@@ -50,6 +50,7 @@ from .keyresolver import KeyResolver, StaticKeyResolver
 from .money import canonicalize_money, format_money, parse_money
 from .pop import sign_agent_binding, verify_agent_binding
 from .resolvers import (
+    WBA_DIRECTORY_PATH,
     DirectoryUnavailableError,
     KeyExpiredError,
     KeyRevokedError,
@@ -59,6 +60,7 @@ from .resolvers import (
     WBAKeyResolver,
     WellKnownEndpointResolver,
     WellKnownKeyResolver,
+    wba_directory_url,
 )
 from .scopes import apply_scopes, normalize_scopes, scopes_subset
 from .signedurl import sign_ed25519_signed_url, verify_ed25519_signed_url
@@ -77,6 +79,7 @@ from .wire import (
 __all__ = [
     "ERROR_DETAIL_TYPE",
     "REASON_FIELDS",
+    "WBA_DIRECTORY_PATH",
     "ConnectProtocolVersion",
     "ConnectProtocolVersionHeader",
     "ContentTypeJSON",
@@ -134,4 +137,5 @@ __all__ = [
     "verify_offer_acceptance_jcs",
     "verify_request",
     "verify_request_server",
+    "wba_directory_url",
 ]

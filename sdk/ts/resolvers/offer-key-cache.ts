@@ -29,14 +29,10 @@
 import { WBAFileSchema } from "../../../gen/ts/wire/schemas.ts";
 import type { OfferKeyResolver } from "../core/verifier.ts";
 import { type FetchLike, fetchStrict, guardedFetchFromEnv } from "./http.ts";
-import { activeEd25519KeyWithExpiryScreened } from "./wba.ts";
+import { activeEd25519KeyWithExpiryScreened, wbaDirectoryURL } from "./wba.ts";
 
 /** A parsed WBA identity directory — the shape the injected fetch seam returns. */
 type WBAFile = ReturnType<typeof WBAFileSchema.parse>;
-
-/** The fixed Web Bot Auth directory path the default fetcher GETs. */
-export const WBA_OFFER_DIRECTORY_PATH =
-	"/.well-known/http-message-signatures-directory";
 
 /** Default per-domain cache TTL (5 min), matching the Go/Python resolver. */
 const DEFAULT_TTL_MS = 300_000;
@@ -193,8 +189,9 @@ export function newCachedOfferKeyResolver(
 
 /**
  * newWBAOfferDirectoryFetch returns the default {@link OfferDirectoryFetch}: it
- * GETs {scheme}://{domain}[:{port}]{WBA_OFFER_DIRECTORY_PATH} and parses the body
- * as a WBAFile, returning `undefined` on ANY transport/status/decode failure so
+ * GETs {scheme}://{domain}[:{port}]{WBA_DIRECTORY_PATH} (built by the shared
+ * wbaDirectoryURL) and parses the body as a WBAFile, returning `undefined` on ANY
+ * transport/status/decode failure so
  * the default fetcher itself upholds the undefined-not-throw seam contract.
  *
  * The default transport is SSRF-guarded (guardedFetchFromEnv): the exchange domain
@@ -212,10 +209,7 @@ export function newWBAOfferDirectoryFetch(
 	return async (domain: string) => {
 		try {
 			const host = port !== "" ? `${domain}:${port}` : domain;
-			const body = await fetchStrict(
-				fetchFn,
-				`${scheme}://${host}${WBA_OFFER_DIRECTORY_PATH}`,
-			);
+			const body = await fetchStrict(fetchFn, wbaDirectoryURL(scheme, host));
 			return WBAFileSchema.parse(JSON.parse(body));
 		} catch {
 			return undefined;

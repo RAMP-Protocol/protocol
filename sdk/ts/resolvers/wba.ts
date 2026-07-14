@@ -29,7 +29,23 @@ import {
 	guardedFetch,
 } from "./http.ts";
 
-const WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory";
+/** The single public well-known path a WBA identity directory is served at (Web
+ * Bot Auth; the identity half of the RAMP-24 split — the commercial overlay stays
+ * in /.well-known/ramp.json). The one shared copy across the whole SDK. */
+export const WBA_DIRECTORY_PATH =
+	"/.well-known/http-message-signatures-directory";
+
+/** Build the full WBA identity-directory URL from a scheme and an already-joined
+ * host: `${scheme}://${host}` + {@link WBA_DIRECTORY_PATH}. An empty scheme
+ * defaults to https. A PURE string function — the host arrives ALREADY-JOINED (any
+ * port-join / IPv6 bracketing is the caller's concern), there is NO env read and NO
+ * scheme-in-host detection (those stay consumer glue). It mirrors the sdk/go
+ * WBADirectoryURL oracle byte-for-byte, locked by the tri-replayed
+ * wba-url-vectors.json corpus. */
+export function wbaDirectoryURL(scheme: string, host: string): string {
+	const s = scheme === "" ? "https" : scheme;
+	return `${s}://${host}${WBA_DIRECTORY_PATH}`;
+}
 const DEFAULT_TTL_MS = 3_600_000; // 1 hour
 const DEFAULT_POLL_MS = 300_000; // 300 s
 const DEFAULT_SYNC_DEBOUNCE_MS = 5_000; // unknown-thumbprint force-refresh throttle

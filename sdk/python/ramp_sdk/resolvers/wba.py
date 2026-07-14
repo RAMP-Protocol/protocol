@@ -42,7 +42,32 @@ from ramp_sdk.resolvers.errors import (
 )
 from ramp_sdk.thumbprint import thumbprint
 
-_WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory"
+WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory"
+
+
+def wba_directory_url(scheme: str, host: str) -> str:
+    """Build the full WBA identity-directory URL: ``scheme://host`` + the shared
+    :data:`WBA_DIRECTORY_PATH`. An empty ``scheme`` defaults to ``https``.
+
+    A PURE string function — the host arrives ALREADY-JOINED (any port-join / IPv6
+    bracketing is the caller's concern), there is NO env read (the app keeps its
+    consumer-side ``RAMP_WELLKNOWN_SCHEME`` read) and NO scheme-in-host detection.
+    It mirrors the sdk/go ``WBADirectoryURL`` oracle byte-for-byte, locked by the
+    tri-replayed ``wba-url-vectors.json`` corpus.
+
+    Consumer note: Python has no default WBA directory fetcher — the
+    ``_fetch_directory`` seam carries an already-joined ``base`` and appends
+    :data:`WBA_DIRECTORY_PATH` directly, so this builder has no inline production
+    call-site inside the SDK. Its production consumer is the app cleanup that
+    replaces the three hand-rolled ``{scheme}://{host}{WBA_PATH}`` copies with this
+    one function; for a pure string function with no remaining inline copy, the
+    tri-language corpus is the sanctioned arithmetic proof.
+    """
+    if scheme == "":
+        scheme = "https"
+    return f"{scheme}://{host}{WBA_DIRECTORY_PATH}"
+
+
 _DEFAULT_TTL = timedelta(hours=1)
 _DEFAULT_POLL_INTERVAL = timedelta(seconds=300)
 # Throttle for the unknown-thumbprint force-refresh, per directory host. The
@@ -270,7 +295,7 @@ class WBAKeyResolver:
             pending.event.set()
 
     def _fetch_directory(self, base: str) -> WBAFile:
-        body = fetch_strict(self._http, base + _WBA_DIRECTORY_PATH)
+        body = fetch_strict(self._http, base + WBA_DIRECTORY_PATH)
         try:
             return WBAFile.model_validate_json(body)
         except ValidationError as exc:

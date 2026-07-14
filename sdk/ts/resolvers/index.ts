@@ -23,7 +23,6 @@ export {
 	newCachedOfferKeyResolver,
 	newWBAOfferDirectoryFetch,
 	type OfferDirectoryFetch,
-	WBA_OFFER_DIRECTORY_PATH,
 } from "./offer-key-cache.ts";
 export { allowedScheme, blockedAddress } from "./ssrf.ts";
 export { newStaticKeyResolver, type StaticKeyResolver } from "./static.ts";
@@ -33,8 +32,10 @@ export {
 	activeEd25519KeyWithExpiry,
 	activeEd25519KeyWithExpiryScreened,
 	newWBAKeyResolver,
+	WBA_DIRECTORY_PATH,
 	type WBAKeyResolver,
 	type WBAKeyResolverOptions,
+	wbaDirectoryURL,
 } from "./wba.ts";
 export {
 	type EndpointOptions,

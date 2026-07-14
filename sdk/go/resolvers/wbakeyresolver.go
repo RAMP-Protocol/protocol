@@ -64,6 +64,23 @@ var (
 // overlay stays in /.well-known/ramp.json).
 const WBADirectoryPath = "/.well-known/http-message-signatures-directory"
 
+// WBADirectoryURL builds the full WBA identity-directory URL from a scheme and an
+// already-joined host: scheme://host + WBADirectoryPath. An empty scheme defaults
+// to https. It is a PURE string function — the host arrives pre-formed (any
+// port-join / IPv6 bracketing is the caller's concern, e.g. net.JoinHostPort at
+// NewWBADirectoryFetcher), there is no env read, and no scheme-in-host detection.
+// It is the cross-language oracle for the wba-url-vectors.json parity corpus that
+// sdk/python wba_directory_url and sdk/ts wbaDirectoryURL replay; the base-carrying
+// fetch path (fetchWBAFile) keeps appending the shared WBADirectoryPath const
+// directly, so it is deliberately left untouched to preserve the single
+// fetch+decode path and avoid a double-append.
+func WBADirectoryURL(scheme, host string) string {
+	if scheme == "" {
+		scheme = "https"
+	}
+	return scheme + "://" + host + WBADirectoryPath
+}
+
 // Defaults mirror the platform reference implementation: the directory itself
 // rotates slowly (keys carry validity windows), so an hour TTL is fine; the
 // revocation snapshot bounds emergency-revocation latency, so it is polled on

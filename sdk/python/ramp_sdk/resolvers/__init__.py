@@ -29,15 +29,18 @@ from ramp_sdk.resolvers.errors import (
 )
 from ramp_sdk.resolvers.offer_key_cache import CachedOfferKeyResolver, DirectoryFetch
 from ramp_sdk.resolvers.wba import (
+    WBA_DIRECTORY_PATH,
     WBAKeyResolver,
     active_ed25519_key,
     active_ed25519_key_screened,
     active_ed25519_key_with_expiry,
     active_ed25519_key_with_expiry_screened,
+    wba_directory_url,
 )
 from ramp_sdk.resolvers.wellknown import WellKnownEndpointResolver, WellKnownKeyResolver
 
 __all__ = [
+    "WBA_DIRECTORY_PATH",
     "CachedOfferKeyResolver",
     "DirectoryFetch",
     "DirectoryUnavailableError",
@@ -60,4 +63,5 @@ __all__ = [
     "guarded_async_client",
     "guarded_client",
     "ssrf_guard",
+    "wba_directory_url",
 ]
