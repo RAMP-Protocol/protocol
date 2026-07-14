@@ -52,7 +52,7 @@ from .httpsig import (
     verify_request,
     verify_request_server,
 )
-from .idempotency import new_idempotency_key, validate_idempotency_key
+from .idempotency import generate_idempotency_key, validate_idempotency_key
 from .keyresolver import KeyResolver, StaticKeyResolver
 from .money import canonicalize_money, format_money, parse_money
 from .pop import sign_agent_binding, verify_agent_binding
@@ -123,10 +123,10 @@ __all__ = [
     "domain_verification_failure_detail",
     "error_detail_from",
     "format_money",
+    "generate_idempotency_key",
     "hash_url",
     "jcs_acceptance_payload",
     "monotonic_window",
-    "new_idempotency_key",
     "normalize_scopes",
     "parse_error_detail",
     "parse_money",

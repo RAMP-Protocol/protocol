@@ -33,7 +33,7 @@ import {
 	DirectoryUnavailable,
 	KeyExpired,
 	KeyRevoked,
-	newWBAKeyResolver,
+	createWBAKeyResolver,
 	RevocationUnevaluated,
 } from "../resolvers/index.ts";
 
@@ -95,7 +95,7 @@ function makeSignal(): { fire: () => void; wait: () => Promise<void> } {
 	};
 }
 
-describe("newWBAKeyResolver.resolve", () => {
+describe("createWBAKeyResolver.resolve", () => {
 	let origin: Origin | undefined;
 	let extra: Origin | undefined;
 	afterEach(async () => {
@@ -110,7 +110,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin = await startOrigin();
 		origin.setWBA(wbaFileJson([activeJwk(k.x)]));
 
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		expect(await r.resolve(k.tp, origin.url)).toEqual(k.rawPub);
 	});
 
@@ -120,7 +120,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin = await startOrigin();
 		origin.setWBA(wbaFileJson([expiredJwk(k.x)]));
 
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		await expect(r.resolve(k.tp, origin.url)).rejects.toBeInstanceOf(KeyExpired);
 	});
 
@@ -130,7 +130,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin = await startOrigin();
 		origin.setWBA(wbaFileJson([activeJwk(k.x)]));
 
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		expect(await r.resolve("absent-thumbprint", origin.url)).toBeUndefined();
 	});
 
@@ -141,7 +141,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin.setWBA(wbaFileJson([activeJwk(k.x)], origin.revocationURL()));
 		origin.setRevocation(revocationJson(iso(ANCHOR_MS), [k.tp]));
 
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		await expect(r.resolve(k.tp, origin.url)).rejects.toBeInstanceOf(KeyRevoked);
 	});
 
@@ -153,7 +153,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin.setWBA(wbaFileJson([activeJwk(k1.x)])); // prime: only k1
 
 		const now = ANCHOR_MS;
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
 		expect(await r.resolve(k1.tp, origin.url)).toEqual(k1.rawPub);
 
 		origin.setWBA(wbaFileJson([activeJwk(k1.x), activeJwk(k2.x)])); // rotate k2 in
@@ -171,7 +171,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin.setRevocation(revocationJson(iso(ANCHOR_MS), [k.tp]));
 
 		let now = ANCHOR_MS;
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
 		await expect(r.resolve(k.tp, origin.url)).rejects.toBeInstanceOf(KeyRevoked);
 
 		// Publish a rolled-back (older as_of) snapshot that drops the revocation.
@@ -188,7 +188,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin.setRevocation(revocationJson(iso(ANCHOR_MS), [k.tp]));
 
 		let now = ANCHOR_MS;
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
 		await expect(r.resolve(k.tp, origin.url)).rejects.toBeInstanceOf(KeyRevoked);
 
 		origin.setRevocation(revocationJson(iso(ANCHOR_MS + HOUR_MS), []));
@@ -205,7 +205,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin.setRevocation(revocationJson(iso(ANCHOR_MS + 10000 * HOUR_MS), []));
 
 		let now = ANCHOR_MS;
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
 		expect(await r.resolve(k.tp, origin.url)).toEqual(k.rawPub); // prime
 
 		now = ANCHOR_MS + 2 * HOUR_MS;
@@ -221,7 +221,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin.setWBA(wbaFileJson([longJwk(k1.x)]));
 
 		let now = ANCHOR_MS;
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => now });
 		expect(await r.resolve(k1.tp, origin.url)).toEqual(k1.rawPub);
 
 		origin.setWBA(wbaFileJson([longJwk(k2.x)])); // drop k1
@@ -239,7 +239,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin = await startOrigin();
 		origin.setWBA(wbaFileJson([activeJwk(k.x)], extra.revocationURL())); // cross-host
 
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		// Not anchored → not polled → key resolves.
 		expect(await r.resolve(k.tp, origin.url)).toEqual(k.rawPub);
 	});
@@ -259,11 +259,11 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin.setWBA(wbaFileJson([activeJwk(k.x)], extra.revocationURL()));
 
 		// Default (best-effort): resolves despite the unevaluated revocation channel.
-		const best = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const best = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		expect(await best.resolve(k.tp, origin.url)).toEqual(k.rawPub);
 
 		// requireRevocation: fail closed — revocation_url declared, no snapshot.
-		const strict = newWBAKeyResolver({
+		const strict = createWBAKeyResolver({
 			scheme: "http", fetch: loopbackFetch,
 			requireRevocation: true,
 			now: () => ANCHOR_MS,
@@ -276,7 +276,7 @@ describe("newWBAKeyResolver.resolve", () => {
 
 	// Test 12 — no directory (empty Signature-Agent) → unknown (undefined).
 	it("returns undefined when no directory is supplied", async () => {
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		expect(await r.resolve("any-thumbprint", "")).toBeUndefined();
 	});
 
@@ -284,7 +284,7 @@ describe("newWBAKeyResolver.resolve", () => {
 	// (undefined), DISTINCT from a fetch failure. Malformed cannot name a
 	// directory, so it is fall-through, not a fail-closed halt.
 	it("returns undefined for a malformed directory reference", async () => {
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		expect(await r.resolve("any-thumbprint", "http://")).toBeUndefined();
 	});
 
@@ -294,7 +294,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin = await startOrigin();
 		origin.setWBA(wbaFileJson([wbaJwk(k.x, iso(ANCHOR_MS - HOUR_MS), iso(ANCHOR_MS + 10 * HOUR_MS))]));
 
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, ttlMs: HOUR_MS, now: () => ANCHOR_MS });
 		expect(await r.resolve(k.tp, origin.url)).toEqual(k.rawPub);
 
 		origin.setWBAStatus(500); // origin now fails; cached hit must still succeed
@@ -307,7 +307,7 @@ describe("newWBAKeyResolver.resolve", () => {
 		origin = await startOrigin();
 		origin.setWBAStatus(500);
 
-		const r = newWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
+		const r = createWBAKeyResolver({ scheme: "http", fetch: loopbackFetch, now: () => ANCHOR_MS });
 		// Directory outage is a thrown halt, never an undefined fall-through.
 		await expect(r.resolve("any-thumbprint", origin.url)).rejects.toBeInstanceOf(
 			DirectoryUnavailable,
@@ -318,7 +318,7 @@ describe("newWBAKeyResolver.resolve", () => {
 // Test 11 — the background Run poller applies a newly-published revocation
 // without a directory re-fetch, driven by the deterministic clock + armed/cycle
 // seams (no sleeps).
-describe("newWBAKeyResolver.run poller", () => {
+describe("createWBAKeyResolver.run poller", () => {
 	it("applies a revocation published after priming, on the next poll boundary", async () => {
 		const k = await makeKey();
 		const origin = await startOrigin();
@@ -330,7 +330,7 @@ describe("newWBAKeyResolver.run poller", () => {
 		const armed = makeSignal();
 		const cycled = makeSignal();
 
-		const r = newWBAKeyResolver({
+		const r = createWBAKeyResolver({
 			scheme: "http", fetch: loopbackFetch,
 			ttlMs: 100 * HOUR_MS, // never expires during the test → isolate the poller
 			pollIntervalMs,

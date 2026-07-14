@@ -11,7 +11,7 @@
 // directory-absent-but-revoked → true, which is the whole point of the accessor.
 import { afterEach, describe, expect, it } from "vitest";
 import vector from "../../go/resolvers/testdata/revocation-membership-vectors.json";
-import { newWBAKeyResolver } from "../resolvers/index.ts";
+import { createWBAKeyResolver } from "../resolvers/index.ts";
 import {
 	type Origin,
 	revocationJson,
@@ -55,7 +55,7 @@ describe("sdk/ts revoked() matches the sdk/go revocation-membership oracle", () 
 		origin.setWBA(wbaFileJson(keys, origin.revocationURL()));
 		origin.setRevocation(revocationJson(vec.as_of, vec.revoked));
 
-		const r = newWBAKeyResolver({
+		const r = createWBAKeyResolver({
 			scheme: "http", fetch: loopbackFetch,
 			now: () => Date.parse(vec.as_of),
 		});

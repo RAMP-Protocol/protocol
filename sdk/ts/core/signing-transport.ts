@@ -14,7 +14,7 @@
 //   - signOutbound(...): the transport-NEUTRAL header core (Python SignedOutbound
 //     sibling) — computes the RFC 9421 headers for one request and returns them
 //     with the untouched body. Wraps no client.
-//   - newSigningTransport(send, opts): wraps a WHATWG-fetch-shaped outbound seam
+//   - createSigningTransport(send, opts): wraps a WHATWG-fetch-shaped outbound seam
 //     send(url, init) — buffers the body, computes headers via signOutbound, and
 //     forwards the SAME body bytes to send.
 //
@@ -128,7 +128,7 @@ export interface OutboundInit {
 	body?: Uint8Array<ArrayBuffer>;
 }
 
-/** The seam newSigningTransport wraps: a WHATWG-fetch-shaped send(url, init). */
+/** The seam createSigningTransport wraps: a WHATWG-fetch-shaped send(url, init). */
 export type OutboundSend<R> = (url: string, init: OutboundInit) => Promise<R>;
 
 /** What a sign predicate inspects to decide whether a request is signed. */
@@ -140,7 +140,7 @@ export interface OutboundRequest {
 }
 
 /**
- * Options for newSigningTransport — an idiomatic TS options object, one field per
+ * Options for createSigningTransport — an idiomatic TS options object, one field per
  * Go WithX (transport.go:47-96). window replaces the default freshness window;
  * appendOnly forces the relay append branch; signatureAgent supplies the covered
  * directory value stamped SET-IF-ABSENT; predicate gates which requests are signed
@@ -156,7 +156,7 @@ export interface SigningTransportOptions {
 }
 
 /**
- * newSigningTransport wraps a WHATWG-fetch-shaped send and returns a send with the
+ * createSigningTransport wraps a WHATWG-fetch-shaped send and returns a send with the
  * same shape that auto-signs each outbound request: it buffers the body, computes
  * the RFC 9421 headers via signOutbound, merges them, and forwards the SAME body
  * bytes to the wrapped send. A request with no body — or one the predicate
@@ -166,7 +166,7 @@ export interface SigningTransportOptions {
  * newXResolver siblings; the whole-surface newX -> create rename is owned by a
  * dedicated epic child, not this module.
  */
-export function newSigningTransport<R>(
+export function createSigningTransport<R>(
 	send: OutboundSend<R>,
 	opts: SigningTransportOptions,
 ): OutboundSend<R> {

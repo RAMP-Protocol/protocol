@@ -1,5 +1,5 @@
 {
-  "_comment": "Symbol-level Go->Python->TS API-surface parity map. Go is the oracle (sdk/go/{helpers,resolvers,core,connect,connectserver}). One entry per Go public symbol (pkg-qualified). 'python'/'ts' hold the mapped public name or null when that language exposes no public symbol of that name. allowlist_reason marks a deliberate documented divergence (shrink-only). Enforced by sdk/python/tests/test_api_surface_parity.py. hp5o2.6 renames the TS/Python factory names next -- update THIS file.",
+  "_comment": "Symbol-level Go->Python->TS API-surface parity map. Go is the oracle (sdk/go/{helpers,resolvers,core,connect,connectserver}). One entry per Go public symbol (pkg-qualified). 'python'/'ts' hold the mapped public name or null when that language exposes no public symbol of that name. allowlist_reason marks a deliberate documented divergence (shrink-only). Enforced by sdk/python/tests/test_api_surface_parity.py. TS object factories use the create* prefix and value generators use generate* (Go NewX stays idiomatic); the guarded-client names (guarded_client/guarded_async_client vs guardedFetchFromEnv) are a documented idiomatic divergence, not a transliteration.",
   "go_exclusions": {
     "connect.ClientOption": "Part of the Go-only typed Connect client; see the Connect-client DECISION in docs/sdk-parity-matrix.md.",
     "connect.ExecuteOption": "Part of the Go-only typed Connect client; see the Connect-client DECISION in docs/sdk-parity-matrix.md.",
@@ -152,12 +152,12 @@
     "core.NewSigningTransport": {
       "allowlist_reason": null,
       "python": "SigningTransport",
-      "ts": "newSigningTransport"
+      "ts": "createSigningTransport"
     },
     "core.NewVerifier": {
       "allowlist_reason": null,
       "python": null,
-      "ts": "NewVerifier"
+      "ts": "createVerifier"
     },
     "core.RejectedOffer": {
       "allowlist_reason": null,
@@ -276,13 +276,13 @@
     },
     "helpers.NewIdempotencyKey": {
       "allowlist_reason": null,
-      "python": "new_idempotency_key",
-      "ts": "newIdempotencyKey"
+      "python": "generate_idempotency_key",
+      "ts": "generateIdempotencyKey"
     },
     "helpers.NewStaticKeyResolver": {
       "allowlist_reason": null,
       "python": null,
-      "ts": "newStaticKeyResolver"
+      "ts": "createStaticKeyResolver"
     },
     "helpers.NormalizeScopes": {
       "allowlist_reason": null,
@@ -462,7 +462,7 @@
     "resolvers.NewCachedOfferKeyResolver": {
       "allowlist_reason": null,
       "python": null,
-      "ts": "newCachedOfferKeyResolver"
+      "ts": "createCachedOfferKeyResolver"
     },
     "resolvers.NewGuardedClientFromEnv": {
       "allowlist_reason": null,
@@ -472,22 +472,22 @@
     "resolvers.NewWBADirectoryFetcher": {
       "allowlist_reason": null,
       "python": null,
-      "ts": "newWBAOfferDirectoryFetch"
+      "ts": "createWBAOfferDirectoryFetch"
     },
     "resolvers.NewWBAKeyResolver": {
       "allowlist_reason": null,
       "python": null,
-      "ts": "newWBAKeyResolver"
+      "ts": "createWBAKeyResolver"
     },
     "resolvers.NewWellKnownEndpointResolver": {
       "allowlist_reason": null,
       "python": null,
-      "ts": "newWellKnownEndpointResolver"
+      "ts": "createWellKnownEndpointResolver"
     },
     "resolvers.NewWellKnownKeyResolver": {
       "allowlist_reason": null,
       "python": null,
-      "ts": "newWellKnownKeyResolver"
+      "ts": "createWellKnownKeyResolver"
     },
     "resolvers.OfferDirectoryFetcher": {
       "allowlist_reason": null,

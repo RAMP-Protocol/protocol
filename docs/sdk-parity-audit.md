@@ -110,10 +110,10 @@ oracle vectors), **guard** = structural/compile guard only, **—** = absent.
 | **JCS canonical acceptance payload** | unexported; sign/verify public · T | `src/acceptance.ts acceptancePayload` (exported) · T | `core.jcs_acceptance_payload` · T | **PARITY** |
 | **JWK thumbprint (RFC 7638)** | `helpers.Thumbprint` · T | `src/thumbprint.ts thumbprint` · T (`thumbprint.parity`) | `thumbprint.thumbprint` · T (`test_thumbprint_parity`) | **PARITY** |
 | **base64url codec** | stdlib inline (no exported face) | `src/base64url.ts` (+`utf8Bytes`) · T (indirect) | `b64` · T (`test_b64_public_home`) | **PARITY** (Go needs none) |
-| **Key resolver — static** (pure L1) | `helpers.NewStaticKeyResolver` · T | `resolvers.newStaticKeyResolver` · T | `keyresolver.StaticKeyResolver` · T | **PARITY** |
-| **Key resolver — well-known JWKS** (L2 I/O) | `resolvers.NewWellKnownKeyResolver` · T (httptest) | `resolvers.newWellKnownKeyResolver` · T (`resolvers-wellknown.integration`) | `resolvers.WellKnownKeyResolver` · T | **PARITY** |
-| **Key resolver — WBA (revocation-aware)** (L2 I/O) | `resolvers.NewWBAKeyResolver` (+poller) · T (httptest) | `resolvers.newWBAKeyResolver` (+`run` poller) · T (`resolvers-wba*`) | `resolvers.WBAKeyResolver` (+`run` poller) · T | **PARITY** |
-| **Endpoint resolver — ramp.json** (L2 I/O) | `resolvers.NewWellKnownEndpointResolver` · T | `resolvers.newWellKnownEndpointResolver` · T | `resolvers.WellKnownEndpointResolver` · T | **PARITY** |
+| **Key resolver — static** (pure L1) | `helpers.NewStaticKeyResolver` · T | `resolvers.createStaticKeyResolver` · T | `keyresolver.StaticKeyResolver` · T | **PARITY** |
+| **Key resolver — well-known JWKS** (L2 I/O) | `resolvers.NewWellKnownKeyResolver` · T (httptest) | `resolvers.createWellKnownKeyResolver` · T (`resolvers-wellknown.integration`) | `resolvers.WellKnownKeyResolver` · T | **PARITY** |
+| **Key resolver — WBA (revocation-aware)** (L2 I/O) | `resolvers.NewWBAKeyResolver` (+poller) · T (httptest) | `resolvers.createWBAKeyResolver` (+`run` poller) · T (`resolvers-wba*`) | `resolvers.WBAKeyResolver` (+`run` poller) · T | **PARITY** |
+| **Endpoint resolver — ramp.json** (L2 I/O) | `resolvers.NewWellKnownEndpointResolver` · T | `resolvers.createWellKnownEndpointResolver` · T | `resolvers.WellKnownEndpointResolver` · T | **PARITY** |
 | **Active-key selection (window-active, doc order)** | `resolvers.ActiveEd25519Key[WithExpiry]` · T (`active-ed25519-key-vectors`) | `resolvers.activeEd25519Key[WithExpiry]` · T | `resolvers.active_ed25519_key[_with_expiry]` · T | **PARITY** |
 | **Active-key selection — revocation-aware (screened)** | `resolvers.ActiveEd25519Key[WithExpiry]Screened` · T | `resolvers.activeEd25519Key[WithExpiry]Screened` · T | `resolvers.active_ed25519_key[_with_expiry]_screened` · T | **PARITY** |
 | **Cached offer-key resolver** | `resolvers.NewCachedOfferKeyResolver` · T | **—** (TS composes the selector directly) | `resolvers.CachedOfferKeyResolver` · T | **PARITY** (Go+Py; TS n/a by design) |
@@ -292,8 +292,8 @@ all three languages.
   `verify_multisig_request_server` (Python), both consuming
   `multisig-chain-vectors.json` (o3szv).
 - **Key/endpoint resolvers in TS + Python** — `sdk/ts/resolvers/*` (named
-  `newStaticKeyResolver`, `newWellKnownKeyResolver`, `newWBAKeyResolver` +poller,
-  `newWellKnownEndpointResolver`) and `sdk/python/ramp_sdk/resolvers/*` +
+  `createStaticKeyResolver`, `createWellKnownKeyResolver`, `createWBAKeyResolver` +poller,
+  `createWellKnownEndpointResolver`) and `sdk/python/ramp_sdk/resolvers/*` +
   `keyresolver.StaticKeyResolver`, integration-tested (bsh8k).
 - **Utility parity in TS + Python** — scopes, money, idempotency, HashURL, wire
   constants, injectable Window all present with parity tests (djeue).

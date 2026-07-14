@@ -35,10 +35,11 @@ The gate then asserts four properties:
 The Go surface is read with ``go doc``; the TS surface is read by scanning every module
 listed in ``sdk/ts/package.json`` ``exports`` for BOTH inline
 ``export function/const/class/interface/type/enum`` declarations AND ``export {...}``
-re-exports — a barrel-only scan would miss inline faces like ``newSigningTransport``,
+re-exports — a barrel-only scan would miss inline faces like ``createSigningTransport``,
 the exact class of symbol this gate exists to catch.
 
-hp5o2.6 renames the TS/Python factory names next — it updates sdk/parity/symbol-map.json.
+TS object factories carry the create* prefix and value generators the generate* prefix
+(Go NewX stays idiomatic); sdk/parity/symbol-map.json holds the mapped names.
 """
 
 from __future__ import annotations
@@ -186,7 +187,7 @@ def _scan_ts_module_text(text: str) -> set[str]:
 
     Handles BOTH inline ``export function/const/class/interface/type/enum <name>`` AND
     ``export { A, type B, C as D } from "..."`` re-export blocks. A barrel-only scan
-    would miss every inline face (e.g. ``newSigningTransport``) — precisely the symbols
+    would miss every inline face (e.g. ``createSigningTransport``) — precisely the symbols
     this gate is built to protect.
     """
     names: set[str] = set()
@@ -424,32 +425,32 @@ def test_ts_scanner_extracts_an_inline_export_pure() -> None:
     """The TS scanner MUST see inline exports, not just barrel re-exports.
 
     Pure in-test simulation — does not touch real source. If this regresses to
-    barrel-only, an inline face like newSigningTransport becomes invisible and a future
+    barrel-only, an inline face like createSigningTransport becomes invisible and a future
     missing inline export ships GREEN.
     """
     synthetic = (
         "// a plain module, not a barrel\n"
         "import { foo } from './x.ts';\n"
-        "export async function newSigningTransport<R>(signer: S): R {\n"
+        "export async function createSigningTransport<R>(signer: S): R {\n"
         "  return signer as R;\n"
         "}\n"
         "export const OFFER_SIGNATURE_ALGORITHM = 'EdDSA';\n"
         "export interface SigningTransportOptions {}\n"
     )
     found = _scan_ts_module_text(synthetic)
-    assert "newSigningTransport" in found, "inline `export function` not detected"
+    assert "createSigningTransport" in found, "inline `export function` not detected"
     assert "OFFER_SIGNATURE_ALGORITHM" in found, "inline `export const` not detected"
     assert "SigningTransportOptions" in found, "inline `export interface` not detected"
 
 
 def test_ts_enumerator_finds_the_inline_signing_transport_face() -> None:
-    """The LIVE TS surface must expose the inline newSigningTransport (guard-the-guard).
+    """The LIVE TS surface must expose the inline createSigningTransport (guard-the-guard).
 
-    newSigningTransport is `export function` inline in core/signing-transport.ts — the
+    createSigningTransport is `export function` inline in core/signing-transport.ts — the
     SigningTransport family whose past TS absence motivated this gate. If the enumerator
     cannot see it, the gate is blind exactly where it matters.
     """
-    assert "newSigningTransport" in enumerate_ts()
+    assert "createSigningTransport" in enumerate_ts()
 
 
 def test_gate_bites_when_a_mapped_face_goes_missing() -> None:
@@ -466,10 +467,10 @@ def test_gate_bites_when_a_mapped_face_goes_missing() -> None:
     # sanity: with the true surfaces there are no presence failures
     assert not presence_failures(parity_map["symbols"], py, ts)
 
-    crippled_ts = ts - {"CachedOfferKeyResolver", "newSigningTransport"}
+    crippled_ts = ts - {"CachedOfferKeyResolver", "createSigningTransport"}
     failures = presence_failures(parity_map["symbols"], py, crippled_ts)
     assert any("CachedOfferKeyResolver" in f for f in failures), failures
-    assert any("newSigningTransport" in f for f in failures), failures
+    assert any("createSigningTransport" in f for f in failures), failures
 
 
 def test_completeness_bites_on_an_unmapped_go_symbol() -> None:

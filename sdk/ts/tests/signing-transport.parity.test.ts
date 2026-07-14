@@ -7,7 +7,7 @@
 //   - signOutbound({ privKey, keyid, method, url, body, authorization,
 //     signatureAgent, window, appendOnly, prior? }) -> { headers, body }
 //     (transport-neutral header core, Python SignedOutbound sibling);
-//   - newSigningTransport(send, opts) -> a WHATWG-fetch-shaped send that buffers
+//   - createSigningTransport(send, opts) -> a WHATWG-fetch-shaped send that buffers
 //     the body, stamps Content-Digest / Signature-Input / Signature via signOutbound,
 //     and forwards the SAME body bytes to the wrapped send.
 //
@@ -34,7 +34,7 @@
 
 import { describe, it, expect } from "vitest";
 // RED: sdk/ts/core/signing-transport.ts does not exist yet (TDD red step).
-import { newSigningTransport, signOutbound } from "../core/signing-transport.ts";
+import { createSigningTransport, signOutbound } from "../core/signing-transport.ts";
 // The append/relay path reuses the already-landed primitives to arrange the
 // upstream sig1 state the relay transport chains onto.
 import { signRequest } from "../core/sign-request.ts";
@@ -158,7 +158,7 @@ function capturingSend(): {
 // (a)+(b) PARITY + BODY-INTEGRITY through the transport.
 // ---------------------------------------------------------------------------
 
-describe("newSigningTransport replays the shared Go sign-request vectors byte-identically", () => {
+describe("createSigningTransport replays the shared Go sign-request vectors byte-identically", () => {
   const doc = signRequestVectors as { vectors: SignRequestVector[] };
 
   it("vector matrix is non-empty and includes the empty-signature-agent case", () => {
@@ -176,7 +176,7 @@ describe("newSigningTransport replays the shared Go sign-request vectors byte-id
       // FIXED window per vector (MED-3): reproduce the vector's created/expires;
       // the default clockWindow(now) would drift the base. Source the covered
       // signature_agent via the option when the vector's is non-empty.
-      const signing = newSigningTransport(send, {
+      const signing = createSigningTransport(send, {
         privKey: priv,
         keyid: v.keyid,
         window: () => [v.created, v.expires] as [number, number],
@@ -259,7 +259,7 @@ describe("signOutbound returns the RFC 9421 header set byte-identical to the Go 
 // Signature-Agent, and the appended sig2 reproduces the Go 2-hop chain.
 // ---------------------------------------------------------------------------
 
-describe("newSigningTransport append/relay path mirrors the Go multisig chain", () => {
+describe("createSigningTransport append/relay path mirrors the Go multisig chain", () => {
   const doc = multisigVectors as { vectors: MultisigChainVector[] };
   const byName = (n: string): MultisigChainVector => {
     const v = doc.vectors.find((x) => x.name === n);
@@ -291,7 +291,7 @@ describe("newSigningTransport append/relay path mirrors the Go multisig chain", 
     // MUST NOT overwrite the agent's covered Signature-Agent — doing so would
     // break sig1 at the verifier.
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, {
+    const signing = createSigningTransport(send, {
       privKey: await importSigningKey(h2.seed_hex),
       keyid: h2.keyid,
       window: () => [v.created, v.expires] as [number, number],
@@ -330,13 +330,13 @@ describe("newSigningTransport append/relay path mirrors the Go multisig chain", 
 // / defaults / no-body), not byte-parity, so a freshly generated signer is used.
 // ---------------------------------------------------------------------------
 
-describe("newSigningTransport option behavior (ported from Go transport_options_test.go)", () => {
+describe("createSigningTransport option behavior (ported from Go transport_options_test.go)", () => {
   const BODY = utf8('{"test":true}');
 
   it("WithWindow: injects the supplied created/expires into Signature-Input", async () => {
     const { privKey, keyid } = await genSigner();
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, {
+    const signing = createSigningTransport(send, {
       privKey,
       keyid,
       window: () => [1_700_000_000, 1_700_000_300] as [number, number],
@@ -356,7 +356,7 @@ describe("newSigningTransport option behavior (ported from Go transport_options_
   it("appendOnly on a FRESH request still produces a valid sig1", async () => {
     const { privKey, keyid } = await genSigner();
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, { privKey, keyid, appendOnly: true });
+    const signing = createSigningTransport(send, { privKey, keyid, appendOnly: true });
 
     await signing("https://exchange.example.com/ramp.x/Y", {
       method: "POST",
@@ -388,7 +388,7 @@ describe("newSigningTransport option behavior (ported from Go transport_options_
     });
 
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, { privKey, keyid }); // no appendOnly
+    const signing = createSigningTransport(send, { privKey, keyid }); // no appendOnly
 
     await signing("https://exchange.example.com/ramp.x/Y", {
       method: "POST",
@@ -411,7 +411,7 @@ describe("newSigningTransport option behavior (ported from Go transport_options_
     const { privKey, keyid } = await genSigner();
     const dir = "https://broker.example.com";
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, {
+    const signing = createSigningTransport(send, {
       privKey,
       keyid,
       signatureAgent: dir,
@@ -431,7 +431,7 @@ describe("newSigningTransport option behavior (ported from Go transport_options_
     const { privKey, keyid } = await genSigner();
     const agentDir = "https://agent.example.com";
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, {
+    const signing = createSigningTransport(send, {
       privKey,
       keyid,
       signatureAgent: "https://broker.example.com",
@@ -450,7 +450,7 @@ describe("newSigningTransport option behavior (ported from Go transport_options_
   it("predicate returning FALSE: request passes through UNSIGNED (not an error)", async () => {
     const { privKey, keyid } = await genSigner();
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, {
+    const signing = createSigningTransport(send, {
       privKey,
       keyid,
       predicate: () => false,
@@ -470,7 +470,7 @@ describe("newSigningTransport option behavior (ported from Go transport_options_
   it("predicate returning TRUE: signs even a non-/ramp path", async () => {
     const { privKey, keyid } = await genSigner();
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, {
+    const signing = createSigningTransport(send, {
       privKey,
       keyid,
       predicate: () => true,
@@ -489,7 +489,7 @@ describe("newSigningTransport option behavior (ported from Go transport_options_
   it("default (zero options): signs any bodied request", async () => {
     const { privKey, keyid } = await genSigner();
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, { privKey, keyid });
+    const signing = createSigningTransport(send, { privKey, keyid });
 
     await signing("https://exchange.example.com/ramp.x/Y", {
       method: "POST",
@@ -505,7 +505,7 @@ describe("newSigningTransport option behavior (ported from Go transport_options_
   it("no-body request: passes through UNSIGNED (nothing to bind Content-Digest to)", async () => {
     const { privKey, keyid } = await genSigner();
     const { send, calls } = capturingSend();
-    const signing = newSigningTransport(send, { privKey, keyid });
+    const signing = createSigningTransport(send, { privKey, keyid });
 
     await signing("https://exchange.example.com/ramp.x/Y", {
       method: "GET",

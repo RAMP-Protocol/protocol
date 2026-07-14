@@ -100,7 +100,7 @@ export interface WBAKeyResolver {
 }
 
 /** Construct a WBA resolver with defaults applied. */
-export function newWBAKeyResolver(
+export function createWBAKeyResolver(
 	opts: WBAKeyResolverOptions = {},
 ): WBAKeyResolver {
 	return new WBAResolverImpl(opts);

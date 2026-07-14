@@ -20,18 +20,18 @@ export {
 	type CachedOfferKeyResolver,
 	type CachedOfferKeyResolverOptions,
 	clampOfferKeyExpiry,
-	newCachedOfferKeyResolver,
-	newWBAOfferDirectoryFetch,
+	createCachedOfferKeyResolver,
+	createWBAOfferDirectoryFetch,
 	type OfferDirectoryFetch,
 } from "./offer-key-cache.ts";
 export { allowedScheme, blockedAddress } from "./ssrf.ts";
-export { newStaticKeyResolver, type StaticKeyResolver } from "./static.ts";
+export { createStaticKeyResolver, type StaticKeyResolver } from "./static.ts";
 export {
 	activeEd25519Key,
 	activeEd25519KeyScreened,
 	activeEd25519KeyWithExpiry,
 	activeEd25519KeyWithExpiryScreened,
-	newWBAKeyResolver,
+	createWBAKeyResolver,
 	WBA_DIRECTORY_PATH,
 	type WBAKeyResolver,
 	type WBAKeyResolverOptions,
@@ -39,8 +39,8 @@ export {
 } from "./wba.ts";
 export {
 	type EndpointOptions,
-	newWellKnownEndpointResolver,
-	newWellKnownKeyResolver,
+	createWellKnownEndpointResolver,
+	createWellKnownKeyResolver,
 	type WellKnownEndpointResolver,
 	type WellKnownKeyResolver,
 	type WellKnownOptions,

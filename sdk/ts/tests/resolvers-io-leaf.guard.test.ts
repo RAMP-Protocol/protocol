@@ -80,7 +80,7 @@ describe("resolver IO-leaf structural guard", () => {
 	// --- meta-tests: exercise the detector against synthetic source ------------
 	it("[meta positive] catches a pure-tree file importing resolvers", () => {
 		expect(
-			importsIo('import { newWBAKeyResolver } from "../resolvers/index.ts";'),
+			importsIo('import { createWBAKeyResolver } from "../resolvers/index.ts";'),
 		).toBe(true);
 	});
 
@@ -104,7 +104,7 @@ describe("resolver IO-leaf structural guard", () => {
 
 	it("[meta would-be-missed] catches a reformatted import a naive substring would slip", () => {
 		const reformatted =
-			'import {\n  newWBAKeyResolver,\n}\n  from   "../resolvers/wba.ts";';
+			'import {\n  createWBAKeyResolver,\n}\n  from   "../resolvers/wba.ts";';
 		expect(importsIo(reformatted)).toBe(true);
 	});
 });

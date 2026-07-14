@@ -15,7 +15,7 @@ Present in all three, same shape:
 |---|---|---|---|
 | Go | `resolvers.NewWellKnownEndpointResolver(WellKnownOptions).ResolveEndpoint(ctx, host)` | `{scheme}://{host}/.well-known/ramp.json` | `opts.Scheme` (default `https`) |
 | Python | `resolvers.WellKnownEndpointResolver(scheme=...).resolve_endpoint(host)` | same | `scheme=` kwarg (default `https`) |
-| TS | `newWellKnownEndpointResolver({scheme}).resolveEndpoint(host)` | same | `opts.scheme` (default `https`) |
+| TS | `createWellKnownEndpointResolver({scheme}).resolveEndpoint(host)` | same | `opts.scheme` (default `https`) |
 
 So the app claim "could not import an SDK builder" is **partially real, partially stale**:
 
@@ -48,9 +48,9 @@ Legend: ✅ present · ❌ absent · ⚠️ present-but-divergent. Verdict colum
 
 | symbol (Go) | go | python | ts | verdict |
 |---|---|---|---|---|
-| `WellKnownKeyResolver` / `NewWellKnownKeyResolver` | ✅ | ✅ `WellKnownKeyResolver` | ✅ `newWellKnownKeyResolver` | UNTESTED-PARITY (fetch+TTL+single-flight, no vector) |
+| `WellKnownKeyResolver` / `NewWellKnownKeyResolver` | ✅ | ✅ `WellKnownKeyResolver` | ✅ `createWellKnownKeyResolver` | UNTESTED-PARITY (fetch+TTL+single-flight, no vector) |
 | `WellKnownEndpointResolver` / `NewWellKnownEndpointResolver` / `ResolveEndpoint` | ✅ | ✅ `resolve_endpoint` | ✅ `resolveEndpoint` | UNTESTED-PARITY (host-keyed fetch/cache, no vector) |
-| `WBAKeyResolver` / `NewWBAKeyResolver` / `.Resolve` / `.Run` / `.Revoked` | ✅ | ✅ `WBAKeyResolver` (+poller) | ✅ `newWBAKeyResolver` | UNTESTED-PARITY (revocation *membership* IS vectored; fetch/poll loop is not) |
+| `WBAKeyResolver` / `NewWBAKeyResolver` / `.Resolve` / `.Run` / `.Revoked` | ✅ | ✅ `WBAKeyResolver` (+poller) | ✅ `createWBAKeyResolver` | UNTESTED-PARITY (revocation *membership* IS vectored; fetch/poll loop is not) |
 | `ActiveEd25519Key` (+`WithExpiry`/`Screened`/`WithExpiryScreened`) | ✅ | ✅ `active_ed25519_key` ×4 | ✅ `activeEd25519Key` ×4 | **PARITY** (active-ed25519-key-vectors.json) |
 | revocation membership | ✅ | ✅ | ✅ | **PARITY** (revocation-membership-vectors.json) |
 | `CachedOfferKeyResolver` / `NewCachedOfferKeyResolver` / `DirectoryFetch`/`OfferDirectoryFetcher` | ✅ | ✅ `CachedOfferKeyResolver`,`DirectoryFetch` | ❌ | **GAP** (TS has no offer-key cache) |
@@ -84,7 +84,7 @@ Legend: ✅ present · ❌ absent · ⚠️ present-but-divergent. Verdict colum
 | `Thumbprint` / `ThumbprintBytes` | ✅ | ✅ `thumbprint` | ✅ `thumbprint` | **PARITY** (thumbprint-vectors.json) |
 | JCS canonical offer/acceptance payload | ✅ (`SignOffer` path) | ✅ `canonical_offer_payload`,`jcs_acceptance_payload` | ✅ `canonicalOfferPayload`, `fromWireOffer` | **PARITY** (wire-canonical + offer vectors) |
 | `ParseMoney`/`FormatMoney`/`CanonicalizeMoney` | ✅ | ✅ `parse_money`,`format_money`,`canonicalize_money` | ✅ `parseMoney`,`formatMoney`,`canonicalizeMoney` | **PARITY** (money-vectors.json) |
-| `NewIdempotencyKey` (generate) | ✅ | ✅ `new_idempotency_key` | ✅ `newIdempotencyKey` | UNTESTED-PARITY (random output → format only spot-checked; not corpus-locked) |
+| `NewIdempotencyKey` (generate) | ✅ | ✅ `generate_idempotency_key` | ✅ `generateIdempotencyKey` | UNTESTED-PARITY (random output → format only spot-checked; not corpus-locked) |
 | `ValidateIdempotencyKey` | ✅ | ✅ `validate_idempotency_key` | ✅ `validateIdempotencyKey` | **PARITY** (idempotency-validate-vectors.json) |
 | `NormalizeScopes`/`ScopesSubset`/`ApplyScopes` | ✅ | ✅ | ✅ | **PARITY** (scopes-vectors.json) |
 | wire constants (`ContentTypeJSON`, `RequestIDHeader`, `SignatureAgentHeader`, …) | ✅ | ✅ | ✅ | **PARITY** (wire-constants-vectors.json) |
@@ -99,7 +99,7 @@ Legend: ✅ present · ❌ absent · ⚠️ present-but-divergent. Verdict colum
 |---|---|---|---|---|
 | `connect.Client` / `NewClient` / `.Discover` / `.Execute` / `ClientOption`s | ✅ | ❌ | ❌ | **DECISION** — Go-only client is an intentional runtime-native divergence (TS edge zero-RPC; Python shim's 3 legs are single non-orchestration RPCs, no `gen/` client substrate). Recorded in `sdk-parity-matrix.md`; reopen only for multi-RPC Discover→Execute orchestration. |
 | `connectserver` handlers (`NewExchangeServiceHandler`, `NewBrokerServiceHandler`, `AttachErrorDetail`, `ClassifyReject`, `AsConnectError`, `EmitUnpopulatedJSONCodec`, `ServerOption`s) | ✅ | ⚠️ `verify_request_server` only | ⚠️ `hono/middleware.rampVerify` only | DIVERGENT-by-runtime (server adapter is transport-specific; verify-gate parity exists, handler wiring does not) |
-| `core.Verifier` / `NewVerifier` / `Mode` / `RejectedOffer` / `VerifiedOffer` / `Result` | ✅ | ✅ `Verifier`,`Mode`,`VerifiedOffer`,`RejectedOffer`,`Result` | ✅ `Verifier`,`NewVerifier`,`Mode`,… | **PARITY** (core-offer-verify parity test) — but see naming smell `NewVerifier` (TS) |
+| `core.Verifier` / `NewVerifier` / `Mode` / `RejectedOffer` / `VerifiedOffer` / `Result` | ✅ | ✅ `Verifier`,`Mode`,`VerifiedOffer`,`RejectedOffer`,`Result` | ✅ `Verifier`,`createVerifier`,`Mode`,… | **PARITY** (core-offer-verify parity test) |
 | `RequestIDMiddleware` / `DefaultRequestID` / `ClockWindow` / `MonotonicWindow` | ✅ | ✅ `clock_window`,`monotonic_window`,`Window` | ✅ `clockWindow`,`monotonicWindow` | **PARITY** (request-id middleware Go-only, windows tri-present) |
 
 ---
@@ -129,22 +129,10 @@ These are corpus-completeness blind spots — parity asserted by hand-porting, n
 
 ---
 
-## Naming hygiene list
+## Naming hygiene (resolved)
 
 **DO NOT FLAG Go `NewX`.** `NewWellKnownEndpointResolver`, `NewWBAKeyResolver`, `NewStaticKeyResolver`, `NewIdempotencyKey`, `NewCachedOfferKeyResolver`, `NewGuardedClientFromEnv`, `NewVerifier`, `NewClient`, `NewEd25519Signer`, etc. are **idiomatic Go and required by revive/golint** (constructor convention). Leave every Go `NewX` exactly as-is; "fixing" them would break lint and Go convention.
 
-Non-idiomatic transliterations of Go's `NewX` into other languages:
+The transliterated TS/Python factory names have been swept: TS object factories now use the `create*` prefix (`createWellKnownKeyResolver`, `createWellKnownEndpointResolver`, `createWBAKeyResolver`, `createStaticKeyResolver`, `createCachedOfferKeyResolver`, `createWBAOfferDirectoryFetch`, `createSigningTransport`, `createVerifier`) and value generators use `generate*` (`generateIdempotencyKey`; Python `generate_idempotency_key`). No `new*`-prefixed or PascalCase-transliterated factory remains on the TS/Python public surface.
 
-| language | current symbol | file | why it smells | idiomatic target |
-|---|---|---|---|---|
-| TS | `newWellKnownEndpointResolver` | `ts/resolvers/wellknown.ts` | `new`-prefixed factory returning an interface; TS reserves `new` for the operator | drop prefix → `wellKnownEndpointResolver(...)` or `createWellKnownEndpointResolver(...)`, or export the class |
-| TS | `newWellKnownKeyResolver` | `ts/resolvers/wellknown.ts` | same | `wellKnownKeyResolver` / `createWellKnownKeyResolver` |
-| TS | `newWBAKeyResolver` | `ts/resolvers/wba.ts` | same | `wbaKeyResolver` / `createWbaKeyResolver` |
-| TS | `newStaticKeyResolver` | `ts/resolvers/static.ts` | same | `staticKeyResolver` / `createStaticKeyResolver` |
-| TS | `newIdempotencyKey` | `ts/src/idempotency.ts` | borderline — reads as verb "make a new key" — but still a Go-ism; inconsistent with the rest of the pure-helper module (`validateIdempotencyKey`, `parseMoney`) | `generateIdempotencyKey` or `createIdempotencyKey` (verb-first) |
-| TS | `NewVerifier` | `ts/core/verifier.ts` | **PascalCase function** — worst offender: PascalCase in TS signals a class/constructor, but this is a plain factory function; a straight `s/New/`-transliteration of Go `NewVerifier` | `newVerifier`→ no; use `createVerifier(...)` or export `Verifier` class + `Verifier.create(...)` |
-| Python | `new_idempotency_key` | `python/ramp_sdk/idempotency.py` | `new_`-prefixed snake_case transliteration of Go `NewIdempotencyKey`; Python convention is a plain verb or classmethod | `generate_idempotency_key` (plain function) — verb-first, matches `validate_idempotency_key` sibling |
-
-Extra find beyond the task's seed list: **TS `NewVerifier` (PascalCase)** — the most jarring because PascalCase falsely implies a class. Confirmed seed items all present. `newIdempotencyKey`/`new_idempotency_key` are the mildest (generator "new" reads as a verb) but remain inconsistent with their pure-helper module siblings.
-
-Note: TS `guardedFetchFromEnv` and Python `guarded_client`/`guarded_async_client` correctly AVOID the `new` prefix (idiomatic) even though Go names it `NewGuardedClientFromEnv` — good precedent that the resolver factories should follow.
+The guarded-client names — TS `guardedFetchFromEnv` and Python `guarded_client`/`guarded_async_client` — are **an intentional idiomatic divergence, not a transliteration**: Python exposes a sync/async `httpx.Client` pair while TS exposes a single fetch client, so the stems legitimately differ by return type. They already avoid the `new` prefix and are left as-is.

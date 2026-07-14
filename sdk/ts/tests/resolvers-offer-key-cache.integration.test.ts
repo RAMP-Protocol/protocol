@@ -24,7 +24,7 @@ import type { OfferKeyResolver } from "../core/verifier.ts";
 import {
 	type CachedOfferKeyResolverOptions,
 	type OfferDirectoryFetch,
-	newCachedOfferKeyResolver,
+	createCachedOfferKeyResolver,
 } from "../resolvers/offer-key-cache.ts";
 import {
 	activeJwk,
@@ -60,7 +60,7 @@ describe("CachedOfferKeyResolver", () => {
 		// A structural pin: the factory's return value must satisfy OfferKeyResolver
 		// so newVerifier({ resolve }) accepts it. The TS analogue of Go's
 		// `var _ helpers.KeyResolver = (*CachedOfferKeyResolver)(nil)` compile-assert.
-		const resolver: OfferKeyResolver = newCachedOfferKeyResolver({
+		const resolver: OfferKeyResolver = createCachedOfferKeyResolver({
 			fetch,
 			now: () => ANCHOR_MS,
 		});
@@ -72,7 +72,7 @@ describe("CachedOfferKeyResolver", () => {
 		const { fetch, calls } = countingFetch({
 			[EXCHANGE]: directory([activeJwk(key.x)]),
 		});
-		const resolver = newCachedOfferKeyResolver({
+		const resolver = createCachedOfferKeyResolver({
 			fetch,
 			ttlMs: MINUTE_MS,
 			now: () => ANCHOR_MS,
@@ -90,7 +90,7 @@ describe("CachedOfferKeyResolver", () => {
 			[EXCHANGE]: directory([activeJwk(key.x)]),
 		});
 		let now = ANCHOR_MS;
-		const resolver = newCachedOfferKeyResolver({
+		const resolver = createCachedOfferKeyResolver({
 			fetch,
 			ttlMs: MINUTE_MS,
 			now: () => now,
@@ -112,7 +112,7 @@ describe("CachedOfferKeyResolver", () => {
 			[EXCHANGE]: directory([activeJwk(key.x)]), // not_after = ANCHOR+1h
 		});
 		let now = ANCHOR_MS;
-		const resolver = newCachedOfferKeyResolver({
+		const resolver = createCachedOfferKeyResolver({
 			fetch,
 			ttlMs: 1000 * HOUR_MS,
 			now: () => now,
@@ -139,7 +139,7 @@ describe("CachedOfferKeyResolver", () => {
 		const { fetch } = countingFetch({
 			[EXCHANGE]: directory([activeJwk(revoked.x), activeJwk(live.x)]),
 		});
-		const resolver = newCachedOfferKeyResolver({
+		const resolver = createCachedOfferKeyResolver({
 			fetch,
 			now: () => ANCHOR_MS,
 			revoked: (tp) => tp === revoked.tp,
@@ -153,7 +153,7 @@ describe("CachedOfferKeyResolver", () => {
 		// TS is fail-closed by ABSENCE — resolve() returns undefined, never throws.
 		// This is the confirmed API-shape decision (OfferKeyResolver contract).
 		const { fetch, calls } = countingFetch({}); // EXCHANGE absent → undefined
-		const resolver = newCachedOfferKeyResolver({ fetch, now: () => ANCHOR_MS });
+		const resolver = createCachedOfferKeyResolver({ fetch, now: () => ANCHOR_MS });
 
 		await expect(resolver.resolve(EXCHANGE)).resolves.toBeUndefined();
 		expect(calls()).toBe(1);
@@ -166,7 +166,7 @@ describe("CachedOfferKeyResolver", () => {
 		const { fetch } = countingFetch({
 			[EXCHANGE]: directory([expiredJwk(key.x)]),
 		});
-		const resolver = newCachedOfferKeyResolver({ fetch, now: () => ANCHOR_MS });
+		const resolver = createCachedOfferKeyResolver({ fetch, now: () => ANCHOR_MS });
 
 		await expect(resolver.resolve(EXCHANGE)).resolves.toBeUndefined();
 	});
@@ -175,7 +175,7 @@ describe("CachedOfferKeyResolver", () => {
 		// Mirrors Go PanicsWithoutFetch: a missing seam is a programmer error surfaced
 		// at construction, NOT a per-resolve fail-closed absence.
 		expect(() =>
-			newCachedOfferKeyResolver({} as CachedOfferKeyResolverOptions),
+			createCachedOfferKeyResolver({} as CachedOfferKeyResolverOptions),
 		).toThrow(TypeError);
 	});
 
@@ -195,7 +195,7 @@ describe("CachedOfferKeyResolver", () => {
 			await gate; // hold the flight open so both resolves observe it in-flight
 			return dir;
 		};
-		const resolver = newCachedOfferKeyResolver({ fetch, now: () => ANCHOR_MS });
+		const resolver = createCachedOfferKeyResolver({ fetch, now: () => ANCHOR_MS });
 
 		const p1 = resolver.resolve(EXCHANGE);
 		const p2 = resolver.resolve(EXCHANGE);
@@ -217,7 +217,7 @@ describe("CachedOfferKeyResolver", () => {
 			const boom: OfferDirectoryFetch = async () => {
 				throw new Error("directory unreachable");
 			};
-			const resolver = newCachedOfferKeyResolver({
+			const resolver = createCachedOfferKeyResolver({
 				fetch: boom,
 				now: () => ANCHOR_MS,
 			});
@@ -230,7 +230,7 @@ describe("CachedOfferKeyResolver", () => {
 			const { fetch } = countingFetch({
 				[EXCHANGE]: directory([activeJwk(key.x)]),
 			});
-			const resolver = newCachedOfferKeyResolver({
+			const resolver = createCachedOfferKeyResolver({
 				fetch,
 				now: () => ANCHOR_MS,
 				revoked: () => {

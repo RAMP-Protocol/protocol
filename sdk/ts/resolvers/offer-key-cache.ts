@@ -6,7 +6,7 @@
 // revocation screening into selection, and coalescing concurrent resolves for a
 // domain into a single directory fetch. It IMPLEMENTS core/verifier.ts
 // OfferKeyResolver (resolve(exchange) → Promise<key | undefined>), so
-// NewVerifier({ resolve }) injects it directly.
+// createVerifier({ resolve }) injects it directly.
 //
 // It ASSEMBLES existing SDK primitives rather than reinventing them:
 //   - activeEd25519KeyWithExpiryScreened (wba.ts) — the revocation-aware
@@ -50,7 +50,7 @@ export type OfferDirectoryFetch = (
 	domain: string,
 ) => Promise<WBAFile | undefined>;
 
-/** Wires a {@link newCachedOfferKeyResolver}. `fetch` is REQUIRED. */
+/** Wires a {@link createCachedOfferKeyResolver}. `fetch` is REQUIRED. */
 export interface CachedOfferKeyResolverOptions {
 	/** Resolves a domain to its WBA directory. REQUIRED — the factory throws a
 	 * TypeError at construction when it is missing (a resolver with no directory
@@ -176,19 +176,19 @@ class CachedOfferKeyResolverImpl implements OfferKeyResolver {
 }
 
 /**
- * newCachedOfferKeyResolver builds a domain-keyed offer-key cache implementing
+ * createCachedOfferKeyResolver builds a domain-keyed offer-key cache implementing
  * OfferKeyResolver. `newX` for family consistency with the sibling resolver
- * factories (newWBAKeyResolver, newWellKnownKeyResolver, …). Throws TypeError when
+ * factories (createWBAKeyResolver, createWellKnownKeyResolver, …). Throws TypeError when
  * opts.fetch is missing; every other failure fails closed at resolve() time.
  */
-export function newCachedOfferKeyResolver(
+export function createCachedOfferKeyResolver(
 	opts: CachedOfferKeyResolverOptions,
 ): CachedOfferKeyResolver {
 	return new CachedOfferKeyResolverImpl(opts);
 }
 
 /**
- * newWBAOfferDirectoryFetch returns the default {@link OfferDirectoryFetch}: it
+ * createWBAOfferDirectoryFetch returns the default {@link OfferDirectoryFetch}: it
  * GETs {scheme}://{domain}[:{port}]{WBA_DIRECTORY_PATH} (built by the shared
  * wbaDirectoryURL) and parses the body as a WBAFile, returning `undefined` on ANY
  * transport/status/decode failure so
@@ -200,7 +200,7 @@ export function newCachedOfferKeyResolver(
  * lever (mirrors Go NewWBADirectoryFetcher). Tests inject a loopback fetch; apps
  * may inject a fetch wrapping their shared well-known client.
  */
-export function newWBAOfferDirectoryFetch(
+export function createWBAOfferDirectoryFetch(
 	opts: { fetch?: FetchLike; scheme?: string; port?: string } = {},
 ): OfferDirectoryFetch {
 	const fetchFn = opts.fetch ?? guardedFetchFromEnv();

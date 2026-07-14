@@ -21,15 +21,33 @@ Consumers import the moved Go resolvers from `sdk/go/resolvers`, not `sdk/go/hel
 | PoP sign (GET agent binding) | ⚠️ via `AppendSignature` 2-component set; no dedicated face | ✅ `core/sign.ts signInbound` | ✅ `pop.sign_agent_binding` |
 | Acceptance sign / verify | ✅ `helpers.SignOfferAcceptance` / `VerifyOfferAcceptance` | ✅ `src/acceptance.ts signOfferAcceptance` / `verifyOfferAcceptance` | ✅ `core.sign_offer_acceptance_jcs` / `verify_offer_acceptance_jcs` (+`acceptance` aliases) |
 | Offer verify ({verified, rejected}, unforgeable VerifiedOffer) | ✅ `core.Verifier.Sort` + brand | ✅ `core/verifier.ts Verifier.sort` + brand | ✅ `core.Verifier.sort` + token-gated brand |
-| Key resolution — static (pure L1) | ✅ `helpers.NewStaticKeyResolver` | ✅ `resolvers.newStaticKeyResolver` | ✅ `keyresolver.StaticKeyResolver` |
-| Key resolution — well-known JWKS (L2 I/O) | ✅ `resolvers.NewWellKnownKeyResolver` | ✅ `resolvers.newWellKnownKeyResolver` | ✅ `resolvers.WellKnownKeyResolver` |
-| Key resolution — WBA directory (revocation-aware, L2 I/O) | ✅ `resolvers.NewWBAKeyResolver` (+`Run` poller) | ✅ `resolvers.newWBAKeyResolver` (+`run` poller) | ✅ `resolvers.WBAKeyResolver` (+`run` poller) |
-| Endpoint resolution — well-known ramp.json (L2 I/O) | ✅ `resolvers.NewWellKnownEndpointResolver` (`WellKnownOptions`, `ErrNoEndpoint`) | ✅ `resolvers.newWellKnownEndpointResolver` | ✅ `resolvers.WellKnownEndpointResolver` |
+| Key resolution — static (pure L1) | ✅ `helpers.NewStaticKeyResolver` | ✅ `resolvers.createStaticKeyResolver` | ✅ `keyresolver.StaticKeyResolver` |
+| Key resolution — well-known JWKS (L2 I/O) | ✅ `resolvers.NewWellKnownKeyResolver` | ✅ `resolvers.createWellKnownKeyResolver` | ✅ `resolvers.WellKnownKeyResolver` |
+| Key resolution — WBA directory (revocation-aware, L2 I/O) | ✅ `resolvers.NewWBAKeyResolver` (+`Run` poller) | ✅ `resolvers.createWBAKeyResolver` (+`run` poller) | ✅ `resolvers.WBAKeyResolver` (+`run` poller) |
+| Endpoint resolution — well-known ramp.json (L2 I/O) | ✅ `resolvers.NewWellKnownEndpointResolver` (`WellKnownOptions`, `ErrNoEndpoint`) | ✅ `resolvers.createWellKnownEndpointResolver` | ✅ `resolvers.WellKnownEndpointResolver` |
 | Active-key selection — window-active, document order | ✅ `resolvers.ActiveEd25519Key` / `ActiveEd25519KeyWithExpiry` | ✅ `resolvers.activeEd25519Key` / `activeEd25519KeyWithExpiry` | ✅ `resolvers.active_ed25519_key` / `active_ed25519_key_with_expiry` |
 | Active-key selection — revocation-aware (screened) | ✅ `resolvers.ActiveEd25519KeyScreened` / `ActiveEd25519KeyWithExpiryScreened` | ✅ `resolvers.activeEd25519KeyScreened` / `activeEd25519KeyWithExpiryScreened` | ✅ `resolvers.active_ed25519_key_screened` / `active_ed25519_key_with_expiry_screened` |
 | Cached offer-key resolver (clamps TTL to key `not_after`) | ✅ `resolvers.NewCachedOfferKeyResolver` | ❌ (not intended; TS edge composes the selector directly) | ✅ `resolvers.CachedOfferKeyResolver` |
 | SSRF-guarded fetch client (env-driven: `SKIP_SSRF`, `ALLOW_INSECURE`) | ✅ `resolvers.NewGuardedClientFromEnv` (+`SSRFGuard`/`SSRFCheckRedirect`) | ✅ `resolvers.guardedFetchFromEnv` (+`ssrfGuard`/`SsrfBlockedError`) | ✅ `resolvers.guarded_client` (+`ssrf_guard`/`async_ssrf_guard`) |
 | Signed-URL fetch binding (3-way PoP against URL agent_id) | ✅ `helpers.VerifiedURL.CheckProofOfPossession` | ✅ `src/pop.ts verifyAgentBinding` | ✅ `pop.verify_agent_binding` |
+
+### Factory naming conventions
+
+Go's idiomatic `NewX` constructor stays as-is (revive/golint require it). TS object
+factories carry the `create*` prefix (`createStaticKeyResolver`,
+`createWellKnownKeyResolver`, `createWBAKeyResolver`,
+`createWellKnownEndpointResolver`, `createCachedOfferKeyResolver`,
+`createWBAOfferDirectoryFetch`, `createSigningTransport`, `createVerifier`) and value
+generators the `generate*` prefix (`generateIdempotencyKey`; Python
+`generate_idempotency_key`).
+
+The SSRF-guarded fetch client is the one **intentional idiomatic divergence**, not a
+transliteration: Python exposes a sync/async pair (`guarded_client` returns an
+`httpx.Client`, `guarded_async_client` returns an `httpx.AsyncClient`) while TS
+exposes a single fetch-shaped client (`guardedFetchFromEnv`). The stems legitimately
+differ by return type, and no `new`/`NewX` transliteration is involved, so the names
+are left as they are — the env semantics (`SKIP_SSRF`, `ALLOW_INSECURE`) are identical
+across all three.
 
 ## SERVER role (broker / exchange)
 

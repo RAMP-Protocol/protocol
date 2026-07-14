@@ -245,7 +245,7 @@ function parseUtcMillis(s: string): number {
 	return Date.parse(hasTz ? s : `${s}Z`);
 }
 
-/** Options for NewVerifier (all injected — the core owns no state). */
+/** Options for createVerifier (all injected — the core owns no state). */
 export interface VerifierOptions {
 	resolve: (exchange: string) => Promise<Uint8Array<ArrayBuffer> | undefined>;
 	now: () => number;
@@ -253,11 +253,11 @@ export interface VerifierOptions {
 }
 
 /**
- * NewVerifier is the transport-neutral constructor. Mirror of sdk/go
+ * createVerifier is the transport-neutral constructor. Mirror of sdk/go
  * core.NewVerifier: the verification mode, offer KeyResolver, and clock are all
  * injected; the Ed25519 primitive defaults to WebCrypto.
  */
-export function NewVerifier(mode: Mode, opts: VerifierOptions): Verifier {
+export function createVerifier(mode: Mode, opts: VerifierOptions): Verifier {
 	const resolver: OfferKeyResolver = { resolve: opts.resolve };
 	return new Verifier(
 		mode,
