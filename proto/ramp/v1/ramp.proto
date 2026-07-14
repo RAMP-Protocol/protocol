@@ -1563,7 +1563,8 @@ message Delegation {
   optional int32 max_accesses = 9;
 
   // Quota reset period. How often the access/spend counters reset.
-  // Example: 720h (30 days) for monthly subscriptions.
+  // Example: 30 days for monthly subscriptions — "2592000s" on the wire
+  // (proto-JSON encodes Duration as seconds; "720h" is not accepted).
   // When absent, the quota is lifetime (bounded only by expires_at).
   optional google.protobuf.Duration quota_period = 10;
 
@@ -2330,7 +2331,8 @@ message RequestConstraints {
   // for the budget_scope. Transactions that would exceed are denied.
   optional Cost period_budget = 8;
 
-  // Budget period (e.g. 720h = 30 days). Resets at period boundary.
+  // Budget period (e.g. "2592000s" = 30 days; proto-JSON encodes Duration
+  // as seconds). Resets at period boundary.
   optional google.protobuf.Duration budget_period = 9;
 
   // Maximum acceptable age of resource data. The Broker SHOULD
