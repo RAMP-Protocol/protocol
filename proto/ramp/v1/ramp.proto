@@ -183,7 +183,7 @@ message ResourceQuery {
 
   // Maximum time the caller will wait for a response.
   // Exchange SHOULD prioritize speed over completeness when tight.
-  // Absent = 500ms default.
+  // Absent = "0.5s" default (proto-JSON encodes Duration as seconds).
   optional google.protobuf.Duration deadline = 6;
 
   // Domain extension profiles the caller understands.
