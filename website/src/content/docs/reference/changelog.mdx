@@ -17,9 +17,13 @@ protocol guarantee: a decoder that discards unknown fields (as connect-go's
 default codec does) ignores a stray `billing_ref` inside `requester`, but a
 strict `protojson` decoder rejects the whole message — endpoints that hand-roll
 `protojson` decoding should set `DiscardUnknown: true` if they want to keep
-accepting old callers. For anyone who used the field: cost-allocation labels
-belong in `RequestConstraints.budget_scope`; who pays is always the account
-minted at `Register`, resolved from the request signature.
+accepting old callers. For anyone who used the field: who pays is always the
+account minted at `Register`, resolved from the request signature. For a
+cost-allocation label, Broker callers use `RequestConstraints.budget_scope` on
+`DiscoveryRequest` (a Broker-side spend-tracking key; it does not reach the
+Exchange). Direct-to-Exchange callers who need to attach one use
+`Requester.ext` — but do not name the key `billing_ref`: it is not an account
+handle, and the Exchange will not read it as one.
 
 **Agent account registration + status RPCs (additive).** `ExchangeService`
 gains `Register` and `GetAccountStatus` — the agent-account front door.
