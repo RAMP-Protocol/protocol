@@ -137,7 +137,7 @@ class Delegation(WireModel):
     )
     quota_period: str | None = Field(
         None,
-        description='Quota reset period. How often the access/spend counters reset.\n Example: 720h (30 days) for monthly subscriptions.\n When absent, the quota is lifetime (bounded only by expires_at).',
+        description='Quota reset period. How often the access/spend counters reset.\n Example: 30 days for monthly subscriptions — "2592000s" on the wire\n (proto-JSON encodes Duration as seconds; "720h" is not accepted).\n When absent, the quota is lifetime (bounded only by expires_at).',
     )
     revocation_uri: str | None = Field(
         None,
@@ -669,7 +669,7 @@ class ReportingPolicy(WireModel):
 class RequestConstraints(WireModel):
     budget_period: str | None = Field(
         None,
-        description='Budget period (e.g. 720h = 30 days). Resets at period boundary.',
+        description='Budget period (e.g. "2592000s" = 30 days; proto-JSON encodes Duration\n as seconds). Resets at period boundary.',
     )
     budget_scope: str | None = Field(
         None,

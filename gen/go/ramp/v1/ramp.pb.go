@@ -4206,7 +4206,8 @@ type Delegation struct {
 	// For subscriptions with "10,000 accesses/month", this carries the ceiling.
 	MaxAccesses *int32 `protobuf:"varint,9,opt,name=max_accesses,json=maxAccesses,proto3,oneof" json:"max_accesses,omitempty"`
 	// Quota reset period. How often the access/spend counters reset.
-	// Example: 720h (30 days) for monthly subscriptions.
+	// Example: 30 days for monthly subscriptions — "2592000s" on the wire
+	// (proto-JSON encodes Duration as seconds; "720h" is not accepted).
 	// When absent, the quota is lifetime (bounded only by expires_at).
 	QuotaPeriod *durationpb.Duration `protobuf:"bytes,10,opt,name=quota_period,json=quotaPeriod,proto3,oneof" json:"quota_period,omitempty"`
 	// Token bytes. A JWT (base64url-encoded JWS).
@@ -6349,7 +6350,8 @@ type RequestConstraints struct {
 	// Per-period budget limit. The Broker tracks spend against this
 	// for the budget_scope. Transactions that would exceed are denied.
 	PeriodBudget *Cost `protobuf:"bytes,8,opt,name=period_budget,json=periodBudget,proto3,oneof" json:"period_budget,omitempty"`
-	// Budget period (e.g. 720h = 30 days). Resets at period boundary.
+	// Budget period (e.g. "2592000s" = 30 days; proto-JSON encodes Duration
+	// as seconds). Resets at period boundary.
 	BudgetPeriod *durationpb.Duration `protobuf:"bytes,9,opt,name=budget_period,json=budgetPeriod,proto3,oneof" json:"budget_period,omitempty"`
 	// Maximum acceptable age of resource data. The Broker SHOULD
 	// exclude offers where (now - Offer.data_as_of) exceeds this duration.
