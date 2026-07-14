@@ -124,6 +124,23 @@ is byte-deterministic). Genuinely-open items only:
   `connectserver.New{Exchange,Broker}ServiceHandler` does. Whether to ship that
   binding (vs. leaving framework wiring to the app) is the open call
   (`agentic-content-access-qqkro`).
+- DECISION (resolved): typed Connect **client**. Go ships a typed Connect client
+  (`NewClient` / `.Discover` / `.Execute` / `ClientOption`s); Python and TS do not,
+  and this is a **deliberate runtime-native divergence, not a gap to fill**. The TS
+  edge makes zero outbound RPC (its `fetch` is origin-proxy + WBA key-directory
+  only). The Python MCP shim hand-builds three Connect/HTTP legs — `BrokerService/
+  Resolve` (`broker.py`), the broker-relay execute (`broker.py`), and an
+  exchange-direct `ExchangeService/ReportUsage` (`usage_report.py`, via
+  `outbound._signed_post_capped`, deliberately bypassing the Broker relay). Every
+  leg is a single fire-and-forget RPC already consolidated through `outbound.py`'s
+  shared signed-POST helpers over SDK-backed signing/verify/resolve/offer-key — none
+  is the multi-RPC Discover→Execute offer-lifecycle orchestration the Go client
+  provides. `gen/python` ships wire models and `gen/ts` ships Zod schemas only (no
+  `connect-python` / `connect-es` client stubs), so a typed client would be a
+  from-scratch two-language transport build, disproportionate to one usage-report
+  POST. REOPEN iff a Python or TS consumer needs the multi-RPC Discover→Execute
+  offer-lifecycle **orchestration** (not a single usage report), or `gen/` begins
+  emitting `connect-python` / `connect-es` client stubs.
 - TS wire→canonical from-wire face: Python has `wire_canon.from_wire_offer` (and
   consumes wire-canonical-vectors); TS has no from-wire face and does not consume
   those vectors (TS edge consumes canonical input today).
