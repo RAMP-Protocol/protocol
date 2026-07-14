@@ -13,6 +13,7 @@ export {
 	NoEndpoint,
 	ResolverError,
 	RevocationUnevaluated,
+	UnknownKey,
 } from "./errors.ts";
 export type { FetchLike, FetchResponse } from "./http.ts";
 export { guardedFetchFromEnv, SsrfBlockedError, ssrfGuard } from "./http.ts";

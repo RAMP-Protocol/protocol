@@ -255,9 +255,9 @@
       "ts": "domainVerificationFailureDetail"
     },
     "helpers.ErrUnknownKey": {
-      "allowlist_reason": "TS has no UnknownKey error class; resolver error taxonomy otherwise at parity (KeyExpired/KeyRevoked/NoEndpoint/RevocationUnevaluated/DirectoryUnavailable all present) — tracked follow-up",
+      "allowlist_reason": null,
       "python": "UnknownKeyError",
-      "ts": null
+      "ts": "UnknownKey"
     },
     "helpers.FormatMoney": {
       "allowlist_reason": null,
@@ -455,9 +455,9 @@
       "ts": "RevocationUnevaluated"
     },
     "resolvers.ErrUnknownKey": {
-      "allowlist_reason": "TS has no UnknownKey error class; resolver error taxonomy otherwise at parity (KeyExpired/KeyRevoked/NoEndpoint/RevocationUnevaluated/DirectoryUnavailable all present) — tracked follow-up",
+      "allowlist_reason": null,
       "python": "UnknownKeyError",
-      "ts": null
+      "ts": "UnknownKey"
     },
     "resolvers.NewCachedOfferKeyResolver": {
       "allowlist_reason": "Go NewCachedOfferKeyResolver factory folds into the Python class constructor (CachedOfferKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createCachedOfferKeyResolver factory.",

@@ -70,21 +70,22 @@ _GO_PACKAGES = ("helpers", "resolvers", "core", "connect", "connectserver")
 #     docs/sdk-parity-matrix.md reached via decision_anchor (connect.Client /
 #     connect.NewClient and the two connectserver handler bindings).
 #   * PARTIAL gap (one language present, the other genuinely absent) — backed by an
-#     inline allowlist_reason naming the one-sided divergence. The 12 partial gaps:
-#     the two ErrUnknownKey entries (helpers/resolvers — TS ships no UnknownKey error
-#     class while Python/Go do; the rest of the resolver error taxonomy is at parity)
-#     plus the ten language-idiom folds absorbed from the old BASELINE_PY_ONLY_GAP
-#     ratchet — seven Go NewX constructor funcs that fold into Python class
-#     constructors, and three Go/TS options types that fold into Python constructor
-#     kwargs. Each carries a per-entry reason; none is a symbol Python is missing.
+#     inline allowlist_reason naming the one-sided divergence. The 10 partial gaps are
+#     all language-idiom folds absorbed from the old BASELINE_PY_ONLY_GAP ratchet —
+#     seven Go NewX constructor funcs that fold into Python class constructors, and
+#     three Go/TS options types that fold into Python constructor kwargs. Each carries
+#     a per-entry reason; none is a symbol Python is missing. (The two former
+#     ErrUnknownKey partial gaps are RESOLVED: TS now exports the UnknownKey error
+#     class, completing the resolver error taxonomy in all three languages.)
 # A change that RAISES this number adds a new silent divergence and MUST be reviewed as
 # such: bumping the constant is the whole tell. Never raise it to make a red gate green —
-# map the symbol (fill the name) or record the divergence. Grown 6 -> 16 ONLY by
+# map the symbol (fill the name) or record the divergence. Moved 6 -> 16 ONLY by
 # documenting the ten previously-OPAQUE Python-null gaps (BASELINE_PY_ONLY_GAP 19 -> 0
-# in the same change): net, 19 undocumented divergences became 10 documented ones and
-# 9 exported Python symbols. That trade is the one sanctioned growth shape — every
-# entry must arrive with its reason, never bare.
-BASELINE_ALLOWLIST = 16
+# in the same change — 19 undocumented divergences became 10 documented ones and 9
+# exported Python symbols; that trade is the one sanctioned growth shape — every entry
+# must arrive with its reason, never bare), then shrunk 16 -> 14 by resolving the two
+# ErrUnknownKey gaps.
+BASELINE_ALLOWLIST = 14
 
 # HARD ZERO (was a shrink-only ratchet at 19) — undocumented TS-present / Python-null
 # gaps. The PRESENCE check skips nulls, so absent this ceiling a NEW Python-null gap
@@ -387,8 +388,8 @@ def test_every_gap_is_resolved_or_documented() -> None:
 
     TS direction (python present, ts null): HARD zero — every real TS face is now in
     package.json exports (money / idempotency / scopes / hashurl / wire / core.window /
-    verify-multisig-request / verify-request) and the only genuine TS-absent symbols
-    (helpers.ErrUnknownKey / resolvers.ErrUnknownKey) are allowlisted-with-reason.
+    verify-multisig-request / verify-request), including the UnknownKey error class
+    that completed the resolver error taxonomy in all three languages.
 
     Python direction (ts present, python null): HARD zero (BASELINE_PY_ONLY_GAP = 0) —
     the original 19 gaps were each resolved (Python face exported) or documented
