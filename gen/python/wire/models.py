@@ -209,7 +209,8 @@ class DisputeReason(Enum):
 
 class DisputeRequest(WireModel):
     billing_id: str | None = Field(
-        '', description='Billing reference from the transaction.'
+        '',
+        description='Billing record identifier from the disputed transaction\n (TransactionResultItem.billing_id).',
     )
     description: str | None = Field(
         None, description='Human-readable description of the issue.'
@@ -881,7 +882,10 @@ class TransactionDenial(WireModel):
 
 
 class TransactionResultItem(WireModel):
-    billing_id: str | None = Field('', description='Billing reference.')
+    billing_id: str | None = Field(
+        '',
+        description="Billing record identifier minted by the Exchange's billing adapter for\n this transaction (not the account handle — see RegisterResponse.billing_ref).",
+    )
     cost: Cost | None = Field(None, description='Cost for this item.')
     delivery_method: (
         constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
@@ -1346,7 +1350,8 @@ class UsageReport(WireModel):
         None, description='Assets that were delivered and used.'
     )
     billing_id: str | None = Field(
-        '', description='Billing reference from the delivery.'
+        '',
+        description='Billing record identifier from the delivery (TransactionResultItem.billing_id).',
     )
     exchange: str | None = Field(None, description='Exchange this report is for.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')

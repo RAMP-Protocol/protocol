@@ -4803,7 +4803,8 @@ type TransactionResultItem struct {
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
 	// Exchange-assigned transaction identifier.
 	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	// Billing reference.
+	// Billing record identifier minted by the Exchange's billing adapter for
+	// this transaction (not the account handle — see RegisterResponse.billing_ref).
 	BillingId string `protobuf:"bytes,3,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// Resource title echoed from the Offer.
 	ResourceTitle *string `protobuf:"bytes,4,opt,name=resource_title,json=resourceTitle,proto3,oneof" json:"resource_title,omitempty"`
@@ -5734,7 +5735,7 @@ type UsageReport struct {
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction ID from the delivery.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	// Billing reference from the delivery.
+	// Billing record identifier from the delivery (TransactionResultItem.billing_id).
 	BillingId string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// How the resource was actually used.
 	Usage *Usage `protobuf:"bytes,5,opt,name=usage,proto3" json:"usage,omitempty"`
@@ -7287,7 +7288,8 @@ type DisputeRequest struct {
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction being disputed.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	// Billing reference from the transaction.
+	// Billing record identifier from the disputed transaction
+	// (TransactionResultItem.billing_id).
 	BillingId string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// Reason for the dispute.
 	Reason DisputeReason `protobuf:"varint,5,opt,name=reason,proto3,enum=ramp.v1.DisputeReason" json:"reason,omitempty"`
