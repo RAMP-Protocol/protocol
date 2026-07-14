@@ -30,6 +30,22 @@ oracle. The SSRF-guarded transport is now a single env-driven client
 two flags (`SKIP_SSRF`, `ALLOW_INSECURE`). See `docs/sdk-parity-matrix.md` for the
 per-language surface.
 
+**Agent account registration + status RPCs (additive).** `ExchangeService`
+gains `Register(RegisterRequest) → RegisterResponse` and
+`GetAccountStatus(GetAccountStatusRequest) → GetAccountStatusResponse` — the
+agent-account front door the Web Bot Auth Registry epic needs. Registration
+creates the agent's account with the Exchange and mints `billing_ref`, the
+opaque, long-lived, per-Exchange account handle; the caller's identity is
+derived from the verified request signature, never from the body, and the
+operator-defined business payload rides in a flexible
+`RegisterRequest.registration_data` (`google.protobuf.Struct`) that the
+Exchange passes through uninspected. A repeat `Register` for the same agent
+returns the same `billing_ref` (idempotent by design — no `idempotency_key`).
+`GetAccountStatus` is the read-only "is my account active" check; its request
+deliberately carries no identifying field. Refused registrations use the
+pre-existing `ErrorDetail.registration_failure` / `RegistrationFailureReason`
+path, which until now had no RPC front door. Pre-v1 additive change.
+
 **Operator plane: new `ramp.admin.v1` package with `AdminService` (additive).**
 Two full-replace, idempotent setters for Exchange operators —
 `SetTenantFeeRate(SetTenantFeeRateRequest) → SetTenantFeeRateResponse` and
