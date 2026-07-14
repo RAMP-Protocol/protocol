@@ -1976,7 +1976,7 @@ type ResourceQuery struct {
 	AcceptableRestrictions []*AcceptableRestriction `protobuf:"bytes,9,rep,name=acceptable_restrictions,json=acceptableRestrictions,proto3" json:"acceptable_restrictions,omitempty"`
 	// Maximum time the caller will wait for a response.
 	// Exchange SHOULD prioritize speed over completeness when tight.
-	// Absent = 500ms default.
+	// Absent = "0.5s" default (proto-JSON encodes Duration as seconds).
 	Deadline *durationpb.Duration `protobuf:"bytes,6,opt,name=deadline,proto3,oneof" json:"deadline,omitempty"`
 	// Domain extension profiles the caller understands.
 	//

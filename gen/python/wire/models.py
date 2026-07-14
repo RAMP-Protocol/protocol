@@ -1223,7 +1223,7 @@ class ResourceQuery(WireModel):
     )
     deadline: str | None = Field(
         None,
-        description='Maximum time the caller will wait for a response.\n Exchange SHOULD prioritize speed over completeness when tight.\n Absent = 500ms default.',
+        description='Maximum time the caller will wait for a response.\n Exchange SHOULD prioritize speed over completeness when tight.\n Absent = "0.5s" default (proto-JSON encodes Duration as seconds).',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
