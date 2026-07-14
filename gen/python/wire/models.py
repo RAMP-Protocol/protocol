@@ -641,7 +641,7 @@ class ReportingObligation(WireModel):
     )
     window: str | None = Field(
         None,
-        description='Duration within which the report must be submitted (e.g. 24h).',
+        description='Duration within which the report must be submitted (e.g. "86400s" = 24\n hours; proto-JSON encodes Duration as seconds).',
     )
 
 

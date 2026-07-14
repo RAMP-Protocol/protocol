@@ -5630,7 +5630,8 @@ type ReportingObligation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Whether post-usage reporting is required.
 	Required bool `protobuf:"varint,1,opt,name=required,proto3" json:"required,omitempty"`
-	// Duration within which the report must be submitted (e.g. 24h).
+	// Duration within which the report must be submitted (e.g. "86400s" = 24
+	// hours; proto-JSON encodes Duration as seconds).
 	Window *durationpb.Duration `protobuf:"bytes,2,opt,name=window,proto3,oneof" json:"window,omitempty"`
 	// URL to submit the usage report to (if different from Exchange).
 	Endpoint *string `protobuf:"bytes,3,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
