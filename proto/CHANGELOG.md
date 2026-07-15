@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+**SDK parity matrix is now generated, not hand-maintained (no wire change).** The
+three overlapping, drift-prone parity docs (`docs/sdk-parity-matrix.md`,
+`sdk-api-parity-map.md`, `sdk-parity-audit.md`) collapse to a single generated
+artifact, `docs/sdk-parity-matrix.md`, rendered by `scripts/gen-parity-matrix.py` from
+the two ground-truth sources CI already enforces against the code: the API surface from
+`sdk/parity/symbol-map.json` (gated by `test_api_surface_parity.py`) and the
+conformance-vector replay table from the committed corpora (gated by
+`test_corpus_replay_completeness.py`). A regenerate-and-diff drift gate runs both in
+`scripts/ci-local.sh` and as `sdk/python/tests/test_parity_matrix_generated.py`
+(`sdk-types-ci.yml`), so the matrix can no longer drift from the real surface. The two
+superseded audit docs are deleted.
+
 **Go SDK: the network-fetching resolvers move `sdk/go/helpers` → `sdk/go/resolvers`
 (source move, no wire change).** The IO-bearing key/endpoint resolvers — the
 well-known JWKS resolver (`NewWellKnownKeyResolver`), the revocation-aware WBA
