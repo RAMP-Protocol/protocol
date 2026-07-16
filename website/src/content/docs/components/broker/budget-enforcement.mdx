@@ -27,7 +27,7 @@ graph TB
 |---|---|---|---|---|
 | **Per-transaction** | `RequestConstraints.max_price` | Hard reject if offer exceeds | Stateless -- always enforced | None |
 | **Per-session** | Broker in-memory map | Hard reject if cumulative spend exceeds session budget | Lost on crash; agent re-declares | In-memory |
-| **Per-period** | Redis, keyed by `billing_ref` or sub-account ID | Hard reject if period budget exhausted | Survives restart (persisted in Redis) | Redis |
+| **Per-period** | Redis, keyed by the verified agent identity or sub-account ID | Hard reject if period budget exhausted | Survives restart (persisted in Redis) | Redis |
 | **Per-Exchange** | Exchange's billing adapter | Advisory -- Exchange ultimately decides | Not Broker's state | External |
 
 ## Budget Scope Identifiers
@@ -44,7 +44,7 @@ type RequestConstraints struct {
 }
 ```
 
-Per-period budgets are keyed by `budget_scope` (or `billing_ref` if no scope is provided) and persisted in Redis with TTLs matching the period (e.g., monthly keys expire at month-end).
+Per-period budgets are keyed by `budget_scope` (or the verified agent identity if no scope is provided) and persisted in Redis with TTLs matching the period (e.g., monthly keys expire at month-end).
 
 ## Session Budget Tracker
 

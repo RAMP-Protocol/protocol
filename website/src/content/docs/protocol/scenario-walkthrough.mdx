@@ -162,10 +162,10 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
 7. Compile into radix trie -> serialize to catalog.bin -> Exchange loads via atomic pointer swap
 ```
 
-SSP-Alpha also knows about Anthropic's subscription:
+SSP-Alpha also knows about Anthropic's subscription, looked up by Anthropic's account handle (minted at registration):
 
 ```
-BillingAdapter.CheckSubscription("claude-agent-001@claude.ai", "hearst-media")
+BillingAdapter.CheckSubscription("acct_7f3e21c9", "hearst-media")
   -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026", active: true, quota_remaining: 850000 }
 ```
 
@@ -241,22 +241,20 @@ Step 3: Prepare RFC 9421 HTTP Message Signature (alg=ed25519)
 
 ## Phase 2: Supply Discovery (Requester Identity, Subscription Detection, Content Attestations, Ed25519 Verification)
 
-The SDK sends `DiscoverResources` to SSP-Alpha:
+The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`:
 
+{/* ramp-validate: ResourceQuery */}
 ```json
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
-
 {
   "ver": "1.0",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": ["https://techcrunch.com/premium/ai-regulation-2026.html"],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
+  "acceptable_restrictions": [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }],
   "deadline": "0.5s"
 }
 ```
@@ -271,10 +269,10 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
    c. Verify the signature against public key -> pass
 3. Resolve tenant: techcrunch.com -> Hearst Media tenant
 4. Find offers: lookup "/premium/ai-regulation-2026.html" in radix trie -> match
-5. Check subscription with quota (keyed on the requester's VERIFIED IDENTITY
-   from step 2 — requester.id + domain, via the RFC 9421 signature; entitlement
-   is NOT derived from billing_ref, which only attributes cost):
-   BillingAdapter.CheckSubscription("claude-agent-001@claude.ai", "hearst-media")
+5. Check subscription with quota (the account handle is resolved from the
+   requester's VERIFIED IDENTITY from step 2 — requester.id + domain, via the
+   RFC 9421 signature — never from the request body):
+   BillingAdapter.CheckSubscription("acct_7f3e21c9", "hearst-media")
      -> { subscription_id: "SUB-ANTHROPIC-HEARST-2026",
           active: true,
           quota_remaining: 850000 }
@@ -433,24 +431,23 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 ## Phase 2b: Cross-Provider via Broker (Header Signature Chain, OfferGroups, SimHash)
 
-If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `DiscoveryRequest` to the Broker with multiple URIs (`BrokerService.Resolve` is discovery-only — it returns offers grouped by URI; execution happens later via a separate `ExecuteTransaction` call):
+If Anthropic uses its hosted Broker instead of the SDK directly, the Broker provides cross-provider intelligence. The agent sends a `DiscoveryRequest` to the Broker with multiple URIs (`BrokerService.Resolve` is discovery-only — it returns offers grouped by URI; execution happens later via a separate `ExecuteTransaction` call). Agent → Broker:
 
+{/* ramp-validate: DiscoveryRequest */}
 ```json
-// Agent -> Broker
 {
   "ver": "1.0",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": [
     "https://techcrunch.com/premium/ai-regulation-2026.html",
     "https://theverge.com/premium/ai-regulation-republish.html"
   ],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
+  "acceptable_restrictions": [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }],
   "constraints": {
     "preferred_exchanges": ["exchange.ssp-alpha.com"],
     "max_unit_cost": "0.00005",
@@ -469,24 +466,23 @@ The Broker queries both Exchanges. For each forwarded request, the Broker:
 2. Preserves the agent's RFC 9421 HTTP Message Signature (its labeled signature stays in the `Signature`/`Signature-Input` headers)
 3. Adds its own labeled RFC 9421 HTTP Message Signature, covering the request plus the agent's prior signature (the ordered set of header signatures is the chain that proves the Broker forwarded it)
 
-```json
-// Broker -> SSP-Alpha (multi-URI batch query)
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+Broker → SSP-Alpha (multi-URI batch query) — `POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`:
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "uris": [
     "https://techcrunch.com/premium/ai-regulation-2026.html",
     "https://theverge.com/premium/ai-regulation-republish.html"
   ],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
+  "acceptable_restrictions": [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }],
   "deadline": "0.4s"
 }
 ```
@@ -612,9 +608,10 @@ SDK or Broker commits to the subscription offer.
 
 ### Direct (SDK) request -- single signature in the headers:
 
-```json
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-claude-001",
@@ -622,7 +619,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "items": [
@@ -644,7 +640,8 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
           "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
           "content_hash": "a1b2c3d4e5f6...",
-          "hash_method": "simhash-v1"
+          "hash_method": "simhash-v1",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
         "signature": "base64-ed25519-sig-B...",
         "signature_algorithm": "EdDSA"
@@ -660,9 +657,10 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
 
 ### Orchestrated request -- forwarding chain in the headers:
 
-```json
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-claude-001",
@@ -670,7 +668,6 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
     "id": "claude-agent-001",
     "domain": "claude.ai",
     "type": "REQUESTER_TYPE_AGENT",
-    "billing_ref": "ACCT-ANTHROPIC-001",
     "scopes": ["*"]
   },
   "items": [
@@ -692,7 +689,8 @@ POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTrans
           "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001",
           "content_hash": "a1b2c3d4e5f6...",
-          "hash_method": "simhash-v1"
+          "hash_method": "simhash-v1",
+          "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
         },
         "signature": "base64-ed25519-sig-B...",
         "signature_algorithm": "EdDSA"
@@ -724,7 +722,7 @@ The request body is identical to the direct case; the forwarding chain lives in 
    - Reconstruct offer data from signed token (stateless, no offer storage)
 5. subscription_id present on offer -> SKIP billing.Authorize (already paid under subscription)
 6. Quota check:
-   - BillingAdapter.CheckSubscription("claude-agent-001@claude.ai", "hearst-media")
+   - BillingAdapter.CheckSubscription("acct_7f3e21c9", "hearst-media")
      -> quota_remaining: 850000 tokens
    - Estimated consumption: 3300 tokens
    - 850000 > 3300 -> sufficient quota, proceed
@@ -825,9 +823,10 @@ CDN access log records:
 
 The SDK auto-submits a usage report (background, non-blocking). Usage reporting is mandatory for subscription transactions -- failure to report within the window triggers `DENIAL_REASON_REPORTING_OVERDUE` on subsequent transactions.
 
-```json
-POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+`POST https://exchange.ssp-alpha.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage`
 
+{/* ramp-validate: UsageReport */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "ur-claude-001",

@@ -66,9 +66,10 @@ The `supported_profiles` field tells the agent that this Exchange speaks the med
 
 The agent sends a `ResourceQuery` using a DICOM-style URI that encodes the Study Instance UID. This is a non-web identifier — RAMP's URI field is not limited to HTTP URLs.
 
-```json
-POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+`POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
@@ -81,7 +82,7 @@ POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/Discov
     "dicom://study/1.2.840.113619.2.388.10180.7.2026.3.14.8.12.42"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }
   ],
   "supported_profiles": ["ramp-medimg-v1"]
 }
@@ -208,9 +209,10 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
 
 The agent commits to the offer. Because `medimg.dua_required` was flagged as critical, the agent MUST include a valid DUA reference in `ext`. This is the pre-transaction compliance gate — the Exchange will reject the transaction if the DUA cannot be verified.
 
-```json
-POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-mri-001",
@@ -451,9 +453,10 @@ The manifest is a JSON document listing all 847 DICOM instances grouped by serie
 
 The agent reports consumption after completing its analysis. Medical imaging uses per-study metering, not per-token:
 
-```json
-POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+`POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage`
 
+{/* ramp-validate: UsageReport */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "ur-mri-001",
@@ -506,9 +509,10 @@ Six weeks after the transaction, the research team discovers that one DICOM inst
 
 ### Filing the Dispute
 
-```json
-POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/DisputeTransaction
+`POST https://exchange.medimg-exchange.com/ramp/v1/ramp.v1.ExchangeService/DisputeTransaction`
 
+{/* ramp-validate: DisputeRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "disp-mri-001",

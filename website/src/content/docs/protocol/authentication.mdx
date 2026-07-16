@@ -25,7 +25,6 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 | `domain` | `string` | Domain for public key lookup — keys at `{domain}/.well-known/ramp.json` (`WellKnownManifest`, `role=ROLE_AGENT`) |
 | `type` | `RequesterType` | What kind of entity is making the request |
 | `name` | `string` (optional) | Human-readable name (e.g., `"Acme Research Assistant"`) |
-| `billing_ref` | `string` (optional) | Opaque billing reference for invoicing / cost attribution (not an entitlement; access is via scopes/delegation) |
 | `scopes` | `repeated string` | Entitlement scopes — what the requester can access |
 | `delegation` | `Delegation` (optional) | Holder-bound JWT delegation token from a principal |
 | `ext` | `Struct` | Implementer-specific extensions |
@@ -124,7 +123,7 @@ The token is carried in the `Delegation` message, nested inside `Requester`:
 | `token_format` | `string` | Token format: `"jwt"` (the sole/default format) |
 | `revocation_uri` | `string` (optional) | URI for real-time revocation checking (high-value transactions) |
 | `max_accesses` | `int32` (optional) | Maximum number of accesses allowed under this delegation. Exchange tracks count and denies with `DENIAL_REASON_QUOTA_EXCEEDED` when count >= limit. |
-| `quota_period` | `Duration` (optional) | How often access/spend counters reset. E.g., `"720h"` for monthly subscriptions. When absent, quota is lifetime (bounded only by `expires_at`). |
+| `quota_period` | `Duration` (optional) | How often access/spend counters reset. E.g., `"2592000s"` (30 days) for monthly subscriptions — proto-JSON encodes `Duration` as seconds. When absent, quota is lifetime (bounded only by `expires_at`). |
 | `issuer` | `string` (optional) | Token issuer — OIDC issuer URL (for JWT signature validation via OIDC→JWKS) |
 | `ext` | `Struct` | Implementer-specific extensions |
 | `ext_critical` | `repeated string` | Critical extension keys (COSE crit pattern) |
@@ -151,6 +150,7 @@ Rules:
 - **Vendors MAY add namespaced claims** (`vendor:claim`).
 - **Constraints fail closed.** A claim a verifier cannot evaluate is **binding by default** — it MUST reject rather than ignore (a dropped constraint would fail *open*, granting more than intended). This mirrors [`Restriction.advisory`](/protocol/licensing-terms/): the issuer may mark a custom claim *advisory* to downgrade it to ignorable. (The issuer lists the mandatory-to-understand claims; an unrecognized non-advisory claim is rejected.)
 - **`ramp_`-prefixed claim names are reserved** for this registry. Vendors MUST use their own `vendor:` namespace and MUST NOT define `ramp_*` names, so registered claims can never be shadowed.
+- **Claim values keep their home encoding.** RFC-registered claims use the encoding their RFC defines — `exp` is a NumericDate (seconds since epoch, RFC 7519). `ramp_*` claims mirror a `Delegation` field and use that field's proto-JSON encoding — for example, `ramp_quota_period` is a Duration string in seconds (`"2592000s"`), the same form the [`quota_period` field](/reference/proto-ramp/#delegation) carries on the wire.
 
 > **Token format.** The delegation token is a **holder-bound JWT** — `token_format: "jwt"` is the sole format conformant implementations support. Multi-hop attenuation is expressed as a chain of `cnf`-linked child JWTs (each signed by the key its parent named, each narrowing scope), and the holder binding always applies (the request-signing key must match the holder the token is sealed to).
 
@@ -371,6 +371,7 @@ See [Signed URL Verification](/components/edge-function/signed-url-verification)
 
 A research bot queries a public Exchange. No delegation token, no special scopes — it gets whatever is publicly available.
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -385,7 +386,7 @@ A research bot queries a public Exchange. No delegation token, no special scopes
     "https://cdn.ramp-protocol.org/premium/ai-funding-roundup"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["SUMMARIZE"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["SUMMARIZE"] }
   ]
 }
 ```
@@ -394,8 +395,9 @@ The Exchange verifies the signature by fetching the public key from `research.ac
 
 ### Subscription Agent (MarketData JWT)
 
-A financial analysis agent carries a MarketData-issued delegation JWT that grants access to subscription-tier data.
+A financial analysis agent carries a MarketData-issued delegation JWT that grants access to subscription-tier data. `delegation.token` is a `bytes` field, so proto-JSON carries the compact JWS base64-encoded (decoded here for illustration: `eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>`).
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -404,7 +406,6 @@ A financial analysis agent carries a MarketData-issued delegation JWT that grant
     "domain": "fintech.example.com",
     "type": "REQUESTER_TYPE_AGENT",
     "name": "FinBot Alpha",
-    "billing_ref": "lic-marketdata-fintech-2026",
     "scopes": [
       "subscription:marketdata-2026",
       "quote:*",
@@ -416,7 +417,7 @@ A financial analysis agent carries a MarketData-issued delegation JWT that grant
       "scopes": ["quote:*", "earnings:*"],
       "expires_at": "2026-03-20T18:00:00Z",
       "max_spend_cents": 50000,
-      "token": "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token": "ZXlKaGJHY2lPaUpGWkVSVFFTSjkuPGNsYWltczogaXNzLCBzY29wZSwgZXhwLCBjbmYuamt0Pi48c2lnPg",
       "token_format": "jwt"
     }
   },
@@ -425,7 +426,7 @@ A financial analysis agent carries a MarketData-issued delegation JWT that grant
     "marketdata://earnings/NVDA/2025-Q4"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["RETRIEVE"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["RETRIEVE"] }
   ]
 }
 ```
@@ -440,6 +441,7 @@ The Exchange:
 
 An internal agent at a law firm carries a delegation JWT issued by the firm's IAM system, granting access to legal and credit resources.
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -448,7 +450,6 @@ An internal agent at a law firm carries a delegation JWT issued by the firm's IA
     "domain": "agents.kirkland.com",
     "type": "REQUESTER_TYPE_SERVICE",
     "name": "Kirkland Legal Research",
-    "billing_ref": "lic-kirkland-enterprise-2026",
     "scopes": [
       "legal:case-law",
       "credit:read"
@@ -459,7 +460,7 @@ An internal agent at a law firm carries a delegation JWT issued by the firm's IA
       "scopes": ["legal:case-law", "legal:statutes", "credit:read"],
       "expires_at": "2026-03-20T20:00:00Z",
       "max_spend_cents": 100000,
-      "token": "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token": "ZXlKaGJHY2lPaUpGWkVSVFFTSjkuPGNsYWltczogaXNzLCBzY29wZSwgZXhwLCBjbmYuamt0Pi48c2lnPg",
       "token_format": "jwt"
     }
   },
@@ -468,7 +469,7 @@ An internal agent at a law firm carries a delegation JWT issued by the firm's IA
     "duns://credit/123456789"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["RETRIEVE", "SUMMARIZE"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["RETRIEVE", "SUMMARIZE"] }
   ]
 }
 ```
@@ -479,6 +480,7 @@ The internal Exchange verifies the delegation JWT against `iam.kirkland.com`'s p
 
 The Kirkland legal agent from the previous example delegates to a sub-agent that only needs credit data. It issues a child delegation JWT (bound to the sub-agent's key) that removes legal access and lowers the spend cap.
 
+{/* ramp-validate: ResourceQuery */}
 ```json
 {
   "ver": "1.0",
@@ -487,7 +489,6 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
     "domain": "agents.kirkland.com",
     "type": "REQUESTER_TYPE_DELEGATED",
     "name": "Kirkland Credit Sub-Agent",
-    "billing_ref": "lic-kirkland-enterprise-2026",
     "scopes": [
       "credit:read"
     ],
@@ -497,7 +498,7 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
       "scopes": ["credit:read"],
       "expires_at": "2026-03-20T19:00:00Z",
       "max_spend_cents": 20000,
-      "token": "eyJhbGciOiJFZERTQSJ9.<child claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "token": "ZXlKaGJHY2lPaUpGWkVSVFFTSjkuPGNoaWxkIGNsYWltczogaXNzLCBzY29wZSwgZXhwLCBjbmYuamt0Pi48c2lnPg",
       "token_format": "jwt"
     }
   },
@@ -505,7 +506,7 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
     "duns://credit/123456789"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["RETRIEVE"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["RETRIEVE"] }
   ]
 }
 ```

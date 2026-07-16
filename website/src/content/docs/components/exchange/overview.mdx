@@ -145,8 +145,8 @@ type BillingAdapter interface {
     Authorize(ctx context.Context, req *BillingAuthorizeRequest) (*BillingAuthorizeResponse, error)
     Record(ctx context.Context, req *BillingRecordRequest) (*BillingRecordResponse, error)
     Release(ctx context.Context, billingID string) error
-    GetBalance(ctx context.Context, requesterID string) (*BillingBalance, error)
-    CheckSubscription(ctx context.Context, requesterID string, tenantID string) (*SubscriptionStatus, error)
+    GetBalance(ctx context.Context, billingRef string) (*BillingBalance, error)
+    CheckSubscription(ctx context.Context, billingRef string, tenantID string) (*SubscriptionStatus, error)
 }
 
 type OfferSigner interface {

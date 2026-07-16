@@ -880,7 +880,7 @@ type DenialReason int32
 
 const (
 	DenialReason_DENIAL_REASON_UNSPECIFIED               DenialReason = 0  // unset — rejected at ingest
-	DenialReason_DENIAL_REASON_BILLING_REF_INACTIVE      DenialReason = 1  // billing_ref is not active / not recognized by the billing system
+	DenialReason_DENIAL_REASON_BILLING_REF_INACTIVE      DenialReason = 1  // the requester's account (the billing_ref minted at Register) is not active / not recognized by the billing system
 	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE      DenialReason = 2  // Requester's balance too low
 	DenialReason_DENIAL_REASON_RATE_LIMITED              DenialReason = 3  // Too many requests
 	DenialReason_DENIAL_REASON_CONTENT_UNAVAILABLE       DenialReason = 4  // Resource no longer available
@@ -1976,7 +1976,7 @@ type ResourceQuery struct {
 	AcceptableRestrictions []*AcceptableRestriction `protobuf:"bytes,9,rep,name=acceptable_restrictions,json=acceptableRestrictions,proto3" json:"acceptable_restrictions,omitempty"`
 	// Maximum time the caller will wait for a response.
 	// Exchange SHOULD prioritize speed over completeness when tight.
-	// Absent = 500ms default.
+	// Absent = "0.5s" default (proto-JSON encodes Duration as seconds).
 	Deadline *durationpb.Duration `protobuf:"bytes,6,opt,name=deadline,proto3,oneof" json:"deadline,omitempty"`
 	// Domain extension profiles the caller understands.
 	//
@@ -4005,13 +4005,14 @@ func (x *Pricing) GetMetering() PricingMetering {
 
 // Requester — Universal identity for any RAMP client.
 //
-// Carries identity, entitlements, and a billing handle ONLY — who is asking,
-// what they are entitled to (scopes, delegation), and how to bill them
-// (billing_ref). What they are asking for (uris) and the limits they will
-// operate within (acceptable_restrictions) belong to the ask, not the identity,
-// and live on ResourceQuery / DiscoveryRequest. The Exchange verifies identity via
-// the RFC 9421 request signature, then filters its catalog by the requester's
-// scopes.
+// Carries identity and entitlements ONLY — who is asking and what they are
+// entitled to (scopes, delegation). What they are asking for (uris) and the
+// limits they will operate within (acceptable_restrictions) belong to the ask,
+// not the identity, and live on ResourceQuery / DiscoveryRequest. The Exchange
+// verifies identity via the RFC 9421 request signature, then filters its
+// catalog by the requester's scopes. Billing needs nothing from this message:
+// the Exchange resolves the caller's account (RegisterResponse.billing_ref)
+// from the verified signature, never from anything the caller sends.
 type Requester struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique requester identifier (e.g., "agent-research-bot-001").
@@ -4023,13 +4024,6 @@ type Requester struct {
 	Type RequesterType `protobuf:"varint,3,opt,name=type,proto3,enum=ramp.v1.RequesterType" json:"type,omitempty"`
 	// Human-readable name (e.g., "Acme Research Assistant").
 	Name *string `protobuf:"bytes,4,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	// Opaque billing reference linking this requester to the Exchange's (and,
-	// through the Exchange, the publisher's) billing/accounting systems — e.g. a
-	// billing account, PO number, or cost center. NOT an entitlement or
-	// subscription credential: access is governed by scopes and delegation, and
-	// identity by the request signature. The Exchange uses it only for invoicing
-	// and cost attribution.
-	BillingRef *string `protobuf:"bytes,5,opt,name=billing_ref,json=billingRef,proto3,oneof" json:"billing_ref,omitempty"`
 	// Entitlement scopes. Declare what the requester can access.
 	//
 	// The Exchange filters its catalog to resources matching these scopes.
@@ -4133,13 +4127,6 @@ func (x *Requester) GetName() string {
 	return ""
 }
 
-func (x *Requester) GetBillingRef() string {
-	if x != nil && x.BillingRef != nil {
-		return *x.BillingRef
-	}
-	return ""
-}
-
 func (x *Requester) GetScopes() []string {
 	if x != nil {
 		return x.Scopes
@@ -4219,7 +4206,8 @@ type Delegation struct {
 	// For subscriptions with "10,000 accesses/month", this carries the ceiling.
 	MaxAccesses *int32 `protobuf:"varint,9,opt,name=max_accesses,json=maxAccesses,proto3,oneof" json:"max_accesses,omitempty"`
 	// Quota reset period. How often the access/spend counters reset.
-	// Example: 720h (30 days) for monthly subscriptions.
+	// Example: 30 days for monthly subscriptions — "2592000s" on the wire
+	// (proto-JSON encodes Duration as seconds; "720h" is not accepted).
 	// When absent, the quota is lifetime (bounded only by expires_at).
 	QuotaPeriod *durationpb.Duration `protobuf:"bytes,10,opt,name=quota_period,json=quotaPeriod,proto3,oneof" json:"quota_period,omitempty"`
 	// Token bytes. A JWT (base64url-encoded JWS).
@@ -4816,7 +4804,8 @@ type TransactionResultItem struct {
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
 	// Exchange-assigned transaction identifier.
 	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	// Billing reference.
+	// Billing record identifier minted by the Exchange's billing adapter for
+	// this transaction (not the account handle — see RegisterResponse.billing_ref).
 	BillingId string `protobuf:"bytes,3,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// Resource title echoed from the Offer.
 	ResourceTitle *string `protobuf:"bytes,4,opt,name=resource_title,json=resourceTitle,proto3,oneof" json:"resource_title,omitempty"`
@@ -5641,7 +5630,8 @@ type ReportingObligation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Whether post-usage reporting is required.
 	Required bool `protobuf:"varint,1,opt,name=required,proto3" json:"required,omitempty"`
-	// Duration within which the report must be submitted (e.g. 24h).
+	// Duration within which the report must be submitted (e.g. "86400s" = 24
+	// hours; proto-JSON encodes Duration as seconds).
 	Window *durationpb.Duration `protobuf:"bytes,2,opt,name=window,proto3,oneof" json:"window,omitempty"`
 	// URL to submit the usage report to (if different from Exchange).
 	Endpoint *string `protobuf:"bytes,3,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
@@ -5747,7 +5737,7 @@ type UsageReport struct {
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction ID from the delivery.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	// Billing reference from the delivery.
+	// Billing record identifier from the delivery (TransactionResultItem.billing_id).
 	BillingId string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// How the resource was actually used.
 	Usage *Usage `protobuf:"bytes,5,opt,name=usage,proto3" json:"usage,omitempty"`
@@ -6361,7 +6351,8 @@ type RequestConstraints struct {
 	// Per-period budget limit. The Broker tracks spend against this
 	// for the budget_scope. Transactions that would exceed are denied.
 	PeriodBudget *Cost `protobuf:"bytes,8,opt,name=period_budget,json=periodBudget,proto3,oneof" json:"period_budget,omitempty"`
-	// Budget period (e.g. 720h = 30 days). Resets at period boundary.
+	// Budget period (e.g. "2592000s" = 30 days; proto-JSON encodes Duration
+	// as seconds). Resets at period boundary.
 	BudgetPeriod *durationpb.Duration `protobuf:"bytes,9,opt,name=budget_period,json=budgetPeriod,proto3,oneof" json:"budget_period,omitempty"`
 	// Maximum acceptable age of resource data. The Broker SHOULD
 	// exclude offers where (now - Offer.data_as_of) exceeds this duration.
@@ -7300,7 +7291,8 @@ type DisputeRequest struct {
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction being disputed.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	// Billing reference from the transaction.
+	// Billing record identifier from the disputed transaction
+	// (TransactionResultItem.billing_id).
 	BillingId string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
 	// Reason for the dispute.
 	Reason DisputeReason `protobuf:"varint,5,opt,name=reason,proto3,enum=ramp.v1.DisputeReason" json:"reason,omitempty"`
@@ -9002,23 +8994,20 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
 	"\x05_unitB\v\n" +
-	"\t_metering\"\xfa\x02\n" +
+	"\t_metering\"\xd7\x02\n" +
 	"\tRequester\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x124\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x16.ramp.v1.RequesterTypeB\b\xbaH\x05\x82\x01\x02 \x00R\x04type\x12\x17\n" +
-	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12$\n" +
-	"\vbilling_ref\x18\x05 \x01(\tH\x01R\n" +
-	"billingRef\x88\x01\x01\x12 \n" +
+	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\x06 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x128\n" +
 	"\n" +
-	"delegation\x18\a \x01(\v2\x13.ramp.v1.DelegationH\x02R\n" +
+	"delegation\x18\a \x01(\v2\x13.ramp.v1.DelegationH\x01R\n" +
 	"delegation\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\a\n" +
-	"\x05_nameB\x0e\n" +
-	"\f_billing_refB\r\n" +
-	"\v_delegation\"\xe9\x04\n" +
+	"\x05_nameB\r\n" +
+	"\v_delegationJ\x04\b\x05\x10\x06R\vbilling_ref\"\xe9\x04\n" +
 	"\n" +
 	"Delegation\x12)\n" +
 	"\x10principal_domain\x18\x01 \x01(\tR\x0fprincipalDomain\x12!\n" +

@@ -98,9 +98,10 @@ All three publishers route through the same academic aggregator Exchange (`excha
 
 The Broker sends a batch `ResourceQuery` with all 50 DOIs in `ResourceQuery.uris`. The `Requester` carries the university's delegation JWT with `academic:*` scope, and the query declares support for `ramp-academic-v1` so the Exchange includes version, OA status, and retraction metadata in its response.
 
-```json
-POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+`POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
@@ -115,8 +116,8 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverR
       "scopes": ["academic:*"],
       "expires_at": "2026-12-31T23:59:59Z",
       "max_accesses": 100000,
-      "quota_period": "720h",
-      "token": "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "quota_period": "2592000s",
+      "token": "ZXlKaGJHY2lPaUpGWkVSVFFTSjkuPGNsYWltczogaXNzLCBzY29wZSwgZXhwLCBjbmYuamt0Pi48c2lnPg",
       "token_format": "jwt"
     }
   },
@@ -172,7 +173,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverR
     "doi:10.1016/j.media.2023.103078",
     "doi:10.1038/s41592-024-02467-x"
   ],
-  "acceptable_restrictions": [{ "axis": "FUNCTION", "values": ["ai-input"] }],
+  "acceptable_restrictions": [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }],
   "supported_profiles": ["ramp-academic-v1"]
 }
 ```
@@ -188,7 +189,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/DiscoverR
     "sub": "inst-sub-stanford-2026",
     "scope": "academic:*",
     "ramp_max_accesses": 100000,
-    "ramp_quota_period": "720h",
+    "ramp_quota_period": "2592000s",
     "exp": 1798761599,
     "cnf": { "jkt": "<thumbprint of the agent's key>" }
   }
@@ -609,9 +610,10 @@ The Broker also flags the retracted paper to the agent:
 
 The Broker commits to all 49 selected offers in a single batch `TransactionRequest`. Each item carries the full signed `offer`, reflected back exactly as received at discovery (stateless verification — the Exchange does not need to store offers).
 
-```json
-POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-litrev-001",
@@ -626,8 +628,8 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
       "scopes": ["academic:*"],
       "expires_at": "2026-12-31T23:59:59Z",
       "max_accesses": 100000,
-      "quota_period": "720h",
-      "token": "eyJhbGciOiJFZERTQSJ9.<claims: iss, scope, exp, cnf.jkt>.<sig>",
+      "quota_period": "2592000s",
+      "token": "ZXlKaGJHY2lPaUpGWkVSVFFTSjkuPGNsYWltczogaXNzLCBzY29wZSwgZXhwLCBjbmYuamt0Pi48c2lnPg",
       "token_format": "jwt"
     }
   },
@@ -645,6 +647,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
           "unit": "tokens"
         },
         "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "expires_at": "2026-03-20T12:35:00Z",
         "identity": {
           "canonical_url": "https://arxiv.org/abs/2406.11838",
           "doi": "10.48550/arXiv.2406.11838",
@@ -670,6 +673,7 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
         },
         "subscription_id": "inst-sub-stanford-2026",
         "delivery_method": "DELIVERY_METHOD_INSTRUCTIONS",
+        "expires_at": "2026-03-20T12:35:00Z",
         "identity": {
           "canonical_url": "https://www.sciencedirect.com/science/article/pii/S1361841524001250",
           "doi": "10.1016/j.media.2024.103250",
@@ -681,11 +685,11 @@ POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTr
         "signature_algorithm": "EdDSA"
       }
     }
-    // … 47 more items, each { "offer": { …full signed Offer, reflected back… } } —
-    //    12 arXiv (free), 18 more Elsevier (subscription), 15 Springer + 2 Elsevier (paid) …
   ]
 }
 ```
+
+*(Abbreviated: 2 of 49 items shown. The remaining 47 follow the same shape — each carries the full signed Offer reflected back: 12 arXiv (free), 18 more Elsevier (subscription), 15 Springer + 2 Elsevier (paid).)*
 
 The Exchange processes all 49 items in a single batch:
 
@@ -793,9 +797,10 @@ The agent then fetches all 49 PDFs via the signed URLs. For each paper, because 
 
 Usage reporting is mandatory for all 49 transactions. The agent submits an aggregated report with per-DOI consumption data:
 
-```json
-POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+`POST https://exchange.scholarsgate.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage`
 
+{/* ramp-validate: UsageReport */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "ur-litrev-001",
