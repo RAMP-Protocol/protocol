@@ -16,6 +16,19 @@ patterns=(
   # Requester reshape
   'license_id' 'licenseId' 'BuyerLicenseID'
   'IntermediaryHop' '"intermediaries"'
+  # Requester.billing_ref dropped (RAMP-155): billing keys on the verified
+  # caller identity and the account minted at Register, never on a request
+  # field. Only the Requester-scoped forms are banned — the bare identifier
+  # stays live (RegisterResponse / GetAccountStatusResponse account handle).
+  # Covered forms: the dotted token (with an optional markdown-escaped
+  # underscore, billing\_ref) and the adjacent possessive/prose form
+  # ("the Requester's billing_ref"). JSON examples are gated by the
+  # conformance candidate detector (TestDocMarkedExamplesValidate), not this
+  # grep — do not widen these into a proximity pattern; it would
+  # false-positive on the live account-handle prose (e.g. the
+  # DENIAL_REASON_BILLING_REF_INACTIVE comment in ramp.proto).
+  '[Rr]equester\.billing\\?_ref' '[Rr]equester\.[Bb]illingRef'
+  "[Rr]equester'?s?[[:space:]]+\`?billing\\\\?_ref"
   # request signatures live in HTTP headers (RFC 9421), not message fields
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   # the scalar offer_signature pair is gone: the execute-request now reflects the

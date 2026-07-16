@@ -137,7 +137,7 @@ class Delegation(WireModel):
     )
     quota_period: str | None = Field(
         None,
-        description='Quota reset period. How often the access/spend counters reset.\n Example: 720h (30 days) for monthly subscriptions.\n When absent, the quota is lifetime (bounded only by expires_at).',
+        description='Quota reset period. How often the access/spend counters reset.\n Example: 30 days for monthly subscriptions — "2592000s" on the wire\n (proto-JSON encodes Duration as seconds; "720h" is not accepted).\n When absent, the quota is lifetime (bounded only by expires_at).',
     )
     revocation_uri: str | None = Field(
         None,
@@ -209,7 +209,8 @@ class DisputeReason(Enum):
 
 class DisputeRequest(WireModel):
     billing_id: str | None = Field(
-        '', description='Billing reference from the transaction.'
+        '',
+        description='Billing record identifier from the disputed transaction\n (TransactionResultItem.billing_id).',
     )
     description: str | None = Field(
         None, description='Human-readable description of the issue.'
@@ -640,7 +641,7 @@ class ReportingObligation(WireModel):
     )
     window: str | None = Field(
         None,
-        description='Duration within which the report must be submitted (e.g. 24h).',
+        description='Duration within which the report must be submitted (e.g. "86400s" = 24\n hours; proto-JSON encodes Duration as seconds).',
     )
 
 
@@ -668,7 +669,7 @@ class ReportingPolicy(WireModel):
 class RequestConstraints(WireModel):
     budget_period: str | None = Field(
         None,
-        description='Budget period (e.g. 720h = 30 days). Resets at period boundary.',
+        description='Budget period (e.g. "2592000s" = 30 days; proto-JSON encodes Duration\n as seconds). Resets at period boundary.',
     )
     budget_scope: str | None = Field(
         None,
@@ -881,7 +882,10 @@ class TransactionDenial(WireModel):
 
 
 class TransactionResultItem(WireModel):
-    billing_id: str | None = Field('', description='Billing reference.')
+    billing_id: str | None = Field(
+        '',
+        description="Billing record identifier minted by the Exchange's billing adapter for\n this transaction (not the account handle — see RegisterResponse.billing_ref).",
+    )
     cost: Cost | None = Field(None, description='Cost for this item.')
     delivery_method: (
         constr(pattern=r'^DELIVERY_METHOD_UNSPECIFIED$')
@@ -1133,10 +1137,6 @@ class RegistrationFailure(WireModel):
 
 
 class Requester(WireModel):
-    billing_ref: str | None = Field(
-        None,
-        description="Opaque billing reference linking this requester to the Exchange's (and,\n through the Exchange, the publisher's) billing/accounting systems — e.g. a\n billing account, PO number, or cost center. NOT an entitlement or\n subscription credential: access is governed by scopes and delegation, and\n identity by the request signature. The Exchange uses it only for invoicing\n and cost attribution.",
-    )
     delegation: Delegation | None = Field(
         None,
         description='Optional delegation — present when the requester acts on behalf of\n another entity (user, organization, upstream agent).',
@@ -1223,7 +1223,7 @@ class ResourceQuery(WireModel):
     )
     deadline: str | None = Field(
         None,
-        description='Maximum time the caller will wait for a response.\n Exchange SHOULD prioritize speed over completeness when tight.\n Absent = 500ms default.',
+        description='Maximum time the caller will wait for a response.\n Exchange SHOULD prioritize speed over completeness when tight.\n Absent = "0.5s" default (proto-JSON encodes Duration as seconds).',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1350,7 +1350,8 @@ class UsageReport(WireModel):
         None, description='Assets that were delivered and used.'
     )
     billing_id: str | None = Field(
-        '', description='Billing reference from the delivery.'
+        '',
+        description='Billing record identifier from the delivery (TransactionResultItem.billing_id).',
     )
     exchange: str | None = Field(None, description='Exchange this report is for.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')

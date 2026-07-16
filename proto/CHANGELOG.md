@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+**`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
+billing label on `Requester` is gone; field number 5 and the name are
+`reserved` so they can never be reused with a different meaning. Nothing read
+it: billing and cost attribution key on the verified caller identity and the
+account handle minted at `Register` (`RegisterResponse.billing_ref`), which the
+Exchange resolves from the request signature — never from anything the caller
+sends. Dropping the field also removes the name collision between the
+caller-written label and the authoritative account handle. Binary
+wire-compatible: an old caller still sending field 5 has it ignored as an
+unknown field. JSON tolerance is a decoder property, not a protocol guarantee:
+a decoder that discards unknown fields (as connect-go's default codec does)
+ignores a stray `billing_ref` inside `requester`, but a strict `protojson`
+decoder rejects the whole message — endpoints that hand-roll `protojson`
+decoding should set `DiscardUnknown: true` if they want to keep accepting old
+callers. For anyone who used the field: who pays is always the account minted
+at `Register`, resolved from the request signature. For a cost-allocation
+label, Broker callers use `RequestConstraints.budget_scope` on
+`DiscoveryRequest` (a Broker-side spend-tracking key; it does not reach the
+Exchange). Direct-to-Exchange callers who need to attach one use
+`Requester.ext` — but do not name the key `billing_ref`: it is not an account
+handle, and the Exchange will not read it as one.
+
 **Agent account registration + status RPCs (additive).** `ExchangeService`
 gains `Register(RegisterRequest) → RegisterResponse` and
 `GetAccountStatus(GetAccountStatusRequest) → GetAccountStatusResponse` — the

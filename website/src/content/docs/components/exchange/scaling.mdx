@@ -275,7 +275,7 @@ For the Scale tier (10K RPS) and beyond, shard by **provider tenant**:
 - Load balancer can route based on the URI domain in the ResourceQuery.
 
 **Why not shard by requester or content path?**
-- Requester sharding requires the load balancer to inspect the request body (billing reference), which is slower and more complex.
+- Requester sharding requires the load balancer to inspect the request body (`requester.id` + `requester.domain`), which is slower and more complex.
 - Content path sharding fragments a tenant's catalog across shards, complicating RSL ingestion and offer resolution.
 
 **Load balancing**: Layer 7 (HTTP) load balancer. Use consistent hashing on the target domain extracted from the request URI for sticky routing. Fallback to round-robin for requests without a resolvable domain.

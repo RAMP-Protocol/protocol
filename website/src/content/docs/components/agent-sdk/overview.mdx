@@ -61,9 +61,10 @@ func (c *Client) Close(ctx context.Context) error
 
 ```go
 client, err := ramp.NewClient(ramp.Config{
-    BillingRef: "ACCT-BUYER-001",
+    AgentID:     "research-bot",
+    AgentDomain: "agent.example.com",
     SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
-    Budget:     ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
+    Budget:      ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
 })
 if err != nil {
     log.Fatal(err)
@@ -110,7 +111,8 @@ The TypeScript SDK is not yet published to npm; the example below is illustrativ
 import { RampClient } from "@ramp-protocol/agent-sdk";
 
 const client = new RampClient({
-    billingRef: "ACCT-BUYER-001",
+    agentId: "research-bot",
+    agentDomain: "agent.example.com",
     signingKey: process.env.RAMP_SIGNING_KEY!,
     budget: { maxPerRequest: 0.10, currency: "USD" },
 });
@@ -140,7 +142,8 @@ The Python SDK is not yet published to PyPI; the example below is illustrative.
 from ramp_sdk import RampClient, Budget
 
 client = RampClient(
-    billing_ref="ACCT-BUYER-001",
+    agent_id="research-bot",
+    agent_domain="agent.example.com",
     signing_key=os.environ["RAMP_SIGNING_KEY"],
     budget=Budget(max_per_request=0.10, currency="USD"),
 )
@@ -196,7 +199,7 @@ type FetchResult struct {
     Content        string           // Fetched content (HTML, JSON, or text)
     ContentType    string           // Content type from CDN (e.g. "text/html")
     Cost           Cost             // Transaction cost. Zero for subscription-based access
-    BillingID      string           // Exchange-assigned billing reference
+    BillingID      string           // Billing record for this transaction (not the account handle)
     TransactionID  string           // Exchange-assigned transaction identifier
     ReportID       string           // Exchange-assigned report ID (from UsageReportResponse)
     Exchange    string           // Which Exchange fulfilled this request
@@ -218,9 +221,12 @@ type Cost struct {
 
 ```go
 type Config struct {
-    // Billing reference issued by the Exchange operator (cost-attribution
-    // handle; not an entitlement — access is via scopes/delegation).
-    BillingRef string
+    // REQUIRED. The agent's identity: id + the domain serving its Web Bot
+    // Auth key directory ({domain}/.well-known/http-message-signatures-directory).
+    // The Exchange bills the account it resolves from the verified request
+    // signature.
+    AgentID     string
+    AgentDomain string
 
     // REQUIRED. Ed25519 private key for agent request signatures.
     SigningKey string
@@ -253,9 +259,10 @@ type Config struct {
 
 ```go
 client, _ := ramp.NewClient(ramp.Config{
-    BillingRef: "ACCT-BUYER-001",
-    SigningKey: os.Getenv("RAMP_SIGNING_KEY"),
-    Budget:    ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
+    AgentID:     "research-bot",
+    AgentDomain: "agent.example.com",
+    SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
+    Budget:      ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
 })
 ```
 

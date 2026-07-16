@@ -688,10 +688,10 @@ func (x *AISystem) GetExt() *structpb.Struct {
 // CoMP §aisystemuse.json
 type AISystemUse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// License ID — public agent identifier in CoMP. NOT a credential.
-	// In RAMP this maps to Requester.billing_ref (a billing handle, not an
-	// entitlement). Request authentication is an RFC 9421 HTTP Message Signature;
-	// the agent's key is resolved by its domain, never by this id.
+	// License ID — public agent identifier in CoMP. NOT a credential, and it
+	// has no counterpart field on the RAMP request. Request authentication is
+	// an RFC 9421 HTTP Message Signature; the agent's key is resolved by its
+	// domain, never by this id.
 	Lid string `protobuf:"bytes,1,opt,name=lid,proto3" json:"lid,omitempty"`
 	// How the AI system authenticates itself.
 	Aiauth AuthMethod `protobuf:"varint,2,opt,name=aiauth,proto3,enum=comp.v1.AuthMethod" json:"aiauth,omitempty"`

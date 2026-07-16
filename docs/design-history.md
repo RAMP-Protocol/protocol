@@ -141,6 +141,15 @@ records only the wire-shaping reasoning.
 
 ## `license_id` → `billing_ref`: identity is the signature, not a field
 
+> **Superseded by RAMP-155.** The renamed field was later removed outright:
+> after the Broker cost guard moved to the authenticated agent identity
+> (RAMP-153), nothing read `Requester.billing_ref`, and the caller-written
+> label collided by name with the authoritative account handle minted at
+> `Register`. Field 5 and the name are now `reserved`. The reasoning below
+> still stands — it is the same separation (identity = signature,
+> entitlement = scopes/delegation) taken one step further: billing needs no
+> request field at all.
+
 `Requester` once carried a `license_id`, and the name implied that the value was
 what entitled the requester to access — that holding the right `license_id`
 granted the right resources. We renamed it `billing_ref` and recast it as an

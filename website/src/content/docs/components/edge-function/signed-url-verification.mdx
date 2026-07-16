@@ -129,7 +129,7 @@ The signed URL is bound to the agent that purchased the resource, so a leaked UR
 **Definition.** `agent_identity_hash` (URL parameter `agent_id`) is the **[RFC 7638](https://www.rfc-editor.org/rfc/rfc7638) JWK Thumbprint (SHA-256, base64url)** of the agent's Ed25519 request-signing key — the same key published in the agent's manifest at `{domain}/.well-known/ramp.json` and used for RFC 9421 request signatures. RFC 7638 defines one canonical JSON form and one hash, so signer and verifier compute the identical value. It is present whenever a signed `retrieval_endpoint` is returned, and it is covered by the URL HMAC.
 
 :::caution
-This is **not** `SHA-256(billing_ref)`. The billing reference is a public identifier — hashing it binds nothing an attacker cannot reproduce. The thumbprint binds the URL to a key whose *private* half the fetcher must prove it holds.
+This is **not** a hash of an account identifier such as `billing_ref` — an identifier is not a secret, so hashing it binds nothing an attacker cannot reproduce. The thumbprint binds the URL to a key whose *private* half the fetcher must prove it holds.
 :::
 
 **What the agent presents at fetch:**

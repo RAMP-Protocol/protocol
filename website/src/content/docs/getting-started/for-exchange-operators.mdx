@@ -179,7 +179,7 @@ For resources that exist but fall outside the requester's scopes:
 
 ### Subscription Quota Signaling
 
-When the requester holds a subscription (identifiable via the requester's `delegation` and/or subscription scopes — not via `billing_ref`, which only attributes cost), populate `SubscriptionQuotaInfo` entries on offers and transaction responses. This proactive quota signaling lets agents track remaining allowance and avoid committing to transactions they cannot complete. Track `max_accesses` and `quota_period` from the `Delegation` message when present.
+When the requester holds a subscription (identifiable via the requester's `delegation` and/or subscription scopes), populate `SubscriptionQuotaInfo` entries on offers and transaction responses. This proactive quota signaling lets agents track remaining allowance and avoid committing to transactions they cannot complete. Track `max_accesses` and `quota_period` from the `Delegation` message when present.
 
 ### New Denial Reasons to Implement
 
@@ -286,10 +286,12 @@ AI agents can use a **Broker** to query multiple Exchanges and compare prices --
 **Billing adapter interface** (your integration point):
 ```go
 type BillingAdapter interface {
-    Authorize(ctx, buyerID, amount) → (ok, error)
+    Authorize(ctx, billingRef, amount) → (ok, error)
     Record(ctx, transaction) → error
-    CheckSubscription(ctx, buyerID, providerGroup) → (sub, error)
+    CheckSubscription(ctx, billingRef, providerGroup) → (sub, error)
 }
+// billingRef is the account handle the Exchange minted at Register and
+// resolves from the verified request signature on every call.
 ```
 
 Implement these three methods against your existing billing system. The reference implementation uses DynamoDB; production deployments wire it to their real ledger.

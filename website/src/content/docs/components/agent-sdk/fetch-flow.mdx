@@ -183,9 +183,10 @@ client.FetchBatch(ctx, [url1, url2, url3])
 
 ```go
 client, err := ramp.NewClient(ramp.Config{
-    BillingRef: "ACCT-BUYER-001",
+    AgentID:     "research-bot",
+    AgentDomain: "agent.example.com",
     SigningKey:  os.Getenv("RAMP_SIGNING_KEY"),
-    Budget:     ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
+    Budget:      ramp.Budget{MaxPerRequest: 0.10, Currency: "USD"},
 })
 if err != nil {
     log.Fatal(err)
@@ -337,9 +338,10 @@ func TestAgentLogic(t *testing.T) {
     defer mock.Close()
 
     client, _ := ramp.NewClient(ramp.Config{
-        BillingRef: "test-billing-ref",
-        SigningKey: "test-key",
-        Budget:    ramp.Budget{MaxPerRequest: 1.00, Currency: "USD"},
+        AgentID:     "test-agent",
+        AgentDomain: "agent.example.test",
+        SigningKey:  "test-key",
+        Budget:      ramp.Budget{MaxPerRequest: 1.00, Currency: "USD"},
         Exchanges: []ramp.ExchangeConfig{{
             Domain:   "mock.exchange.test",
             Endpoint: mock.URL(),

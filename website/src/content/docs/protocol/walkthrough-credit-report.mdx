@@ -85,9 +85,10 @@ The `supported_profiles` field declares that D&B's Exchange understands the `ram
 
 The Broker sends a `ResourceQuery` with the resolved D-U-N-S number as a `duns:` URI. The `supported_profiles` field tells the Exchange to include credit-specific `ext` fields in the response.
 
-```json
-POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+`POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
@@ -100,7 +101,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
     "duns:123456789"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }
   ],
   "supported_profiles": ["ramp-credit-v1"],
   "ext": {
@@ -111,7 +112,7 @@ POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
 
 **Key fields:**
 - **`ResourceQuery.uris: ["duns:123456789"]`** — the D-U-N-S number as a URI. RAMP is URI-centric; the Broker performed entity resolution before this step.
-- **`acceptable_restrictions: [{ "axis": "FUNCTION", "values": ["ai-input"] }]`** — the function restrictions the agent is willing to accept. Here it accepts inference (`ai-input`) use.
+- **`acceptable_restrictions: [{ "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }]`** — the function restrictions the agent is willing to accept. Here it accepts inference (`ai-input`) use.
 - **`supported_profiles: ["ramp-credit-v1"]`** — the Broker declares it understands the credit extension profile. The Exchange includes credit-specific `ext` fields (PAYDEX, trade count, score model) in the response.
 - **`ext.max_data_age: "604800s"`** — freshness constraint. The agent needs a report updated within the last 7 days (604,800 seconds). The Exchange SHOULD exclude offers whose `data_as_of` is older than this threshold.
 - **`scopes: ["credit:read"]`** — the agent is authorized to read credit data. No subscription — pay-per-report pricing.
@@ -393,9 +394,10 @@ The `rate_limit` on the response signals that D&B enforces per-caller rate limit
 
 The agent selects the **standard tier** ($61.99) — sufficient depth for due diligence without the premium cost of the comprehensive report. The agent sends the offer's `exchange_signature` back to the Exchange for stateless verification:
 
-```json
-POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-dnb-001",
@@ -525,9 +527,10 @@ The agent could still dispute if the content were fundamentally wrong — wrong 
 
 Usage reporting is mandatory. The agent reports actual consumption:
 
-```json
-POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+`POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage`
 
+{/* ramp-validate: UsageReport */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "ur-dnb-001",

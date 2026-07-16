@@ -37,12 +37,12 @@ The agent does not know individual document URIs — it knows a company name and
 
 The agent sends a single high-level request to its Broker. The key field is `budget_scope` — it ties all costs across every Exchange to a single deal identifier:
 
-```json
-POST https://broker.lawfirm.com/ramp/v1
+`POST https://broker.lawfirm.com/ramp/v1`
 
+{/* ramp-validate: DiscoveryRequest */}
+```json
 {
   "ver": "1.0",
-  "id": "ramp-dd-001",
   "requester": {
     "id": "dd-analyst",
     "domain": "lawfirm.com",
@@ -51,7 +51,7 @@ POST https://broker.lawfirm.com/ramp/v1
   },
   "uris": [],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }
   ],
   "constraints": {
     "budget_scope": "deal:acme-acquisition",
@@ -109,9 +109,10 @@ The Broker sends 6 `ResourceQuery` requests in parallel. Each query targets a sp
 
 ### Query 1: Credit Report (Dynamic, High-Value)
 
-```json
-POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+`POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
@@ -124,7 +125,7 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverRes
     "https://creditdata.com/reports/duns/123456789"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }
   ],
   "deadline": "5s"
 }
@@ -132,9 +133,10 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverRes
 
 ### Query 2: Court Filings (Batch, Per-Page)
 
-```json
-POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+`POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
@@ -149,7 +151,7 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
     "https://pacer.uscourts.gov/case/1:23-cv-09012"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }
   ],
   "deadline": "5s"
 }
@@ -157,9 +159,10 @@ POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverReso
 
 ### Query 4: SEC Filings (Free, Multi-URI)
 
-```json
-POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources
+`POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResources`
 
+{/* ramp-validate: ResourceQuery */}
+```json
 {
   "ver": "1.0",
   "requester": {
@@ -173,7 +176,7 @@ POST https://exchange.secdata.com/ramp/v1/ramp.v1.ExchangeService/DiscoverResour
     "https://sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001234567&type=10-Q&dateb=&owner=include&count=2"
   ],
   "acceptable_restrictions": [
-    { "axis": "FUNCTION", "values": ["ai-input"] }
+    { "axis": "RESTRICTION_KIND_FUNCTION", "values": ["ai-input"] }
   ],
   "deadline": "5s"
 }
@@ -500,9 +503,10 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
 
 ### Transaction to Credit Exchange (single item)
 
-```json
-POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-dd-credit-001",
@@ -542,9 +546,10 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTran
 
 ### Transaction to Legal Exchange (3 items, batch)
 
-```json
-POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction
+`POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 
+{/* ramp-validate: TransactionRequest */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "tx-dd-legal-001",
@@ -690,9 +695,10 @@ The Broker files a `UsageReport` for every transaction, to every Exchange. All r
 
 ### Report 1: Credit Report
 
-```json
-POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+`POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage`
 
+{/* ramp-validate: UsageReport */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "ur-dd-credit-001",
@@ -721,9 +727,10 @@ POST https://exchange.creditdata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
 
 ### Report 2: Court Filings (one report per transaction)
 
-```json
-POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage
+`POST https://exchange.legaldata.com/ramp/v1/ramp.v1.ExchangeService/ReportUsage`
 
+{/* ramp-validate: UsageReport */}
+```json
 {
   "ver": "1.0",
   "idempotency_key": "ur-dd-legal-001",

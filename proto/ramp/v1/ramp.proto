@@ -183,7 +183,7 @@ message ResourceQuery {
 
   // Maximum time the caller will wait for a response.
   // Exchange SHOULD prioritize speed over completeness when tight.
-  // Absent = 500ms default.
+  // Absent = "0.5s" default (proto-JSON encodes Duration as seconds).
   optional google.protobuf.Duration deadline = 6;
 
   // Domain extension profiles the caller understands.
@@ -1412,13 +1412,14 @@ enum DeliveryMethod {
 
 // Requester — Universal identity for any RAMP client.
 //
-// Carries identity, entitlements, and a billing handle ONLY — who is asking,
-// what they are entitled to (scopes, delegation), and how to bill them
-// (billing_ref). What they are asking for (uris) and the limits they will
-// operate within (acceptable_restrictions) belong to the ask, not the identity,
-// and live on ResourceQuery / DiscoveryRequest. The Exchange verifies identity via
-// the RFC 9421 request signature, then filters its catalog by the requester's
-// scopes.
+// Carries identity and entitlements ONLY — who is asking and what they are
+// entitled to (scopes, delegation). What they are asking for (uris) and the
+// limits they will operate within (acceptable_restrictions) belong to the ask,
+// not the identity, and live on ResourceQuery / DiscoveryRequest. The Exchange
+// verifies identity via the RFC 9421 request signature, then filters its
+// catalog by the requester's scopes. Billing needs nothing from this message:
+// the Exchange resolves the caller's account (RegisterResponse.billing_ref)
+// from the verified signature, never from anything the caller sends.
 message Requester {
   // Unique requester identifier (e.g., "agent-research-bot-001").
   string id = 1;
@@ -1434,13 +1435,12 @@ message Requester {
   // Human-readable name (e.g., "Acme Research Assistant").
   optional string name = 4;
 
-  // Opaque billing reference linking this requester to the Exchange's (and,
-  // through the Exchange, the publisher's) billing/accounting systems — e.g. a
-  // billing account, PO number, or cost center. NOT an entitlement or
-  // subscription credential: access is governed by scopes and delegation, and
-  // identity by the request signature. The Exchange uses it only for invoicing
-  // and cost attribution.
-  optional string billing_ref = 5;
+  // Field 5 was a caller-written billing label. Removed: billing and cost
+  // attribution key on the verified caller identity and the account minted at
+  // Register, never on anything the caller writes into the request. Reserved
+  // so the number and name can never be reused with a different meaning.
+  reserved 5;
+  reserved "billing_ref";
 
   // Entitlement scopes. Declare what the requester can access.
   //
@@ -1563,7 +1563,8 @@ message Delegation {
   optional int32 max_accesses = 9;
 
   // Quota reset period. How often the access/spend counters reset.
-  // Example: 720h (30 days) for monthly subscriptions.
+  // Example: 30 days for monthly subscriptions — "2592000s" on the wire
+  // (proto-JSON encodes Duration as seconds; "720h" is not accepted).
   // When absent, the quota is lifetime (bounded only by expires_at).
   optional google.protobuf.Duration quota_period = 10;
 
@@ -1807,7 +1808,8 @@ message TransactionResultItem {
   // Exchange-assigned transaction identifier.
   string transaction_id = 2;
 
-  // Billing reference.
+  // Billing record identifier minted by the Exchange's billing adapter for
+  // this transaction (not the account handle — see RegisterResponse.billing_ref).
   string billing_id = 3;
 
   // Resource title echoed from the Offer.
@@ -1860,7 +1862,7 @@ message Cost {
 // of denial patterns across the ecosystem.
 enum DenialReason {
   DENIAL_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
-  DENIAL_REASON_BILLING_REF_INACTIVE = 1; // billing_ref is not active / not recognized by the billing system
+  DENIAL_REASON_BILLING_REF_INACTIVE = 1; // the requester's account (the billing_ref minted at Register) is not active / not recognized by the billing system
   DENIAL_REASON_INSUFFICIENT_BALANCE = 2; // Requester's balance too low
   DENIAL_REASON_RATE_LIMITED = 3;         // Too many requests
   DENIAL_REASON_CONTENT_UNAVAILABLE = 4;  // Resource no longer available
@@ -2075,7 +2077,8 @@ message ReportingObligation {
   // Whether post-usage reporting is required.
   bool required = 1;
 
-  // Duration within which the report must be submitted (e.g. 24h).
+  // Duration within which the report must be submitted (e.g. "86400s" = 24
+  // hours; proto-JSON encodes Duration as seconds).
   optional google.protobuf.Duration window = 2;
 
   // URL to submit the usage report to (if different from Exchange).
@@ -2115,7 +2118,7 @@ message UsageReport {
   // Transaction ID from the delivery.
   string transaction_id = 3;
 
-  // Billing reference from the delivery.
+  // Billing record identifier from the delivery (TransactionResultItem.billing_id).
   string billing_id = 4;
 
   // How the resource was actually used.
@@ -2329,7 +2332,8 @@ message RequestConstraints {
   // for the budget_scope. Transactions that would exceed are denied.
   optional Cost period_budget = 8;
 
-  // Budget period (e.g. 720h = 30 days). Resets at period boundary.
+  // Budget period (e.g. "2592000s" = 30 days; proto-JSON encodes Duration
+  // as seconds). Resets at period boundary.
   optional google.protobuf.Duration budget_period = 9;
 
   // Maximum acceptable age of resource data. The Broker SHOULD
@@ -2712,7 +2716,8 @@ message DisputeRequest {
   // Transaction being disputed.
   string transaction_id = 3;
 
-  // Billing reference from the transaction.
+  // Billing record identifier from the disputed transaction
+  // (TransactionResultItem.billing_id).
   string billing_id = 4;
 
   // Reason for the dispute.
