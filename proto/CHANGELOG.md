@@ -32,7 +32,7 @@ the static `NewStaticKeyResolver` stay in `helpers`.
 Document-order active-key selection — `ActiveEd25519Key` /
 `ActiveEd25519KeyWithExpiry` and their revocation-aware `…Screened` variants
 (`active_ed25519_key*` in Python, `activeEd25519Key*` in TS) — plus a
-`CachedOfferKeyResolver` (Go + Python), an injectable Ed25519 verify primitive on
+`CachedOfferKeyResolver`, an injectable Ed25519 verify primitive on
 the TS signed-URL verify (`Ed25519Verifier`), and cross-language `ErrorDetail`
 readers: Go `AttachErrorDetail` / `AttachDetail` on the server binding, and
 `parse_error_detail` / `error_detail_from` (Python) and `parseErrorDetail` /

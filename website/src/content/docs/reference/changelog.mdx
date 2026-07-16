@@ -19,7 +19,7 @@ a hard rename; consumers import the resolvers from `sdk/go/resolvers`. The pure
 **SDK (all 3 languages): new public faces (additive, no wire change).** Document-order
 active-key selection (`ActiveEd25519Key` / `…WithExpiry` and revocation-aware
 `…Screened` variants; `active_ed25519_key*` in Python, `activeEd25519Key*` in TS), a
-`CachedOfferKeyResolver` (Go + Python), an injectable Ed25519 verify primitive on the
+`CachedOfferKeyResolver`, an injectable Ed25519 verify primitive on the
 TS signed-URL verify (`Ed25519Verifier`), and cross-language `ErrorDetail` readers
 (Go `AttachErrorDetail` / `AttachDetail`; `parse_error_detail` / `error_detail_from`
 in Python; `parseErrorDetail` / `errorDetailFrom` in TS). The SSRF-guarded transport
