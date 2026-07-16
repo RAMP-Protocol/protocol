@@ -1,7 +1,7 @@
 // Cross-language revocation-set-membership parity (TypeScript side).
 //
 // sdk/ts `revoked()` MUST reproduce the sdk/go oracle's verdict for every case
-// in sdk/go/helpers/testdata/revocation-membership-vectors.json. The vector
+// in sdk/go/resolvers/testdata/revocation-membership-vectors.json. The vector
 // carries a served WBA directory (keys + windows), a served revocation snapshot
 // (as_of + revoked thumbprints), a prime thumbprint (a directory-listed key
 // resolved to populate the snapshot), and labelled cases with the expected
@@ -10,8 +10,8 @@
 // `revoked(tp)` matches the oracle for EVERY case — including the load-bearing
 // directory-absent-but-revoked → true, which is the whole point of the accessor.
 import { afterEach, describe, expect, it } from "vitest";
-import vector from "../../go/helpers/testdata/revocation-membership-vectors.json";
-import { newWBAKeyResolver } from "../resolvers/index.ts";
+import vector from "../../go/resolvers/testdata/revocation-membership-vectors.json";
+import { createWBAKeyResolver } from "../resolvers/index.ts";
 import {
 	type Origin,
 	revocationJson,
@@ -55,7 +55,7 @@ describe("sdk/ts revoked() matches the sdk/go revocation-membership oracle", () 
 		origin.setWBA(wbaFileJson(keys, origin.revocationURL()));
 		origin.setRevocation(revocationJson(vec.as_of, vec.revoked));
 
-		const r = newWBAKeyResolver({
+		const r = createWBAKeyResolver({
 			scheme: "http", fetch: loopbackFetch,
 			now: () => Date.parse(vec.as_of),
 		});

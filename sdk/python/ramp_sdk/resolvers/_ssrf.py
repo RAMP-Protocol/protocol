@@ -29,6 +29,37 @@ class SsrfError(OSError):
     best-effort refresh) rather than surfacing as an uncaught exception.
     """
 
+
+# The shared redirect-depth cap. Deny-by-default and IDENTICAL across the three
+# SDKs (Go maxWBARedirects / undici maxRedirections): the guarded client follows
+# at most this many redirect hops and refuses the next, so no SDK inherits its
+# HTTP library's looser default (httpx's default is 20). httpx enforces it via the
+# guarded client's ``max_redirects`` kwarg; the corpus pins the predicate below.
+MAX_REDIRECTS = 5
+
+
+def redirect_chain_refused(hops: int) -> bool:
+    """Report whether a chain of ``hops`` redirects must be refused.
+
+    The shared redirect-depth policy: a chain is refused iff it EXCEEDS
+    :data:`MAX_REDIRECTS`. Corpus-tested identically against the Go oracle's
+    ``redirectChainRefused`` so the three SDKs agree on the boundary; the real
+    httpx client is configured to the same cap (``max_redirects=MAX_REDIRECTS``).
+    """
+    return hops > MAX_REDIRECTS
+
+
+def refusal(host: str) -> SsrfError:
+    """Build the GENERIC dial-refusal error the guard raises for EVERY refuse
+    reason — an unresolvable host, an empty resolution, or a resolved-reserved
+    address all yield the SAME message. It names only the caller-supplied host
+    (already known to the caller), never the resolved IP, and does not distinguish
+    an NXDOMAIN from a resolved-private answer, so it cannot serve as a pre-auth
+    DNS oracle against internal networks. Identical wording across the three SDKs.
+    """
+    return SsrfError(f"refusing to dial {host!r} (SSRF guard)")
+
+
 # The reserved / non-public address set the WBA SSRF guard rejects. Mirrors the
 # Go oracle's ssrfBlockedPrefixes EXACTLY (order irrelevant — membership is a
 # per-prefix containment test). IPv4-mapped and NAT64 forms are unwrapped in

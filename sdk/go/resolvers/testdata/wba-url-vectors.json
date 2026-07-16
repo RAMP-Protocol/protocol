@@ -1,0 +1,29 @@
+{
+  "note": "WBA directory URL = scheme://host + /.well-known/http-message-signatures-directory, produced by the sdk/go WBADirectoryURL oracle; py/ts replay and must match every vector",
+  "vectors": [
+    {
+      "label": "https-default",
+      "scheme": "",
+      "host": "exchange.example",
+      "expected_url": "https://exchange.example/.well-known/http-message-signatures-directory"
+    },
+    {
+      "label": "explicit-http",
+      "scheme": "http",
+      "host": "exchange.example",
+      "expected_url": "http://exchange.example/.well-known/http-message-signatures-directory"
+    },
+    {
+      "label": "host-with-port",
+      "scheme": "https",
+      "host": "exchange.example:8443",
+      "expected_url": "https://exchange.example:8443/.well-known/http-message-signatures-directory"
+    },
+    {
+      "label": "ipv6-passthrough",
+      "scheme": "https",
+      "host": "[2001:db8::1]:8443",
+      "expected_url": "https://[2001:db8::1]:8443/.well-known/http-message-signatures-directory"
+    }
+  ]
+}

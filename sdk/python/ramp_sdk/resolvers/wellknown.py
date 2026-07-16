@@ -19,10 +19,14 @@ import json
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
-from ramp_sdk.b64 import b64url_decode
-from ramp_sdk.resolvers._http import HttpFetch, default_fetch, fetch_strict
+from ramp_sdk.b64 import b64url_decode_strict
+from ramp_sdk.resolvers._http import default_client, fetch_strict
 from ramp_sdk.resolvers.errors import DirectoryUnavailableError, NoEndpointError
+
+if TYPE_CHECKING:
+    import httpx
 
 _ED25519_PUBLIC_KEY_BYTES = 32
 _DEFAULT_TTL = timedelta(minutes=5)
@@ -60,7 +64,9 @@ def _extract_ed25519(entry: object) -> tuple[str, bytes] | None:
     if entry.get("kty") != "OKP" or entry.get("crv") != "Ed25519":
         return None
     try:
-        raw = b64url_decode(x)
+        # JWK OKP `x` is UNPADDED base64url (RFC 8037); reject padding / the
+        # standard alphabet to match Go's go-jose JWKS parse (RawURLEncoding).
+        raw = b64url_decode_strict(x)
     except ValueError:
         return None
     if len(raw) != _ED25519_PUBLIC_KEY_BYTES:
@@ -77,13 +83,13 @@ class WellKnownKeyResolver:
         *,
         ttl: timedelta = _DEFAULT_TTL,
         now: NowFn = _now_utc,
-        http: HttpFetch = default_fetch,
+        http: httpx.Client | None = None,
         allow: AllowFn | None = None,
     ) -> None:
         self._url = url
         self._ttl = ttl if ttl > timedelta(0) else _DEFAULT_TTL
         self._now = now
-        self._http = http
+        self._http = http if http is not None else default_client()
         self._allow = allow
         self._lock = threading.Lock()
         self._cache: dict[str, bytes] = {}
@@ -132,13 +138,13 @@ class WellKnownEndpointResolver:
         ttl: timedelta = _DEFAULT_TTL,
         scheme: str = "https",
         now: NowFn = _now_utc,
-        http: HttpFetch = default_fetch,
+        http: httpx.Client | None = None,
         allow: AllowFn | None = None,
     ) -> None:
         self._ttl = ttl if ttl > timedelta(0) else _DEFAULT_TTL
         self._scheme = scheme or "https"
         self._now = now
-        self._http = http
+        self._http = http if http is not None else default_client()
         self._allow = allow
         self._cache_lock = threading.Lock()
         self._cache: dict[str, tuple[str, datetime]] = {}

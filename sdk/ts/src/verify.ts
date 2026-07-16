@@ -37,14 +37,41 @@ const ParamsSchema = z.object({
   agentId: z.string().min(1).optional(),
 });
 
-export interface VerifyDeps {
+/**
+ * The Ed25519 primitive the verify envelope calls once a key is resolved. It
+ * receives the resolved key (whatever type `resolveKey` yields — a WebCrypto
+ * `CryptoKey` by default, but a raw 32-byte public key on a runtime whose
+ * SubtleCrypto lacks Ed25519), the canonical message bytes, and the signature
+ * bytes, and returns whether the signature verifies. INJECTABLE so a consumer
+ * on a runtime without native Ed25519 (Fastly Compute) swaps in @noble/ed25519
+ * and reuses this whole envelope (param parse, expiry, reason mapping) instead
+ * of re-hand-rolling it — mirroring how the sign/verify faces already inject
+ * key resolution. `K` is inferred from `resolveKey`.
+ */
+export type Ed25519Verifier<K = CryptoKey> = (
+  key: K,
+  message: Uint8Array<ArrayBuffer>,
+  sig: Uint8Array<ArrayBuffer>,
+) => Promise<boolean> | boolean;
+
+// The default primitive: WebCrypto native Ed25519. Byte-identical to the prior
+// inline crypto.subtle.verify — the argument order is adapted (WebCrypto takes
+// (algo, key, sig, data); the injectable contract is (key, message, sig)).
+const defaultVerify: Ed25519Verifier<CryptoKey> = (key, message, sig) =>
+  crypto.subtle.verify("Ed25519", key, sig, message);
+
+export interface VerifyDeps<K = CryptoKey> {
   now?: () => number;
-  resolveKey: (kid: string | undefined) => Promise<CryptoKey | undefined>;
+  resolveKey: (kid: string | undefined) => Promise<K | undefined>;
+  /** Ed25519 primitive; defaults to WebCrypto native (`crypto.subtle.verify`).
+   * A runtime lacking native Ed25519 injects its own (e.g. @noble/ed25519) and
+   * MUST when `resolveKey` yields a non-`CryptoKey` (e.g. raw public-key bytes). */
+  verify?: Ed25519Verifier<K>;
 }
 
-export async function verifyEd25519SignedUrl(
+export async function verifyEd25519SignedUrl<K = CryptoKey>(
   rawUrl: string,
-  deps: VerifyDeps,
+  deps: VerifyDeps<K>,
 ): Promise<VerifyResult> {
   // Coerce a URL-like input (a Fastly Compute request URL object) to its opaque
   // string form ONCE at the boundary, so param parsing and the canonical message
@@ -81,7 +108,11 @@ export async function verifyEd25519SignedUrl(
   }
 
   const message = canonicalMessage(raw);
-  const okSig = await crypto.subtle.verify("Ed25519", key, sigBytes, message);
+  // The default cast is dead when K !== CryptoKey: such a consumer always
+  // supplies its own verifier (the `??` short-circuits), so defaultVerify — which
+  // only type-checks for CryptoKey — is never reached with a foreign key type.
+  const verify = deps.verify ?? (defaultVerify as Ed25519Verifier<K>);
+  const okSig = await verify(key, message, sigBytes);
   if (!okSig) {
     return buildResult({ valid: false, expired: false, kid, reason: "signature_mismatch" });
   }

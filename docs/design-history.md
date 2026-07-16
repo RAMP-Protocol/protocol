@@ -448,3 +448,94 @@ instead of reading the descriptor, and rendered tables as opaque Astro component
 autolink pass could not see into. All of it is deleted. `protoc-gen-rampvocab` and
 `gen/go/vocab` stay — they are a real Go-SDK surface the conformance suite uses
 (`pricingunits.IsRegistered`).
+
+## SDK layering: a dependency-free trust core, a vetted-client I/O tier
+
+The three SDKs (`sdk/go`, `sdk/ts`, `sdk/python`) are split into a **pure trust
+core** and a separate **I/O tier**, and the two obey opposite dependency rules. The
+core — the RFC 9421 / 7638 crypto, JCS canonicalization, offer/acceptance verify, and
+the transport-neutral `core` composition — imposes **nothing** beyond the platform
+standard library, a vetted crypto primitive, and a vetted JCS/canonicalization
+library. It takes no HTTP client and does not dial the network: `sdk/go/helpers`
+never constructs an `http.Client`, `sdk/ts/core` imports neither `undici` nor a
+framework, and `ramp_sdk.core` imports no `httpx`. The I/O tier — `sdk/{go,ts,python}/resolvers`
+— is the *only* place a network fetch lives (well-known JWKS, WBA directory,
+`ramp.json` endpoint, offer-key resolution), and there the rule inverts: it runs on a
+**maintained HTTP client** (Go `net/http`, TS `undici`, Python `httpx`) rather than a
+hand-rolled transport, because the client owns the response state machine (status,
+redirects, 1xx, decompression) and the SDK should own only the SSRF check it injects
+as a connection-level hook.
+
+The reasoning is a threat boundary, not an aesthetic one. The host a resolver fetches
+is caller-supplied and reached **before** any signature is checked, so the fetch
+surface is pre-auth-reachable network I/O — exactly the surface an attacker probes for
+SSRF. Keeping every dial in one tier, behind one SSRF-guarded client, means the pure
+verification code an edge worker or a broker links can never be tricked into dialing:
+there is no client in it to trick. The split is enforced structurally by an **io-leaf
+guard** in each SDK that fails the build if a core/pure file names a dialing surface
+(`http.Client`, `net.Dial`, an `httpx`/`undici` import), so the maintained-client
+dependency cannot leak back down into the trust core.
+
+This is the resolution of an earlier terminology overload. The `core` package was once
+described as "L2 CORE [that] must impose NOTHING … NO httpx", while the resolvers tier
+— which legitimately *does* use `httpx`/`undici`/`net/http` — was *also* called "L2".
+Read literally the two statements contradict; the fix is to name the split by kind
+rather than by a single "L2" number: the **trust core** (pure, dependency-minimal, no
+dial) and the **I/O resolvers tier** (vetted maintained client, SSRF-guarded) are
+distinct tiers with opposite dependency policies, and "no httpx" is a property of the
+core alone, never of the whole SDK above L1.
+
+## SSRF-guarded fetch: two flags, a corpus-locked transport
+
+Every third-party-influenceable fetch across all three SDKs runs through **one**
+env-driven guarded client (`NewGuardedClientFromEnv` in Go, `guarded_client` in
+Python, `guardedFetchFromEnv` in TS), whose behavior is governed by exactly two
+orthogonal environment flags and nothing else — no deployment allow-list, no config
+file, no per-stack policy. `SKIP_SSRF` toggles the dial-time **address** guard (default
+off: reserved / non-public addresses are refused); `ALLOW_INSECURE` toggles the
+**scheme** guard (default off: https only). An operator opts out of a guard by setting
+its flag; the production default is both guards on.
+
+The transport policy is fixed and identical in all three languages: redirect depth is
+capped at **5** hops, well-known/JWKS response bodies are capped at **1 MiB**, and a
+host resolving to multiple addresses **fails closed if any** resolved address is
+reserved (never "the first address looked fine"). Python additionally imposes an
+overall wall-clock deadline on one guarded GET, because `httpx`'s timeout is per-phase
+and a hostile `getaddrinfo` could otherwise stall past every per-phase budget. The two
+parts of the guard that are expressible as data — reserved-address classification and
+the deny-by-default scheme allowlist — are **corpus-locked** to shared vectors
+(`sdk/go/resolvers/testdata/ssrf-address-vectors.json`, `ssrf-scheme-vectors.json`,
+`ssrf-hostset-vectors.json`, `ssrf-redirect-vectors.json`) that all three SDKs replay;
+the residual wiring (that the guard is actually applied on each redirect hop and that a
+non-2xx surfaces as a status rather than a crash) is covered behaviorally per language.
+
+## Active-key selection: deterministic, non-normative, unbounded by default
+
+The WBA directory can carry several simultaneously window-active signing keys during an
+overlap rotation, and the protocol defines no "current" key among them. The SDK offers
+a document-order selector (`ActiveEd25519Key` and its `…WithExpiry` / `…Screened`
+variants) that returns the **first window-active key in document order** — a purely
+deterministic tie-break, explicitly **not** a claim about which key is canonical.
+Callers must not read normative meaning into the choice. Three conventions are
+deliberate and shared byte-for-byte across the SDKs: the scan is **unbounded by
+default** (a silent cap would make a valid key at a high document position permanently
+unselectable *and* indistinguishable from "no active key" — a directory-padding
+footgun — so a bound is opt-in via `MaxScan`, and an exhausted explicit bound is
+**logged**); the `kty`/`crv` match ("OKP" / "Ed25519") is **case-insensitive** even
+though RFC 7517/8037 specify exact case, so a case-varying directory resolves the same
+key everywhere; and the bare selector screens *only* validity windows, so a
+verification-path caller must use the revocation-aware `…Screened` form (or screen the
+selected thumbprint themselves) — an emergency-revoked but still window-active key
+would otherwise be selected.
+
+## `ErrorDetail` is decoded cross-language, not just emitted
+
+The typed `ErrorDetail` failure contract (see "Failure as a typed contract" above) is
+now **read** in every SDK, not only produced by the Go server. The Go server binding
+attaches a typed detail to a Connect error (`AttachErrorDetail` / `AttachDetail`), and
+Python and TS ship symmetric **decoders** (`parse_error_detail` / `error_detail_from`;
+`parseErrorDetail` / `errorDetailFrom`) so a TS or Python client branches on the typed
+reason enum a Go exchange emitted, never on a human string. Emit and decode are pinned
+to one shared oracle corpus (`error-detail-vectors.json`) replayed by all three
+languages, so the typed-failure contract is verified end-to-end across the language
+boundary rather than trusted to match by inspection.

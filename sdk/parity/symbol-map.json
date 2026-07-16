@@ -1,0 +1,539 @@
+{
+  "_comment": "Symbol-level Go->Python->TS API-surface parity map. Go is the oracle (sdk/go/{helpers,resolvers,core,connect,connectserver}). One entry per Go public symbol (pkg-qualified). 'python'/'ts' hold the mapped public name or null when that language exposes no public symbol of that name. allowlist_reason marks a deliberate documented divergence (shrink-only). Enforced by sdk/python/tests/test_api_surface_parity.py. TS object factories use the create* prefix and value generators use generate* (Go NewX stays idiomatic); the guarded-client names (guarded_client/guarded_async_client vs guardedFetchFromEnv) are a documented idiomatic divergence, not a transliteration.",
+  "go_exclusions": {
+    "connect.ClientOption": "Part of the Go-only typed Connect client; see the Connect-client DECISION in docs/sdk-parity-matrix.md.",
+    "connect.ExecuteOption": "Part of the Go-only typed Connect client; see the Connect-client DECISION in docs/sdk-parity-matrix.md.",
+    "connect.NewValidateInterceptor": "Go-only protovalidate interceptor (matrix SERVER-role validation row: TS/Py absent).",
+    "connect.Validation": "Part of the Go-only typed Connect client validation option; see the Connect-client DECISION in docs/sdk-parity-matrix.md.",
+    "connect.WithHTTPClient": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithIdempotencyKey": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithInterceptors": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithKeyResolver": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithOfferKey": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithRequestIDFunc": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithSigner": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithValidation": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithVerification": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.AsConnectError": "Go-only Connect error mapping; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
+    "connectserver.AttachDetail": "Go-only Connect ErrorDetail attach; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
+    "connectserver.AttachErrorDetail": "Go-only Connect ErrorDetail attach; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
+    "connectserver.ClassifyReject": "Go-only reject classifier; part of the Go Connect handler binding (connectserver-handler DECISION).",
+    "connectserver.EmitUnpopulatedJSONCodec": "Go connect-go codec; n/a for TS/Python (no Connect binding) per the matrix Codec row.",
+    "connectserver.ErrReplayed": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "connectserver.NewErrorDetail": "Go-only Connect ErrorDetail envelope build (the build half of AttachErrorDetail, exposed for callers that set a typed reason before attaching); TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row).",
+    "connectserver.ServerOption": "Part of the Go-only Connect handler binding; see the connectserver-handler DECISION in docs/sdk-parity-matrix.md.",
+    "connectserver.WithEmitUnpopulated": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithHandlerOptions": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithInterceptors": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithKeyResolver": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithMaxSignatureAge": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithMaxSignatures": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithOnReject": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithReplayStore": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithReplayTTL": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithRequestIDFunc": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithValidation": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithVerifyGate": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connectserver.WithoutReplayStore": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "core.DefaultRequestID": "Go default request-id minter; py/ts mint request-ids inline.",
+    "core.ErrOfferExpired": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "core.RequestIDFunc": "Go request-id function type; py/ts pass a callable inline.",
+    "core.RequestIDMiddleware": "Go-only request-id middleware (matrix SERVER-role request-id row: TS/Py absent).",
+    "core.SigningOption": "Go functional-option type for the signing transport; py/ts pass options objects.",
+    "core.WithAppendSigner": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "core.WithSignPredicate": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "core.WithSignatureAgent": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "core.WithWindow": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "helpers.AgentIDParam": "Signed-URL query-parameter name; language-idiomatic inline constant, no cross-language public face.",
+    "helpers.AlgEd25519": "RFC 9421 alg tag constant; inlined per language.",
+    "helpers.AllSignaturesFromContext": "Go context.Context accessor; py/ts thread multisig state explicitly.",
+    "helpers.BrokerKeyIDPrefix": "Relay keyID wire-prefix constant; inlined per language.",
+    "helpers.ComponentParam": "Go value type for an RFC 9421 covered-component parameter; py/ts model components inline.",
+    "helpers.CoveredComponent": "Go value type for an RFC 9421 covered component; py/ts model components inline.",
+    "helpers.ErrAcceptanceSignatureInvalid": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrBrokenSignatureChain": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrDigestMismatch": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrEmptyIdempotencyKey": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrEmptyMoney": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrExpired": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrFutureCreated": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrInvalidKeyLength": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrMalformedSignatureInput": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrMissingContentDigest": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrMissingCreated": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrMissingExpires": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrMissingRequiredComponent": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrMissingSignature": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrMissingSignatureInput": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrOfferExpired": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrOfferSignatureInvalid": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrProofOfPossessionMismatch": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrSignatureLifetimeTooLong": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrSignatureVerify": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrTooManyHops": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrURLExpired": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrURLMissingExpiry": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrURLMissingSignature": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrURLNotAgentBound": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrURLSignatureInvalid": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrUnsupportedAlgorithm": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.FromContext": "Go context.Context accessor; py/ts thread verified-request state explicitly.",
+    "helpers.NewContext": "Go context.Context accessor; py/ts thread verified-request state explicitly.",
+    "helpers.NewEd25519Signer": "Go Ed25519 Signer constructor; py/ts inject a sign function rather than constructing a named signer.",
+    "helpers.NewEd25519SignerFromSeed": "Go Ed25519 Signer-from-seed constructor; py/ts inject a sign function rather than constructing a named signer.",
+    "helpers.NewMultisigContext": "Go context.Context accessor; py/ts thread multisig state explicitly.",
+    "helpers.SharedValidator": "Go protovalidate validator singleton; TS/Python ship no protovalidate face.",
+    "helpers.SignOptions": "Go options struct for SignRequest; py/ts pass options via kwargs/options objects.",
+    "helpers.SignatureAgentFromContext": "Go context.Context accessor; py/ts thread signature-agent state explicitly.",
+    "helpers.SignedURL": "Go signed-URL result value type; py/ts return language-native result objects.",
+    "helpers.Signer": "Go Signer interface; py/ts inject a sign function (TS Ed25519SignFn; Python a signing callable) rather than a named Signer type — divergent handle shape, not a missing operation.",
+    "helpers.ThumbprintBytes": "Go raw-[32]byte thumbprint variant; py/ts expose only the string thumbprint.",
+    "helpers.Validate": "Go protovalidate wrapper; TS/Python ship no validation interceptor (matrix SERVER-role validation row: TS/Py absent).",
+    "helpers.VerifiedRequest": "Go verified-request result value type; py/ts return language-native verdict objects.",
+    "helpers.VerifiedURL": "Go verified-URL result value type (PoP via CheckProofOfPossession); py/ts expose verify_agent_binding/verifyAgentBinding.",
+    "helpers.VerifyMultisigRequestResolved": "Go resolver-injected multisig-verify overload; py/ts expose a single multisig-verify entry point.",
+    "helpers.VerifyOffer": "Go low-level offer-signature verify; py/ts route offer verification through the Verifier face (core.Verifier).",
+    "helpers.VerifyOptions": "Go options struct for verify; py/ts pass options via kwargs/options objects.",
+    "helpers.VerifyPresentedOffer": "Go low-level presented-offer freshness verify; py/ts route offer verification through the Verifier face.",
+    "helpers.VerifyRequestResolved": "Go resolver-injected VerifyRequest overload; py/ts expose a single verify entry point.",
+    "helpers.WithSignatureAgent": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "resolvers.ActiveKeyScanOptions": "Go scan-options struct; py/ts pass scan options inline.",
+    "resolvers.SSRFCheckRedirect": "Go redirect-policy hook; py/ts fold redirect checks into the guard (async_ssrf_guard / the guarded fetch)."
+  },
+  "symbols": {
+    "connect.Client": {
+      "allowlist_reason": "Go-only typed Connect client (Discover->Execute orchestration) — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md",
+      "decision_anchor": "typed Connect **client**",
+      "python": null,
+      "ts": null
+    },
+    "connect.ErrorDetailFrom": {
+      "allowlist_reason": null,
+      "python": "error_detail_from",
+      "ts": "errorDetailFrom"
+    },
+    "connect.NewClient": {
+      "allowlist_reason": "Go-only typed Connect client constructor — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md",
+      "decision_anchor": "typed Connect **client**",
+      "python": null,
+      "ts": null
+    },
+    "connectserver.NewBrokerServiceHandler": {
+      "allowlist_reason": "Go-only full Connect Broker handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md",
+      "decision_anchor": "full Connect handler binding",
+      "python": null,
+      "ts": null
+    },
+    "connectserver.NewExchangeServiceHandler": {
+      "allowlist_reason": "Go-only full Connect Exchange handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md",
+      "decision_anchor": "full Connect handler binding",
+      "python": null,
+      "ts": null
+    },
+    "connectserver.RejectReason": {
+      "allowlist_reason": null,
+      "python": "RejectReason",
+      "ts": "RejectReason"
+    },
+    "core.ClockWindow": {
+      "allowlist_reason": null,
+      "python": "clock_window",
+      "ts": "clockWindow"
+    },
+    "core.Mode": {
+      "allowlist_reason": null,
+      "python": "Mode",
+      "ts": "Mode"
+    },
+    "core.MonotonicWindow": {
+      "allowlist_reason": null,
+      "python": "monotonic_window",
+      "ts": "monotonicWindow"
+    },
+    "core.NewSigningTransport": {
+      "allowlist_reason": null,
+      "python": "SigningTransport",
+      "ts": "createSigningTransport"
+    },
+    "core.NewVerifier": {
+      "allowlist_reason": "Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory.",
+      "python": null,
+      "ts": "createVerifier"
+    },
+    "core.RejectedOffer": {
+      "allowlist_reason": null,
+      "python": "RejectedOffer",
+      "ts": "RejectedOffer"
+    },
+    "core.ReplayStore": {
+      "allowlist_reason": null,
+      "python": "ReplayStore",
+      "ts": "ReplayStore"
+    },
+    "core.RequestIDHeader": {
+      "allowlist_reason": null,
+      "python": "RequestIDHeader",
+      "ts": "RequestIDHeader"
+    },
+    "core.Result": {
+      "allowlist_reason": null,
+      "python": "Result",
+      "ts": "Result"
+    },
+    "core.VerifiedOffer": {
+      "allowlist_reason": null,
+      "python": "VerifiedOffer",
+      "ts": "VerifiedOffer"
+    },
+    "core.Verifier": {
+      "allowlist_reason": null,
+      "python": "Verifier",
+      "ts": "Verifier"
+    },
+    "core.Window": {
+      "allowlist_reason": null,
+      "python": "Window",
+      "ts": "Window"
+    },
+    "helpers.AcceptanceSignatureAlgorithm": {
+      "allowlist_reason": null,
+      "python": "ACCEPTANCE_SIGNATURE_ALGORITHM",
+      "ts": "ACCEPTANCE_SIGNATURE_ALGORITHM"
+    },
+    "helpers.AppendSignature": {
+      "allowlist_reason": null,
+      "python": "append_signature",
+      "ts": "appendSignature"
+    },
+    "helpers.ApplyScopes": {
+      "allowlist_reason": null,
+      "python": "apply_scopes",
+      "ts": "applyScopes"
+    },
+    "helpers.CanonicalizeMoney": {
+      "allowlist_reason": null,
+      "python": "canonicalize_money",
+      "ts": "canonicalizeMoney"
+    },
+    "helpers.CatalogRejectionDetail": {
+      "allowlist_reason": null,
+      "python": "catalog_rejection_detail",
+      "ts": "catalogRejectionDetail"
+    },
+    "helpers.ConnectProtocolVersion": {
+      "allowlist_reason": null,
+      "python": "ConnectProtocolVersion",
+      "ts": "ConnectProtocolVersion"
+    },
+    "helpers.ConnectProtocolVersionHeader": {
+      "allowlist_reason": null,
+      "python": "ConnectProtocolVersionHeader",
+      "ts": "ConnectProtocolVersionHeader"
+    },
+    "helpers.ContentDigest": {
+      "allowlist_reason": null,
+      "python": "content_digest",
+      "ts": "contentDigest"
+    },
+    "helpers.ContentTypeJSON": {
+      "allowlist_reason": null,
+      "python": "ContentTypeJSON",
+      "ts": "ContentTypeJSON"
+    },
+    "helpers.ContentTypeProto": {
+      "allowlist_reason": null,
+      "python": "ContentTypeProto",
+      "ts": "ContentTypeProto"
+    },
+    "helpers.DisputeFailureDetail": {
+      "allowlist_reason": null,
+      "python": "dispute_failure_detail",
+      "ts": "disputeFailureDetail"
+    },
+    "helpers.DomainVerificationFailureDetail": {
+      "allowlist_reason": null,
+      "python": "domain_verification_failure_detail",
+      "ts": "domainVerificationFailureDetail"
+    },
+    "helpers.ErrUnknownKey": {
+      "allowlist_reason": null,
+      "python": "UnknownKeyError",
+      "ts": "UnknownKey"
+    },
+    "helpers.FormatMoney": {
+      "allowlist_reason": null,
+      "python": "format_money",
+      "ts": "formatMoney"
+    },
+    "helpers.HashURL": {
+      "allowlist_reason": null,
+      "python": "hash_url",
+      "ts": "hashUrl"
+    },
+    "helpers.KeyResolver": {
+      "allowlist_reason": null,
+      "python": "KeyResolver",
+      "ts": "RequestKeyResolver"
+    },
+    "helpers.NewIdempotencyKey": {
+      "allowlist_reason": null,
+      "python": "generate_idempotency_key",
+      "ts": "generateIdempotencyKey"
+    },
+    "helpers.NewStaticKeyResolver": {
+      "allowlist_reason": "Go NewStaticKeyResolver factory folds into the Python class constructor (StaticKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createStaticKeyResolver factory.",
+      "python": null,
+      "ts": "createStaticKeyResolver"
+    },
+    "helpers.NormalizeScopes": {
+      "allowlist_reason": null,
+      "python": "normalize_scopes",
+      "ts": "normalizeScopes"
+    },
+    "helpers.OfferSignatureAlgorithm": {
+      "allowlist_reason": null,
+      "python": "OFFER_SIGNATURE_ALGORITHM",
+      "ts": "OFFER_SIGNATURE_ALGORITHM"
+    },
+    "helpers.ParseMoney": {
+      "allowlist_reason": null,
+      "python": "parse_money",
+      "ts": "parseMoney"
+    },
+    "helpers.Reason": {
+      "allowlist_reason": null,
+      "python": "reason",
+      "ts": "reason"
+    },
+    "helpers.RegistrationFailureDetail": {
+      "allowlist_reason": null,
+      "python": "registration_failure_detail",
+      "ts": "registrationFailureDetail"
+    },
+    "helpers.RequestIDHeader": {
+      "allowlist_reason": null,
+      "python": "RequestIDHeader",
+      "ts": "RequestIDHeader"
+    },
+    "helpers.RetrievalAuthFailureDetail": {
+      "allowlist_reason": null,
+      "python": "retrieval_auth_failure_detail",
+      "ts": "retrievalAuthFailureDetail"
+    },
+    "helpers.ScopesSubset": {
+      "allowlist_reason": null,
+      "python": "scopes_subset",
+      "ts": "scopesSubset"
+    },
+    "helpers.SignOffer": {
+      "allowlist_reason": null,
+      "python": "sign_offer_jcs",
+      "ts": "signOffer"
+    },
+    "helpers.SignOfferAcceptance": {
+      "allowlist_reason": null,
+      "python": "sign_offer_acceptance_jcs",
+      "ts": "signOfferAcceptance"
+    },
+    "helpers.SignRequest": {
+      "allowlist_reason": null,
+      "python": "sign_request",
+      "ts": "signRequest"
+    },
+    "helpers.SignURLEd25519": {
+      "allowlist_reason": null,
+      "python": "sign_ed25519_signed_url",
+      "ts": "signEd25519SignedUrl"
+    },
+    "helpers.SignatureAgentHeader": {
+      "allowlist_reason": null,
+      "python": "SignatureAgentHeader",
+      "ts": "SignatureAgentHeader"
+    },
+    "helpers.StaticKeyResolver": {
+      "allowlist_reason": null,
+      "python": "StaticKeyResolver",
+      "ts": "StaticKeyResolver"
+    },
+    "helpers.Thumbprint": {
+      "allowlist_reason": null,
+      "python": "thumbprint",
+      "ts": "thumbprint"
+    },
+    "helpers.TransactionDenialDetail": {
+      "allowlist_reason": null,
+      "python": "transaction_denial_detail",
+      "ts": "transactionDenialDetail"
+    },
+    "helpers.UsageReportRejectionDetail": {
+      "allowlist_reason": null,
+      "python": "usage_report_rejection_detail",
+      "ts": "usageReportRejectionDetail"
+    },
+    "helpers.ValidateIdempotencyKey": {
+      "allowlist_reason": null,
+      "python": "validate_idempotency_key",
+      "ts": "validateIdempotencyKey"
+    },
+    "helpers.ValidationRuleIDs": {
+      "allowlist_reason": null,
+      "python": "cross_field_rule_ids",
+      "ts": "crossFieldRuleIds"
+    },
+    "helpers.VerifyMultisigRequest": {
+      "allowlist_reason": null,
+      "python": "verify_multisig_request_server",
+      "ts": "verifyMultisigRequestServer"
+    },
+    "helpers.VerifyOfferAcceptance": {
+      "allowlist_reason": null,
+      "python": "verify_offer_acceptance_jcs",
+      "ts": "verifyOfferAcceptance"
+    },
+    "helpers.VerifyRequest": {
+      "allowlist_reason": null,
+      "python": "verify_request",
+      "ts": "verifyRequestServer"
+    },
+    "helpers.VerifyURLEd25519": {
+      "allowlist_reason": null,
+      "python": "verify_ed25519_signed_url",
+      "ts": "verifyEd25519SignedUrl"
+    },
+    "resolvers.ActiveEd25519Key": {
+      "allowlist_reason": null,
+      "python": "active_ed25519_key",
+      "ts": "activeEd25519Key"
+    },
+    "resolvers.ActiveEd25519KeyScreened": {
+      "allowlist_reason": null,
+      "python": "active_ed25519_key_screened",
+      "ts": "activeEd25519KeyScreened"
+    },
+    "resolvers.ActiveEd25519KeyWithExpiry": {
+      "allowlist_reason": null,
+      "python": "active_ed25519_key_with_expiry",
+      "ts": "activeEd25519KeyWithExpiry"
+    },
+    "resolvers.ActiveEd25519KeyWithExpiryScreened": {
+      "allowlist_reason": null,
+      "python": "active_ed25519_key_with_expiry_screened",
+      "ts": "activeEd25519KeyWithExpiryScreened"
+    },
+    "resolvers.CachedOfferKeyResolver": {
+      "allowlist_reason": null,
+      "python": "CachedOfferKeyResolver",
+      "ts": "CachedOfferKeyResolver"
+    },
+    "resolvers.CachedOfferKeyResolverConfig": {
+      "allowlist_reason": "Go config struct / TS options object folds into Python constructor keyword arguments (CachedOfferKeyResolver(...)); idiomatic Python has no separate options type.",
+      "python": null,
+      "ts": "CachedOfferKeyResolverOptions"
+    },
+    "resolvers.ErrDirectoryUnavailable": {
+      "allowlist_reason": null,
+      "python": "DirectoryUnavailableError",
+      "ts": "DirectoryUnavailable"
+    },
+    "resolvers.ErrKeyExpired": {
+      "allowlist_reason": null,
+      "python": "KeyExpiredError",
+      "ts": "KeyExpired"
+    },
+    "resolvers.ErrKeyRevoked": {
+      "allowlist_reason": null,
+      "python": "KeyRevokedError",
+      "ts": "KeyRevoked"
+    },
+    "resolvers.ErrNoEndpoint": {
+      "allowlist_reason": null,
+      "python": "NoEndpointError",
+      "ts": "NoEndpoint"
+    },
+    "resolvers.ErrRevocationUnevaluated": {
+      "allowlist_reason": null,
+      "python": "RevocationUnevaluatedError",
+      "ts": "RevocationUnevaluated"
+    },
+    "resolvers.ErrUnknownKey": {
+      "allowlist_reason": null,
+      "python": "UnknownKeyError",
+      "ts": "UnknownKey"
+    },
+    "resolvers.NewCachedOfferKeyResolver": {
+      "allowlist_reason": "Go NewCachedOfferKeyResolver factory folds into the Python class constructor (CachedOfferKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createCachedOfferKeyResolver factory.",
+      "python": null,
+      "ts": "createCachedOfferKeyResolver"
+    },
+    "resolvers.NewGuardedClientFromEnv": {
+      "allowlist_reason": null,
+      "python": "guarded_client",
+      "ts": "guardedFetchFromEnv"
+    },
+    "resolvers.NewWBADirectoryFetcher": {
+      "allowlist_reason": "Go's default OfferDirectoryFetcher factory folds into the Python WBAKeyResolver's injected directory-fetch seam (constructor default); no separate public factory symbol exists. TS keeps the createWBAOfferDirectoryFetch factory.",
+      "python": null,
+      "ts": "createWBAOfferDirectoryFetch"
+    },
+    "resolvers.NewWBAKeyResolver": {
+      "allowlist_reason": "Go NewWBAKeyResolver factory folds into the Python class constructor (WBAKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWBAKeyResolver factory.",
+      "python": null,
+      "ts": "createWBAKeyResolver"
+    },
+    "resolvers.NewWellKnownEndpointResolver": {
+      "allowlist_reason": "Go NewWellKnownEndpointResolver factory folds into the Python class constructor (WellKnownEndpointResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownEndpointResolver factory.",
+      "python": null,
+      "ts": "createWellKnownEndpointResolver"
+    },
+    "resolvers.NewWellKnownKeyResolver": {
+      "allowlist_reason": "Go NewWellKnownKeyResolver factory folds into the Python class constructor (WellKnownKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownKeyResolver factory.",
+      "python": null,
+      "ts": "createWellKnownKeyResolver"
+    },
+    "resolvers.OfferDirectoryFetcher": {
+      "allowlist_reason": null,
+      "python": "DirectoryFetch",
+      "ts": "OfferDirectoryFetch"
+    },
+    "resolvers.SSRFGuard": {
+      "allowlist_reason": null,
+      "python": "ssrf_guard",
+      "ts": "ssrfGuard"
+    },
+    "resolvers.WBADirectoryPath": {
+      "allowlist_reason": null,
+      "python": "WBA_DIRECTORY_PATH",
+      "ts": "WBA_DIRECTORY_PATH"
+    },
+    "resolvers.WBADirectoryURL": {
+      "allowlist_reason": null,
+      "python": "wba_directory_url",
+      "ts": "wbaDirectoryURL"
+    },
+    "resolvers.WBAKeyResolver": {
+      "allowlist_reason": null,
+      "python": "WBAKeyResolver",
+      "ts": "WBAKeyResolver"
+    },
+    "resolvers.WBAKeyResolverOptions": {
+      "allowlist_reason": "Go options struct / TS options object folds into Python constructor keyword arguments (WBAKeyResolver(...)); idiomatic Python has no separate options type.",
+      "python": null,
+      "ts": "WBAKeyResolverOptions"
+    },
+    "resolvers.WellKnownEndpointResolver": {
+      "allowlist_reason": null,
+      "python": "WellKnownEndpointResolver",
+      "ts": "WellKnownEndpointResolver"
+    },
+    "resolvers.WellKnownKeyResolver": {
+      "allowlist_reason": null,
+      "python": "WellKnownKeyResolver",
+      "ts": "WellKnownKeyResolver"
+    },
+    "resolvers.WellKnownOptions": {
+      "allowlist_reason": "Go options struct (shared by the well-known key/endpoint resolvers) / TS options object folds into Python constructor keyword arguments (WellKnownKeyResolver(...) / WellKnownEndpointResolver(...)); idiomatic Python has no separate options type.",
+      "python": null,
+      "ts": "WellKnownOptions"
+    }
+  }
+}

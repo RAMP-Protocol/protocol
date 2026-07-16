@@ -1,9 +1,20 @@
-# sdk/python — RAMP L1 helper library (ADR-020 tree sdk/{go,ts,python}/).
+# sdk/python — RAMP SDK (ADR-020 tree sdk/{go,ts,python}/).
 #
-# Stateless, IO-free protocol mechanics (thumbprint, signed-URL verify, RFC 9421
-# sign/verify + PoP, offer-acceptance, cross-field validation), byte-parity-guarded
-# against the sdk/go oracle. The import package is `ramp_sdk`; the PyPI dist name
-# defers to the L2/publish ticket.
+# The `ramp_sdk` import package bundles BOTH tiers in one distribution:
+#   L1 — stateless, IO-free protocol mechanics (thumbprint, signed-URL verify,
+#        RFC 9421 sign/verify + PoP, offer-acceptance, cross-field validation),
+#        byte-parity-guarded against the sdk/go oracle. This tier's IMPORT surface
+#        (ramp_sdk.core and the signing primitives) pulls no third-party HTTP
+#        client — it is dependency-free at the import level.
+#   L2 — the fetching resolvers (ramp_sdk.resolvers), which DO take a maintained
+#        HTTP client (httpx/httpcore) for the WBA / well-known directory GETs.
+# Because the two ship as one package, httpx/httpcore are HARD [project]
+# dependencies, not an optional extra: a pure-L1 consumer still installs them.
+# That is deliberate — keeping them non-optional means the SECURITY-relevant
+# version ceilings below (httpx<0.29, httpcore<2, guarding the private-internals
+# SSRF seam) bind EVERY install transitively, including consumers that declare
+# httpx directly. So "dependency-free" describes the L1 import surface, NOT the
+# package install. The PyPI dist name defers to the L2/publish ticket.
 #
 # Vetted libs the port uses (the app is the quality bar — do NOT hand-roll
 # crypto/canonicalization): cryptography>=44, pydantic>=2.9. The generated Pydantic
@@ -65,10 +76,6 @@ select = [
 # fix. The poll jitter is not security-sensitive (mirrors Go math/rand). PLR0913
 # (arg count) and S311 (non-crypto random) are waived for exactly this module.
 "ramp_sdk/resolvers/wba.py" = ["PLR0913", "S311"]
-# The default transport is a bounded stdlib urllib GET. Per the Go SSRF contract
-# the SDK exposes the injection point and the SSRF guard stays with the caller;
-# S310 (urllib url-open) is the intended, documented shape here.
-"ramp_sdk/resolvers/_http.py" = ["S310"]
 # SigningTransport exposes the sign-window seam as an INJECTION point: signer_seed
 # and keyid are identity, now/ttl_sec are the default clock+TTL, signature_agent is
 # the covered directory, and window is the injectable Window (mirroring the Go
@@ -99,6 +106,23 @@ requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
   "cryptography>=44",
+  # Maintained HTTP client for the L2 fetching resolvers (WBA / well-known
+  # directory GETs). It owns the response state machine (status, redirects, 1xx,
+  # decompression) so the SDK never hand-rolls a transport; the SSRF guard is
+  # injected as an httpx transport (ramp_sdk.resolvers.ssrf_guard). The pure
+  # signing core (ramp_sdk.signing_transport) remains transport-neutral and
+  # imports no httpx — the dependency is scoped to the I/O layer.
+  # Upper bounds are load-bearing, not hygiene: the SSRF guard attaches by
+  # assigning transport._pool._network_backend — httpx/httpcore PRIVATE internals.
+  # A future release that renames them would make that assignment a silent no-op
+  # (Python creates a dead attribute, no error) and leave a pre-auth fetch path
+  # UNGUARDED. ssrf_guard() now fails closed if the attr is absent, but the ceiling
+  # keeps us on a version whose internals we have verified. Raise deliberately after
+  # testing a newer release, never blindly.
+  "httpx>=0.27,<0.29",
+  # httpcore is httpx's transport engine; declared explicitly because the SSRF
+  # guard subclasses httpcore.SyncBackend directly (resolvers._http._GuardedBackend).
+  "httpcore>=1.0,<2",
   "pydantic>=2.9",
   # Vetted RFC 8785 JCS canonicalization for the offer/acceptance signed payload
   # (never hand-roll canonicalization). The core composes it; it is the JSON
@@ -108,9 +132,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
-# No httpx extra: ramp_sdk.signing_transport is a transport-neutral sign face —
-# it imports no httpx; the consumer owns its HTTP client. The ASGI server-binding
-# extra (FastAPI/Starlette) is deferred with its binding.
+# The ASGI server-binding extra (FastAPI/Starlette) is deferred with its binding.
 
 [tool.setuptools.packages.find]
 where = ["."]

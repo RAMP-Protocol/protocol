@@ -16,7 +16,7 @@ from .b64 import b64url_nopad
 _IDEMPOTENCY_KEY_BYTES = 16
 
 
-def new_idempotency_key() -> str:
+def generate_idempotency_key() -> str:
     """Return a fresh cryptographically-random, URL-safe idempotency key (16
     random bytes -> base64url, 22 chars, no padding). Use it once per logical
     operation; reuse a stored key only to deliberately replay.

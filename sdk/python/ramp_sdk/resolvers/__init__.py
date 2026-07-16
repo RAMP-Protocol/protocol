@@ -11,6 +11,12 @@ errors.Is-DISTINCT fail-closed taxonomy. The static face stays in
 
 from __future__ import annotations
 
+from ramp_sdk.resolvers._http import (
+    async_ssrf_guard,
+    guarded_async_client,
+    guarded_client,
+    ssrf_guard,
+)
 from ramp_sdk.resolvers._ssrf import SsrfError, blocked_address
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
@@ -21,10 +27,22 @@ from ramp_sdk.resolvers.errors import (
     RevocationUnevaluatedError,
     UnknownKeyError,
 )
-from ramp_sdk.resolvers.wba import WBAKeyResolver
+from ramp_sdk.resolvers.offer_key_cache import CachedOfferKeyResolver, DirectoryFetch
+from ramp_sdk.resolvers.wba import (
+    WBA_DIRECTORY_PATH,
+    WBAKeyResolver,
+    active_ed25519_key,
+    active_ed25519_key_screened,
+    active_ed25519_key_with_expiry,
+    active_ed25519_key_with_expiry_screened,
+    wba_directory_url,
+)
 from ramp_sdk.resolvers.wellknown import WellKnownEndpointResolver, WellKnownKeyResolver
 
 __all__ = [
+    "WBA_DIRECTORY_PATH",
+    "CachedOfferKeyResolver",
+    "DirectoryFetch",
     "DirectoryUnavailableError",
     "KeyExpiredError",
     "KeyRevokedError",
@@ -36,5 +54,14 @@ __all__ = [
     "WBAKeyResolver",
     "WellKnownEndpointResolver",
     "WellKnownKeyResolver",
+    "active_ed25519_key",
+    "active_ed25519_key_screened",
+    "active_ed25519_key_with_expiry",
+    "active_ed25519_key_with_expiry_screened",
+    "async_ssrf_guard",
     "blocked_address",
+    "guarded_async_client",
+    "guarded_client",
+    "ssrf_guard",
+    "wba_directory_url",
 ]

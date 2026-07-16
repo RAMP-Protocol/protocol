@@ -1,110 +1,282 @@
-# SDK Full-Surface Parity Matrix (go · ts · python)
+# SDK API-Surface Parity Matrix (go · python · ts)
 
-Decision: **3 SDKs mean 3 SDKs** — one must be able to build an agent, a broker,
-an exchange, or an edge verifier in any of Go/TS/Python. This matrix is the
-committed inventory of the intended surface per role, the per-language state,
-and the gap list. Update it when a face lands or a gap ticket closes.
+<!-- GENERATED FILE — DO NOT EDIT BY HAND.
+     Source of truth:
+       • API surface   — sdk/parity/symbol-map.json
+                          (enforced against live exports by
+                           sdk/python/tests/test_api_surface_parity.py)
+       • Vector replay  — sdk/go/{helpers,resolvers}/testdata/*-vectors.json
+                          (enforced by test_corpus_replay_completeness.py)
+     Regenerate:  python3 scripts/gen-parity-matrix.py
+     Drift-gated in scripts/ci-local.sh. Narrative/rationale: docs/design-history.md. -->
 
-Surveyed at: sdk/go (helpers, core, connect, connectserver), sdk/ts (src, core,
-hono), sdk/python (ramp_sdk). Legend: ✅ present (symbol named) · ⚠️ partial ·
-❌ absent.
+Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-## AGENT role
+**At a glance:** 72 symbols at cross-language parity · 14 documented divergences · 98 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
 
-| Operation | go | ts | python |
+Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
+
+## API surface — parity per Go public symbol
+
+Legend: a name = the public face in that language · `—` = intentionally none (see Documented divergences). Every row here is at parity by construction: the gate rejects a mapped name that is absent from the live surface.
+
+### helpers — L1 pure primitives (crypto, canonicalization, money, scopes)
+
+| Go | python | ts |
+|---|---|---|
+| `AcceptanceSignatureAlgorithm` | `ACCEPTANCE_SIGNATURE_ALGORITHM` | `ACCEPTANCE_SIGNATURE_ALGORITHM` |
+| `AppendSignature` | `append_signature` | `appendSignature` |
+| `ApplyScopes` | `apply_scopes` | `applyScopes` |
+| `CanonicalizeMoney` | `canonicalize_money` | `canonicalizeMoney` |
+| `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
+| `ConnectProtocolVersion` | `ConnectProtocolVersion` | `ConnectProtocolVersion` |
+| `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` |
+| `ContentDigest` | `content_digest` | `contentDigest` |
+| `ContentTypeJSON` | `ContentTypeJSON` | `ContentTypeJSON` |
+| `ContentTypeProto` | `ContentTypeProto` | `ContentTypeProto` |
+| `DisputeFailureDetail` | `dispute_failure_detail` | `disputeFailureDetail` |
+| `DomainVerificationFailureDetail` | `domain_verification_failure_detail` | `domainVerificationFailureDetail` |
+| `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
+| `FormatMoney` | `format_money` | `formatMoney` |
+| `HashURL` | `hash_url` | `hashUrl` |
+| `KeyResolver` | `KeyResolver` | `RequestKeyResolver` |
+| `NewIdempotencyKey` | `generate_idempotency_key` | `generateIdempotencyKey` |
+| `NormalizeScopes` | `normalize_scopes` | `normalizeScopes` |
+| `OfferSignatureAlgorithm` | `OFFER_SIGNATURE_ALGORITHM` | `OFFER_SIGNATURE_ALGORITHM` |
+| `ParseMoney` | `parse_money` | `parseMoney` |
+| `Reason` | `reason` | `reason` |
+| `RegistrationFailureDetail` | `registration_failure_detail` | `registrationFailureDetail` |
+| `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
+| `RetrievalAuthFailureDetail` | `retrieval_auth_failure_detail` | `retrievalAuthFailureDetail` |
+| `ScopesSubset` | `scopes_subset` | `scopesSubset` |
+| `SignOffer` | `sign_offer_jcs` | `signOffer` |
+| `SignOfferAcceptance` | `sign_offer_acceptance_jcs` | `signOfferAcceptance` |
+| `SignRequest` | `sign_request` | `signRequest` |
+| `SignURLEd25519` | `sign_ed25519_signed_url` | `signEd25519SignedUrl` |
+| `SignatureAgentHeader` | `SignatureAgentHeader` | `SignatureAgentHeader` |
+| `StaticKeyResolver` | `StaticKeyResolver` | `StaticKeyResolver` |
+| `Thumbprint` | `thumbprint` | `thumbprint` |
+| `TransactionDenialDetail` | `transaction_denial_detail` | `transactionDenialDetail` |
+| `UsageReportRejectionDetail` | `usage_report_rejection_detail` | `usageReportRejectionDetail` |
+| `ValidateIdempotencyKey` | `validate_idempotency_key` | `validateIdempotencyKey` |
+| `ValidationRuleIDs` | `cross_field_rule_ids` | `crossFieldRuleIds` |
+| `VerifyMultisigRequest` | `verify_multisig_request_server` | `verifyMultisigRequestServer` |
+| `VerifyOfferAcceptance` | `verify_offer_acceptance_jcs` | `verifyOfferAcceptance` |
+| `VerifyRequest` | `verify_request` | `verifyRequestServer` |
+| `VerifyURLEd25519` | `verify_ed25519_signed_url` | `verifyEd25519SignedUrl` |
+
+### resolvers — L2 I/O (key/endpoint resolution, active-key, SSRF-guarded fetch)
+
+| Go | python | ts |
+|---|---|---|
+| `ActiveEd25519Key` | `active_ed25519_key` | `activeEd25519Key` |
+| `ActiveEd25519KeyScreened` | `active_ed25519_key_screened` | `activeEd25519KeyScreened` |
+| `ActiveEd25519KeyWithExpiry` | `active_ed25519_key_with_expiry` | `activeEd25519KeyWithExpiry` |
+| `ActiveEd25519KeyWithExpiryScreened` | `active_ed25519_key_with_expiry_screened` | `activeEd25519KeyWithExpiryScreened` |
+| `CachedOfferKeyResolver` | `CachedOfferKeyResolver` | `CachedOfferKeyResolver` |
+| `ErrDirectoryUnavailable` | `DirectoryUnavailableError` | `DirectoryUnavailable` |
+| `ErrKeyExpired` | `KeyExpiredError` | `KeyExpired` |
+| `ErrKeyRevoked` | `KeyRevokedError` | `KeyRevoked` |
+| `ErrNoEndpoint` | `NoEndpointError` | `NoEndpoint` |
+| `ErrRevocationUnevaluated` | `RevocationUnevaluatedError` | `RevocationUnevaluated` |
+| `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
+| `NewGuardedClientFromEnv` | `guarded_client` | `guardedFetchFromEnv` |
+| `OfferDirectoryFetcher` | `DirectoryFetch` | `OfferDirectoryFetch` |
+| `SSRFGuard` | `ssrf_guard` | `ssrfGuard` |
+| `WBADirectoryPath` | `WBA_DIRECTORY_PATH` | `WBA_DIRECTORY_PATH` |
+| `WBADirectoryURL` | `wba_directory_url` | `wbaDirectoryURL` |
+| `WBAKeyResolver` | `WBAKeyResolver` | `WBAKeyResolver` |
+| `WellKnownEndpointResolver` | `WellKnownEndpointResolver` | `WellKnownEndpointResolver` |
+| `WellKnownKeyResolver` | `WellKnownKeyResolver` | `WellKnownKeyResolver` |
+
+### core — L2 composition (verifier, signing transport, windows, replay)
+
+| Go | python | ts |
+|---|---|---|
+| `ClockWindow` | `clock_window` | `clockWindow` |
+| `Mode` | `Mode` | `Mode` |
+| `MonotonicWindow` | `monotonic_window` | `monotonicWindow` |
+| `NewSigningTransport` | `SigningTransport` | `createSigningTransport` |
+| `RejectedOffer` | `RejectedOffer` | `RejectedOffer` |
+| `ReplayStore` | `ReplayStore` | `ReplayStore` |
+| `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
+| `Result` | `Result` | `Result` |
+| `VerifiedOffer` | `VerifiedOffer` | `VerifiedOffer` |
+| `Verifier` | `Verifier` | `Verifier` |
+| `Window` | `Window` | `Window` |
+
+### connect — Connect client + interceptors
+
+| Go | python | ts |
+|---|---|---|
+| `ErrorDetailFrom` | `error_detail_from` | `errorDetailFrom` |
+
+### connectserver — server-verify handler binding
+
+| Go | python | ts |
+|---|---|---|
+| `RejectReason` | `RejectReason` | `RejectReason` |
+
+## Documented divergences & DECISIONs
+
+Deliberate, reason-backed asymmetries. The allowlist is **shrink-only** — a new undocumented gap cannot ship green. Each entry's rationale is the `allowlist_reason` from the symbol map; DECISION anchors are cross-checked by `test_api_surface_parity.py`.
+
+### Architectural DECISIONs
+
+- **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
+- **DECISION — typed Connect **client**.** Go-only typed Connect client (Discover->Execute orchestration) — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md _(symbols: `connect.Client`, `connect.NewClient`)_
+
+### Mapped symbols with an intentional per-language gap
+
+| Go symbol | python | ts | rationale |
 |---|---|---|---|
-| Request sign (RFC 9421, 5-component covered set) | ✅ `helpers.SignRequest` (+`core.NewSigningTransport` L2) | ✅ `core/sign-request.ts signRequest` (+`appendSignature`) | ✅ `httpsig.sign_request` (+`signing_transport.SigningTransport` L2) |
-| PoP sign (GET agent binding) | ⚠️ via `AppendSignature` 2-component set; no dedicated face | ✅ `core/sign.ts signInbound` | ✅ `pop.sign_agent_binding` |
-| Acceptance sign / verify | ✅ `helpers.SignOfferAcceptance` / `VerifyOfferAcceptance` | ✅ `src/acceptance.ts signOfferAcceptance` / `verifyOfferAcceptance` | ✅ `core.sign_offer_acceptance_jcs` / `verify_offer_acceptance_jcs` (+`acceptance` aliases) |
-| Offer verify ({verified, rejected}, unforgeable VerifiedOffer) | ✅ `core.Verifier.Sort` + brand | ✅ `core/verifier.ts Verifier.sort` + brand | ✅ `core.Verifier.sort` + token-gated brand |
-| Key resolution — static | ✅ `helpers.NewStaticKeyResolver` | ✅ `resolvers.newStaticKeyResolver` | ✅ `keyresolver.StaticKeyResolver` |
-| Key resolution — well-known JWKS | ✅ `helpers.NewWellKnownKeyResolver` | ✅ `resolvers.newWellKnownKeyResolver` | ✅ `resolvers.WellKnownKeyResolver` |
-| Key resolution — WBA directory (revocation-aware) | ✅ `helpers.NewWBAKeyResolver` (+`Run` poller) | ✅ `resolvers.newWBAKeyResolver` (+`run` poller) | ✅ `resolvers.WBAKeyResolver` (+`run` poller) |
-| Endpoint resolution — well-known ramp.json | ✅ `helpers.NewWellKnownEndpointResolver` | ✅ `resolvers.newWellKnownEndpointResolver` | ✅ `resolvers.WellKnownEndpointResolver` |
-| Signed-URL fetch binding (3-way PoP against URL agent_id) | ✅ `helpers.VerifiedURL.CheckProofOfPossession` | ✅ `src/pop.ts verifyAgentBinding` | ✅ `pop.verify_agent_binding` |
+| `connect.Client` | — | — | Go-only typed Connect client (Discover->Execute orchestration) — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md |
+| `connect.NewClient` | — | — | Go-only typed Connect client constructor — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md |
+| `connectserver.NewBrokerServiceHandler` | — | — | Go-only full Connect Broker handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md |
+| `connectserver.NewExchangeServiceHandler` | — | — | Go-only full Connect Exchange handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md |
+| `core.NewVerifier` | — | `createVerifier` | Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory. |
+| `helpers.NewStaticKeyResolver` | — | `createStaticKeyResolver` | Go NewStaticKeyResolver factory folds into the Python class constructor (StaticKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createStaticKeyResolver factory. |
+| `resolvers.CachedOfferKeyResolverConfig` | — | `CachedOfferKeyResolverOptions` | Go config struct / TS options object folds into Python constructor keyword arguments (CachedOfferKeyResolver(...)); idiomatic Python has no separate options type. |
+| `resolvers.NewCachedOfferKeyResolver` | — | `createCachedOfferKeyResolver` | Go NewCachedOfferKeyResolver factory folds into the Python class constructor (CachedOfferKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createCachedOfferKeyResolver factory. |
+| `resolvers.NewWBADirectoryFetcher` | — | `createWBAOfferDirectoryFetch` | Go's default OfferDirectoryFetcher factory folds into the Python WBAKeyResolver's injected directory-fetch seam (constructor default); no separate public factory symbol exists. TS keeps the createWBAOfferDirectoryFetch factory. |
+| `resolvers.NewWBAKeyResolver` | — | `createWBAKeyResolver` | Go NewWBAKeyResolver factory folds into the Python class constructor (WBAKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWBAKeyResolver factory. |
+| `resolvers.NewWellKnownEndpointResolver` | — | `createWellKnownEndpointResolver` | Go NewWellKnownEndpointResolver factory folds into the Python class constructor (WellKnownEndpointResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownEndpointResolver factory. |
+| `resolvers.NewWellKnownKeyResolver` | — | `createWellKnownKeyResolver` | Go NewWellKnownKeyResolver factory folds into the Python class constructor (WellKnownKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createWellKnownKeyResolver factory. |
+| `resolvers.WBAKeyResolverOptions` | — | `WBAKeyResolverOptions` | Go options struct / TS options object folds into Python constructor keyword arguments (WBAKeyResolver(...)); idiomatic Python has no separate options type. |
+| `resolvers.WellKnownOptions` | — | `WellKnownOptions` | Go options struct (shared by the well-known key/endpoint resolvers) / TS options object folds into Python constructor keyword arguments (WellKnownKeyResolver(...) / WellKnownEndpointResolver(...)); idiomatic Python has no separate options type. |
 
-## SERVER role (broker / exchange)
+### Go-idiomatic symbols with no cross-language face (by design)
 
-| Operation | go | ts | python |
+Go constructs (functional-option builders, `errors.Is` sentinels, value types, context accessors) that Python/TS express idiomatically inline rather than as a named public symbol.
+
+| Go symbol | why no py/ts face |
+|---|---|
+| `connect.ClientOption` | Part of the Go-only typed Connect client; see the Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.ExecuteOption` | Part of the Go-only typed Connect client; see the Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.NewValidateInterceptor` | Go-only protovalidate interceptor (matrix SERVER-role validation row: TS/Py absent). |
+| `connect.Validation` | Part of the Go-only typed Connect client validation option; see the Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.WithHTTPClient` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithIdempotencyKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithInterceptors` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithKeyResolver` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithOfferKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithRequestIDFunc` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithSigner` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithValidation` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithVerification` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.AsConnectError` | Go-only Connect error mapping; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
+| `connectserver.AttachDetail` | Go-only Connect ErrorDetail attach; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
+| `connectserver.AttachErrorDetail` | Go-only Connect ErrorDetail attach; TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
+| `connectserver.ClassifyReject` | Go-only reject classifier; part of the Go Connect handler binding (connectserver-handler DECISION). |
+| `connectserver.EmitUnpopulatedJSONCodec` | Go connect-go codec; n/a for TS/Python (no Connect binding) per the matrix Codec row. |
+| `connectserver.ErrReplayed` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `connectserver.NewErrorDetail` | Go-only Connect ErrorDetail envelope build (the build half of AttachErrorDetail, exposed for callers that set a typed reason before attaching); TS/Python emit reject-reason tokens only (matrix SERVER-role reject-mapping row). |
+| `connectserver.ServerOption` | Part of the Go-only Connect handler binding; see the connectserver-handler DECISION in docs/sdk-parity-matrix.md. |
+| `connectserver.WithEmitUnpopulated` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithHandlerOptions` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithInterceptors` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithKeyResolver` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithMaxSignatureAge` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithMaxSignatures` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithOnReject` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithReplayStore` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithReplayTTL` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithRequestIDFunc` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithValidation` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithVerifyGate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connectserver.WithoutReplayStore` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `core.DefaultRequestID` | Go default request-id minter; py/ts mint request-ids inline. |
+| `core.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `core.RequestIDFunc` | Go request-id function type; py/ts pass a callable inline. |
+| `core.RequestIDMiddleware` | Go-only request-id middleware (matrix SERVER-role request-id row: TS/Py absent). |
+| `core.SigningOption` | Go functional-option type for the signing transport; py/ts pass options objects. |
+| `core.WithAppendSigner` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `core.WithSignPredicate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `core.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `core.WithWindow` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `helpers.AgentIDParam` | Signed-URL query-parameter name; language-idiomatic inline constant, no cross-language public face. |
+| `helpers.AlgEd25519` | RFC 9421 alg tag constant; inlined per language. |
+| `helpers.AllSignaturesFromContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
+| `helpers.BrokerKeyIDPrefix` | Relay keyID wire-prefix constant; inlined per language. |
+| `helpers.ComponentParam` | Go value type for an RFC 9421 covered-component parameter; py/ts model components inline. |
+| `helpers.CoveredComponent` | Go value type for an RFC 9421 covered component; py/ts model components inline. |
+| `helpers.ErrAcceptanceSignatureInvalid` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrBrokenSignatureChain` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrDigestMismatch` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrEmptyIdempotencyKey` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrEmptyMoney` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrFutureCreated` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrInvalidKeyLength` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrMalformedSignatureInput` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrMissingContentDigest` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrMissingCreated` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrMissingExpires` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrMissingRequiredComponent` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrMissingSignature` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrMissingSignatureInput` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrOfferSignatureInvalid` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrProofOfPossessionMismatch` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrSignatureLifetimeTooLong` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrSignatureVerify` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrTooManyHops` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrURLExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrURLMissingExpiry` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrURLMissingSignature` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrURLNotAgentBound` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrURLSignatureInvalid` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrUnsupportedAlgorithm` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.FromContext` | Go context.Context accessor; py/ts thread verified-request state explicitly. |
+| `helpers.NewContext` | Go context.Context accessor; py/ts thread verified-request state explicitly. |
+| `helpers.NewEd25519Signer` | Go Ed25519 Signer constructor; py/ts inject a sign function rather than constructing a named signer. |
+| `helpers.NewEd25519SignerFromSeed` | Go Ed25519 Signer-from-seed constructor; py/ts inject a sign function rather than constructing a named signer. |
+| `helpers.NewMultisigContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
+| `helpers.SharedValidator` | Go protovalidate validator singleton; TS/Python ship no protovalidate face. |
+| `helpers.SignOptions` | Go options struct for SignRequest; py/ts pass options via kwargs/options objects. |
+| `helpers.SignatureAgentFromContext` | Go context.Context accessor; py/ts thread signature-agent state explicitly. |
+| `helpers.SignedURL` | Go signed-URL result value type; py/ts return language-native result objects. |
+| `helpers.Signer` | Go Signer interface; py/ts inject a sign function (TS Ed25519SignFn; Python a signing callable) rather than a named Signer type — divergent handle shape, not a missing operation. |
+| `helpers.ThumbprintBytes` | Go raw-[32]byte thumbprint variant; py/ts expose only the string thumbprint. |
+| `helpers.Validate` | Go protovalidate wrapper; TS/Python ship no validation interceptor (matrix SERVER-role validation row: TS/Py absent). |
+| `helpers.VerifiedRequest` | Go verified-request result value type; py/ts return language-native verdict objects. |
+| `helpers.VerifiedURL` | Go verified-URL result value type (PoP via CheckProofOfPossession); py/ts expose verify_agent_binding/verifyAgentBinding. |
+| `helpers.VerifyMultisigRequestResolved` | Go resolver-injected multisig-verify overload; py/ts expose a single multisig-verify entry point. |
+| `helpers.VerifyOffer` | Go low-level offer-signature verify; py/ts route offer verification through the Verifier face (core.Verifier). |
+| `helpers.VerifyOptions` | Go options struct for verify; py/ts pass options via kwargs/options objects. |
+| `helpers.VerifyPresentedOffer` | Go low-level presented-offer freshness verify; py/ts route offer verification through the Verifier face. |
+| `helpers.VerifyRequestResolved` | Go resolver-injected VerifyRequest overload; py/ts expose a single verify entry point. |
+| `helpers.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `resolvers.ActiveKeyScanOptions` | Go scan-options struct; py/ts pass scan options inline. |
+| `resolvers.SSRFCheckRedirect` | Go redirect-policy hook; py/ts fold redirect checks into the guard (async_ssrf_guard / the guarded fetch). |
+
+## Cross-language conformance-vector replay
+
+Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness gate holds the un-replayed count at **zero with no exemption mechanism**, so every corpus below is referenced by all three trees.
+
+| Corpus | go | python | ts |
 |---|---|---|---|
-| Server-verify middleware (all /ramp. procedures) | ✅ `connectserver.New{Exchange,Broker}ServiceHandler` + options | ⚠️ `core/verify-request.ts verifyRequestServer` (framework-agnostic single-sig verdict) + `hono rampVerify` edge GET-PoP binding — no full Connect handler binding | ⚠️ `server_verify.verify_request_server` (framework-agnostic single-sig verdict) — no full Connect/ASGI handler binding |
-| Multisig append / verify (+hop budget) | ✅ `helpers.AppendSignature` / `VerifyMultisigRequest[Resolved]`, `core.WithAppendSigner` | ✅ `appendSignature` (core/sign-request.ts) / `verifyMultisigRequestServer` (core/verify-multisig-request.ts) | ✅ `append_signature` (httpsig) / `verify_multisig_request_server` (server_verify) |
-| Codec (EmitUnpopulated JSON) | ✅ `connectserver.EmitUnpopulatedJSONCodec` / `WithEmitUnpopulated` | n/a (no Connect binding) | n/a |
-| Reject / error mapping | ✅ `connectserver` reject mapping, `connect.ErrorDetailFrom`, `helpers.*Detail` | ⚠️ reject-reason tokens only (`RejectReason` "signature"/"replay" on the verify verdict) — no ErrorDetail mapping | ⚠️ reject-reason tokens only (`VerifiedRequest.reason` "signature"/"replay") — no ErrorDetail mapping |
-| Replay window | ✅ `core.ReplayStore`, `core.MonotonicWindow` | ✅ `core/verify-request.ts ReplayStore` iface + two-phase replay (injected store, SDK owns no state) | ✅ `server_verify.ReplayStore` Protocol + two-phase replay (injected store, SDK owns no state) |
-| Entitlement-coverage enforcement (unsigned X-Entitlement-Token rejected) | ✅ `helpers.enforceEntitlementCoverage` (verify.go) | ✅ `core/verify-request.ts` (covered-set commit check) | ✅ `server_verify.verify_request_server` (covered-set commit check) |
-| Validation interceptor (protovalidate) | ✅ `connect.NewValidateInterceptor`, `helpers.Validate`/`ValidationRuleIDs` | ❌ (crossfield layer only) | ❌ (crossfield layer only) |
-| Request-ID middleware | ✅ `core.RequestIDMiddleware` | ❌ | ❌ |
+| `helpers/testdata/acceptance-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/error-detail-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/hashurl-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/idempotency-validate-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/money-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/multisig-chain-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/offer-verify-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/pop-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/scopes-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/sign-request-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/signedurl-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/thumbprint-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/verify-request-neg-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/wire-canonical-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/wire-constants-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/active-ed25519-key-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/offer-key-clamp-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/revocation-membership-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/ssrf-address-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/ssrf-hostset-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/ssrf-redirect-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/ssrf-scheme-vectors.json` | ✅ | ✅ | ✅ |
+| `resolvers/testdata/wba-url-vectors.json` | ✅ | ✅ | ✅ |
 
-## EDGE role
-
-| Operation | go | ts | python |
-|---|---|---|---|
-| Signed-URL sign | ✅ `helpers.SignURLEd25519` | ✅ `src/signurl.ts signEd25519SignedUrl` | ✅ `signedurl.sign_ed25519_signed_url` |
-| Signed-URL verify | ✅ `helpers.VerifyURLEd25519` | ✅ `src/verify.ts verifyEd25519SignedUrl` | ✅ `signedurl.verify_ed25519_signed_url` |
-| GET-PoP verify | ✅ `VerifiedURL.CheckProofOfPossession` | ✅ `src/pop.ts verifyAgentBinding` (+`hono rampVerify` binding) | ✅ `pop.verify_agent_binding` |
-| Thumbprint (RFC 7638) | ✅ `helpers.Thumbprint` | ✅ `src/thumbprint.ts` | ✅ `thumbprint.thumbprint` |
-| HashURL (audit hash) | ✅ `helpers.HashURL` | ✅ `src/hashurl.ts hashUrl` | ✅ `hashurl.hash_url` |
-
-## SHARED
-
-| Operation | go | ts | python |
-|---|---|---|---|
-| base64url codec | ⚠️ stdlib inline (no exported face; none needed) | ✅ `src/base64url.ts` (+`utf8Bytes`) | ✅ `b64` |
-| JCS canonical offer payload | ✅ (unexported; `SignOffer`/`VerifyOffer` public) | ✅ `core.canonicalOfferPayload` | ✅ `core.canonical_offer_payload` |
-| JCS canonical acceptance payload | ✅ (unexported; sign/verify public) | ✅ `src/acceptance.ts acceptancePayload` (exported; also via sign/verify) | ✅ `core.jcs_acceptance_payload` |
-| Wire→canonical offer (snake → pruned-snake, drops unknown/empty) | n/a (Go emits, never inverts) | ❌ (no TS from-wire face; TS edge consumes canonical input today) | ✅ `wire_canon.from_wire_offer` |
-| Crossfield validation (stable rule-ids) | ✅ `helpers.ValidationRuleIDs` (protovalidate oracle) | ✅ `src/crossfield.ts crossFieldRuleIds` | ✅ `crossfield.cross_field_rule_ids` |
-| Scopes normalize/apply/subset | ✅ `helpers.{Normalize,Apply}Scopes`, `ScopesSubset` | ✅ `src/scopes.ts {normalize,apply}Scopes/scopesSubset` | ✅ `scopes.{normalize,apply}_scopes/scopes_subset` |
-| Money parse/format/canonicalize | ✅ `helpers.{Parse,Format,Canonicalize}Money` | ✅ `src/money.ts {parse,format,canonicalize}Money` | ✅ `money.{parse,format,canonicalize}_money` |
-| Idempotency key mint/validate | ✅ `helpers.{New,Validate}IdempotencyKey` | ✅ `src/idempotency.ts {new,validate}IdempotencyKey` | ✅ `idempotency.{new,validate}_idempotency_key` |
-| Wire constants (headers, content types) | ✅ `helpers` constants | ✅ `src/wire.ts` | ✅ `wire` |
-| Window (created/expires source) | ✅ `core.Window`/`ClockWindow`/`MonotonicWindow` | ✅ `core/window.ts {clock,monotonic}Window` | ✅ `window.{clock,monotonic}_window` |
-
-## Conformance-vector consumption (oracle: sdk/go/helpers/testdata)
-
-| Vector | go | ts | python |
-|---|---|---|---|
-| thumbprint-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| signedurl-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| pop-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| sign-request-vectors.json | ✅ emit+consume | ✅ `sign-request.parity.test.ts` (byte-identical) | ✅ |
-| acceptance-vectors.json | ✅ emit+consume | ✅ `acceptance.parity.test.ts` (byte-identical) | ✅ |
-| offer-verify-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| wire-canonical-vectors.json | ✅ emit+consume | ❌ (no TS from-wire face; not currently intended) | ✅ |
-| conformance/corpus/crossfield.json | ✅ | ✅ | ✅ |
-| multisig-chain-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| scopes-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| money-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| idempotency-validate-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| hashurl-vectors.json | ✅ emit+consume | ✅ | ✅ |
-| wire-constants-vectors.json | ✅ emit+consume | ✅ | ✅ |
-
-## Gap tickets
-
-Filed in the app repo's beads tracker as children of the SDK-adoption epic
-(each fill ticket requires a Go-oracle conformance vector where the operation
-is byte-deterministic). Genuinely-open items only:
-
-- DECISION: full Connect handler binding for the TS/Python server role. Both now
-  ship a framework-agnostic single-sig verify verdict (`verifyRequestServer` /
-  `verify_request_server`, +entitlement-coverage +two-phase replay), but neither
-  binds a full Connect/ASGI handler over all `/ramp.*` procedures the way Go's
-  `connectserver.New{Exchange,Broker}ServiceHandler` does. Whether to ship that
-  binding (vs. leaving framework wiring to the app) is the open call
-  (`agentic-content-access-qqkro`).
-- TS wire→canonical from-wire face: Python has `wire_canon.from_wire_offer` (and
-  consumes wire-canonical-vectors); TS has no from-wire face and does not consume
-  those vectors (TS edge consumes canonical input today).
-
-CLOSED since the last revision (matrix rows now ✅): TS outbound request-sign
-(`core/sign-request.ts signRequest`, xbxk2); TS+Python multisig append/verify
-(o3szv); TS+Python key/endpoint resolvers (bsh8k); TS+Python utility parity —
-scopes/money/idempotency/HashURL/wire constants/Window (djeue). Also DONE: TS
-acceptance sign/verify (src/acceptance.ts), TS canonical acceptance payload
-(`acceptancePayload`), signed-URL sign in TS + Python (`src/signurl.ts
-signEd25519SignedUrl`, `sign_ed25519_signed_url`), and offer sign in TS + Python
-(`src/offer-sign.ts signOffer`, `core.sign_offer_jcs`).
-
-Tracked elsewhere (not duplicated): TS agentHash→agentId rename (ov97t.14),
-CloudFront RSA TS helper (m8t96).

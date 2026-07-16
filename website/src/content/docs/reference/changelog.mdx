@@ -5,6 +5,26 @@ description: "RAMP protocol changelog"
 
 ## Unreleased
 
+**Go SDK: network-fetching resolvers move `sdk/go/helpers` → `sdk/go/resolvers`
+(source move, no wire change).** The IO-bearing key/endpoint resolvers — well-known
+JWKS (`NewWellKnownKeyResolver`), revocation-aware WBA directory (`NewWBAKeyResolver`),
+the `ramp.json` endpoint resolver (`WellKnownEndpointResolver` /
+`NewWellKnownEndpointResolver` / `WellKnownOptions` / `ErrNoEndpoint`), and the
+SSRF-guarded fetch client — now live in a new L2 I/O package, one tier above the pure,
+IO-free `sdk/go/helpers`, so no network dial enters the trust core. Import them from
+`github.com/RAMP-Protocol/protocol/sdk/go/resolvers`. No alias shim is shipped — it is
+a hard rename; consumers import the resolvers from `sdk/go/resolvers`. The pure
+`KeyResolver` interface and `NewStaticKeyResolver` stay in `helpers`.
+
+**SDK (all 3 languages): new public faces (additive, no wire change).** Document-order
+active-key selection (`ActiveEd25519Key` / `…WithExpiry` and revocation-aware
+`…Screened` variants; `active_ed25519_key*` in Python, `activeEd25519Key*` in TS), a
+`CachedOfferKeyResolver`, an injectable Ed25519 verify primitive on the
+TS signed-URL verify (`Ed25519Verifier`), and cross-language `ErrorDetail` readers
+(Go `AttachErrorDetail` / `AttachDetail`; `parse_error_detail` / `error_detail_from`
+in Python; `parseErrorDetail` / `errorDetailFrom` in TS). The SSRF-guarded transport
+is a single env-driven client governed by two flags (`SKIP_SSRF`, `ALLOW_INSECURE`).
+
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
 billing label on `Requester` is gone; field number 5 and the name are
 `reserved` so they can never be reused with a different meaning. Nothing read

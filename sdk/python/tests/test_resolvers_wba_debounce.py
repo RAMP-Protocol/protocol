@@ -26,7 +26,7 @@ from resolvers_harness import (
     HOUR,
     MutableClock,
     long_jwk,
-    loopback_fetch,
+    loopback_client,
     make_key,
     wba_file_json,
 )
@@ -108,7 +108,7 @@ def test_unknown_thumbprint_burst_debounced() -> None:
     try:
         clock = MutableClock(ANCHOR)
         r = WBAKeyResolver(
-            http=loopback_fetch,
+            http=loopback_client(),
             scheme="http",
             ttl=HOUR,
             sync_debounce=timedelta(seconds=5),
@@ -145,7 +145,9 @@ def test_concurrent_refresh_singleflight() -> None:
     origin.gate = threading.Event()
     origin.arrived = queue.Queue()
     try:
-        r = WBAKeyResolver(http=loopback_fetch, scheme="http", ttl=HOUR, now=MutableClock(ANCHOR))
+        r = WBAKeyResolver(
+            http=loopback_client(), scheme="http", ttl=HOUR, now=MutableClock(ANCHOR)
+        )
 
         burst = 12
         barrier = threading.Barrier(burst)

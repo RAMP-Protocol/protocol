@@ -14,6 +14,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
+import { WBAFileSchema } from "../../../gen/ts/wire/schemas.ts";
 import { decodeBase64Url } from "../src/base64url.ts";
 import { thumbprint } from "../src/thumbprint.ts";
 
@@ -238,3 +239,31 @@ export const loopbackFetch = (
 	url: string,
 ): Promise<{ status: number; text(): Promise<string> }> =>
 	fetch(url) as unknown as Promise<{ status: number; text(): Promise<string> }>;
+
+// Parsed-WBAFile builders. These mirror the inline helpers the active-key
+// behavior suite uses, hoisted here so the offer-key-cache suite consumes a
+// PARSED WBAFile (the shape the cache's injected OfferDirectoryFetch seam
+// returns) without re-deriving window arithmetic. `WBAFileSchema` is a generated
+// schema (always present), so importing it here does NOT couple the harness to
+// the not-yet-existing offer-key-cache face — a RED run still points at that
+// missing module, not at this fixture.
+export type WBAFile = ReturnType<typeof WBAFileSchema.parse>;
+
+/** Parse raw JWK member objects into a WBAFile, exactly as an injected
+ * directory-fetch seam would hand one to the cache. */
+export function directory(keys: Record<string, unknown>[]): WBAFile {
+	return WBAFileSchema.parse({ keys });
+}
+
+/** A window-active JWK member: validity window straddles ANCHOR
+ * ([ANCHOR-1h, ANCHOR+1h]), so its `not_after` is ANCHOR+1h — the bound the
+ * cache clamps its TTL against. */
+export function activeJwk(x: string): Record<string, unknown> {
+	return wbaJwk(x, iso(ANCHOR_MS - HOUR_MS), iso(ANCHOR_MS + HOUR_MS));
+}
+
+/** A retired JWK member: validity window sits entirely before ANCHOR, so it is
+ * never window-active at ANCHOR. */
+export function expiredJwk(x: string): Record<string, unknown> {
+	return wbaJwk(x, iso(ANCHOR_MS - 2 * HOUR_MS), iso(ANCHOR_MS - HOUR_MS));
+}

@@ -10,7 +10,7 @@
 // with an empty/missing kid, a non-OKP/Ed25519 type, or a wrong-length `x` is
 // skipped, survivors are keyed by kid, and one bad key never fails the whole set.
 
-import { decodeBase64Url } from "../src/base64url.ts";
+import { decodeBase64UrlStrict } from "../src/base64url.ts";
 
 const ED25519_PUBLIC_KEY_BYTES = 32;
 
@@ -32,7 +32,9 @@ function extractEd25519(entry: unknown): { kid: string; pub: Uint8Array } | unde
   if (typeof e.kid !== "string" || e.kid === "") return undefined;
   if (e.kty !== "OKP" || e.crv !== "Ed25519") return undefined;
   if (typeof e.x !== "string") return undefined;
-  const raw = decodeBase64Url(e.x);
+  // JWK OKP `x` is UNPADDED base64url (RFC 8037); reject padding / the standard
+  // alphabet to match Go's go-jose JWKS parse (RawURLEncoding).
+  const raw = decodeBase64UrlStrict(e.x);
   if (!raw || raw.length !== ED25519_PUBLIC_KEY_BYTES) return undefined;
   return { kid: e.kid, pub: raw };
 }

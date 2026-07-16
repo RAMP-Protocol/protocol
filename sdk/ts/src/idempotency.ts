@@ -11,11 +11,11 @@ import { encodeBase64Url } from "./base64url.ts";
 const idempotencyKeyBytes = 16;
 
 /**
- * newIdempotencyKey returns a fresh cryptographically-random, URL-safe
+ * generateIdempotencyKey returns a fresh cryptographically-random, URL-safe
  * idempotency key (16 random bytes -> base64url, 22 chars, no padding). Use it
  * once per logical operation; reuse a stored key only to deliberately replay.
  */
-export function newIdempotencyKey(): string {
+export function generateIdempotencyKey(): string {
 	const b = crypto.getRandomValues(new Uint8Array(idempotencyKeyBytes));
 	return encodeBase64Url(b);
 }

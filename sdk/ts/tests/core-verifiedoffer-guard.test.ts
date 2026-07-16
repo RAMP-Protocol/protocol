@@ -18,7 +18,7 @@
 // against the branded type once sdk/ts/core lands, and deliberately NOT written as
 // a test that fails to COMPILE (that would be red for the wrong reason).
 import { describe, it, expect } from "vitest";
-import { NewVerifier, isVerifiedOffer } from "../core/verifier.ts";
+import { createVerifier, isVerifiedOffer } from "../core/verifier.ts";
 
 // TYPE-GUARD NOTE (documented, enforced by tsc --strict once core lands):
 // `execute(offer: VerifiedOffer)` accepts ONLY the branded type. The following,
@@ -38,7 +38,7 @@ describe("sdk/ts/core VerifiedOffer is unforgeable and rejected offers need .uns
   it("a rejected offer requires explicit .unsafe() to yield an executable VerifiedOffer", async () => {
     // A doctored offer (no resolvable key) lands in rejected under Strict. It is
     // visible but NOT directly executable; only .unsafe() mints a VerifiedOffer.
-    const verifier = NewVerifier("strict", {
+    const verifier = createVerifier("strict", {
       resolve: async () => undefined, // no key → fail-closed reject
       now: () => Date.now(),
     });

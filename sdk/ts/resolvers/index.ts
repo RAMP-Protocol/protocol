@@ -7,27 +7,42 @@
 // preserve the oracle's errors.Is-DISTINCT fail-closed taxonomy.
 
 export {
-  DirectoryUnavailable,
-  KeyExpired,
-  KeyRevoked,
-  NoEndpoint,
-  ResolverError,
-  RevocationUnevaluated,
+	DirectoryUnavailable,
+	KeyExpired,
+	KeyRevoked,
+	NoEndpoint,
+	ResolverError,
+	RevocationUnevaluated,
+	UnknownKey,
 } from "./errors.ts";
 export type { FetchLike, FetchResponse } from "./http.ts";
-export { SsrfBlockedError } from "./http.ts";
+export { guardedFetchFromEnv, SsrfBlockedError, ssrfGuard } from "./http.ts";
+export {
+	type CachedOfferKeyResolver,
+	type CachedOfferKeyResolverOptions,
+	clampOfferKeyExpiry,
+	createCachedOfferKeyResolver,
+	createWBAOfferDirectoryFetch,
+	type OfferDirectoryFetch,
+} from "./offer-key-cache.ts";
 export { allowedScheme, blockedAddress } from "./ssrf.ts";
-export { type StaticKeyResolver, newStaticKeyResolver } from "./static.ts";
+export { createStaticKeyResolver, type StaticKeyResolver } from "./static.ts";
 export {
-  type EndpointOptions,
-  type WellKnownEndpointResolver,
-  type WellKnownKeyResolver,
-  type WellKnownOptions,
-  newWellKnownEndpointResolver,
-  newWellKnownKeyResolver,
-} from "./wellknown.ts";
-export {
-  type WBAKeyResolver,
-  type WBAKeyResolverOptions,
-  newWBAKeyResolver,
+	activeEd25519Key,
+	activeEd25519KeyScreened,
+	activeEd25519KeyWithExpiry,
+	activeEd25519KeyWithExpiryScreened,
+	createWBAKeyResolver,
+	WBA_DIRECTORY_PATH,
+	type WBAKeyResolver,
+	type WBAKeyResolverOptions,
+	wbaDirectoryURL,
 } from "./wba.ts";
+export {
+	type EndpointOptions,
+	createWellKnownEndpointResolver,
+	createWellKnownKeyResolver,
+	type WellKnownEndpointResolver,
+	type WellKnownKeyResolver,
+	type WellKnownOptions,
+} from "./wellknown.ts";

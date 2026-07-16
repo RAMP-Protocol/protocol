@@ -1,14 +1,27 @@
 // Typed error surface for the fetching resolver faces (R4). The Go oracle uses
 // errors.Is-DISTINCT sentinels (ErrKeyRevoked / ErrKeyExpired /
-// ErrDirectoryUnavailable / ErrNoEndpoint) so a composite resolver can HALT on a
-// fail-closed verdict rather than fall through as if the key were merely unknown.
-// The TS port preserves that distinctness as distinct thrown classes; a plain
-// unknown key stays `undefined` (never a thrown error), matching the existing
-// RequestKeyResolver fail-closed-is-undefined convention.
+// ErrDirectoryUnavailable / ErrNoEndpoint / ErrUnknownKey) so a composite
+// resolver can HALT on a fail-closed verdict rather than fall through as if the
+// key were merely unknown. The TS port preserves that distinctness as distinct
+// thrown classes. The SDK's own RequestKeyResolver faces still signal a plain
+// miss with the `undefined` return (never a throw); UnknownKey below is the
+// catchable class of that same verdict for consumers and composite stacks that
+// need the error-shaped face Go and Python expose.
 
-/** Base of every fail-closed resolver verdict. Unknown-key is NOT modelled here
- * — it is the `undefined` return, deliberately outside this hierarchy. */
+/** Base of every resolver verdict. */
 export class ResolverError extends Error {}
+
+/** No key is known for the requested keyid/thumbprint (fall-through miss) —
+ * the class face of Go `ErrUnknownKey` / Python `UnknownKeyError`. The SDK's
+ * own resolver faces signal this verdict with an `undefined` return; the class
+ * exists for consumers and fail-closed composite stacks that surface the miss
+ * as a catchable error, keeping the taxonomy identical across all three SDKs. */
+export class UnknownKey extends ResolverError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "UnknownKey";
+  }
+}
 
 /** The WBA identity directory (or a well-known JWKS/manifest) could not be
  * fetched, returned non-200, or failed to decode. DISTINCT from unknown-key so a

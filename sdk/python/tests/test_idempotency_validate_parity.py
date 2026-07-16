@@ -7,7 +7,7 @@ oracle: the ONLY rule is non-empty (protocol min_len=1). The shared vectors at
 sdk/go/helpers/testdata/idempotency-validate-vectors.json carry {key, valid}.
 A valid key returns (does not raise); an empty key raises.
 
-NOTE: new_idempotency_key MINT is random → NOT vector-gated (behaviour-tested in
+NOTE: generate_idempotency_key MINT is random → NOT vector-gated (behaviour-tested in
 test_idempotency_behavior.py). This suite covers the pure VALIDATE face only.
 
 RED now purely because ``ramp_sdk.idempotency`` does not exist yet.

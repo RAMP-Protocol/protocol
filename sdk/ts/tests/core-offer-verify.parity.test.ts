@@ -28,7 +28,7 @@
 // single vector would let Struct-key-ordering or Timestamp encoding diverge
 // silently on real offers while the guard stays green.
 import { describe, it, expect } from "vitest";
-import { NewVerifier } from "../core/verifier.ts";
+import { createVerifier } from "../core/verifier.ts";
 import offerVerifyVectors from "../../go/helpers/testdata/offer-verify-vectors.json";
 
 // Each vector is emitted by the Go oracle: an Offer (as canonical proto-JSON),
@@ -97,7 +97,7 @@ describe("sdk/ts/core Verifier offer-verify matches the shared JCS oracle matrix
       // Strict mode (fail-closed default): resolver knows exactly this exchange's
       // offer-signing key; the Verifier reproduces JCS(protojson(offer)) and
       // ed25519-verifies. Clock injected for the freshness gate.
-      const verifier = NewVerifier("strict", {
+      const verifier = createVerifier("strict", {
         resolve: async (exchange: string) =>
           exchange === v.exchange ? exchangePub : undefined,
         now: () => v.now_unix * 1000,

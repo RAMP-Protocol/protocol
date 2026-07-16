@@ -10,7 +10,7 @@
 // clock assert a burst of N unknown lookups → 1 fetch (independent of N); the
 // window resumes after syncDebounceMs; a concurrent burst → 1 fetch.
 import { afterEach, describe, expect, it } from "vitest";
-import { newWBAKeyResolver } from "../resolvers/index.ts";
+import { createWBAKeyResolver } from "../resolvers/index.ts";
 import {
 	ANCHOR_MS,
 	HOUR_MS,
@@ -27,7 +27,7 @@ function longJwk(x: string): Record<string, unknown> {
 	return wbaJwk(x, iso(ANCHOR_MS - HOUR_MS), iso(ANCHOR_MS + 1000 * HOUR_MS));
 }
 
-describe("newWBAKeyResolver unknown-thumbprint debounce", () => {
+describe("createWBAKeyResolver unknown-thumbprint debounce", () => {
 	let origin: Origin | undefined;
 	afterEach(async () => {
 		await origin?.close();
@@ -42,7 +42,7 @@ describe("newWBAKeyResolver unknown-thumbprint debounce", () => {
 		origin.setWBA(wbaFileJson([longJwk(known.x)]));
 
 		let now = ANCHOR_MS;
-		const r = newWBAKeyResolver({
+		const r = createWBAKeyResolver({
 			scheme: "http", fetch: loopbackFetch,
 			ttlMs: HOUR_MS,
 			syncDebounceMs: 5_000,
@@ -76,7 +76,7 @@ describe("newWBAKeyResolver unknown-thumbprint debounce", () => {
 		origin = o;
 		o.setWBA(wbaFileJson([longJwk(known.x)]));
 
-		const r = newWBAKeyResolver({
+		const r = createWBAKeyResolver({
 			scheme: "http", fetch: loopbackFetch,
 			ttlMs: HOUR_MS,
 			now: () => ANCHOR_MS,

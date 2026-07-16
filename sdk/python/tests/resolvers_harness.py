@@ -2,9 +2,10 @@
 
 Per the RAMP testing doctrine the ported resolver faces are IO-BOUND, so the
 suites drive them against a REAL in-process ``http.server.ThreadingHTTPServer``
-on 127.0.0.1:0 — never a mocked HTTP callable. The resolvers use their default
-stdlib-urllib transport; only the clock (and the poll timer/seams for the WBA
-poller) are injected for determinism.
+on 127.0.0.1:0 — never a mocked HTTP callable. The WBA suites inject
+``loopback_client()`` (a plain, unguarded httpx.Client) so the guarded default
+does not refuse the loopback origin; only the clock (and the poll timer/seams for
+the WBA poller) are injected for determinism.
 
 This module imports ONLY the existing byte-parity-pinned SDK primitives
 (``thumbprint``, ``b64url_nopad``) and never the not-yet-existing
@@ -17,14 +18,13 @@ from __future__ import annotations
 import json
 import queue
 import threading
-import urllib.error
-import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, UTC
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from collections.abc import Callable
 
+import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
@@ -45,26 +45,20 @@ ANCHOR = datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)
 HOUR = timedelta(hours=1)
 
 _FETCH_TIMEOUT_S = 10.0
-_MAX_DOC_BYTES = 1 << 20
 
 
-def loopback_fetch(url: str) -> tuple[int, bytes]:
-    """An UNGUARDED stdlib GET the resolver suites inject to reach the in-process
+def loopback_client() -> httpx.Client:
+    """An UNGUARDED httpx.Client the resolver suites inject to reach the in-process
     origin.
 
-    The Origin listens on 127.0.0.1, which the SDK's default SSRF-guarded
-    transport refuses to dial (loopback is a reserved target). Mirroring the Go
-    oracle — whose httptest suites inject their own client past the guarded
-    default — the integration suites inject this callable via ``http=`` to REACH
-    the private test directory. It is byte-for-byte the pre-guard ``default_fetch``
-    behavior: a bounded ``urllib.request`` GET returning ``(status, body)``.
+    The origin listens on 127.0.0.1, which the SDK's default SSRF-guarded transport
+    refuses to dial (loopback is a reserved target). Mirroring the Go oracle — whose
+    httptest suites inject their own client past the guarded default — the
+    integration suites inject this plain client via ``http=`` to REACH the private
+    test directory. It is the escape hatch: a maintained httpx.Client with no SSRF
+    guard, so 127.0.0.1 is reachable.
     """
-    req = urllib.request.Request(url, method="GET")  # noqa: S310 (fixed http scheme, test origin)
-    try:
-        with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT_S) as resp:  # noqa: S310
-            return int(resp.status), resp.read(_MAX_DOC_BYTES)
-    except urllib.error.HTTPError as exc:
-        return int(exc.code), b""
+    return httpx.Client(follow_redirects=True, timeout=_FETCH_TIMEOUT_S)
 
 
 @dataclass

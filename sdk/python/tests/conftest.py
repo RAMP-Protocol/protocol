@@ -22,6 +22,10 @@ from typing import Any
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 GO_TESTDATA = _REPO_ROOT / "sdk" / "go" / "helpers" / "testdata"
+# The fetching resolvers (WBA / well-known / endpoint) and their SSRF + revocation
+# corpora live in the sdk/go/resolvers L2 package (the I/O layer, extracted from
+# helpers). GO_TESTDATA stays the L1 crypto-vector home; this is its L2 sibling.
+GO_RESOLVERS_TESTDATA = _REPO_ROOT / "sdk" / "go" / "resolvers" / "testdata"
 CONFORMANCE_CORPUS = _REPO_ROOT / "conformance" / "corpus"
 
 

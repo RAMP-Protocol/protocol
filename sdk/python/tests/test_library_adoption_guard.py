@@ -102,11 +102,16 @@ def test_meta_passes_clean_composed_source() -> None:
 
 # ---- sdk/python/ramp_sdk.core transport-neutrality guard (ixs7u.10) ----
 #
-# Mirror of the Go core "no connectrpc import" guard and the sdk/ts core guard. The
-# L2 CORE must impose NOTHING beyond stdlib + cryptography + the vetted JCS lib: NO
-# framework import — no httpx, no FastAPI/Starlette. The framework bindings
-# (ramp_sdk.signing_transport) depend on core, never the reverse, so the forbidden
-# imports are the FRAMEWORK names in core.py, and the required marker is that
+# Mirror of the Go core "no connectrpc import" guard and the sdk/ts core guard. This
+# guards the PURE TRUST CORE (ramp_sdk.core): it must impose NOTHING beyond stdlib +
+# cryptography + the vetted JCS lib — NO framework import, and NO HTTP client (no
+# httpx, no FastAPI/Starlette). This is the dependency-free-core half of the SDK's
+# split policy (docs/design-history.md, "SDK layering"): the maintained HTTP client
+# (httpx) is DELIBERATELY permitted, but only one tier up in the I/O resolvers layer
+# (ramp_sdk.resolvers), behind the SSRF guard — never in this core. So "no httpx" is a
+# property of the trust core alone, not of the whole SDK above L1. The framework
+# bindings (ramp_sdk.signing_transport) depend on core, never the reverse, so the
+# forbidden imports are the FRAMEWORK names in core.py, and the required marker is that
 # offer-verify + acceptance compose the vetted rfc8785 JCS lib rather than
 # hand-rolling canonicalization.
 def test_core_imports_no_framework_and_uses_vetted_jcs() -> None:

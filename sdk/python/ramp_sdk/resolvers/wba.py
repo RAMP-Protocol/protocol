@@ -15,6 +15,7 @@ the sync directory-fetch path AND the Run poller — never poller-only.
 
 from __future__ import annotations
 
+import logging
 import queue
 import random
 import threading
@@ -22,12 +23,16 @@ import urllib.parse
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 from wire.models import JsonWebKey, KeyRevocationList, WBAFile
 
-from ramp_sdk.b64 import b64url_decode
-from ramp_sdk.resolvers._http import HttpFetch, fetch_soft, fetch_strict, guarded_fetch
+if TYPE_CHECKING:
+    import httpx
+
+from ramp_sdk.b64 import b64url_decode_strict
+from ramp_sdk.resolvers._http import fetch_soft, fetch_strict, guarded_client
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
     KeyExpiredError,
@@ -37,7 +42,32 @@ from ramp_sdk.resolvers.errors import (
 )
 from ramp_sdk.thumbprint import thumbprint
 
-_WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory"
+WBA_DIRECTORY_PATH = "/.well-known/http-message-signatures-directory"
+
+
+def wba_directory_url(scheme: str, host: str) -> str:
+    """Build the full WBA identity-directory URL: ``scheme://host`` + the shared
+    :data:`WBA_DIRECTORY_PATH`. An empty ``scheme`` defaults to ``https``.
+
+    A PURE string function — the host arrives ALREADY-JOINED (any port-join / IPv6
+    bracketing is the caller's concern), there is NO env read (the app keeps its
+    consumer-side ``RAMP_WELLKNOWN_SCHEME`` read) and NO scheme-in-host detection.
+    It mirrors the sdk/go ``WBADirectoryURL`` oracle byte-for-byte, locked by the
+    tri-replayed ``wba-url-vectors.json`` corpus.
+
+    Consumer note: Python has no default WBA directory fetcher — the
+    ``_fetch_directory`` seam carries an already-joined ``base`` and appends
+    :data:`WBA_DIRECTORY_PATH` directly, so this builder has no inline production
+    call-site inside the SDK. Its production consumer is the app cleanup that
+    replaces the three hand-rolled ``{scheme}://{host}{WBA_PATH}`` copies with this
+    one function; for a pure string function with no remaining inline copy, the
+    tri-language corpus is the sanctioned arithmetic proof.
+    """
+    if scheme == "":
+        scheme = "https"
+    return f"{scheme}://{host}{WBA_DIRECTORY_PATH}"
+
+
 _DEFAULT_TTL = timedelta(hours=1)
 _DEFAULT_POLL_INTERVAL = timedelta(seconds=300)
 # Throttle for the unknown-thumbprint force-refresh, per directory host. The
@@ -51,6 +81,11 @@ _DEFAULT_SYNC_DEBOUNCE = timedelta(seconds=5)
 # permanently freezes later (legitimately earlier) snapshots under the guard.
 _AS_OF_SKEW = timedelta(seconds=300)
 _ED25519_PUBLIC_KEY_BYTES = 32
+
+# Diagnostics for the active-key selector's bounded-scan exhaustion (see
+# _select_active_ed25519_key). The unbounded default never logs; only an explicit
+# max_scan that is exhausted while more keys remain emits a warning.
+_logger = logging.getLogger(__name__)
 
 NowFn = Callable[[], datetime]
 AfterFn = Callable[[timedelta], "queue.Queue[datetime]"]
@@ -108,14 +143,15 @@ class WBAKeyResolver:
         require_revocation: bool = False,
         on_poll_armed: Hook | None = None,
         on_poll_cycle: Hook | None = None,
-        # Safe by default: the SSRF-guarded transport. The directory host is
+        # Safe by default: an SSRF-guarded httpx.Client. The directory host is
         # derived from the caller-supplied Signature-Agent and fetched BEFORE the
         # ed25519 check, so an unguarded default would be a pre-auth SSRF lever.
-        # ``guarded_fetch`` resolves + pins to a checked IP (closing the
+        # ``guarded_client()`` resolves + pins to a checked IP (closing the
         # DNS-rebinding window) and refuses reserved / non-public targets. A
         # deployment that must reach a private directory (tests, on-prem) injects
-        # its own callable here — the escape hatch, mirroring the Go client injection.
-        http: HttpFetch = guarded_fetch,
+        # its own httpx.Client here — the escape hatch, mirroring the Go client
+        # injection.
+        http: httpx.Client | None = None,
     ) -> None:
         self._scheme = scheme or "https"
         self._ttl = ttl if ttl > timedelta(0) else _DEFAULT_TTL
@@ -134,7 +170,7 @@ class WBAKeyResolver:
         self._require_revocation = require_revocation
         self._on_poll_armed = on_poll_armed
         self._on_poll_cycle = on_poll_cycle
-        self._http = http
+        self._http = http if http is not None else guarded_client()
         self._dir_lock = threading.Lock()
         self._dir_cache: dict[str, _DirEntry] = {}
         self._rev_lock = threading.Lock()
@@ -259,7 +295,7 @@ class WBAKeyResolver:
             pending.event.set()
 
     def _fetch_directory(self, base: str) -> WBAFile:
-        body = fetch_strict(self._http, base + _WBA_DIRECTORY_PATH)
+        body = fetch_strict(self._http, base + WBA_DIRECTORY_PATH)
         try:
             return WBAFile.model_validate_json(body)
         except ValidationError as exc:
@@ -341,6 +377,173 @@ class WBAKeyResolver:
         return base + timedelta(seconds=random.uniform(-seconds, seconds))
 
 
+def active_ed25519_key(
+    directory: WBAFile,
+    now: datetime,
+    max_scan: int | None = None,
+) -> bytes | None:
+    """First window-active, well-formed Ed25519 key (raw 32 bytes) from ``directory``.
+
+    Selects an identity's signing key BY DOCUMENT ORDER when its thumbprint is not
+    known ahead of time — complementing :meth:`WBAKeyResolver.resolve`, which matches
+    a KNOWN thumbprint. Iterates the directory's keys in document order and returns
+    the FIRST key that passes ALL of: window-active ([not_before, not_after) half-open
+    covers ``now``, both bounds RFC 3339-parseable — a missing/unparseable bound makes
+    the key inactive); ``kty == "OKP"`` and ``crv == "Ed25519"`` matched
+    CASE-INSENSITIVELY (a deliberate lenient SDK convention: RFC 7517/8037 specify the
+    exact-case ``"OKP"`` / ``"Ed25519"``, but all three SDKs accept any case
+    IDENTICALLY so a case-varying directory resolves the SAME key everywhere); and a
+    present ``x`` that base64url-decodes to exactly 32 bytes. Any key failing any check
+    is skipped and iteration continues.
+
+    The result is the first window-active key in document order — this SDK's
+    deterministic tie-break, NOT a normative "current" key: the protocol permits
+    several simultaneously-active keys during overlap rotation and defines no "first".
+
+    ``max_scan`` is an OPTIONAL document-order bound. ``None`` (the default) scans the
+    WHOLE directory — unbounded, so a valid key at any position is reachable; a silent
+    cap would make a high-position key indistinguishable from "no active key" (a
+    DoS-by-directory-padding footgun). A non-``None`` bound caps the scan at
+    ``max(0, max_scan)`` keys (0 or negative scans none); when a positive bound is
+    exhausted while more keys remain, the exhaustion is logged. Returns ``None`` when
+    no examined key qualifies (or ``directory`` is ``None``). Byte-parity with the Go
+    ``ActiveEd25519Key`` / TS ``activeEd25519Key`` oracles.
+
+    REVOCATION: this selector screens ONLY validity windows and key well-formedness —
+    it does NOT consult any revocation channel. A key that was emergency-revoked but
+    is still window-active in a (possibly CDN-cached) directory WILL be selected. A
+    caller on a VERIFICATION path MUST NOT trust the result until it has screened the
+    selected key's RFC 7638 thumbprint against the resolver's revoked-thumbprint set
+    (:meth:`WBAKeyResolver.revoked` / a revocation snapshot); otherwise adopting this
+    selector defeats emergency revocation. Prefer :func:`active_ed25519_key_screened`,
+    which folds that screen into selection. This bare form is for non-verification
+    callers only.
+    """
+    selected = _select_active_ed25519_key(directory, now, max_scan)
+    return None if selected is None else selected[0]
+
+
+def active_ed25519_key_with_expiry(
+    directory: WBAFile,
+    now: datetime,
+    max_scan: int | None = None,
+) -> tuple[bytes, datetime] | None:
+    """Like :func:`active_ed25519_key`, but ALSO returns the selected key's expiry.
+
+    Runs the IDENTICAL document-order selection as :func:`active_ed25519_key` and
+    returns a ``(raw_public_key, not_after)`` pair for the FIRST qualifying key — the
+    raw 32 bytes plus the SAME ``not_after`` the window check parsed, as an aware
+    :class:`~datetime.datetime`. A downstream caller (e.g. an offer-key cache) uses
+    ``not_after`` to clamp its cache TTL to ``min(now + ttl, not_after)`` so a cached
+    key never outlives its validity window. The ``not_after`` is guaranteed
+    parseable — selection required it (a key with a missing/unparseable bound is
+    inactive and skipped). Returns ``None`` when no examined key qualifies.
+
+    REVOCATION: like :func:`active_ed25519_key`, this bare form does NOT consult
+    revocation — it can return a window-active-but-revoked key. A VERIFICATION path
+    MUST screen the result, or use :func:`active_ed25519_key_with_expiry_screened`.
+    """
+    return _select_active_ed25519_key(directory, now, max_scan)
+
+
+def active_ed25519_key_screened(
+    directory: WBAFile,
+    now: datetime,
+    revoked: Callable[[str], bool],
+    max_scan: int | None = None,
+) -> bytes | None:
+    """:func:`active_ed25519_key` made REVOCATION-AWARE.
+
+    Runs the same document-order window + well-formedness selection but ALSO skips
+    any key whose RFC 7638 thumbprint ``revoked`` reports true, so a
+    window-active-but-revoked key is never returned. It is the selector a
+    VERIFICATION path adopts — folding the revoked-set screen the bare
+    :func:`active_ed25519_key` leaves to the caller into selection itself, so an
+    emergency-revoked key still listed in a CDN-cached directory is passed over for
+    the next active, non-revoked key. ``revoked`` is REQUIRED: pass a predicate over
+    the resolver's revoked-thumbprint set (e.g. :meth:`WBAKeyResolver.revoked`) or,
+    for a caller with no revocation channel, an explicit ``lambda _tp: False`` to make
+    the waiver visible. The thumbprint is computed with :func:`ramp_sdk.thumbprint`
+    (RFC 7638) — the SAME primitive :meth:`WBAKeyResolver.resolve` keys on. Returns
+    ``None`` when no examined, non-revoked key qualifies.
+    """
+    selected = _select_active_ed25519_key(directory, now, max_scan, revoked)
+    return None if selected is None else selected[0]
+
+
+def active_ed25519_key_with_expiry_screened(
+    directory: WBAFile,
+    now: datetime,
+    revoked: Callable[[str], bool],
+    max_scan: int | None = None,
+) -> tuple[bytes, datetime] | None:
+    """:func:`active_ed25519_key_with_expiry` made REVOCATION-AWARE.
+
+    The same document-order selection as :func:`active_ed25519_key_with_expiry`, plus
+    a skip of any key whose RFC 7638 thumbprint ``revoked`` reports true, returned
+    with the selected key's ``not_after`` for cache-TTL clamping. This is the selector
+    :class:`~ramp_sdk.resolvers.CachedOfferKeyResolver` composes so a cached
+    offer-signing key is both window-active AND not revoked. ``revoked`` is REQUIRED
+    (see :func:`active_ed25519_key_screened`). Returns ``None`` when no examined,
+    non-revoked key qualifies.
+    """
+    return _select_active_ed25519_key(directory, now, max_scan, revoked)
+
+
+def _select_active_ed25519_key(
+    directory: WBAFile,
+    now: datetime,
+    max_scan: int | None,
+    revoked: Callable[[str], bool] | None = None,
+) -> tuple[bytes, datetime] | None:
+    """Shared selector behind all four active-key faces: the FIRST window-active,
+    well-formed Ed25519, non-revoked key in document order (UNBOUNDED by default;
+    ``max_scan`` optionally caps it), as a ``(raw_public_key, not_after)`` pair, or
+    ``None``. ``active_ed25519_key`` drops the expiry; ``active_ed25519_key_with_expiry``
+    returns it. ``not_after`` reuses the SAME parser :func:`_key_active_at` used, so the
+    faces never disagree on the selected key. ``revoked`` None disables revocation
+    screening (the bare faces); a predicate skips any key whose RFC 7638 thumbprint it
+    reports true (the screened faces). A ``None`` ``directory`` returns ``None`` (guarded,
+    never raises), matching Go."""
+    if directory is None:
+        return None
+    keys = directory.keys or []
+    # max_scan None scans every key (unbounded); a bound clamps to max(0, n) — Go's
+    # clamp-to-zero / TS's Math.max(0, n) — since a bare keys[:negative] would wrongly
+    # slice from the end.
+    scanned = keys if max_scan is None else keys[: max(0, max_scan)]
+    for key in scanned:
+        if not _key_active_at(key, now):
+            continue
+        raw = _public_key_of_safe(key)
+        if raw is None:
+            continue
+        # Revocation screen (verification-path callers): skip a window-active key
+        # whose thumbprint is revoked, so an emergency-revoked key still listed in a
+        # CDN-cached directory is never selected. Thumbprint via the RFC 7638
+        # primitive _key_by_thumbprint uses; raw is already length-checked to 32 bytes.
+        if revoked is not None and revoked(thumbprint(raw)):
+            continue
+        # not_after is guaranteed present + parseable: _key_active_at above rejects
+        # any key whose window bounds do not parse, so the selected key always has one.
+        not_after = _parse_rfc3339(key.not_after)
+        if not_after is None:  # unreachable: _key_active_at required a parseable bound
+            continue
+        return raw, not_after
+    # Bounded-scan exhaustion signal: a positive explicit bound was exhausted while the
+    # directory held MORE keys than the bound, so a valid key beyond the cap is
+    # unreachable. Log it rather than let a bounded miss masquerade as a genuine "no
+    # active key" — the DoS-by-padding footgun the unbounded default avoids.
+    if max_scan is not None and max_scan > 0 and max_scan < len(keys):
+        _logger.warning(
+            "active-key scan hit explicit max_scan bound without selecting a key; "
+            "a valid key beyond the cap is unreachable (max_scan=%d, total_keys=%d)",
+            max_scan,
+            len(keys),
+        )
+    return None
+
+
 def _await_inflight(pending: _Inflight) -> WBAFile:
     """Block on the leader's in-flight fetch and return its shared result, or
     re-raise the leader's error. The leader publishes ``file`` xor ``error``
@@ -404,10 +607,16 @@ def _key_by_thumbprint(file: WBAFile, keyid: str) -> JsonWebKey | None:
 
 
 def _public_key_of_safe(key: JsonWebKey) -> bytes | None:
+    # kty/crv are matched CASE-INSENSITIVELY — a deliberate lenient SDK convention
+    # (RFC 7517/8037 specify the exact-case "OKP" / "Ed25519"); the three SDKs accept
+    # any case identically so a case-varying directory resolves the SAME key.
     if (key.kty or "").upper() != "OKP" or (key.crv or "").lower() != "ed25519":
         return None
     try:
-        raw = b64url_decode(key.x or "")
+        # JWK OKP `x` is UNPADDED base64url (RFC 8037); reject padding / the
+        # standard alphabet so this matches Go's base64.RawURLEncoding and the
+        # tri-language selector picks the SAME key on a malformed-`x` directory.
+        raw = b64url_decode_strict(key.x or "")
     except ValueError:
         return None
     if len(raw) != _ED25519_PUBLIC_KEY_BYTES:
@@ -436,6 +645,14 @@ def _parse_rfc3339(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return None
+    # A naive (offset-less) bound is not a valid RFC 3339 instant. Comparing it
+    # against the aware ``now`` in ``_key_active_at`` would raise TypeError and
+    # crash the selector; treat it as inactive instead (fail closed). This keeps
+    # parity with Go's time.Parse(time.RFC3339) and TS's offset-required parse,
+    # both of which reject an offset-less bound as inactive.
+    if parsed.tzinfo is None:
+        return None
+    return parsed

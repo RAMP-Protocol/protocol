@@ -38,7 +38,7 @@ export interface WellKnownEndpointResolver {
 }
 
 /** Lazily fetch the JWKS at `url`, cache resolved keys with a TTL. */
-export function newWellKnownKeyResolver(
+export function createWellKnownKeyResolver(
   url: string,
   opts: WellKnownOptions = {},
 ): WellKnownKeyResolver {
@@ -46,7 +46,7 @@ export function newWellKnownKeyResolver(
 }
 
 /** Host-keyed resolver of an Exchange domain → its self-advertised endpoint. */
-export function newWellKnownEndpointResolver(
+export function createWellKnownEndpointResolver(
   opts: EndpointOptions = {},
 ): WellKnownEndpointResolver {
   return new EndpointResolverImpl(opts);

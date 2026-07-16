@@ -1,4 +1,4 @@
-package helpers_test
+package resolvers_test
 
 // Golden-vector emitter for the cross-language revocation-set-membership parity
 // corpus. sdk/ts `revoked()` and sdk/python `revoked()` assert their verdict
@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
 // revMembershipJWK is one served directory key (snake_case, protojson shape).
@@ -79,7 +80,7 @@ func buildRevocationMembershipVector(t *testing.T) revMembershipVector {
 	origin.setRevocation(marshalRevocation(revMembershipAnchor, tpAbsentRevoked))
 
 	ctx := helpers.WithSignatureAgent(context.Background(), origin.url)
-	r := helpers.NewWBAKeyResolver(helpers.WBAKeyResolverOptions{
+	r := resolvers.NewWBAKeyResolver(resolvers.WBAKeyResolverOptions{
 		Scheme: "http",
 		HTTP:   origin.Client(),
 		Now:    func() time.Time { return revMembershipAnchor },

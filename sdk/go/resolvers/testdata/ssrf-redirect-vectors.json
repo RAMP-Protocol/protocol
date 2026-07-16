@@ -1,0 +1,34 @@
+{
+  "vectors": [
+    {
+      "name": "no_redirect",
+      "hops": 0,
+      "refused": false
+    },
+    {
+      "name": "one_hop",
+      "hops": 1,
+      "refused": false
+    },
+    {
+      "name": "under_cap",
+      "hops": 4,
+      "refused": false
+    },
+    {
+      "name": "at_cap",
+      "hops": 5,
+      "refused": false
+    },
+    {
+      "name": "one_over_cap",
+      "hops": 6,
+      "refused": true
+    },
+    {
+      "name": "library_default_20",
+      "hops": 20,
+      "refused": true
+    }
+  ]
+}

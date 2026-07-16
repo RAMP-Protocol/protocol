@@ -1,4 +1,4 @@
-package helpers
+package resolvers
 
 import (
 	"context"
@@ -15,13 +15,13 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
 // WBA-resolution sentinels. AUTHORITY CONTRACT: the resolver surfaces these
@@ -31,17 +31,24 @@ import (
 // next delegate, e.g. a lazy-registration path) is the CALLER's decision —
 // composite ordering and any masking live in the application.
 var (
+	// ErrUnknownKey re-exports helpers.ErrUnknownKey so the active-key selectors'
+	// "no candidate" verdict (empty / nil / all-malformed directory, or a bound that
+	// scanned none) is checkable from this package — errors.Is-identical to the
+	// sentinel WBAKeyResolver.Resolve surfaces for an unknown thumbprint — without a
+	// caller importing helpers directly. It is the DISTINCT counterpart to
+	// ErrKeyExpired: no candidate at all, versus a candidate that was out of window.
+	ErrUnknownKey = helpers.ErrUnknownKey
 	// ErrKeyRevoked signals the thumbprint is present in the directory host's
 	// current revocation snapshot.
-	ErrKeyRevoked = errors.New("helpers: key revoked")
+	ErrKeyRevoked = errors.New("resolvers: key revoked")
 	// ErrKeyExpired signals the key exists but is outside its
 	// [not_before, not_after) validity window.
-	ErrKeyExpired = errors.New("helpers: key outside validity window")
+	ErrKeyExpired = errors.New("resolvers: key outside validity window")
 	// ErrDirectoryUnavailable signals the WBA directory could not be fetched or
 	// parsed. It is deliberately errors.Is-DISTINCT from ErrUnknownKey: a
 	// fail-closed composite must be able to halt on a directory outage rather
 	// than fall through as if the key were merely unknown.
-	ErrDirectoryUnavailable = errors.New("helpers: WBA directory unavailable")
+	ErrDirectoryUnavailable = errors.New("resolvers: WBA directory unavailable")
 	// ErrRevocationUnevaluated signals that the key resolved, but its directory
 	// declares a revocation_url whose snapshot has never been fetched (unreachable
 	// or not host-anchored) — so revocation was NEVER EVALUATED, which is distinct
@@ -49,13 +56,30 @@ var (
 	// set; the default keeps the prior best-effort behavior. It lets a caller that
 	// treats revocation as mandatory fail closed instead of trusting an
 	// unevaluated key.
-	ErrRevocationUnevaluated = errors.New("helpers: key revocation unevaluated")
+	ErrRevocationUnevaluated = errors.New("resolvers: key revocation unevaluated")
 )
 
 // WBADirectoryPath is the well-known path a WBA identity directory is served
 // at (Web Bot Auth; the identity half of the RAMP-24 split — the commercial
 // overlay stays in /.well-known/ramp.json).
 const WBADirectoryPath = "/.well-known/http-message-signatures-directory"
+
+// WBADirectoryURL builds the full WBA identity-directory URL from a scheme and an
+// already-joined host: scheme://host + WBADirectoryPath. An empty scheme defaults
+// to https. It is a PURE string function — the host arrives pre-formed (any
+// port-join / IPv6 bracketing is the caller's concern, e.g. net.JoinHostPort at
+// NewWBADirectoryFetcher), there is no env read, and no scheme-in-host detection.
+// It is the cross-language oracle for the wba-url-vectors.json parity corpus that
+// sdk/python wba_directory_url and sdk/ts wbaDirectoryURL replay; the base-carrying
+// fetch path (fetchWBAFile) keeps appending the shared WBADirectoryPath const
+// directly, so it is deliberately left untouched to preserve the single
+// fetch+decode path and avoid a double-append.
+func WBADirectoryURL(scheme, host string) string {
+	if scheme == "" {
+		scheme = "https"
+	}
+	return scheme + "://" + host + WBADirectoryPath
+}
 
 // Defaults mirror the platform reference implementation: the directory itself
 // rotates slowly (keys carry validity windows), so an hour TTL is fine; the
@@ -164,52 +188,141 @@ func allowedScheme(scheme string) bool {
 	}
 }
 
-// maxWBARedirects bounds redirect following on the guarded transport.
+// maxWBARedirects bounds redirect following on the guarded transport: the guard
+// follows at most this many redirect hops and refuses the next. Shared, corpus-
+// tested across the three SDKs (redirectChainRefused): the Go CheckRedirect,
+// httpx max_redirects, and undici maxRedirections all honor this SAME cap.
 const maxWBARedirects = 5
 
+// redirectChainRefused is the shared redirect-depth policy: a chain of hops
+// redirects is refused iff it EXCEEDS maxWBARedirects (deny-by-default parity).
+// Called with len(via) (the requests already made when a redirect is offered), so
+// the guard follows the first maxWBARedirects hops and refuses the next. The
+// shared corpus pins this predicate across the three SDKs so no language inherits
+// its HTTP library's looser default (~20 hops).
+func redirectChainRefused(hops int) bool { return hops > maxWBARedirects }
+
+// anyAddrBlocked reports whether ANY address in addrs is reserved / non-public.
+// It is the multi-address fail-closed rule the three SDKs share: a host that
+// resolves to a MIXED public/reserved set is refused OUTRIGHT, so a rebinding or
+// round-robin DNS answer cannot land a later connect on the reserved member. The
+// corpus emitter self-checks against this predicate so the Go dialer and the
+// cross-language vectors agree on the whole-set verdict.
+func anyAddrBlocked(addrs []netip.Addr) bool {
+	for _, a := range addrs {
+		if ssrfBlocked(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// SSRFGuard returns base with an SSRF-guarded dialer installed: it resolves every
+// candidate address for the target host, refuses OUTRIGHT if ANY of them is a
+// reserved / non-public address (anyAddrBlocked — fail-closed on a mixed set),
+// and otherwise dials PINNED to a checked address literal. No re-resolution
+// happens at connect, so a rebinding DNS cannot steer the connect onto a reserved
+// address after the check. It is the INJECTABLE form of the WBA default client's
+// dial-seam guard — drop it into any *http.Client so a fetch of a caller-supplied
+// host cannot reach an internal target.
+//
+// base==nil yields a fresh, minimal transport; a non-nil base is cloned so the
+// caller's other transport settings are kept. In BOTH cases the guard forces
+// Proxy=nil: a proxied transport dials the PROXY, so the dial-time check would vet
+// the proxy's address instead of the true target — a full bypass. The dial-time
+// SSRF pin and an egress proxy are therefore mutually exclusive by construction.
+// Pair it with SSRFCheckRedirect on the *http.Client to also vet redirect schemes
+// and bound redirect depth.
+func SSRFGuard(base *http.Transport) *http.Transport {
+	if base == nil {
+		base = &http.Transport{}
+	} else {
+		base = base.Clone()
+	}
+	// A proxied CONNECT would tunnel past the dial-time address check (the dialer
+	// would resolve+check the PROXY, not the destination). Force it off so the
+	// guard always vets the real target.
+	base.Proxy = nil
+	base.DialContext = guardedDialContext
+	return base
+}
+
+// guardedDialContext is the http.Transport.DialContext that closes the SSRF and
+// DNS-rebinding windows: it resolves the target host, refuses if ANY resolved
+// address is reserved (fail-closed on a mixed set), then dials PINNED to a checked
+// address literal so the connection lands on a vetted peer and no second lookup
+// can steer it. TLS SNI is unaffected — http.Transport sets the server name from
+// the request URL, not from the dialed address.
+func guardedDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+	addrs, err := ssrfResolveChecked(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	var d net.Dialer
+	var dialErr error
+	for _, a := range addrs {
+		conn, cerr := d.DialContext(ctx, network, net.JoinHostPort(a.String(), port))
+		if cerr == nil {
+			return conn, nil
+		}
+		dialErr = cerr
+	}
+	return nil, dialErr
+}
+
+// ssrfResolveChecked resolves host and returns its candidate addresses ONLY if
+// every one is public; otherwise it returns a GENERIC refusal. A bare IP literal
+// is checked directly (no lookup). The error deliberately neither echoes the
+// resolved address nor distinguishes an unresolvable host from a resolved-reserved
+// one, so it cannot serve as a pre-auth DNS oracle against internal networks.
+func ssrfResolveChecked(ctx context.Context, host string) ([]netip.Addr, error) {
+	refuse := fmt.Errorf("resolvers: refusing to dial %q (SSRF guard)", host)
+	if addr, perr := netip.ParseAddr(host); perr == nil {
+		if ssrfBlocked(addr) {
+			return nil, refuse
+		}
+		return []netip.Addr{addr}, nil
+	}
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	if err != nil || len(addrs) == 0 || anyAddrBlocked(addrs) {
+		return nil, refuse
+	}
+	return addrs, nil
+}
+
+// SSRFCheckRedirect is an http.Client.CheckRedirect that bounds redirect depth
+// (redirectChainRefused, the shared cap) and re-vets every redirect target's
+// scheme against the deny-by-default http/https allowlist (a scheme denylist is
+// unwinnable — ftp, file, data, …). Redirect ADDRESS re-vetting is automatic when
+// the client's transport is SSRFGuard-wrapped: each redirect makes a fresh guarded
+// dial.
+func SSRFCheckRedirect(req *http.Request, via []*http.Request) error {
+	if redirectChainRefused(len(via)) {
+		return fmt.Errorf("resolvers: too many redirects (SSRF guard)")
+	}
+	if !allowedScheme(req.URL.Scheme) {
+		return fmt.Errorf("resolvers: refusing redirect to non-http(s) scheme %q (SSRF guard)", req.URL.Scheme)
+	}
+	return nil
+}
+
 // newGuardedWBAClient is the HTTP client used when the caller injects none. It
-// refuses to dial any non-public address (see ssrfBlockedPrefixes). The directory
-// host is derived from a caller-supplied Signature-Agent and the fetch runs
-// BEFORE the ed25519 signature check, so an unguarded default is a pre-auth SSRF
-// lever against internal networks. The check runs in Dialer.Control against the
-// ALREADY-RESOLVED address, so it also closes the DNS-rebinding window (a public
-// A record that resolves to 169.254.x is rejected at connect time, not just at
-// lookup time). A deployment that must reach a private directory (tests, on-prem)
+// installs the dial-time address guard (SSRFGuard, no proxy) and the redirect
+// scheme+depth guard (SSRFCheckRedirect, http+https), so it refuses reserved /
+// non-public targets by default. The directory host is derived from a
+// caller-supplied Signature-Agent and the fetch runs BEFORE the ed25519 signature
+// check, so an unguarded default is a pre-auth SSRF lever against internal
+// networks. A deployment that must reach a private directory (tests, on-prem)
 // injects its own HTTP client.
 func newGuardedWBAClient() *http.Client {
-	dialer := &net.Dialer{
-		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return err
-			}
-			addr, perr := netip.ParseAddr(host)
-			if perr != nil {
-				return fmt.Errorf("helpers: refusing to dial unresolved address %q (SSRF guard)", address)
-			}
-			if ssrfBlocked(addr) {
-				return fmt.Errorf("helpers: refusing to dial non-public address %s (SSRF guard)", addr)
-			}
-			return nil
-		},
-	}
 	return &http.Client{
-		Timeout:   defaultWBAHTTPTimeout,
-		Transport: &http.Transport{DialContext: dialer.DialContext},
-		// Every redirect target is re-vetted: the scheme against the allowlist
-		// (net/http already rejects non-http schemes, but assert it explicitly so
-		// the policy is enforced regardless of transport) and — because each
-		// redirect makes a fresh dial through the same guarded dialer — its
-		// resolved address against ssrfBlocked. Bounded to avoid loops.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= maxWBARedirects {
-				return fmt.Errorf("helpers: too many redirects (SSRF guard)")
-			}
-			if !allowedScheme(req.URL.Scheme) {
-				return fmt.Errorf("helpers: refusing redirect to non-http(s) scheme %q (SSRF guard)", req.URL.Scheme)
-			}
-			return nil
-		},
+		Timeout:       defaultWBAHTTPTimeout,
+		Transport:     SSRFGuard(nil),
+		CheckRedirect: SSRFCheckRedirect,
 	}
 }
 
@@ -373,15 +486,15 @@ func NewWBAKeyResolver(opts WBAKeyResolverOptions) *WBAKeyResolver {
 // removal is not revocation — the authoritative revocation channel is the
 // revocation list, so a composite resolver falls through on a removed key.
 func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.PublicKey, error) {
-	dir := SignatureAgentFromContext(ctx)
+	dir := helpers.SignatureAgentFromContext(ctx)
 	if dir == "" || keyID == "" {
-		return nil, fmt.Errorf("%w: no signature-agent directory for keyid=%q", ErrUnknownKey, keyID)
+		return nil, fmt.Errorf("%w: no signature-agent directory for keyid=%q", helpers.ErrUnknownKey, keyID)
 	}
 	base, host, err := r.directoryBase(dir)
 	if err != nil {
 		// A malformed Signature-Agent cannot name a directory: the key is
 		// unresolvable here, not "the directory is down" — fall-through verdict.
-		return nil, fmt.Errorf("%w: unparseable signature-agent %q: %w", ErrUnknownKey, dir, err)
+		return nil, fmt.Errorf("%w: unparseable signature-agent %q: %w", helpers.ErrUnknownKey, dir, err)
 	}
 	f, err := r.wbaFile(ctx, base, host)
 	if err != nil {
@@ -395,13 +508,13 @@ func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.Pub
 		// thumbprint is reported unknown WITHOUT a fetch. Removal-vs-rotation
 		// self-heal still works — the first unknown lookup in each window refetches.
 		if !r.beginSync(host) {
-			return nil, fmt.Errorf("%w: keyid=%q host=%q (refresh debounced)", ErrUnknownKey, keyID, host)
+			return nil, fmt.Errorf("%w: keyid=%q host=%q (refresh debounced)", helpers.ErrUnknownKey, keyID, host)
 		}
 		if f, err = r.syncRefresh(ctx, base, host); err != nil {
 			return nil, err
 		}
 		if key, ok = wbaKeyByThumbprint(f, keyID); !ok {
-			return nil, fmt.Errorf("%w: keyid=%q host=%q", ErrUnknownKey, keyID, host)
+			return nil, fmt.Errorf("%w: keyid=%q host=%q", helpers.ErrUnknownKey, keyID, host)
 		}
 	}
 	if r.isRevoked(host, keyID) {
@@ -521,7 +634,20 @@ func (r *WBAKeyResolver) syncRefresh(ctx context.Context, base, host string) (*r
 // status, or decode failure wraps ErrDirectoryUnavailable — see the sentinel
 // contract: a directory outage must stay distinguishable from an unknown key.
 func (r *WBAKeyResolver) fetchDirectory(ctx context.Context, base string) (*rampv1.WBAFile, error) {
-	raw, err := r.getDoc(ctx, base+WBADirectoryPath)
+	return fetchWBAFile(ctx, r.http, base)
+}
+
+// getDoc GETs a small well-known document, bounding the body read.
+func (r *WBAKeyResolver) getDoc(ctx context.Context, docURL string) ([]byte, error) {
+	return fetchWBADoc(ctx, r.http, docURL)
+}
+
+// fetchWBAFile GETs base+WBADirectoryPath through client and protojson-decodes the
+// WBAFile, wrapping any transport/status/decode failure in ErrDirectoryUnavailable.
+// It is the one fetch+decode path shared by WBAKeyResolver.fetchDirectory and the
+// domain-keyed offer-key fetcher (NewWBADirectoryFetcher), so the two never drift.
+func fetchWBAFile(ctx context.Context, client *http.Client, base string) (*rampv1.WBAFile, error) {
+	raw, err := fetchWBADoc(ctx, client, base+WBADirectoryPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrDirectoryUnavailable, err)
 	}
@@ -532,13 +658,13 @@ func (r *WBAKeyResolver) fetchDirectory(ctx context.Context, base string) (*ramp
 	return &f, nil
 }
 
-// getDoc GETs a small well-known document, bounding the body read.
-func (r *WBAKeyResolver) getDoc(ctx context.Context, docURL string) ([]byte, error) {
+// fetchWBADoc GETs a small well-known document through client, bounding the body read.
+func fetchWBADoc(ctx context.Context, client *http.Client, docURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, docURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request: %w", err)
 	}
-	resp, err := r.http.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
@@ -698,7 +824,7 @@ func wbaKeyByThumbprint(f *rampv1.WBAFile, thumbprint string) (*rampv1.JsonWebKe
 		if err != nil {
 			continue
 		}
-		tp, err := Thumbprint(pub)
+		tp, err := helpers.Thumbprint(pub)
 		if err != nil {
 			continue
 		}
@@ -713,16 +839,223 @@ func wbaKeyByThumbprint(f *rampv1.WBAFile, thumbprint string) (*rampv1.JsonWebKe
 // checks (kty/crv/x length) stand in for schema validation of the wire doc.
 func wbaPublicKey(k *rampv1.JsonWebKey) (ed25519.PublicKey, error) {
 	if !strings.EqualFold(k.GetKty(), "OKP") || !strings.EqualFold(k.GetCrv(), "Ed25519") {
-		return nil, fmt.Errorf("helpers: unsupported key type kty=%q crv=%q", k.GetKty(), k.GetCrv())
+		return nil, fmt.Errorf("resolvers: unsupported key type kty=%q crv=%q", k.GetKty(), k.GetCrv())
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(k.GetX())
 	if err != nil {
-		return nil, fmt.Errorf("helpers: decode jwk x: %w", err)
+		return nil, fmt.Errorf("resolvers: decode jwk x: %w", err)
 	}
 	if len(raw) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("helpers: jwk x length %d != %d", len(raw), ed25519.PublicKeySize)
+		return nil, fmt.Errorf("resolvers: jwk x length %d != %d", len(raw), ed25519.PublicKeySize)
 	}
 	return ed25519.PublicKey(raw), nil
+}
+
+// ActiveKeyScanOptions tunes the document-order scan the ActiveEd25519Key* faces
+// perform. The zero value — and omitting it entirely — scans the WHOLE directory,
+// UNBOUNDED, which is the safe default: a silent cap makes a valid key at a high
+// document position permanently unselectable AND indistinguishable from "no active
+// key" (a DoS-by-directory-padding footgun), so a bound is now opt-IN, never the
+// default.
+//
+// It follows the file's options-struct convention (cf. WBAKeyResolverOptions),
+// replacing the former variadic maxScan ...int that silently honored only its first
+// argument. The faces still accept it variadically (opts ...ActiveKeyScanOptions) so
+// the common unbounded call omits it entirely; at most ONE options value is honored
+// (the first).
+type ActiveKeyScanOptions struct {
+	// MaxScan optionally bounds how many keys are examined in document order. nil
+	// (the zero value) scans EVERY key — unbounded. A non-nil bound caps the scan at
+	// max(0, *MaxScan) keys: 0 or negative scans none. When a non-nil positive bound
+	// is exhausted without selecting a key AND the directory holds MORE keys than the
+	// bound, the exhaustion is LOGGED (a valid key beyond the cap is unreachable), so a
+	// bounded miss is never silently indistinguishable from a genuine "no active key".
+	MaxScan *int
+	// Logger receives the explicit-bound exhaustion warning (nil → slog.Default()).
+	// Consulted ONLY on the bounded-exhaustion path; the unbounded default never logs.
+	Logger *slog.Logger
+}
+
+// ActiveEd25519Key selects an identity's window-active Ed25519 signing key from a WBA
+// directory BY DOCUMENT ORDER, complementing WBAKeyResolver (which matches a KNOWN
+// thumbprint). It iterates directory.GetKeys() in document order and returns the
+// FIRST key that passes ALL of: window-active ([not_before, not_after) half-open
+// covers now, both bounds RFC 3339-parseable — a missing/unparseable bound makes the
+// key inactive); kty=="OKP" && crv=="Ed25519" (matched CASE-INSENSITIVELY — a
+// deliberate lenient SDK convention: RFC 7517/8037 specify the exact-case "OKP" /
+// "Ed25519", but all three SDKs accept any case IDENTICALLY so a case-varying
+// directory resolves the SAME key everywhere); and a present x that base64url-decodes
+// to exactly 32 bytes. Any key failing any check is skipped and iteration continues.
+//
+// SELECTION IS NOT NORMATIVE: the result is the first window-active key in document
+// order, which is this SDK's deterministic tie-break — NOT "the current key". The
+// protocol permits several simultaneously-active keys during overlap rotation and
+// defines no "first", so callers must not read a normative meaning into the choice.
+//
+// By default the WHOLE directory is scanned; pass ActiveKeyScanOptions.MaxScan to
+// bound it. It returns (nil, ErrUnknownKey) when NO well-formed candidate key exists
+// in the scanned range (empty / nil / all-malformed / bound scans none), or
+// (nil, ErrKeyExpired) when a well-formed candidate existed but none was selectable
+// (all out of window / all revoked). Byte-parity with the Python active_ed25519_key /
+// TS activeEd25519Key oracles.
+//
+// REVOCATION: this selector screens ONLY validity windows and key well-formedness —
+// it does NOT consult any revocation channel. A key that was emergency-revoked but
+// is still window-active in a (possibly CDN-cached) directory WILL be selected. A
+// caller on a VERIFICATION path MUST NOT trust the result until it has screened the
+// selected key's RFC 7638 thumbprint against the resolver's revoked-thumbprint set
+// (WBAKeyResolver.Revoked / a revocation snapshot); otherwise adopting this selector
+// defeats emergency revocation. Prefer ActiveEd25519KeyScreened, which folds that
+// screen into selection. This bare form is for non-verification callers only.
+func ActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, error) {
+	pub, _, err := selectActiveEd25519Key(directory, now, nil, opts...)
+	return pub, err
+}
+
+// ActiveEd25519KeyWithExpiry runs the IDENTICAL document-order selection as
+// ActiveEd25519Key but ALSO returns the selected key's not_after (its
+// [not_before, not_after) upper bound). A downstream caller — e.g. an offer-key
+// cache — clamps its cache TTL to min(now+ttl, not_after) with the returned
+// time.Time so a cached key never outlives its validity window; the plain
+// ActiveEd25519Key drops it. The not_after is guaranteed parseable because
+// selection required it (wbaKeyActiveAt rejects a key whose window bounds do not
+// parse). It returns the same (ErrUnknownKey / ErrKeyExpired) not-found sentinels
+// ActiveEd25519Key surfaces when no key qualifies. Byte-parity with the Python
+// active_ed25519_key_with_expiry / TS activeEd25519KeyWithExpiry oracles.
+//
+// REVOCATION: like ActiveEd25519Key, this bare form does NOT consult revocation —
+// it can return a window-active-but-revoked key. A VERIFICATION path MUST screen
+// the result against the revoked-thumbprint set, or use the revocation-aware
+// ActiveEd25519KeyWithExpiryScreened instead.
+func ActiveEd25519KeyWithExpiry(directory *rampv1.WBAFile, now time.Time, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, time.Time, error) {
+	return selectActiveEd25519Key(directory, now, nil, opts...)
+}
+
+// ActiveEd25519KeyScreened is ActiveEd25519Key made REVOCATION-AWARE: it runs the
+// same document-order window + well-formedness selection but ALSO skips any key
+// whose RFC 7638 thumbprint `revoked` reports true, so a window-active-but-revoked
+// key is never returned. It is the selector a VERIFICATION path adopts — folding
+// the revoked-set screen the bare ActiveEd25519Key leaves to the caller into
+// selection itself, so an emergency-revoked key still listed in a CDN-cached
+// directory is passed over for the next active, non-revoked key. `revoked` is
+// REQUIRED: a nil predicate screens nothing (equivalent to the bare selector and
+// unsafe on a verification path). Pass one over the resolver's revoked-thumbprint
+// set (e.g. WBAKeyResolver.Revoked) or, for a caller with no revocation channel, an
+// explicit func(string) bool { return false } to make the waiver visible. The
+// thumbprint is computed with helpers.Thumbprint (RFC 7638) — the SAME primitive
+// WBAKeyResolver.Resolve keys on. Returns (nil, ErrUnknownKey) when no well-formed
+// candidate existed, else (nil, ErrKeyExpired) when every candidate was out of window
+// or revoked.
+func ActiveEd25519KeyScreened(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, error) {
+	pub, _, err := selectActiveEd25519Key(directory, now, revoked, opts...)
+	return pub, err
+}
+
+// ActiveEd25519KeyWithExpiryScreened is ActiveEd25519KeyWithExpiry made
+// REVOCATION-AWARE (see ActiveEd25519KeyScreened): the same document-order
+// selection, plus a skip of any key whose RFC 7638 thumbprint `revoked` reports
+// true, returned with the selected key's not_after for cache-TTL clamping. This is
+// the selector CachedOfferKeyResolver composes so a cached offer-signing key is
+// both window-active AND not revoked. `revoked` is REQUIRED (see the screened plain
+// face). Returns the same (ErrUnknownKey / ErrKeyExpired) not-found sentinels when no
+// examined, non-revoked key qualifies.
+func ActiveEd25519KeyWithExpiryScreened(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, time.Time, error) {
+	return selectActiveEd25519Key(directory, now, revoked, opts...)
+}
+
+// selectActiveEd25519Key is the shared selector behind all four active-key faces:
+// the FIRST window-active, well-formed OKP/Ed25519, non-revoked key in document
+// order (UNBOUNDED by default; ActiveKeyScanOptions.MaxScan caps it), returned with
+// its not_after. It parses not_after with the SAME time.Parse(RFC3339) wbaKeyActiveAt
+// used, so the faces never disagree on the selected key. `revoked` nil disables
+// revocation screening (the bare faces); non-nil skips any key whose RFC 7638
+// thumbprint it reports true (the screened faces).
+//
+// A nil directory yields ErrUnknownKey, never a panic. Well-formedness (kty/crv/x)
+// is checked BEFORE the window so the not-found sentinel can distinguish "no
+// candidate" (ErrUnknownKey) from "a candidate existed but none was selectable"
+// (ErrKeyExpired) — mirroring WBAKeyResolver.Resolve's ErrUnknownKey/ErrKeyExpired
+// split. Reordering the two checks does NOT change WHICH key is selected (a selected
+// key must pass both regardless of order), so byte-parity with py/ts holds.
+func selectActiveEd25519Key(directory *rampv1.WBAFile, now time.Time, revoked func(thumbprint string) bool, opts ...ActiveKeyScanOptions) (ed25519.PublicKey, time.Time, error) {
+	var opt ActiveKeyScanOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+	if directory == nil {
+		return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", helpers.ErrUnknownKey)
+	}
+	keys := directory.GetKeys()
+	scan := len(keys) // unbounded default: scan every key
+	bounded := opt.MaxScan != nil
+	if bounded {
+		scan = *opt.MaxScan
+		if scan < 0 {
+			scan = 0 // negative bound scans none (clamp), matching py max(0,n) / ts Math.max(0,n)
+		}
+		if scan > len(keys) {
+			scan = len(keys)
+		}
+	}
+	sawCandidate := false
+	for _, k := range keys[:scan] {
+		pub, err := wbaPublicKey(k)
+		if err != nil {
+			continue // malformed / wrong key type — not a candidate
+		}
+		sawCandidate = true // a well-formed OKP/Ed25519 key, in or out of window
+		if !wbaKeyActiveAt(k, now) {
+			continue // a candidate, but outside its validity window
+		}
+		// Revocation screen (verification-path callers): skip a window-active key
+		// whose thumbprint is revoked, so an emergency-revoked key still listed in a
+		// CDN-cached directory is never selected. Thumbprint via helpers.Thumbprint
+		// (RFC 7638) — the SAME keying WBAKeyResolver.Resolve uses. A key whose
+		// thumbprint cannot be computed cannot be proven un-revoked, so it is skipped.
+		if revoked != nil {
+			tp, err := helpers.Thumbprint(pub)
+			if err != nil {
+				continue
+			}
+			if revoked(tp) {
+				continue
+			}
+		}
+		// not_after is guaranteed parseable: wbaKeyActiveAt above rejects any key
+		// whose window bounds do not parse, so the selected key always has one.
+		notAfter, err := time.Parse(time.RFC3339, k.GetNotAfter())
+		if err != nil { // unreachable: wbaKeyActiveAt required a parseable bound
+			continue
+		}
+		return pub, notAfter, nil
+	}
+	// Bounded-scan exhaustion signal: a positive explicit bound was exhausted while
+	// the directory held MORE keys than the bound, so a valid key beyond the cap is
+	// unreachable. Log it rather than let a bounded miss masquerade as a genuine "no
+	// active key" — the DoS-by-padding footgun the unbounded default now avoids. The
+	// unbounded default never reaches here with keys left unexamined.
+	if bounded && *opt.MaxScan > 0 && *opt.MaxScan < len(keys) {
+		activeKeyScanLogger(opt).Warn(
+			"active-key scan hit explicit max_scan bound without selecting a key; a valid key beyond the cap is unreachable",
+			"max_scan", *opt.MaxScan, "total_keys", len(keys))
+	}
+	if sawCandidate {
+		// A well-formed key existed but none was selectable (all out of window / all
+		// revoked): the "expired" sentinel, matching Resolve's out-of-window verdict.
+		return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", ErrKeyExpired)
+	}
+	// No well-formed candidate at all (empty / nil / all-malformed / bound scanned
+	// none): the "unknown" sentinel, matching Resolve's no-such-key verdict.
+	return nil, time.Time{}, fmt.Errorf("%w: no active key in directory", helpers.ErrUnknownKey)
+}
+
+// activeKeyScanLogger resolves the logger for the bounded-exhaustion warning,
+// defaulting to slog.Default() when the caller injected none.
+func activeKeyScanLogger(opt ActiveKeyScanOptions) *slog.Logger {
+	if opt.Logger != nil {
+		return opt.Logger
+	}
+	return slog.Default()
 }
 
 // wbaKeyActiveAt reports whether now falls inside k's [not_before, not_after)

@@ -65,7 +65,7 @@ func TestLibraryAdoptionGuard_ThumbprintUsesGoJose(t *testing.T) {
 		file: "thumbprint.go",
 		forbidden: []string{
 			`fmt.Sprintf(` + "`" + `{"crv":"Ed25519","kty":"OKP","x":%q}` + "`", // hand-built canonical JWK
-			"sha256.Sum256([]byte(canonical))",                                 // hand-rolled hash over it
+			"sha256.Sum256([]byte(canonical))",                                  // hand-rolled hash over it
 		},
 		required: []string{
 			"go-jose/go-jose/v4", // go-jose import
@@ -74,37 +74,11 @@ func TestLibraryAdoptionGuard_ThumbprintUsesGoJose(t *testing.T) {
 	})
 }
 
-// TestLibraryAdoptionGuard_KeyResolverUsesGoJoseJWKS pins that the JWKS decode
-// path (keyresolver.go) and the shared wellKnownDoc.Keys struct
-// (endpointresolver.go) no longer hand-roll the OKP/Ed25519 match and the raw
-// base64url decode of the JWK `x` member, and instead decode via go-jose's
-// jose.JSONWebKeySet.
-func TestLibraryAdoptionGuard_KeyResolverUsesGoJoseJWKS(t *testing.T) {
-	assertSite(t, siteGuard{
-		file: "keyresolver.go",
-		forbidden: []string{
-			`strings.EqualFold(k.Kty, "OKP")`,               // manual kty match
-			"base64.RawURLEncoding.DecodeString(k.X)",       // manual JWK x decode
-		},
-		required: []string{
-			"jose.JSONWebKeySet", // go-jose JWKS decode
-		},
-	})
-	// The hand-rolled JWK struct the key face decodes lives in the shared
-	// wellKnownDoc.Keys in endpointresolver.go (scope refinement coupling #2/#3).
-	src := readHelperSource(t, "endpointresolver.go")
-	for _, forbidden := range []string{
-		"Kty string `json:\"kty\"`",
-		"Crv string `json:\"crv\"`",
-		"X   string `json:\"x\"`",
-	} {
-		if strings.Contains(src, forbidden) {
-			t.Errorf("endpointresolver.go still declares the hand-rolled JWK struct field %q; "+
-				"the key face must decode via go-jose jose.JSONWebKeySet (json.RawMessage split), "+
-				"keeping only the Endpoint field", forbidden)
-		}
-	}
-}
+// TestLibraryAdoptionGuard_KeyResolverUsesGoJoseJWKS moved to sdk/go/resolvers
+// with the well-known key/endpoint resolvers (the fetching I/O layer, extracted
+// from helpers per the L1/L2 SSRF-hardening split). It pins the same go-jose
+// JWKS-decode adoption, now against wellknownkeyresolver.go + endpointresolver.go.
+// See sdk/go/resolvers/library_adoption_guard_test.go.
 
 // TestLibraryAdoptionGuard_VerifyUsesHTTPSFVParser pins that verify.go no longer
 // hand-rolls the RFC 8941 structured-field parser cluster and instead parses the
@@ -122,7 +96,7 @@ func TestLibraryAdoptionGuard_VerifyUsesHTTPSFVParser(t *testing.T) {
 			"func parseSignatureField(",
 		},
 		required: []string{
-			"dunglas/httpsfv",     // httpsfv import
+			"dunglas/httpsfv",             // httpsfv import
 			"httpsfv.UnmarshalDictionary", // RFC 8941 parser entrypoint
 		},
 	})

@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+**SDK parity matrix is now generated, not hand-maintained (no wire change).** The
+three overlapping, drift-prone parity docs (`docs/sdk-parity-matrix.md`,
+`sdk-api-parity-map.md`, `sdk-parity-audit.md`) collapse to a single generated
+artifact, `docs/sdk-parity-matrix.md`, rendered by `scripts/gen-parity-matrix.py` from
+the two ground-truth sources CI already enforces against the code: the API surface from
+`sdk/parity/symbol-map.json` (gated by `test_api_surface_parity.py`) and the
+conformance-vector replay table from the committed corpora (gated by
+`test_corpus_replay_completeness.py`). A regenerate-and-diff drift gate runs both in
+`scripts/ci-local.sh` and as `sdk/python/tests/test_parity_matrix_generated.py`
+(`sdk-types-ci.yml`), so the matrix can no longer drift from the real surface. The two
+superseded audit docs are deleted.
+
+**Go SDK: the network-fetching resolvers move `sdk/go/helpers` → `sdk/go/resolvers`
+(source move, no wire change).** The IO-bearing key/endpoint resolvers — the
+well-known JWKS resolver (`NewWellKnownKeyResolver`), the revocation-aware WBA
+directory resolver (`NewWBAKeyResolver`), the `ramp.json` endpoint resolver
+(`WellKnownEndpointResolver` / `NewWellKnownEndpointResolver` / `WellKnownOptions` /
+`ErrNoEndpoint`), and the SSRF-guarded fetch client — now live in the new L2 I/O
+package `sdk/go/resolvers`, one tier above the pure, IO-free `sdk/go/helpers`. This
+keeps every network dial out of the trust core (enforced by an io-leaf guard).
+Migration: import these from `github.com/RAMP-Protocol/protocol/sdk/go/resolvers`
+instead of `.../sdk/go/helpers`. **No alias shim is provided** — the move is a hard
+rename and the downstream app already compiles against the moved layout; consumers
+import the resolvers from `sdk/go/resolvers`. The pure `KeyResolver` interface and
+the static `NewStaticKeyResolver` stay in `helpers`.
+
+**SDK (all 3 languages): new public faces this cycle (additive, no wire change).**
+Document-order active-key selection — `ActiveEd25519Key` /
+`ActiveEd25519KeyWithExpiry` and their revocation-aware `…Screened` variants
+(`active_ed25519_key*` in Python, `activeEd25519Key*` in TS) — plus a
+`CachedOfferKeyResolver`, an injectable Ed25519 verify primitive on
+the TS signed-URL verify (`Ed25519Verifier`), and cross-language `ErrorDetail`
+readers: Go `AttachErrorDetail` / `AttachDetail` on the server binding, and
+`parse_error_detail` / `error_detail_from` (Python) and `parseErrorDetail` /
+`errorDetailFrom` (TS) decoders, all pinned to the shared `error-detail-vectors.json`
+oracle. The SSRF-guarded transport is now a single env-driven client
+(`NewGuardedClientFromEnv` / `guarded_client` / `guardedFetchFromEnv`) governed by
+two flags (`SKIP_SSRF`, `ALLOW_INSECURE`). See `docs/sdk-parity-matrix.md` for the
+per-language surface.
+
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
 billing label on `Requester` is gone; field number 5 and the name are
 `reserved` so they can never be reused with a different meaning. Nothing read
