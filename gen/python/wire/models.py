@@ -1700,7 +1700,7 @@ class ResourceEntry(WireModel):
     )
     resource_mutability: ResourceMutability | None = Field(
         None,
-        description='Optional mutability hint. When omitted, the Exchange applies the STATIC\n default. Mirrors the required Offer-side ResourceIdentity.resource_mutability.',
+        description='Optional mutability hint. When omitted, the Exchange applies the `STATIC`\n default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in\n `ext` is not read — the typed field is authoritative, so an ext-only value\n is treated as omitted. Mirrors the required Offer-side\n `ResourceIdentity.resource_mutability`.',
     )
     source: IngestionSource | None = Field(
         None, description='How the entry was discovered'

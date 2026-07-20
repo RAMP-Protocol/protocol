@@ -7,9 +7,10 @@ description: "RAMP protocol changelog"
 
 **`ResourceEntry` gains typed `resource_mutability` (field 14) (additive, no wire break).**
 Publishers submit `resource_mutability` as a typed `ResourceEntry` field instead of inside
-`ext`/`ext_critical`; the Exchange no longer promotes it from `ext` at discovery. The field
-is `optional` — when omitted the Exchange defaults to `STATIC`. Offer-side
-`ResourceIdentity.resource_mutability` is unchanged.
+`ext`/`ext_critical`; the Exchange reads the typed field, not `ext`. The field is `optional` —
+when omitted the Exchange defaults to `STATIC` at Offer build; an explicit
+`RESOURCE_MUTABILITY_UNSPECIFIED` is rejected (`not_in:[0]`, matching the Offer-side twin).
+Offer-side `ResourceIdentity.resource_mutability` is unchanged.
 
 **Go SDK: network-fetching resolvers move `sdk/go/helpers` → `sdk/go/resolvers`
 (source move, no wire change).** The IO-bearing key/endpoint resolvers — well-known
@@ -273,7 +274,7 @@ Domain-specific metadata carried in `ext` fields:
 - `ResourceEntry.terms` (field 13) — publisher-declared terms pushed via `CatalogService.PushResources`.
 - `PushResourcesResponse.warnings` (field 3) — non-fatal ingestion warnings (e.g., unrecognized vocab token).
 - `PRICING_MODEL_ATTRIBUTION` (6) and `PRICING_MODEL_CONTRIBUTION` (7) **removed** from `PricingModel`. Migrate to `Obligation.kind = ATTRIBUTION / CONTRIBUTION` in a `LicenseTerm`.
-- **Wire-enforced validation** — licensing presence and coherence rules are now expressed as protovalidate CEL embedded in the descriptors (not prose-only): pricing required on every term, `REFERENCE_ONLY ⇒ license.uri`, `uri ⇒ uri_digest`, the required discriminator enums reject `UNSPECIFIED` (`LicenseTerm.semantics`, `Pricing.model`, `Restriction.kind`, `Obligation.kind`, `Obligation.trigger`, `Quota.window`), one restriction per kind, permitted/prohibited disjoint, and token-format rules. A `conformance/` test suite evaluates the CEL against valid/invalid instances and validates the doc examples, wired into CI; a guard derives the discriminator set from the proto (each such enum's zero value is marked "rejected at ingest") and fails if any field of one is left unenforced, so the set can't silently drift. Enforced and tested in the Go SDK today; the TypeScript SDK is generated (protovalidate-es not yet wired) and Python is a tracked follow-up.
+- **Wire-enforced validation** — licensing presence and coherence rules are now expressed as protovalidate CEL embedded in the descriptors (not prose-only): pricing required on every term, `REFERENCE_ONLY ⇒ license.uri`, `uri ⇒ uri_digest`, the required discriminator enums reject `UNSPECIFIED` (`LicenseTerm.semantics`, `Pricing.model`, `Restriction.kind`, `Obligation.kind`, `Obligation.trigger`, `Quota.window`), one restriction per kind, permitted/prohibited disjoint, and token-format rules. A `conformance/` test suite evaluates the CEL against valid/invalid instances and validates the doc examples, wired into CI; a guard derives the discriminator set from the proto (each such discriminator field rejects the enum's zero via its `not_in:[0]` rule) and fails if any field of one is left unenforced, so the set can't silently drift. Enforced and tested in the Go SDK today; the TypeScript SDK is generated (protovalidate-es not yet wired) and Python is a tracked follow-up.
 
 ### Wire format
 

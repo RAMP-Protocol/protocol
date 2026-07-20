@@ -7,7 +7,7 @@ description: "How RAMP classifies resource stability (static, dynamic, live) to 
 
 An agent receives a content hash with an Offer and a different hash when it fetches the content. Is this tampering (dispute it) or a routine update (expected behavior)?
 
-Without a mutability signal, the agent cannot distinguish "content was tampered with" from "content was updated since the offer was generated." RAMP solves this with the `ResourceMutability` enum on `ResourceIdentity` and two freshness fields: `Offer.data_as_of` and `RequestConstraints.max_data_age`.
+Without a mutability signal, the agent cannot distinguish "content was tampered with" from "content was updated since the offer was generated." RAMP solves this with the `ResourceMutability` enum — set on the Offer's `ResourceIdentity.resource_mutability` and declarable at ingest via `ResourceEntry.resource_mutability` — and two freshness fields: `Offer.data_as_of` and `RequestConstraints.max_data_age`.
 
 ## ResourceMutability Enum
 
@@ -20,7 +20,7 @@ enum ResourceMutability {
 }
 ```
 
-Set on `ResourceIdentity.resource_mutability` (field 8) for every resource.
+Set on `ResourceIdentity.resource_mutability` (field 8) on every emitted Offer. Publishers MAY declare it at ingestion as the typed `ResourceEntry.resource_mutability` (field 14); an omitted `ResourceEntry` field defaults to `RESOURCE_MUTABILITY_STATIC` when the Exchange builds the Offer. The Exchange reads the typed field, not `ext`.
 
 ### STATIC
 
@@ -201,6 +201,8 @@ No `content_hash` -- the content does not exist at offer time. The agent connect
 ## Exchange Responsibilities
 
 - **MUST** set `resource_mutability` on every `ResourceIdentity`
+- When a publisher's `ResourceEntry` **OMITS** `resource_mutability`, the Exchange **MUST** default the Offer's `ResourceIdentity.resource_mutability` to `RESOURCE_MUTABILITY_STATIC` at Offer-build time
+- Publishers **MAY** declare mutability as the typed `ResourceEntry.resource_mutability` field (field 14). The Exchange **MUST** read that typed field and **MUST NOT** read `resource_mutability` from `ext`; a value present only in `ext` is treated as omitted (→ `RESOURCE_MUTABILITY_STATIC`), and when both the typed field and an `ext` key are present the typed field wins. An explicit `RESOURCE_MUTABILITY_UNSPECIFIED` on the typed field is rejected (`not_in:[0]`)
 - **MUST** set `data_as_of` on Offers for DYNAMIC resources
 - **MUST NOT** set `content_hash` on LIVE resources
 - **SHOULD** respect `max_data_age` constraints from `RequestConstraints` (or from `ResourceQuery.ext` when forwarded)

@@ -46,7 +46,7 @@ const (
 type DiscoveryMethod int32
 
 const (
-	DiscoveryMethod_DISCOVERY_METHOD_UNSPECIFIED DiscoveryMethod = 0 // unset — rejected at ingest
+	DiscoveryMethod_DISCOVERY_METHOD_UNSPECIFIED DiscoveryMethod = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
 	// URI was requested by the agent directly or found via Exchange query.
 	DiscoveryMethod_DISCOVERY_METHOD_EXCHANGE DiscoveryMethod = 1
 	// URI was discovered via a search engine (e.g., Exa, Tavily, Brave Search).
@@ -109,7 +109,7 @@ func (DiscoveryMethod) EnumDescriptor() ([]byte, []int) {
 type OfferAbsenceReason int32
 
 const (
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED OfferAbsenceReason = 0 // unset — rejected at ingest
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED OfferAbsenceReason = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
 	// Resource URI is not in this Exchange's catalog.
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_IN_CATALOG OfferAbsenceReason = 1
 	// Resource exists but the provider has opted out of AI access for it (the
@@ -257,7 +257,7 @@ func (TermSemantics) EnumDescriptor() ([]byte, []int) {
 type RestrictionKind int32
 
 const (
-	RestrictionKind_RESTRICTION_KIND_UNSPECIFIED RestrictionKind = 0 // unset — rejected at ingest
+	RestrictionKind_RESTRICTION_KIND_UNSPECIFIED RestrictionKind = 0 // unset — zero allowed on AcceptableRestriction.axis / OfferGroup.restriction_filters / *.restriction_mismatches; rejected (not_in:[0]) as the Restriction.kind discriminator
 	// What the agent may do with the content. Seeded from RSL 1.0 AI-use
 	// vocabulary and extended with established IP/copyright terms.
 	RestrictionKind_RESTRICTION_KIND_FUNCTION RestrictionKind = 1
@@ -498,7 +498,7 @@ func (ObligationTrigger) EnumDescriptor() ([]byte, []int) {
 type PricingModel int32
 
 const (
-	PricingModel_PRICING_MODEL_UNSPECIFIED PricingModel = 0 // unset — rejected at ingest (omission cannot default to FREE)
+	PricingModel_PRICING_MODEL_UNSPECIFIED PricingModel = 0 // unset — zero allowed on WellKnownManifest.pricing_models_supported (capability list); rejected (not_in:[0]) as the Pricing.model discriminator (omission cannot default to FREE)
 	PricingModel_PRICING_MODEL_FREE        PricingModel = 1 // no charge; rate must be 0 (state FREE explicitly — absent Pricing is not free)
 	PricingModel_PRICING_MODEL_PER_UNIT    PricingModel = 2 // rate per Pricing.unit; unit REQUIRED (registered token or vendor:custom)
 	PricingModel_PRICING_MODEL_FLAT        PricingModel = 3 // one-time flat fee; rate is the total, no unit
@@ -611,7 +611,7 @@ func (PricingMetering) EnumDescriptor() ([]byte, []int) {
 type DeliveryMethod int32
 
 const (
-	DeliveryMethod_DELIVERY_METHOD_UNSPECIFIED DeliveryMethod = 0 // unset — rejected at ingest
+	DeliveryMethod_DELIVERY_METHOD_UNSPECIFIED DeliveryMethod = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
 	// Exchange returns resource inline or via its own endpoint.
 	DeliveryMethod_DELIVERY_METHOD_DIRECT DeliveryMethod = 1
 	// Exchange returns access info (signed URL, token) for retrieval
@@ -743,7 +743,7 @@ func (RequesterType) EnumDescriptor() ([]byte, []int) {
 type C2PAStatus int32
 
 const (
-	C2PAStatus_C2PA_STATUS_UNSPECIFIED C2PAStatus = 0 // unset — rejected at ingest
+	C2PAStatus_C2PA_STATUS_UNSPECIFIED C2PAStatus = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
 	// Manifest is valid AND signer certificate chains to a C2PA Trust List root.
 	// Highest assurance: provenance is cryptographically verified by a trusted CA.
 	C2PAStatus_C2PA_STATUS_TRUSTED C2PAStatus = 1
@@ -816,7 +816,7 @@ func (C2PAStatus) EnumDescriptor() ([]byte, []int) {
 type ResourceMutability int32
 
 const (
-	ResourceMutability_RESOURCE_MUTABILITY_UNSPECIFIED ResourceMutability = 0 // unset — defaulted to STATIC at ingest; rejected on the Offer (ResourceIdentity.resource_mutability {not_in:[0]})
+	ResourceMutability_RESOURCE_MUTABILITY_UNSPECIFIED ResourceMutability = 0 // unset — the Exchange defaults to `STATIC` at Offer build; an explicit `UNSPECIFIED` is rejected on `ResourceEntry.resource_mutability` and the Offer's `ResourceIdentity.resource_mutability` (both `{not_in:[0]}`)
 	// Content is immutable. Hash computed at offer time will match at delivery time.
 	// Agent SHOULD verify content_hash on delivery. Mismatch is disputable.
 	ResourceMutability_RESOURCE_MUTABILITY_STATIC ResourceMutability = 1
@@ -879,7 +879,7 @@ func (ResourceMutability) EnumDescriptor() ([]byte, []int) {
 type DenialReason int32
 
 const (
-	DenialReason_DENIAL_REASON_UNSPECIFIED               DenialReason = 0  // unset — rejected at ingest
+	DenialReason_DENIAL_REASON_UNSPECIFIED               DenialReason = 0  // output enum; zero = not-applicable on TransactionResultItem.denial_reason, rejected (not_in:[0]) where set on TransactionDenial.reason
 	DenialReason_DENIAL_REASON_BILLING_REF_INACTIVE      DenialReason = 1  // the requester's account (the billing_ref minted at Register) is not active / not recognized by the billing system
 	DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE      DenialReason = 2  // Requester's balance too low
 	DenialReason_DENIAL_REASON_RATE_LIMITED              DenialReason = 3  // Too many requests
@@ -982,7 +982,7 @@ func (DenialReason) EnumDescriptor() ([]byte, []int) {
 type IngestionSource int32
 
 const (
-	IngestionSource_INGESTION_SOURCE_UNSPECIFIED  IngestionSource = 0 // unset — rejected at ingest
+	IngestionSource_INGESTION_SOURCE_UNSPECIFIED  IngestionSource = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
 	IngestionSource_INGESTION_SOURCE_RAMP_SITEMAP IngestionSource = 1 // RAMP XML namespace in sitemap
 	IngestionSource_INGESTION_SOURCE_RSL          IngestionSource = 2 // RSL rsl.txt
 	IngestionSource_INGESTION_SOURCE_SITEMAP      IngestionSource = 3 // Standard sitemap.xml
@@ -1207,7 +1207,7 @@ func (ProviderRelationship) EnumDescriptor() ([]byte, []int) {
 type AuthMethod int32
 
 const (
-	AuthMethod_AUTH_METHOD_UNSPECIFIED AuthMethod = 0 // unset — rejected at ingest
+	AuthMethod_AUTH_METHOD_UNSPECIFIED AuthMethod = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
 	// GNAP (RFC 9635) — key-first identity, key-bound tokens. Recommended.
 	AuthMethod_AUTH_METHOD_GNAP AuthMethod = 1
 	// OAuth 2.0 + DPoP (RFC 9449) — sender-constrained tokens. Enterprise recommended.
@@ -1346,7 +1346,7 @@ func (DisputeReason) EnumDescriptor() ([]byte, []int) {
 type DisputeStatus int32
 
 const (
-	DisputeStatus_DISPUTE_STATUS_UNSPECIFIED DisputeStatus = 0 // unset — rejected at ingest
+	DisputeStatus_DISPUTE_STATUS_UNSPECIFIED DisputeStatus = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
 	// Agent submitted DisputeRequest. Initial state.
 	DisputeStatus_DISPUTE_STATUS_FILED DisputeStatus = 1
 	// Exchange auto-resolved via Tier 1 rules (CDN logs, hash comparison).
@@ -1429,7 +1429,7 @@ func (DisputeStatus) EnumDescriptor() ([]byte, []int) {
 type ResolutionType int32
 
 const (
-	ResolutionType_RESOLUTION_TYPE_UNSPECIFIED ResolutionType = 0 // unset — rejected at ingest
+	ResolutionType_RESOLUTION_TYPE_UNSPECIFIED ResolutionType = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
 	// Account credit applied to the agent's next billing cycle.
 	ResolutionType_RESOLUTION_TYPE_CREDIT ResolutionType = 1
 	// New signed URL issued for the same resource (e.g., when content hash
@@ -5155,8 +5155,11 @@ type ResourceEntry struct {
 	// The Exchange validates ENUMERATED terms at push time and surfaces them
 	// in Offer.terms on discovery.
 	Terms []*LicenseTerm `protobuf:"bytes,13,rep,name=terms,proto3" json:"terms,omitempty"`
-	// Optional mutability hint. When omitted, the Exchange applies the STATIC
-	// default. Mirrors the required Offer-side ResourceIdentity.resource_mutability.
+	// Optional mutability hint. When omitted, the Exchange applies the `STATIC`
+	// default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in
+	// `ext` is not read — the typed field is authoritative, so an ext-only value
+	// is treated as omitted. Mirrors the required Offer-side
+	// `ResourceIdentity.resource_mutability`.
 	ResourceMutability *ResourceMutability `protobuf:"varint,14,opt,name=resource_mutability,json=resourceMutability,proto3,enum=ramp.v1.ResourceMutability,oneof" json:"resource_mutability,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -9107,7 +9110,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\aentries\x18\x03 \x03(\v2\x16.ramp.v1.ResourceEntryR\aentries\x12\x1b\n" +
 	"\tcaller_id\x18\x04 \x01(\tR\bcallerId\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\x9e\a\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa8\a\n" +
 	"\rResourceEntry\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\"\n" +
@@ -9125,8 +9128,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	" \x01(\tH\aR\x10provenanceSource\x88\x01\x01\x12R\n" +
 	"\x14provenance_timestamp\x18\v \x01(\v2\x1a.google.protobuf.TimestampH\bR\x13provenanceTimestamp\x88\x01\x01\x12@\n" +
 	"\fattestations\x18\f \x03(\v2\x1c.ramp.v1.ResourceAttestationR\fattestations\x12*\n" +
-	"\x05terms\x18\r \x03(\v2\x14.ramp.v1.LicenseTermR\x05terms\x12Q\n" +
-	"\x13resource_mutability\x18\x0e \x01(\x0e2\x1b.ramp.v1.ResourceMutabilityH\tR\x12resourceMutability\x88\x01\x01\x12)\n" +
+	"\x05terms\x18\r \x03(\v2\x14.ramp.v1.LicenseTermR\x05terms\x12[\n" +
+	"\x13resource_mutability\x18\x0e \x01(\x0e2\x1b.ramp.v1.ResourceMutabilityB\b\xbaH\x05\x82\x01\x02 \x00H\tR\x12resourceMutability\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
 	"\v_content_idB\b\n" +

@@ -359,6 +359,9 @@ A single resource catalog entry.
 
 ::proto-message{name=ResourceEntry}
 
+Validation rules (wire-enforced via protovalidate):
+- `resource_mutability` rejects `RESOURCE_MUTABILITY_UNSPECIFIED` (the field's `enum.not_in:[0]` rule). It is `optional`, so an omitted value is accepted — the Exchange defaults the Offer to `STATIC` at build time.
+
 ### PushResourcesResponse
 
 The `accepted` / `rejected` counts are entry-level tallies of a successful push — not the removed failure bools. A push that could not be applied at all travels as a non-OK transport error carrying [`ErrorDetail.catalog_rejection`](#unified-error-model).
@@ -519,7 +522,7 @@ Single-sources the delivery-edge token unions (signed-URL checks in `verify.ts`,
 
 ### PricingModel
 
-The charging **structure** only (a closed set). The open-ended metering basis ("per what") is NOT enumerated here — it lives in `Pricing.unit` as a registry-governed vocabulary. `UNSPECIFIED` is rejected at ingest (omission cannot default to FREE).
+The charging **structure** only (a closed set). The open-ended metering basis ("per what") is NOT enumerated here — it lives in `Pricing.unit` as a registry-governed vocabulary. `UNSPECIFIED` is rejected on `Pricing.model` (omission cannot default to FREE).
 
 ::proto-enum{name=PricingModel numbers}
 

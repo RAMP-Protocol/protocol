@@ -31,7 +31,7 @@ The feed is a **transport convenience**, not a third licensing model: every line
 | `content_hash` | string | no | `ResourceEntry.content_hash` | integrity pin of the content bytes |
 | `hash_method` | string | no | `ResourceEntry.hash_method` | algorithm for `content_hash` (e.g. `sha256`) |
 | `source` | string | no | `ResourceEntry.source` (`IngestionSource`) | provenance of the metadata (`INGESTION_SOURCE_CMS_API`, …) |
-| `resource_mutability` | string (enum) | no | `ResourceEntry.resource_mutability` (`ResourceMutability`) | `STATIC`/`DYNAMIC`/`LIVE`; drives delivery-time hash-verification behavior |
+| `resource_mutability` | string (enum) | no | `ResourceEntry.resource_mutability` (`ResourceMutability`) | `RESOURCE_MUTABILITY_STATIC`/`RESOURCE_MUTABILITY_DYNAMIC`/`RESOURCE_MUTABILITY_LIVE`; drives delivery-time hash-verification behavior. Omitting the field defaults the Offer to `RESOURCE_MUTABILITY_STATIC`; explicit `RESOURCE_MUTABILITY_UNSPECIFIED` is rejected |
 | `provenance_source` | string | no | `ResourceEntry.provenance_source` | who supplied the metadata (audit trail) |
 | `provenance_timestamp` | RFC3339 | no | `ResourceEntry.provenance_timestamp` | when it was collected / generated |
 | `license` | object | no (yes for any REFERENCE_ONLY term) | `LicenseTerm.license` | governing license document `{id, uri, uri_digest, name}` |
@@ -40,7 +40,7 @@ The feed is a **transport convenience**, not a third licensing model: every line
 | `ext_critical` | string[] | no | `ResourceEntry.ext_critical` | keys in `ext` a consumer MUST understand (COSE `crit` pattern) |
 | `attestations` | array | no | `ResourceEntry.attestations[]` | signed attestations `{verifier, keyid, attested_at, uri, claims, signature}` |
 
-`resource_mutability` is a typed `ResourceEntry` field carried straight through to `Offer.identity.resource_mutability`. `previews[]` still has no typed field on `ResourceEntry` — it rides inside `ext` and is promoted to `Offer.previews[]` at discovery.
+`resource_mutability` is a typed `ResourceEntry` field. When present it is carried through to `Offer.identity.resource_mutability`; when **omitted** the Exchange defaults the Offer to `RESOURCE_MUTABILITY_STATIC` at Offer-build time (there is nothing to carry). An explicit `RESOURCE_MUTABILITY_UNSPECIFIED` is rejected (`not_in:[0]`); the Exchange reads the typed field, not `ext`. `previews[]` still has no typed field on `ResourceEntry` — it rides inside `ext` and is promoted to `Offer.previews[]` at discovery.
 
 ## Term schema (one element = one `LicenseTerm`)
 

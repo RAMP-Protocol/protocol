@@ -252,7 +252,7 @@ CatalogService is NOT how Exchange operators push their own inventory. Exchange 
 
 ### Authentication and Authorization
 
-`PushResources` requests must be signed. The `caller_id` field (field 3) identifies the registered CatalogService client, and the request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) carried in the HTTP headers (`Signature` / `Signature-Input`, with a `Content-Digest` over the body) — there is no in-message caller signature field.
+`PushResources` requests must be signed. The `caller_id` field (field 4) identifies the registered CatalogService client, and the request itself is signed with an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) carried in the HTTP headers (`Signature` / `Signature-Input`, with a `Content-Digest` over the body) — there is no in-message caller signature field.
 
 The Exchange verifies the RFC 9421 signature against the caller's published Ed25519 key in its WBA directory (the JWK Set at `{caller domain}/.well-known/http-message-signatures-directory`), identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`), and confirms that `caller_id` is authorized to push content for the specified `tenant_id`.
 
@@ -264,38 +264,11 @@ Companies like GumGum, Peer39, and DoubleVerify already index the web for contex
 
 **Authorization**: A verification vendor must be listed in the provider's `catalog_contributors` (declared in `/.well-known/ramp.json`) to push attestations for that provider's content. The Exchange checks this authorization on every `PushResources` call.
 
-```protobuf
-service CatalogService {
-  rpc PushResources(PushResourcesRequest) returns (PushResourcesResponse);
-  rpc RemoveContent(RemoveContentRequest) returns (RemoveContentResponse);
-  rpc RefreshCatalog(RefreshCatalogRequest) returns (RefreshCatalogResponse);
-}
+::proto-service{name=CatalogService}
 
-message PushResourcesRequest {
-  string tenant_id = 1;
-  repeated ResourceEntry entries = 2;
-  string caller_id = 3;
-}
+::proto-message{name=PushResourcesRequest}
 
-message ResourceEntry {
-  string domain = 1;
-  string path = 2;
-  optional string content_id = 3;
-  optional string title = 4;
-  optional int32 word_count = 5;
-  optional int32 estimated_quantity = 6;
-  optional string content_hash = 7;
-  optional string hash_method = 8;
-  optional IngestionSource source = 9;
-  optional string provenance_source = 10;
-  optional google.protobuf.Timestamp provenance_timestamp = 11;
-  repeated ResourceAttestation attestations = 12; // v1.0: signed attestation entries
-  repeated LicenseTerm terms = 13;
-  optional ResourceMutability resource_mutability = 14;
-  google.protobuf.Struct ext = 15;
-  repeated string ext_critical = 90;
-}
-```
+::proto-message{name=ResourceEntry}
 
 ### Provenance Tracking
 

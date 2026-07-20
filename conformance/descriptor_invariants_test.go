@@ -80,7 +80,6 @@ var zeroAllowed = map[string]string{
 	"RequestConstraints.delivery_preference": "optional agent preference; unset = no preference",
 	"Offer.delivery_method":                  "offer-side hint; unset = negotiated at delivery",
 	"ResourceEntry.source":                   "optional ingestion provenance; unset = unspecified source",
-	"ResourceEntry.resource_mutability":      "optional mutability hint; unset = defaulted downstream to STATIC (cf. required twin ResourceIdentity.resource_mutability)",
 	"ResourceIdentity.c2pa_status":           "optional provenance; UNSPECIFIED is distinct from ABSENT (not evaluated)",
 
 	// ── Capability advertisements on the manifest: a list of supported values,

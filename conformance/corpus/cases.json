@@ -2195,6 +2195,27 @@
     }
   },
   {
+    "id": "ResourceEntry/resource_mutability/not_in",
+    "message": "ResourceEntry",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_UNSPECIFIED"
+    }
+  },
+  {
+    "id": "ResourceEntry/valid",
+    "message": "ResourceEntry",
+    "valid": true,
+    "json": {
+      "provenance_timestamp": "2026-01-02T03:04:05Z",
+      "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+    }
+  },
+  {
     "id": "ResourceIdentity/resource_mutability/not_in",
     "message": "ResourceIdentity",
     "valid": false,
