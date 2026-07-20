@@ -1698,6 +1698,10 @@ class ResourceEntry(WireModel):
     provenance_timestamp: AwareDatetime | None = Field(
         None, description='When this metadata was collected/generated.'
     )
+    resource_mutability: ResourceMutability | None = Field(
+        None,
+        description='Optional mutability hint. When omitted, the Exchange applies the STATIC\n default. Mirrors the required Offer-side ResourceIdentity.resource_mutability.',
+    )
     source: IngestionSource | None = Field(
         None, description='How the entry was discovered'
     )

@@ -1631,7 +1631,7 @@ enum C2PAStatus {
 //   DYNAMIC: D&B credit report, DrugBank interactions, satellite catalog, news article (corrections)
 //   LIVE:    MarketData quote stream, NPR live broadcast, news monitoring feed
 enum ResourceMutability {
-  RESOURCE_MUTABILITY_UNSPECIFIED = 0;  // unset — rejected at ingest
+  RESOURCE_MUTABILITY_UNSPECIFIED = 0;  // unset — defaulted to STATIC at ingest; rejected on the Offer (ResourceIdentity.resource_mutability {not_in:[0]})
   // Content is immutable. Hash computed at offer time will match at delivery time.
   // Agent SHOULD verify content_hash on delivery. Mismatch is disputable.
   RESOURCE_MUTABILITY_STATIC = 1;
@@ -2002,6 +2002,10 @@ message ResourceEntry {
   // The Exchange validates ENUMERATED terms at push time and surfaces them
   // in Offer.terms on discovery.
   repeated LicenseTerm terms = 13;
+
+  // Optional mutability hint. When omitted, the Exchange applies the STATIC
+  // default. Mirrors the required Offer-side ResourceIdentity.resource_mutability.
+  optional ResourceMutability resource_mutability = 14;
 
   // Extension point
   google.protobuf.Struct ext = 15;

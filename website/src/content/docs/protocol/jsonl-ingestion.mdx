@@ -31,15 +31,16 @@ The feed is a **transport convenience**, not a third licensing model: every line
 | `content_hash` | string | no | `ResourceEntry.content_hash` | integrity pin of the content bytes |
 | `hash_method` | string | no | `ResourceEntry.hash_method` | algorithm for `content_hash` (e.g. `sha256`) |
 | `source` | string | no | `ResourceEntry.source` (`IngestionSource`) | provenance of the metadata (`INGESTION_SOURCE_CMS_API`, …) |
+| `resource_mutability` | string (enum) | no | `ResourceEntry.resource_mutability` (`ResourceMutability`) | `STATIC`/`DYNAMIC`/`LIVE`; drives delivery-time hash-verification behavior |
 | `provenance_source` | string | no | `ResourceEntry.provenance_source` | who supplied the metadata (audit trail) |
 | `provenance_timestamp` | RFC3339 | no | `ResourceEntry.provenance_timestamp` | when it was collected / generated |
 | `license` | object | no (yes for any REFERENCE_ONLY term) | `LicenseTerm.license` | governing license document `{id, uri, uri_digest, name}` |
 | `terms` | array (≥1) | yes | `ResourceEntry.terms[]` | the licensing offers on this resource (see below) |
-| `ext` | object | no | `ResourceEntry.ext` | free-form extension metadata; carries fields with no typed slot (e.g. `resource_mutability`, `previews[]`) and domain-profile data |
+| `ext` | object | no | `ResourceEntry.ext` | free-form extension metadata; carries fields with no typed slot (e.g. `previews[]`) and domain-profile data |
 | `ext_critical` | string[] | no | `ResourceEntry.ext_critical` | keys in `ext` a consumer MUST understand (COSE `crit` pattern) |
 | `attestations` | array | no | `ResourceEntry.attestations[]` | signed attestations `{verifier, keyid, attested_at, uri, claims, signature}` |
 
-`resource_mutability` and `previews[]` have no typed field on `ResourceEntry` — they ride inside `ext` and are promoted to typed fields on the Offer at discovery (`Offer.identity.resource_mutability`, `Offer.previews[]`).
+`resource_mutability` is a typed `ResourceEntry` field carried straight through to `Offer.identity.resource_mutability`. `previews[]` still has no typed field on `ResourceEntry` — it rides inside `ext` and is promoted to `Offer.previews[]` at discovery.
 
 ## Term schema (one element = one `LicenseTerm`)
 
@@ -77,7 +78,7 @@ A publisher MAY place domain-profile data (e.g. [CoMP](/protocol/ext-comp/)) und
  "word_count":359,"estimated_quantity":474,"content_hash":"sha256:…","hash_method":"sha256",
  "source":"INGESTION_SOURCE_CMS_API","provenance_source":"example.com",
  "provenance_timestamp":"2026-06-18T09:23:45Z",
- "ext":{"resource_mutability":"RESOURCE_MUTABILITY_STATIC"},
+ "resource_mutability":"RESOURCE_MUTABILITY_STATIC",
  "terms":[
    {"semantics":"enumerated","functions":["ai-input"],
     "pricing":{"model":"per_unit","unit":"accesses","rate":0.05,"currency":"USD"},

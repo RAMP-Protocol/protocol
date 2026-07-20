@@ -290,7 +290,10 @@ message ResourceEntry {
   optional string provenance_source = 10;
   optional google.protobuf.Timestamp provenance_timestamp = 11;
   repeated ResourceAttestation attestations = 12; // v1.0: signed attestation entries
+  repeated LicenseTerm terms = 13;
+  optional ResourceMutability resource_mutability = 14;
   google.protobuf.Struct ext = 15;
+  repeated string ext_critical = 90;
 }
 ```
 
