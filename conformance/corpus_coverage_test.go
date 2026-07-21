@@ -3,10 +3,11 @@
 // re-validate cases (that is corpus_test.go's job); it asserts the corpus
 // EXERCISES specific field-level rule classes that the parity harness must cover.
 //
-// These four classes were the blind spots that let money/validation bugs ship
+// These five classes were the blind spots that let money/validation bugs ship
 // green: money's divergent value space, the empty-money
-// positive ” accept, repeated-item length bounds, and pattern-derived
-// required-presence. Each is asserted over the corpus JSON — the behavioral
+// positive ” accept, repeated-item length bounds, pattern-derived
+// required-presence, and presence-tracked-enum omitted-is-valid. Each is
+// asserted over the corpus JSON — the behavioral
 // artifact the clients consume — not over corpusgen source. When corpusgen is
 // updated to emit these mutants, each assertion flips to green.
 package conformance
@@ -106,7 +107,7 @@ func ruleMatches(rules []string, substr string) bool {
 	return false
 }
 
-// TestCorpusCoverage guards that the generated corpus exercises the four
+// TestCorpusCoverage guards that the generated corpus exercises the five
 // field-level rule classes that were identified as missing. Each subtest is an
 // independent coverage assertion whose failure names exactly which mutant class
 // the corpus lacks. It fails NOW (corpus has 86 cases, none of these classes) and
@@ -189,5 +190,31 @@ func TestCorpusCoverage(t *testing.T) {
 		t.Errorf("MISSING CLASS 4 (pattern-derived required presence): no INVALID Quota case "+
 			"OMITS 'metric' and trips string.pattern; the 'missing' edge fires only for the one "+
 			"explicit required field, so pattern-required presence (Quota.metric) is untested (%d cases scanned)", len(cases))
+	})
+
+	// Class 5 — presence-tracked-enum omitted-is-valid: a proto3 optional enum
+	// that rejects its zero (not_in:[0]) must still ACCEPT omission. This is the
+	// property the optional-field design rests on — a publisher that omits the
+	// hint is the common case — and it lives on ResourceEntry.resource_mutability.
+	// If a regenerated client drops the optional keyword, omitted feeds start
+	// being rejected while every other gate stays green; this class fails loudly.
+	t.Run("valid_presence_tracked_enum_omitted", func(t *testing.T) {
+		for _, c := range cases {
+			if c.Message != "ResourceEntry" || !c.Valid {
+				continue
+			}
+			obj, ok := decodeCaseJSON(t, c.JSON).(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, present := obj["resource_mutability"]; present {
+				continue
+			}
+			return // found a VALID ResourceEntry that OMITS resource_mutability
+		}
+		t.Errorf("MISSING CLASS 5 (presence-tracked enum, omitted-is-valid): no VALID ResourceEntry "+
+			"case OMITS 'resource_mutability'; the property that an optional not_in:[0] enum accepts "+
+			"omission (the common ingest case) is unguarded, so dropping the 'optional' keyword would "+
+			"reject every omitting feed with all gates green (%d cases scanned)", len(cases))
 	})
 }

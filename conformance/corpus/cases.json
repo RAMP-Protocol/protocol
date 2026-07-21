@@ -2207,6 +2207,14 @@
     }
   },
   {
+    "id": "ResourceEntry/resource_mutability/unset_valid",
+    "message": "ResourceEntry",
+    "valid": true,
+    "json": {
+      "provenance_timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
     "id": "ResourceEntry/valid",
     "message": "ResourceEntry",
     "valid": true,

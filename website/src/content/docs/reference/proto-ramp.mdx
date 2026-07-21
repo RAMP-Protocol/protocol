@@ -359,9 +359,6 @@ A single resource catalog entry.
 
 ::proto-message{name=ResourceEntry}
 
-Validation rules (wire-enforced via protovalidate):
-- `resource_mutability` rejects `RESOURCE_MUTABILITY_UNSPECIFIED` (the field's `enum.not_in:[0]` rule). It is `optional`, so an omitted value is accepted — the Exchange defaults the Offer to `STATIC` at build time.
-
 ### PushResourcesResponse
 
 The `accepted` / `rejected` counts are entry-level tallies of a successful push — not the removed failure bools. A push that could not be applied at all travels as a non-OK transport error carrying [`ErrorDetail.catalog_rejection`](#unified-error-model).

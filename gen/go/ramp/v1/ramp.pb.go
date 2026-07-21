@@ -46,7 +46,7 @@ const (
 type DiscoveryMethod int32
 
 const (
-	DiscoveryMethod_DISCOVERY_METHOD_UNSPECIFIED DiscoveryMethod = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
+	DiscoveryMethod_DISCOVERY_METHOD_UNSPECIFIED DiscoveryMethod = 0 // unset — output/optional; zero is a valid not-applicable/unset state
 	// URI was requested by the agent directly or found via Exchange query.
 	DiscoveryMethod_DISCOVERY_METHOD_EXCHANGE DiscoveryMethod = 1
 	// URI was discovered via a search engine (e.g., Exa, Tavily, Brave Search).
@@ -109,7 +109,7 @@ func (DiscoveryMethod) EnumDescriptor() ([]byte, []int) {
 type OfferAbsenceReason int32
 
 const (
-	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED OfferAbsenceReason = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
+	OfferAbsenceReason_OFFER_ABSENCE_REASON_UNSPECIFIED OfferAbsenceReason = 0 // unset — output/optional; zero is a valid not-applicable/unset state
 	// Resource URI is not in this Exchange's catalog.
 	OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_IN_CATALOG OfferAbsenceReason = 1
 	// Resource exists but the provider has opted out of AI access for it (the
@@ -611,7 +611,7 @@ func (PricingMetering) EnumDescriptor() ([]byte, []int) {
 type DeliveryMethod int32
 
 const (
-	DeliveryMethod_DELIVERY_METHOD_UNSPECIFIED DeliveryMethod = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
+	DeliveryMethod_DELIVERY_METHOD_UNSPECIFIED DeliveryMethod = 0 // unset — output/optional and capability-list; zero is a valid not-applicable/unset state
 	// Exchange returns resource inline or via its own endpoint.
 	DeliveryMethod_DELIVERY_METHOD_DIRECT DeliveryMethod = 1
 	// Exchange returns access info (signed URL, token) for retrieval
@@ -743,7 +743,7 @@ func (RequesterType) EnumDescriptor() ([]byte, []int) {
 type C2PAStatus int32
 
 const (
-	C2PAStatus_C2PA_STATUS_UNSPECIFIED C2PAStatus = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
+	C2PAStatus_C2PA_STATUS_UNSPECIFIED C2PAStatus = 0 // unset — output/optional; zero is a valid not-applicable/unset state
 	// Manifest is valid AND signer certificate chains to a C2PA Trust List root.
 	// Highest assurance: provenance is cryptographically verified by a trusted CA.
 	C2PAStatus_C2PA_STATUS_TRUSTED C2PAStatus = 1
@@ -982,7 +982,7 @@ func (DenialReason) EnumDescriptor() ([]byte, []int) {
 type IngestionSource int32
 
 const (
-	IngestionSource_INGESTION_SOURCE_UNSPECIFIED  IngestionSource = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
+	IngestionSource_INGESTION_SOURCE_UNSPECIFIED  IngestionSource = 0 // unset — output/optional; zero is a valid not-applicable/unset state
 	IngestionSource_INGESTION_SOURCE_RAMP_SITEMAP IngestionSource = 1 // RAMP XML namespace in sitemap
 	IngestionSource_INGESTION_SOURCE_RSL          IngestionSource = 2 // RSL rsl.txt
 	IngestionSource_INGESTION_SOURCE_SITEMAP      IngestionSource = 3 // Standard sitemap.xml
@@ -1207,7 +1207,7 @@ func (ProviderRelationship) EnumDescriptor() ([]byte, []int) {
 type AuthMethod int32
 
 const (
-	AuthMethod_AUTH_METHOD_UNSPECIFIED AuthMethod = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
+	AuthMethod_AUTH_METHOD_UNSPECIFIED AuthMethod = 0 // unset — zero allowed on WellKnownManifest.supported_auth_methods (capability list); no discriminator carrier
 	// GNAP (RFC 9635) — key-first identity, key-bound tokens. Recommended.
 	AuthMethod_AUTH_METHOD_GNAP AuthMethod = 1
 	// OAuth 2.0 + DPoP (RFC 9449) — sender-constrained tokens. Enterprise recommended.
@@ -1346,7 +1346,7 @@ func (DisputeReason) EnumDescriptor() ([]byte, []int) {
 type DisputeStatus int32
 
 const (
-	DisputeStatus_DISPUTE_STATUS_UNSPECIFIED DisputeStatus = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
+	DisputeStatus_DISPUTE_STATUS_UNSPECIFIED DisputeStatus = 0 // unset — output/optional; zero is a valid not-applicable/unset state
 	// Agent submitted DisputeRequest. Initial state.
 	DisputeStatus_DISPUTE_STATUS_FILED DisputeStatus = 1
 	// Exchange auto-resolved via Tier 1 rules (CDN logs, hash comparison).
@@ -1429,7 +1429,7 @@ func (DisputeStatus) EnumDescriptor() ([]byte, []int) {
 type ResolutionType int32
 
 const (
-	ResolutionType_RESOLUTION_TYPE_UNSPECIFIED ResolutionType = 0 // unset — output/optional; zero is a valid not-applicable/unset state (allow-listed in zeroAllowed)
+	ResolutionType_RESOLUTION_TYPE_UNSPECIFIED ResolutionType = 0 // unset — output/optional; zero is a valid not-applicable/unset state
 	// Account credit applied to the agent's next billing cycle.
 	ResolutionType_RESOLUTION_TYPE_CREDIT ResolutionType = 1
 	// New signed URL issued for the same resource (e.g., when content hash
@@ -2595,7 +2595,7 @@ type Offer struct {
 	// plus a third-party verification). Agents choose which to trust.
 	Attestations []*ResourceAttestation `protobuf:"bytes,14,rep,name=attestations,proto3" json:"attestations,omitempty"`
 	// When the offered data was current. For dynamic resources
-	// (content_mutability = DYNAMIC), this is the snapshot timestamp.
+	// (resource_mutability = DYNAMIC), this is the snapshot timestamp.
 	// Enables the Broker to evaluate freshness: "this credit report
 	// reflects data as of March 18" or "this drug database was updated today."
 	//
