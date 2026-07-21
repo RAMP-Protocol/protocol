@@ -1,6 +1,6 @@
 package helpers
 
-// Utility-face golden-vector emitter (djeue / ADR-020 §5).
+// Utility-face golden-vector emitter (ADR-020 §5).
 //
 // The sdk/ts and sdk/python DETERMINISTIC utility faces — NormalizeScopes /
 // ScopesSubset, CanonicalizeMoney (Parse+Format), ValidateIdempotencyKey,
@@ -13,11 +13,11 @@ package helpers
 // MonotonicWindow) carry entropy or a wall clock and are NOT vector-gated —
 // they are behaviour-tested in the port suites, not here.
 //
-// R4 (djeue review): buildMoneyVectors enumerates the leading-zero and
+// buildMoneyVectors enumerates the leading-zero and
 // high-precision-fraction inputs that trigger the Go shopspring round-trip
 // (007→7, 00.5→0.5, 0010.20→10.2, 0.0000001 stays plain) plus the invalid
 // inputs (empty, negative, leading '+', exponent, leading dot) so a divergent
-// port cannot pass green. R5: an all-empty scopes input exercises Go's nil →
+// port cannot pass green. An all-empty scopes input exercises Go's nil →
 // JSON-null normalization.
 //
 // Like TestGenerateVectors this test is a verification no-op by default (it
@@ -35,7 +35,7 @@ import (
 
 // scopesNormalizeVector is one NormalizeScopes case: an input scope list and
 // the normalized result the REAL NormalizeScopes returns. Go returns nil for an
-// empty/all-empty input, which marshals to JSON `null` — the R5 empty case.
+// empty/all-empty input, which marshals to JSON `null` — the empty case.
 type scopesNormalizeVector struct {
 	Name       string   `json:"name"`
 	Input      []string `json:"input"`
@@ -85,7 +85,7 @@ type wireConstantVector struct {
 
 // buildScopesNormalizeVectors emits the NormalizeScopes corpus, deriving every
 // normalized result from the REAL NormalizeScopes: drop-empty, first-seen dedup,
-// lexicographic sort, nil (→ JSON null) for empty/all-empty (R5).
+// lexicographic sort, nil (→ JSON null) for empty/all-empty.
 func buildScopesNormalizeVectors() []scopesNormalizeVector {
 	inputs := []struct {
 		name  string
@@ -140,7 +140,7 @@ func buildScopesSubsetVectors() []scopesSubsetVector {
 	return out
 }
 
-// buildMoneyVectors emits the CanonicalizeMoney corpus (R4). Every canonical +
+// buildMoneyVectors emits the CanonicalizeMoney corpus. Every canonical +
 // valid field is DERIVED from the REAL CanonicalizeMoney — the leading-zero and
 // high-precision cases are what catch a naive TS string surface or a Python
 // str(Decimal) scientific-notation divergence.

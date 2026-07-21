@@ -78,7 +78,7 @@ export function revocationJson(asOf: string, revoked: string[]): string {
 	return JSON.stringify({ as_of: asOf, revoked });
 }
 
-/** Serialize the ad-hoc kid-carrying JWKS key doc (R1 shape:
+/** Serialize the ad-hoc kid-carrying JWKS key doc (shape:
  * `{keys:[{kid,kty,crv,x}]}`) the WellKnownKeyResolver reads. */
 export function jwksKeyDocJson(entries: Record<string, unknown>[]): string {
 	return JSON.stringify({ keys: entries });

@@ -1,4 +1,5 @@
-// Wire-constants parity (TypeScript side) — TDD red for djeue.
+// Wire-constants parity (TypeScript side): wire.ts exposes the six wire constants
+// with the exact values the Go oracle carries.
 //
 // sdk/ts `wire.ts` MUST expose the six wire constants with the EXACT values the
 // sdk/go oracle carries. The shared vectors at

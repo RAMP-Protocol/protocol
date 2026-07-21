@@ -99,7 +99,7 @@ func WithSignPredicate(fn func(*http.Request) bool) SigningOption {
 // outbound request body, stamps Content-Digest, binds Authorization, and writes
 // the RFC 9421 Signature-Input / Signature headers via the injected Signer, then
 // forwards to base. A request already carrying a Signature header is CHAINED onto
-// (helpers.AppendSignature, the RAMP-56 forwarding chain) rather than replaced.
+// (helpers.AppendSignature, the forwarding chain) rather than replaced.
 // base defaults to http.DefaultTransport when nil. It is exported so an
 // application can compose the SDK sign face onto its own *http.Client (e.g. to
 // wrap it in a tracing or metrics RoundTripper). Options tune transport

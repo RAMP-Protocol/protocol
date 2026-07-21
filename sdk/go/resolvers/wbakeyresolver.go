@@ -60,7 +60,7 @@ var (
 )
 
 // WBADirectoryPath is the well-known path a WBA identity directory is served
-// at (Web Bot Auth; the identity half of the RAMP-24 split — the commercial
+// at (Web Bot Auth; the identity half of the split — the commercial
 // overlay stays in /.well-known/ramp.json).
 const WBADirectoryPath = "/.well-known/http-message-signatures-directory"
 

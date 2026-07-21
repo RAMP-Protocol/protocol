@@ -1,4 +1,4 @@
-"""HashURL parity (Python side) — TDD red for djeue.
+"""HashURL parity (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/hashurl.parity.test.ts.
 

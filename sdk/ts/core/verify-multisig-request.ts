@@ -2,7 +2,7 @@
 // — the TS port of Go helpers.VerifyMultisigRequest[Resolved] (verify.go /
 // keyresolver.go). Where core/verify-request.ts is the SINGLE-SIG surface, this is
 // the multi-hop verify a Broker/Exchange built in TS wires when a request carries
-// a forwarding chain (RAMP-56): it parses ALL labels, enforces the hop budget
+// a forwarding chain: it parses ALL labels, enforces the hop budget
 // FIRST, the structural forwarding chain NEXT, then cryptographically verifies
 // every hop — returning a verdict with the verified keyids in chain order, never
 // throwing.
@@ -10,7 +10,7 @@
 // Reject precedence (parity-critical, mirrors Go VerifyMultisigRequest):
 //   hop_budget → broken_chain → signature.
 //
-// NO replay (o3szv R1): the Go helpers oracle VerifyMultisigRequest[Resolved]
+// NO replay: the Go helpers oracle VerifyMultisigRequest[Resolved]
 // performs no replay (replay lives at the connectserver layer), so this face
 // reuses the replay-free per-signature core (verifyParsedSignature) and never
 // touches a ReplayStore. The chain link resolves to the LIVE predecessor bytes, so

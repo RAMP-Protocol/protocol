@@ -1,4 +1,6 @@
-// Cross-field Zod parity (TypeScript side) — TDD red for ixs7u.5.
+// Cross-field Zod parity (TypeScript side): mirrors the Go cross-field CEL oracle
+// — each invalid instance is rejected and the expected rule-id appears in the
+// SDK's reported cross-field rule-ids.
 //
 // Mirrors the sdk/go oracle test TestValidate_enforcesCrossFieldCEL
 // (sdk/go/helpers/validate_corpus_test.go) against the SHARED corpus

@@ -119,13 +119,13 @@
       "ts": null
     },
     "connectserver.NewBrokerServiceHandler": {
-      "allowlist_reason": "Go-only full Connect Broker handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md",
+      "allowlist_reason": "Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md",
       "decision_anchor": "full Connect handler binding",
       "python": null,
       "ts": null
     },
     "connectserver.NewExchangeServiceHandler": {
-      "allowlist_reason": "Go-only full Connect Exchange handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md",
+      "allowlist_reason": "Go-only full Connect Exchange handler binding — OPEN DECISION in docs/sdk-parity-matrix.md",
       "decision_anchor": "full Connect handler binding",
       "python": null,
       "ts": null

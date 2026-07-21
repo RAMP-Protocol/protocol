@@ -3,8 +3,8 @@
 // re-validate cases (that is corpus_test.go's job); it asserts the corpus
 // EXERCISES specific field-level rule classes that the parity harness must cover.
 //
-// These four classes were the blind spots that let H1/M3-class bugs ship green
-// (see agentic-content-access-kb1s0.9): money's divergent value space, the H1
+// These four classes were the blind spots that let money/validation bugs ship
+// green: money's divergent value space, the empty-money
 // positive ” accept, repeated-item length bounds, and pattern-derived
 // required-presence. Each is asserted over the corpus JSON — the behavioral
 // artifact the clients consume — not over corpusgen source. When corpusgen is
@@ -107,7 +107,7 @@ func ruleMatches(rules []string, substr string) bool {
 }
 
 // TestCorpusCoverage guards that the generated corpus exercises the four
-// field-level rule classes M5 identified as missing. Each subtest is an
+// field-level rule classes that were identified as missing. Each subtest is an
 // independent coverage assertion whose failure names exactly which mutant class
 // the corpus lacks. It fails NOW (corpus has 86 cases, none of these classes) and
 // passes once corpusgen emits them.
@@ -131,7 +131,7 @@ func TestCorpusCoverage(t *testing.T) {
 			"proves the clients reject 'two words' but never the money-specific value space (%d cases scanned)", len(cases))
 	})
 
-	// Class 2 — the H1 positive blind spot: '' must be VALID on a money field.
+	// Class 2 — the positive empty-money blind spot: '' must be VALID on a money field.
 	t.Run("valid_empty_money_value", func(t *testing.T) {
 		for _, c := range cases {
 			if !c.Valid {
@@ -144,7 +144,7 @@ func TestCorpusCoverage(t *testing.T) {
 			}
 		}
 		t.Errorf("MISSING CLASS 2 (positive empty money): no VALID case has a money field "+
-			"equal to \"\"; the H1 blind spot (clients wrongly rejecting accepted-empty money) "+
+			"equal to \"\"; the empty-money blind spot (clients wrongly rejecting accepted-empty money) "+
 			"is unguarded — baselines use \"0\", never \"\" (%d cases scanned)", len(cases))
 	})
 

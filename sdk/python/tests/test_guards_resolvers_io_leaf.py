@@ -1,4 +1,4 @@
-"""Structural guard for the resolver IO-leaf invariant (bsh8k).
+"""Structural guard for the resolver IO-leaf invariant.
 
 The resolver faces (``ramp_sdk/resolvers/``) are the SDK's ONLY IO-bearing tree:
 they fetch JWKS / WBA directories / ramp.json over an injected transport (default

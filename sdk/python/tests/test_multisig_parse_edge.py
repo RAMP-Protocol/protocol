@@ -1,4 +1,4 @@
-"""sdk/python multi-member Signature-Input parser parse-edge units (o3szv R2).
+"""sdk/python multi-member Signature-Input parser parse-edge units.
 
 The canonical Go golden vectors (multisig-chain-vectors.json) are well-behaved
 (no comma/paren inside a quoted keyid, no backslash escapes, canonical

@@ -2516,8 +2516,8 @@ type Offer struct {
 	// bytes (see `signature` below — the signature covers every field except
 	// `signature` / `signature_algorithm`), so an intermediary cannot redirect
 	// the execute call to a different Exchange without invalidating the offer.
-	// (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,
-	// retiring the X-RAMP-Exchange-Endpoint transport header.)
+	// This enables multi-Exchange fan-out routing from the offer itself,
+	// retiring the X-RAMP-Exchange-Endpoint transport header.
 	Exchange string `protobuf:"bytes,8,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
 	// Offer — every field, including `pricing`, `terms` (the full licensing
@@ -4356,7 +4356,7 @@ func (x *Delegation) GetExtCritical() []string {
 }
 
 // AgentAcceptance — the agent's DETACHED acceptance signature over an accepted
-// Offer (RAMP-102 §1). Distinct from the transport (RFC 9421) request signature:
+// Offer. Distinct from the transport (RFC 9421) request signature:
 // it is topology-independent and content-bound, so it stays valid no matter how
 // many brokers relay the request, and binds the agent to THIS specific offer +
 // requester + transaction. It travels in the execute body alongside the
@@ -4630,8 +4630,8 @@ type TransactionItem struct {
 	// presented bytes — stateless, no reconstruct-from-catalog. REQUIRED: every
 	// batch item carries its offer.
 	Offer *Offer `protobuf:"bytes,3,opt,name=offer,proto3" json:"offer,omitempty"`
-	// The agent's detached acceptance signature over this item's `offer`
-	// (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per
+	// The agent's detached acceptance signature over this item's `offer`.
+	// Optional on the wire; the Exchange enforces presence per
 	// item at the service layer for relayed batches. Signed bytes =
 	// deterministic AgentAcceptancePayload, with requester_* and idempotency_key
 	// taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.
@@ -4686,7 +4686,7 @@ func (x *TransactionItem) GetAgentAcceptance() *AgentAcceptance {
 
 // TransactionResponse — Exchange confirms the transaction(s).
 //
-// Items-only (RAMP-102 / epic 6afpc): every per-result datum lives in `items`
+// Items-only: every per-result datum lives in `items`
 // (one TransactionResultItem per committed offer, in original order); the
 // top-level fields carry only the shared aggregate state. A single offer is the
 // degenerate 1-element `items`. The per-item denials remain in-body on

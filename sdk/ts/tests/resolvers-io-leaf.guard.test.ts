@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Structural guard for the resolver IO-leaf invariant (bsh8k).
+// Structural guard for the resolver IO-leaf invariant.
 //
 // The resolver faces (sdk/ts/resolvers/) are the SDK's ONLY IO-bearing tree: they
 // fetch JWKS / WBA directories / ramp.json over an injected transport (default a

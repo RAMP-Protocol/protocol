@@ -9,7 +9,7 @@ sdk/go/helpers/testdata/sign-request-vectors.json.
 
 Covered set is EXACTLY ``@method @target-uri content-digest authorization
 signature-agent`` (no conditional biscuit component). Signature-Agent joined the
-required set with the WBA identity split (RAMP-24): every signature commits to
+required set with the WBA identity split: every signature commits to
 the signer's key-directory URL, empty included — this supersedes the earlier
 four-component pin. L1 purity (ADR-020 §1/§4): ``created``/``expires`` are
 INJECTED — sign reads no wall clock. The ``Signature`` value is STANDARD base64
@@ -83,7 +83,7 @@ def _signature_params(
 ) -> str:
     # The optional forwarding-chain token (``"signature";key="sigN"``) is appended
     # as the LAST covered component and rendered VERBATIM — it already carries its
-    # own quotes + key= param, so it must NOT be re-wrapped (o3szv R4). Default None
+    # own quotes + key= param, so it must NOT be re-wrapped. Default None
     # keeps the single-sig (N=1) inner list byte-identical.
     tokens = [f'"{c}"' for c in covered]
     if chain_link_token is not None:
@@ -174,7 +174,7 @@ def append_signature(
     expires: int,
 ) -> SignedRequest:
     """Chain sig(N+1) onto ``prev_signature_input``/``prev_signature`` WITHOUT
-    disturbing existing members (RAMP-56 forwarding chain), the Python port of Go
+    disturbing existing members of the forwarding chain, the Python port of Go
     ``helpers.AppendSignature``.
 
     Finds the next label sig(N+1) and predecessor sigN, binds the RAMP base plus a

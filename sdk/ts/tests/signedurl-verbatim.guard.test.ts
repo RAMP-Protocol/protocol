@@ -1,6 +1,6 @@
-// sdk/ts verbatim-canonicalization guard (parity guard, ov97t.16).
+// sdk/ts verbatim-canonicalization guard (parity guard).
 //
-// THE CONTRACT (Constantine, 2026-07-07): the signed-URL signature covers
+// THE CONTRACT: the signed-URL signature covers
 // `GET\n<url>` as OPAQUE URL BYTES. Signer and verifier MUST agree on `<url>`
 // byte-for-byte. The ONLY permitted transform is deterministic query handling
 // (add exp/kid/agent_id, remove sig, sort query) — NEVER host-lowercasing,

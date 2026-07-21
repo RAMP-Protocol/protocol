@@ -124,7 +124,7 @@ func coveredFor(req *http.Request) []CoveredComponent {
 // rampChainCoveredComponents returns the covered set for an appended signature
 // (sigN, N>1): the base set plus a forwarding-chain link
 // "signature";key="<prevLabel>" so sigN cryptographically commits to its
-// predecessor (RAMP-56, RFC 9421 §2.4). When hasPrev is false it degrades to the
+// predecessor (RFC 9421 §2.4). When hasPrev is false it degrades to the
 // plain base set — identical to a sig1 covered set.
 func rampChainCoveredComponents(req *http.Request, prevLabel string, hasPrev bool) []CoveredComponent {
 	covered := coveredFor(req)
@@ -239,7 +239,7 @@ func componentValue(req *http.Request, c CoveredComponent) (string, error) {
 // member: :base64(bytes):. It decodes the referenced member to raw bytes and
 // re-encodes canonically (base64.StdEncoding) rather than splicing the raw wire
 // substring, so signer and verifier agree byte-for-byte regardless of incidental
-// whitespace around the member on the wire (RAMP-56, Risk R1).
+// whitespace around the member on the wire.
 func chainLinkValue(req *http.Request, c CoveredComponent) (string, error) {
 	key := componentParam(c, "key")
 	if key == "" {

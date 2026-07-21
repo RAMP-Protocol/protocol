@@ -1,10 +1,10 @@
-"""Signed-URL + RFC 9421 GET-PoP byte-parity (Python side) — TDD red for ixs7u.6.
+"""Signed-URL + RFC 9421 GET-PoP byte-parity (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/signedurl-pop.parity.test.ts in pytest.
 
 The Core Invariant for these two helpers is byte-identical verdicts to the
 sdk/go oracle. Both shared vector files already exist (emitted by the Go golden
-emitter in ixs7u.5):
+emitter):
 
   sdk/go/helpers/testdata/signedurl-vectors.json  (SignURLEd25519 output)
   sdk/go/helpers/testdata/pop-vectors.json        (RFC 9421 GET-PoP output)

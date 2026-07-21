@@ -14,7 +14,7 @@ import (
 )
 
 // TestSSRFBlocked_ReservedRanges pins the reserved/non-public classification,
-// including the ranges the old IsPrivate() heuristic missed (SEC-NEW-1): CGNAT,
+// including the ranges the old IsPrivate() heuristic missed: CGNAT,
 // 0.0.0.0/8, and the v4-mapped / NAT64 forms that embed a private v4.
 func TestSSRFBlocked_ReservedRanges(t *testing.T) {
 	blocked := []string{

@@ -10,7 +10,7 @@ import (
 // non-authoritative developer message, the stable service domain, and any
 // structured field metadata) and attaches it to an ALREADY-CLASSIFIED
 // *connect.Error, returning that same error. It is the SDK-owned realisation of
-// the ErrorDetail<->domain envelope build (RAMP-118): every service that maps a
+// the ErrorDetail<->domain envelope build: every service that maps a
 // domain error to a connect.Error and then stamps a generic (no typed reason)
 // detail shares this one body instead of copying it.
 //

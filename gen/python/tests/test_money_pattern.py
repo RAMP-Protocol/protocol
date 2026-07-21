@@ -1,4 +1,4 @@
-"""Direct behavioral regression for the money wire-pattern (H1 / kb1s0.1).
+"""Direct behavioral regression for the money wire-pattern.
 
 Money on the wire is a pattern-constrained string: ^([0-9]+([.][0-9]+)?)?$
 (Go keeps string.pattern; Zod keeps z.string().regex(...)). The generated

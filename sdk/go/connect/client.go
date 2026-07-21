@@ -119,7 +119,7 @@ func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...
 		}
 		key = minted
 	}
-	// Items-only wire shape (RAMP-102): a single offer is the degenerate
+	// Items-only wire shape: a single offer is the degenerate
 	// 1-element items list, each item reflecting its signed Offer back exactly as
 	// received at discovery. The authoritative identity is the reflected offer; the
 	// optional top-level offer_id correlation scalar is left unset.

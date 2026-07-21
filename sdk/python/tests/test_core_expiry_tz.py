@@ -1,4 +1,4 @@
-"""sdk/python core expiry timezone-awareness regression — TDD red for ov97t.3.
+"""sdk/python core expiry timezone-awareness regression.
 
 Pin: ``_expired`` must treat an offset-less RFC 3339 ``expires_at`` as UTC,
 matching the Go oracle (protobuf ``Timestamp.AsTime()`` always returns UTC).

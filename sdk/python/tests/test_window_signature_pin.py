@@ -1,8 +1,8 @@
-"""Window-refactor signature regression pin (Python side) — djeue M3/R3.
+"""Window-refactor signature regression pin (Python side).
 
-The djeue refactor sources SigningTransport's (created, expires) from an injected
+The window-injection refactor sources SigningTransport's (created, expires) from an injected
 window (default clock_window(time.time, ttl_sec)) instead of the inline
-``created = int(self._now()); expires = created + ttl`` mint. R3: clock_window
+``created = int(self._now()); expires = created + ttl`` mint. clock_window
 MUST int()-truncate so the produced RFC 9421 @signature-params bytes stay
 byte-identical. This pin captures the CURRENT (pre-refactor) behaviour and MUST
 STAY GREEN after the refactor:

@@ -38,7 +38,7 @@ var (
 	// ErrBrokenSignatureChain signals a multisig request whose signatures do not
 	// form a valid forwarding chain: labels are non-contiguous, reordered, or a
 	// sigN (N>1) does not cover exactly its predecessor via
-	// "signature";key="sigN-1" (RAMP-56 forwarding chain, RFC 9421 §2.4).
+	// "signature";key="sigN-1" (forwarding chain, RFC 9421 §2.4).
 	ErrBrokenSignatureChain = errors.New("helpers: signature chain broken (gap/reorder/missing link)")
 	// ErrTooManyHops signals that the number of signatures on a request exceeds
 	// the verifier's configured MaxSignatures budget (Exchange hop bound).
@@ -59,7 +59,7 @@ type VerifyOptions struct {
 	Now           time.Time
 	MaxFutureSkew time.Duration
 	// MaxSignatures bounds the number of signatures accepted on a multisig
-	// request — the Exchange hop bound (RAMP-56). 0 means unbounded; only the
+	// request — the Exchange hop bound. 0 means unbounded; only the
 	// Exchange-terminal consumer sets it (= max_intermediary_hops + 1). A request
 	// carrying more signatures is rejected with ErrTooManyHops before any
 	// signature is cryptographically verified. Ignored by single-sig VerifyRequest.
@@ -472,8 +472,8 @@ func parseSigLabel(d *httpsfv.Dictionary, label string) ([]byte, error) {
 }
 
 // signatureBytesForLabel parses the Signature header off h and returns the raw
-// signature bytes for label. It backs the forwarding-chain link resolution
-// (RAMP-56): a predecessor hop's signature is referenced by label from the
+// signature bytes for label. It backs the forwarding-chain link resolution:
+// a predecessor hop's signature is referenced by label from the
 // current hop's covered "signature";key="…" component.
 func signatureBytesForLabel(h http.Header, label string) ([]byte, error) {
 	sigValues := h.Values("Signature")
@@ -514,8 +514,8 @@ func VerifyMultisigRequest(req *http.Request, body []byte, resolve resolveFunc, 
 	return verified, nil
 }
 
-// enforceSignatureChain checks that allParams form a valid forwarding chain
-// (RAMP-56): labels are exactly sig1..sigN contiguous in Signature-Input order,
+// enforceSignatureChain checks that allParams form a valid forwarding chain:
+// labels are exactly sig1..sigN contiguous in Signature-Input order,
 // sig1 carries no "signature" component, and every sigK (K>1) covers exactly one
 // "signature";key="sig(K-1)" link to its immediate predecessor. This is the
 // STRUCTURAL gate only; the cryptographic binding is enforced by the per-sig

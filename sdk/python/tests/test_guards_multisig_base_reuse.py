@@ -1,4 +1,4 @@
-"""Structural guard for the "forked signature-base builder" disease (o3szv).
+"""Structural guard for the "forked signature-base builder" disease.
 
 DISEASE: the RFC 9421 5-component request signature-base
 (@method @target-uri content-digest authorization signature-agent) is rendered by

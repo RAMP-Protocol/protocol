@@ -1,8 +1,8 @@
-"""sdk/python/ramp_sdk/core offer-verify parity — TDD red for ixs7u.10.
+"""sdk/python/ramp_sdk/core offer-verify parity.
 
 Mirror of the sdk/ts core offer-verify parity suite. The L2 core Verifier splits
 received offers into {verified, rejected} by ed25519-verifying the canonical
-offer-signature. Per the BINDING amendment on ixs7u.10 (user-decided), the signed
+offer-signature. The signed
 payload is NO LONGER Go deterministic protobuf-binary — it is RFC 8785 JCS over the
 canonical proto-JSON of the Offer with signature/signature_algorithm cleared:
 
@@ -23,7 +23,7 @@ RED now for TWO expected reasons:
      extends the Go golden emitter to emit this matrix. load_json raises
      FileNotFoundError → collection failure, a clean TDD-red signal.
 
-The matrix MUST exercise the hard JCS encodings (architect-review MEDIUM), not a
+The matrix MUST exercise the hard JCS encodings, not a
 single happy path: minimal / struct_ext_multi_key (forces recursive JCS key-sort)
 / two_timestamps / repeated_terms_enum / tamper_negative.
 """
@@ -45,7 +45,7 @@ from ramp_sdk.core import Mode, StaticOfferKeyResolver, Verifier  # type: ignore
 _OFFER_VERIFY_VECTORS_PATH = GO_TESTDATA / "offer-verify-vectors.json"
 _VECTORS = load_json(_OFFER_VERIFY_VECTORS_PATH)["vectors"]
 
-# The required matrix names (BINDING amendment): the hard JCS encodings, not a
+# The required matrix names: the hard JCS encodings, not a
 # single happy path.
 _REQUIRED_MATRIX = {
     "minimal",

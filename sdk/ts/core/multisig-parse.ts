@@ -2,14 +2,14 @@
 // inner-per-label extractor — the TS port of Go helpers.parseAllSignatures /
 // rawInnerByLabel / splitTopLevelMembers (verify.go). The single-sig verify path
 // (core/verify-request.ts) hand-rolls a minimal ONE-label parser; the multisig
-// forwarding chain (o3szv) needs the FULL multi-member dictionary parse plus the
+// forwarding chain needs the FULL multi-member dictionary parse plus the
 // exact byte-verbatim inner value each hop's base terminates with.
 //
 // Dependency-light on purpose: no new runtime dep, mirroring the existing minimal
 // single-label parsers. Correctness on ADVERSARIAL headers (quoted-comma,
 // backslash escapes, top-level splitting, malformed reject) is pinned by
 // tests/multisig-parse.edge.test.ts — the canonical Go golden vectors are
-// well-behaved and do NOT gate the parser (o3szv R2).
+// well-behaved and do NOT gate the parser.
 
 import { decodeBase64Url } from "../src/base64url.ts";
 

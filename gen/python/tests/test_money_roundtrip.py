@@ -3,7 +3,7 @@ a normalizing round-trip (e.g. Decimal coercion turning "007.50" into "7.50" or
 "1E3" into "1E+3") would change the bytes of a JWS-signed offer or anything under
 RFC 9421 Content-Digest coverage and break the signature. This pins that the
 generated Pydantic money field preserves the exact wire string (regression guard
-for M2 / kb1s0.6; the fix rides on money-as-str from kb1s0.1)."""
+for money round-trip byte-exactness; the fix rides on money being a wire string)."""
 
 import sys
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""Idempotency-validate parity (Python side) — TDD red for djeue.
+"""Idempotency-validate parity (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/idempotency-validate.parity.test.ts.
 

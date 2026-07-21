@@ -1,6 +1,6 @@
 // sdk/ts full-RPC single-signature SERVER-VERIFY parity against the shared Go
-// oracle (agentic-content-access-qqkro, SINGLE-SIG scope per the 2026-07-07
-// decision; multisig-chain verify is out of scope — o3szv owns it).
+// oracle (agentic-content-access, SINGLE-SIG scope; multisig-chain verify is out
+// of scope — the multisig verify sibling owns it).
 //
 // Today sdk/ts has NO framework-agnostic request-verify: hono/middleware.ts's
 // rampVerify is edge-GET-PoP-scoped (2-component, self-verifying, no resolver)
@@ -30,7 +30,7 @@
 // and OUT OF SCOPE here.
 //
 // RED until BOTH (a) sdk/ts/core/verify-request.ts exists AND (b) the Go emitter
-// produces verify-request-neg-vectors.json. The implement step (7bjkh.23) adds
+// produces verify-request-neg-vectors.json. The implement step adds
 // both; this test is the TDD-red contract. Do NOT implement either here.
 
 import { describe, it, expect } from "vitest";
@@ -177,7 +177,7 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
 
   it("negative-verify vector set covers the five single-sig reject cases", () => {
     // The Go emitter must produce exactly these named single-sig negatives; the
-    // multisig cases (broken_chain / hop_budget) are out of scope (o3szv).
+    // multisig cases (broken_chain / hop_budget) are out of scope.
     const names = new Set(negDoc.vectors.map((v) => v.name));
     expect(names.has("neg_bad_sig")).toBe(true);
     expect(names.has("neg_replay")).toBe(true);
@@ -314,12 +314,12 @@ describe("sdk/ts full-RPC single-sig server-verify mirrors the Go connectserver 
     });
   }
 
-  // R2-4: the single-sig MaxSignatureAge lifetime clamp (mirrors Go
+  // The single-sig MaxSignatureAge lifetime clamp (mirrors Go
   // enforceCreatedExpires with opts.MaxSignatureAge). A live-signed request with a
   // known window is verified at several clamp settings: unbounded default, at the
   // bound (inclusive → pass), above the bound (pass), below the bound (reject
   // "signature"). Live-signing keeps the window a first-class test knob.
-  describe("R2-4 single-sig MaxSignatureAge clamp", () => {
+  describe("single-sig MaxSignatureAge clamp", () => {
     const seedHex =
       "55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374";
     const created = 1_700_000_000;

@@ -12,7 +12,7 @@ import (
 //
 // Both signed RAMP payloads — the Offer signature and the agent's detached
 // offer-acceptance — cover a canonical serialization of a protobuf message. As of
-// the JCS switch (user decision, ixs7u.10) that canonical form is:
+// the JCS switch that canonical form is:
 //
 //	signed_payload = JCS( protojson(msg with sig/sig_algorithm cleared) )
 //

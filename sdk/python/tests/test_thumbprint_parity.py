@@ -1,4 +1,4 @@
-"""Thumbprint parity (Python side) — TDD red for ixs7u.6.
+"""Thumbprint parity (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/thumbprint.parity.test.ts in pytest.
 

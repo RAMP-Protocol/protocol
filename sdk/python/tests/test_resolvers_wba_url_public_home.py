@@ -1,9 +1,9 @@
 """Public-surface home of the WBA directory-path constant (Python side).
 
 The WBA directory path is public only in Go (``WBADirectoryPath``); Python keeps
-it as the module-private ``_WBA_DIRECTORY_PATH``. hp5o2.4 promotes it to a public
+it as the module-private ``_WBA_DIRECTORY_PATH``. This change promotes it to a public
 ``WBA_DIRECTORY_PATH`` and re-exports it from the ``ramp_sdk`` top-level package so
-the app cleanup (hp5o2.9) can import ONE shared constant instead of hand-rolling a
+the app cleanup can import ONE shared constant instead of hand-rolling a
 fourth copy of ``/.well-known/http-message-signatures-directory``.
 
 TDD-red: the constant is still private (``_WBA_DIRECTORY_PATH``) and absent from

@@ -1,4 +1,4 @@
-"""Direct behavioral regression for wire forward-compatibility (H2 / kb1s0.2).
+"""Direct behavioral regression for wire forward-compatibility.
 
 Core invariant: an UNKNOWN top-level field (a field a newer protocol version
 adds that this older client has never seen) MUST be ACCEPTED and DROPPED — not

@@ -13,8 +13,8 @@ no wall clock), and (g) returns a VERDICT carrying the reject reason mirroring t
 Go connectserver taxonomy (classify.go ``RejectReason.String()`` /
 ``ErrReplayed``) — never a thrown exception at the SDK boundary.
 
-SINGLE-SIG scope only (2026-07-07 decision on agentic-content-access-qqkro):
-multisig forwarding-chain verify (hop budget, broken_chain) is owned by o3szv.
+SINGLE-SIG scope only: multisig forwarding-chain verify (hop budget,
+broken_chain) is handled by the separate multisig server-verify path below.
 The reject reason tokens this face emits are exactly the two the single-sig
 surface produces: ``"signature"`` (bad sig / expiry / future-created /
 wrong-or-unresolvable key / tampered covered field / missing component — the
@@ -114,7 +114,7 @@ class ReplayStore(Protocol):
 class _ParsedInput:
     """The parsed single-sig Signature-Input: label, covered names, keyid, window.
 
-    ``created``/``expires`` back the MaxSignatureAge lifetime clamp (R2-4); the
+    ``created``/``expires`` back the MaxSignatureAge lifetime clamp; the
     freshness/window check itself is re-parsed by ``verify_request`` from the
     verbatim params tail, so these are consumed only for the clamp."""
 
@@ -296,7 +296,7 @@ def verify_request_server(
     if _has_entitlement_header(headers) and _ENTITLEMENT_HEADER not in parsed.covered:
         return _reject(_REASON_SIGNATURE)
 
-    # Lifetime clamp (R2-4, mirrors Go enforceCreatedExpires MaxSignatureAge): reject
+    # Lifetime clamp (mirrors Go enforceCreatedExpires MaxSignatureAge): reject
     # a declared window longer than allowed — a far-future expires is a wide replay
     # window. 0 = unbounded; inclusive at the bound (== max_signature_age passes).
     if (
@@ -344,11 +344,11 @@ def verify_request_server(
     return VerifiedRequest(valid=True)
 
 
-# --- MULTISIG forwarding-chain server-verify (o3szv) --------------------------
+# --- MULTISIG forwarding-chain server-verify ----------------------------------
 #
 # The Python sibling of Go helpers.VerifyMultisigRequest[Resolved]. Reject
 # precedence is parity-critical: hop_budget -> broken_chain -> signature. NO replay
-# (o3szv R1) — the Go helpers oracle performs none; the per-hop verify core below
+# — the Go helpers oracle performs none; the per-hop verify core below
 # mirrors verify_request's checks MINUS the two-phase ReplayStore path, and the
 # chain link resolves to the LIVE predecessor bytes so a stripped / reordered /
 # tampered predecessor is rejected.
@@ -414,7 +414,7 @@ def _verify_member(
         return False
     if not member.covered_names >= _REQUIRED_COVERED:
         return False
-    # Entitlement coverage per hop (SEC-NEW-2, mirrors Go verifySingleSignature's
+    # Entitlement coverage per hop (mirrors Go verifySingleSignature's
     # enforceEntitlementCoverage): if the relayed request carries the entitlement
     # header, THIS member's covered set must include it, else an unsigned
     # entitlement token could be slipped under an otherwise-valid hop signature.
@@ -424,7 +424,7 @@ def _verify_member(
         return False
     if member.expires < now or member.created > now + _MAX_FUTURE_SKEW_SEC:
         return False
-    # Lifetime clamp (R2-4, mirrors Go enforceCreatedExpires MaxSignatureAge): a
+    # Lifetime clamp (mirrors Go enforceCreatedExpires MaxSignatureAge): a
     # signer-chosen far-future expires is a wide replay window. Reject a window
     # longer than allowed. 0 = unbounded; inclusive at the bound (== max_age passes).
     if max_age > 0 and member.expires - member.created > max_age:

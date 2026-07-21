@@ -298,7 +298,7 @@ type acceptanceVector struct {
 }
 
 // acceptanceSeedHex is the fixed seed shared with the app's committed
-// testdata/acceptance-vectors.json (BINDING amendment); its raw bytes are the
+// testdata/acceptance-vectors.json; its raw bytes are the
 // signer seed for every acceptance vector.
 const acceptanceSeedHex = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
 
@@ -354,7 +354,7 @@ func offerCanonicalProtoJSON(t *testing.T, offer *rampv1.Offer) json.RawMessage 
 // buildOfferVerifyVectors signs a MATRIX of offers with the REAL Go SignOffer and
 // records, for each, the canonical proto-JSON, the exchange offer-signing pubkey,
 // and the verdict the real VerifyOffer + expiry gate reaches. The matrix exercises
-// the hard JCS encodings (architect-review MEDIUM): minimal / Struct-ext-with->1-
+// the hard JCS encodings: minimal / Struct-ext-with->1-
 // key (recursive key-sort) / two Timestamps / repeated terms+attestations+enum /
 // a tamper negative.
 func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {

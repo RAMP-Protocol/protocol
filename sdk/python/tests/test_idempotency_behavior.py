@@ -1,4 +1,4 @@
-"""Idempotency MINT behaviour (Python side) — TDD red for djeue.
+"""Idempotency MINT behaviour (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/idempotency.behavior.test.ts.
 

@@ -296,7 +296,7 @@ func fieldEnum(t *testing.T, md protoreflect.MessageDescriptor, field string) pr
 	return fd.Enum()
 }
 
-// TestRequesterBillingRefStaysRemoved pins the RAMP-155 removal at the
+// TestRequesterBillingRefStaysRemoved pins the billing_ref removal at the
 // descriptor level: Requester carries no billing_ref field and no field 5,
 // and both stay reserved. protoc enforces the reservation only while the two
 // `reserved` statements exist in the source; `buf breaking` (which would flag
@@ -306,10 +306,10 @@ func fieldEnum(t *testing.T, md protoreflect.MessageDescriptor, field string) pr
 func TestRequesterBillingRefStaysRemoved(t *testing.T) {
 	md := (&rampv1.Requester{}).ProtoReflect().Descriptor()
 	if fd := md.Fields().ByName("billing_ref"); fd != nil {
-		t.Errorf("Requester regained a billing_ref field (number %d) — RAMP-155 removed it", fd.Number())
+		t.Errorf("Requester regained a billing_ref field (number %d) — it was removed and its number reserved", fd.Number())
 	}
 	if fd := md.Fields().ByNumber(5); fd != nil {
-		t.Errorf("Requester field number 5 reused by %q — RAMP-155 reserved it", fd.Name())
+		t.Errorf("Requester field number 5 reused by %q — it must stay reserved", fd.Name())
 	}
 	if !md.ReservedRanges().Has(5) {
 		t.Error("Requester no longer reserves field number 5 — restore `reserved 5;`")

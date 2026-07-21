@@ -1,8 +1,8 @@
 package helpers
 
-// Multisig forwarding-chain golden-vector emitter (RAMP-56 / ADR-020 §8).
+// Multisig forwarding-chain golden-vector emitter (ADR-020 §8).
 //
-// The sdk/ts and sdk/python multisig append/verify faces (o3szv) assert
+// The sdk/ts and sdk/python multisig append/verify faces assert
 // byte-parity against this Go oracle: a chain signed by SignRequest(sig1) +
 // AppendSignature(sig2[,sig3]) must reconstruct byte-for-byte in TS and Python,
 // and the hop-budget / broken-chain / tampered-predecessor rejections must match
@@ -11,7 +11,7 @@ package helpers
 // outcome/reason from the REAL VerifyMultisigRequestResolved — the same
 // self-contained-oracle shape gen_vectors_test.go uses for the single-sig corpus.
 //
-// R3 (o3szv review): the single-sig oracleNegReason (gen_vectors_test.go) runs
+// The single-sig oracleNegReason (gen_vectors_test.go) runs
 // VerifyRequest and CANNOT emit hop_budget (no MaxSignatures / multi-hop
 // resolver). This file therefore carries a NEW multisig oracle-reason wrapper
 // (multisigOracleReason) that calls VerifyMultisigRequestResolved with a per-hop
@@ -231,7 +231,7 @@ func buildMissingLinkVector(t *testing.T, body []byte, agent, broker hopSpec) mu
 // multisigOracleReason drives the REAL VerifyMultisigRequestResolved over the
 // reconstructed request with a per-hop resolver + MaxSignatures, returning the
 // verified keyids (in chain order) on success or the classified reject reason.
-// The multisig sibling of oracleNegReason (R3): reuses classifyNegReason
+// The multisig sibling of oracleNegReason: reuses classifyNegReason
 // unchanged; the multi-hop resolver + MaxSignatures is what lets it emit
 // hop_budget, which the single-sig path cannot.
 func multisigOracleReason(t *testing.T, v multisigChainVector) (keyids []string, reason string) {

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Structural guard for the raw-URL runtime-shape divergence (RAMP-120). The
+// Structural guard for the raw-URL runtime-shape divergence. The
 // sweep-verify atom requires a class-level counter-measure so a future edit
 // cannot silently re-introduce the disease the fix eliminated: a URL-consuming
 // SDK boundary that feeds its RAW url parameter into a string-op / @target-uri

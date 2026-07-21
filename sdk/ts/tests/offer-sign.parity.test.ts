@@ -1,4 +1,4 @@
-// sdk/ts offer SIGN byte-parity against the Go oracle (TDD red for ov97t.16).
+// sdk/ts offer SIGN byte-parity against the Go oracle.
 //
 // Under the 3-SDKs=3-SDKs decision a TS Exchange must SIGN offers, not only
 // verify them. This suite pins the not-yet-existing TS offer-sign face
@@ -12,7 +12,7 @@
 // (core/verifier.ts canonicalOfferPayload). Ed25519 is deterministic (RFC 8032),
 // so the TS signature MUST equal the Go one byte-for-byte, not merely verify.
 //
-// This half of ov97t.16 is UNAFFECTED by the signed-URL opaque-bytes decision:
+// The offer-sign half is UNAFFECTED by the signed-URL opaque-bytes decision:
 // JCS over proto-JSON is already deterministic and cross-language byte-agreed.
 //
 // RED now for TWO expected reasons, both intended:

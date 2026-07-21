@@ -123,7 +123,7 @@ Deliberate, reason-backed asymmetries. The allowlist is **shrink-only** — a ne
 
 ### Architectural DECISIONs
 
-- **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
+- **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
 - **DECISION — typed Connect **client**.** Go-only typed Connect client (Discover->Execute orchestration) — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md _(symbols: `connect.Client`, `connect.NewClient`)_
 
 ### Mapped symbols with an intentional per-language gap
@@ -132,8 +132,8 @@ Deliberate, reason-backed asymmetries. The allowlist is **shrink-only** — a ne
 |---|---|---|---|
 | `connect.Client` | — | — | Go-only typed Connect client (Discover->Execute orchestration) — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md |
 | `connect.NewClient` | — | — | Go-only typed Connect client constructor — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md |
-| `connectserver.NewBrokerServiceHandler` | — | — | Go-only full Connect Broker handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md |
-| `connectserver.NewExchangeServiceHandler` | — | — | Go-only full Connect Exchange handler binding — OPEN DECISION (agentic-content-access-qqkro) in docs/sdk-parity-matrix.md |
+| `connectserver.NewBrokerServiceHandler` | — | — | Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
+| `connectserver.NewExchangeServiceHandler` | — | — | Go-only full Connect Exchange handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `core.NewVerifier` | — | `createVerifier` | Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory. |
 | `helpers.NewStaticKeyResolver` | — | `createStaticKeyResolver` | Go NewStaticKeyResolver factory folds into the Python class constructor (StaticKeyResolver(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createStaticKeyResolver factory. |
 | `resolvers.CachedOfferKeyResolverConfig` | — | `CachedOfferKeyResolverOptions` | Go config struct / TS options object folds into Python constructor keyword arguments (CachedOfferKeyResolver(...)); idiomatic Python has no separate options type. |

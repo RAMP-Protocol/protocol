@@ -17,7 +17,7 @@ Go ``helpers.*Detail`` constructors (sdk/go/helpers/errordetail.go). Each builds
 ``(domain, message, reason)``, mirroring Go one-for-one: the builder sets ONLY the
 reason block and omits the reason message's extra sub-fields (``offer_id``,
 ``rejected_paths``, …) — a caller that needs them, or metadata, mutates the returned
-model post-construction, exactly as the Go emitter does. A Python service (RAMP-24)
+model post-construction, exactly as the Go emitter does. A Python service
 now emits the same typed envelope a Go service does; byte-parity of both halves is
 gated by ``error-detail-vectors.json``, replayed in Go + Python + TS.
 

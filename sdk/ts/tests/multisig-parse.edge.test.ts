@@ -1,5 +1,5 @@
-// sdk/ts multi-member Signature-Input parser parse-edge units (o3szv refinement
-// R2). The canonical Go golden vectors (multisig-chain-vectors.json) are well-
+// sdk/ts multi-member Signature-Input parser parse-edge units. The canonical Go
+// golden vectors (multisig-chain-vectors.json) are well-
 // behaved (no comma/paren inside a quoted keyid, no backslash escapes, canonical
 // whitespace), so passing every vector does NOT gate the TS parser's correctness
 // on an ADVERSARIAL Signature-Input. Go itself delegates the dictionary parse to

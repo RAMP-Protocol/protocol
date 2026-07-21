@@ -1,4 +1,4 @@
-"""Money parity (Python side) — TDD red for djeue.
+"""Money parity (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/money.parity.test.ts.
 
@@ -6,7 +6,7 @@ Mirrors the sdk/ts sibling sdk/ts/tests/money.parity.test.ts.
 byte-for-byte. The shared vectors at sdk/go/helpers/testdata/money-vectors.json
 carry {input, canonical, valid} derived from Go CanonicalizeMoney (Parse+Format).
 
-The load-bearing cases (R2/R4): Go drops leading zeros (007→7, 00.5→0.5,
+The load-bearing cases: Go drops leading zeros (007→7, 00.5→0.5,
 0010.20→10.2, 000→0) AND never emits scientific notation for a high-precision
 small fraction (0.0000001 stays plain — where str(Decimal('0.0000001')) would
 give '1E-7'). The Python face MUST use plain formatting (format(d,'f')), not

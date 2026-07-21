@@ -1,10 +1,10 @@
-"""sdk/python full-RPC single-signature SERVER-VERIFY parity — TDD red for qqkro.
+"""sdk/python full-RPC single-signature SERVER-VERIFY parity.
 
-SINGLE-SIG scope only (2026-07-07 decision on agentic-content-access-qqkro):
-multisig forwarding-chain verify (hop budget, broken_chain) is OUT OF SCOPE and
-owned by o3szv. This suite pins the generalized ``httpsig.verify_request`` server
+SINGLE-SIG scope only: multisig forwarding-chain verify (hop budget, broken_chain)
+is OUT OF SCOPE and handled separately. This suite pins the generalized
+``httpsig.verify_request`` server
 face: today ``verify_request`` is a pure primitive that takes an already-resolved
-public key and explicit covered fields; qqkro adds a framework-agnostic SERVER
+public key and explicit covered fields; it adds a framework-agnostic SERVER
 entry that (a) parses the inbound Signature-Input/Signature off the request
 headers, (b) resolves the keyid through an INJECTED KeyResolver (SDK owns no
 keys), (c) enforces the covered-set/digest/window, (d) runs the two-phase replay
@@ -21,7 +21,7 @@ multisig tokens broken_chain / hop_budget are out of scope here.
 
 RED until BOTH (a) httpsig grows ``verify_request_server`` AND (b) the Go emitter
 produces sdk/go/helpers/testdata/verify-request-neg-vectors.json. The implement
-step (7bjkh.23) adds both; this test is the TDD-red contract. Referencing the
+step adds both; this test is the TDD-red contract. Referencing the
 not-yet-existing symbol + the not-yet-emitted vector file keeps the suite RED on
 both the missing server face AND the missing shared negative oracle.
 """
@@ -37,7 +37,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from conftest import GO_TESTDATA, load_json
 
 # RED: ``verify_request_server`` does not exist yet on httpsig (TDD red). It is
-# the framework-agnostic single-sig server-verify entry qqkro adds.
+# the framework-agnostic single-sig server-verify entry.
 from ramp_sdk.httpsig import sign_request, verify_request_server  # type: ignore[attr-defined]
 from ramp_sdk.keyresolver import StaticKeyResolver
 
@@ -97,7 +97,7 @@ class _MemoryReplayStore:
 
 def test_neg_vector_set_covers_the_five_single_sig_reject_cases() -> None:
     # The Go emitter must produce exactly these named single-sig negatives; the
-    # multisig cases (broken_chain / hop_budget) are out of scope (o3szv).
+    # multisig cases (broken_chain / hop_budget) are out of scope.
     names = {v["name"] for v in _NEG_VECTORS}
     assert {
         "neg_bad_sig",
@@ -269,7 +269,7 @@ def test_replay_uses_the_injected_store_only() -> None:
 def _live_signed_call(*, max_signature_age: int, window: int = 600) -> object:
     # Sign a request live over a `window`-second declared lifetime and verify it
     # through the single-sig server face under the given max_signature_age clamp.
-    # Returns the verdict. Backs the R2-4 lifetime-clamp parity tests.
+    # Returns the verdict. Backs the lifetime-clamp parity tests.
     seed = bytes.fromhex("55565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374")
     pub = (
         Ed25519PrivateKey.from_private_bytes(seed)
@@ -309,20 +309,20 @@ def _live_signed_call(*, max_signature_age: int, window: int = 600) -> object:
 
 
 def test_single_sig_within_max_age_bound_verifies() -> None:
-    # R2-4 clamp — WITHIN the bound: a 600s window under a 700s clamp verifies.
+    # Lifetime clamp — WITHIN the bound: a 600s window under a 700s clamp verifies.
     verdict = _live_signed_call(max_signature_age=700)
     assert verdict.valid is True  # type: ignore[attr-defined]
 
 
 def test_single_sig_equal_to_max_age_bound_verifies() -> None:
-    # R2-4 clamp — EQUAL to the bound (inclusive): 600s window under a 600s clamp
+    # Lifetime clamp — EQUAL to the bound (inclusive): 600s window under a 600s clamp
     # verifies (mirrors Go's `> maxAge` reject — equality passes).
     verdict = _live_signed_call(max_signature_age=600)
     assert verdict.valid is True  # type: ignore[attr-defined]
 
 
 def test_single_sig_exceeding_max_age_bound_is_rejected() -> None:
-    # R2-4 clamp — EXCEEDING the bound: 600s window under a 500s clamp rejects with
+    # Lifetime clamp — EXCEEDING the bound: 600s window under a 500s clamp rejects with
     # reason "signature" (mirrors Go ErrSignatureLifetimeTooLong).
     verdict = _live_signed_call(max_signature_age=500)
     assert verdict.valid is False  # type: ignore[attr-defined]
@@ -330,6 +330,6 @@ def test_single_sig_exceeding_max_age_bound_is_rejected() -> None:
 
 
 def test_single_sig_unbounded_max_age_default_verifies() -> None:
-    # R2-4 clamp — UNBOUNDED default (0 / omitted): the 600s window is admitted.
+    # Lifetime clamp — UNBOUNDED default (0 / omitted): the 600s window is admitted.
     verdict = _live_signed_call(max_signature_age=0)
     assert verdict.valid is True  # type: ignore[attr-defined]

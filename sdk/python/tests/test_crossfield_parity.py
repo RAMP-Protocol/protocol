@@ -1,13 +1,13 @@
-"""Cross-field Pydantic parity (Python side) — TDD red for ixs7u.6.
+"""Cross-field Pydantic parity (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/crossfield.parity.test.ts (NOT the
-weaker gen/python/tests/test_parity.py, per the BINDING architect-review
-amendment). test_parity.py asserts pass/fail ONLY — correct for the field-level
+weaker gen/python/tests/test_parity.py). test_parity.py asserts pass/fail ONLY —
+correct for the field-level
 cases.json but strictly weaker for crossfield.json, because a refinement could
 fire for the WRONG reason. This suite asserts the reported cross-field RULE IDS,
 the direct analogue of the Go oracle's `contains(ValidationRuleIDs(err), want)`.
 
-Contract (BINDING amendment): expose
+Contract: expose
 `ramp_sdk.cross_field_rule_ids(message, json) -> list[str]`. For each corpus
 case in conformance/corpus/crossfield.json, assert each expected `rules[]` id
 (minus the co-emitted "required" presence rule protovalidate co-emits with

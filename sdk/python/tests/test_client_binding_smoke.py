@@ -1,9 +1,9 @@
-"""sdk/python httpx client-binding smoke — TDD red for ixs7u.10.
+"""sdk/python httpx client-binding smoke.
 
 MCP shim (src/mcp) is a CLIENT: httpsig.SigningTransport auto-signs every outbound
 httpx POST to the Broker (RFC 9421), receives offers, and today does NOT verify
 their signatures — the exact gap ADR-020 §4 names. This is the ONLY in-repo Python
-consumer this ticket ships a binding for. The smoke drives MCP's real shape through
+consumer this binding is built for. The smoke drives MCP's real shape through
 the opt-in sdk/python httpx client binding (a SigningTransport analogue = the Go
 RoundTripper analogue over core's sign seam) AND the core Verifier:
 

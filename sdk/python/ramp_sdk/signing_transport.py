@@ -72,7 +72,7 @@ class SigningTransport:
         # Source (created, expires) from an injected Window, defaulting to a
         # clock_window over now/ttl_sec. clock_window int()-truncates to whole
         # seconds, so the @signature-params bytes stay byte-identical to the
-        # historical inline ``int(self._now())`` mint (R3).
+        # historical inline ``int(self._now())`` mint.
         self._window = window or clock_window(self._now, self._ttl_sec)
 
     def sign_outbound(

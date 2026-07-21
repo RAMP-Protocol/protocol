@@ -17,7 +17,7 @@ import (
 
 // Ported from v2 internal/httpsig/chain_test.go, re-expressed in the L1 idiom
 // (Signer interface + VerifyOptions.Now). These pin the forwarding-chain
-// behaviour: byte-exact signature base (Risk R1), chain-link presence, and the
+// behaviour: byte-exact signature base, chain-link presence, and the
 // structural + cryptographic rejection vectors (strip / reorder / missing-link /
 // substituted-predecessor / hop-budget).
 
@@ -52,7 +52,7 @@ func goldenSignedRequest(t *testing.T, body []byte, signer helpers.Signer, now t
 }
 
 // TestChain_GoldenSignatureBase pins the byte-exact signature base for sig1 and
-// the chain-linked sig2 inner list — the byte-preservation contract (Risk R1).
+// the chain-linked sig2 inner list — the byte-preservation contract.
 // The sig1 base here is also the single-sig golden: it proves the N=1 covered
 // rendering is unchanged after the []string→[]CoveredComponent widen.
 func TestChain_GoldenSignatureBase(t *testing.T) {

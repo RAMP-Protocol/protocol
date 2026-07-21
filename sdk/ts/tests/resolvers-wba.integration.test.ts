@@ -1,12 +1,12 @@
 // Integration suite (TDD red) for the ported WBA key resolver — mirroring
-// sdk/go/helpers/wbakeyresolver_test.go 1:1 (all 14 tests) plus R3
-// (malformed Signature-Agent → unknown). The WBA directory host that Go threads
+// sdk/go/helpers/wbakeyresolver_test.go 1:1 (all 14 tests) plus a malformed
+// Signature-Agent case (→ unknown). The WBA directory host that Go threads
 // through ctx (Signature-Agent) is passed EXPLICITLY as the second resolve arg
 // in the port: resolve(thumbprint, directory).
 //
 // Every case drives a REAL node:http origin (the shared harness) through the
 // resolver's default global-fetch transport; the clock and the poll-timer seam
-// are injected so no test sleeps. Per R5 the monotonic guard / as_of clamp /
+// are injected so no test sleeps. The monotonic guard / as_of clamp /
 // forward-progress cases run via Resolve + TTL-expiry (NO poller), so a
 // poller-only guard would fail them — only Run_PollerAppliesRevocation exercises
 // the background poller, via the OnPollArmed/OnPollCycle determinism seams.
@@ -28,7 +28,7 @@ import {
 	loopbackFetch,
 } from "./resolvers-harness.ts";
 
-// RED: the WBA face and its typed sentinels do not exist yet (TDD red for bsh8k).
+// RED: the WBA face and its typed sentinels do not exist yet.
 import {
 	DirectoryUnavailable,
 	KeyExpired,
@@ -163,7 +163,7 @@ describe("createWBAKeyResolver.resolve", () => {
 	});
 
 	// Test 6 — monotonic guard: an older-as_of snapshot must NOT un-revoke.
-	// Runs via Resolve + TTL-expiry (no poller) per R5.
+	// Runs via Resolve + TTL-expiry (no poller).
 	it("ignores a rolled-back (older as_of) revocation snapshot", async () => {
 		const k = await makeKey();
 		origin = await startOrigin();
@@ -280,7 +280,7 @@ describe("createWBAKeyResolver.resolve", () => {
 		expect(await r.resolve("any-thumbprint", "")).toBeUndefined();
 	});
 
-	// R3 — a malformed (non-empty, unparseable) directory ref → unknown
+	// A malformed (non-empty, unparseable) directory ref → unknown
 	// (undefined), DISTINCT from a fetch failure. Malformed cannot name a
 	// directory, so it is fall-through, not a fail-closed halt.
 	it("returns undefined for a malformed directory reference", async () => {

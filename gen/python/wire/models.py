@@ -1596,7 +1596,7 @@ class Offer(WireModel):
     ) = Field(0, description='How resource will be delivered.')
     exchange: str | None = Field(
         '',
-        description='Canonical domain of the Exchange that issued this offer (e.g.\n "exchange.example.com"). This is the execute-routing target: the agent (or\n a relaying Broker) sends the ExecuteTransaction call for this offer to this\n Exchange. Because it is an ordinary Offer field it falls inside the signed\n bytes (see `signature` below — the signature covers every field except\n `signature` / `signature_algorithm`), so an intermediary cannot redirect\n the execute call to a different Exchange without invalidating the offer.\n (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,\n retiring the X-RAMP-Exchange-Endpoint transport header.)',
+        description='Canonical domain of the Exchange that issued this offer (e.g.\n "exchange.example.com"). This is the execute-routing target: the agent (or\n a relaying Broker) sends the ExecuteTransaction call for this offer to this\n Exchange. Because it is an ordinary Offer field it falls inside the signed\n bytes (see `signature` below — the signature covers every field except\n `signature` / `signature_algorithm`), so an intermediary cannot redirect\n the execute call to a different Exchange without invalidating the offer.\n This enables multi-Exchange fan-out routing from the offer itself,\n retiring the X-RAMP-Exchange-Endpoint transport header.',
     )
     expires_at: AwareDatetime | None = Field(
         None, description='When this offer expires (ISO 8601).'
@@ -1740,7 +1740,7 @@ class ResourceResponse(WireModel):
 class TransactionItem(WireModel):
     agent_acceptance: AgentAcceptance | None = Field(
         None,
-        description="The agent's detached acceptance signature over this item's `offer`\n (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.",
+        description="The agent's detached acceptance signature over this item's `offer`.\n Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.",
     )
     offer: Offer = Field(
         ...,

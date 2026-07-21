@@ -1,7 +1,7 @@
-"""RFC 9421 request SIGN byte-parity (Python side) — TDD red for ixs7u.6.
+"""RFC 9421 request SIGN byte-parity (Python side).
 
 No sibling exists in sdk/ts (the TS edge never SIGNs a request — it verifies);
-this is the surface sdk/python adds over ixs7u.5. The byte oracle is the Go
+this is the surface sdk/python adds. The byte oracle is the Go
 SignRequest (sdk/go/helpers/sign.go) + buildSignatureBase (sigbase.go); the port
 source is the app's src/mcp/src/ramp_mcp_shim/httpsig.py Signer.sign.
 
@@ -13,10 +13,9 @@ over a fixed request+body+created+expires, cross-checked by round-tripping
 through the real Go SignRequest/VerifyRequest). Referencing it by its planned
 path keeps this test RED now on BOTH the missing module AND the missing file.
 
-Contract (the WBA identity split REVERSED the earlier exactly-four-components
-binding amendment — signature-agent joined the required covered set platform-wide
-with RAMP-24, so a four-component signer would produce signatures the platform
-rejects; architect-review + user approval 2026-07-04):
+Contract (the WBA identity split superseded the earlier exactly-four-components
+pin — signature-agent joined the required covered set platform-wide, so a
+four-component signer would produce signatures the platform rejects):
   - covered set is EXACTLY @method @target-uri content-digest authorization
     signature-agent (NO biscuit / no conditional component beyond these five);
   - Signature-Agent is bound like Authorization: an empty string is still
@@ -70,8 +69,8 @@ def test_sign_request_vector_file_is_nonempty() -> None:
 
 
 def test_sign_request_vector_file_exists_and_covers_empty_authorization() -> None:
-    # The vector set MUST include the empty-authorization bound case (BINDING
-    # amendment) — an authorization value of "" that is still covered.
+    # The vector set MUST include the empty-authorization bound case — an
+    # authorization value of "" that is still covered.
     assert _SIGN_REQUEST_VECTORS_PATH.exists()
     authz_values = {str(v.get("authorization", "MISSING")) for v in _VECTORS}
     assert "" in authz_values, (
@@ -81,7 +80,7 @@ def test_sign_request_vector_file_exists_and_covers_empty_authorization() -> Non
 
 @pytest.mark.parametrize("vector", _VECTORS, ids=[v["name"] for v in _VECTORS])
 def test_sign_request_produces_byte_identical_signature(vector: dict[str, object]) -> None:
-    # Enumerated fixed request (BINDING amendment): method, absolute URL,
+    # Enumerated fixed request: method, absolute URL,
     # body→content-digest, authorization value, created, expires. created/expires
     # are INJECTED (L1-pure, no wall clock).
     seed = bytes.fromhex(str(vector["signer_seed_hex"]))

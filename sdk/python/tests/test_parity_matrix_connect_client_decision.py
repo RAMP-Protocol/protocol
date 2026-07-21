@@ -1,6 +1,6 @@
 """Doc-guard: the Go-only Connect client divergence must be a RECORDED decision.
 
-The whole point of the Connect-client parity ticket is to END the silent absence:
+The whole point of the Connect-client parity work is to END the silent absence:
 Go ships a typed Connect client (NewClient/Discover/Execute) and Python + TS do not.
 The resolution is option (b) — document it as a deliberate runtime-native divergence
 in docs/sdk-parity-matrix.md, mirroring the sibling server-handler DECISION. This

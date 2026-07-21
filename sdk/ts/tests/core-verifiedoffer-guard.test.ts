@@ -1,4 +1,5 @@
-// sdk/ts/core VerifiedOffer forge/compile guard — TDD red for ixs7u.10.
+// sdk/ts/core VerifiedOffer forge/compile guard: the branded VerifiedOffer type
+// cannot be forged with an object literal and slipped into execute().
 //
 // Mirror of the Go compile guard (sdk/go/core: VerifiedOffer has an UNEXPORTED
 // field and no exported constructor, so Client.Execute(ctx, VerifiedOffer) is a

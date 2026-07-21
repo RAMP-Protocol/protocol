@@ -3,7 +3,7 @@ extractor — the Python port of Go helpers.parseAllSignatures / rawInnerByLabel
 splitTopLevelMembers (verify.go).
 
 The single-sig verify path (server_verify.py) hand-rolls a minimal ONE-label
-parser; the multisig forwarding chain (o3szv) needs the FULL multi-member
+parser; the multisig forwarding chain needs the FULL multi-member
 dictionary parse plus the exact byte-verbatim inner value each hop's base
 terminates with.
 
@@ -11,7 +11,7 @@ Dependency-light on purpose (no new runtime dep, mirroring the existing minimal
 single-label parsers). Correctness on ADVERSARIAL headers (quoted-comma, backslash
 escapes, top-level splitting, malformed reject) is pinned by
 tests/test_multisig_parse_edge.py — the canonical Go golden vectors are
-well-behaved and do NOT gate the parser (o3szv R2).
+well-behaved and do NOT gate the parser.
 """
 
 from __future__ import annotations

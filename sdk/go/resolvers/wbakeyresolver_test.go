@@ -255,7 +255,7 @@ func TestWBAKeyResolver_RevocationForwardProgressApplied(t *testing.T) {
 
 // ── Test 8 ─────────────────────────────────────────────────────────────────
 
-// TestWBAKeyResolver_FirstPollFarFutureAsOfClamp verifies the RAMP-24 AC: a
+// TestWBAKeyResolver_FirstPollFarFutureAsOfClamp verifies that a
 // far-future as_of on the first revocation poll is clamped to now+skew so that
 // a later, honest revocation snapshot still applies rather than being frozen
 // out by the monotonic guard.

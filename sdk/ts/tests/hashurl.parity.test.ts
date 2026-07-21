@@ -1,4 +1,4 @@
-// HashURL parity (TypeScript side) (parity guard, djeue).
+// HashURL parity (TypeScript side) (parity guard).
 //
 // sdk/ts `hashUrl(signed)` MUST reproduce the sdk/go oracle: SHA-256 over the
 // VERBATIM URL bytes (opaque bytes, no WHATWG renormalization), returning the

@@ -141,9 +141,9 @@ records only the wire-shaping reasoning.
 
 ## `license_id` → `billing_ref`: identity is the signature, not a field
 
-> **Superseded by RAMP-155.** The renamed field was later removed outright:
-> after the Broker cost guard moved to the authenticated agent identity
-> (RAMP-153), nothing read `Requester.billing_ref`, and the caller-written
+> **Superseded — the renamed field was later removed outright:**
+> after the Broker cost guard moved to the authenticated agent identity,
+> nothing read `Requester.billing_ref`, and the caller-written
 > label collided by name with the authoritative account handle minted at
 > `Register`. Field 5 and the name are now `reserved`. The reasoning below
 > still stands — it is the same separation (identity = signature,

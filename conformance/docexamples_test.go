@@ -56,8 +56,8 @@ func walkDocs(t *testing.T, fn func(path, content string)) {
 // codeFenceRe matches the body of ANY fenced code block regardless of language
 // tag (```json, ```go, an unlabeled ```, …). The semantics check uses this
 // rather than jsonFences because LicenseTerm shapes also appear in unlabeled
-// pseudocode fences (walkthroughs), which the json-only scan could not see
-// (R6-7). The language tag, if any, is consumed up to the first newline.
+// pseudocode fences (walkthroughs), which the json-only scan could not see.
+// The language tag, if any, is consumed up to the first newline.
 var codeFenceRe = regexp.MustCompile("(?s)```[a-zA-Z0-9]*\\s*\\n(.*?)```")
 
 func codeFences(content string) []string {
@@ -151,7 +151,7 @@ func TestDocSignatureAlgorithm(t *testing.T) {
 // itself (the license_term.semantics_specified CEL), so a term example without
 // it would not validate. The scan covers ALL code fences (not just ```json) and
 // matches quoted or unquoted keys, because term shapes also appear in unlabeled
-// pseudocode fences in the walkthroughs (R6-7b). A term shape is a `terms: [`
+// pseudocode fences in the walkthroughs. A term shape is a `terms: [`
 // array (lowercase data-literal key, not the Go `.Terms` field) that carries at
 // least one term-only key (`restrictions`/`quotas`/`obligations`). If such a
 // fence has no `semantics` anywhere, flag it.

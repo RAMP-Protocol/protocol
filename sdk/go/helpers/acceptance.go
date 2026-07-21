@@ -9,7 +9,7 @@ import (
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
-// Agent offer-acceptance (RAMP-102 §1, ramp.proto AgentAcceptance). An agent
+// Agent offer-acceptance (ramp.proto AgentAcceptance). An agent
 // signs a DETACHED, content-bound acceptance over an accepted Offer; the
 // Exchange verifies it to bind the agent to the transaction (and binds the
 // delivery URL to the agent's key via its RFC 7638 thumbprint). Unlike the

@@ -1,6 +1,6 @@
 // Integration suite (TDD red) for the ported STATIC, WELL-KNOWN-KEY, and
 // WELL-KNOWN-ENDPOINT resolver faces — mirroring sdk/go/helpers
-// keyresolver_test.go + endpointresolver_test.go 1:1, plus the R2 skip-not-fail
+// keyresolver_test.go + endpointresolver_test.go 1:1, plus the skip-not-fail
 // JWKS matrix.
 //
 // These are IO-bound faces, so every case drives a REAL node:http origin (the
@@ -25,7 +25,7 @@ import {
 	loopbackFetch,
 } from "./resolvers-harness.ts";
 
-// RED: ../resolvers/index.ts does not exist yet (TDD red for bsh8k). The typed
+// RED: ../resolvers/index.ts does not exist yet. The typed
 // error classes and the four named constructors are the ported public surface.
 import {
 	DirectoryUnavailable,
@@ -42,7 +42,7 @@ describe("createStaticKeyResolver", () => {
 		const r = createStaticKeyResolver({ "a.v1": a.rawPub });
 
 		expect(await r.resolve("a.v1")).toEqual(a.rawPub);
-		// R4: a plain unknown key is undefined (NOT a thrown typed error).
+		// A plain unknown key is undefined (NOT a thrown typed error).
 		expect(await r.resolve("missing")).toBeUndefined();
 
 		r.put("b.v1", b.rawPub);
@@ -124,7 +124,7 @@ describe("createWellKnownKeyResolver", () => {
 		expect(origin.jwksHits()).toBe(1);
 	});
 
-	// R2: JWKS extraction is skip-not-fail — one malformed key must not kill the
+	// JWKS extraction is skip-not-fail — one malformed key must not kill the
 	// whole publisher key set; survivors still resolve, bad entries become
 	// unknown (undefined).
 	it("skips malformed JWKS entries (missing kid / non-Ed25519 / bad-length x) and resolves survivors", async () => {

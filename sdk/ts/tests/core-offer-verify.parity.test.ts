@@ -1,10 +1,9 @@
-// sdk/ts/core offer-verify parity — TDD red for ixs7u.10.
+// sdk/ts/core offer-verify parity against the shared Go JCS oracle matrix.
 //
 // The L2 core Verifier splits received offers into {verified, rejected} by
-// ed25519-verifying the canonical offer-signature. Per the BINDING amendment on
-// ixs7u.10 (user-decided), the signed payload is NO LONGER Go deterministic
-// protobuf-binary — it is RFC 8785 JCS over the canonical proto-JSON of the Offer
-// with signature/signature_algorithm cleared:
+// ed25519-verifying the canonical offer-signature. The signed payload is NOT Go
+// deterministic protobuf-binary — it is RFC 8785 JCS over the canonical proto-JSON
+// of the Offer with signature/signature_algorithm cleared:
 //
 //     signed_payload = JCS(protojson(offer with sig+alg cleared))
 //
@@ -22,8 +21,8 @@
 //      (b) extends the Go golden emitter to emit this matrix. Referencing it by
 //      its planned path keeps this test RED now.
 //
-// The matrix MUST exercise the hard encodings, not just a happy path (per the
-// architect-review MEDIUM): minimal / Struct-ext-with->1-key (forces recursive
+// The matrix MUST exercise the hard encodings, not just a happy path:
+// minimal / Struct-ext-with->1-key (forces recursive
 // JCS key-sort) / two-Timestamps / repeated-terms+enum / tamper-negative. A
 // single vector would let Struct-key-ordering or Timestamp encoding diverge
 // silently on real offers while the guard stays green.
@@ -61,7 +60,7 @@ describe("sdk/ts/core Verifier offer-verify matches the shared JCS oracle matrix
   });
 
   it("matrix covers the hard JCS encodings (not just a happy path)", () => {
-    // The architect-review MEDIUM: one happy-path vector passes while
+    // The failure mode this guards: one happy-path vector passes while
     // Struct-key-ordering / Timestamp encoding / repeated-field ordering diverge
     // silently. Pin the required matrix names so the guard actually exercises
     // JCS's recursive key-sort, both Timestamps, repeated fields, and a negative.

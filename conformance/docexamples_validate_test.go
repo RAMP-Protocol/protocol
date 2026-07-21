@@ -82,7 +82,7 @@ var langFenceRe = regexp.MustCompile("(?s)```([a-zA-Z0-9]*)[ \t]*\\n(.*?)```")
 //     legitimately teach these as copy-paste curl commands; those payloads
 //     are shape-policed by TestDocTransactionExamplesAreItemsOnly (which
 //     scans every fence language), so they are not forced into extraction.
-//   - billing_ref: the key RAMP-155 removed from Requester. It stays live on
+//   - billing_ref: the key removed from Requester. It stays live on
 //     RegisterResponse/GetAccountStatusResponse, so a JSON fence showing it
 //     must be marked and validated instead of trusted, but non-JSON fences
 //     (logs, SQL) may legitimately show the server-side handle.
@@ -199,7 +199,7 @@ func TestDocMarkedExamplesValidate(t *testing.T) {
 // doc suite's healthy state is zero findings, so a regression that stops the
 // detector from ever matching (a key check drifts, balancedJSONObjects stops
 // yielding spans) would keep the suite green with the guard disarmed. The
-// probes mirror the injection cases from the RAMP-155 review.
+// probes mirror the injection cases for the removed billing_ref field.
 func TestRequestCandidateDetectorFires(t *testing.T) {
 	cases := []struct {
 		name, body, want string
@@ -284,7 +284,7 @@ func balancedJSONObjects(s string) []string {
 	return out
 }
 
-// The items-only collapse (RAMP-102) moved the single offer into items[].offer
+// The items-only collapse moved the single offer into items[].offer
 // and the per-result data into items[] TransactionResultItem. A transaction
 // example carrying any of these at the TOP LEVEL is the removed single-offer
 // shape. Detection is positive-keyed so non-transaction JSON (ramp.json, JWKS,
@@ -303,7 +303,7 @@ var (
 // TestDocTransactionExamplesAreItemsOnly: every transaction request/response
 // example in the docs — in a ```json fence, a curl `-d`, or after a verb line —
 // must use the items-only shape. A top-level offer/offer_id/aisystem in a
-// request, or a top-level per-item result field in a response, is the pre-RAMP-102
+// request, or a top-level per-item result field in a response, is the pre-items-only
 // single-offer shape and fails here instead of teaching a removed contract.
 func TestDocTransactionExamplesAreItemsOnly(t *testing.T) {
 	scanned := 0

@@ -1,4 +1,4 @@
-// Ad-hoc JWKS decode for the well-known KEY document (R1). The publisher's
+// Ad-hoc JWKS decode for the well-known KEY document. The publisher's
 // ramp.json key set is the kid-carrying RFC 7517 subset
 // `{"keys":[{"kid","kty":"OKP","crv":"Ed25519","x":"<base64url>"}]}` — NOT the
 // gen JsonWebKey/WellKnownManifest schemas, which carry no `kid` and no JWK-set
@@ -6,7 +6,7 @@
 // for the WBA path (thumbprint-keyed, needs no kid). base64url `x` decode reuses
 // the byte-parity-pinned primitive.
 //
-// Extraction is SKIP-NOT-FAIL (R2, mirroring go-jose ed25519KeysFromJWKS): a key
+// Extraction is SKIP-NOT-FAIL (mirroring go-jose ed25519KeysFromJWKS): a key
 // with an empty/missing kid, a non-OKP/Ed25519 type, or a wrong-length `x` is
 // skipped, survivors are keyed by kid, and one bad key never fails the whole set.
 

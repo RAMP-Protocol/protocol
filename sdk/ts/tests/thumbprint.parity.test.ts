@@ -1,4 +1,5 @@
-// Thumbprint parity (TypeScript side) — TDD red for ixs7u.5.
+// Thumbprint parity (TypeScript side): thumbprint(pubkey) reproduces the RFC 7638
+// JWK Thumbprint the Go oracle emits, byte-for-byte.
 //
 // sdk/ts `thumbprint(pubkey)` MUST reproduce, byte-for-byte, the RFC 7638 JWK
 // Thumbprint the sdk/go oracle emits. The shared vectors at
