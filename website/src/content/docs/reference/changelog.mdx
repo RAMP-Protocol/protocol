@@ -33,9 +33,10 @@ in Python; `parseErrorDetail` / `errorDetailFrom` in TS). The SSRF-guarded trans
 is a single env-driven client governed by two flags (`SKIP_SSRF`, `ALLOW_INSECURE`).
 
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
-billing label on `Requester` is gone; field number 5 and the name are
-`reserved` so they can never be reused with a different meaning. Nothing read
-it: billing and cost attribution key on the verified caller identity and the
+billing label on `Requester` is gone; the field is deleted outright with no
+`reserved` statement — pre-v1 the number returns to the free pool, and
+`reserved` becomes the tool for field removals only once v1.0.0 is tagged.
+Nothing read it: billing and cost attribution key on the verified caller identity and the
 account handle minted at `Register` (`RegisterResponse.billing_ref`), which the
 Exchange resolves from the request signature — never from anything the caller
 sends. Dropping the field also removes the name collision between the
