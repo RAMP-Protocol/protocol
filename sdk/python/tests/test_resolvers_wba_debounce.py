@@ -1,4 +1,4 @@
-"""RAMP-24 anti-amplification parity (Python port of the Go
+"""Anti-amplification parity (Python port of the Go
 wbakeyresolver_debounce_test.go).
 
 The unknown-thumbprint force-refresh is throttled to one directory fetch per

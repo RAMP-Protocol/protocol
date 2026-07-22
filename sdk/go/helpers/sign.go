@@ -103,7 +103,7 @@ func SignRequest(ctx context.Context, req *http.Request, body []byte, signer Sig
 }
 
 // AppendSignature chains a new signature onto req WITHOUT disturbing any
-// existing one (RAMP-56 forwarding chain). It preserves an existing
+// existing one (forwarding chain). It preserves an existing
 // Content-Digest (only setting it when missing), binds Authorization, finds the
 // next label sig(N+1) and predecessor sigN, builds the chain-linked covered set
 // (the RAMP base plus "signature";key="sigN" so sig(N+1) commits to its

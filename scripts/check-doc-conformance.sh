@@ -16,7 +16,7 @@ patterns=(
   # Requester reshape
   'license_id' 'licenseId' 'BuyerLicenseID'
   'IntermediaryHop' '"intermediaries"'
-  # Requester.billing_ref dropped (RAMP-155): billing keys on the verified
+  # Requester.billing_ref dropped: billing keys on the verified
   # caller identity and the account minted at Register, never on a request
   # field. Only the Requester-scoped forms are banned — the bare identifier
   # stays live (RegisterResponse / GetAccountStatusResponse account handle).
@@ -53,7 +53,7 @@ patterns=(
   # CoMP Package is an ext profile, not a core Offer field
   '"package":'
   # Removed CoMP Go path (req.Aisystem.Aisysuse.…). Narrow Go-path patterns only,
-  # so legitimate CoMP JSON keys elsewhere don't false-positive. (R5-9)
+  # so legitimate CoMP JSON keys elsewhere don't false-positive.
   'req\.Aisystem' '\.Aisysuse\.'
   # Fields from the deleted AccessRestrictions message — express as Quota now.
   'max_display_words'
@@ -78,7 +78,7 @@ patterns=(
 exclude_re='(reference/changelog\.mdx|docs/design-history\.md|proto/CHANGELOG\.md)'
 
 # Search roots. `proto/ramp` is included so the gate also catches stale wire
-# identifiers / orphan comments in the source of truth itself (the R3-6 class:
+# identifiers / orphan comments in the source of truth itself (e.g.
 # a banner that survived the message it described). Only `proto/ramp` — NOT
 # `proto/comp` — because comp.proto mirrors the external CoMP standard, which
 # has its own vocabulary (e.g. a legitimate `revshare` field) that the RAMP
@@ -113,7 +113,7 @@ done
 # The contract's two roles are Requester (the AI/demand side) and Provider (the
 # content/supply side). "Buyer"/"Seller" are pre-standardization synonyms; left
 # in PROSE they drift the vocabulary the proto and the rest of the docs
-# standardize on (the M2 "Buyer's balance" class).
+# standardize on (the "Buyer's balance" class).
 #
 # This bans the PROSE word only. The boundary `(^|[^A-Za-z0-9._/-])…([^…]|$)`
 # (ERE, so it also works under BSD grep in ci-local) deliberately does NOT match
@@ -166,7 +166,7 @@ fi
 # remark-proto guard forbids re-introducing a hand-typed copy. The grep here would
 # only have searched the directive source, not the rendered values.)
 
-# Delegation-claim registry guard (R4-7 / R5-8). The registered JWT claims are
+# Delegation-claim registry guard. The registered JWT claims are
 # named `ramp_<field>` where <field> is a Delegation proto field. Self-extending:
 # derive the registered claim names straight from the auth registry (the only
 # place `ramp_` underscored identifiers appear) and assert each maps to a real

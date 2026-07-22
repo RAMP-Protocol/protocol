@@ -3,10 +3,11 @@
 // re-validate cases (that is corpus_test.go's job); it asserts the corpus
 // EXERCISES specific field-level rule classes that the parity harness must cover.
 //
-// These four classes were the blind spots that let H1/M3-class bugs ship green
-// (see agentic-content-access-kb1s0.9): money's divergent value space, the H1
-// positive ” accept, repeated-item length bounds, and pattern-derived
-// required-presence. Each is asserted over the corpus JSON — the behavioral
+// These five classes were the blind spots that let money/validation bugs ship
+// green: money's divergent value space, the empty-money
+// positive ” accept, repeated-item length bounds, pattern-derived
+// required-presence, and presence-tracked-enum omitted-is-valid. Each is
+// asserted over the corpus JSON — the behavioral
 // artifact the clients consume — not over corpusgen source. When corpusgen is
 // updated to emit these mutants, each assertion flips to green.
 package conformance
@@ -106,8 +107,8 @@ func ruleMatches(rules []string, substr string) bool {
 	return false
 }
 
-// TestCorpusCoverage guards that the generated corpus exercises the four
-// field-level rule classes M5 identified as missing. Each subtest is an
+// TestCorpusCoverage guards that the generated corpus exercises the five
+// field-level rule classes that were identified as missing. Each subtest is an
 // independent coverage assertion whose failure names exactly which mutant class
 // the corpus lacks. It fails NOW (corpus has 86 cases, none of these classes) and
 // passes once corpusgen emits them.
@@ -131,7 +132,7 @@ func TestCorpusCoverage(t *testing.T) {
 			"proves the clients reject 'two words' but never the money-specific value space (%d cases scanned)", len(cases))
 	})
 
-	// Class 2 — the H1 positive blind spot: '' must be VALID on a money field.
+	// Class 2 — the positive empty-money blind spot: '' must be VALID on a money field.
 	t.Run("valid_empty_money_value", func(t *testing.T) {
 		for _, c := range cases {
 			if !c.Valid {
@@ -144,7 +145,7 @@ func TestCorpusCoverage(t *testing.T) {
 			}
 		}
 		t.Errorf("MISSING CLASS 2 (positive empty money): no VALID case has a money field "+
-			"equal to \"\"; the H1 blind spot (clients wrongly rejecting accepted-empty money) "+
+			"equal to \"\"; the empty-money blind spot (clients wrongly rejecting accepted-empty money) "+
 			"is unguarded — baselines use \"0\", never \"\" (%d cases scanned)", len(cases))
 	})
 
@@ -189,5 +190,31 @@ func TestCorpusCoverage(t *testing.T) {
 		t.Errorf("MISSING CLASS 4 (pattern-derived required presence): no INVALID Quota case "+
 			"OMITS 'metric' and trips string.pattern; the 'missing' edge fires only for the one "+
 			"explicit required field, so pattern-required presence (Quota.metric) is untested (%d cases scanned)", len(cases))
+	})
+
+	// Class 5 — presence-tracked-enum omitted-is-valid: a proto3 optional enum
+	// that rejects its zero (not_in:[0]) must still ACCEPT omission. This is the
+	// property the optional-field design rests on — a publisher that omits the
+	// hint is the common case — and it lives on ResourceEntry.resource_mutability.
+	// If a regenerated client drops the optional keyword, omitted feeds start
+	// being rejected while every other gate stays green; this class fails loudly.
+	t.Run("valid_presence_tracked_enum_omitted", func(t *testing.T) {
+		for _, c := range cases {
+			if c.Message != "ResourceEntry" || !c.Valid {
+				continue
+			}
+			obj, ok := decodeCaseJSON(t, c.JSON).(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, present := obj["resource_mutability"]; present {
+				continue
+			}
+			return // found a VALID ResourceEntry that OMITS resource_mutability
+		}
+		t.Errorf("MISSING CLASS 5 (presence-tracked enum, omitted-is-valid): no VALID ResourceEntry "+
+			"case OMITS 'resource_mutability'; the property that an optional not_in:[0] enum accepts "+
+			"omission (the common ingest case) is unguarded, so dropping the 'optional' keyword would "+
+			"reject every omitting feed with all gates green (%d cases scanned)", len(cases))
 	})
 }

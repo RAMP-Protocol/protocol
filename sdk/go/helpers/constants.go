@@ -17,7 +17,7 @@ const (
 	// SignatureAgentHeader carries the signer's Web Bot Auth key-directory URL
 	// (the WBA identity anchor). It is a required covered component: every RAMP
 	// signature commits to it, empty included, so the directory a verifier
-	// resolves keys from is the one the signer bound (RAMP-24).
+	// resolves keys from is the one the signer bound.
 	SignatureAgentHeader = "Signature-Agent"
 )
 

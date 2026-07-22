@@ -16,7 +16,7 @@ import (
 //
 //	request-id  ·  verify (http-seam)  ·  [validate · error-detail  as connect interceptors]  ·  origin
 //
-// Request-id is OUTERMOST (architect-review amendment): an auth-rejection response
+// Request-id is OUTERMOST: an auth-rejection response
 // must still carry the stamped X-Request-ID so reject-path logs correlate — putting
 // request-id inner to verify would regress that. verify is an http.Handler wrapper
 // (body-bytes reason), NOT a connect.Interceptor; validate and error-detail ARE true

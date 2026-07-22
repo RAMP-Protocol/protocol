@@ -14,7 +14,7 @@
 // throws — the TDD-red anchor of this task. A guard test asserts each is a function,
 // making the missing-symbol red explicit.
 //
-// The replay honors the binding recipe on agentic-content-access-hp5o2.5:
+// The replay honors the binding recipe on agentic-content-access:
 //   1. detail = <builder for vector.reason family>(domain, message, reason_enum)
 //      — arity is exactly (domain, message, reason); the builder sets ONLY the oneof
 //      reason block, mirroring Go which omits sub-fields (offer_id, rejected_paths…).

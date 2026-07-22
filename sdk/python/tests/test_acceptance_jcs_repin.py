@@ -1,6 +1,6 @@
-"""Acceptance sign/verify RE-PIN to RFC 8785 JCS — TDD red for ixs7u.10.
+"""Acceptance sign/verify RE-PIN to RFC 8785 JCS.
 
-The BINDING amendment on ixs7u.10 moves BOTH signed payloads (offer AND
+This re-pin moves BOTH signed payloads (offer AND
 acceptance) off Go deterministic protobuf-binary onto RFC 8785 JCS over canonical
 proto-JSON:
 

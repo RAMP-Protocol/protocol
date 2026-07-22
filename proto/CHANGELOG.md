@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+**`ResourceEntry` gains typed `resource_mutability` (field 14) (additive, no wire break).**
+Publishers submit `resource_mutability` as a typed `ResourceEntry` field instead of inside
+`ext`/`ext_critical`; the Exchange reads the typed field, not `ext`. The field is `optional` —
+when omitted the Exchange defaults to `STATIC` at Offer build; an explicit
+`RESOURCE_MUTABILITY_UNSPECIFIED` is rejected (`not_in:[0]`, matching the Offer-side twin).
+Offer-side `ResourceIdentity.resource_mutability` is unchanged.
+
 **SDK parity matrix is now generated, not hand-maintained (no wire change).** The
 three overlapping, drift-prone parity docs (`docs/sdk-parity-matrix.md`,
 `sdk-api-parity-map.md`, `sdk-parity-audit.md`) collapse to a single generated

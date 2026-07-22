@@ -14,7 +14,7 @@
 # version ceilings below (httpx<0.29, httpcore<2, guarding the private-internals
 # SSRF seam) bind EVERY install transitively, including consumers that declare
 # httpx directly. So "dependency-free" describes the L1 import surface, NOT the
-# package install. The PyPI dist name defers to the L2/publish ticket.
+# package install. The PyPI dist name defers to the L2/publish work.
 #
 # Vetted libs the port uses (the app is the quality bar — do NOT hand-roll
 # crypto/canonicalization): cryptography>=44, pydantic>=2.9. The generated Pydantic

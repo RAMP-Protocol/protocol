@@ -1,10 +1,10 @@
-// Scopes parity (TypeScript side) (parity guard, djeue).
+// Scopes parity (TypeScript side) (parity guard).
 //
 // sdk/ts `normalizeScopes`/`scopesSubset` MUST reproduce the sdk/go oracle
 // byte-for-byte. The shared vectors at
 // sdk/go/helpers/testdata/scopes-vectors.json are the cross-language guard:
 //   - normalize: {input:string[], normalized:string[]|null}
-//     (Go returns nil for empty/all-empty input → JSON null, R5)
+//     (Go returns nil for empty/all-empty input → JSON null)
 //   - subset:    {sub:string[], super:string[], expected:boolean}
 //
 // These faces now exist; the suite is green and guards cross-language parity.
@@ -38,7 +38,7 @@ describe("sdk/ts normalizeScopes matches the sdk/go oracle vectors", () => {
 	for (const v of vectors.normalize) {
 		it(`normalizeScopes(${v.name}) === ${JSON.stringify(v.normalized)}`, () => {
 			const got = normalizeScopes(v.input);
-			// R5: Go emits `null` for empty/all-empty; the TS face returns []. The
+			// Go emits `null` for empty/all-empty; the TS face returns []. The
 			// comparator treats null == [] so the empty-input vector matches.
 			const want = v.normalized ?? [];
 			expect(got).toEqual(want);

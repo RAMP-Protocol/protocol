@@ -41,7 +41,7 @@ func hostOf(t *testing.T, srv *httptest.Server) string {
 	return u.Host
 }
 
-// TestWellKnownEndpointResolver_perHostIsolation is the M1 correction: two
+// TestWellKnownEndpointResolver_perHostIsolation verifies per-host isolation: two
 // DISTINCT exchange hosts must resolve to their OWN endpoints from their OWN
 // manifests. A single-host-only resolver (or a single shared cache slot) fails
 // this — it is the core host-keyed contract the broker's per-request

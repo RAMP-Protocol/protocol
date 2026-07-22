@@ -7,7 +7,7 @@ deterministic-clock test stays inside the verifier's freshness window.
 The clock is in the SECONDS domain (matching Go's ``now().Unix()``); both faces
 truncate to integer seconds via ``int()`` so the produced RFC 9421
 @signature-params bytes stay byte-identical to the sign-site's historical inline
-mint (R3).
+mint.
 """
 
 from __future__ import annotations

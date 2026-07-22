@@ -27,7 +27,7 @@ note() { printf '    %s\n' "$1"; }
 
 # Pin buf so the committed gen/descriptor.binpb (a byte-exact, drift-gated
 # artifact) is reproducible. A newer buf re-encodes the descriptor with no
-# schema change and fails the drift gate (the H1 class). CI pins the same
+# schema change and fails the drift gate. CI pins the same
 # version in proto-ci.yml; keep the two in lockstep.
 want_buf=1.66.1
 have_buf=$(buf --version 2>/dev/null || echo 'not-found')

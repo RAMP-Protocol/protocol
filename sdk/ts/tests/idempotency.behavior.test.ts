@@ -1,4 +1,5 @@
-// Idempotency MINT behaviour (TypeScript side) — TDD red for djeue.
+// Idempotency MINT behaviour (TypeScript side): generateIdempotencyKey mints a
+// 22-char base64url string (no padding), distinct across calls, matching the Go oracle shape.
 //
 // NewIdempotencyKey carries entropy → NOT vector-gated. The Go oracle mints 16
 // crypto-random bytes → base64.RawURLEncoding (22 chars, no padding). The TS

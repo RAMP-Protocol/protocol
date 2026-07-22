@@ -1,8 +1,8 @@
-"""sdk/python verbatim-canonicalization guard — TDD red for ov97t.16.
+"""sdk/python verbatim-canonicalization guard.
 
 Mirror of the sdk/ts sibling sdk/ts/tests/signedurl-verbatim.guard.test.ts.
 
-THE CONTRACT (Constantine, 2026-07-07): the signed-URL signature covers
+THE CONTRACT: the signed-URL signature covers
 ``GET\\n<url>`` as OPAQUE URL BYTES. Signer and verifier MUST agree on ``<url>``
 byte-for-byte. The ONLY permitted transform is deterministic query handling
 (add exp/kid/agent_id, remove sig, sort query) — NEVER host-lowercasing,

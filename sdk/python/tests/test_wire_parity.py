@@ -1,4 +1,4 @@
-"""Wire-constants parity (Python side) — TDD red for djeue.
+"""Wire-constants parity (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/wire.parity.test.ts.
 

@@ -60,7 +60,7 @@ func TestVerifyOffer_tamperedExpiry(t *testing.T) {
 }
 
 func TestVerifyOffer_tamperedExchange(t *testing.T) {
-	// Offer.exchange is the signature-covered routing target (RAMP-101): a
+	// Offer.exchange is the signature-covered routing target: a
 	// relaying Broker must not be able to redirect a signed offer to a different
 	// Exchange. This is the anti-redirect property the relay routing depends on.
 	pub, priv, _ := ed25519.GenerateKey(nil)

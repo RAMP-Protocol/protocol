@@ -1,10 +1,10 @@
 // sdk/ts multisig forwarding-chain append+verify parity against the shared Go
-// oracle (agentic-content-access-o3szv). Go carries the ONLY multisig surface
+// oracle (agentic-content-access). Go carries the ONLY multisig surface
 // today (helpers.AppendSignature, VerifyMultisigRequest[Resolved], hop budget);
 // under the 3-SDKs decision a TS broker must append and verify chains too. This
 // suite is the TDD-red contract for the NEW ported faces.
 //
-// Core Invariant (o3szv): the RFC 9421 signature base — including the
+// Core Invariant: the RFC 9421 signature base — including the
 // parameterized "signature";key="sigN" forwarding-chain component rendered as
 // :stdbase64(decoded-predecessor-signature-bytes): — must reconstruct BYTE-FOR-
 // BYTE in Go and TS, so a chain signed in Go verifies in TS AND the
@@ -255,7 +255,7 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
     });
   }
 
-  // SEC-NEW-2: entitlement coverage is enforced PER HOP on the multisig path,
+  // Entitlement coverage is enforced PER HOP on the multisig path,
   // mirroring Go's verifySingleSignature (which runs enforceEntitlementCoverage)
   // being called per hop by VerifyMultisigRequest. A live 2-hop chain — whose
   // covered set is the RAMP required-5 and NEVER commits to x-entitlement-token —
@@ -321,11 +321,11 @@ describe("sdk/ts multisig forwarding-chain append+verify mirrors the Go oracle",
     expect(verdict.reason).toBe("signature");
   });
 
-  // R2-4: per-hop MaxSignatureAge lifetime clamp, enforced on EVERY hop exactly
+  // Per-hop MaxSignatureAge lifetime clamp, enforced on EVERY hop exactly
   // like the single-sig path (Go enforceCreatedExpires with maxAge, called per
   // hop). The bound is inclusive: a window equal to it passes, one exceeding it is
   // rejected "signature"; 0/undefined is unbounded.
-  describe("R2-4 per-hop MaxSignatureAge clamp on the multisig path", () => {
+  describe("per-hop MaxSignatureAge clamp on the multisig path", () => {
     const v = () => byName("positive_two_hop");
 
     async function verifyWithMaxAge(

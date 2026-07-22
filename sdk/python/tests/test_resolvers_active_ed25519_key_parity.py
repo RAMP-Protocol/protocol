@@ -7,8 +7,8 @@ WBA directory (keys[] with validity windows + JWK ``x``), an optional
 ``max_scan``, and the oracle's verdict: the selected key's document-order index
 (-1 = none), its raw public key (base64url), and its ``not_after``.
 
-The corpus is the shared parity lock for the H2 base64 edges (standard-alphabet
-``x``, ``=``-padded ``x``, valid unpadded ``x``) and the C1 timestamp edges
+The corpus is the shared parity lock for the base64 edges (standard-alphabet
+``x``, ``=``-padded ``x``, valid unpadded ``x``) and the timestamp edges
 (offset-less/naive, date-only, empty bounds, the not_before==now / not_after==now
 half-open boundaries), plus the ``max_scan`` DoS cap. Replaying it here is what
 proves the Python selector selects the SAME key the Go oracle did — the

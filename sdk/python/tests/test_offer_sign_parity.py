@@ -1,4 +1,4 @@
-"""sdk/python offer SIGN byte-parity against the Go oracle — TDD red for ov97t.16.
+"""sdk/python offer SIGN byte-parity against the Go oracle.
 
 Mirror of the sdk/ts sibling sdk/ts/tests/offer-sign.parity.test.ts, and a direct
 sibling of the acceptance-sign exemplar (core.sign_offer_acceptance_jcs).
@@ -14,7 +14,7 @@ Canonical form = JCS(protojson(offer with sig+alg cleared)) — the SAME primiti
 the verify face reuses (core.canonical_offer_payload). Ed25519 is deterministic
 (RFC 8032), so the Python signature MUST equal the Go one byte-for-byte.
 
-This half of ov97t.16 is UNAFFECTED by the signed-URL opaque-bytes decision: JCS
+The offer-sign half is UNAFFECTED by the signed-URL opaque-bytes decision: JCS
 over proto-JSON is already deterministic and cross-language byte-agreed.
 
 RED now for TWO expected reasons, both intended:

@@ -149,7 +149,7 @@ RAMP classifies your resources into three mutability levels. This drives how age
 | **DYNAMIC** | Content updates between offer and fetch | Hash mismatch expected, not disputable. `data_as_of` indicates freshness | Credit reports, drug interaction databases, stock snapshots, property records |
 | **LIVE** | No content exists at offer time | No content hash. Metering is time-based | Quote feeds, live broadcasts, continuous monitoring feeds |
 
-Your Exchange sets `resource_mutability` on every resource. For DYNAMIC resources, the Exchange also sets `data_as_of` — a timestamp indicating when the data was current. Agents can filter by freshness using `max_data_age` (e.g., "credit report updated within 7 days").
+You **may** declare `resource_mutability` via the typed `ResourceEntry.resource_mutability` field; if you omit it, the Exchange sets `STATIC` when it builds the Offer (it reads the typed field, not `ext`). For DYNAMIC resources, the Exchange also sets `data_as_of` — a timestamp indicating when the data was current. Agents can filter by freshness using `max_data_age` (e.g., "credit report updated within 7 days").
 
 ## Resource Attestation (Self-Attestation)
 

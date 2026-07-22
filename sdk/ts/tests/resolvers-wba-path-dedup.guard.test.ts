@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Structural dedup guard for the WBA directory-path constant (hp5o2.4).
+// Structural dedup guard for the WBA directory-path constant.
 //
 // TS carries TWO copies of the "/.well-known/http-message-signatures-directory"
 // path string: the module-private WBA_DIRECTORY_PATH in resolvers/wba.ts and the

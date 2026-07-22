@@ -1,4 +1,4 @@
-// Direct behavioral regression for wire forward-compatibility (H2 / kb1s0.2),
+// Direct behavioral regression for wire forward-compatibility,
 // TypeScript / Zod side. Mirrors gen/python/tests/test_forward_compat.py.
 //
 // Core invariant: an UNKNOWN top-level field (one a newer protocol version adds

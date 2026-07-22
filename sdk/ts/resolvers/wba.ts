@@ -8,7 +8,7 @@
 //
 // The monotonic revocation guard + far-future as_of clamp + revocation priming
 // live in the SHARED refresh routine (refreshRevocationFor), invoked by BOTH the
-// sync directory-fetch path AND the Run poller (R5) — never poller-only.
+// sync directory-fetch path AND the Run poller — never poller-only.
 
 import {
 	KeyRevocationListSchema,
@@ -30,8 +30,8 @@ import {
 } from "./http.ts";
 
 /** The single public well-known path a WBA identity directory is served at (Web
- * Bot Auth; the identity half of the RAMP-24 split — the commercial overlay stays
- * in /.well-known/ramp.json). The one shared copy across the whole SDK. */
+ * Bot Auth; the identity half of the identity/commercial split — the commercial
+ * overlay stays in /.well-known/ramp.json). The one shared copy across the whole SDK. */
 export const WBA_DIRECTORY_PATH =
 	"/.well-known/http-message-signatures-directory";
 
@@ -278,7 +278,7 @@ class WBAResolverImpl implements WBAKeyResolver {
 
 	// Best-effort: a missing/cross-host/failed/undecodable revocation_url leaves the
 	// prior snapshot in place. The monotonic guard + as_of clamp live here so BOTH
-	// the sync path and the poller apply them identically (R5).
+	// the sync path and the poller apply them identically.
 	private async refreshRevocationFor(
 		host: string,
 		file: WBAFile,

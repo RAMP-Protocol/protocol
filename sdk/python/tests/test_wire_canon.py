@@ -1,4 +1,4 @@
-"""sdk/python wire-to-canonical offer canonicalizer — TDD red for ov97t.7.
+"""sdk/python wire-to-canonical offer canonicalizer.
 
 The RAMP Connect wire emitted by the Broker is camelCase protojson with
 EmitUnpopulated (zero-valued scalars present). The offer SIGNATURE covers the

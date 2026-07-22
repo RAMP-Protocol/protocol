@@ -1,4 +1,4 @@
-"""sdk/python signed-URL SIGN byte-parity against the Go oracle — TDD red for ov97t.16.
+"""sdk/python signed-URL SIGN byte-parity against the Go oracle.
 
 Mirror of the sdk/ts sibling sdk/ts/tests/signedurl-sign.parity.test.ts.
 
@@ -8,7 +8,7 @@ byte-identical to the Go oracle (helpers.SignURLEd25519): re-signing a vector's
 SOURCE url under its signer seed MUST reproduce the Go-emitted ``signed_url``
 STRING exactly.
 
-THE CONTRACT UNDER TEST (Constantine, 2026-07-07): the signature covers
+THE CONTRACT UNDER TEST: the signature covers
 ``GET\\n<url>`` as OPAQUE URL BYTES. Neither signer nor verifier re-normalizes
 scheme/host/path — the ONLY permitted transform is deterministic query handling
 (add exp/kid/agent_id, remove sig, sort query). Today verify uses

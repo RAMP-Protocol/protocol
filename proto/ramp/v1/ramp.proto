@@ -284,7 +284,7 @@ message OfferGroup {
 // DiscoveryMethod — How the Broker discovered this resource URI.
 // Metadata for the agent; does not affect transaction flow.
 enum DiscoveryMethod {
-  DISCOVERY_METHOD_UNSPECIFIED = 0;  // unset — rejected at ingest
+  DISCOVERY_METHOD_UNSPECIFIED = 0;  // unset — output/optional; zero is a valid not-applicable/unset state
   // URI was requested by the agent directly or found via Exchange query.
   DISCOVERY_METHOD_EXCHANGE = 1;
   // URI was discovered via a search engine (e.g., Exa, Tavily, Brave Search).
@@ -300,7 +300,7 @@ enum DiscoveryMethod {
 // Used in OfferGroup.absence_reason when offers is empty.
 // Enables diagnostic feedback without requiring a transaction attempt.
 enum OfferAbsenceReason {
-  OFFER_ABSENCE_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
+  OFFER_ABSENCE_REASON_UNSPECIFIED = 0;  // unset — output/optional; zero is a valid not-applicable/unset state
   // Resource URI is not in this Exchange's catalog.
   OFFER_ABSENCE_REASON_NOT_IN_CATALOG = 1;
   // Resource exists but the provider has opted out of AI access for it (the
@@ -434,8 +434,8 @@ message Offer {
   // bytes (see `signature` below — the signature covers every field except
   // `signature` / `signature_algorithm`), so an intermediary cannot redirect
   // the execute call to a different Exchange without invalidating the offer.
-  // (RAMP-101: enables multi-Exchange fan-out routing from the offer itself,
-  // retiring the X-RAMP-Exchange-Endpoint transport header.)
+  // This enables multi-Exchange fan-out routing from the offer itself,
+  // retiring the X-RAMP-Exchange-Endpoint transport header.
   string exchange = 8;
 
   // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
@@ -518,7 +518,7 @@ message Offer {
   repeated ResourceAttestation attestations = 14;
 
   // When the offered data was current. For dynamic resources
-  // (content_mutability = DYNAMIC), this is the snapshot timestamp.
+  // (resource_mutability = DYNAMIC), this is the snapshot timestamp.
   // Enables the Broker to evaluate freshness: "this credit report
   // reflects data as of March 18" or "this drug database was updated today."
   //
@@ -843,7 +843,7 @@ enum TermSemantics {
 // 3166-1 alpha-2 codes are validated structurally (two-letter uppercase),
 // not enumerated.
 enum RestrictionKind {
-  RESTRICTION_KIND_UNSPECIFIED = 0;  // unset — rejected at ingest
+  RESTRICTION_KIND_UNSPECIFIED = 0;  // unset — zero allowed on AcceptableRestriction.axis / OfferGroup.restriction_filters / *.restriction_mismatches; rejected (not_in:[0]) as the Restriction.kind discriminator
 
   // What the agent may do with the content. Seeded from RSL 1.0 AI-use
   // vocabulary and extended with established IP/copyright terms.
@@ -1353,7 +1353,7 @@ message Pricing {
 // Subscription = model=FREE + scopes (see LicenseTerm); attribution/contribution
 // are obligations (see ObligationKind); revenue-share settlement is off-protocol.
 enum PricingModel {
-  PRICING_MODEL_UNSPECIFIED = 0;  // unset — rejected at ingest (omission cannot default to FREE)
+  PRICING_MODEL_UNSPECIFIED = 0;  // unset — zero allowed on WellKnownManifest.pricing_models_supported (capability list); rejected (not_in:[0]) as the Pricing.model discriminator (omission cannot default to FREE)
   PRICING_MODEL_FREE        = 1;  // no charge; rate must be 0 (state FREE explicitly — absent Pricing is not free)
   PRICING_MODEL_PER_UNIT    = 2;  // rate per Pricing.unit; unit REQUIRED (registered token or vendor:custom)
   PRICING_MODEL_FLAT        = 3;  // one-time flat fee; rate is the total, no unit
@@ -1375,7 +1375,7 @@ enum PricingMetering {
 }
 
 enum DeliveryMethod {
-  DELIVERY_METHOD_UNSPECIFIED = 0;  // unset — rejected at ingest
+  DELIVERY_METHOD_UNSPECIFIED = 0;  // unset — output/optional and capability-list; zero is a valid not-applicable/unset state
   // Exchange returns resource inline or via its own endpoint.
   DELIVERY_METHOD_DIRECT = 1;
   // Exchange returns access info (signed URL, token) for retrieval
@@ -1606,7 +1606,7 @@ message Delegation {
 // verification vendor validates the C2PA manifest and publishes
 // the results as attestation claims signed with Ed25519.
 enum C2PAStatus {
-  C2PA_STATUS_UNSPECIFIED = 0;  // unset — rejected at ingest
+  C2PA_STATUS_UNSPECIFIED = 0;  // unset — output/optional; zero is a valid not-applicable/unset state
   // Manifest is valid AND signer certificate chains to a C2PA Trust List root.
   // Highest assurance: provenance is cryptographically verified by a trusted CA.
   C2PA_STATUS_TRUSTED = 1;
@@ -1631,7 +1631,7 @@ enum C2PAStatus {
 //   DYNAMIC: D&B credit report, DrugBank interactions, satellite catalog, news article (corrections)
 //   LIVE:    MarketData quote stream, NPR live broadcast, news monitoring feed
 enum ResourceMutability {
-  RESOURCE_MUTABILITY_UNSPECIFIED = 0;  // unset — rejected at ingest
+  RESOURCE_MUTABILITY_UNSPECIFIED = 0;  // unset — the Exchange defaults to `STATIC` at Offer build; an explicit `UNSPECIFIED` is rejected on `ResourceEntry.resource_mutability` and the Offer's `ResourceIdentity.resource_mutability` (both `{not_in:[0]}`)
   // Content is immutable. Hash computed at offer time will match at delivery time.
   // Agent SHOULD verify content_hash on delivery. Mismatch is disputable.
   RESOURCE_MUTABILITY_STATIC = 1;
@@ -1650,7 +1650,7 @@ enum ResourceMutability {
 // ============================================================================
 
 // AgentAcceptance — the agent's DETACHED acceptance signature over an accepted
-// Offer (RAMP-102 §1). Distinct from the transport (RFC 9421) request signature:
+// Offer. Distinct from the transport (RFC 9421) request signature:
 // it is topology-independent and content-bound, so it stays valid no matter how
 // many brokers relay the request, and binds the agent to THIS specific offer +
 // requester + transaction. It travels in the execute body alongside the
@@ -1709,7 +1709,7 @@ message AgentAcceptancePayload {
 // The Exchange validates eligibility, authorizes billing, creates
 // delivery, and logs each transaction.
 message TransactionRequest {
-  // A transaction carries one or more items (items-only, RAMP-102 / epic 6afpc):
+  // A transaction carries one or more items (items-only):
   // single-offer mode was removed — a single offer is the degenerate 1-element
   // `items` list.
 
@@ -1755,8 +1755,8 @@ message TransactionItem {
   // batch item carries its offer.
   Offer offer = 3 [(buf.validate.field).required = true];
 
-  // The agent's detached acceptance signature over this item's `offer`
-  // (RAMP-102 §1). Optional on the wire; the Exchange enforces presence per
+  // The agent's detached acceptance signature over this item's `offer`.
+  // Optional on the wire; the Exchange enforces presence per
   // item at the service layer for relayed batches. Signed bytes =
   // deterministic AgentAcceptancePayload, with requester_* and idempotency_key
   // taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.
@@ -1765,7 +1765,7 @@ message TransactionItem {
 
 // TransactionResponse — Exchange confirms the transaction(s).
 //
-// Items-only (RAMP-102 / epic 6afpc): every per-result datum lives in `items`
+// Items-only: every per-result datum lives in `items`
 // (one TransactionResultItem per committed offer, in original order); the
 // top-level fields carry only the shared aggregate state. A single offer is the
 // degenerate 1-element `items`. The per-item denials remain in-body on
@@ -1861,7 +1861,7 @@ message Cost {
 // Logged as enum values, not strings. Enables automated processing
 // of denial patterns across the ecosystem.
 enum DenialReason {
-  DENIAL_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
+  DENIAL_REASON_UNSPECIFIED = 0;  // output enum; zero = not-applicable on TransactionResultItem.denial_reason, rejected (not_in:[0]) where set on TransactionDenial.reason
   DENIAL_REASON_BILLING_REF_INACTIVE = 1; // the requester's account (the billing_ref minted at Register) is not active / not recognized by the billing system
   DENIAL_REASON_INSUFFICIENT_BALANCE = 2; // Requester's balance too low
   DENIAL_REASON_RATE_LIMITED = 3;         // Too many requests
@@ -1892,7 +1892,7 @@ enum DenialReason {
 // IngestionSource — How the catalog entry was discovered.
 // Used by the Content Ingestion Pipeline to track provenance.
 enum IngestionSource {
-  INGESTION_SOURCE_UNSPECIFIED = 0;  // unset — rejected at ingest
+  INGESTION_SOURCE_UNSPECIFIED = 0;  // unset — output/optional; zero is a valid not-applicable/unset state
   INGESTION_SOURCE_RAMP_SITEMAP = 1;  // RAMP XML namespace in sitemap
   INGESTION_SOURCE_RSL = 2;            // RSL rsl.txt
   INGESTION_SOURCE_SITEMAP = 3;        // Standard sitemap.xml
@@ -2002,6 +2002,13 @@ message ResourceEntry {
   // The Exchange validates ENUMERATED terms at push time and surfaces them
   // in Offer.terms on discovery.
   repeated LicenseTerm terms = 13;
+
+  // Optional mutability hint. When omitted, the Exchange applies the `STATIC`
+  // default at Offer build; an explicit `UNSPECIFIED` is rejected. A value in
+  // `ext` is not read — the typed field is authoritative, so an ext-only value
+  // is treated as omitted. Mirrors the required Offer-side
+  // `ResourceIdentity.resource_mutability`.
+  optional ResourceMutability resource_mutability = 14 [(buf.validate.field).enum = {not_in: [0]}];
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -2629,7 +2636,7 @@ enum ProviderRelationship {
 // AuthMethod — Authorization methods an Exchange can support.
 // Advertised in WellKnownManifest.supported_auth_methods (ordered by preference).
 enum AuthMethod {
-  AUTH_METHOD_UNSPECIFIED = 0;  // unset — rejected at ingest
+  AUTH_METHOD_UNSPECIFIED = 0;  // unset — zero allowed on WellKnownManifest.supported_auth_methods (capability list); no discriminator carrier
   // GNAP (RFC 9635) — key-first identity, key-bound tokens. Recommended.
   AUTH_METHOD_GNAP = 1;
   // OAuth 2.0 + DPoP (RFC 9449) — sender-constrained tokens. Enterprise recommended.
@@ -2781,7 +2788,7 @@ enum DisputeReason {
 // Appeals: losing party may appeal with new evidence.
 //   RESOLVED → APPEALED → UNDER_REVIEW (re-enters Tier 2).
 enum DisputeStatus {
-  DISPUTE_STATUS_UNSPECIFIED = 0;  // unset — rejected at ingest
+  DISPUTE_STATUS_UNSPECIFIED = 0;  // unset — output/optional; zero is a valid not-applicable/unset state
   // Agent submitted DisputeRequest. Initial state.
   DISPUTE_STATUS_FILED = 1;
   // Exchange auto-resolved via Tier 1 rules (CDN logs, hash comparison).
@@ -2807,7 +2814,7 @@ enum DisputeStatus {
 // Populated in DisputeResponse.resolution when the dispute reaches a
 // terminal state (RESOLVED, SETTLED, or FINAL).
 enum ResolutionType {
-  RESOLUTION_TYPE_UNSPECIFIED = 0;  // unset — rejected at ingest
+  RESOLUTION_TYPE_UNSPECIFIED = 0;  // unset — output/optional; zero is a valid not-applicable/unset state
   // Account credit applied to the agent's next billing cycle.
   RESOLUTION_TYPE_CREDIT = 1;
   // New signed URL issued for the same resource (e.g., when content hash

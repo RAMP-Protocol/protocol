@@ -11,7 +11,7 @@
 //     the body, stamps Content-Digest / Signature-Input / Signature via signOutbound,
 //     and forwards the SAME body bytes to the wrapped send.
 //
-// Core Invariant (agentic-content-access-hp5o2.2): the transport is a pure
+// Core Invariant (agentic-content-access): the transport is a pure
 // ORCHESTRATION of the already-parity-locked signRequest / appendSignature +
 // clockWindow / monotonicWindow primitives — it stamps RFC 9421 headers
 // byte-identical to the shared Go/Python oracle, forwards the request body
@@ -22,7 +22,7 @@
 // (sdk/go/helpers/testdata/sign-request-vectors.json for the fresh-sig path,
 // multisig-chain-vectors.json for the append/relay path) THROUGH the transport
 // via a capturing fake send, and assert the stamped headers equal the vector
-// fields byte-for-byte. Per the refined plan (MED-3) each vector injects a FIXED
+// fields byte-for-byte. Each vector injects a FIXED
 // window ()=>[v.created, v.expires] — the DEFAULT clockWindow(now) drifts
 // created/expires and the base would not reproduce; the windowless
 // sign-request.parity.test.ts harness is adapted, NOT copied verbatim.
@@ -173,7 +173,7 @@ describe("createSigningTransport replays the shared Go sign-request vectors byte
       const { send, calls } = capturingSend();
       const priv = await importSigningKey(v.signer_seed_hex);
 
-      // FIXED window per vector (MED-3): reproduce the vector's created/expires;
+      // FIXED window per vector: reproduce the vector's created/expires;
       // the default clockWindow(now) would drift the base. Source the covered
       // signature_agent via the option when the vector's is non-empty.
       const signing = createSigningTransport(send, {

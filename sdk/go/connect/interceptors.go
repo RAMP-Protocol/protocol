@@ -45,8 +45,8 @@ func (i *requestIDInterceptor) WrapStreamingHandler(next connectrpc.StreamingHan
 
 // Validation selects protovalidate strictness for the SDK validate interceptor.
 // Strict wires the vetted connectrpc.com/validate interceptor BIDIRECTIONALLY —
-// requests, responses, AND error details are one SDK-validated contract (ADR-019;
-// architect-review amendment MEDIUM-3). Off omits the interceptor. It is a distinct
+// requests, responses, AND error details are one SDK-validated contract
+// (ADR-019). Off omits the interceptor. It is a distinct
 // axis from WithVerification (offer authenticity): validation is proto-shape
 // conformance, verification is signature authenticity. This enum is SHARED by both
 // faces: the server binding (sdk/go/connectserver) references connect.Validation so
@@ -64,7 +64,7 @@ const (
 // NewValidateInterceptor returns the bidirectional protovalidate interceptor built
 // on the vetted connectrpc.com/validate library. It validates requests, responses,
 // AND error details (WithValidateResponses) — the two-way SDK-validated contract of
-// ADR-019 / amendment MEDIUM-3 — reusing the shared protovalidate engine
+// ADR-019 — reusing the shared protovalidate engine
 // helpers.Validate wraps so the interceptor and the L1 pre-check share one engine
 // (zero rule drift). It is the SINGLE definition both the client (this package) and
 // the server binding (sdk/go/connectserver, which imports it) compose, so the two

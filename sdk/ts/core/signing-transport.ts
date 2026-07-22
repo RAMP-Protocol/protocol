@@ -88,7 +88,7 @@ export interface SignedOutbound {
  * headers for one outbound request and returns them with the body untouched — the
  * transport-neutral core (Python SignedOutbound sibling). It orchestrates the
  * parity-locked primitives: appendSignature when appendOnly is set OR a prior
- * Signature is present (RAMP-56 forwarding chain), signRequest otherwise. The
+ * Signature is present (forwarding chain), signRequest otherwise. The
  * covered Signature-Agent is bound verbatim from `signatureAgent`; the returned
  * headers echo it (via the exported SignatureAgentHeader) only when non-empty.
  */
@@ -163,8 +163,8 @@ export interface SigningTransportOptions {
  * excludes — passes through UNSIGNED (there is nothing to bind a Content-Digest
  * to); that is not an error. A request already carrying a Signature is CHAINED
  * onto (appendSignature), never replaced. Naming stays family-consistent with the
- * newXResolver siblings; the whole-surface newX -> create rename is owned by a
- * dedicated epic child, not this module.
+ * newXResolver siblings; the whole-surface newX -> create rename is a separate,
+ * broader change, not this module's concern.
  */
 export function createSigningTransport<R>(
 	send: OutboundSend<R>,
@@ -207,7 +207,7 @@ export function createSigningTransport<R>(
 			prior,
 		});
 
-		// Forward the SAME body bytes (MED-2 body integrity — buffer for the digest
+		// Forward the SAME body bytes (body integrity — buffer for the digest
 		// but never consume/replace the payload; Go resets req.Body + GetBody).
 		return send(url, {
 			...init,

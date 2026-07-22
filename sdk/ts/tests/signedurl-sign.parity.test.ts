@@ -1,4 +1,4 @@
-// sdk/ts signed-URL SIGN byte-parity against the Go oracle (TDD red for ov97t.16).
+// sdk/ts signed-URL SIGN byte-parity against the Go oracle.
 //
 // Under the 3-SDKs=3-SDKs decision a TS Exchange must MINT signed delivery URLs,
 // not only verify them. This suite pins the not-yet-existing TS sign face
@@ -6,7 +6,7 @@
 // STRING must equal the Go-emitted `signed_url` for the same source URL, kid,
 // agent_id, exp, and signer seed.
 //
-// THE CONTRACT UNDER TEST (Constantine, 2026-07-07): the signature covers
+// THE CONTRACT UNDER TEST: the signature covers
 // `GET\n<url>` as OPAQUE URL BYTES. Neither signer nor verifier re-normalizes
 // scheme/host/path — the ONLY permitted transform is deterministic query handling
 // (add exp/kid/agent_id, remove sig, sort query). Today the verify faces normalize

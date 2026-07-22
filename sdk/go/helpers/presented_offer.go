@@ -16,7 +16,7 @@ import (
 var ErrOfferExpired = errors.New("helpers: offer expired")
 
 // VerifyPresentedOffer is the stateless {verified, rejected} primitive for a
-// reflected Offer (RAMP-103): the agent presents the WHOLE signed Offer and the
+// reflected Offer: the agent presents the WHOLE signed Offer and the
 // verifier checks it against its own key over the exact presented bytes — no
 // reconstruct-from-catalog. It returns nil only when BOTH hold, in this order:
 //

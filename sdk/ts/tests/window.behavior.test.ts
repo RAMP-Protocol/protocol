@@ -1,9 +1,10 @@
-// Window behaviour (TypeScript side) — TDD red for djeue.
+// Window behaviour (TypeScript side): clockWindow floors created and adds ttl;
+// monotonicWindow keeps back-to-back expires strictly increasing.
 //
 // The signature Window (Go core/sigwindow.go) carries a clock → NOT vector-
 // gated. Two faces:
 //   - clockWindow(now, ttlSec): created = floor(now()), expires = created+ttl
-//     (R3: MUST floor — Go .Unix() floors; current signInbound uses
+//     (MUST floor — Go .Unix() floors; current signInbound uses
 //      Math.floor(now()); an un-floored default would change signature bytes).
 //   - monotonicWindow(now, ttlSec): expires strictly increases across a burst
 //     within one wall-clock second, so no two back-to-back signatures share an
@@ -14,7 +15,7 @@ import { describe, it, expect } from "vitest";
 // RED: sdk/ts/core/window.ts does not exist yet (TDD red — missing face).
 import { clockWindow, monotonicWindow } from "../core/window.ts";
 
-describe("sdk/ts clockWindow floors created and adds ttl to expires (R3)", () => {
+describe("sdk/ts clockWindow floors created and adds ttl to expires", () => {
 	it("created = floor(now), expires = floor(now)+ttl for a fractional now", () => {
 		// A fractional-second now (seconds domain, matching Go's now().Unix()).
 		const now = () => 1_700_000_000.987;

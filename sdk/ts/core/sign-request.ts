@@ -65,11 +65,11 @@ export async function contentDigest(
 	return `sha-256=:${stdBase64(digest)}:`;
 }
 
-// A forwarding-chain link (RAMP-56): the pre-rendered covered token
+// A forwarding-chain link: the pre-rendered covered token
 // `"signature";key="sigN"` and its base value `:<std-base64(prev sig bytes)>:`.
 // The token is inserted as the LAST covered component before @signature-params
 // and is rendered VERBATIM (NOT re-wrapped in the naive per-element quoting) —
-// it already carries its own quotes and the key= param (o3szv R4).
+// it already carries its own quotes and the key= param.
 export interface ChainLink {
 	token: string;
 	value: string;
@@ -176,7 +176,7 @@ export interface PriorSignatures {
 
 /**
  * appendSignature chains sig(N+1) onto `prev` WITHOUT disturbing existing members
- * (RAMP-56 forwarding chain), the TS port of Go helpers.AppendSignature. It finds
+ * (forwarding chain), the TS port of Go helpers.AppendSignature. It finds
  * the next label sig(N+1) and predecessor sigN, binds the RAMP base plus a
  * `"signature";key="sigN"` link whose value is `:<std-base64(decoded predecessor
  * sig bytes)>:` (re-encoded canonically, NOT a wire splice), Ed25519-signs, and

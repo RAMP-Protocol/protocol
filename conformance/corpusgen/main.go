@@ -79,7 +79,7 @@ func seeds() map[string]proto.Message {
 		"LicenseTerm":           &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: pricing()},
 		"AcceptableRestriction": &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train"}},
 		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
-		// Reflected-Offer execute contract (RAMP-103 / items-only 6afpc): Offer is
+		// Reflected-Offer execute contract (items-only): Offer is
 		// the required sub-message of TransactionItem (auto-fill needs its seed),
 		// and TransactionRequest needs a valid 1-item items[] baseline because its
 		// items field is now repeated.min_items=1 (single-offer mode removed).
@@ -104,7 +104,7 @@ var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256
 // stringEdges' pattern#<idx> mutants), so appending keeps existing case IDs stable and
 // the byte drift-gate diff purely additive. The trailing four are money-specific
 // killers — numbers a naive Decimal would accept (negative / NaN / Infinity / exponent)
-// but the decimal-string money pattern rejects; they are the H1 blind spot.
+// but the decimal-string money pattern rejects; they are the money-value blind spot.
 var badStrings = []string{"two words", "1.2.3", "!!bad!!", "\x00ctl\x00", " ", "-5", "NaN", "Infinity", "1E3"}
 
 func main() {
@@ -488,6 +488,17 @@ func enumEdges(fd protoreflect.FieldDescriptor, r *validate.EnumRules) []edge {
 			m.Set(fd, protoreflect.ValueOfEnum(nn))
 		}})
 	}
+	// A presence-tracked (proto3 optional) enum that rejects its zero via not_in
+	// still ACCEPTS omission: protovalidate skips an unset optional field's rule,
+	// so the cleared value is valid — the common ingest case where a publisher
+	// omits the hint. Gated on BOTH a not_in rule AND presence (the non-trivial
+	// pairing), so it fires only for a field that rejects its zero yet may be
+	// absent — today just ResourceEntry.resource_mutability — pinning
+	// omitted-is-valid across all three runners.
+	if len(r.GetNotIn()) > 0 && fd.HasPresence() {
+		es = append(es, edge{label: "unset_valid", valid: true,
+			apply: func(m protoreflect.Message) { m.Clear(fd) }})
+	}
 	// Only when defined_only is set does Go reject an undefined number. With
 	// not_in:[0] alone, proto's open-enum forward-compat lets an unknown value
 	// through server-side (a newer peer's value), so no edge here.
@@ -512,7 +523,7 @@ func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edg
 				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(bad)) }})
 		}
 		// The empty-string boundary: if the pattern ACCEPTS "" it is a positive case
-		// (money — the H1 blind spot; proves clients accept ""); if it REJECTS "" then
+		// (money — the empty-money blind spot; proves clients accept ""); if it REJECTS "" then
 		// the zero value is invalid, so omission must be rejected (pattern-derived
 		// required-presence, e.g. Quota.metric) — only meaningful for a non-optional
 		// field whose cleared value really is "".

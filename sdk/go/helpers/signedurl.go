@@ -16,7 +16,7 @@ import (
 // Ed25519 signed delivery URLs (ADR-013). The Exchange issues a URL signed over
 // the canonical message "GET\n<url>"; the edge worker (src/edge/src/verify.ts)
 // and this SDK verify it identically. The signature covers the URL as OPAQUE
-// BYTES (Constantine, 2026-07-07): neither signer nor verifier re-normalizes
+// BYTES: neither signer nor verifier re-normalizes
 // scheme/host/path — a mixed-case host, an explicit default port, and a raw
 // space or percent in the path are all preserved verbatim. The ONLY transform is
 // deterministic query handling (add exp/kid/agent_id, remove sig, sort the

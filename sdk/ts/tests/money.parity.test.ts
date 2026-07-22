@@ -1,10 +1,10 @@
-// Money parity (TypeScript side) — TDD red for djeue.
+// Money parity (TypeScript side): canonicalizeMoney reproduces the Go oracle byte-for-byte.
 //
 // sdk/ts `canonicalizeMoney` MUST reproduce the sdk/go oracle byte-for-byte.
 // The shared vectors at sdk/go/helpers/testdata/money-vectors.json carry
 // {input, canonical, valid} derived from Go CanonicalizeMoney (Parse+Format).
 //
-// The load-bearing cases (R1/R4): Go round-trips shopspring and drops leading
+// The load-bearing cases: Go round-trips shopspring and drops leading
 // zeros (007→7, 00.5→0.5, 0010.20→10.2, 000→0) AND never emits exponent
 // notation for a high-precision small fraction (0.0000001 stays plain). A naive
 // TS string surface that only trims TRAILING zeros diverges — the vector catches

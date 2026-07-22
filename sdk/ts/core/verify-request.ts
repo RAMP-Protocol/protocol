@@ -11,8 +11,9 @@
 // through an INJECTED clock (the SDK owns no wall clock), and returns a VERDICT
 // carrying the reject reason mirroring the Go taxonomy — never throws.
 //
-// SINGLE-SIG scope only (2026-07-07 decision on agentic-content-access-qqkro):
-// multisig forwarding-chain verify (hop budget, broken_chain) is owned by o3szv.
+// SINGLE-SIG scope only:
+// multisig forwarding-chain verify (hop budget, broken_chain) is owned by the
+// core/verify-multisig-request.ts sibling.
 // The reject reasons this face emits are exactly the two the single-sig surface
 // produces (connectserver classify.go RejectReason.String()): "signature" (bad
 // sig / expiry / future-created / wrong-or-unresolvable key / tampered covered
@@ -236,7 +237,7 @@ export interface ParsedSignatureParams {
 
 /**
  * The per-signature verify core shared by the single-sig and multisig paths
- * (mirrors Go verifySingleSignature, MINUS replay — o3szv R1): alg + required
+ * (mirrors Go verifySingleSignature, MINUS replay): alg + required
  * covered set + created/expires window + content-digest + key resolution +
  * Ed25519 over the reconstructed base. Returns true iff the signature is authentic
  * and policy-valid. `chainLink`, when present, inserts the forwarding-chain base
@@ -322,7 +323,7 @@ export async function verifyRequestServer(
 
 	// The full per-signature core (covered set / window / digest / key / Ed25519),
 	// shared with the multisig path; replay stays here so the multisig loop never
-	// touches a ReplayStore (o3szv R1).
+	// touches a ReplayStore.
 	const ok = await verifyParsedSignature(
 		{
 			method: input.method,

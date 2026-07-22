@@ -1,4 +1,4 @@
-// Typed error surface for the fetching resolver faces (R4). The Go oracle uses
+// Typed error surface for the fetching resolver faces. The Go oracle uses
 // errors.Is-DISTINCT sentinels (ErrKeyRevoked / ErrKeyExpired /
 // ErrDirectoryUnavailable / ErrNoEndpoint / ErrUnknownKey) so a composite
 // resolver can HALT on a fail-closed verdict rather than fall through as if the

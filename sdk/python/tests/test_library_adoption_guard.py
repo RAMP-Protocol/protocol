@@ -1,4 +1,4 @@
-"""Source-level adoption guard for the sdk/python L1 relocation (ixs7u.6).
+"""Source-level adoption guard for the sdk/python L1 relocation.
 
 Mirrors the sdk/ts sibling (sdk/ts/tests/library_adoption_guard.test.ts). It pins
 that the canonical sdk/python helpers keep composing the generated artifacts + the
@@ -8,7 +8,7 @@ gen/python models, or a drifted canonical thumbprint JWK string).
 
 SCOPE — deliberately sdk/python/ramp_sdk ONLY. A tree-wide ban would false-fire on
 the app modules, which MUST still exist until their deletion in the downstream
-adoption ticket (ixs7u.8). The behavioral guard for byte-parity is the parity
+adoption work. The behavioral guard for byte-parity is the parity
 suite (test_*_parity.py vs the Go oracle vectors); this file adds the source-level
 guard.
 """
@@ -100,7 +100,7 @@ def test_meta_passes_clean_composed_source() -> None:
     assert eval_site(good, guard) == []
 
 
-# ---- sdk/python/ramp_sdk.core transport-neutrality guard (ixs7u.10) ----
+# ---- sdk/python/ramp_sdk.core transport-neutrality guard ----
 #
 # Mirror of the Go core "no connectrpc import" guard and the sdk/ts core guard. This
 # guards the PURE TRUST CORE (ramp_sdk.core): it must impose NOTHING beyond stdlib +

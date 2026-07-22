@@ -6,7 +6,7 @@
 //
 // The clock is in the SECONDS domain (matching Go's now().Unix()); both faces
 // FLOOR to integer seconds via Math.floor so the produced @signature-params
-// bytes stay byte-identical to the sign-site's historical inline mint (R3).
+// bytes stay byte-identical to the sign-site's historical inline mint.
 
 /** A Window yields the [created, expires] unix-second cutoffs for one signature. */
 export type Window = () => [created: number, expires: number];

@@ -1,12 +1,12 @@
 """Integration suite (TDD red) for the ported WBA key resolver — mirroring
-sdk/go/helpers/wbakeyresolver_test.go 1:1 (all 14 tests) plus R3 (malformed
-Signature-Agent → unknown). The WBA directory host that Go threads through ctx
+sdk/go/helpers/wbakeyresolver_test.go 1:1 (all 14 tests) plus a malformed
+Signature-Agent case (→ unknown). The WBA directory host that Go threads through ctx
 (Signature-Agent) is passed EXPLICITLY as the second ``resolve`` argument in the
 port: ``resolve(thumbprint, directory)``.
 
 Every case drives a REAL http.server origin (the shared harness) through the
 resolver's default stdlib-urllib transport; the clock and the poll-timer seam are
-injected so no test sleeps. Per R5 the monotonic guard / as_of clamp /
+injected so no test sleeps. The monotonic guard / as_of clamp /
 forward-progress cases run via Resolve + TTL-expiry (NO poller), so a poller-only
 guard would fail them — only the poller test exercises the background Run poller,
 via the on_poll_armed/on_poll_cycle determinism seams.
@@ -38,7 +38,7 @@ from resolvers_harness import (
     wba_jwk,
 )
 
-# RED: the WBA face and its typed sentinels do not exist yet (TDD red for bsh8k).
+# RED: the WBA face and its typed sentinels do not exist yet (TDD red).
 from ramp_sdk.resolvers import (  # type: ignore[import-not-found]
     DirectoryUnavailableError,
     KeyExpiredError,
@@ -116,7 +116,7 @@ def test_wba_rotation_self_heal() -> None:
 
 def test_wba_revocation_rollback_ignored() -> None:
     # Monotonic guard: an older-as_of snapshot must NOT un-revoke. Runs via
-    # Resolve + TTL-expiry (no poller) per R5.
+    # Resolve + TTL-expiry (no poller).
     k = make_key()
     origin = Origin()
     origin.set_wba(wba_file_json([long_jwk(k.x)], origin.revocation_url()))
@@ -215,7 +215,7 @@ def test_wba_no_signature_agent() -> None:
 
 
 def test_wba_malformed_signature_agent() -> None:
-    # R3: a malformed (non-empty, unparseable) directory ref → UnknownKeyError
+    # A malformed (non-empty, unparseable) directory ref → UnknownKeyError
     # (fall-through), DISTINCT from a fetch failure. Malformed cannot name a
     # directory, so it is not a fail-closed halt.
     r = WBAKeyResolver(http=loopback_client(), scheme="http", now=MutableClock(ANCHOR))

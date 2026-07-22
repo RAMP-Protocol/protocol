@@ -1,8 +1,8 @@
-// Window-refactor signature regression pin (TypeScript side) — djeue M3/R3.
+// Window-refactor signature regression pin (TypeScript side).
 //
-// The djeue refactor sources signInbound's (created, expires) from an injected
+// The Window refactor sources signInbound's (created, expires) from an injected
 // Window (default clockWindow(()=>Date.now()/1000, ttlSec)) instead of the
-// inline `nowSec = Math.floor(now()/1000)` mint. R3: clockWindow MUST FLOOR so
+// inline `nowSec = Math.floor(now()/1000)` mint. clockWindow MUST FLOOR so
 // the produced @signature-params bytes stay byte-identical. This pin captures
 // the CURRENT (pre-refactor) behaviour and MUST STAY GREEN after the refactor:
 //   - given a fractional now, created = floor(now/1000), expires = created+ttl,
@@ -30,7 +30,7 @@ const TTL_SEC = 600;
 const EXPECT_CREATED = 1_700_000_000;
 const EXPECT_EXPIRES = 1_700_000_600;
 
-describe("signInbound signature window survives the Window refactor byte-identically (R3)", () => {
+describe("signInbound signature window survives the Window refactor byte-identically", () => {
 	it("floors created and stamps created/expires verbatim in Signature-Input", async () => {
 		const kp = await fixedAgentKey();
 		const rawPub = new Uint8Array(

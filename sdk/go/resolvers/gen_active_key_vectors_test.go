@@ -12,15 +12,15 @@ package resolvers_test
 // — Go is the oracle, never a hand-authored table — and a per-vector sanity gate
 // asserts the oracle picked the index the vector was constructed to exercise.
 //
-// COVERAGE (the edges the three languages must agree on): the H2 base64 edges
+// COVERAGE (the edges the three languages must agree on): the base64 edges
 // (standard-alphabet `x`, `=`-padded `x`, valid unpadded `x`), the mixed-case
-// kty/crv lenient-accept, the C1 timestamp edges (offset-less/naive bounds,
+// kty/crv lenient-accept, the timestamp edges (offset-less/naive bounds,
 // date-only bounds, empty/missing bounds, the not_before==now and not_after==now
 // half-open boundaries), and the document-order scan bound — now UNBOUNDED by
 // default (an index-10 key the old cap-of-10 hid is selected), with an explicit
 // bound that reaches the key, an exhausted explicit bound that returns none (and
 // logs), and a negative bound that clamps to scan-none. Replaying it in all three
-// languages is what LOCKS parity and would have caught the H2/C1 divergences.
+// languages is what LOCKS parity and would have caught these divergences.
 //
 // DETERMINISM: every key is derived from a FIXED seed and every instant is a
 // FIXED offset from wbaAnchor, so re-running reproduces byte-identical output.
@@ -301,15 +301,15 @@ func buildBasicVectors(t *testing.T) []activeKeyVector {
 func buildBase64Vectors(t *testing.T) []activeKeyVector {
 	t.Helper()
 	return []activeKeyVector{
-		buildVector(t, "valid-unpadded-x-selected", "a valid unpadded-urlsafe x decodes and is selected (H2 unchanged path)", nil,
+		buildVector(t, "valid-unpadded-x-selected", "a valid unpadded-urlsafe x decodes and is selected", nil,
 			[]kb{activeKB("valid")}, 0),
-		buildVector(t, "standard-alphabet-x-then-valid", "an active key with a STANDARD-alphabet x (+//) is skipped; the next valid key wins (H2)", nil,
+		buildVector(t, "standard-alphabet-x-then-valid", "an active key with a STANDARD-alphabet x (+//) is skipped; the next valid key wins", nil,
 			[]kb{stdAlphaKB(), activeKB("valid")}, 1),
-		buildVector(t, "standard-alphabet-x-only-none", "the only key has a STANDARD-alphabet x; Go rejects it → none (H2: py/ts once selected it)", nil,
+		buildVector(t, "standard-alphabet-x-only-none", "the only key has a STANDARD-alphabet x; Go rejects it → none (py/ts once selected it)", nil,
 			[]kb{stdAlphaKB()}, -1),
-		buildVector(t, "padded-x-then-valid", "an active key with a '='-PADDED urlsafe x is skipped; the next valid key wins (H2)", nil,
+		buildVector(t, "padded-x-then-valid", "an active key with a '='-PADDED urlsafe x is skipped; the next valid key wins", nil,
 			[]kb{paddedKB(), activeKB("valid")}, 1),
-		buildVector(t, "padded-x-only-none", "the only key has a '='-PADDED x; Go rejects it → none (H2: py/ts once selected it)", nil,
+		buildVector(t, "padded-x-only-none", "the only key has a '='-PADDED x; Go rejects it → none (py/ts once selected it)", nil,
 			[]kb{paddedKB()}, -1),
 		buildVector(t, "non-okp-then-valid", "a window-active non-OKP key is skipped; the next valid key wins", nil,
 			[]kb{mutateActive("rsa", func(j *activeKeyJWK) { j.Kty = "RSA" }), activeKB("valid")}, 1),
@@ -337,9 +337,9 @@ func buildTimestampVectors(t *testing.T) []activeKeyVector {
 	nbEqNow := withBounds(activeKB("nbnow"), rfc(wbaAnchor), rfc(wbaAnchor.Add(time.Hour)), true)
 	naEqNow := withBounds(activeKB("nanow"), rfc(wbaAnchor.Add(-time.Hour)), rfc(wbaAnchor), false)
 	return []activeKeyVector{
-		buildVector(t, "offset-less-bound-then-valid", "an offset-less (naive) window is inactive; the next valid key wins (C1)", nil,
+		buildVector(t, "offset-less-bound-then-valid", "an offset-less (naive) window is inactive; the next valid key wins", nil,
 			[]kb{naive("naive"), activeKB("valid")}, 1),
-		buildVector(t, "offset-less-bound-only-none", "the only key has offset-less bounds → none (C1)", nil,
+		buildVector(t, "offset-less-bound-only-none", "the only key has offset-less bounds → none", nil,
 			[]kb{naive("naive")}, -1),
 		buildVector(t, "date-only-bound-then-valid", "a date-only (no time) bound is unparseable → inactive; the next valid key wins", nil,
 			[]kb{dateOnly("dateonly"), activeKB("valid")}, 1),

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "RAMP L1 helpers (stateless, IO-free protocol mechanics), exposed at the repo root so plain npm — which has no git-subdirectory support — can pin the TS SDK by commit as a whole-repo git dependency (parity with the Go/pip git+subdir+rev pins). Re-exports sdk/ts, which compiles the in-repo gen/ts by relative path. Self-contained packaging + npm publish is tracked under RAMP-96.",
+  "description": "RAMP L1 helpers (stateless, IO-free protocol mechanics), exposed at the repo root so plain npm — which has no git-subdirectory support — can pin the TS SDK by commit as a whole-repo git dependency (parity with the Go/pip git+subdir+rev pins). Re-exports sdk/ts, which compiles the in-repo gen/ts by relative path. Self-contained packaging and npm publish are not yet implemented.",
   "files": [
     "sdk/ts",
     "gen/ts"

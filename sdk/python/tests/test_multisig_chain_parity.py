@@ -1,11 +1,11 @@
-"""sdk/python multisig forwarding-chain append+verify parity — TDD red for o3szv.
+"""sdk/python multisig forwarding-chain append+verify parity.
 
 Go carries the ONLY multisig surface today (helpers.AppendSignature,
 VerifyMultisigRequest[Resolved], hop budget); under the 3-SDKs decision a Python
 broker must append and verify chains too. This suite pins the NEW ported faces
 against the shared Go oracle.
 
-Core Invariant (o3szv): the RFC 9421 signature base — including the parameterized
+Core Invariant: the RFC 9421 signature base — including the parameterized
 ``"signature";key="sigN"`` forwarding-chain component rendered as
 ``:stdbase64(decoded-predecessor-signature-bytes):`` — must reconstruct
 BYTE-FOR-BYTE in Go and Python, so a chain signed in Go verifies in Python AND the
@@ -226,7 +226,7 @@ def _positive_two_hop_call(
 
 
 def test_multisig_uncovered_entitlement_header_is_rejected_per_hop() -> None:
-    # SEC-NEW-2: a relayed 2-hop request carrying an uncovered X-Entitlement-Token
+    # A relayed 2-hop request carrying an uncovered X-Entitlement-Token
     # header must be REJECTED with reason "signature" — the per-hop entitlement
     # coverage check (mirrors the single-sig neg_entitlement_uncovered case). The
     # positive chain's covered sets do NOT include x-entitlement-token, so slipping
@@ -246,21 +246,21 @@ def test_multisig_covered_entitlement_absent_header_still_verifies() -> None:
 
 
 def test_multisig_signature_within_max_age_bound_verifies() -> None:
-    # R2-4 clamp — WITHIN the bound: the positive chain's declared window is 600s;
+    # Lifetime clamp — WITHIN the bound: the positive chain's declared window is 600s;
     # a 700s clamp admits it.
     verdict = _positive_two_hop_call(max_signature_age=700)
     assert verdict.valid is True  # type: ignore[attr-defined]
 
 
 def test_multisig_signature_equal_to_max_age_bound_verifies() -> None:
-    # R2-4 clamp — EQUAL to the bound (inclusive): a 600s clamp admits the 600s
+    # Lifetime clamp — EQUAL to the bound (inclusive): a 600s clamp admits the 600s
     # window (mirrors Go's `> maxAge` rejection — equality passes).
     verdict = _positive_two_hop_call(max_signature_age=600)
     assert verdict.valid is True  # type: ignore[attr-defined]
 
 
 def test_multisig_signature_exceeding_max_age_bound_is_rejected() -> None:
-    # R2-4 clamp — EXCEEDING the bound: a 500s clamp rejects the 600s window with
+    # Lifetime clamp — EXCEEDING the bound: a 500s clamp rejects the 600s window with
     # reason "signature" (per-hop, mirrors Go ErrSignatureLifetimeTooLong).
     verdict = _positive_two_hop_call(max_signature_age=500)
     assert verdict.valid is False  # type: ignore[attr-defined]
@@ -268,6 +268,6 @@ def test_multisig_signature_exceeding_max_age_bound_is_rejected() -> None:
 
 
 def test_multisig_unbounded_max_age_default_verifies() -> None:
-    # R2-4 clamp — UNBOUNDED default (0 / omitted): the 600s window is admitted.
+    # Lifetime clamp — UNBOUNDED default (0 / omitted): the 600s window is admitted.
     verdict = _positive_two_hop_call(max_signature_age=0)
     assert verdict.valid is True  # type: ignore[attr-defined]

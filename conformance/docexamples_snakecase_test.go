@@ -35,7 +35,7 @@ func camelProtoFieldNames(t *testing.T) map[string]bool {
 
 var docJSONKeyRe = regexp.MustCompile(`"([a-zA-Z_][a-zA-Z0-9_]*)"\s*:`)
 
-// TestDocExamplesAreSnakeCase closes the harness blind spot behind RN1: the wire is
+// TestDocExamplesAreSnakeCase closes a harness blind spot: the wire is
 // snake_case proto-JSON, but nothing parsed doc code blocks through the client naming,
 // so camelCase RAMP field keys (e.g. required `idempotencyKey`) survived in walkthrough
 // examples and are hard-rejected by the generated clients. This fails if any doc code

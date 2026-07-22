@@ -7,18 +7,18 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// R1 (RAMP-102): the agent offer-acceptance wire envelope and its canonical
+// The agent offer-acceptance wire envelope and its canonical
 // signing payload exist on the modern execute shape. The acceptance must travel
 // WITH the reflected Offer on both single-mode (TransactionRequest) and batch
 // (TransactionItem), and the canonical payload must marshal deterministically
-// (byte-identical across the SDK signer (R2) and the Exchange verifier (R4)).
+// (byte-identical across the SDK signer and the Exchange verifier).
 func TestAgentAcceptance_wireFieldsExist(t *testing.T) {
 	acc := &rampv1.AgentAcceptance{
 		Signature:          "deadbeef",
 		SignatureAlgorithm: "EdDSA",
 	}
 
-	// Items-only (6afpc): each item carries a per-item acceptance alongside its
+	// Items-only: each item carries a per-item acceptance alongside its
 	// reflected Offer (single-offer mode removed — a single offer is a 1-item list).
 	item := &rampv1.TransactionItem{
 		Offer:           &rampv1.Offer{OfferId: "of_2"},
@@ -32,8 +32,8 @@ func TestAgentAcceptance_wireFieldsExist(t *testing.T) {
 	}
 }
 
-// The canonical signing structure is a dedicated message so the signer (R2) and
-// verifier (R4) derive byte-identical signed bytes from the same proto. It MUST
+// The canonical signing structure is a dedicated message so the signer and
+// verifier derive byte-identical signed bytes from the same proto. It MUST
 // marshal deterministically.
 func TestAgentAcceptancePayload_deterministicMarshal(t *testing.T) {
 	payload := &rampv1.AgentAcceptancePayload{

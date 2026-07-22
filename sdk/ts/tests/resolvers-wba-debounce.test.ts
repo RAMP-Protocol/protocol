@@ -1,4 +1,4 @@
-// RAMP-24 anti-amplification parity (TS port of the Go
+// Anti-amplification parity (TS port of the Go
 // wbakeyresolver_debounce_test.go). The unknown-thumbprint force-refresh is
 // throttled to one directory fetch per debounce window per host, and a
 // concurrent burst coalesces to one in-flight fetch. Because the resolver runs

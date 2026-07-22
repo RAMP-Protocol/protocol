@@ -112,7 +112,7 @@ def revocation_json(as_of: datetime, revoked: list[str]) -> str:
 
 
 def jwks_entry(kid: str, x: str) -> dict[str, Any]:
-    """A valid Ed25519 JWKS entry keyed by kid (the R1 ad-hoc doc shape)."""
+    """A valid Ed25519 JWKS entry keyed by kid (the ad-hoc doc shape)."""
     return {"kid": kid, "kty": "OKP", "crv": "Ed25519", "x": x}
 
 

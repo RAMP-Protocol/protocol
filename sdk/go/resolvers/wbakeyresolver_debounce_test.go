@@ -1,6 +1,6 @@
 package resolvers_test
 
-// wbakeyresolver_debounce_test.go — RAMP-24 anti-amplification: the
+// wbakeyresolver_debounce_test.go — anti-amplification: the
 // unknown-thumbprint force-refresh is throttled to one directory fetch per
 // SyncDebounce window per host, and a concurrent burst coalesces to one
 // in-flight fetch via singleflight. Because the resolver runs BEFORE the ed25519

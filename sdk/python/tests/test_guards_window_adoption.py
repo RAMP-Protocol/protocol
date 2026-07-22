@@ -1,4 +1,4 @@
-"""Structural guard for the injectable-Window adoption (djeue).
+"""Structural guard for the injectable-Window adoption.
 
 DISEASE: a sign site that mints a signature's (created, expires) pair by inline
 now+ttl arithmetic (e.g. ``expires = created + self._ttl_sec``) instead of sourcing

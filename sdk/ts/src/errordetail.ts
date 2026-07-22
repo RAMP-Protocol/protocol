@@ -29,7 +29,7 @@ import { ErrorDetailSchema } from "../../../gen/ts/wire/schemas.ts";
 // (domain, message, reason), mirroring Go one-for-one: the builder sets ONLY the
 // reason block and omits the reason message's extra sub-fields (offer_id,
 // rejected_paths, …) — a caller that needs them, or metadata, mutates the returned
-// object post-construction, exactly as the Go emitter does. A TS service (RAMP-24)
+// object post-construction, exactly as the Go emitter does. A TS service
 // now emits the same typed envelope a Go service does; byte-parity of both halves is
 // gated by error-detail-vectors.json, replayed in Go + Python + TS.
 //

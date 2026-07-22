@@ -114,7 +114,7 @@
     },
     {
       "label": "valid-unpadded-x-selected",
-      "note": "a valid unpadded-urlsafe x decodes and is selected (H2 unchanged path)",
+      "note": "a valid unpadded-urlsafe x decodes and is selected",
       "max_scan": null,
       "keys": [
         {
@@ -132,7 +132,7 @@
     },
     {
       "label": "standard-alphabet-x-then-valid",
-      "note": "an active key with a STANDARD-alphabet x (+//) is skipped; the next valid key wins (H2)",
+      "note": "an active key with a STANDARD-alphabet x (+//) is skipped; the next valid key wins",
       "max_scan": null,
       "keys": [
         {
@@ -157,7 +157,7 @@
     },
     {
       "label": "standard-alphabet-x-only-none",
-      "note": "the only key has a STANDARD-alphabet x; Go rejects it → none (H2: py/ts once selected it)",
+      "note": "the only key has a STANDARD-alphabet x; Go rejects it → none (py/ts once selected it)",
       "max_scan": null,
       "keys": [
         {
@@ -175,7 +175,7 @@
     },
     {
       "label": "padded-x-then-valid",
-      "note": "an active key with a '='-PADDED urlsafe x is skipped; the next valid key wins (H2)",
+      "note": "an active key with a '='-PADDED urlsafe x is skipped; the next valid key wins",
       "max_scan": null,
       "keys": [
         {
@@ -200,7 +200,7 @@
     },
     {
       "label": "padded-x-only-none",
-      "note": "the only key has a '='-PADDED x; Go rejects it → none (H2: py/ts once selected it)",
+      "note": "the only key has a '='-PADDED x; Go rejects it → none (py/ts once selected it)",
       "max_scan": null,
       "keys": [
         {
@@ -336,7 +336,7 @@
     },
     {
       "label": "offset-less-bound-then-valid",
-      "note": "an offset-less (naive) window is inactive; the next valid key wins (C1)",
+      "note": "an offset-less (naive) window is inactive; the next valid key wins",
       "max_scan": null,
       "keys": [
         {
@@ -361,7 +361,7 @@
     },
     {
       "label": "offset-less-bound-only-none",
-      "note": "the only key has offset-less bounds → none (C1)",
+      "note": "the only key has offset-less bounds → none",
       "max_scan": null,
       "keys": [
         {

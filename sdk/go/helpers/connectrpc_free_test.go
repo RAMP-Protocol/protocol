@@ -1,6 +1,6 @@
 package helpers_test
 
-// Structural neutrality guard for the sdk/go L1 helpers package (ixs7u.15, the
+// Structural neutrality guard for the sdk/go L1 helpers package (the
 // core/connect split with the folded-in AsConnectError decouple). The Core
 // Invariant of that refactor is transport neutrality: a grpc-go / plain
 // net/http / any-transport consumer that only wants the neutral L1 mechanics

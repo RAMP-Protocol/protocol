@@ -7,7 +7,7 @@ import (
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
-// Regression test for the items-only collapse (epic 6afpc / RAMP-102).
+// Regression test for the items-only collapse.
 //
 // Core Invariant: a redeemed offer is a self-contained bearer token — the agent
 // presents the WHOLE signed Offer in each TransactionItem, so the verifier

@@ -1,8 +1,8 @@
-// Signed-URL + RFC 9421 GET-PoP byte-parity (TypeScript side) — TDD red for ixs7u.5.
+// Signed-URL + RFC 9421 GET-PoP byte-parity (TypeScript side).
 //
 // The Core Invariant for these two helpers is byte-identical output to the
-// sdk/go oracle. Per the user-decided parity contract (see ixs7u.5 notes: "Go
-// golden-emitter -> shared testdata"), the implement step adds a Go golden
+// sdk/go oracle. Per the user-decided parity contract ("Go golden-emitter ->
+// shared testdata"), the implement step adds a Go golden
 // emitter under sdk/go/helpers that signs with the REAL Go signer and writes:
 //
 //   sdk/go/helpers/testdata/signedurl-vectors.json  (SignURLEd25519 output)

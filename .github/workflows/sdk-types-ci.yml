@@ -109,8 +109,8 @@ jobs:
       - name: assert Go golden vectors are current
         run: go test ./sdk/go/helpers/ -run TestGenerateVectors
 
-      # sdk/ts L1 helpers PLUS the L2 core + Hono server-verify binding (ixs7u.10:
-      # offer-verify over JCS, the branded VerifiedOffer guard, the server-verify
+      # sdk/ts L1 helpers PLUS the L2 core + Hono server-verify binding
+      # (offer-verify over JCS, the branded VerifiedOffer guard, the server-verify
       # seam). `npm install` pulls the `canonicalize` JCS dep declared in
       # sdk/ts/package.json; the new core/hono suites run under the same `npm test`.
       - name: TypeScript L1 + L2 core parity

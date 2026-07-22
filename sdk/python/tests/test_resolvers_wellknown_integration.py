@@ -1,6 +1,6 @@
 """Integration suite (TDD red) for the ported STATIC, WELL-KNOWN-KEY, and
 WELL-KNOWN-ENDPOINT resolver faces — mirroring sdk/go/helpers
-keyresolver_test.go + endpointresolver_test.go 1:1, plus the R2 skip-not-fail
+keyresolver_test.go + endpointresolver_test.go 1:1, plus the skip-not-fail
 JWKS matrix.
 
 These faces are IO-bound, so every case drives a REAL http.server origin (the
@@ -38,7 +38,7 @@ from resolvers_harness import (
 # parity with the Go static test.
 from ramp_sdk.keyresolver import StaticKeyResolver
 
-# RED: ramp_sdk.resolvers does not exist yet (TDD red for bsh8k). The typed error
+# RED: ramp_sdk.resolvers does not exist yet (TDD red). The typed error
 # classes and the fetching faces are the ported public surface.
 from ramp_sdk.resolvers import (  # type: ignore[import-not-found]
     DirectoryUnavailableError,
@@ -106,7 +106,7 @@ def test_wellknown_key_non200_raises_directory_unavailable() -> None:
 
 
 def test_wellknown_key_skips_malformed_entries_resolves_survivors() -> None:
-    # R2: JWKS extraction is skip-not-fail — one malformed key must not kill the
+    # JWKS extraction is skip-not-fail — one malformed key must not kill the
     # whole publisher key set; survivors still resolve, bad entries become misses.
     good = make_key()
     non_ed = make_key()

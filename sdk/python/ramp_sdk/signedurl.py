@@ -6,7 +6,7 @@ resolution is INJECTED (``resolve_key``) so no IO/state lives in the SDK — the
 ADR-020 §4 KeyResolver split; ``now`` is INJECTED so the verify reads no wall
 clock.
 
-Byte contract (Constantine, 2026-07-07): the signature covers ``"GET\\n<url>"``
+Byte contract: the signature covers ``"GET\\n<url>"``
 as OPAQUE URL BYTES. Neither signer nor verifier re-normalizes scheme/host/path —
 a mixed-case host, an explicit default port, and a raw space or percent in the
 path are all preserved verbatim. The ONLY transform is deterministic query

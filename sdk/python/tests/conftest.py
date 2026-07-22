@@ -1,4 +1,4 @@
-"""Shared pytest fixtures/paths for the sdk/python parity suites (ixs7u.6).
+"""Shared pytest fixtures/paths for the sdk/python parity suites.
 
 The parity suites assert sdk/python's `ramp_sdk` L1 helpers against the SHARED
 Go-oracle vectors (never against copied app fixtures — Core Invariant). This

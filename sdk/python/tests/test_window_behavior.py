@@ -1,11 +1,11 @@
-"""Window behaviour (Python side) — TDD red for djeue.
+"""Window behaviour (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/window.behavior.test.ts.
 
 The signature Window (Go core/sigwindow.go) carries a clock → NOT vector-gated.
 Two faces:
   - clock_window(now, ttl_sec): created = int(now()), expires = created+ttl
-    (R3: MUST int()-truncate — Go .Unix() floors; the current SigningTransport
+    (MUST int()-truncate — Go .Unix() floors; the current SigningTransport
      mint uses int(self._now()); an un-truncated default would change signature
      bytes).
   - monotonic_window(now, ttl_sec): expires strictly increases across a burst

@@ -1,4 +1,4 @@
-// Regression guard for the raw-URL runtime-shape divergence (RAMP-120).
+// Regression guard for the raw-URL runtime-shape divergence.
 //
 // Some edge runtimes (Fastly Compute) hand the request URL as a URL-LIKE OBJECT
 // rather than a primitive string. Both URL-consuming SDK faces — the Ed25519

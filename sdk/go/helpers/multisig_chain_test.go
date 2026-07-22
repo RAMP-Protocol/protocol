@@ -11,7 +11,7 @@ import (
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
-// R3 (RAMP-56): the agent ALWAYS signs its request (sig1); a relaying broker
+// Forward-chain: the agent ALWAYS signs its request (sig1); a relaying broker
 // chains its signature (sig2) on top via AppendSignature. VerifyMultisigRequest
 // returns ALL verified labels in chain order, enforcing the order-bound
 // forwarding chain. Single-sig is exactly the N=1 case of this path.

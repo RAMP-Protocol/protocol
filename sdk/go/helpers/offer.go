@@ -72,7 +72,7 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 // language (Go/TS/Python) reproduces the exact signed bytes without a protobuf
 // binary codec. See canonicalsign.go for the pinned proto-JSON option set.
 //
-// NOTE (RAMP-96 reconciliation): the protocol spec covers expires_at so a
+// NOTE (expires_at reconciliation): the protocol spec covers expires_at so a
 // relaying Broker cannot extend/shorten a signed offer's TTL. The pre-SDK
 // service-internal signer additionally cleared expires_at (a stateless-reissue
 // workaround); this SDK follows the protocol. The platform adopts this behavior

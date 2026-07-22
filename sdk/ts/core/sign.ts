@@ -62,7 +62,7 @@ export async function signInbound(
 	// Source (created, expires) from the injected Window, defaulting to a
 	// clockWindow over now (ms → seconds) and ttlSec. clockWindow floors to
 	// integer seconds, so the @signature-params bytes stay byte-identical to the
-	// historical inline `Math.floor(now()/1000)` mint (R3).
+	// historical inline `Math.floor(now()/1000)` mint.
 	const ttlSec = opts.ttlSec ?? DEFAULT_POP_TTL_SEC;
 	const window =
 		opts.window ??

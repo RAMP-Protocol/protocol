@@ -1,4 +1,5 @@
-// Idempotency-validate parity (TypeScript side) — TDD red for djeue.
+// Idempotency-validate parity (TypeScript side): validateIdempotencyKey mirrors
+// the Go oracle — the only rule is non-empty (protocol min_len=1).
 //
 // sdk/ts `validateIdempotencyKey` MUST reproduce the sdk/go oracle: the ONLY
 // rule is non-empty (protocol min_len=1). The shared vectors at

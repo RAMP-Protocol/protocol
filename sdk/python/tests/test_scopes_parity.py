@@ -1,4 +1,4 @@
-"""Scopes parity (Python side) — TDD red for djeue.
+"""Scopes parity (Python side).
 
 Mirrors the sdk/ts sibling sdk/ts/tests/scopes.parity.test.ts.
 
@@ -6,7 +6,7 @@ Mirrors the sdk/ts sibling sdk/ts/tests/scopes.parity.test.ts.
 oracle byte-for-byte. The shared vectors at
 sdk/go/helpers/testdata/scopes-vectors.json carry:
   - normalize: {input:[str], normalized:[str]|null}  (Go returns nil → JSON null
-    for empty/all-empty input, R5 — the comparator treats null == []).
+    for empty/all-empty input; the comparator treats null == []).
   - subset:    {sub:[str], super:[str], expected:bool}.
 
 RED now purely because ``ramp_sdk.scopes`` does not exist yet (the import below
@@ -34,7 +34,7 @@ def test_scopes_vector_sets_nonempty() -> None:
 
 @pytest.mark.parametrize("vector", _NORMALIZE, ids=[v["name"] for v in _NORMALIZE])
 def test_normalize_matches_go_oracle(vector: dict) -> None:
-    # R5: Go emits null for empty/all-empty; the Python face returns []. Coalesce
+    # Go emits null for empty/all-empty; the Python face returns []. Coalesce
     # so the empty-input vector matches.
     want = vector["normalized"] or []
     assert normalize_scopes(list(vector["input"])) == want

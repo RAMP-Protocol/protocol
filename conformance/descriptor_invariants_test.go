@@ -296,7 +296,7 @@ func fieldEnum(t *testing.T, md protoreflect.MessageDescriptor, field string) pr
 	return fd.Enum()
 }
 
-// TestRequesterBillingRefStaysRemoved pins the RAMP-155 removal at the
+// TestRequesterBillingRefStaysRemoved pins the billing_ref removal at the
 // descriptor level: Requester carries no billing_ref field and no field 5,
 // and both stay reserved. protoc enforces the reservation only while the two
 // `reserved` statements exist in the source; `buf breaking` (which would flag
@@ -306,15 +306,42 @@ func fieldEnum(t *testing.T, md protoreflect.MessageDescriptor, field string) pr
 func TestRequesterBillingRefStaysRemoved(t *testing.T) {
 	md := (&rampv1.Requester{}).ProtoReflect().Descriptor()
 	if fd := md.Fields().ByName("billing_ref"); fd != nil {
-		t.Errorf("Requester regained a billing_ref field (number %d) — RAMP-155 removed it", fd.Number())
+		t.Errorf("Requester regained a billing_ref field (number %d) — it was removed and its number reserved", fd.Number())
 	}
 	if fd := md.Fields().ByNumber(5); fd != nil {
-		t.Errorf("Requester field number 5 reused by %q — RAMP-155 reserved it", fd.Name())
+		t.Errorf("Requester field number 5 reused by %q — it must stay reserved", fd.Name())
 	}
 	if !md.ReservedRanges().Has(5) {
 		t.Error("Requester no longer reserves field number 5 — restore `reserved 5;`")
 	}
 	if !md.ReservedNames().Has("billing_ref") {
 		t.Error(`Requester no longer reserves the name billing_ref — restore 'reserved "billing_ref";'`)
+	}
+}
+
+// TestResourceMutabilityPresenceContract pins the presence semantics the typed
+// ResourceEntry.resource_mutability field rests on. That field is proto3 `optional`
+// (explicit presence), so an omitted value skips its not_in:[0] rule and is VALID —
+// the common ingest case where a publisher does not declare the hint, which the
+// Exchange then defaults to STATIC at Offer build. Drop the `optional` keyword and
+// the field becomes a singular enum whose zero is present-and-rejected, silently
+// flipping every omitting feed to rejected while `buf breaking` (the change is
+// wire-compatible) and the language gates stay green. The Offer-side twin
+// ResourceIdentity.resource_mutability is deliberately singular (no presence): it is
+// required on every signed Offer, so its zero must always be rejected. Pin both halves.
+func TestResourceMutabilityPresenceContract(t *testing.T) {
+	entry := (&rampv1.ResourceEntry{}).ProtoReflect().Descriptor()
+	if fd := entry.Fields().ByName("resource_mutability"); fd == nil {
+		t.Fatal("ResourceEntry has no resource_mutability field")
+	} else if !fd.HasPresence() {
+		t.Error("ResourceEntry.resource_mutability lost explicit presence — restore the `optional` keyword; " +
+			"without it an omitted hint is a present zero and not_in:[0] rejects every feed that omits the field")
+	}
+	identity := (&rampv1.ResourceIdentity{}).ProtoReflect().Descriptor()
+	if fd := identity.Fields().ByName("resource_mutability"); fd == nil {
+		t.Fatal("ResourceIdentity has no resource_mutability field")
+	} else if fd.HasPresence() {
+		t.Error("ResourceIdentity.resource_mutability gained explicit presence — it must stay singular; " +
+			"it is required on every signed Offer, so its zero must always be rejected")
 	}
 }

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Structural guard for the sdk/ts L1 relocation (ixs7u.5). This is the
+// Structural guard for the sdk/ts L1 relocation. This is the
 // class-level counter-measure the sweep-verify atom requires: it pins that the
 // canonical sdk/ts helpers keep composing the generated artifacts + the fixed
 // byte contract, so a future edit cannot silently re-introduce the disease the
@@ -11,8 +11,8 @@ import { describe, expect, it } from "vitest";
 //
 // SCOPE — deliberately sdk/ts/src ONLY. A tree-wide ban on hand-rolled TS
 // crypto would false-fire on the app's src/edge/src/{thumbprint,verify,pop}.ts,
-// which MUST still exist until their deletion in the downstream adoption ticket
-// (ixs7u.7). The tree-wide guard belongs to that ticket; here the guard is
+// which MUST still exist until their deletion in the downstream adoption work.
+// The tree-wide guard belongs to that downstream work; here the guard is
 // correctly scoped to the new canonical library.
 //
 // The behavioral guard for byte-parity is the parity suite
@@ -103,7 +103,7 @@ describe("sdk/ts library-adoption guard", () => {
 	});
 });
 
-// ---- sdk/ts/core transport-neutrality guard (ixs7u.10) ----
+// ---- sdk/ts/core transport-neutrality guard ----
 //
 // Mirror of the Go core "no connectrpc import" guard (sdk/go/core
 // library_adoption_guard_test.go). The L2 CORE must impose NOTHING beyond the web
