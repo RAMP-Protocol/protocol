@@ -9007,7 +9007,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
 	"\x05_unitB\v\n" +
-	"\t_metering\"\xd7\x02\n" +
+	"\t_metering\"\xc4\x02\n" +
 	"\tRequester\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x124\n" +
@@ -9020,7 +9020,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\a\n" +
 	"\x05_nameB\r\n" +
-	"\v_delegationJ\x04\b\x05\x10\x06R\vbilling_ref\"\xe9\x04\n" +
+	"\v_delegation\"\xe9\x04\n" +
 	"\n" +
 	"Delegation\x12)\n" +
 	"\x10principal_domain\x18\x01 \x01(\tR\x0fprincipalDomain\x12!\n" +

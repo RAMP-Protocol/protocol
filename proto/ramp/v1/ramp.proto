@@ -1435,13 +1435,6 @@ message Requester {
   // Human-readable name (e.g., "Acme Research Assistant").
   optional string name = 4;
 
-  // Field 5 was a caller-written billing label. Removed: billing and cost
-  // attribution key on the verified caller identity and the account minted at
-  // Register, never on anything the caller writes into the request. Reserved
-  // so the number and name can never be reused with a different meaning.
-  reserved 5;
-  reserved "billing_ref";
-
   // Entitlement scopes. Declare what the requester can access.
   //
   // The Exchange filters its catalog to resources matching these scopes.
