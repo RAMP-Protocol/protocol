@@ -317,7 +317,7 @@ type offerVerifyVector struct {
 	NowUnix           int64           `json:"now_unix"`
 	ExpectedVerified  bool            `json:"expected_verified"`
 	// ExchangeSeedHex is the exchange offer-signing seed (fixedSeed 0x66), so a
-	// sign-face port re-signs canonicalOfferPayload(offer_json) and byte-matches
+	// sign-face port re-signs CanonicalOfferBytes(offer_json) and byte-matches
 	// the signature already embedded in offer_json.
 	ExchangeSeedHex string `json:"exchange_seed_hex"`
 }
@@ -483,7 +483,7 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 // offer exactly as the Connect codec emits it (camelCase json_names, enums as
 // names, EmitUnpopulated zero-inflation; JCS-stabilized so the committed file is
 // deterministic), canonical_json is the byte sequence the offer signature covers
-// (canonicalOfferPayload: signature/signature_algorithm cleared, snake_case,
+// (CanonicalOfferBytes: signature/signature_algorithm cleared, snake_case,
 // omit-unpopulated, JCS). A from-wire canonicalizer in any language must map
 // wire_json to canonical_json exactly.
 type wireCanonicalVector struct {
@@ -516,7 +516,7 @@ func buildWireCanonicalVectors(t *testing.T) []wireCanonicalVector {
 		if err != nil {
 			t.Fatalf("%s: wire JCS: %v", name, err)
 		}
-		canonical, err := canonicalOfferPayload(offer)
+		canonical, err := CanonicalOfferBytes(offer)
 		if err != nil {
 			t.Fatalf("%s: canonical payload: %v", name, err)
 		}

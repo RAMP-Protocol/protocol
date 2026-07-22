@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 72 symbols at cross-language parity · 14 documented divergences · 98 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
+**At a glance:** 72 symbols at cross-language parity · 14 documented divergences · 99 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -198,6 +198,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.AlgEd25519` | RFC 9421 alg tag constant; inlined per language. |
 | `helpers.AllSignaturesFromContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
 | `helpers.BrokerKeyIDPrefix` | Relay keyID wire-prefix constant; inlined per language. |
+| `helpers.CanonicalOfferBytes` | Go-only canonical-offer-bytes accessor (the verbatim JCS-over-proto-JSON bytes an Offer signature covers, for callers persisting re-verifiable offer evidence); py/ts route offer signing/verification through SignOffer / the Verifier face and never need the raw signed bytes. |
 | `helpers.ComponentParam` | Go value type for an RFC 9421 covered-component parameter; py/ts model components inline. |
 | `helpers.CoveredComponent` | Go value type for an RFC 9421 covered component; py/ts model components inline. |
 | `helpers.ErrAcceptanceSignatureInvalid` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |

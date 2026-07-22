@@ -1,7 +1,9 @@
 package helpers_test
 
 import (
+	"bytes"
 	"crypto/ed25519"
+	"encoding/hex"
 	"errors"
 	"testing"
 	"time"
@@ -95,6 +97,75 @@ func TestVerifyOffer_malformedHex(t *testing.T) {
 func TestVerifyOffer_nil(t *testing.T) {
 	pub, _, _ := ed25519.GenerateKey(nil)
 	if err := helpers.VerifyOffer(nil, "00", pub); err == nil {
+		t.Error("nil offer should error")
+	}
+}
+
+func TestCanonicalOfferBytes_matchesSignOffer(t *testing.T) {
+	// The bytes CanonicalOfferBytes returns are exactly what SignOffer signed:
+	// verifying the SignOffer signature directly over them must hold. This is the
+	// property a caller relies on to persist verbatim, re-verifiable offer evidence.
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	offer := sampleOffer()
+	sigHex, err := helpers.SignOffer(priv, offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canon, err := helpers.CanonicalOfferBytes(offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := hex.DecodeString(sigHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ed25519.Verify(pub, canon, sig) {
+		t.Error("SignOffer signature must verify over CanonicalOfferBytes")
+	}
+}
+
+func TestCanonicalOfferBytes_ignoresSignatureFields(t *testing.T) {
+	// signature/signature_algorithm are cleared on a clone before canonicalizing,
+	// so an already-signed offer yields the same bytes as the unsigned one — the
+	// signature cannot cover itself.
+	offer := sampleOffer()
+	before, err := helpers.CanonicalOfferBytes(offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer.Signature = "deadbeef"
+	offer.SignatureAlgorithm = helpers.OfferSignatureAlgorithm
+	after, err := helpers.CanonicalOfferBytes(offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Error("CanonicalOfferBytes must clear signature/signature_algorithm; bytes differ")
+	}
+}
+
+func TestCanonicalOfferBytes_coversExpiresAt(t *testing.T) {
+	// expires_at is inside the signed bytes (only the signature fields are
+	// cleared), so changing it changes the canonical output — the property that
+	// stops a relaying Broker from re-stretching a signed offer's TTL.
+	a := sampleOffer()
+	b := sampleOffer()
+	b.ExpiresAt = timestamppb.New(time.Unix(1799999999, 0))
+	ba, err := helpers.CanonicalOfferBytes(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bb, err := helpers.CanonicalOfferBytes(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(ba, bb) {
+		t.Error("offers differing only in expires_at must produce different CanonicalOfferBytes")
+	}
+}
+
+func TestCanonicalOfferBytes_nil(t *testing.T) {
+	if _, err := helpers.CanonicalOfferBytes(nil); err == nil {
 		t.Error("nil offer should error")
 	}
 }
