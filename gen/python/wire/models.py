@@ -13,7 +13,7 @@ from enum import Enum
 class AgentAcceptance(WireModel):
     signature: constr(min_length=1) = Field(
         ...,
-        description='Hex-encoded detached Ed25519 signature over the deterministic-marshaled\n AgentAcceptancePayload bytes.',
+        description='Hex-encoded detached Ed25519 signature over the canonical AgentAcceptancePayload\n bytes (see the canonical-signing definition on Offer.signature).',
     )
     signature_algorithm: str | None = Field(
         '', description='Signature algorithm; "EdDSA" for Ed25519.'
@@ -1740,7 +1740,7 @@ class ResourceResponse(WireModel):
 class TransactionItem(WireModel):
     agent_acceptance: AgentAcceptance | None = Field(
         None,
-        description="The agent's detached acceptance signature over this item's `offer`.\n Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes =\n deterministic AgentAcceptancePayload, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.",
+        description="The agent's detached acceptance signature over this item's `offer`.\n Optional on the wire; the Exchange enforces presence per\n item at the service layer for relayed batches. Signed bytes = the canonical\n AgentAcceptancePayload form, with requester_* and idempotency_key\n taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.",
     )
     offer: Offer = Field(
         ...,

@@ -37,6 +37,41 @@ Responses do not retrace the chain: the terminal Exchange returns directly to th
 originating agent, because the signed `retrieval_endpoint` is already bound to the
 agent's identity (`agent_identity_hash`) and needs no return-path relay.
 
+## Canonical signing: JCS over proto-JSON, not deterministic protobuf
+
+The two signed RAMP payloads that outlive an HTTP exchange — `Offer.signature` and
+the agent's `AgentAcceptance.signature` — originally covered deterministic protobuf
+*binary*: marshal the message with deterministic field order, sign those bytes. We
+reversed that and moved both onto RFC 8785 JCS over canonical proto-JSON,
+`JCS(protojson(msg with the signature fields cleared))`, under one pinned
+proto-JSON option set (snake_case field names, enums as name strings, unpopulated
+fields omitted).
+
+Deterministic protobuf marshaling is not actually canonical. Protobuf's own
+documentation disclaims byte stability across languages, across library versions,
+and in the presence of unknown fields — it is a best-effort local property, not a
+wire-format guarantee. That makes it unusable as the basis of a signature two
+independent implementations must agree on, which is precisely the RAMP case: an
+agent SDK signs, a broker relays, an Exchange verifies, and none of them need share
+a language. It also forces every verifier — including an edge worker or a browser
+client — to link a protobuf binary codec just to check a signature. JCS over
+proto-JSON has neither problem: it is a published canonicalization of JSON, and any
+language can reproduce the signed bytes from the JSON rendering alone. The
+Go-emitted golden vector is the arbiter, and the TS and Python SDKs replay it
+byte-for-byte.
+
+The reversal left a consequence worth naming, because it is the reason the canonical
+bytes are a first-class SDK export rather than an internal detail. A canonical form
+that changed once can change again, and a verifier that re-derives the bytes at
+verification time has silently pinned an *already-signed* payload to whatever
+canonicalization the SDK implements *later* — the failure would surface as "the
+signature does not verify", indistinguishable from "it was never signed". So all
+three SDKs expose the exact signed bytes as a public accessor (`CanonicalOfferBytes`
+/ `CanonicalAcceptanceBytes` in Go, `canonical_offer_payload` /
+`jcs_acceptance_payload` in Python, `canonicalOfferPayload` / `acceptancePayload` in
+TS). A party keeping evidence stores those bytes and re-verifies against them
+verbatim, rather than trusting a future canonicalizer to reproduce the past.
+
 ## "Marketplace" → "Exchange"
 
 The selling intermediary was originally called a *marketplace*. We renamed it to

@@ -70,6 +70,18 @@ canonicalization the SDK implements later. Python (`jcs_acceptance_payload`) and
 (`acceptancePayload`) already expose the equivalent public accessor; this brings the
 Go surface to parity.
 
+**Acceptance canonical-form text corrected (documentation only, no wire change).**
+`AgentAcceptance` and `AgentAcceptancePayload` still described the RETIRED signing
+form — "the deterministic protobuf serialization", "`proto.Marshal(Deterministic:
+true)`" — contradicting the canonical-signing block on `Offer.signature` in the same
+file, which already states that RFC 8785 JCS over canonical proto-JSON "applies to
+the agent offer-acceptance signature". The acceptance text now points at that single
+normative definition instead of restating a superseded recipe:
+`AgentAcceptancePayload` fixes the field set, `Offer.signature` fixes the byte
+layout. Implementations that followed the stale text would have produced
+non-verifying signatures. No field, message, or wire change — comments only, with
+`gen/` and the website mirror regenerated.
+
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
 billing label on `Requester` is gone; the field is deleted outright with no
 `reserved` statement — pre-v1 the number returns to the free pool, and

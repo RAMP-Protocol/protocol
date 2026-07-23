@@ -4364,13 +4364,14 @@ func (x *Delegation) GetExtCritical() []string {
 // agent's key (RFC 7638 thumbprint of the acceptance key).
 //
 // `signature` is a hex-encoded detached Ed25519 signature (NOT a JWS) over the
-// deterministic protobuf serialization of `AgentAcceptancePayload` — the same
-// hex/Ed25519 convention the SDK uses for Offer.signature. `signature_algorithm`
-// is "EdDSA".
+// CANONICAL SIGNING form of `AgentAcceptancePayload` — RFC 8785 JCS over canonical
+// proto-JSON, defined once on Offer.signature above and applying verbatim here —
+// the same hex/Ed25519 convention the SDK uses for Offer.signature.
+// `signature_algorithm` is "EdDSA".
 type AgentAcceptance struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Hex-encoded detached Ed25519 signature over the deterministic-marshaled
-	// AgentAcceptancePayload bytes.
+	// Hex-encoded detached Ed25519 signature over the canonical AgentAcceptancePayload
+	// bytes (see the canonical-signing definition on Offer.signature).
 	Signature string `protobuf:"bytes,1,opt,name=signature,proto3" json:"signature,omitempty"`
 	// Signature algorithm; "EdDSA" for Ed25519.
 	SignatureAlgorithm string `protobuf:"bytes,2,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
@@ -4425,8 +4426,10 @@ func (x *AgentAcceptance) GetSignatureAlgorithm() string {
 // AgentAcceptancePayload — the canonical signing structure for AgentAcceptance.
 // It is NEVER sent on the wire; it exists solely so the signer (SDK) and the
 // verifier (Exchange) derive BYTE-IDENTICAL signed bytes from the same proto
-// schema via `proto.Marshal(Deterministic: true)`. Underspecifying these bytes
-// is the top cross-implementation drift risk, so the field set is fixed here.
+// schema. This message fixes the FIELD SET; the byte layout is the canonical
+// signing form defined on Offer.signature — RFC 8785 JCS over canonical
+// proto-JSON with the pinned option set. Underspecifying either half is the top
+// cross-implementation drift risk, so both are pinned normatively.
 //
 // Field provenance when building the payload for an execute request:
 //   - offer_sig         = the accepted Offer.signature (the Exchange's hex
@@ -4632,8 +4635,8 @@ type TransactionItem struct {
 	Offer *Offer `protobuf:"bytes,3,opt,name=offer,proto3" json:"offer,omitempty"`
 	// The agent's detached acceptance signature over this item's `offer`.
 	// Optional on the wire; the Exchange enforces presence per
-	// item at the service layer for relayed batches. Signed bytes =
-	// deterministic AgentAcceptancePayload, with requester_* and idempotency_key
+	// item at the service layer for relayed batches. Signed bytes = the canonical
+	// AgentAcceptancePayload form, with requester_* and idempotency_key
 	// taken from the ENCLOSING TransactionRequest and offer_sig = offer.signature.
 	AgentAcceptance *AgentAcceptance `protobuf:"bytes,4,opt,name=agent_acceptance,json=agentAcceptance,proto3,oneof" json:"agent_acceptance,omitempty"`
 	unknownFields   protoimpl.UnknownFields
