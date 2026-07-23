@@ -17,9 +17,11 @@ import (
 // it stays valid no matter how many brokers relay the request, because it covers
 // the offer + requester + idempotency, not the HTTP envelope.
 //
-// The signed bytes are pinned by the AgentAcceptancePayload proto message so the
-// signer (agent) and the verifier (Exchange) derive them identically; both go
-// through CanonicalAcceptanceBytes, the single source of the byte layout.
+// The signed bytes are pinned in two halves, both normative: the
+// AgentAcceptancePayload proto message fixes the FIELD SET, and the canonical
+// signing form defined on Offer.signature fixes the BYTE LAYOUT. That is what
+// lets the signer (agent) and the verifier (Exchange) derive them identically;
+// both go through CanonicalAcceptanceBytes, the single implementation of the pair.
 
 // AcceptanceSignatureAlgorithm is the alg advertised on AgentAcceptance.
 // Always EdDSA for Ed25519.
@@ -33,7 +35,9 @@ var ErrAcceptanceSignatureInvalid = errors.New("helpers: offer-acceptance signat
 // CanonicalAcceptanceBytes returns the exact canonical byte sequence an agent's
 // offer acceptance covers: the accepted Offer.signature (which transitively binds
 // the offer's pricing, terms, expiry, and issuing Exchange), plus the requester
-// identity and the transaction's idempotency key. The returned bytes are
+// identity and idempotency key of the ENCLOSING execute request — in batch mode
+// both come from the TransactionRequest, never from the per-item TransactionItem,
+// which carries neither. The returned bytes are
 // byte-identical to what SignOfferAcceptance signs and VerifyOfferAcceptance
 // verifies over — persist them to re-verify an acceptance verbatim, independent of
 // how the canonical form later evolves. Re-verification also needs the persisted

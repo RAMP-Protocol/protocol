@@ -6,9 +6,10 @@ proto-JSON:
 
     signed_payload = JCS(protojson(msg with sig/sig_algorithm cleared))
 
-For acceptance this changes Go canonicalAcceptancePayload (acceptance.go) from the
-hand-rolled proto3 field-tag marshal (today's acceptance-vectors.json carries
-`canonical_bytes_hex` beginning `0a10…` — proto field tags) to JCS UTF-8 bytes.
+For acceptance this changes Go canonicalAcceptancePayload (acceptance.go, since
+exported as CanonicalAcceptanceBytes) from the hand-rolled proto3 field-tag marshal
+(today's acceptance-vectors.json carries `canonical_bytes_hex` beginning `0a10…` —
+proto field tags) to JCS UTF-8 bytes.
 The Go golden emitter therefore REGENERATES acceptance-vectors.json to the JCS form
 (new canonical bytes AND new signatures — the canonicalization itself changed, so
 this is the intended vector change, NOT a behavior-preservation violation).

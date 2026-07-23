@@ -1,7 +1,6 @@
 package helpers_test
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +11,7 @@ import (
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"google.golang.org/protobuf/proto"
 )
 
 func acceptanceFixture() (*rampv1.Offer, *rampv1.Requester, string) {
@@ -212,23 +212,21 @@ func TestCanonicalAcceptanceBytes_failsClosed(t *testing.T) {
 
 func TestCanonicalAcceptanceBytes_doesNotMutateInputs(t *testing.T) {
 	// The payload is built from getters onto a fresh message, so a caller can hand
-	// in the live Offer/Requester it is about to persist and get them back untouched.
+	// in the live Offer/Requester it is about to persist and get them back
+	// untouched. Nothing is cloned on the way in, so the whole message is compared:
+	// a future refactor could reach any field, not only the four the canonical form
+	// reads.
 	offer, requester, idem := acceptanceFixture()
-	before, err := helpers.CanonicalAcceptanceBytes(offer, requester, idem)
-	if err != nil {
+	offerBefore := proto.Clone(offer)
+	requesterBefore := proto.Clone(requester)
+
+	if _, err := helpers.CanonicalAcceptanceBytes(offer, requester, idem); err != nil {
 		t.Fatal(err)
 	}
-	if offer.GetSignature() != "ex-offer-sig-hex" || offer.GetOfferId() != "of_1" {
-		t.Error("CanonicalAcceptanceBytes must not mutate the caller's offer")
+	if !proto.Equal(offer, offerBefore) {
+		t.Errorf("CanonicalAcceptanceBytes mutated the caller's offer\n got  %v\n want %v", offer, offerBefore)
 	}
-	if requester.GetId() != "agent-1" || requester.GetDomain() != "agent.example.com" {
-		t.Error("CanonicalAcceptanceBytes must not mutate the caller's requester")
-	}
-	after, err := helpers.CanonicalAcceptanceBytes(offer, requester, idem)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(before, after) {
-		t.Error("CanonicalAcceptanceBytes must be deterministic for identical inputs")
+	if !proto.Equal(requester, requesterBefore) {
+		t.Errorf("CanonicalAcceptanceBytes mutated the caller's requester\n got  %v\n want %v", requester, requesterBefore)
 	}
 }
