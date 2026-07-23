@@ -4365,9 +4365,12 @@ func (x *Delegation) GetExtCritical() []string {
 //
 // `signature` is a hex-encoded detached Ed25519 signature (NOT a JWS) over the
 // CANONICAL SIGNING form of `AgentAcceptancePayload` — RFC 8785 JCS over canonical
-// proto-JSON, defined once on Offer.signature above and applying verbatim here —
-// the same hex/Ed25519 convention the SDK uses for Offer.signature.
-// `signature_algorithm` is "EdDSA".
+// proto-JSON. That form, including the pinned proto-JSON option set, is defined
+// once on `Offer.signature` and is the single normative definition; there is no
+// second recipe. `AgentAcceptancePayload` carries no signature fields, so the
+// clear-then-render step of that definition reduces here to
+// JCS(protojson(AgentAcceptancePayload)). Same hex/Ed25519 convention as
+// `Offer.signature`; `signature_algorithm` is "EdDSA".
 type AgentAcceptance struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Hex-encoded detached Ed25519 signature over the canonical AgentAcceptancePayload

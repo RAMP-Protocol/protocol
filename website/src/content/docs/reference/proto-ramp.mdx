@@ -158,7 +158,7 @@ A single offer commitment within a batch transaction.
 
 ### AgentAcceptance
 
-The agent's detached acceptance signature over an accepted Offer. It travels in the execute body alongside the reflected Offer and is independent of the transport (RFC 9421) request signature, so it survives any number of broker relays. The Exchange verifies it and binds the delivery URL to the agent's key (RFC 7638 thumbprint). `signature` is a hex-encoded detached Ed25519 signature over the JCS-canonicalized (RFC 8785) proto-JSON of [`AgentAcceptancePayload`](#agentacceptancepayload) — the same canonical signing form `Offer.signature` uses; `signature_algorithm` is `EdDSA`.
+The agent's detached acceptance signature over an accepted Offer. It travels in the execute body alongside the reflected Offer and is independent of the transport (RFC 9421) request signature, so it survives any number of broker relays. The Exchange verifies it and binds the delivery URL to the agent's key (RFC 7638 thumbprint). `signature` is a hex-encoded detached Ed25519 signature over the JCS-canonicalized (RFC 8785) proto-JSON of [`AgentAcceptancePayload`](#agentacceptancepayload) — the same canonical signing form `Offer.signature` defines, reduced here to `JCS(protojson(payload))` because the payload carries no signature fields to clear; `signature_algorithm` is `EdDSA`.
 
 ::proto-message{name=AgentAcceptance}
 
