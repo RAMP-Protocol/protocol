@@ -210,6 +210,11 @@
       "python": "apply_scopes",
       "ts": "applyScopes"
     },
+    "helpers.CanonicalAcceptanceBytes": {
+      "allowlist_reason": null,
+      "python": "jcs_acceptance_payload",
+      "ts": "acceptancePayload"
+    },
     "helpers.CanonicalOfferBytes": {
       "allowlist_reason": null,
       "python": "canonical_offer_payload",

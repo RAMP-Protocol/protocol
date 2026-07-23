@@ -1023,7 +1023,7 @@ func buildAcceptanceVectors(t *testing.T) []acceptanceVector {
 	for _, s := range specs {
 		offer := &rampv1.Offer{Signature: s.offerSig}
 		requester := &rampv1.Requester{Id: s.requesterID, Domain: s.requesterDomain}
-		canon, err := canonicalAcceptancePayload(offer, requester, s.idempotencyKey)
+		canon, err := CanonicalAcceptanceBytes(offer, requester, s.idempotencyKey)
 		if err != nil {
 			t.Fatalf("%s: canonical: %v", s.name, err)
 		}

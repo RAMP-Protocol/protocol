@@ -274,7 +274,7 @@ def jcs_acceptance_payload(
     The same JCS(protojson(...)) canonicalization the offer signature uses. proto-JSON
     OMITS unpopulated fields, so an empty ``requester_domain`` is absent from the
     object before JCS (matching the Go oracle's empty-domain vector). Fail-closed on
-    an empty ``offer_sig`` (mirror Go canonicalAcceptancePayload): an empty anchor
+    an empty ``offer_sig`` (mirror Go CanonicalAcceptanceBytes): an empty anchor
     would let the acceptance float free of any concrete offer.
     """
     if offer_sig == "":

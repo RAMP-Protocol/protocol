@@ -41,6 +41,18 @@ caller can persist the signed offer as verbatim, independently re-verifiable
 evidence. Python (`canonical_offer_payload`) and TS (`canonicalOfferPayload`) already
 expose the equivalent public accessor; this brings the Go surface to parity.
 
+**Go SDK: `helpers.CanonicalAcceptanceBytes` exported (additive, no wire change).**
+The acceptance-canonical-bytes accessor — RFC 8785 JCS over canonical proto-JSON of
+`AgentAcceptancePayload{offer_sig, requester_id, requester_domain, idempotency_key}`,
+byte-identical to what `SignOfferAcceptance` signs and `VerifyOfferAcceptance`
+verifies — is now a public Go symbol, completing the pair with
+`CanonicalOfferBytes`. A caller can persist an agent's acceptance as verbatim,
+independently re-verifiable evidence rather than re-deriving the bytes at
+verification time, which would pin an already-signed acceptance to whatever
+canonicalization the SDK implements later. Python (`jcs_acceptance_payload`) and TS
+(`acceptancePayload`) already expose the equivalent public accessor; this brings the
+Go surface to parity.
+
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
 billing label on `Requester` is gone; the field is deleted outright with no
 `reserved` statement — pre-v1 the number returns to the free pool, and

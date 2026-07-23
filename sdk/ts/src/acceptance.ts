@@ -54,7 +54,7 @@ function bytesToHex(bytes: Uint8Array): string {
  * acceptancePayload reproduces the canonical signed bytes:
  * JCS(protojson(AgentAcceptancePayload)) with an empty requester_domain omitted.
  * Throws on an empty offer signature (fail-closed, mirror Go
- * canonicalAcceptancePayload / Python jcs_acceptance_payload).
+ * CanonicalAcceptanceBytes / Python jcs_acceptance_payload).
  */
 export function acceptancePayload(input: AcceptanceInput): Uint8Array<ArrayBuffer> {
 	if (input.offerSig === "") {

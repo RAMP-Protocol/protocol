@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 73 symbols at cross-language parity · 14 documented divergences · 98 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
+**At a glance:** 74 symbols at cross-language parity · 14 documented divergences · 98 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -27,6 +27,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `AcceptanceSignatureAlgorithm` | `ACCEPTANCE_SIGNATURE_ALGORITHM` | `ACCEPTANCE_SIGNATURE_ALGORITHM` |
 | `AppendSignature` | `append_signature` | `appendSignature` |
 | `ApplyScopes` | `apply_scopes` | `applyScopes` |
+| `CanonicalAcceptanceBytes` | `jcs_acceptance_payload` | `acceptancePayload` |
 | `CanonicalOfferBytes` | `canonical_offer_payload` | `canonicalOfferPayload` |
 | `CanonicalizeMoney` | `canonicalize_money` | `canonicalizeMoney` |
 | `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
