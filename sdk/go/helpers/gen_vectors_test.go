@@ -331,7 +331,7 @@ type offerVerifyDoc struct {
 }
 
 // offerCanonicalProtoJSON renders offer to the SAME pinned proto-JSON the signer
-// canonicalizes over (camelCase, enums-as-names, omit-unpopulated). Emitting the
+// canonicalizes over (snake_case, enums-as-names, omit-unpopulated). Emitting the
 // vector's offer_json through the identical option set is what lets the port
 // reproduce JCS(protojson(offer)) byte-for-byte.
 func offerCanonicalProtoJSON(t *testing.T, offer *rampv1.Offer) json.RawMessage {
@@ -480,11 +480,12 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 }
 
 // wireCanonicalVector pins the wire-to-canonical conversion: wire_json is the
-// offer exactly as the Connect codec emits it (camelCase json_names, enums as
+// offer exactly as the Connect codec emits it (snake_case proto names, enums as
 // names, EmitUnpopulated zero-inflation; JCS-stabilized so the committed file is
 // deterministic), canonical_json is the byte sequence the offer signature covers
-// (CanonicalOfferBytes: signature/signature_algorithm cleared, snake_case,
-// omit-unpopulated, JCS). A from-wire canonicalizer in any language must map
+// (CanonicalOfferBytes: signature/signature_algorithm cleared, omit-unpopulated,
+// JCS). Both sides share the snake_case naming, so what a from-wire canonicalizer
+// must actually undo is the zero-inflation and the signature fields — it must map
 // wire_json to canonical_json exactly.
 type wireCanonicalVector struct {
 	Name          string          `json:"name"`
@@ -511,7 +512,8 @@ func buildWireCanonicalVectors(t *testing.T) []wireCanonicalVector {
 			t.Fatalf("%s: wire proto-JSON marshal: %v", name, err)
 		}
 		// JCS-stabilize the committed wire form (protojson whitespace/order is not
-		// deterministic); key CASE is untouched, so the camel wire shape survives.
+		// deterministic); JCS sorts and re-encodes but never RENAMES a key, so the
+		// codec's snake_case wire shape survives intact.
 		wireCanon, err := jcs.Transform(wirePJ)
 		if err != nil {
 			t.Fatalf("%s: wire JCS: %v", name, err)
