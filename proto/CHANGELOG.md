@@ -49,6 +49,15 @@ oracle. The SSRF-guarded transport is now a single env-driven client
 two flags (`SKIP_SSRF`, `ALLOW_INSECURE`). See `docs/sdk-parity-matrix.md` for the
 per-language surface.
 
+**Go SDK: `helpers.CanonicalOfferBytes` exported (additive, no wire change).**
+The offer-canonical-bytes accessor — RFC 8785 JCS over canonical proto-JSON with
+`signature`/`signature_algorithm` cleared, `expires_at` included, byte-identical to
+what `SignOffer` signs and `VerifyOffer` verifies — is now a public Go symbol. It
+exposes the single canonicalization the signer and verifier already share, so a
+caller can persist the signed offer as verbatim, independently re-verifiable
+evidence. Python (`canonical_offer_payload`) and TS (`canonicalOfferPayload`) already
+expose the equivalent public accessor; this brings the Go surface to parity.
+
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
 billing label on `Requester` is gone; the field is deleted outright with no
 `reserved` statement — pre-v1 the number returns to the free pool, and

@@ -69,6 +69,9 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 // ramp.proto Offer.signature. The returned bytes are byte-identical to what
 // SignOffer signs and VerifyOffer verifies over — persist them to re-verify an
 // Offer signature verbatim, independent of how the Offer message later evolves.
+// Re-verification also needs the persisted Offer.signature and the signer's trusted
+// public key: these bytes are the signed message, necessary but not by themselves
+// sufficient.
 //
 // The canonical form is RFC 8785 JCS over canonical proto-JSON —
 // JCS(protojson(offer with sig cleared)) — via canonicalSignPayload, so any

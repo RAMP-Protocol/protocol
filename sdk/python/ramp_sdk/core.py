@@ -147,7 +147,7 @@ def canonical_offer_payload(offer: dict[str, Any]) -> bytes:
     """Reproduce the offer's signed bytes: clear signature + signature_algorithm from
     the canonical proto-JSON, then apply RFC 8785 JCS.
 
-    MUST stay byte-identical to the Go oracle (helpers.canonicalOfferPayload). The
+    MUST stay byte-identical to the Go oracle (helpers.CanonicalOfferBytes). The
     offer is already canonical proto-JSON (snake_case, enums-as-names,
     omit-unpopulated) — the core only clears the two signature keys and re-JCS-es.
     """

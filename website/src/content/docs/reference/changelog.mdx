@@ -32,14 +32,14 @@ TS signed-URL verify (`Ed25519Verifier`), and cross-language `ErrorDetail` reade
 in Python; `parseErrorDetail` / `errorDetailFrom` in TS). The SSRF-guarded transport
 is a single env-driven client governed by two flags (`SKIP_SSRF`, `ALLOW_INSECURE`).
 
-**Go SDK: `helpers.CanonicalOfferBytes` (additive, Go-only, no wire change).**
-Returns the exact canonical bytes an `Offer` signature is computed over — RFC 8785
-JCS over canonical proto-JSON with `signature`/`signature_algorithm` cleared and
-`expires_at` included — byte-identical to what `SignOffer` signs and `VerifyOffer`
-verifies. It exposes the canonicalization the signer and verifier already share, for
-callers that persist the signed offer as verbatim, independently re-verifiable
-evidence. Go-only: Python/TS route offer signing and verification through the
-`signOffer`/`sign_offer` and verifier faces and never need the raw signed bytes.
+**Go SDK: `helpers.CanonicalOfferBytes` exported (additive, no wire change).**
+The offer-canonical-bytes accessor — RFC 8785 JCS over canonical proto-JSON with
+`signature`/`signature_algorithm` cleared, `expires_at` included, byte-identical to
+what `SignOffer` signs and `VerifyOffer` verifies — is now a public Go symbol. It
+exposes the single canonicalization the signer and verifier already share, so a
+caller can persist the signed offer as verbatim, independently re-verifiable
+evidence. Python (`canonical_offer_payload`) and TS (`canonicalOfferPayload`) already
+expose the equivalent public accessor; this brings the Go surface to parity.
 
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
 billing label on `Requester` is gone; the field is deleted outright with no

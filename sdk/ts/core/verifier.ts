@@ -144,7 +144,7 @@ function hexToBytes(hex: string): Uint8Array<ArrayBuffer> | undefined {
 /**
  * canonicalOfferPayload reproduces the signed bytes: clear signature +
  * signature_algorithm from the offer's canonical proto-JSON, then apply RFC 8785
- * JCS. MUST stay byte-identical to the Go oracle (helpers.canonicalOfferPayload).
+ * JCS. MUST stay byte-identical to the Go oracle (helpers.CanonicalOfferBytes).
  * The offer is already canonical proto-JSON (snake_case, enums-as-names,
  * omit-unpopulated) — the core only clears the two signature fields and re-JCS-es.
  */

@@ -142,6 +142,10 @@ func TestCanonicalOfferBytes_ignoresSignatureFields(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Error("CanonicalOfferBytes must clear signature/signature_algorithm; bytes differ")
 	}
+	// The clear happens on a clone: the caller's offer keeps the fields it set.
+	if offer.Signature != "deadbeef" || offer.SignatureAlgorithm != helpers.OfferSignatureAlgorithm {
+		t.Error("CanonicalOfferBytes must not mutate the caller's offer (clears on a clone)")
+	}
 }
 
 func TestCanonicalOfferBytes_coversExpiresAt(t *testing.T) {
