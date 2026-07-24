@@ -40,19 +40,26 @@ var ErrAcceptanceSignatureInvalid = errors.New("helpers: offer-acceptance signat
 // which carries neither. The returned bytes are
 // byte-identical to what SignOfferAcceptance signs and VerifyOfferAcceptance
 // verifies over — persist them to re-verify an acceptance verbatim, independent of
-// how the canonical form later evolves. Re-verification also needs the persisted
-// AgentAcceptance.signature and the signer's trusted public key: these bytes are the
-// signed message, necessary but not by themselves sufficient.
+// how the canonical form later evolves.
+//
+// Re-verification also needs the persisted AgentAcceptance.signature and the signer's
+// trusted public key: these bytes are the signed message, necessary but not by
+// themselves sufficient. A passing signature proves only that the key holder signed
+// THESE bytes, so a caller weighing them as evidence must also parse them and match
+// their content against the transaction in question.
 //
 // The canonical form is RFC 8785 JCS over canonical proto-JSON —
-// JCS(protojson(AgentAcceptancePayload)) — via canonicalSignPayload, the same
-// primitive the offer signature uses, so any language (Go/TS/Python) reproduces the
-// exact signed bytes without a protobuf binary codec. See canonicalsign.go for the
-// pinned proto-JSON option set.
+// JCS(protojson(AgentAcceptancePayload)) — the same definition the offer signature
+// uses, stated normatively on Offer.signature in ramp.proto: snake_case proto field
+// names, enums as name strings, unpopulated fields omitted. AgentAcceptancePayload
+// carries no signature fields, so the clear-then-render step reduces to a plain
+// render. Any language (Go/TS/Python) reproduces the exact bytes from that
+// definition, without a protobuf binary codec.
 //
-// Unpopulated fields are OMITTED before JCS, so an empty requester domain is absent
-// from the object entirely rather than emitted as "": the bytes for an empty domain
-// are not the bytes for any populated one.
+// Unpopulated fields are OMITTED before JCS — EVERY empty string field, not just the
+// domain: the bytes for an empty requester id are not the bytes for any populated
+// one. A port that assembles this object by hand instead of rendering the proto must
+// reproduce that omission per field, or it signs bytes this function never produces.
 //
 // Fails closed on a nil offer, a nil requester, or an unsigned offer (empty
 // Offer.signature) — an empty anchor would let the acceptance float free of any

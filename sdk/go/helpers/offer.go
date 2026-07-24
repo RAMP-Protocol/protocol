@@ -68,19 +68,31 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 // with ONLY the signature and signature_algorithm fields cleared, per
 // ramp.proto Offer.signature. The returned bytes are byte-identical to what
 // SignOffer signs and VerifyOffer verifies over — persist them to re-verify an
-// Offer signature verbatim, independent of how the Offer message later evolves.
+// Offer signature verbatim, independent of how the canonical form, or the Offer
+// message, later evolves.
+//
 // Re-verification also needs the persisted Offer.signature and the signer's trusted
 // public key: these bytes are the signed message, necessary but not by themselves
-// sufficient.
+// sufficient. A passing signature proves only that the key holder signed THESE bytes,
+// so a caller weighing them as evidence must also parse them and match their content
+// against the transaction in question.
 //
 // The canonical form is RFC 8785 JCS over canonical proto-JSON —
-// JCS(protojson(offer with sig cleared)) — via canonicalSignPayload, so any
-// language (Go/TS/Python) reproduces the exact signed bytes without a protobuf
-// binary codec. See canonicalsign.go for the pinned proto-JSON option set.
+// JCS(protojson(offer with sig cleared)) — rendered under the option set the
+// Offer.signature comment in ramp.proto defines normatively: snake_case proto field
+// names, enums as name strings, unpopulated fields omitted, 64-bit ints as decimal
+// strings. That definition, not this implementation, is what lets any language
+// (Go/TS/Python) reproduce the exact signed bytes without a protobuf binary codec.
 //
 // expires_at is covered (only signature/signature_algorithm are cleared), so a
 // relaying Broker cannot extend or shorten a signed offer's TTL under an
 // otherwise-valid signature.
+//
+// KNOWN LIMIT (fail-closed, never fail-open): a field a newer peer set that this
+// build's generated types do not know arrives as an unknown field, and proto-JSON
+// does not render unknown fields — it is absent from the returned bytes. A signature
+// that covered it therefore fails to verify, rather than verifying over a message
+// silently missing part of what was signed.
 func CanonicalOfferBytes(offer *rampv1.Offer) ([]byte, error) {
 	if offer == nil {
 		return nil, errors.New("helpers: offer is nil")

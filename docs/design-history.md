@@ -45,9 +45,10 @@ the agent's `AgentAcceptance.signature` — originally covered deterministic pro
 reversed that and moved both onto RFC 8785 JCS over canonical proto-JSON,
 `JCS(protojson(msg with the signature fields cleared))`, under one pinned
 proto-JSON option set (snake_case field names, enums as name strings, unpopulated
-fields omitted). (`Attestation.signature` also outlives an HTTP exchange but is out
-of scope here: it signs a hand-built JSON object — `{verifier, keyid, attested_at,
-uri, claims}` — under its own rule, never a rendering of its proto message.)
+fields omitted). (`ResourceAttestation.signature` also outlives an HTTP exchange but
+is out of scope here: it signs a hand-built JSON object — `{verifier, keyid,
+attested_at, uri, claims}` — under its own rule, never a rendering of its proto
+message.)
 
 Deterministic protobuf marshaling is not actually canonical. Protobuf's own
 documentation disclaims byte stability across languages, across library versions,
@@ -71,6 +72,19 @@ hiding client divergence rather than absorbing it. That re-pin **re-signed the
 golden vectors**: signatures produced over the camelCase-JCS form no longer verify,
 and all three SDKs had to move in the same commit.
 
+One clause of that pinned option set carries more weight than it looks.
+`EmitUnpopulated=false` means an empty field is *absent* from the JSON, not present
+with an empty value — so the canonical bytes for an empty string field are never the
+bytes for a populated one. Go inherits that from `protojson` for free. A port that
+assembles the JSON object by hand does not, and has to enumerate the omission for
+every field or it signs bytes Go never produces. The acceptance payload is the one
+place all three SDKs hand-build the object, and it is exactly where the divergence
+appeared: Python and TS dropped an empty `requester_domain` but emitted an empty
+`requester_id`, which is wire-valid because `Requester.id` carries no `min_len`. Such
+a mismatch fails closed, but it falsifies the byte-equivalence the canonical-bytes
+accessors promise, so the shared corpus now carries a vector that holds every port to
+the omission.
+
 The two reversals left a consequence worth naming, because it is the reason the
 canonical bytes are a first-class SDK export rather than an internal detail. A
 canonical form that has already changed twice can change again, and a verifier that
@@ -82,6 +96,13 @@ signed". So all three SDKs expose the exact signed bytes as a public accessor
 / `jcs_acceptance_payload` in Python, `canonicalOfferPayload` / `acceptancePayload`
 in TS). A party keeping evidence stores those bytes and re-verifies against them
 verbatim, rather than trusting a future canonicalizer to reproduce the past.
+
+Storing them is necessary, not sufficient. A signature that verifies over stored bytes
+proves only that the holder of that key signed *those bytes*; it says nothing about
+which transaction they belong to. Whoever reads the evidence must also parse the stored
+bytes and match their content — offer id, requester, idempotency key — against the
+transaction under dispute. Skip that and any valid triple minted under the same key
+passes as evidence for any transaction.
 
 ## "Marketplace" → "Exchange"
 
