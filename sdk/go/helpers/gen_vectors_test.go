@@ -996,9 +996,13 @@ func verifySignRequestVector(t *testing.T, v signRequestVector) {
 }
 
 // buildAcceptanceVectors signs a fixed set of offer acceptances with the REAL Go
-// SignOfferAcceptance, seeded 0102..1f20 (shared with the app fixture). Includes
-// the empty-domain case (proto3 field-3 default-skip). Records canonical bytes
-// hex + signature hex + std-base64 pubkey.
+// SignOfferAcceptance, seeded 0102..1f20 (shared with the app fixture). Records
+// canonical bytes + signature hex + std-base64 pubkey.
+//
+// The specs cover each field the canonical form may omit, one per vector. Go omits
+// them structurally (EmitUnpopulated=false); the Python and TS faces hand-build the
+// object and have to drop empty members themselves, so an omission they miss shows
+// up here as a byte mismatch and nowhere else.
 func buildAcceptanceVectors(t *testing.T) []acceptanceVector {
 	t.Helper()
 	seed, err := hex.DecodeString(acceptanceSeedHex)
@@ -1024,6 +1028,12 @@ func buildAcceptanceVectors(t *testing.T) []acceptanceVector {
 		// vector is what holds the hand-built Python/TS payloads to that, since
 		// they enumerate the keys instead of inheriting EmitUnpopulated=false.
 		{"empty_requester_id", "sig3deadbeef", "", "agent.example.com", "idem-3"},
+		// The last omittable field. TransactionRequest.idempotency_key carries
+		// min_len:1 so the wire rejects an empty one, but these accessors are the
+		// layer below that check and must still agree on the bytes — without this
+		// vector the omission guard can be dropped in any language with every gate
+		// still green.
+		{"empty_idempotency_key", "sig4deadbeef", "agent-4", "agent.example.com", ""},
 	}
 
 	out := make([]acceptanceVector, 0, len(specs))

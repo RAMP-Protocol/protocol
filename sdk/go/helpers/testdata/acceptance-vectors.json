@@ -33,6 +33,17 @@
       "signature_hex": "5e9baefd90faae7edc44c8bcd3c6aec68fc3d9c253a6791ab83d6dcb6d638310053b5cb3607f19618cff96e5fc002a7d93d600ce16ba77019c73a2b7c50d1c01",
       "pubkey_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
       "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    },
+    {
+      "name": "empty_idempotency_key",
+      "offer_sig": "sig4deadbeef",
+      "requester_id": "agent-4",
+      "requester_domain": "agent.example.com",
+      "idempotency_key": "",
+      "canonical_jcs": "{\"offer_sig\":\"sig4deadbeef\",\"requester_domain\":\"agent.example.com\",\"requester_id\":\"agent-4\"}",
+      "signature_hex": "8230b1c9de146f70b9448adb2846a8e4db8a41172cb6b8e8da52c25be4d62d3d4b209eb77f85503eda3b2bd99f27fbd148bcfc7775a19a7f6830e0aa08dde606",
+      "pubkey_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
+      "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
     }
   ]
 }
