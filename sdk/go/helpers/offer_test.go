@@ -12,6 +12,7 @@ import (
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -310,11 +311,95 @@ func TestVerifyOffer_rejectsInjectedUnknownFields(t *testing.T) {
 	}
 }
 
-func TestVerifyOffer_rejectsSignatureOverANewerCanonicalForm(t *testing.T) {
+func TestCanonicalOfferBytes_refusesUnknownFieldsInsideExt(t *testing.T) {
+	// ext is a google.protobuf.Struct, whose `fields` is a map with MESSAGE values —
+	// the one place the walk's map branch is reachable on this schema, and it guards
+	// the sanctioned extension surface. An unknown field planted on a Struct Value
+	// sits two levels below the Offer and behind a map, so nothing shallower catches
+	// it.
+	st, err := structpb.NewStruct(map[string]any{"vendor.key": "v"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clean := sampleOffer()
+	clean.Ext = st
+	if _, err := helpers.CanonicalOfferBytes(clean); err != nil {
+		t.Fatalf("control: an untampered ext must canonicalize: %v", err)
+	}
+
+	tamperedVal := new(structpb.Value)
+	if err := proto.Unmarshal(encodeWithUnknownField(t, st.Fields["vendor.key"]), tamperedVal); err != nil {
+		t.Fatal(err)
+	}
+	if len(tamperedVal.ProtoReflect().GetUnknown()) == 0 {
+		t.Fatal("fixture is inert: the unknown field did not survive unmarshal")
+	}
+	st.Fields["vendor.key"] = tamperedVal
+
+	if _, err := helpers.CanonicalOfferBytes(clean); !errors.Is(err, helpers.ErrUnknownFields) {
+		t.Errorf("want ErrUnknownFields for an unknown field inside ext, got %v", err)
+	}
+}
+
+func TestCanonicalOfferBytes_mapEntryUnknownsAreDroppedBeforeTheWalk(t *testing.T) {
+	// The walk recurses into map VALUES, not into the synthetic entry messages that
+	// carry them. That is total only because protobuf-go discards unknown bytes
+	// planted on an entry at unmarshal, so they never reach the canonicalizer — and
+	// never reach the wire again either. This pins that assumption: if a protobuf
+	// upgrade started retaining entry-level unknowns, the walk would need a branch
+	// for them and this test is what would say so.
+	st, err := structpb.NewStruct(map[string]any{"vendor.key": "v"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	valRaw, err := proto.Marshal(st.Fields["vendor.key"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Struct.fields entry: key(1), value(2), then an undeclared field ON THE ENTRY.
+	entry := protowire.AppendTag(nil, 1, protowire.BytesType)
+	entry = protowire.AppendBytes(entry, []byte("vendor.key"))
+	entry = protowire.AppendTag(entry, 2, protowire.BytesType)
+	entry = protowire.AppendBytes(entry, valRaw)
+	entry = protowire.AppendTag(entry, 500, protowire.VarintType)
+	entry = protowire.AppendVarint(entry, 7)
+	structRaw := protowire.AppendTag(nil, 1, protowire.BytesType)
+	structRaw = protowire.AppendBytes(structRaw, entry)
+
+	got := new(structpb.Struct)
+	if err := proto.Unmarshal(structRaw, got); err != nil {
+		t.Fatal(err)
+	}
+	reEncoded, err := proto.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clean, err := proto.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reEncoded) != len(clean) {
+		t.Fatalf("protobuf-go now RETAINS entry-level unknown bytes (%d vs %d); the walk "+
+			"must gain a map-entry branch", len(reEncoded), len(clean))
+	}
+
+	offer := sampleOffer()
+	offer.Ext = got
+	if _, err := helpers.CanonicalOfferBytes(offer); err != nil {
+		t.Errorf("entry-level unknowns are dropped before the walk, so this must canonicalize: %v", err)
+	}
+}
+
+func TestVerifyOffer_rejectsANewerCanonicalFormWhicheverCheckFires(t *testing.T) {
 	// The other direction: the peer signed its OWN richer rendering, which includes
 	// the field it knows about and this build does not. The signed bytes cannot be
 	// reconstructed here at all, so the offer is rejected rather than verified over
 	// a reduced form.
+	//
+	// This pins the OUTCOME, not the mechanism: the rejection also follows from the
+	// plain signature mismatch, so the test passes with the unknown-field guard
+	// removed. The guard is gated by the injected-unknown tests above, where clean
+	// and tampered render identically and only the guard can reject.
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	base := sampleOffer()
 	baseCanon, err := helpers.CanonicalOfferBytes(base)
