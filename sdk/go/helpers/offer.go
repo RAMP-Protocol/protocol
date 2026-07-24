@@ -55,6 +55,13 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 	}
 	payload, err := CanonicalOfferBytes(offer)
 	if err != nil {
+		if errors.Is(err, errUnknownFields) {
+			// An offer carrying fields this build cannot render is refused on the
+			// SAME path as a forged one. Callers branch on the sentinel to map a
+			// rejection to its denial reason, and "someone appended bytes to a
+			// signed offer" is a signature failure, not an internal fault.
+			return fmt.Errorf("%w: %v", ErrOfferSignatureInvalid, err)
+		}
 		return err
 	}
 	if !ed25519.Verify(pub, payload, sig) {
@@ -80,19 +87,22 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 // The canonical form is RFC 8785 JCS over canonical proto-JSON —
 // JCS(protojson(offer with sig cleared)) — rendered under the option set the
 // Offer.signature comment in ramp.proto defines normatively: snake_case proto field
-// names, enums as name strings, unpopulated fields omitted, 64-bit ints as decimal
-// strings. That definition, not this implementation, is what lets any language
-// (Go/TS/Python) reproduce the exact signed bytes without a protobuf binary codec.
+// names, enums as name strings, unpopulated fields omitted. That definition, not
+// this implementation, is what lets any language (Go/TS/Python) reproduce the exact
+// signed bytes without a protobuf binary codec.
 //
 // expires_at is covered (only signature/signature_algorithm are cleared), so a
 // relaying Broker cannot extend or shorten a signed offer's TTL under an
 // otherwise-valid signature.
 //
-// KNOWN LIMIT (fail-closed, never fail-open): a field a newer peer set that this
-// build's generated types do not know arrives as an unknown field, and proto-JSON
-// does not render unknown fields — it is absent from the returned bytes. A signature
-// that covered it therefore fails to verify, rather than verifying over a message
-// silently missing part of what was signed.
+// An Offer carrying UNKNOWN fields — at any depth, including inside a nested message
+// or a repeated element — is REFUSED rather than rendered. proto-JSON emits only
+// what the schema defines, so those bytes would silently drop the unknown content:
+// a peer built against a newer schema would have signed more than this build can
+// reconstruct, and an intermediary could otherwise append fields to a signed Offer
+// without disturbing its signature. VerifyOffer surfaces the refusal as
+// ErrOfferSignatureInvalid, since a message that arrived carrying extra bytes is a
+// tampered Offer, not an internal fault.
 func CanonicalOfferBytes(offer *rampv1.Offer) ([]byte, error) {
 	if offer == nil {
 		return nil, errors.New("helpers: offer is nil")

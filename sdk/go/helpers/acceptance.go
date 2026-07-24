@@ -56,6 +56,10 @@ var ErrAcceptanceSignatureInvalid = errors.New("helpers: offer-acceptance signat
 // render. Any language (Go/TS/Python) reproduces the exact bytes from that
 // definition, without a protobuf binary codec.
 //
+// The payload is built here from the four scalars rather than taken from the caller,
+// so it cannot carry the unknown fields CanonicalOfferBytes has to refuse; only the
+// values read off the offer and requester reach the signed bytes.
+//
 // Unpopulated fields are OMITTED before JCS — EVERY empty string field, not just the
 // domain: the bytes for an empty requester id are not the bytes for any populated
 // one. A port that assembles this object by hand instead of rendering the proto must

@@ -1,11 +1,13 @@
 package helpers
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gowebpki/jcs"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // Canonical signing payload (ADR-020 §4, ramp.proto "canonical signing" note).
@@ -47,10 +49,82 @@ var canonicalSignJSONOptions = protojson.MarshalOptions{
 	EmitUnpopulated: false, // omit unpopulated fields
 }
 
+// errUnknownFields refuses a message the canonical form cannot faithfully
+// represent. proto-JSON renders only fields the schema defines, so a message
+// carrying unknown ones canonicalizes to bytes that silently omit them. Both
+// directions of that gap are wrong: a signer built against a newer schema
+// covered more than this build can reconstruct, and an on-path party that
+// appends unknown fields to an already-signed message would otherwise leave the
+// signature verifying over bytes it never saw. Refusing the message is what
+// makes the canonical form's coverage total rather than schema-relative.
+var errUnknownFields = errors.New("helpers: message carries unknown fields; canonical bytes cannot represent them")
+
+// hasUnknownFields reports whether msg, or anything reachable from it, carries
+// fields this build's schema does not define.
+//
+// The walk is explicit rather than delegated to a traversal helper: this is a
+// signature-coverage guard, so its reachability rules are stated here where they
+// can be audited against the message tree. Unknown-field sets are PER MESSAGE —
+// a nested message and every element of a repeated or map field owns its own —
+// so a top-level check alone would pass a payload whose tampering sits one level
+// down.
+func hasUnknownFields(msg proto.Message) bool {
+	if msg == nil {
+		return false
+	}
+	return messageHasUnknown(msg.ProtoReflect())
+}
+
+func messageHasUnknown(m protoreflect.Message) bool {
+	if !m.IsValid() {
+		return false // a typed nil carries nothing
+	}
+	if len(m.GetUnknown()) > 0 {
+		return true
+	}
+	found := false
+	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		switch {
+		case fd.IsMap():
+			// Map KEYS are scalars; only a message-typed value can nest one.
+			if fd.MapValue().Kind() == protoreflect.MessageKind ||
+				fd.MapValue().Kind() == protoreflect.GroupKind {
+				v.Map().Range(func(_ protoreflect.MapKey, mv protoreflect.Value) bool {
+					if messageHasUnknown(mv.Message()) {
+						found = true
+					}
+					return !found
+				})
+			}
+		case fd.IsList():
+			if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+				list := v.List()
+				for i := 0; i < list.Len() && !found; i++ {
+					if messageHasUnknown(list.Get(i).Message()) {
+						found = true
+					}
+				}
+			}
+		case fd.Kind() == protoreflect.MessageKind, fd.Kind() == protoreflect.GroupKind:
+			if messageHasUnknown(v.Message()) {
+				found = true
+			}
+		}
+		return !found // stop the range as soon as one is found
+	})
+	return found
+}
+
 // canonicalSignPayload renders msg to canonical proto-JSON (pinned options) and
 // applies RFC 8785 JCS, returning the exact UTF-8 bytes an Ed25519 signature
 // covers. Callers clear signature/signature_algorithm on a clone BEFORE calling.
+//
+// A message carrying unknown fields is refused rather than rendered — see
+// errUnknownFields.
 func canonicalSignPayload(msg proto.Message) ([]byte, error) {
+	if hasUnknownFields(msg) {
+		return nil, errUnknownFields
+	}
 	pj, err := canonicalSignJSONOptions.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("helpers: canonical proto-JSON marshal: %w", err)

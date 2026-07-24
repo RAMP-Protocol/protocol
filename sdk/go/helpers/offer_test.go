@@ -176,50 +176,160 @@ func TestCanonicalOfferBytes_nil(t *testing.T) {
 	}
 }
 
-func TestCanonicalOfferBytes_unknownFieldsFailClosed(t *testing.T) {
-	// An Offer from a peer built against a newer schema carries fields this build's
-	// generated types do not know. proto.Unmarshal keeps them as unknown fields, but
-	// proto-JSON does not render them — so they are absent from the canonical bytes.
-	// The direction that matters is which way the gap fails: the peer's signature
-	// covered MORE than we can reconstruct, so it must be rejected, never accepted
-	// over the truncated message.
-	pub, priv, _ := ed25519.GenerateKey(nil)
-	base := sampleOffer()
-
-	wire, err := proto.Marshal(base)
+// encodeWithUnknownField encodes msg and appends a field number no RAMP message
+// defines — what a peer built against a newer schema emits, and equally what an
+// on-path party appends to a message it did not author.
+func encodeWithUnknownField(t *testing.T, msg proto.Message) []byte {
+	t.Helper()
+	raw, err := proto.Marshal(msg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	unknown := protowire.AppendTag(nil, 500, protowire.VarintType)
-	unknown = protowire.AppendVarint(unknown, 7)
-	var newer rampv1.Offer
-	if err := proto.Unmarshal(append(wire, unknown...), &newer); err != nil {
-		t.Fatal(err)
+	raw = protowire.AppendTag(raw, 500, protowire.VarintType)
+	return protowire.AppendVarint(raw, 7)
+}
+
+// embed appends msg's encoding to host as a length-delimited field, so an
+// unknown field can be planted at a chosen depth of the Offer tree.
+func embed(t *testing.T, host []byte, field protowire.Number, encoded []byte) []byte {
+	t.Helper()
+	host = protowire.AppendTag(host, field, protowire.BytesType)
+	return protowire.AppendBytes(host, encoded)
+}
+
+// unknownFieldCase pairs an Offer with the SAME Offer carrying one unknown field.
+// The two differ by nothing a renderer can see, which is the whole point: any
+// rejection has to come from the unknown field itself, not from a visible
+// difference that would break the signature anyway.
+type unknownFieldCase struct {
+	clean    *rampv1.Offer
+	tampered *rampv1.Offer
+}
+
+// unknownFieldCases plants an unknown field at three depths: on the Offer itself,
+// inside the nested Pricing message, and inside one element of the repeated
+// attestations list. Unknown-field sets are per-message, so a guard that only
+// checks the top level passes the first and misses the other two.
+func unknownFieldCases(t *testing.T) map[string]unknownFieldCase {
+	t.Helper()
+
+	decode := func(raw []byte) *rampv1.Offer {
+		var o rampv1.Offer
+		if err := proto.Unmarshal(raw, &o); err != nil {
+			t.Fatal(err)
+		}
+		return &o
 	}
-	if len(newer.ProtoReflect().GetUnknown()) == 0 {
-		t.Fatal("fixture is inert: the unknown field did not survive unmarshal")
+	encode := func(m proto.Message) []byte {
+		raw, err := proto.Marshal(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
 	}
 
+	out := map[string]unknownFieldCase{}
+
+	out["top level"] = unknownFieldCase{
+		clean:    sampleOffer(),
+		tampered: decode(encodeWithUnknownField(t, sampleOffer())),
+	}
+
+	// Rebuild the offer from a shell plus a hand-encoded Pricing so the unknown
+	// field lands inside the nested message. The shell carries every other field,
+	// so clean and tampered render identically.
+	base := sampleOffer()
+	shell := encode(&rampv1.Offer{OfferId: base.OfferId, ExpiresAt: base.ExpiresAt})
+	out["nested message"] = unknownFieldCase{
+		clean:    decode(embed(t, shell, offerPricingField, encode(base.Pricing))),
+		tampered: decode(embed(t, shell, offerPricingField, encodeWithUnknownField(t, base.Pricing))),
+	}
+
+	// The attestation must be present in BOTH, or the tampered offer would differ
+	// visibly and be rejected on a byte mismatch — passing the test for a reason
+	// that has nothing to do with the unknown field.
+	full := encode(sampleOffer())
+	att := &rampv1.ResourceAttestation{Verifier: "verifier.example.com", Uri: "https://example.com/a"}
+	out["repeated element"] = unknownFieldCase{
+		clean:    decode(embed(t, full, offerAttestationsField, encode(att))),
+		tampered: decode(embed(t, full, offerAttestationsField, encodeWithUnknownField(t, att))),
+	}
+
+	return out
+}
+
+// Offer field numbers used to plant an unknown field at depth. Kept as named
+// constants so a proto renumbering breaks the fixture loudly instead of quietly
+// planting the field somewhere else.
+const (
+	offerPricingField      protowire.Number = 3
+	offerAttestationsField protowire.Number = 14
+)
+
+func TestCanonicalOfferBytes_refusesUnknownFields(t *testing.T) {
+	// proto-JSON renders only what the schema defines, so a message carrying
+	// unknown fields would canonicalize to bytes that silently drop them. Producing
+	// those bytes is refused outright: they are not the bytes anyone signed, and
+	// handing them back as "the canonical form" is what would let an intermediary
+	// append content to a signed offer without disturbing its signature.
+	for name, c := range unknownFieldCases(t) {
+		t.Run(name, func(t *testing.T) {
+			if _, err := helpers.CanonicalOfferBytes(c.clean); err != nil {
+				t.Fatalf("control: the same offer without the unknown field must canonicalize: %v", err)
+			}
+			if _, err := helpers.CanonicalOfferBytes(c.tampered); err == nil {
+				t.Error("an offer carrying unknown fields must not yield canonical bytes")
+			}
+		})
+	}
+}
+
+func TestVerifyOffer_rejectsInjectedUnknownFields(t *testing.T) {
+	// The tamper case: a legitimately signed offer picks up unknown fields in
+	// transit. The signature still matches the fields this build can render, so
+	// only the refusal above stops it from verifying. It must land on the signature
+	// sentinel — callers map that to a signature-invalid denial, and an appended
+	// payload is a tampered offer, not an internal fault.
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	for name, c := range unknownFieldCases(t) {
+		t.Run(name, func(t *testing.T) {
+			// Sign the CLEAN offer, then verify the tampered one. The signature is
+			// genuine and the two render identically, so the unknown field is the
+			// only thing that can cause a rejection.
+			sigHex, err := helpers.SignOffer(priv, c.clean)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := helpers.VerifyOffer(c.clean, sigHex, pub); err != nil {
+				t.Fatalf("control: the clean offer must verify: %v", err)
+			}
+			if err := helpers.VerifyOffer(c.tampered, sigHex, pub); !errors.Is(err, helpers.ErrOfferSignatureInvalid) {
+				t.Errorf("want ErrOfferSignatureInvalid, got %v", err)
+			}
+		})
+	}
+}
+
+func TestVerifyOffer_rejectsSignatureOverANewerCanonicalForm(t *testing.T) {
+	// The other direction: the peer signed its OWN richer rendering, which includes
+	// the field it knows about and this build does not. The signed bytes cannot be
+	// reconstructed here at all, so the offer is rejected rather than verified over
+	// a reduced form.
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	base := sampleOffer()
 	baseCanon, err := helpers.CanonicalOfferBytes(base)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newerCanon, err := helpers.CanonicalOfferBytes(&newer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(baseCanon, newerCanon) {
-		t.Fatalf("unknown fields must not reach the canonical bytes\n got  %s\n want %s",
-			newerCanon, baseCanon)
-	}
-
-	// What the newer peer signed: its own canonical rendering, which includes the
-	// field it knows about. JCS sorts keys, so a member sorting last is appended
-	// before the closing brace.
+	// JCS sorts keys, so a member sorting last is appended before the closing brace.
 	peerSigned := append(baseCanon[:len(baseCanon)-1:len(baseCanon)-1], []byte(`,"zz_new_field":"7"}`)...)
 	peerSig := hex.EncodeToString(ed25519.Sign(priv, peerSigned))
 
+	var newer rampv1.Offer
+	if err := proto.Unmarshal(encodeWithUnknownField(t, base), &newer); err != nil {
+		t.Fatal(err)
+	}
 	if err := helpers.VerifyOffer(&newer, peerSig, pub); !errors.Is(err, helpers.ErrOfferSignatureInvalid) {
-		t.Errorf("signature over a newer peer's canonical form must be rejected, got %v", err)
+		t.Errorf("want ErrOfferSignatureInvalid, got %v", err)
 	}
 }
