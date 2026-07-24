@@ -10,6 +10,8 @@ import (
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -171,5 +173,53 @@ func TestCanonicalOfferBytes_coversExpiresAt(t *testing.T) {
 func TestCanonicalOfferBytes_nil(t *testing.T) {
 	if _, err := helpers.CanonicalOfferBytes(nil); err == nil {
 		t.Error("nil offer should error")
+	}
+}
+
+func TestCanonicalOfferBytes_unknownFieldsFailClosed(t *testing.T) {
+	// An Offer from a peer built against a newer schema carries fields this build's
+	// generated types do not know. proto.Unmarshal keeps them as unknown fields, but
+	// proto-JSON does not render them — so they are absent from the canonical bytes.
+	// The direction that matters is which way the gap fails: the peer's signature
+	// covered MORE than we can reconstruct, so it must be rejected, never accepted
+	// over the truncated message.
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	base := sampleOffer()
+
+	wire, err := proto.Marshal(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown := protowire.AppendTag(nil, 500, protowire.VarintType)
+	unknown = protowire.AppendVarint(unknown, 7)
+	var newer rampv1.Offer
+	if err := proto.Unmarshal(append(wire, unknown...), &newer); err != nil {
+		t.Fatal(err)
+	}
+	if len(newer.ProtoReflect().GetUnknown()) == 0 {
+		t.Fatal("fixture is inert: the unknown field did not survive unmarshal")
+	}
+
+	baseCanon, err := helpers.CanonicalOfferBytes(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newerCanon, err := helpers.CanonicalOfferBytes(&newer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(baseCanon, newerCanon) {
+		t.Fatalf("unknown fields must not reach the canonical bytes\n got  %s\n want %s",
+			newerCanon, baseCanon)
+	}
+
+	// What the newer peer signed: its own canonical rendering, which includes the
+	// field it knows about. JCS sorts keys, so a member sorting last is appended
+	// before the closing brace.
+	peerSigned := append(baseCanon[:len(baseCanon)-1:len(baseCanon)-1], []byte(`,"zz_new_field":"7"}`)...)
+	peerSig := hex.EncodeToString(ed25519.Sign(priv, peerSigned))
+
+	if err := helpers.VerifyOffer(&newer, peerSig, pub); !errors.Is(err, helpers.ErrOfferSignatureInvalid) {
+		t.Errorf("signature over a newer peer's canonical form must be rejected, got %v", err)
 	}
 }
