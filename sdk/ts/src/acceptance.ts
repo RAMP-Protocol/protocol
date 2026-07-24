@@ -52,7 +52,7 @@ function bytesToHex(bytes: Uint8Array): string {
 
 /**
  * acceptancePayload reproduces the canonical signed bytes:
- * JCS(protojson(AgentAcceptancePayload)) with an empty requester_domain omitted.
+ * JCS(protojson(AgentAcceptancePayload)) with EVERY empty string field omitted.
  * Throws on an empty offer signature (fail-closed, mirror Go
  * CanonicalAcceptanceBytes / Python jcs_acceptance_payload).
  */
@@ -62,13 +62,15 @@ export function acceptancePayload(input: AcceptanceInput): Uint8Array<ArrayBuffe
 			"ramp/acceptance: cannot accept an unsigned offer (empty offer signature)",
 		);
 	}
-	const obj: Record<string, string> = {
-		offer_sig: input.offerSig,
-		requester_id: input.requesterId,
-		idempotency_key: input.idempotencyKey,
-	};
-	// proto omit-unpopulated: an empty requester_domain is absent before JCS.
+	// proto omit-unpopulated: every empty string field is absent before JCS. The Go
+	// oracle gets that from EmitUnpopulated=false; this hand-built object has to do it
+	// per field, or an empty requester_id would sign bytes Go never produces and
+	// cross-language verification would fail on a wire-valid input (Requester.id
+	// carries no min_len).
+	const obj: Record<string, string> = { offer_sig: input.offerSig };
+	if (input.requesterId !== "") obj.requester_id = input.requesterId;
 	if (input.requesterDomain !== "") obj.requester_domain = input.requesterDomain;
+	if (input.idempotencyKey !== "") obj.idempotency_key = input.idempotencyKey;
 	const jcs = canonicalize(obj);
 	if (jcs === undefined) {
 		throw new Error("ramp/acceptance: payload is not JSON-serializable");

@@ -65,6 +65,20 @@ layout. Implementations that followed the stale text would have produced
 non-verifying signatures. No field, message, or wire change — comments only, with
 `gen/` and the website mirror regenerated.
 
+**Python + TS SDK: the hand-built acceptance payload omits every unpopulated field
+(bug fix, no wire change).** `jcs_acceptance_payload` (Python) and `acceptancePayload`
+(TS) assemble the `AgentAcceptancePayload` JSON object key by key, and omitted only an
+empty `requester_domain` — `requester_id` and `idempotency_key` were always emitted.
+Go renders the same object through `protojson` with `EmitUnpopulated=false`, which omits
+EVERY unpopulated field, so the three SDKs signed different bytes whenever `requester_id`
+was empty. That input is wire-valid: `Requester.id` carries no `min_len`. Verification
+failed closed on it (a byte mismatch, never a bypass), but the byte-equivalence the
+canonical-bytes accessors promise did not hold. Both hand-built faces now drop each empty
+string field, and a new `empty_requester_id` vector in
+`sdk/go/helpers/testdata/acceptance-vectors.json` pins the agreement across Go, Python and
+TS. The corpus change is purely additive — the pre-existing vectors and their signatures
+are byte-identical, so no already-issued signature is affected.
+
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
 billing label on `Requester` is gone; the field is deleted outright with no
 `reserved` statement — pre-v1 the number returns to the free pool, and

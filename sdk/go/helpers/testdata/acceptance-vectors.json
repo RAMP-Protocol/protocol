@@ -22,6 +22,17 @@
       "signature_hex": "a067c7d83dcf801f10389a5b2e2936756aae37006478b1eae5dbf70805fdf2feb0292e3ae3b5511a3921f4fe331c52bfc19894f25332f0b2ba2d741db0769506",
       "pubkey_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
       "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    },
+    {
+      "name": "empty_requester_id",
+      "offer_sig": "sig3deadbeef",
+      "requester_id": "",
+      "requester_domain": "agent.example.com",
+      "idempotency_key": "idem-3",
+      "canonical_jcs": "{\"idempotency_key\":\"idem-3\",\"offer_sig\":\"sig3deadbeef\",\"requester_domain\":\"agent.example.com\"}",
+      "signature_hex": "5e9baefd90faae7edc44c8bcd3c6aec68fc3d9c253a6791ab83d6dcb6d638310053b5cb3607f19618cff96e5fc002a7d93d600ce16ba77019c73a2b7c50d1c01",
+      "pubkey_b64": "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=",
+      "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
     }
   ]
 }

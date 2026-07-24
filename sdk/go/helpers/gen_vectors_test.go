@@ -1019,6 +1019,11 @@ func buildAcceptanceVectors(t *testing.T) []acceptanceVector {
 	specs := []spec{
 		{"all_present", "ex-offer-sig-hex", "agent-1", "agent.example.com", "idem-1"},
 		{"empty_domain", "sig2deadbeef", "agent-2", "", "idem-2"},
+		// Requester.id carries no min_len, so an empty id is wire-valid. The
+		// canonical form omits EVERY unpopulated field, not only the domain — this
+		// vector is what holds the hand-built Python/TS payloads to that, since
+		// they enumerate the keys instead of inheriting EmitUnpopulated=false.
+		{"empty_requester_id", "sig3deadbeef", "", "agent.example.com", "idem-3"},
 	}
 
 	out := make([]acceptanceVector, 0, len(specs))

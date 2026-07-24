@@ -272,20 +272,24 @@ def jcs_acceptance_payload(
     """Canonical acceptance bytes = JCS(protojson(AgentAcceptancePayload)).
 
     The same JCS(protojson(...)) canonicalization the offer signature uses. proto-JSON
-    OMITS unpopulated fields, so an empty ``requester_domain`` is absent from the
-    object before JCS (matching the Go oracle's empty-domain vector). Fail-closed on
-    an empty ``offer_sig`` (mirror Go CanonicalAcceptanceBytes): an empty anchor
-    would let the acceptance float free of any concrete offer.
+    OMITS unpopulated fields, so EVERY empty string field is absent from the object
+    before JCS — not just ``requester_domain``. The Go oracle gets that from
+    ``EmitUnpopulated=false``; this hand-built object has to do it per field, or an
+    empty ``requester_id`` would sign bytes Go never produces and cross-language
+    verification would fail on a wire-valid input (``Requester.id`` carries no
+    ``min_len``). Fail-closed on an empty ``offer_sig`` (mirror Go
+    CanonicalAcceptanceBytes): an empty anchor would let the acceptance float free of
+    any concrete offer.
     """
     if offer_sig == "":
         raise ValueError("cannot accept an unsigned offer (empty offer signature)")
-    obj: dict[str, str] = {
-        "offer_sig": offer_sig,
-        "requester_id": requester_id,
-        "idempotency_key": idempotency_key,
-    }
+    obj: dict[str, str] = {"offer_sig": offer_sig}
+    if requester_id != "":
+        obj["requester_id"] = requester_id
     if requester_domain != "":
         obj["requester_domain"] = requester_domain
+    if idempotency_key != "":
+        obj["idempotency_key"] = idempotency_key
     return rfc8785.dumps(obj)
 
 
