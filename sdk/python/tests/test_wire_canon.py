@@ -5,9 +5,11 @@ EmitUnpopulated (zero-valued scalars, empty repeateds, null messages and
 ``*_UNSPECIFIED`` enums all present). The offer SIGNATURE covers the CANONICAL form:
 the same snake_case proto names, but omit-unpopulated, enums-as-names, then RFC 8785
 JCS. Both sides share the naming, so what ``from_wire_offer`` undoes is the
-zero-inflation and the signature fields, not the naming. It belongs in sdk/python so
-every RAMP client (MCP shim, future TS MCP, future Python broker) shares one
-wire-normalization function proven byte-identical to the Go oracle.
+zero-inflation, not the naming; it keeps the signature fields, which
+``ramp_sdk.core.canonical_offer_payload`` strips on the way into JCS (hence the manual
+strip in the assertions below). It belongs in sdk/python so every RAMP client (MCP
+shim, future TS MCP, future Python broker) shares one wire-normalization function
+proven byte-identical to the Go oracle.
 
 Four behaviors pinned here:
 

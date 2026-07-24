@@ -6,24 +6,25 @@ proto-JSON:
 
     signed_payload = JCS(protojson(msg with sig/sig_algorithm cleared))
 
-For acceptance this changes Go canonicalAcceptancePayload (acceptance.go, since
+For acceptance this changed Go canonicalAcceptancePayload (acceptance.go, since
 exported as CanonicalAcceptanceBytes) from the hand-rolled proto3 field-tag marshal
-(today's acceptance-vectors.json carries `canonical_bytes_hex` beginning `0a10…` —
-proto field tags) to JCS UTF-8 bytes.
+(acceptance-vectors.json then carried `canonical_bytes_hex` beginning `0a10…` — proto
+field tags) to JCS UTF-8 bytes.
 The Go golden emitter therefore REGENERATES acceptance-vectors.json to the JCS form
 (new canonical bytes AND new signatures — the canonicalization itself changed, so
 this is the intended vector change, NOT a behavior-preservation violation).
 
 This re-pin suite asserts the Python core canonicalizes acceptance via JCS and
 produces byte-identical canonical bytes + signature to the REGENERATED Go oracle.
-It is RED now for TWO expected reasons:
-  1. sdk/python/ramp_sdk/core (the JCS acceptance canonicalizer + sign/verify) does
+It was authored RED, for TWO expected reasons — both since resolved, so the suite is
+green and the narrative below is history, not current state:
+  1. sdk/python/ramp_sdk/core (the JCS acceptance canonicalizer + sign/verify) did
      not exist yet.
-  2. The regenerated acceptance vectors do not exist yet — today's
-     acceptance-vectors.json is still the protobuf-binary form (no `canonical_jcs`
-     field, no `canonicalization: "jcs"` marker). The assertions below require the
-     JCS-regenerated shape, so they FAIL against the current file (and the import
-     fails outright), a clean TDD-red signal.
+  2. The regenerated acceptance vectors did not exist yet — acceptance-vectors.json
+     was still the protobuf-binary form (no `canonical_jcs` field, no
+     `canonicalization: "jcs"` marker). The assertions below require the
+     JCS-regenerated shape, so they FAILED against the file as it then stood (and the
+     import failed outright), a clean TDD-red signal.
 
 Note: this is the acceptance sibling of test_core_offer_verify_parity.py; the two
 prove Go/TS/Python agree on the SAME JCS canonicalization for both signed payloads.

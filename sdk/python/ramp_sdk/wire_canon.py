@@ -7,9 +7,12 @@ what ``codec_test.go`` guards — a stray ``UseProtoNames=false`` is the regress
 catches. The offer SIGNATURE covers the CANONICAL form: the same snake_case proto
 names, but omit-unpopulated, enums-as-names (sdk/go helpers
 ``canonicalSignJSONOptions``), then RFC 8785 JCS. Both sides share the naming, so what
-this inversion actually undoes is the zero-inflation and the signature fields, NOT the
-naming. Every Python client verifying a wire offer must still perform it before calling
-:func:`ramp_sdk.core.canonical_offer_payload` — never call that on raw wire input.
+this inversion undoes is the zero-inflation, NOT the naming. It does NOT clear the
+signature fields — :func:`from_wire_offer` keeps ``signature`` /
+``signature_algorithm`` verbatim, and
+:func:`ramp_sdk.core.canonical_offer_payload` strips them on the way into JCS. Every
+Python client verifying a wire offer must still perform the inversion before calling
+that function — never call it on raw wire input.
 
 The retired proto-JSON lowerCamel ``json_name`` form is still TOLERATED on input (hence
 :func:`_snake`, the ``offer_camel`` parameter name, and the pre-flip fixture the tests
