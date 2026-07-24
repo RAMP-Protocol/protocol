@@ -34,10 +34,21 @@ Byte-parity with the Go oracle is pinned by ``tests/test_wire_canon.py``: over t
 drift-gated ``sdk/go/helpers/testdata/wire-canonical-vectors.json`` corpus for the
 current snake_case wire, and over a live-captured fixture pair for the retired form.
 
-KNOWN LIMITS (fail-closed, never fail-open): a wire offer carrying fields newer
-than the pinned gen models is kept verbatim and will verify FALSE (rejected,
-not silently accepted), and a non-optional int64 zero (emitted as ``"0"``) is
-not dropped (no such field exists on the Offer tree today).
+UNKNOWN FIELDS: a wire key the pinned gen models do not define is kept VERBATIM,
+which makes this a PRESERVING canonicalizer in the sense the ``Offer.signature``
+canonical-signing block defines. Two consequences, and only the second is a limit:
+
+* a field APPENDED after signing lands in the canonical dict, so the bytes differ
+  from what the signer covered and verification fails — the tamper case is closed;
+* a field the SIGNER covered (a peer built against a newer schema) is reproduced
+  exactly, so verification SUCCEEDS over a message this pin cannot fully interpret.
+  That is the forward-compatible outcome and is not a rejection. Go, whose
+  proto-JSON renderer OMITS what it has no schema for, cannot reconstruct such a
+  message at all and refuses it — an inherent difference between the two renderer
+  families, not a parity break.
+
+KNOWN LIMIT (fail-closed, never fail-open): a non-optional int64 zero (emitted as
+``"0"``) is not dropped (no such field exists on the Offer tree today).
 """
 
 from __future__ import annotations

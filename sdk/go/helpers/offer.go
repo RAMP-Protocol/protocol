@@ -55,12 +55,14 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 	}
 	payload, err := CanonicalOfferBytes(offer)
 	if err != nil {
-		if errors.Is(err, errUnknownFields) {
+		if errors.Is(err, ErrUnknownFields) {
 			// An offer carrying fields this build cannot render is refused on the
 			// SAME path as a forged one. Callers branch on the sentinel to map a
 			// rejection to its denial reason, and "someone appended bytes to a
-			// signed offer" is a signature failure, not an internal fault.
-			return fmt.Errorf("%w: %v", ErrOfferSignatureInvalid, err)
+			// signed offer" is a signature failure, not an internal fault. BOTH
+			// sentinels are wrapped: the denial mapping resolves through the first,
+			// a caller wanting the specific reason gets the second.
+			return fmt.Errorf("%w: %w", ErrOfferSignatureInvalid, err)
 		}
 		return err
 	}
@@ -95,14 +97,12 @@ func VerifyOffer(offer *rampv1.Offer, signatureHex string, pub ed25519.PublicKey
 // relaying Broker cannot extend or shorten a signed offer's TTL under an
 // otherwise-valid signature.
 //
-// An Offer carrying UNKNOWN fields — at any depth, including inside a nested message
-// or a repeated element — is REFUSED rather than rendered. proto-JSON emits only
-// what the schema defines, so those bytes would silently drop the unknown content:
-// a peer built against a newer schema would have signed more than this build can
-// reconstruct, and an intermediary could otherwise append fields to a signed Offer
-// without disturbing its signature. VerifyOffer surfaces the refusal as
-// ErrOfferSignatureInvalid, since a message that arrived carrying extra bytes is a
-// tampered Offer, not an internal fault.
+// An Offer carrying UNKNOWN fields at ANY depth is REFUSED (ErrUnknownFields) rather
+// than rendered — proto-JSON emits only what the schema defines, so those bytes would
+// silently drop the unknown content. The rule, and the depths it reaches, are stated
+// once in the ramp.proto Offer.signature comment; it is not restated here. VerifyOffer
+// surfaces the refusal wrapped in ErrOfferSignatureInvalid, since a message that
+// arrived carrying extra bytes is a tampered Offer, not an internal fault.
 func CanonicalOfferBytes(offer *rampv1.Offer) ([]byte, error) {
 	if offer == nil {
 		return nil, errors.New("helpers: offer is nil")
