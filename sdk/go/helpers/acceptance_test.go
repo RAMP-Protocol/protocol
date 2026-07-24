@@ -3,10 +3,7 @@ package helpers_test
 import (
 	"crypto/ed25519"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
@@ -144,55 +141,11 @@ func TestCanonicalAcceptanceBytes_matchesSignOfferAcceptance(t *testing.T) {
 	}
 }
 
-// acceptanceCorpus is the cross-language acceptance fixture: the Go-emitted
-// golden the TS and Python acceptance faces replay byte-for-byte. Asserting the
-// exported accessor against canonical_jcs pins Go/TS/Python to one byte layout
-// through the corpus that already gates the other two.
-const acceptanceCorpus = "testdata/acceptance-vectors.json"
-
-type acceptanceCorpusFile struct {
-	Canonicalization string `json:"canonicalization"`
-	Vectors          []struct {
-		Name            string `json:"name"`
-		OfferSig        string `json:"offer_sig"`
-		RequesterID     string `json:"requester_id"`
-		RequesterDomain string `json:"requester_domain"`
-		IdempotencyKey  string `json:"idempotency_key"`
-		CanonicalJCS    string `json:"canonical_jcs"`
-	} `json:"vectors"`
-}
-
-func TestCanonicalAcceptanceBytes_matchesCorpus(t *testing.T) {
-	t.Parallel()
-	raw, err := os.ReadFile(filepath.Clean(acceptanceCorpus))
-	if err != nil {
-		t.Fatalf("read acceptance corpus: %v", err)
-	}
-	var corpus acceptanceCorpusFile
-	if err := json.Unmarshal(raw, &corpus); err != nil {
-		t.Fatalf("unmarshal acceptance corpus: %v", err)
-	}
-	if corpus.Canonicalization != "jcs" {
-		t.Fatalf("acceptance corpus canonicalization = %q, want jcs", corpus.Canonicalization)
-	}
-	if len(corpus.Vectors) == 0 {
-		t.Fatal("acceptance corpus has no vectors")
-	}
-	for _, v := range corpus.Vectors {
-		t.Run(v.Name, func(t *testing.T) {
-			t.Parallel()
-			offer := &rampv1.Offer{Signature: v.OfferSig}
-			requester := &rampv1.Requester{Id: v.RequesterID, Domain: v.RequesterDomain}
-			got, err := helpers.CanonicalAcceptanceBytes(offer, requester, v.IdempotencyKey)
-			if err != nil {
-				t.Fatalf("CanonicalAcceptanceBytes: %v", err)
-			}
-			if string(got) != v.CanonicalJCS {
-				t.Errorf("canonical bytes\n got  %s\n want %s", got, v.CanonicalJCS)
-			}
-		})
-	}
-}
+// Byte-identity against the committed cross-language corpus is not asserted here:
+// the golden emitter rebuilds testdata/acceptance-vectors.json through this same
+// function and byte-compares the whole committed file on every default run, so a
+// second harness over the same equality would only add a second schema to keep in
+// step with the file.
 
 func TestCanonicalAcceptanceBytes_failsClosed(t *testing.T) {
 	offer, requester, idem := acceptanceFixture()
