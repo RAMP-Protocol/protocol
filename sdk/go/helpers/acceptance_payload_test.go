@@ -4,14 +4,13 @@ import (
 	"testing"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
-	"google.golang.org/protobuf/proto"
 )
 
-// The agent offer-acceptance wire envelope and its canonical
-// signing payload exist on the modern execute shape. The acceptance must travel
-// WITH the reflected Offer on both single-mode (TransactionRequest) and batch
-// (TransactionItem), and the canonical payload must marshal deterministically
-// (byte-identical across the SDK signer and the Exchange verifier).
+// The agent offer-acceptance wire envelope and its canonical signing payload
+// exist on the modern execute shape. The acceptance must travel WITH the
+// reflected Offer on both single-mode (TransactionRequest) and batch
+// (TransactionItem), so the Exchange can bind the agent to the exact offer it
+// is executing no matter how many brokers relayed the request.
 func TestAgentAcceptance_wireFieldsExist(t *testing.T) {
 	acc := &rampv1.AgentAcceptance{
 		Signature:          "deadbeef",
@@ -32,28 +31,28 @@ func TestAgentAcceptance_wireFieldsExist(t *testing.T) {
 	}
 }
 
-// The canonical signing structure is a dedicated message so the signer and
-// verifier derive byte-identical signed bytes from the same proto. It MUST
-// marshal deterministically.
-func TestAgentAcceptancePayload_deterministicMarshal(t *testing.T) {
-	payload := &rampv1.AgentAcceptancePayload{
-		OfferSig:        "ex-offer-sig-hex",
-		RequesterId:     "req-1",
-		RequesterDomain: "agent.example.com",
-		IdempotencyKey:  "idem-1",
+// AgentAcceptancePayload fixes the FIELD SET the acceptance signature covers;
+// the byte layout is the canonical signing form defined on Offer.signature (RFC
+// 8785 JCS over canonical proto-JSON). The two halves are pinned separately, and
+// only this one is pinned by the message.
+//
+// Canonical proto-JSON omits unpopulated fields, so a field added to this message
+// without a matching assignment in CanonicalAcceptanceBytes drops out of the
+// signed bytes entirely: the golden vectors stay byte-identical and every gate
+// stays green while the agent silently commits to less than the message claims.
+// The set is therefore asserted here rather than left to review.
+func TestAgentAcceptancePayload_fieldSetIsPinned(t *testing.T) {
+	want := []string{"offer_sig", "requester_id", "requester_domain", "idempotency_key"}
+
+	fields := (&rampv1.AgentAcceptancePayload{}).ProtoReflect().Descriptor().Fields()
+	if fields.Len() != len(want) {
+		t.Fatalf("AgentAcceptancePayload has %d fields, want %d %v; a field the "+
+			"canonicalizer does not assign is omitted from the signed bytes",
+			fields.Len(), len(want), want)
 	}
-	a, err := proto.MarshalOptions{Deterministic: true}.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal (2): %v", err)
-	}
-	if len(a) == 0 {
-		t.Fatal("canonical payload marshalled to zero bytes")
-	}
-	if string(a) != string(b) {
-		t.Fatal("deterministic marshal is not stable across calls")
+	for i, name := range want {
+		if got := string(fields.Get(i).Name()); got != name {
+			t.Errorf("field %d = %q, want %q", i+1, got, name)
+		}
 	}
 }

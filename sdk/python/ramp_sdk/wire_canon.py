@@ -1,13 +1,22 @@
 """Wire-to-canonical offer conversion (the from-wire canonicalizer).
 
-The RAMP Connect wire is camelCase protojson with ``EmitUnpopulated``
-(zero-valued scalars present) — pinned by the Go SDK codec test
-(``sdk/go/connectserver/codec_test.go``: camelCase, NOT ``UseProtoNames``). The
-offer SIGNATURE however covers the CANONICAL form: snake_case proto names,
-omit-unpopulated, enums-as-names (sdk/go helpers ``canonicalSignJSONOptions``),
-then RFC 8785 JCS. Every Python client verifying a wire offer must therefore
-invert the wire emission before calling :func:`ramp_sdk.core.canonical_offer_payload`
-— never call it on raw camelCase wire input.
+The RAMP Connect wire is snake_case proto-JSON with ``EmitUnpopulated``: zero-valued
+scalars, empty repeateds, null messages and ``*_UNSPECIFIED`` enums are all present.
+That is what ``sdk/go/connectserver/codec.go`` marshals (``UseProtoNames: true``), and
+what ``codec_test.go`` guards — a stray ``UseProtoNames=false`` is the regression it
+catches. The offer SIGNATURE covers the CANONICAL form: the same snake_case proto
+names, but omit-unpopulated, enums-as-names (sdk/go helpers
+``canonicalSignJSONOptions``), then RFC 8785 JCS. Both sides share the naming, so what
+this inversion undoes is the zero-inflation, NOT the naming. It does NOT clear the
+signature fields — :func:`from_wire_offer` keeps ``signature`` /
+``signature_algorithm`` verbatim, and
+:func:`ramp_sdk.core.canonical_offer_payload` strips them on the way into JCS. Every
+Python client verifying a wire offer must still perform the inversion before calling
+that function — never call it on raw wire input.
+
+The retired proto-JSON lowerCamel ``json_name`` form is still TOLERATED on input (hence
+:func:`_snake`, the ``offer_camel`` parameter name, and the pre-flip fixture the tests
+keep). It is out of contract: accepted when it arrives, never emitted.
 
 :func:`from_wire_offer` performs that inversion SCHEMA-AWARE, driven by the
 generated ``wire.models`` classes (gen/python), whose field DEFAULTS encode
@@ -21,13 +30,25 @@ message (``{}``) is kept; map values keep their keys VERBATIM (map keys are
 data, never case-converted). ``*_UNSPECIFIED`` enum values are zero values and
 drop.
 
-Byte-parity with the Go oracle is pinned by ``tests/test_wire_canon.py`` over a
-live-captured wire/canonical fixture pair.
+Byte-parity with the Go oracle is pinned by ``tests/test_wire_canon.py``: over the
+drift-gated ``sdk/go/helpers/testdata/wire-canonical-vectors.json`` corpus for the
+current snake_case wire, and over a live-captured fixture pair for the retired form.
 
-KNOWN LIMITS (fail-closed, never fail-open): a wire offer carrying fields newer
-than the pinned gen models is kept verbatim and will verify FALSE (rejected,
-not silently accepted), and a non-optional int64 zero (emitted as ``"0"``) is
-not dropped (no such field exists on the Offer tree today).
+UNKNOWN FIELDS: a wire key the pinned gen models do not define is kept VERBATIM,
+which makes this a PRESERVING canonicalizer in the sense the ``Offer.signature``
+canonical-signing block defines. Two consequences, and only the second is a limit:
+
+* a field APPENDED after signing lands in the canonical dict, so the bytes differ
+  from what the signer covered and verification fails — the tamper case is closed;
+* a field the SIGNER covered (a peer built against a newer schema) is reproduced
+  exactly, so verification SUCCEEDS over a message this pin cannot fully interpret.
+  That is the forward-compatible outcome and is not a rejection. Go, whose
+  proto-JSON renderer OMITS what it has no schema for, cannot reconstruct such a
+  message at all and refuses it — an inherent difference between the two renderer
+  families, not a parity break.
+
+KNOWN LIMIT (fail-closed, never fail-open): a non-optional int64 zero (emitted as
+``"0"``) is not dropped (no such field exists on the Offer tree today).
 """
 
 from __future__ import annotations
@@ -46,7 +67,11 @@ _UNSPECIFIED_ENUM = re.compile(r"^[A-Z][A-Z0-9_]*_UNSPECIFIED$")
 
 
 def _snake(key: str) -> str:
-    """Invert protojson's default lowerCamel json_name back to the proto name."""
+    """Invert protojson's retired lowerCamel json_name back to the proto name.
+
+    Idempotent on already-snake keys, which is what the current wire and the shared
+    corpus emit — so the inversion costs nothing and keeps the retired form working.
+    """
     return _CAMEL_BOUNDARY.sub(r"_\1", key).lower()
 
 
@@ -102,7 +127,7 @@ def _canon_field(field: FieldInfo, value: Any) -> Any:
 
 
 def _canon_message(model_cls: type[Any], wire: dict[str, Any]) -> dict[str, Any]:
-    """Reconstruct one message's canonical dict from its wire (camel) dict."""
+    """Reconstruct one message's canonical dict from its wire dict."""
     fields = model_cls.model_fields
     out: dict[str, Any] = {}
     for key, value in wire.items():

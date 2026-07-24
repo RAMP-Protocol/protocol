@@ -1,19 +1,22 @@
 """sdk/python wire-to-canonical offer canonicalizer.
 
-The RAMP Connect wire emitted by the Broker is camelCase protojson with
-EmitUnpopulated (zero-valued scalars present). The offer SIGNATURE covers the
-CANONICAL form: snake_case proto names, omit-unpopulated, enums-as-names, then
-RFC 8785 JCS. ``from_wire_offer`` bridges the two forms; it belongs in sdk/python
-so every RAMP client (MCP shim, future TS MCP, future Python broker) shares one
-wire-normalization function proven byte-identical to the Go oracle.
+The wire form, the canonical form, and what the inversion does and does not undo are
+described once, in :mod:`ramp_sdk.wire_canon`. That module docstring is the contract;
+this one says only what the suite pins, so the two cannot drift apart the way they
+already did once. The one consequence worth restating, because the assertions below
+depend on it: ``from_wire_offer`` KEEPS the signature fields, so every comparison here
+strips ``signature``/``signature_algorithm`` by hand, exactly as
+``ramp_sdk.core.canonical_offer_payload`` does on the way into JCS.
 
-Three behaviors pinned here:
+Four behaviors pinned here:
 
-(a) GO-ORACLE PARITY — ``from_wire_offer(offer_wire_camel)`` produces a canonical
-    dict whose JCS (with ``signature``/``signature_algorithm`` stripped) equals the
-    committed ``offer_canonical_go.json`` fixture byte-for-byte. The fixture pair
-    was captured from the live e2e stack (offer_wire_camel.json = real broker wire
-    output; offer_canonical_go.json = Go canonical form).
+(a) LEGACY camelCase TOLERANCE — ``offer_wire_camel.json`` is a PRE-FLIP capture,
+    taken from the live e2e stack before the Connect wire moved to snake_case proto
+    names (``UseProtoNames=true``); ``offer_canonical_go.json`` is the Go canonical
+    form of the same offer. It is kept because the inversion must go on tolerating
+    the retired lowerCamel form. ``from_wire_offer`` on it produces a canonical dict
+    whose JCS (with ``signature``/``signature_algorithm`` stripped) equals the
+    committed fixture byte-for-byte. The CURRENT wire is covered by (d).
 
 (b) UNSPECIFIED ENUM PRUNING — a wire offer carrying
     ``deliveryMethod='DELIVERY_METHOD_UNSPECIFIED'`` must emit a canonical dict
@@ -28,13 +31,20 @@ Three behaviors pinned here:
     this dedicated test makes the invariant explicit and survives future fixture
     rotation.
 
-RED now: ``ramp_sdk.wire_canon`` does not exist yet. The module-level import
-below causes a collection error, which is the established red style in this suite
-(mirrors test_client_binding_smoke.py and test_core_offer_verify_parity.py:
-module-level import with ``type: ignore[import-not-found]`` → ImportError on
-collection → pytest ERRORS = confirmed RED). The implement step adds
-``sdk/python/ramp_sdk/wire_canon.py`` (exporting ``from_wire_offer``); these
-tests go green with no change to the assertions.
+(d) DRIFT-GATED GO-ORACLE PARITY — the committed
+    ``sdk/go/helpers/testdata/wire-canonical-vectors.json`` corpus, emitted by the Go
+    golden emitter and replayed by Go, Python and TS. This is the authoritative
+    parity for the CURRENT snake_case wire; unlike (a) it cannot go silently stale.
+
+(b) and (c) feed camelCase synthetic dicts too, so they exercise the same tolerance
+as (a). The rules they pin are naming-independent, and their snake_case twins are the
+``unspecified_enum_pruned`` and ``set_empty_optional_unit`` vectors in (d).
+
+The suite was authored RED, before ``ramp_sdk.wire_canon`` existed: the module-level
+import below raised on collection, the established red style here (mirrors
+test_client_binding_smoke.py and test_core_offer_verify_parity.py). The module has
+since landed and the assertions went green unchanged — the ``type: ignore`` on the
+import is what remains of that step.
 """
 
 from __future__ import annotations
@@ -54,19 +64,24 @@ _FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 
 
 # ---------------------------------------------------------------------------
-# (a) Go-oracle parity
+# (a) Legacy camelCase tolerance — Go-oracle parity on the pre-flip fixture
 # ---------------------------------------------------------------------------
 
 
 def test_from_wire_offer_go_oracle_parity() -> None:
     """from_wire_offer(wire_camel) JCS-equals the committed Go canonical output.
 
-    The fixture pair was captured from the LIVE e2e stack: offer_wire_camel.json
-    is a real demo offer exactly as the Broker's Connect codec emitted it
-    (camelCase, EmitUnpopulated zero-inflation, ``unit:""`` set-empty optional),
-    and offer_canonical_go.json is the canonical form computed by the Go side
+    The fixture pair was captured from the LIVE e2e stack BEFORE the Connect wire
+    moved to snake_case proto names: offer_wire_camel.json is a real demo offer
+    exactly as the Broker's Connect codec emitted it back then (camelCase,
+    EmitUnpopulated zero-inflation, ``unit:""`` set-empty optional), and
+    offer_canonical_go.json is the canonical form computed by the Go side
     (protojson UseProtoNames + omit-unpopulated, then RFC 8785 JCS) — the byte
     sequence the exchange's offer signature covers.
+
+    The wire has since flipped to snake_case, so this pair no longer describes what
+    a Broker emits; it is retained as the tolerance case, pinning that a lowerCamel
+    wire offer still canonicalizes correctly. Parity for the CURRENT wire is (d).
 
     A divergence here means from_wire_offer diverges from the Go oracle and every
     genuine offer signature would fail to verify in the Python shim.

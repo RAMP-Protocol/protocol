@@ -158,13 +158,13 @@ A single offer commitment within a batch transaction.
 
 ### AgentAcceptance
 
-The agent's detached acceptance signature over an accepted Offer. It travels in the execute body alongside the reflected Offer and is independent of the transport (RFC 9421) request signature, so it survives any number of broker relays. The Exchange verifies it and binds the delivery URL to the agent's key (RFC 7638 thumbprint). `signature` is a hex-encoded detached Ed25519 signature over the deterministically marshaled [`AgentAcceptancePayload`](#agentacceptancepayload); `signature_algorithm` is `EdDSA`.
+The agent's detached acceptance signature over an accepted Offer. It travels in the execute body alongside the reflected Offer and is independent of the transport (RFC 9421) request signature, so it survives any number of broker relays. The Exchange verifies it and binds the delivery URL to the agent's key (RFC 7638 thumbprint). `signature` is a hex-encoded detached Ed25519 signature over the JCS-canonicalized (RFC 8785) proto-JSON of [`AgentAcceptancePayload`](#agentacceptancepayload) — the same canonical signing form `Offer.signature` defines, reduced here to `JCS(protojson(payload))` because the payload carries no signature fields to clear; `signature_algorithm` is `EdDSA`.
 
 ::proto-message{name=AgentAcceptance}
 
 ### AgentAcceptancePayload
 
-The canonical signing structure for [`AgentAcceptance`](#agentacceptance). It is **never sent on the wire** — both the signer and the verifier marshal it deterministically (`proto.Marshal` with deterministic field order) to derive byte-identical signed bytes, so the contract cannot drift between implementations. `offer_sig` is the accepted `Offer.signature` (which transitively binds pricing, terms, and expiry); `requester_id`, `requester_domain`, and `idempotency_key` come from the enclosing `TransactionRequest`.
+The canonical signing structure for [`AgentAcceptance`](#agentacceptance). It is **never sent on the wire** — this message fixes the *field set*, and the *byte layout* is the canonical signing form defined on `Offer.signature`: RFC 8785 JCS over canonical proto-JSON with a pinned option set. Both halves are normative, so signer and verifier derive byte-identical signed bytes in any language without a protobuf binary codec, and the contract cannot drift between implementations. `offer_sig` is the accepted `Offer.signature` (which transitively binds pricing, terms, and expiry); `requester_id`, `requester_domain`, and `idempotency_key` come from the enclosing `TransactionRequest`.
 
 ::proto-message{name=AgentAcceptancePayload}
 

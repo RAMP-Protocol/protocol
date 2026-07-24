@@ -17,9 +17,11 @@ import (
 // it stays valid no matter how many brokers relay the request, because it covers
 // the offer + requester + idempotency, not the HTTP envelope.
 //
-// The signed bytes are pinned by the AgentAcceptancePayload proto message so the
-// signer (agent) and the verifier (Exchange) derive them identically; both go
-// through canonicalAcceptancePayload, the single source of the byte layout.
+// The signed bytes are pinned in two halves, both normative: the
+// AgentAcceptancePayload proto message fixes the FIELD SET, and the canonical
+// signing form defined on Offer.signature fixes the BYTE LAYOUT. That is what
+// lets the signer (agent) and the verifier (Exchange) derive them identically;
+// both go through CanonicalAcceptanceBytes, the single implementation of the pair.
 
 // AcceptanceSignatureAlgorithm is the alg advertised on AgentAcceptance.
 // Always EdDSA for Ed25519.
@@ -30,18 +32,43 @@ const AcceptanceSignatureAlgorithm = "EdDSA"
 // idempotency key).
 var ErrAcceptanceSignatureInvalid = errors.New("helpers: offer-acceptance signature invalid")
 
-// canonicalAcceptancePayload is the canonical byte sequence an agent's offer
-// acceptance covers: the accepted Offer.signature (which transitively binds the
-// offer's pricing, terms, expiry, and issuing Exchange), plus the requester
-// identity and the transaction's idempotency key. The offer must be signed — an
-// empty anchor would let the acceptance float free of any concrete offer, so it
-// is rejected fail-closed.
+// CanonicalAcceptanceBytes returns the exact canonical byte sequence an agent's
+// offer acceptance covers: the accepted Offer.signature (which transitively binds
+// the offer's pricing, terms, expiry, and issuing Exchange), plus the requester
+// identity and idempotency key of the ENCLOSING execute request — in batch mode
+// both come from the TransactionRequest, never from the per-item TransactionItem,
+// which carries neither. The returned bytes are
+// byte-identical to what SignOfferAcceptance signs and VerifyOfferAcceptance
+// verifies over — persist them to re-verify an acceptance verbatim, independent of
+// how the canonical form later evolves.
+//
+// Re-verification also needs the persisted AgentAcceptance.signature and the signer's
+// trusted public key: these bytes are the signed message, necessary but not by
+// themselves sufficient. A passing signature proves only that the key holder signed
+// THESE bytes, so a caller weighing them as evidence must also parse them and match
+// their content against the transaction in question.
 //
 // The canonical form is RFC 8785 JCS over canonical proto-JSON —
-// JCS(protojson(AgentAcceptancePayload)) — via canonicalSignPayload, the same
-// primitive the offer signature uses, so any language reproduces the exact signed
-// bytes without a protobuf binary codec. See canonicalsign.go for the option set.
-func canonicalAcceptancePayload(offer *rampv1.Offer, requester *rampv1.Requester, idempotencyKey string) ([]byte, error) {
+// JCS(protojson(AgentAcceptancePayload)) — the same definition the offer signature
+// uses, stated normatively on Offer.signature in ramp.proto: snake_case proto field
+// names, enums as name strings, unpopulated fields omitted. AgentAcceptancePayload
+// carries no signature fields, so the clear-then-render step reduces to a plain
+// render. Any language (Go/TS/Python) reproduces the exact bytes from that
+// definition, without a protobuf binary codec.
+//
+// The payload is built here from the four scalars rather than taken from the caller,
+// so it cannot carry the unknown fields CanonicalOfferBytes has to refuse; only the
+// values read off the offer and requester reach the signed bytes.
+//
+// Unpopulated fields are OMITTED before JCS — EVERY empty string field, not just the
+// domain: the bytes for an empty requester id are not the bytes for any populated
+// one. A port that assembles this object by hand instead of rendering the proto must
+// reproduce that omission per field, or it signs bytes this function never produces.
+//
+// Fails closed on a nil offer, a nil requester, or an unsigned offer (empty
+// Offer.signature) — an empty anchor would let the acceptance float free of any
+// concrete offer.
+func CanonicalAcceptanceBytes(offer *rampv1.Offer, requester *rampv1.Requester, idempotencyKey string) ([]byte, error) {
 	if offer == nil {
 		return nil, errors.New("helpers: offer is nil")
 	}
@@ -68,7 +95,7 @@ func SignOfferAcceptance(priv ed25519.PrivateKey, offer *rampv1.Offer, requester
 	if len(priv) != ed25519.PrivateKeySize {
 		return "", fmt.Errorf("helpers: ed25519 private key must be %d bytes, got %d", ed25519.PrivateKeySize, len(priv))
 	}
-	payload, err := canonicalAcceptancePayload(offer, requester, idempotencyKey)
+	payload, err := CanonicalAcceptanceBytes(offer, requester, idempotencyKey)
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +113,7 @@ func VerifyOfferAcceptance(offer *rampv1.Offer, requester *rampv1.Requester, ide
 	if err != nil {
 		return fmt.Errorf("helpers: decode acceptance signature: %w", err)
 	}
-	payload, err := canonicalAcceptancePayload(offer, requester, idempotencyKey)
+	payload, err := CanonicalAcceptanceBytes(offer, requester, idempotencyKey)
 	if err != nil {
 		return err
 	}

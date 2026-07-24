@@ -25,10 +25,11 @@ import { utf8Bytes } from "./base64url.ts";
  * (mirror helpers.AcceptanceSignatureAlgorithm). */
 export const ACCEPTANCE_SIGNATURE_ALGORITHM = "EdDSA";
 
-/** The acceptance binding fields. requesterDomain is omitted from the canonical
- * payload when empty (proto omit-unpopulated); an empty offerSig is rejected
- * fail-closed — an empty anchor would let the acceptance float free of any
- * concrete offer. */
+/** The acceptance binding fields. EVERY empty field is omitted from the canonical
+ * payload, not only requesterDomain (proto omit-unpopulated) — so an empty value and
+ * an absent one sign the same bytes, and neither signs the bytes of a populated one.
+ * An empty offerSig is rejected fail-closed — an empty anchor would let the
+ * acceptance float free of any concrete offer. */
 export interface AcceptanceInput {
 	offerSig: string;
 	requesterId: string;
@@ -52,9 +53,9 @@ function bytesToHex(bytes: Uint8Array): string {
 
 /**
  * acceptancePayload reproduces the canonical signed bytes:
- * JCS(protojson(AgentAcceptancePayload)) with an empty requester_domain omitted.
+ * JCS(protojson(AgentAcceptancePayload)) with EVERY empty string field omitted.
  * Throws on an empty offer signature (fail-closed, mirror Go
- * canonicalAcceptancePayload / Python jcs_acceptance_payload).
+ * CanonicalAcceptanceBytes / Python jcs_acceptance_payload).
  */
 export function acceptancePayload(input: AcceptanceInput): Uint8Array<ArrayBuffer> {
 	if (input.offerSig === "") {
@@ -62,13 +63,22 @@ export function acceptancePayload(input: AcceptanceInput): Uint8Array<ArrayBuffe
 			"ramp/acceptance: cannot accept an unsigned offer (empty offer signature)",
 		);
 	}
-	const obj: Record<string, string> = {
+	// proto omit-unpopulated: every empty string field is absent before JCS. The Go
+	// oracle gets that structurally from EmitUnpopulated=false; this record is
+	// hand-built, so the omission is applied once over the whole record rather than
+	// per key. A per-key guard is how the rule went missing for requester_id --
+	// wire-valid, since Requester.id carries no min_len -- which signed bytes Go never
+	// produces. The filter tests for the empty STRING, which covers every member
+	// AgentAcceptancePayload has (the field-set guard in the Go suite pins that list),
+	// so a string field added to the message cannot arrive without its omission. A
+	// non-string field would need its own zero-value test.
+	const payload: Record<string, string> = {
 		offer_sig: input.offerSig,
 		requester_id: input.requesterId,
+		requester_domain: input.requesterDomain,
 		idempotency_key: input.idempotencyKey,
 	};
-	// proto omit-unpopulated: an empty requester_domain is absent before JCS.
-	if (input.requesterDomain !== "") obj.requester_domain = input.requesterDomain;
+	const obj = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== ""));
 	const jcs = canonicalize(obj);
 	if (jcs === undefined) {
 		throw new Error("ramp/acceptance: payload is not JSON-serializable");

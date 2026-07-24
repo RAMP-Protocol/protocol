@@ -76,6 +76,7 @@
     "helpers.ErrURLMissingSignature": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrURLNotAgentBound": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrURLSignatureInvalid": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrUnknownFields": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrUnsupportedAlgorithm": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.FromContext": "Go context.Context accessor; py/ts thread verified-request state explicitly.",
     "helpers.NewContext": "Go context.Context accessor; py/ts thread verified-request state explicitly.",
@@ -209,6 +210,16 @@
       "allowlist_reason": null,
       "python": "apply_scopes",
       "ts": "applyScopes"
+    },
+    "helpers.CanonicalAcceptanceBytes": {
+      "allowlist_reason": null,
+      "python": "jcs_acceptance_payload",
+      "ts": "acceptancePayload"
+    },
+    "helpers.CanonicalOfferBytes": {
+      "allowlist_reason": null,
+      "python": "canonical_offer_payload",
+      "ts": "canonicalOfferPayload"
     },
     "helpers.CanonicalizeMoney": {
       "allowlist_reason": null,

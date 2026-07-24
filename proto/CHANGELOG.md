@@ -49,6 +49,91 @@ oracle. The SSRF-guarded transport is now a single env-driven client
 two flags (`SKIP_SSRF`, `ALLOW_INSECURE`). See `docs/sdk-parity-matrix.md` for the
 per-language surface.
 
+**Go SDK: `helpers.CanonicalOfferBytes` exported (additive, no wire change).**
+The offer-canonical-bytes accessor — RFC 8785 JCS over canonical proto-JSON with
+`signature`/`signature_algorithm` cleared, `expires_at` included, byte-identical to
+what `SignOffer` signs and `VerifyOffer` verifies — is now a public Go symbol. It
+exposes the single canonicalization the signer and verifier already share, so a
+caller can persist the signed offer as verbatim, independently re-verifiable
+evidence. Python (`canonical_offer_payload`) and TS (`canonicalOfferPayload`) already
+expose the equivalent public accessor; this brings the Go surface to parity.
+
+**Go SDK: `helpers.CanonicalAcceptanceBytes` exported (additive, no wire change).**
+The acceptance-canonical-bytes accessor — RFC 8785 JCS over canonical proto-JSON of
+`AgentAcceptancePayload{offer_sig, requester_id, requester_domain, idempotency_key}`,
+byte-identical to what `SignOfferAcceptance` signs and `VerifyOfferAcceptance`
+verifies — is now a public Go symbol, completing the pair with
+`CanonicalOfferBytes`. A caller can persist an agent's acceptance as verbatim,
+independently re-verifiable evidence rather than re-deriving the bytes at
+verification time, which would pin an already-signed acceptance to whatever
+canonicalization the SDK implements later. Python (`jcs_acceptance_payload`) and TS
+(`acceptancePayload`) already expose the equivalent public accessor; this brings the
+Go surface to parity.
+
+**Acceptance canonical-form text corrected (documentation only, no wire change).**
+`AgentAcceptance` and `AgentAcceptancePayload` still described the RETIRED signing
+form — "the deterministic protobuf serialization", "`proto.Marshal(Deterministic:
+true)`" — contradicting the canonical-signing block on `Offer.signature` in the same
+file, which already states that RFC 8785 JCS over canonical proto-JSON "applies to
+the agent offer-acceptance signature". The acceptance text now points at that single
+normative definition instead of restating a superseded recipe:
+`AgentAcceptancePayload` fixes the field set, `Offer.signature` fixes the byte
+layout. Implementations that followed the stale text would have produced
+non-verifying signatures. No field, message, or wire change — comments only, with
+`gen/` and the website mirror regenerated.
+
+**Python + TS SDK: the hand-built acceptance payload omits every unpopulated field
+(bug fix, no wire change).** `jcs_acceptance_payload` (Python) and `acceptancePayload`
+(TS) assemble the `AgentAcceptancePayload` JSON object key by key, and omitted only an
+empty `requester_domain` — `requester_id` and `idempotency_key` were always emitted.
+Go renders the same object through `protojson` with `EmitUnpopulated=false`, which omits
+EVERY unpopulated field, so the three SDKs signed different bytes whenever `requester_id`
+was empty. That input is wire-valid: `Requester.id` carries no `min_len`. Verification
+failed closed on it (a byte mismatch, never a bypass), but the byte-equivalence the
+canonical-bytes accessors promise did not hold. Both hand-built faces now drop each empty
+string field, and two new vectors in `sdk/go/helpers/testdata/acceptance-vectors.json` —
+`empty_requester_id` and `empty_idempotency_key`, one per omittable field left uncovered —
+pin the agreement across Go, Python and TS. Without them the omission can be dropped in any
+one language with every gate still green. The corpus change is purely additive — the
+pre-existing vectors and their signatures are byte-identical, so no already-issued signature
+is affected.
+
+**Canonical signing refuses messages carrying unknown fields (normative; Go SDK
+behavior change, no wire change).** `Offer.signature` — the single normative definition of
+the canonical form — now states the rule, which turns on whether a canonicalizer omits or
+preserves content it has no schema for. An OMITTING canonicalizer (proto-JSON emits only
+schema-defined fields) cannot reproduce the signed bytes of a message carrying unknown
+fields, so it MUST refuse the message rather than emit the reduced bytes, at EVERY depth —
+a nested message and each element of a repeated or map field carries its own unknown-field
+set. A PRESERVING canonicalizer carries unrecognized members through, reproduces the
+signed bytes faithfully, and has nothing to refuse.
+
+Either way an APPENDED field cannot pass, which is the point: the omitting case refuses
+the message, and the preserving case renders the appended member into bytes the signer
+never covered. Without the refusal the omitting case failed OPEN — an intermediary could
+add unknown fields to an already-signed `Offer` **without invalidating its signature**,
+smuggling unauthenticated content through a message the recipient treats as verified. That
+is what the Go SDK now closes: `helpers.VerifyOffer` surfaces the refusal as
+`ErrOfferSignatureInvalid` (a message that arrived carrying extra bytes is a tampered
+offer, not an internal fault) wrapping the new `helpers.ErrUnknownFields`, so a caller can
+branch on either; `helpers.CanonicalOfferBytes` and `helpers.SignOffer` return
+`ErrUnknownFields` directly.
+
+Python (`from_wire_offer`) and TypeScript (`canonicalOfferPayload`) are preserving
+canonicalizers and need no change — they already reject the appended-field case on a byte
+mismatch. They are NOT expected to reject a message whose signer covered the unknown
+member: they reproduce those bytes exactly and verify, which is the forward-compatible
+outcome. Go, being an omitting canonicalizer, cannot reconstruct such a message at all and
+refuses it; that asymmetry is inherent to the renderer, not new here — before this change
+Go rejected the same message on a byte mismatch instead.
+
+No legitimate traffic regresses: an offer signed WITH a field this build cannot render
+already failed to verify; the refusal only makes the reason explicit. Extensions are
+unaffected — they ride in `ext` / `ext_critical`, defined fields that sit inside the signed
+bytes, never undeclared field numbers. One new exported Go symbol (`ErrUnknownFields`,
+registered as a Go-idiomatic exclusion in the parity map); no field, message, or wire
+change — proto comments only, with `gen/` and the website mirror regenerated.
+
 **`Requester.billing_ref` removed (breaking, pre-1.0).** The caller-written
 billing label on `Requester` is gone; the field is deleted outright with no
 `reserved` statement — pre-v1 the number returns to the free pool, and

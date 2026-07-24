@@ -2,11 +2,13 @@ package helpers_test
 
 import (
 	"crypto/ed25519"
+	"encoding/hex"
 	"errors"
 	"testing"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"google.golang.org/protobuf/proto"
 )
 
 func acceptanceFixture() (*rampv1.Offer, *rampv1.Requester, string) {
@@ -112,5 +114,72 @@ func TestSignOfferAcceptance_emptyOfferSignatureRejected(t *testing.T) {
 	unsigned := &rampv1.Offer{OfferId: "of_1"} // no Signature
 	if _, err := helpers.SignOfferAcceptance(priv, unsigned, requester, idem); err == nil {
 		t.Fatal("expected error signing acceptance over an unsigned offer (empty anchor)")
+	}
+}
+
+func TestCanonicalAcceptanceBytes_matchesSignOfferAcceptance(t *testing.T) {
+	// The bytes CanonicalAcceptanceBytes returns are exactly what
+	// SignOfferAcceptance signed: verifying that signature directly over them must
+	// hold. This is the property a caller relies on to persist verbatim,
+	// re-verifiable acceptance evidence.
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	offer, requester, idem := acceptanceFixture()
+	sigHex, err := helpers.SignOfferAcceptance(priv, offer, requester, idem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canon, err := helpers.CanonicalAcceptanceBytes(offer, requester, idem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := hex.DecodeString(sigHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ed25519.Verify(pub, canon, sig) {
+		t.Error("SignOfferAcceptance signature must verify over CanonicalAcceptanceBytes")
+	}
+}
+
+// Byte-identity against the committed cross-language corpus is not asserted here:
+// the golden emitter rebuilds testdata/acceptance-vectors.json through this same
+// function and byte-compares the whole committed file on every default run, so a
+// second harness over the same equality would only add a second schema to keep in
+// step with the file.
+
+func TestCanonicalAcceptanceBytes_failsClosed(t *testing.T) {
+	offer, requester, idem := acceptanceFixture()
+	if _, err := helpers.CanonicalAcceptanceBytes(nil, requester, idem); err == nil {
+		t.Error("nil offer should error")
+	}
+	if _, err := helpers.CanonicalAcceptanceBytes(offer, nil, idem); err == nil {
+		t.Error("nil requester should error")
+	}
+	// An unsigned offer is an empty anchor: the acceptance would float free of any
+	// concrete offer, so the bytes are refused rather than produced.
+	unsigned := &rampv1.Offer{OfferId: "of_1"}
+	if _, err := helpers.CanonicalAcceptanceBytes(unsigned, requester, idem); err == nil {
+		t.Error("unsigned offer (empty offer signature) should error")
+	}
+}
+
+func TestCanonicalAcceptanceBytes_doesNotMutateInputs(t *testing.T) {
+	// The payload is built from getters onto a fresh message, so a caller can hand
+	// in the live Offer/Requester it is about to persist and get them back
+	// untouched. Nothing is cloned on the way in, so the whole message is compared:
+	// a future refactor could reach any field, not only the four the canonical form
+	// reads.
+	offer, requester, idem := acceptanceFixture()
+	offerBefore := proto.Clone(offer)
+	requesterBefore := proto.Clone(requester)
+
+	if _, err := helpers.CanonicalAcceptanceBytes(offer, requester, idem); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(offer, offerBefore) {
+		t.Errorf("CanonicalAcceptanceBytes mutated the caller's offer\n got  %v\n want %v", offer, offerBefore)
+	}
+	if !proto.Equal(requester, requesterBefore) {
+		t.Errorf("CanonicalAcceptanceBytes mutated the caller's requester\n got  %v\n want %v", requester, requesterBefore)
 	}
 }

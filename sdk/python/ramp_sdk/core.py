@@ -147,7 +147,7 @@ def canonical_offer_payload(offer: dict[str, Any]) -> bytes:
     """Reproduce the offer's signed bytes: clear signature + signature_algorithm from
     the canonical proto-JSON, then apply RFC 8785 JCS.
 
-    MUST stay byte-identical to the Go oracle (helpers.canonicalOfferPayload). The
+    MUST stay byte-identical to the Go oracle (helpers.CanonicalOfferBytes). The
     offer is already canonical proto-JSON (snake_case, enums-as-names,
     omit-unpopulated) — the core only clears the two signature keys and re-JCS-es.
     """
@@ -272,21 +272,27 @@ def jcs_acceptance_payload(
     """Canonical acceptance bytes = JCS(protojson(AgentAcceptancePayload)).
 
     The same JCS(protojson(...)) canonicalization the offer signature uses. proto-JSON
-    OMITS unpopulated fields, so an empty ``requester_domain`` is absent from the
-    object before JCS (matching the Go oracle's empty-domain vector). Fail-closed on
-    an empty ``offer_sig`` (mirror Go canonicalAcceptancePayload): an empty anchor
-    would let the acceptance float free of any concrete offer.
+    OMITS unpopulated fields, so EVERY empty string field is absent from the object
+    before JCS — not just ``requester_domain``. The Go oracle gets that structurally
+    from ``EmitUnpopulated=false``; this object is hand-built, so the omission is
+    applied once over the whole record rather than per key. A per-key guard is how the
+    rule went missing for ``requester_id`` — wire-valid, since ``Requester.id`` carries
+    no ``min_len`` — which signed bytes Go never produces. The filter tests for the
+    empty STRING, which covers every member ``AgentAcceptancePayload`` has (the field-set
+    guard in the Go suite pins that list), so a string field added to the message cannot
+    arrive without its omission. A non-string field would need its own zero-value test.
+    Fail-closed on an empty ``offer_sig`` (mirror Go CanonicalAcceptanceBytes): an
+    empty anchor would let the acceptance float free of any concrete offer.
     """
     if offer_sig == "":
         raise ValueError("cannot accept an unsigned offer (empty offer signature)")
-    obj: dict[str, str] = {
+    payload: dict[str, str] = {
         "offer_sig": offer_sig,
         "requester_id": requester_id,
+        "requester_domain": requester_domain,
         "idempotency_key": idempotency_key,
     }
-    if requester_domain != "":
-        obj["requester_domain"] = requester_domain
-    return rfc8785.dumps(obj)
+    return rfc8785.dumps({k: v for k, v in payload.items() if v != ""})
 
 
 def sign_offer_acceptance_jcs(

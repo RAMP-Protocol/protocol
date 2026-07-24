@@ -317,7 +317,7 @@ type offerVerifyVector struct {
 	NowUnix           int64           `json:"now_unix"`
 	ExpectedVerified  bool            `json:"expected_verified"`
 	// ExchangeSeedHex is the exchange offer-signing seed (fixedSeed 0x66), so a
-	// sign-face port re-signs canonicalOfferPayload(offer_json) and byte-matches
+	// sign-face port re-signs CanonicalOfferBytes(offer_json) and byte-matches
 	// the signature already embedded in offer_json.
 	ExchangeSeedHex string `json:"exchange_seed_hex"`
 }
@@ -331,7 +331,7 @@ type offerVerifyDoc struct {
 }
 
 // offerCanonicalProtoJSON renders offer to the SAME pinned proto-JSON the signer
-// canonicalizes over (camelCase, enums-as-names, omit-unpopulated). Emitting the
+// canonicalizes over (snake_case, enums-as-names, omit-unpopulated). Emitting the
 // vector's offer_json through the identical option set is what lets the port
 // reproduce JCS(protojson(offer)) byte-for-byte.
 func offerCanonicalProtoJSON(t *testing.T, offer *rampv1.Offer) json.RawMessage {
@@ -480,11 +480,12 @@ func buildOfferVerifyVectors(t *testing.T) []offerVerifyVector {
 }
 
 // wireCanonicalVector pins the wire-to-canonical conversion: wire_json is the
-// offer exactly as the Connect codec emits it (camelCase json_names, enums as
+// offer exactly as the Connect codec emits it (snake_case proto names, enums as
 // names, EmitUnpopulated zero-inflation; JCS-stabilized so the committed file is
 // deterministic), canonical_json is the byte sequence the offer signature covers
-// (canonicalOfferPayload: signature/signature_algorithm cleared, snake_case,
-// omit-unpopulated, JCS). A from-wire canonicalizer in any language must map
+// (CanonicalOfferBytes: signature/signature_algorithm cleared, omit-unpopulated,
+// JCS). Both sides share the snake_case naming, so what a from-wire canonicalizer
+// must actually undo is the zero-inflation and the signature fields — it must map
 // wire_json to canonical_json exactly.
 type wireCanonicalVector struct {
 	Name          string          `json:"name"`
@@ -511,12 +512,13 @@ func buildWireCanonicalVectors(t *testing.T) []wireCanonicalVector {
 			t.Fatalf("%s: wire proto-JSON marshal: %v", name, err)
 		}
 		// JCS-stabilize the committed wire form (protojson whitespace/order is not
-		// deterministic); key CASE is untouched, so the camel wire shape survives.
+		// deterministic); JCS sorts and re-encodes but never RENAMES a key, so the
+		// codec's snake_case wire shape survives intact.
 		wireCanon, err := jcs.Transform(wirePJ)
 		if err != nil {
 			t.Fatalf("%s: wire JCS: %v", name, err)
 		}
-		canonical, err := canonicalOfferPayload(offer)
+		canonical, err := CanonicalOfferBytes(offer)
 		if err != nil {
 			t.Fatalf("%s: canonical payload: %v", name, err)
 		}
@@ -994,9 +996,13 @@ func verifySignRequestVector(t *testing.T, v signRequestVector) {
 }
 
 // buildAcceptanceVectors signs a fixed set of offer acceptances with the REAL Go
-// SignOfferAcceptance, seeded 0102..1f20 (shared with the app fixture). Includes
-// the empty-domain case (proto3 field-3 default-skip). Records canonical bytes
-// hex + signature hex + std-base64 pubkey.
+// SignOfferAcceptance, seeded 0102..1f20 (shared with the app fixture). Records
+// canonical bytes + signature hex + std-base64 pubkey.
+//
+// The specs cover each field the canonical form may omit, one per vector. Go omits
+// them structurally (EmitUnpopulated=false); the Python and TS faces hand-build the
+// object and have to drop empty members themselves, so an omission they miss shows
+// up here as a byte mismatch and nowhere else.
 func buildAcceptanceVectors(t *testing.T) []acceptanceVector {
 	t.Helper()
 	seed, err := hex.DecodeString(acceptanceSeedHex)
@@ -1017,13 +1023,24 @@ func buildAcceptanceVectors(t *testing.T) []acceptanceVector {
 	specs := []spec{
 		{"all_present", "ex-offer-sig-hex", "agent-1", "agent.example.com", "idem-1"},
 		{"empty_domain", "sig2deadbeef", "agent-2", "", "idem-2"},
+		// Requester.id carries no min_len, so an empty id is wire-valid. The
+		// canonical form omits EVERY unpopulated field, not only the domain — this
+		// vector is what holds the hand-built Python/TS payloads to that, since
+		// they enumerate the keys instead of inheriting EmitUnpopulated=false.
+		{"empty_requester_id", "sig3deadbeef", "", "agent.example.com", "idem-3"},
+		// The last omittable field. TransactionRequest.idempotency_key carries
+		// min_len:1 so the wire rejects an empty one, but these accessors are the
+		// layer below that check and must still agree on the bytes — without this
+		// vector the omission guard can be dropped in any language with every gate
+		// still green.
+		{"empty_idempotency_key", "sig4deadbeef", "agent-4", "agent.example.com", ""},
 	}
 
 	out := make([]acceptanceVector, 0, len(specs))
 	for _, s := range specs {
 		offer := &rampv1.Offer{Signature: s.offerSig}
 		requester := &rampv1.Requester{Id: s.requesterID, Domain: s.requesterDomain}
-		canon, err := canonicalAcceptancePayload(offer, requester, s.idempotencyKey)
+		canon, err := CanonicalAcceptanceBytes(offer, requester, s.idempotencyKey)
 		if err != nil {
 			t.Fatalf("%s: canonical: %v", s.name, err)
 		}
