@@ -2556,6 +2556,19 @@ type Offer struct {
 	//   - google.protobuf.Struct (`ext`) → a plain JSON object; JCS then sorts its
 	//     keys recursively, so the Struct case needs no special handling.
 	//
+	// UNKNOWN FIELDS: a message carrying fields the renderer's schema does not
+	// define MUST NOT be canonicalized, and a verifier MUST reject it rather than
+	// verify over the reduced bytes. proto-JSON emits only what the schema defines,
+	// so the bytes reconstructed from such a message silently omit part of what the
+	// signer covered. The rule binds at EVERY depth — a nested message and each
+	// element of a repeated or map field carries its own unknown-field set. Without
+	// it the omission cuts both ways: a signer built against a newer schema would be
+	// rejected for the wrong reason, and an intermediary could APPEND unknown fields
+	// to an already-signed message without invalidating its signature, smuggling
+	// unauthenticated content through a message the recipient treats as verified.
+	// Extensions therefore ride in `ext` / `ext_critical`, which are defined fields
+	// and inside the signed bytes — never as undeclared field numbers.
+	//
 	// Because the signature covers `terms`, `pricing`, `expires_at`, and
 	// `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,
 	// quotas, obligations, the expiry, the execute-routing target, or any
