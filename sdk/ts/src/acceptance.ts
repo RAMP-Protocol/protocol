@@ -68,8 +68,10 @@ export function acceptancePayload(input: AcceptanceInput): Uint8Array<ArrayBuffe
 	// hand-built, so the omission is applied once over the whole record rather than
 	// per key. A per-key guard is how the rule went missing for requester_id --
 	// wire-valid, since Requester.id carries no min_len -- which signed bytes Go never
-	// produces; filtering the assembled record means a field added to
-	// AgentAcceptancePayload cannot arrive without it.
+	// produces. The filter tests for the empty STRING, which covers every member
+	// AgentAcceptancePayload has (the field-set guard in the Go suite pins that list),
+	// so a string field added to the message cannot arrive without its omission. A
+	// non-string field would need its own zero-value test.
 	const payload: Record<string, string> = {
 		offer_sig: input.offerSig,
 		requester_id: input.requesterId,

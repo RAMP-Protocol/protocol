@@ -277,8 +277,10 @@ def jcs_acceptance_payload(
     from ``EmitUnpopulated=false``; this object is hand-built, so the omission is
     applied once over the whole record rather than per key. A per-key guard is how the
     rule went missing for ``requester_id`` — wire-valid, since ``Requester.id`` carries
-    no ``min_len`` — which signed bytes Go never produces; filtering the assembled
-    record means a field added to ``AgentAcceptancePayload`` cannot arrive without it.
+    no ``min_len`` — which signed bytes Go never produces. The filter tests for the
+    empty STRING, which covers every member ``AgentAcceptancePayload`` has (the field-set
+    guard in the Go suite pins that list), so a string field added to the message cannot
+    arrive without its omission. A non-string field would need its own zero-value test.
     Fail-closed on an empty ``offer_sig`` (mirror Go CanonicalAcceptanceBytes): an
     empty anchor would let the acceptance float free of any concrete offer.
     """

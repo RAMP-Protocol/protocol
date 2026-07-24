@@ -78,7 +78,9 @@ with an empty value — so the canonical bytes for an empty string field are nev
 bytes for a populated one. Go inherits that from `protojson` for free. A port that
 assembles the JSON object by hand does not, and has to enumerate the omission for
 every field or it signs bytes Go never produces. The acceptance payload is the one
-place all three SDKs hand-build the object, and it is exactly where the divergence
+place the Python and TS ports hand-build the object — Go renders the
+`AgentAcceptancePayload` message through the same protojson canonicalizer as the
+offer — and it is exactly where the divergence
 appeared: Python and TS dropped an empty `requester_domain` but emitted an empty
 `requester_id`, which is wire-valid because `Requester.id` carries no `min_len`. Such
 a mismatch fails closed, but it falsifies the byte-equivalence the canonical-bytes
