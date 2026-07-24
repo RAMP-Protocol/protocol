@@ -1,15 +1,12 @@
 """sdk/python wire-to-canonical offer canonicalizer.
 
-The RAMP Connect wire emitted by the Broker is snake_case proto-JSON with
-EmitUnpopulated (zero-valued scalars, empty repeateds, null messages and
-``*_UNSPECIFIED`` enums all present). The offer SIGNATURE covers the CANONICAL form:
-the same snake_case proto names, but omit-unpopulated, enums-as-names, then RFC 8785
-JCS. Both sides share the naming, so what ``from_wire_offer`` undoes is the
-zero-inflation, not the naming; it keeps the signature fields, which
-``ramp_sdk.core.canonical_offer_payload`` strips on the way into JCS (hence the manual
-strip in the assertions below). It belongs in sdk/python so every RAMP client (MCP
-shim, future TS MCP, future Python broker) shares one wire-normalization function
-proven byte-identical to the Go oracle.
+The wire form, the canonical form, and what the inversion does and does not undo are
+described once, in :mod:`ramp_sdk.wire_canon`. That module docstring is the contract;
+this one says only what the suite pins, so the two cannot drift apart the way they
+already did once. The one consequence worth restating, because the assertions below
+depend on it: ``from_wire_offer`` KEEPS the signature fields, so every comparison here
+strips ``signature``/``signature_algorithm`` by hand, exactly as
+``ramp_sdk.core.canonical_offer_payload`` does on the way into JCS.
 
 Four behaviors pinned here:
 
@@ -43,13 +40,11 @@ Four behaviors pinned here:
 as (a). The rules they pin are naming-independent, and their snake_case twins are the
 ``unspecified_enum_pruned`` and ``set_empty_optional_unit`` vectors in (d).
 
-RED now: ``ramp_sdk.wire_canon`` does not exist yet. The module-level import
-below causes a collection error, which is the established red style in this suite
-(mirrors test_client_binding_smoke.py and test_core_offer_verify_parity.py:
-module-level import with ``type: ignore[import-not-found]`` → ImportError on
-collection → pytest ERRORS = confirmed RED). The implement step adds
-``sdk/python/ramp_sdk/wire_canon.py`` (exporting ``from_wire_offer``); these
-tests go green with no change to the assertions.
+The suite was authored RED, before ``ramp_sdk.wire_canon`` existed: the module-level
+import below raised on collection, the established red style here (mirrors
+test_client_binding_smoke.py and test_core_offer_verify_parity.py). The module has
+since landed and the assertions went green unchanged — the ``type: ignore`` on the
+import is what remains of that step.
 """
 
 from __future__ import annotations
