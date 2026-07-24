@@ -273,24 +273,24 @@ def jcs_acceptance_payload(
 
     The same JCS(protojson(...)) canonicalization the offer signature uses. proto-JSON
     OMITS unpopulated fields, so EVERY empty string field is absent from the object
-    before JCS — not just ``requester_domain``. The Go oracle gets that from
-    ``EmitUnpopulated=false``; this hand-built object has to do it per field, or an
-    empty ``requester_id`` would sign bytes Go never produces and cross-language
-    verification would fail on a wire-valid input (``Requester.id`` carries no
-    ``min_len``). Fail-closed on an empty ``offer_sig`` (mirror Go
-    CanonicalAcceptanceBytes): an empty anchor would let the acceptance float free of
-    any concrete offer.
+    before JCS — not just ``requester_domain``. The Go oracle gets that structurally
+    from ``EmitUnpopulated=false``; this object is hand-built, so the omission is
+    applied once over the whole record rather than per key. A per-key guard is how the
+    rule went missing for ``requester_id`` — wire-valid, since ``Requester.id`` carries
+    no ``min_len`` — which signed bytes Go never produces; filtering the assembled
+    record means a field added to ``AgentAcceptancePayload`` cannot arrive without it.
+    Fail-closed on an empty ``offer_sig`` (mirror Go CanonicalAcceptanceBytes): an
+    empty anchor would let the acceptance float free of any concrete offer.
     """
     if offer_sig == "":
         raise ValueError("cannot accept an unsigned offer (empty offer signature)")
-    obj: dict[str, str] = {"offer_sig": offer_sig}
-    if requester_id != "":
-        obj["requester_id"] = requester_id
-    if requester_domain != "":
-        obj["requester_domain"] = requester_domain
-    if idempotency_key != "":
-        obj["idempotency_key"] = idempotency_key
-    return rfc8785.dumps(obj)
+    payload: dict[str, str] = {
+        "offer_sig": offer_sig,
+        "requester_id": requester_id,
+        "requester_domain": requester_domain,
+        "idempotency_key": idempotency_key,
+    }
+    return rfc8785.dumps({k: v for k, v in payload.items() if v != ""})
 
 
 def sign_offer_acceptance_jcs(
