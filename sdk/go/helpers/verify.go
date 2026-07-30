@@ -178,11 +178,51 @@ func verifySingleSignature(
 	}, nil
 }
 
-// signatureAgentOf returns the request's Signature-Agent header value,
-// whitespace-trimmed. The covered-component enforcement above guarantees the
+// signatureAgentOf returns the directory URI carried in the request's
+// Signature-Agent header. The covered-component enforcement above guarantees the
 // header is signed whenever this value is consumed off a VerifiedRequest.
+//
+// Two forms are accepted, and both yield the bare URI:
+//
+//	"https://a.example"   an RFC 8941 String, which is what Web Bot Auth defines
+//	                      the value to be. Quoting is not optional in structured
+//	                      fields — a String has exactly one serialization — so this
+//	                      is the form a conformant signer sends.
+//	https://a.example     the bare form RAMP itself emits. Despite appearances this
+//	                      is not "an unquoted string": it parses as a Token, since
+//	                      RFC 8941 tokens admit ":" and "/". Accepted so RAMP's own
+//	                      legs keep verifying while signers migrate.
+//
+// Anything neither parser accepts is returned trimmed but otherwise verbatim.
+// That keeps hosts no structured-field parser admits working exactly as before,
+// and it is safe because a directory URI still has to survive host validation
+// before it is fetched or stored as an identity.
+//
+// The spec's sf-dictionary form (`agent2="https://a.example"`) is deliberately
+// NOT read, and neither is the data: URI scheme that inlines a whole key
+// directory into the header. Both are refused as a matter of RAMP policy rather
+// than for want of a parser: an inline directory has no fetch location, and the
+// fetch location is the security boundary this SDK's key resolution rests on — a
+// signer that supplies its own directory is asserting its own keys. Such a value
+// falls through to the verbatim branch here and is rejected downstream, where the
+// directory has to resolve to a real host.
 func signatureAgentOf(req *http.Request) string {
-	return strings.TrimSpace(req.Header.Get(SignatureAgentHeader))
+	raw := strings.TrimSpace(req.Header.Get(SignatureAgentHeader))
+	if raw == "" {
+		return ""
+	}
+	item, err := httpsfv.UnmarshalItem([]string{raw})
+	if err != nil {
+		return raw
+	}
+	switch v := item.Value.(type) {
+	case string:
+		return v // String: the parser has already stripped the quotes
+	case httpsfv.Token:
+		return string(v)
+	default:
+		return raw
+	}
 }
 
 func enforceRequiredComponents(covered []CoveredComponent) error {

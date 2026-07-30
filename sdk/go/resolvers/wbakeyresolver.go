@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -558,8 +559,20 @@ func wbaNotify(hook func()) {
 
 // directoryBase normalizes a Signature-Agent value (bare host, host:port, or
 // full URL) into a scheme://host base and its host key.
+//
+// A key directory must be something this resolver FETCHES. An opaque URI carries
+// its payload inline instead, and the WBA directory draft §4.1 permits exactly
+// one such scheme — data:, which embeds a whole key directory in the header. RAMP
+// refuses it: key resolution here rests on fetching the directory from a location
+// the signer had to control, so a signer that ships its own directory inline is
+// asserting its own keys and the boundary is gone. Refusing it by name also
+// replaces the confusing failure the value used to produce, where "data:app/json"
+// was prefixed into "https://data:app/json" and rejected as a bad port.
 func (r *WBAKeyResolver) directoryBase(ref string) (base, host string, err error) {
 	if !strings.Contains(ref, "://") {
+		if err := refuseOpaqueURI(ref); err != nil {
+			return "", "", err
+		}
 		ref = r.scheme + "://" + ref
 	}
 	u, err := url.Parse(ref)
@@ -570,6 +583,25 @@ func (r *WBAKeyResolver) directoryBase(ref string) (base, host string, err error
 		return "", "", fmt.Errorf("no host in %q", ref)
 	}
 	return u.Scheme + "://" + u.Host, u.Host, nil
+}
+
+// refuseOpaqueURI rejects a scheme:opaque reference (data:…, and any other
+// non-fetchable URI) while admitting the bare host:port form that looks like one.
+// The two are told apart by what follows the colon: a port is all digits, an
+// opaque payload is not. "identity:8080" is a compose host, "data:application/…"
+// is an inline directory.
+func refuseOpaqueURI(ref string) error {
+	u, err := url.Parse(ref)
+	if err != nil || u.Opaque == "" {
+		// Unparseable or no opaque part: not the shape this guard covers. A
+		// genuinely malformed value still fails the host check downstream.
+		return nil
+	}
+	if _, portErr := strconv.ParseUint(u.Opaque, 10, 16); portErr == nil {
+		return nil // host:port, not scheme:opaque
+	}
+	return fmt.Errorf("signature-agent %q carries an inline %q URI; only fetchable http(s) directories are accepted",
+		ref, u.Scheme)
 }
 
 // wbaFile returns host's cached directory when fresh, else fetches, stores, and
