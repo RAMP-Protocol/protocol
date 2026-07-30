@@ -9,7 +9,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
@@ -41,44 +40,19 @@ func TestVerifyRequest_signatureAgentOnResult(t *testing.T) {
 // via helpers.SignatureAgentFromContext — the platform relay path where the
 // resolver uses the agent's directory to validate the signing key's provenance.
 func TestVerifyMultisig_resolverSeesSignatureAgent(t *testing.T) {
-	// Build a signed request with Signature-Agent set.
 	body := []byte(`{"resource_id":"r4"}`)
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const keyID = "relay.agent.v1"
-	signer, err := helpers.NewEd25519Signer(keyID, priv)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req, err := http.NewRequest(http.MethodPost, "https://exchange.example/ramp.v1.ExchangeService/Execute", strings.NewReader(string(body)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Signature-Agent", "https://relay.example")
-	if err := helpers.SignRequest(context.Background(), req, body, signer, helpers.SignOptions{Created: tCreated, Expires: tExpires}); err != nil {
-		t.Fatalf("SignRequest: %v", err)
-	}
+	req, spyResolver, captured := signResolvedFixture(t, body, "relay.agent.v1", "https://relay.example")
 
-	// A spy KeyResolver that captures the SignatureAgent from resolution context.
-	var capturedAgent string
-	spyResolver := &signatureAgentSpyResolver{
-		delegate: helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{keyID: pub}),
-		onResolve: func(ctx context.Context, _ string) {
-			capturedAgent = helpers.SignatureAgentFromContext(ctx)
-		},
-	}
-
-	_, err = helpers.VerifyMultisigRequestResolved(context.Background(), req, body, spyResolver, helpers.VerifyOptions{Now: tNow})
-	if err != nil {
+	if _, err := helpers.VerifyMultisigRequestResolved(
+		context.Background(), req, body, spyResolver, helpers.VerifyOptions{Now: tNow},
+	); err != nil {
 		t.Fatalf("VerifyMultisigRequestResolved: %v", err)
 	}
-	if capturedAgent == "" {
+	if captured() == "" {
 		t.Error("KeyResolver.Resolve context had empty SignatureAgent; want 'https://relay.example' pre-threaded by the SDK")
 	}
-	if capturedAgent != "https://relay.example" {
-		t.Errorf("SignatureAgent in resolver context = %q; want %q", capturedAgent, "https://relay.example")
+	if captured() != "https://relay.example" {
+		t.Errorf("SignatureAgent in resolver context = %q; want %q", captured(), "https://relay.example")
 	}
 }
 

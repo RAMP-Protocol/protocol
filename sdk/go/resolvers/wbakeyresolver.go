@@ -493,9 +493,12 @@ func (r *WBAKeyResolver) Resolve(ctx context.Context, keyID string) (ed25519.Pub
 	}
 	base, host, err := r.directoryBase(dir)
 	if err != nil {
-		// A malformed Signature-Agent cannot name a directory: the key is
-		// unresolvable here, not "the directory is down" — fall-through verdict.
-		return nil, fmt.Errorf("%w: unparseable signature-agent %q: %w", helpers.ErrUnknownKey, dir, err)
+		// A Signature-Agent that does not name a fetchable directory cannot resolve
+		// a key here — this is "not a directory", not "the directory is down", so it
+		// stays a fall-through verdict. Deliberately NOT worded as "unparseable":
+		// most failures reaching here are policy refusals of a perfectly well-formed
+		// value, and calling those a parse error misdirects whoever reads the log.
+		return nil, fmt.Errorf("%w: cannot resolve signature-agent %q: %w", helpers.ErrUnknownKey, dir, err)
 	}
 	f, err := r.wbaFile(ctx, base, host)
 	if err != nil {
@@ -560,17 +563,24 @@ func wbaNotify(hook func()) {
 // directoryBase normalizes a Signature-Agent value (bare host, host:port, or
 // full URL) into a scheme://host base and its host key.
 //
-// A key directory must be something this resolver FETCHES. An opaque URI carries
-// its payload inline instead, and the WBA directory draft §4.1 permits exactly
-// one such scheme — data:, which embeds a whole key directory in the header. RAMP
-// refuses it: key resolution here rests on fetching the directory from a location
-// the signer had to control, so a signer that ships its own directory inline is
-// asserting its own keys and the boundary is gone. Refusing it by name also
-// replaces the confusing failure the value used to produce, where "data:app/json"
-// was prefixed into "https://data:app/json" and rejected as a bad port.
+// A key directory must be something this resolver FETCHES, so the scheme has to
+// be one this resolver can fetch over. That is enforced ONCE, on the parsed URL,
+// rather than per syntactic form: a value may arrive with an authority
+// ("data://x", "ftp://x") or as an opaque URI ("data:{…}"), and a guard that saw
+// only one of those shapes would let the other through to fail later as a
+// transport error — a different verdict class, which a composite resolver reads
+// as "directory down" rather than "not a directory".
+//
+// The scheme that matters is data:, which the WBA directory draft §4.1 permits
+// and which embeds a whole key directory in the header. RAMP refuses it: key
+// resolution rests on fetching the directory from a location the signer had to
+// control, so a signer shipping its own directory inline is asserting its own
+// keys. The draft does substitute a boundary there — a certificate chain (x5c
+// validated to a CA via the AIA URI) — but this SDK implements no part of that,
+// so accepting data: would authenticate nothing.
 func (r *WBAKeyResolver) directoryBase(ref string) (base, host string, err error) {
 	if !strings.Contains(ref, "://") {
-		if err := refuseOpaqueURI(ref); err != nil {
+		if err := requireHostForm(ref); err != nil {
 			return "", "", err
 		}
 		ref = r.scheme + "://" + ref
@@ -579,29 +589,49 @@ func (r *WBAKeyResolver) directoryBase(ref string) (base, host string, err error
 	if err != nil {
 		return "", "", err
 	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", "", fmt.Errorf("%q directory is not fetchable; only http(s) directories are accepted", u.Scheme)
+	}
 	if u.Host == "" {
 		return "", "", fmt.Errorf("no host in %q", ref)
 	}
 	return u.Scheme + "://" + u.Host, u.Host, nil
 }
 
-// refuseOpaqueURI rejects a scheme:opaque reference (data:…, and any other
-// non-fetchable URI) while admitting the bare host:port form that looks like one.
-// The two are told apart by what follows the colon: a port is all digits, an
-// opaque payload is not. "identity:8080" is a compose host, "data:application/…"
-// is an inline directory.
-func refuseOpaqueURI(ref string) error {
+// requireHostForm decides whether a reference carrying no "://" is a bare host
+// (possibly with a port and a path) or an opaque scheme:payload URI. Only the
+// former may have a scheme prefixed onto it; prefixing an opaque URI produces a
+// pseudo-authority like "https://data:application/json" whose failure reads as a
+// malformed host rather than a declined directory.
+//
+// url.Parse cannot tell the two apart on its own — "identity:8080" and "data:{…}"
+// both come back as scheme:opaque — so the decision is made on the text before
+// the first "/", which is the only part that could be a port. Getting this wrong
+// in either direction is costly: too strict and compose stacks addressing
+// "identity:8080" break, too loose and inline directories get through.
+//
+// The error is not prefixed with the reference: the caller in Resolve already
+// echoes it, and repeating it produced a message naming the value twice.
+func requireHostForm(ref string) error {
 	u, err := url.Parse(ref)
 	if err != nil || u.Opaque == "" {
 		// Unparseable or no opaque part: not the shape this guard covers. A
 		// genuinely malformed value still fails the host check downstream.
 		return nil
 	}
-	if _, portErr := strconv.ParseUint(u.Opaque, 10, 16); portErr == nil {
-		return nil // host:port, not scheme:opaque
+	// "identity:8080/dir" parses to Opaque "8080/dir"; a path after the port is
+	// legal on a bare host reference and must not be read as an opaque payload.
+	portText, _, _ := strings.Cut(u.Opaque, "/")
+	if _, portErr := strconv.ParseUint(portText, 10, 16); portErr == nil {
+		return nil // host:port, optionally with a path
 	}
-	return fmt.Errorf("signature-agent %q carries an inline %q URI; only fetchable http(s) directories are accepted",
-		ref, u.Scheme)
+	// Digits that do not fit a port are a bad port, not an inline payload. Saying
+	// "inline URI" there would be the same misdiagnosis this guard exists to end,
+	// pointed the other way.
+	if portText != "" && strings.IndexFunc(portText, func(r rune) bool { return r < '0' || r > '9' }) < 0 {
+		return fmt.Errorf("port %q is out of range", portText)
+	}
+	return fmt.Errorf("carries an inline %q URI; only fetchable http(s) directories are accepted", u.Scheme)
 }
 
 // wbaFile returns host's cached directory when fresh, else fetches, stores, and

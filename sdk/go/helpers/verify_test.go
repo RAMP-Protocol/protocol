@@ -19,6 +19,49 @@ const (
 
 var tNow = time.Unix(1700000100, 0) // inside [created, expires]
 
+// signResolvedFixture builds a signed request carrying signatureAgent in its
+// Signature-Agent header, plus a spy KeyResolver that records the directory the
+// SDK threaded into the resolution context. It exists because the
+// resolver-context assertions need a keyID the resolver can be seeded with, which
+// signFixture does not expose — every such test was otherwise re-inlining the
+// same nine-step keygen → signer → request → header → sign → spy sequence.
+//
+// Returns the signed request, the resolver to hand to a resolved verify
+// entrypoint, and a reader for what that resolver saw (meaningful only after the
+// verify call has run).
+func signResolvedFixture(t *testing.T, body []byte, keyID, signatureAgent string) (
+	*http.Request, helpers.KeyResolver, func() string,
+) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := helpers.NewEd25519Signer(keyID, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost,
+		"https://exchange.example/ramp.v1.ExchangeService/Execute", strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set(helpers.SignatureAgentHeader, signatureAgent)
+	if err := helpers.SignRequest(context.Background(), req, body, signer,
+		helpers.SignOptions{Created: tCreated, Expires: tExpires}); err != nil {
+		t.Fatalf("SignRequest: %v", err)
+	}
+
+	var captured string
+	spy := &signatureAgentSpyResolver{
+		delegate: helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{keyID: pub}),
+		onResolve: func(ctx context.Context, _ string) {
+			captured = helpers.SignatureAgentFromContext(ctx)
+		},
+	}
+	return req, spy, func() string { return captured }
+}
+
 func signFixture(t *testing.T, body []byte, mutate func(*http.Request)) (*http.Request, ed25519.PublicKey) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)

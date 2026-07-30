@@ -15,9 +15,7 @@ package helpers_test
 
 import (
 	"context"
-	"crypto/ed25519"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
@@ -69,42 +67,16 @@ func TestSignatureAgent_formsYieldSameDirectory(t *testing.T) {
 // rejected.
 func TestSignatureAgent_quotedFormReachesResolver(t *testing.T) {
 	body := []byte(`{"resource_id":"r2"}`)
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const keyID = "thumbprint.v1"
-	signer, err := helpers.NewEd25519Signer(keyID, priv)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req, err := http.NewRequest(http.MethodPost,
-		"https://exchange.example/ramp.v1.ExchangeService/Execute", strings.NewReader(string(body)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set(helpers.SignatureAgentHeader, `"`+wantDirectory+`"`)
-	if err := helpers.SignRequest(context.Background(), req, body, signer,
-		helpers.SignOptions{Created: tCreated, Expires: tExpires}); err != nil {
-		t.Fatalf("SignRequest: %v", err)
-	}
-
-	var captured string
-	spy := &signatureAgentSpyResolver{
-		delegate: helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{keyID: pub}),
-		onResolve: func(ctx context.Context, _ string) {
-			captured = helpers.SignatureAgentFromContext(ctx)
-		},
-	}
+	req, spy, captured := signResolvedFixture(t, body, "thumbprint.v1", `"`+wantDirectory+`"`)
 
 	if _, err := helpers.VerifyRequestResolved(
 		context.Background(), req, body, spy, helpers.VerifyOptions{Now: tNow},
 	); err != nil {
 		t.Fatalf("VerifyRequestResolved: %v", err)
 	}
-	if captured != wantDirectory {
+	if captured() != wantDirectory {
 		t.Errorf("resolver context directory = %q; want %q — a resolver cannot fetch a directory whose URI still carries quotes",
-			captured, wantDirectory)
+			captured(), wantDirectory)
 	}
 }
 
@@ -155,23 +127,70 @@ func TestSignatureAgent_emptyStaysEmpty(t *testing.T) {
 	}
 }
 
-// TestSignatureAgent_unparseableValuePreserved pins the fallback. A host that no
-// structured-field parser admits must still reach the caller unchanged rather than
-// becoming empty, so values that worked before this parsing was added keep
-// working. The draft permits ignoring a malformed field but does not require it,
-// and every consumer already has to cope with a directory it cannot resolve.
-func TestSignatureAgent_unparseableValuePreserved(t *testing.T) {
-	const unparseable = `"unterminated`
-	body := []byte(`{"resource_id":"r5"}`)
-	req, pub := signFixture(t, body, func(r *http.Request) {
-		r.Header.Set(helpers.SignatureAgentHeader, unparseable)
-	})
+// TestSignatureAgent_edgeShapes pins the parser's contract across the shapes a
+// single example does not reach: the fallback for values no structured-field
+// parser admits, an item carrying parameters, and a string with escapes.
+//
+// The fallback matters because a host that fails structured-field parsing must
+// still reach the caller unchanged rather than becoming empty — values that
+// worked before this parsing existed keep working. The draft permits ignoring a
+// malformed field but does not require it, and every consumer already has to cope
+// with a directory it cannot resolve.
+func TestSignatureAgent_edgeShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		wire string
+		want string
+	}{
+		{
+			name: "unterminated string falls back verbatim",
+			wire: `"unterminated`,
+			want: `"unterminated`,
+		},
+		{
+			name: "bare host no parser admits falls back verbatim",
+			wire: "agent_(1).example",
+			want: "agent_(1).example",
+		},
+		{
+			// Parameters are not defined for this field. They parse, and the
+			// directory is the item's value — the params are dropped, not appended
+			// to the URI. Pinned because silently folding ";v=1" into the directory
+			// would produce an unresolvable host.
+			name: "parameters on a quoted string are ignored",
+			wire: `"https://agent.example";v=1`,
+			want: "https://agent.example",
+		},
+		{
+			name: "parameters on a bare token are ignored",
+			wire: `https://agent.example;v=1`,
+			want: "https://agent.example",
+		},
+		{
+			// RFC 8941 strings escape \ and ". The parser unescapes; the surfaced
+			// directory is the decoded text.
+			name: "escaped quote inside a string is decoded",
+			wire: `"https://agent.example/\"x"`,
+			want: `https://agent.example/"x`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := []byte(`{"resource_id":"r5"}`)
+			req, pub := signFixture(t, body, func(r *http.Request) {
+				r.Header.Set(helpers.SignatureAgentHeader, tc.wire)
+			})
 
-	vr, err := helpers.VerifyRequest(req, body, pub, helpers.VerifyOptions{Now: tNow})
-	if err != nil {
-		t.Fatalf("VerifyRequest: %v", err)
-	}
-	if vr.SignatureAgent != unparseable {
-		t.Errorf("SignatureAgent = %q; want %q preserved verbatim", vr.SignatureAgent, unparseable)
+			vr, err := helpers.VerifyRequest(req, body, pub, helpers.VerifyOptions{Now: tNow})
+			if err != nil {
+				t.Fatalf("VerifyRequest with Signature-Agent %s: %v", tc.wire, err)
+			}
+			if vr.SignatureAgent != tc.want {
+				t.Errorf("SignatureAgent = %q; want %q", vr.SignatureAgent, tc.want)
+			}
+			// Whatever the shape, the wire bytes are never rewritten.
+			if got := req.Header.Get(helpers.SignatureAgentHeader); got != tc.wire {
+				t.Errorf("header mutated to %q; want %q", got, tc.wire)
+			}
+		})
 	}
 }
