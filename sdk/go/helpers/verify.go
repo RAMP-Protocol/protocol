@@ -198,6 +198,15 @@ func verifySingleSignature(
 // and it is safe because a directory URI still has to survive host validation
 // before it is fetched or stored as an identity.
 //
+// There is a THIRD outcome the two above do not cover: an item carrying
+// structured-field parameters yields its value with the parameters dropped, so
+// `https://a.example;q=1` surfaces as `https://a.example`. That is the right
+// reading — no parameter is defined for this field, and folding one into the URI
+// would produce a host nothing resolves — but it does WIDEN what reaches the
+// resolver, since the parameterized spelling used to be an unresolvable host and
+// is now a fetchable one. It grants a signer nothing it could not already get by
+// sending the bare form, and the value still has to survive host validation.
+//
 // The spec's sf-dictionary form (`agent2="https://a.example"`) is deliberately
 // NOT read, and neither is the data: URI scheme that inlines a whole key
 // directory into the header. Both are refused as a matter of RAMP policy rather
@@ -207,7 +216,11 @@ func verifySingleSignature(
 // falls through to the verbatim branch here and is rejected downstream, where the
 // directory has to resolve to a real host.
 func signatureAgentOf(req *http.Request) string {
-	raw := strings.TrimSpace(req.Header.Get(SignatureAgentHeader))
+	// Values joined the way the signature base joins them, NOT Get. Get returns
+	// only the first field line, so a repeated Signature-Agent header would have
+	// the identity derived from one value while the signature committed to both —
+	// the two readings of one header must not diverge.
+	raw := strings.TrimSpace(strings.Join(req.Header.Values(SignatureAgentHeader), ", "))
 	if raw == "" {
 		return ""
 	}

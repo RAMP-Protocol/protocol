@@ -587,15 +587,82 @@ func (r *WBAKeyResolver) directoryBase(ref string) (base, host string, err error
 	}
 	u, err := url.Parse(ref)
 	if err != nil {
-		return "", "", err
+		// Framed, not passed through raw. A value that is not a URL at all used to
+		// surface whatever url.Parse happened to complain about — for the spec's
+		// dictionary form that is `invalid port ":application"`, which names a port
+		// nobody wrote and hides that the value was never a directory reference.
+		return "", "", fmt.Errorf("is not a directory reference: %w", err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	// The SAME allowlist the guarded transport applies to every redirect hop,
+	// now applied to the initial URL too. Reusing the predicate rather than
+	// re-deriving the verdict is the point: its own contract records that a
+	// scheme denylist is unwinnable, and the shared corpus already pins which
+	// schemes are fetchable. A second, differently-shaped rule here would be a
+	// place for the two to disagree.
+	if !allowedScheme(u.Scheme) {
 		return "", "", fmt.Errorf("%q directory is not fetchable; only http(s) directories are accepted", u.Scheme)
 	}
 	if u.Host == "" {
 		return "", "", fmt.Errorf("no host in %q", ref)
 	}
+	// A reference that survives parsing can still carry a Host no host-port split
+	// reproduces — "data:" prefixed becomes "https://data:", whose Host keeps a
+	// dangling colon. Such values are not merely unreachable: this Host is the
+	// cache key and the Host header for every later fetch, so admitting one puts
+	// a malformed key in a shared map.
+	if !wellFormedHost(u) {
+		return "", "", fmt.Errorf("%q is not a host[:port]", u.Host)
+	}
 	return u.Scheme + "://" + u.Host, u.Host, nil
+}
+
+// wellFormedHost reports whether u.Host is an addressable host[:port] rather than
+// merely non-empty. url.Parse is deliberately lenient — it carries a trailing
+// colon, or text no name resolver could ever look up, through as a Host instead
+// of failing — and this Host becomes the directory cache key and the Host header
+// of every later fetch, so leniency here puts junk in a shared map.
+//
+// Two conditions. The name must be a registered name or an IP literal, which is
+// what rejects the sf-dictionary form: "agent2=\"a.example\"" parses to exactly
+// that Host, and quotes and equals signs are not host characters. And Host must
+// be precisely what re-assembling the parsed name and port produces, which is
+// what rejects a dangling colon.
+func wellFormedHost(u *url.URL) bool {
+	name := u.Hostname()
+	if name == "" {
+		return false
+	}
+	reassembled := name
+	if strings.Contains(name, ":") {
+		// Colons are legal in a host only inside an IPv6 literal, and Hostname()
+		// strips the brackets that Host carries.
+		if net.ParseIP(name) == nil {
+			return false
+		}
+		reassembled = "[" + name + "]"
+	} else if !isRegisteredName(name) {
+		return false
+	}
+	if port := u.Port(); port != "" {
+		reassembled += ":" + port
+	}
+	return u.Host == reassembled
+}
+
+// isRegisteredName reports whether name holds only characters a DNS name may
+// carry. Internationalized names reach here already punycoded (xn--…), so ASCII
+// is the whole alphabet; underscore is admitted because service records and
+// container hostnames use it.
+func isRegisteredName(name string) bool {
+	for _, c := range name {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '.', c == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // requireHostForm decides whether a reference carrying no "://" is a bare host

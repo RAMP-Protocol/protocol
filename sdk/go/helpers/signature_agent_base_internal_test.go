@@ -76,6 +76,63 @@ func TestSignatureBase_bareSignatureAgentUnchanged(t *testing.T) {
 	}
 }
 
+// TestSignatureAgentOf_readsEveryFieldLine pins that the reader and the signature
+// base see the SAME header. HTTP allows a field to arrive as several lines; the
+// base joins them all, so reading only the first would derive an identity from
+// one value while the signature committed to both. The joined value is not a
+// valid item, so it falls through verbatim — which is the point: both sides then
+// agree on the same string.
+func TestSignatureAgentOf_readsEveryFieldLine(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPost, "https://exchange.example/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Add(SignatureAgentHeader, `"https://a.example"`)
+	req.Header.Add(SignatureAgentHeader, `"https://b.example"`)
+
+	surfaced := signatureAgentOf(req)
+	covered, err := componentValue(req, CoveredComponent{Name: signatureAgentLower})
+	if err != nil {
+		t.Fatalf("componentValue: %v", err)
+	}
+	if surfaced != covered {
+		t.Errorf("surfaced %q but signed %q — a repeated header must not give the reader and the base different values",
+			surfaced, covered)
+	}
+	if surfaced == "https://a.example" {
+		t.Error("only the first field line was read; the signature covers both")
+	}
+}
+
+// TestSignatureAgentOf_parametersDropped pins the third outcome the accept-or-
+// verbatim pair does not cover, including that it WIDENS what reaches the
+// resolver: the parameterized spelling used to be an unresolvable host and is now
+// a fetchable one. Documented rather than prevented — no parameter is defined for
+// this field, folding one into the URI would produce a host nothing resolves, and
+// a signer could send the bare form directly anyway.
+func TestSignatureAgentOf_parametersDropped(t *testing.T) {
+	for _, tc := range []struct{ wire, want string }{
+		{`"https://a.example";expires=1`, "https://a.example"},
+		{`https://a.example;q=1`, "https://a.example"},
+		{`https://evil.example;x="https://good.example"`, "https://evil.example"},
+	} {
+		req, err := http.NewRequest(http.MethodPost, "https://exchange.example/x", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set(SignatureAgentHeader, tc.wire)
+		if got := signatureAgentOf(req); got != tc.want {
+			t.Errorf("signatureAgentOf(%s) = %q; want %q", tc.wire, got, tc.want)
+		}
+		// The parameters stay in the signed bytes even though the reader drops them.
+		if covered, err := componentValue(req, CoveredComponent{Name: signatureAgentLower}); err != nil {
+			t.Fatalf("componentValue: %v", err)
+		} else if covered != tc.wire {
+			t.Errorf("covered value = %q; want the wire bytes %q", covered, tc.wire)
+		}
+	}
+}
+
 // TestSignatureAgentOf_doesNotDependOnTheBase states the split the two tests above
 // rest on, as an executable claim rather than a comment: for one set of wire bytes
 // the SURFACED value is unquoted while the SIGNED value is not. Reading the header

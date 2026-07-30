@@ -37,6 +37,15 @@ func TestDirectoryBase_acceptsFetchableForms(t *testing.T) {
 		// this form outright.
 		{"bare host:port with path", "identity:8080/dir", "https://identity:8080", "identity:8080"},
 		{"bare host with path", "agent.example/dir", "https://agent.example", "agent.example"},
+		// A lone trailing slash was enough to break this form once: the whole
+		// opaque part was read as the port, so "8443/" failed the digits test.
+		{"bare host:port with a bare trailing slash", "agent.example:8443/", "https://agent.example:8443", "agent.example:8443"},
+		{"bare host:port with query", "agent.example:8443?x=1", "https://agent.example:8443", "agent.example:8443"},
+		{"bare host:port with fragment", "agent.example:8443#f", "https://agent.example:8443", "agent.example:8443"},
+		// IPv6 survives the host re-assembly check: Hostname() drops the brackets
+		// that Host carries, so the check has to put them back.
+		{"bracketed IPv6 with port", "[::1]:8080", "https://[::1]:8080", "[::1]:8080"},
+		{"full origin, bracketed IPv6", "https://[::1]:8080", "https://[::1]:8080", "[::1]:8080"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base, host, err := r.directoryBase(tc.ref)
@@ -84,6 +93,36 @@ func TestDirectoryBase_refusesUnfetchable(t *testing.T) {
 			name:        "port out of range",
 			ref:         "identity:99999999",
 			wantPhrase:  "out of range",
+			wantMissing: "inline",
+		},
+		// The shapes below all PARSE. url.Parse carries a dangling colon or plain
+		// junk through as a Host rather than failing, and that Host becomes the
+		// directory cache key and the Host header of every later fetch — so
+		// "non-empty" is not a sufficient test of a host.
+		{
+			name:       "opaque URI with no payload",
+			ref:        "data:",
+			wantPhrase: "not a host",
+		},
+		{
+			name:       "opaque URI with only a fragment",
+			ref:        "data:#x",
+			wantPhrase: "not a host",
+		},
+		{
+			// The sf-dictionary form RAMP does not read. Quotes and equals signs
+			// are not host characters, so it cannot be mistaken for one.
+			name:       "sf-dictionary form is not a host",
+			ref:        `agent2="a.example"`,
+			wantPhrase: "not a host",
+		},
+		{
+			// The draft's own §A.4 shape: a dictionary holding a data: value. It
+			// does not parse at all, and used to surface url.Parse complaining
+			// about a port nobody wrote.
+			name:        "dictionary holding a data: value",
+			ref:         `agent2="data:application/http-message-signatures-directory;utf8,{}"`,
+			wantPhrase:  "is not a directory reference",
 			wantMissing: "inline",
 		},
 	} {
