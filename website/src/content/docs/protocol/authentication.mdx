@@ -22,7 +22,7 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 | Field | Type | Description |
 |---|---|---|
 | `id` | `string` | Unique requester identifier (e.g., `"agent-research-bot-001"`) |
-| `domain` | `string` | Domain for public key lookup — keys at `{domain}/.well-known/ramp.json` (`WellKnownManifest`, `role=ROLE_AGENT`) |
+| `domain` | `string` | The requester's own domain, as it declares it. **Not** where keys are looked up — that is the covered `Signature-Agent` header (see [Key Lookup](#key-lookup)). A value here is a claim, not a credential |
 | `type` | `RequesterType` | What kind of entity is making the request |
 | `name` | `string` (optional) | Human-readable name (e.g., `"Acme Research Assistant"`) |
 | `scopes` | `repeated string` | Entitlement scopes — what the requester can access |
@@ -36,7 +36,9 @@ Every RAMP request carries a `Requester` message that identifies who is making t
 
 ### Key Lookup
 
-The Exchange resolves a requester's public key by fetching its WBA directory — the JWK Set at `{domain}/.well-known/http-message-signatures-directory` — and selecting the `JsonWebKey` whose RFC 7638 thumbprint matches the request signature's `keyid`. (The `{domain}` is the one announced in the requester's `WellKnownManifest` at `/.well-known/ramp.json` with `role=ROLE_AGENT`.)
+The Exchange resolves a requester's public key by fetching its WBA directory — the JWK Set at `{directory}/.well-known/http-message-signatures-directory` — and selecting the `JsonWebKey` whose RFC 7638 thumbprint matches the request signature's `keyid`.
+
+The `{directory}` comes from the **`Signature-Agent` header**, not from the `Requester` message and not from the `ramp.json` manifest. That header is a covered component of the signature, so the pointer the Exchange follows is one the signer committed to and an attacker cannot repoint it under a valid signature. This is what makes the lookup meaningful: the `keyid` is only a key thumbprint — proof that the signer holds the key, not a claim about who they are — so it is the directory publishing that key that establishes whose key it is.
 
 ```json
 // GET https://research.acme.com/.well-known/http-message-signatures-directory
@@ -77,12 +79,16 @@ WebBotAuth solves identity ("this bot is who it claims to be"). RAMP adds the tr
 
 ### Signature Verification
 
-The `Requester` message carries identity semantics only — it has **no** signature field. Request authentication is an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) over the HTTP request itself (covering `@method`, `@target-uri`, and a `Content-Digest` of the body), carried in the `Signature` / `Signature-Input` HTTP headers rather than in the protobuf body. This separates identity semantics (the `Requester` message) from cryptographic proof (the HTTP signature). The Exchange verifies it by:
+The `Requester` message carries identity semantics only — it has **no** signature field. Request authentication is an [RFC 9421 HTTP Message Signature](https://www.rfc-editor.org/rfc/rfc9421) over the HTTP request itself, carried in the `Signature` / `Signature-Input` HTTP headers rather than in the protobuf body. This separates identity semantics (the `Requester` message) from cryptographic proof (the HTTP signature).
+
+The signature MUST cover five components: `@method`, `@target-uri`, `content-digest`, `authorization`, and `signature-agent`. A signature omitting any of them is rejected. `authorization` is covered even when empty, so a token cannot be slipped under an existing signature; `signature-agent` is covered so the directory the key is looked up in cannot be repointed.
+
+The Exchange verifies it by:
 
 1. Reading the `keyid` and covered components from the request's `Signature-Input` header
-2. Extracting `domain` from the `Requester` message and fetching its WBA directory at `{domain}/.well-known/http-message-signatures-directory`, selecting the `JsonWebKey` whose RFC 7638 thumbprint matches the `keyid` (and whose `[not_before, not_after)` window covers now)
+2. Reading the directory from the covered `Signature-Agent` header and fetching its WBA directory at `{directory}/.well-known/http-message-signatures-directory`, selecting the `JsonWebKey` whose RFC 7638 thumbprint matches the `keyid` (and whose `[not_before, not_after)` window covers now)
 3. Reconstructing the signed content from the declared components and verifying the Ed25519 signature in the `Signature` header against that key
-4. Confirming the `Content-Digest` matches the request body, and that the manifest `domain` matches the requester's `domain` with `role=ROLE_AGENT`
+4. Confirming the `Content-Digest` matches the request body, and that the directory that published the key is the identity the caller is authorised as
 
 If verification fails, the Exchange rejects the request. No fallback, no degraded mode. See [How RFC 9421 Signatures Work](#how-rfc-9421-signatures-work) below for the header details.
 
@@ -326,15 +332,20 @@ An agent sends a signed request directly to the Exchange:
 POST /ramp.v1.ExchangeService/DiscoverResources HTTP/1.1
 Content-Type: application/json
 Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
-Signature-Input: agent=("@method" "@target-uri" "content-digest");keyid="kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k";alg="ed25519"
+Authorization:
+Signature-Agent: https://research.acme.com
+Signature-Input: agent=("@method" "@target-uri" "content-digest" "authorization" "signature-agent");keyid="kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k";alg="ed25519";created=1700000000;expires=1700000300
 Signature: agent=:dGVzdC1zaWduYXR1cmUtYWdlbnQ=:
 ```
 
 The `Signature-Input` header declares:
 - **Label**: `agent` — identifies this signature in multi-signature scenarios
-- **Covered components**: `@method` (POST), `@target-uri` (the RPC path), `content-digest` (body hash)
-- **keyid**: the RFC 7638 thumbprint of the agent's key — resolved in the agent's WBA directory at `.well-known/http-message-signatures-directory`
+- **Covered components**: `@method` (POST), `@target-uri` (the RPC path), `content-digest` (body hash), `authorization` (bound even when empty, as above), `signature-agent` (the key directory)
+- **keyid**: the RFC 7638 thumbprint of the agent's key — resolved in the WBA directory named by `Signature-Agent`
 - **alg**: `ed25519` — same key type used throughout RAMP
+- **created / expires**: the validity window; both are required and a signature outside it is refused
+
+The `Signature-Agent` value may also arrive quoted — `"https://research.acme.com"` — which is the RFC 8941 String form Web Bot Auth specifies. Both spellings name the same directory. The bytes are signed exactly as sent, so a relay forwarding the header must not rewrite it.
 
 ### Multi-Hop Example (Broker)
 
@@ -344,11 +355,15 @@ When a request passes through a Broker, each hop adds its own signature. The Bro
 POST /ramp.v1.ExchangeService/DiscoverResources HTTP/1.1
 Content-Type: application/json
 Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
-Signature-Input: agent=("@method" "@target-uri" "content-digest");keyid="kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k";alg="ed25519", broker=("@method" "@target-uri" "content-digest");keyid="broker-key";alg="ed25519"
+Authorization:
+Signature-Agent: https://research.acme.com
+Signature-Input: agent=("@method" "@target-uri" "content-digest" "authorization" "signature-agent");keyid="kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k";alg="ed25519", broker=("@method" "@target-uri" "content-digest" "authorization" "signature-agent" "signature";key="agent");keyid="broker-key";alg="ed25519"
 Signature: agent=:dGVzdC1zaWduYXR1cmUtYWdlbnQ=:, broker=:dGVzdC1zaWduYXR1cmUtYnJva2Vy:
 ```
 
 Each labeled signature (`agent`, `broker`) is independently verifiable. The Exchange checks every signature in the `Signature` header against the corresponding `keyid` in `Signature-Input`.
+
+Note that the Broker's covered set adds `"signature";key="agent"`, a reference to the agent's signature. That is what makes the hops a chain rather than a set: the Broker commits to the exact signature it received, so a relay cannot strip or reorder the hop in front of it. `Signature-Agent` stays the **agent's** directory and is forwarded unchanged — the Broker's own key is found by its `keyid` thumbprint, not by that header.
 
 ### No fallback
 
