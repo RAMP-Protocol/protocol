@@ -148,6 +148,13 @@ func TestDirectoryBase_refusesUnfetchable(t *testing.T) {
 			ref:        "\xff\xfe.example",
 			wantPhrase: "not a host",
 		},
+		{
+			// Credentials are dropped from Host by url.Parse, so accepting this
+			// would fetch a different URL than the caller wrote.
+			name:       "credentials in the reference",
+			ref:        "https://user:pass@a.example",
+			wantPhrase: "credentials",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := r.directoryBase(tc.ref)
@@ -170,6 +177,10 @@ func TestDirectoryBase_refusesUnfetchable(t *testing.T) {
 // scheme:opaque — so the test on the text before the first "/" is the only thing
 // separating a compose host from an inline payload. Too strict breaks compose
 // stacks; too loose admits inline directories.
+//
+// This guard decides SHAPE only. Whether a port is in range is judged later on the
+// parsed URL, so that both spellings of one reference reach the same verdict by the
+// same rule — see the out-of-range case in TestDirectoryBase_refusesUnfetchable.
 func TestRequireHostForm_portVsOpaque(t *testing.T) {
 	for _, tc := range []struct {
 		ref       string
@@ -181,10 +192,11 @@ func TestRequireHostForm_portVsOpaque(t *testing.T) {
 		{"https://agent.example", false}, // has an authority, guard not consulted
 		{"data:application/json,{}", true},
 		{"mailto:ops@example.com", true},
-		{"identity:99999999", true}, // digits, but not a 16-bit port
+		// Digits: a host:port shape, so this guard passes it. The range is the
+		// parsed URL's business.
+		{"identity:99999999", false},
 		// No opaque part at all. This does NOT fail here — it is prefixed into
-		// "https://data:" and stops at the fetch. Recorded so the guard's actual
-		// reach is not overstated.
+		// "https://data:" and refused by the host check.
 		{"data:", false},
 	} {
 		t.Run(tc.ref, func(t *testing.T) {
@@ -210,5 +222,74 @@ func TestRequireHostForm_errorOmitsRef(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), ref) {
 		t.Errorf("error %q echoes the reference; the caller in Resolve already does", err)
+	}
+}
+
+// TestDirectoryBase_oneVerdictPerReference is the property the scheme check was
+// moved onto the parsed URL for, applied to every axis rather than one: a policy
+// must not reach different verdicts because a caller spelled the same reference
+// two ways. The port range split exactly this way — "host:65536" was refused while
+// "https://a.example:65536" was accepted and failed later as an outage, which a
+// composite resolver reads as "directory down" rather than "bad reference".
+func TestDirectoryBase_oneVerdictPerReference(t *testing.T) {
+	r := &WBAKeyResolver{scheme: "https"}
+	for _, tc := range []struct {
+		name   string
+		bare   string
+		full   string
+		wantOK bool
+	}{
+		{"in-range port", "a.example:8080", "https://a.example:8080", true},
+		{"out-of-range port", "a.example:65536", "https://a.example:65536", false},
+		{"plain host", "a.example", "https://a.example", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, bareHost, bareErr := r.directoryBase(tc.bare)
+			_, fullHost, fullErr := r.directoryBase(tc.full)
+			if (bareErr == nil) != (fullErr == nil) {
+				t.Fatalf("spelling changed the verdict: %q -> %v, %q -> %v",
+					tc.bare, bareErr, tc.full, fullErr)
+			}
+			if tc.wantOK && bareErr != nil {
+				t.Fatalf("both refused, want accepted: %v", bareErr)
+			}
+			if bareErr == nil && bareHost != fullHost {
+				t.Errorf("same reference resolved to %q and %q", bareHost, fullHost)
+			}
+		})
+	}
+}
+
+// TestRevocationAnchored_schemeMayNotDowngrade pins the scheme half of the
+// revocation anchoring. The revocation_url is chosen by the directory being
+// polled, so a directory served over https naming a plaintext revocation_url on
+// its OWN host satisfies any host-only check. The poll then runs in the clear
+// every cadence, and an on-path answer carrying an empty list with a newer as_of
+// wipes every revocation — the monotonic guard is built to accept a newer
+// snapshot, so it cannot be the thing that catches this.
+func TestRevocationAnchored_schemeMayNotDowngrade(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		base   string
+		host   string
+		revURL string
+		want   bool
+	}{
+		{"same scheme, same host", "https://a.example", "a.example", "https://a.example/rev", true},
+		{"same scheme, subdomain", "https://a.example", "a.example", "https://sub.a.example/rev", true},
+		{"downgrade to plaintext", "https://a.example", "a.example", "http://a.example/rev", false},
+		{"http directory keeps http", "http://a.example", "a.example", "http://a.example/rev", true},
+		{"cross-host still refused", "https://a.example", "a.example", "https://evil.example/rev", false},
+		{"look-alike host refused", "https://a.example", "a.example", "https://evil-a.example/rev", false},
+		// A directory cached before the base was threaded through falls back to the
+		// host check rather than refusing every poll.
+		{"empty base falls back to host only", "", "a.example", "http://a.example/rev", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := wbaRevocationAnchored(tc.base, tc.host, tc.revURL); got != tc.want {
+				t.Errorf("wbaRevocationAnchored(%q, %q, %q) = %v; want %v",
+					tc.base, tc.host, tc.revURL, got, tc.want)
+			}
+		})
 	}
 }

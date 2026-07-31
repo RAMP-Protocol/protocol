@@ -148,7 +148,18 @@ func TestSignatureAgent_edgeShapes(t *testing.T) {
 			want: `"unterminated`,
 		},
 		{
-			name: "bare host no parser admits falls back verbatim",
+			// The case the fallback exists for: no structured-field parser admits a
+			// non-ASCII name, and this one is an ordinary host that resolves.
+			name: "internationalized host falls back verbatim and stays usable",
+			wire: "bücher.example",
+			want: "bücher.example",
+		},
+		{
+			// Also falls back verbatim, but is NOT usable — the resolver refuses it,
+			// because parentheses are not host characters. Recorded next to the case
+			// above so the fallback is not read as a promise that whatever survives
+			// here will resolve: this function types the wire value and stops there.
+			name: "unusable host also falls back verbatim",
 			wire: "agent_(1).example",
 			want: "agent_(1).example",
 		},

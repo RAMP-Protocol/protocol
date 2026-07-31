@@ -628,43 +628,62 @@ func (r *WBAKeyResolver) directoryBase(ref string) (base, host string, err error
 	// dangling colon. Such values are not merely unreachable: this Host is the
 	// cache key and the Host header for every later fetch, so admitting one puts
 	// a malformed key in a shared map.
-	if !wellFormedHost(u) {
-		return "", "", fmt.Errorf("%q is not a host[:port]", u.Host)
+	// Credentials in a directory reference are meaningless — nothing here presents
+	// them — and url.Parse drops them silently from Host, so accepting the value
+	// would mean fetching a different URL than the caller wrote.
+	if u.User != nil {
+		return "", "", fmt.Errorf("directory reference carries credentials")
+	}
+	if err := wellFormedHost(u); err != nil {
+		return "", "", err
 	}
 	return u.Scheme + "://" + u.Host, u.Host, nil
 }
 
 // wellFormedHost reports whether u.Host is an addressable host[:port] rather than
 // merely non-empty. url.Parse is deliberately lenient — it carries a trailing
-// colon, or text no name resolver could ever look up, through as a Host instead
-// of failing — and this Host becomes the directory cache key and the Host header
-// of every later fetch, so leniency here puts junk in a shared map.
+// colon, an out-of-range port, or text no name resolver could ever look up
+// through as a Host instead of failing — and this Host becomes the directory
+// cache key and the Host header of every later fetch, so leniency here puts junk
+// in a shared map.
 //
-// Two conditions. The name must be a registered name or an IP literal, which is
+// It runs on the PARSED url, which is what keeps one policy from reaching two
+// verdicts depending on how the reference was spelled. The port range was
+// previously checked only on the branch that has no "://", so "host:65536" was
+// refused while "https://a.example:65536" sailed through to fail as an outage —
+// the same split this check was written to remove for schemes.
+//
+// Three conditions. The name must be a registered name or an IP literal, which is
 // what rejects the sf-dictionary form: "agent2=\"a.example\"" parses to exactly
-// that Host, and quotes and equals signs are not host characters. And Host must
-// be precisely what re-assembling the parsed name and port produces, which is
-// what rejects a dangling colon.
-func wellFormedHost(u *url.URL) bool {
+// that Host, and quotes and equals signs are not host characters. Any port must
+// fit 16 bits. And Host must be precisely what re-assembling the parsed name and
+// port produces, which is what rejects a dangling colon.
+func wellFormedHost(u *url.URL) error {
 	name := u.Hostname()
 	if name == "" {
-		return false
+		return fmt.Errorf("%q has no host", u.Host)
 	}
 	reassembled := name
 	if strings.Contains(name, ":") {
 		// Colons are legal in a host only inside an IPv6 literal, and Hostname()
 		// strips the brackets that Host carries.
 		if net.ParseIP(name) == nil {
-			return false
+			return fmt.Errorf("%q is not a host[:port]", u.Host)
 		}
 		reassembled = "[" + name + "]"
 	} else if !isRegisteredName(name) {
-		return false
+		return fmt.Errorf("%q is not a host[:port]", u.Host)
 	}
 	if port := u.Port(); port != "" {
+		if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+			return fmt.Errorf("port %q is out of range", port)
+		}
 		reassembled += ":" + port
 	}
-	return u.Host == reassembled
+	if u.Host != reassembled {
+		return fmt.Errorf("%q is not a host[:port]", u.Host)
+	}
+	return nil
 }
 
 // isRegisteredName reports whether name holds only characters a host may carry.
@@ -719,15 +738,16 @@ func requireHostForm(ref string) error {
 	}
 	// "identity:8080/dir" parses to Opaque "8080/dir"; a path after the port is
 	// legal on a bare host reference and must not be read as an opaque payload.
+	//
+	// Digits are the whole test, and the RANGE is deliberately not judged here:
+	// "host:65536" is a host with a bad port, not an inline payload, and saying
+	// otherwise would be the misdiagnosis this guard exists to end pointed the
+	// other way. Letting it through to wellFormedHost is also what keeps the two
+	// spellings converged — "https://a.example:65536" reaches the same verdict by
+	// the same rule, rather than each branch keeping its own copy of the policy.
 	portText, _, _ := strings.Cut(u.Opaque, "/")
-	if _, portErr := strconv.ParseUint(portText, 10, 16); portErr == nil {
-		return nil // host:port, optionally with a path
-	}
-	// Digits that do not fit a port are a bad port, not an inline payload. Saying
-	// "inline URI" there would be the same misdiagnosis this guard exists to end,
-	// pointed the other way.
 	if portText != "" && strings.IndexFunc(portText, func(r rune) bool { return r < '0' || r > '9' }) < 0 {
-		return fmt.Errorf("port %q is out of range", portText)
+		return nil // host:port — the port's range is judged on the parsed URL
 	}
 	return fmt.Errorf("carries an inline %q URI; only fetchable http(s) directories are accepted", u.Scheme)
 }
@@ -777,7 +797,7 @@ func (r *WBAKeyResolver) syncRefresh(ctx context.Context, base, host string) (*r
 		r.dirCache[host] = wbaDirEntry{file: f, exp: r.now().Add(r.ttl)}
 		r.dirBase[host] = base
 		r.dirMu.Unlock()
-		r.refreshRevocationFor(ctx, host, f)
+		r.refreshRevocationFor(ctx, base, host, f)
 		return f, nil
 	})
 	if err != nil {
@@ -892,19 +912,26 @@ func (r *WBAKeyResolver) Revoked(keyID string) bool {
 // revocation_url. Best-effort: a fetch failure leaves the prior snapshot in
 // place and is logged, never propagated (a stale-but-present snapshot is safer
 // than dropping revocations on a transient blip).
-func (r *WBAKeyResolver) refreshRevocationFor(ctx context.Context, host string, f *rampv1.WBAFile) {
+func (r *WBAKeyResolver) refreshRevocationFor(
+	ctx context.Context, base, host string, f *rampv1.WBAFile,
+) {
 	revURL := f.GetRevocationUrl()
 	if revURL == "" {
 		return
 	}
-	// Anchor the revocation_url to the directory host before polling it. A WBA
+	// Anchor the revocation_url to the directory before polling it. A WBA
 	// directory that names a revocation_url on a different host would otherwise
 	// steer the poller at an arbitrary target every cadence — cross-host polling
-	// and SSRF amplification. Only a same-host-or-subdomain revocation_url is
-	// fetched; a mismatch is logged and skipped, leaving the prior snapshot.
-	if !wbaHostAnchored(host, revURL) {
-		r.logger.WarnContext(ctx, "revocation_url host not anchored to directory; skipping poll",
-			"host", host, "revocation_url", revURL)
+	// and SSRF amplification. The SCHEME is anchored for the same reason: the
+	// value is chosen by the directory, so a directory served over https naming a
+	// plaintext revocation_url on its own host would pass a host-only check and be
+	// polled in the clear, where an on-path answer carrying a newer as_of and an
+	// empty list wipes every revocation — the monotonic guard accepts it. Only a
+	// same-scheme, same-host-or-subdomain revocation_url is fetched; a mismatch is
+	// logged and skipped, leaving the prior snapshot.
+	if !wbaRevocationAnchored(base, host, revURL) {
+		r.logger.WarnContext(ctx, "revocation_url not anchored to directory; skipping poll",
+			"host", host, "base", base, "revocation_url", revURL)
 		return
 	}
 	raw, err := r.getDoc(ctx, revURL)
@@ -951,12 +978,14 @@ func (r *WBAKeyResolver) refreshRevocationFor(ctx context.Context, host string, 
 func (r *WBAKeyResolver) refreshAllRevocations(ctx context.Context) {
 	r.dirMu.Lock()
 	entries := make(map[string]*rampv1.WBAFile, len(r.dirCache))
+	bases := make(map[string]string, len(r.dirCache))
 	for host, e := range r.dirCache {
 		entries[host] = e.file
+		bases[host] = r.dirBase[host]
 	}
 	r.dirMu.Unlock()
 	for host, f := range entries {
-		r.refreshRevocationFor(ctx, host, f)
+		r.refreshRevocationFor(ctx, bases[host], host, f)
 	}
 }
 
@@ -1247,4 +1276,39 @@ func wbaHostAnchored(anchor, candidate string) bool {
 		return false
 	}
 	return c == a || strings.HasSuffix(c, "."+a)
+}
+
+// wbaRevocationAnchored reports whether a directory's advertised revocation_url
+// may be polled: same host (or a subdomain) AND the same scheme the directory
+// itself was fetched over.
+//
+// The scheme half is not redundant with the host half. The value is chosen by the
+// directory being polled, so a directory served over https may name a plaintext
+// revocation_url on its OWN host — which satisfies any host-only anchoring. The
+// poll then runs in the clear on every cadence, and an on-path answer carrying an
+// empty list with a newer as_of wipes every revocation, because the monotonic
+// guard is designed to accept a newer snapshot. Requiring the scheme to match
+// means a directory cannot downgrade its own revocation channel.
+//
+// The guarded transport refuses that fetch too, so this is defence in depth
+// rather than the only barrier — but a caller may inject an unguarded client, and
+// a refusal decided here reads as a policy verdict in the log instead of a dial
+// error. An empty base (a directory cached before this was threaded through)
+// falls back to the host check alone rather than refusing every poll.
+func wbaRevocationAnchored(base, anchorHost, candidate string) bool {
+	if !wbaHostAnchored(anchorHost, candidate) {
+		return false
+	}
+	if base == "" {
+		return true
+	}
+	b, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	c, err := url.Parse(candidate)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(b.Scheme, c.Scheme)
 }

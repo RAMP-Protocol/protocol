@@ -193,10 +193,17 @@ func verifySingleSignature(
 //	                      RFC 8941 tokens admit ":" and "/". Accepted so RAMP's own
 //	                      legs keep verifying while signers migrate.
 //
-// Anything neither parser accepts is returned trimmed but otherwise verbatim.
-// That keeps hosts no structured-field parser admits working exactly as before,
-// and it is safe because a directory URI still has to survive host validation
-// before it is fetched or stored as an identity.
+// Anything neither parser accepts is returned trimmed but otherwise verbatim, so
+// a value this reader cannot type still reaches the caller unchanged rather than
+// becoming empty. "bücher.example" is the case that matters: no structured-field
+// parser admits it — tokens are ASCII — and it is an ordinary host that resolves.
+//
+// Verbatim here does NOT mean usable. This function types the wire value and
+// nothing more; whether the result names a fetchable directory is decided later,
+// and some values that survive this step are refused there ("agent_(1).example"
+// surfaces intact and is then rejected as not a host). Keeping the two apart is
+// deliberate — a reader that also judged fetchability would have to know what the
+// caller intends to do with the value.
 //
 // There is a THIRD outcome the two above do not cover: an item carrying
 // structured-field parameters yields its value with the parameters dropped, so
