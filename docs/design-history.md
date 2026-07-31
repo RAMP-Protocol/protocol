@@ -557,14 +557,31 @@ core alone, never of the whole SDK above L1.
 
 ## SSRF-guarded fetch: two flags, a corpus-locked transport
 
-Every third-party-influenceable fetch across all three SDKs runs through **one**
-env-driven guarded client (`NewGuardedClientFromEnv` in Go, `guarded_client` in
-Python, `guardedFetchFromEnv` in TS), whose behavior is governed by exactly two
-orthogonal environment flags and nothing else — no deployment allow-list, no config
-file, no per-stack policy. `SKIP_SSRF` toggles the dial-time **address** guard (default
-off: reserved / non-public addresses are refused); `ALLOW_INSECURE` toggles the
-**scheme** guard (default off: https only). An operator opts out of a guard by setting
-its flag; the production default is both guards on.
+Every third-party-influenceable fetch across all three SDKs runs through a guarded
+client governed by exactly two orthogonal environment flags and nothing else — no
+deployment allow-list, no config file, no per-stack policy. `SKIP_SSRF` toggles the
+dial-time **address** guard (default off: reserved / non-public addresses are
+refused); `ALLOW_INSECURE` toggles the **scheme** guard (default off: https only).
+An operator opts out of a guard by setting its flag; the production default is both
+guards on.
+
+Most fetches take that policy from the shared factory — `NewGuardedClientFromEnv`
+in Go, `guarded_client` in Python, `guardedFetchFromEnv` in TS. The **WBA directory
+fetch is the exception, and is deliberately stricter**: its host arrives in an
+unauthenticated header and the GET runs *before* the signature is checked, so its
+address guard is **not** opt-outable — `SKIP_SSRF` does not reach it. It honours
+`ALLOW_INSECURE` for the scheme like everything else. A caller injecting its own
+client into the resolver replaces that transport entirely and owns both policies
+from then on, which is how the SDK's own tests reach loopback origins.
+
+That asymmetry was not the original state, and the gap ran the other way. The
+directory client was written before the scheme guard existed, and the change that
+introduced the guard shared the address classifier with this resolver while leaving
+the scheme policy behind — so for a period this section described a posture the most
+exposed fetch in the SDK did not have. The lesson generalises: a guard introduced
+after its callers has to be walked back through them, and a sentence beginning
+"every fetch" is the easiest kind of claim to leave standing once it stops being
+true.
 
 The transport policy is fixed and identical in all three languages: redirect depth is
 capped at **5** hops, well-known/JWKS response bodies are capped at **1 MiB**, and a
