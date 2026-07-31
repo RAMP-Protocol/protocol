@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -649,15 +650,28 @@ func wellFormedHost(u *url.URL) bool {
 	return u.Host == reassembled
 }
 
-// isRegisteredName reports whether name holds only characters a DNS name may
-// carry. Internationalized names reach here already punycoded (xn--…), so ASCII
-// is the whole alphabet; underscore is admitted because service records and
+// isRegisteredName reports whether name holds only characters a host may carry.
+//
+// What it exists to reject is ASCII punctuation that cannot appear in a host
+// because a URL parser would have treated it as a delimiter — quotes and equals
+// signs above all, since those are what the sf-dictionary form
+// (`agent2="a.example"`) is made of. Underscore is admitted: service records and
 // container hostnames use it.
+//
+// Non-ASCII is admitted rather than required to arrive punycoded. An
+// internationalized name like "bücher.example" is a perfectly ordinary host, and
+// net/http converts it at dial time, so demanding "xn--bcher-kva.example" here
+// would refuse a name that resolves — a restriction with no security argument
+// behind it. Invalid UTF-8 is refused, because there is no name to convert.
 func isRegisteredName(name string) bool {
+	if !utf8.ValidString(name) {
+		return false
+	}
 	for _, c := range name {
 		switch {
 		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
 		case c == '-', c == '.', c == '_':
+		case c >= utf8.RuneSelf: // an IDN label; punycoded at dial
 		default:
 			return false
 		}

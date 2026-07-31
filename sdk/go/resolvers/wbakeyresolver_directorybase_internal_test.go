@@ -46,6 +46,14 @@ func TestDirectoryBase_acceptsFetchableForms(t *testing.T) {
 		// that Host carries, so the check has to put them back.
 		{"bracketed IPv6 with port", "[::1]:8080", "https://[::1]:8080", "[::1]:8080"},
 		{"full origin, bracketed IPv6", "https://[::1]:8080", "https://[::1]:8080", "[::1]:8080"},
+		// Internationalized names are ordinary hosts. net/http punycodes them at
+		// dial, so requiring the xn-- form here would refuse a name that resolves.
+		// A host-character rule tight enough to reject the sf-dictionary form is
+		// easy to draw one notch too tight and take these with it.
+		{"internationalized name", "bücher.example", "https://bücher.example", "bücher.example"},
+		{"internationalized name with port", "bücher.example:8443", "https://bücher.example:8443", "bücher.example:8443"},
+		{"non-latin script", "日本.example", "https://日本.example", "日本.example"},
+		{"already punycoded", "xn--bcher-kva.example", "https://xn--bcher-kva.example", "xn--bcher-kva.example"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base, host, err := r.directoryBase(tc.ref)
@@ -124,6 +132,21 @@ func TestDirectoryBase_refusesUnfetchable(t *testing.T) {
 			ref:         `agent2="data:application/http-message-signatures-directory;utf8,{}"`,
 			wantPhrase:  "is not a directory reference",
 			wantMissing: "inline",
+		},
+		{
+			// ASCII punctuation a URL parser would have taken as a delimiter is
+			// what the host-character rule is for. Parentheses are not host
+			// characters even though nothing structural depends on them.
+			name:       "ASCII punctuation in a host",
+			ref:        "agent_(1).example",
+			wantPhrase: "not a host",
+		},
+		{
+			// Non-ASCII is admitted, but only as text. Bytes that are not valid
+			// UTF-8 name nothing that could be punycoded.
+			name:       "invalid UTF-8 in a host",
+			ref:        "\xff\xfe.example",
+			wantPhrase: "not a host",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
