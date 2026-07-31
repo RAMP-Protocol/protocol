@@ -138,6 +138,10 @@ func TestSSRFGuardNilsProxy(t *testing.T) {
 // pins the cap so no future change silently inherits net/http's larger default.
 func TestGuardedClientRedirectDepthCap(t *testing.T) {
 	allowLoopbackForWiringTest(t)
+	// The chain is plaintext http on loopback; opt out of the scheme guard so the
+	// refusal under test is the depth cap. The scheme decision is pinned separately
+	// by TestGuardedWBAClientRefusesPlaintextByDefault.
+	t.Setenv(envAllowInsecure, "1")
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// /n redirects to /(n-1); /0 is the terminal 200.
@@ -191,15 +195,16 @@ func allowLoopbackForWiringTest(t *testing.T) {
 // non-2xx crash that motivated this suite was Python's hand-built opener).
 func TestGuardedClientSurfacesNon2xx(t *testing.T) {
 	allowLoopbackForWiringTest(t)
+	// The httptest origin is plaintext http, which the client refuses unless
+	// ALLOW_INSECURE is set. Opt out of the guard that is not under test, the same
+	// way allowLoopbackForWiringTest opts out of the address table: what this test
+	// proves is status surfacing, and either guard would mask it.
+	t.Setenv(envAllowInsecure, "1")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
-	// The httptest origin is plaintext http on loopback. newGuardedWBAClient allows
-	// http+https (SSRFCheckRedirect), and allowLoopbackForWiringTest empties the
-	// address table, so the request reaches the origin — the address decision is
-	// corpus-locked elsewhere; here we prove status surfacing.
 	resp, err := newGuardedWBAClient().Get(srv.URL)
 	if err != nil {
 		t.Fatalf("non-2xx surfaced as a transport error, want a 404 response: %v", err)
@@ -232,5 +237,68 @@ func TestGuardedClientRefusesRedirectScheme(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SSRF guard") {
 		t.Fatalf("redirect refused for the wrong reason (want SSRF guard): %v", err)
+	}
+}
+
+// TestGuardedWBAClientRefusesPlaintextByDefault pins the scheme half of the
+// default client's posture, which arrived late: this client predates the scheme
+// guard, and the change that introduced the guard shared the address classifier
+// with this resolver while leaving the scheme policy behind. The directory fetch
+// is the most exposed fetch in the SDK — the host comes from an unauthenticated
+// header and the GET runs before the signature check — so it was the one place
+// the documented "https unless opted out" posture did not hold.
+//
+// The address table is emptied so the refusal under test is the scheme one, not
+// loopback being blocked.
+func TestGuardedWBAClientRefusesPlaintextByDefault(t *testing.T) {
+	allowLoopbackForWiringTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	if _, err := newGuardedWBAClient().Get(srv.URL); err == nil {
+		t.Fatal("plaintext http directory fetched in the default posture; want a refusal")
+	}
+}
+
+// TestGuardedWBAClientAllowsPlaintextWhenOptedIn is the other half: a deployment
+// serving directories over plaintext — a compose stack, an on-prem lab — sets the
+// same flag it already sets for every other fetch, and the fetch proceeds. Without
+// this the refusal above could be satisfied by a client that never fetches at all.
+func TestGuardedWBAClientAllowsPlaintextWhenOptedIn(t *testing.T) {
+	allowLoopbackForWiringTest(t)
+	t.Setenv(envAllowInsecure, "1")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	resp, err := newGuardedWBAClient().Get(srv.URL)
+	if err != nil {
+		t.Fatalf("ALLOW_INSECURE set but the fetch was still refused: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("StatusCode = %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestGuardedWBAClientAddressGuardIsNotOptOutable pins the deliberate asymmetry
+// with NewGuardedClientFromEnv. That client lets SKIP_SSRF switch its dial-time
+// address pin off; this one must not, because the host it dials is attacker-chosen
+// and unauthenticated. Adopting the scheme half of the env policy must not have
+// dragged the address escape hatch along with it.
+func TestGuardedWBAClientAddressGuardIsNotOptOutable(t *testing.T) {
+	t.Setenv(envSkipSSRF, "1")
+	t.Setenv(envAllowInsecure, "1")
+	// No allowLoopbackForWiringTest: the address table stays in force.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	if _, err := newGuardedWBAClient().Get(srv.URL); err == nil {
+		t.Fatal("SKIP_SSRF disabled the address guard on the directory fetch; it must not be opt-outable here")
 	}
 }

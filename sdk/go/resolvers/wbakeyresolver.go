@@ -312,19 +312,36 @@ func SSRFCheckRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// newGuardedWBAClient is the HTTP client used when the caller injects none. It
-// installs the dial-time address guard (SSRFGuard, no proxy) and the redirect
-// scheme+depth guard (SSRFCheckRedirect, http+https), so it refuses reserved /
-// non-public targets by default. The directory host is derived from a
-// caller-supplied Signature-Agent and the fetch runs BEFORE the ed25519 signature
-// check, so an unguarded default is a pre-auth SSRF lever against internal
-// networks. A deployment that must reach a private directory (tests, on-prem)
-// injects its own HTTP client.
+// newGuardedWBAClient is the HTTP client used when the caller injects none. The
+// directory host is derived from a caller-supplied Signature-Agent and the fetch
+// runs BEFORE the ed25519 signature check, so an unguarded default is a pre-auth
+// SSRF lever against internal networks. A deployment that must reach a private
+// directory (tests, on-prem) injects its own HTTP client and owns its transport
+// policy from then on — including the scheme.
+//
+// It installs the dial-time address guard, the initial-request scheme guard
+// (https, plus plaintext http only under ALLOW_INSECURE), and the redirect
+// scheme+depth guard.
+//
+// The scheme guard arrived here late. This client was written three days before
+// the guard existed, and the change that introduced it shared the address
+// classifier with this resolver while leaving the scheme policy behind — so the
+// posture design-history describes ("https unless opted out") held everywhere
+// except the most exposed fetch in the SDK.
 func newGuardedWBAClient() *http.Client {
 	return &http.Client{
-		Timeout:       defaultWBAHTTPTimeout,
-		Transport:     SSRFGuard(nil),
-		CheckRedirect: SSRFCheckRedirect,
+		Timeout: defaultWBAHTTPTimeout,
+		// Address guard FIRST and unconditionally. This is the one place it is not
+		// negotiable: NewGuardedClientFromEnv lets SKIP_SSRF switch its address pin
+		// off, and this fetch — host from an unauthenticated header, GET before the
+		// signature check — is the last one that should carry that escape hatch. So
+		// this client takes the scheme half of the env policy and keeps the
+		// stricter address half.
+		Transport: &schemeGuardRoundTripper{base: SSRFGuard(nil)},
+		// schemeCheckRedirect over SSRFCheckRedirect: identical depth cap, and the
+		// stricter of the two scheme predicates, so a redirect cannot reach a
+		// plaintext hop the initial request would have been refused.
+		CheckRedirect: schemeCheckRedirect,
 	}
 }
 
@@ -594,11 +611,11 @@ func (r *WBAKeyResolver) directoryBase(ref string) (base, host string, err error
 		// nobody wrote and hides that the value was never a directory reference.
 		return "", "", fmt.Errorf("is not a directory reference: %w", err)
 	}
-	// The SAME allowlist the guarded transport applies to every redirect hop,
-	// now applied to the initial URL too. Reusing the predicate rather than
-	// re-deriving the verdict is the point: its own contract records that a
-	// scheme denylist is unwinnable, and the shared corpus already pins which
-	// schemes are fetchable. A second, differently-shaped rule here would be a
+	// Reference-level policy, independent of whose transport does the fetching: a
+	// directory must be named by something fetchable at all. Whether plaintext
+	// http is then permitted is a TRANSPORT decision and lives on the client — see
+	// newGuardedWBAClient. Reusing the predicate rather than re-deriving the
+	// verdict is the point: a second, differently-shaped rule here would be a
 	// place for the two to disagree.
 	if !allowedScheme(u.Scheme) {
 		return "", "", fmt.Errorf("%q directory is not fetchable; only http(s) directories are accepted", u.Scheme)
