@@ -4,8 +4,9 @@ package conformance
 //
 // Every message of the wire contract carries `ver` at field 1, and the value is
 // "1.0". That was true before this guard existed too — but only ONE of the 29
-// fields said so: WellKnownManifest.ver. The other 28 read "Protocol version"
-// and nothing more, and one (DiscoveryResponse.ver) carried no comment at all.
+// fields said so: WellKnownManifest.ver. Of the other 28, twenty-seven read only
+// "Protocol version" or "RAMP protocol version", and DiscoveryResponse.ver
+// carried no comment at all.
 // Nobody removed those statements; they were never written, because a per-field
 // doc obligation that lives only in a reviewer's head is complete the day it is
 // discharged and silently incomplete the day the next message is added.
