@@ -82,21 +82,27 @@ import "ramp/v1/vocab.proto";
 // SDK exports it as ProtocolVersion in all three languages, so a version bump
 // is one edit in one place.
 //
-// `ver` is ADVISORY on receive. A receiver MUST NOT reject a message on `ver`
-// alone — authenticity rides on the RFC 9421 request signature and the Ed25519
-// offer signature, not on this field, and no version-negotiation mechanism
-// exists for a rejection to be actionable against. A receiver that does
-// version-check MUST reject only an unrecognised MAJOR version; an unrecognised
-// MINOR version MUST be tolerated, minor revisions being additive by definition.
+// `ver` is ADVISORY on receive. It is not an authenticity or authorization
+// control and MUST NOT be used as one — authenticity rides on the RFC 9421
+// request signature and the Ed25519 offer signature, not on this field. A
+// receiver is NOT required to check `ver`. A receiver that does check it MAY
+// reject an unrecognised MAJOR version, and MUST NOT reject an unrecognised
+// MINOR version — minor revisions are additive by definition.
 //
-// This is deliberately not a buf.validate rule. An exact-match rule would
-// reject a "1.1" message before any peer could negotiate — the wrong semantics
-// for a version field. A major-version pattern would additionally make `ver`
-// structurally required on every message, a wire change no consumer has asked
-// for. The invariant that IS enforced is the one that can be: a source-level
-// guard pins the single-constant rule, so the value cannot silently skew across
-// a subset of authored messages. That guard binds what this project emits; it
-// cannot bind a third party, which is the accepted limit of the advisory model.
+// Version negotiation, where it is needed, happens OUT OF BAND: an Exchange
+// publishes the versions it speaks in
+// WellKnownManifest.protocol_versions_supported, and a Broker filters on that
+// before sending. That is why the in-band field need not be a rejection gate.
+//
+// This is deliberately not a buf.validate rule. An exact-match rule would make
+// every peer reject a "1.1" message outright, contradicting the
+// reject-unrecognised-MAJOR-versions policy the manifest already states. A
+// major-version pattern would additionally make `ver` structurally required on
+// every message, a wire change no consumer has asked for. The invariant that IS
+// enforced is the one that can be: a source-level guard pins the single-constant
+// rule, so the value cannot silently skew across a subset of authored messages.
+// That guard binds what this project emits; it cannot bind a third party, which
+// is the accepted limit of the advisory model.
 //
 // WellKnownManifest.ver is a SEPARATE namespace — the schema version of the
 // /.well-known/ramp.json document, not of the RPC envelope. It is stated
