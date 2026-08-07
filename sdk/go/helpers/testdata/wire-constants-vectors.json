@@ -17,6 +17,10 @@
       "value": "1"
     },
     {
+      "name": "ProtocolVersion",
+      "value": "1.0"
+    },
+    {
       "name": "RequestIDHeader",
       "value": "X-Request-ID"
     },

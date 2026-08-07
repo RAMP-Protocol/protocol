@@ -12,6 +12,15 @@ const (
 	ConnectProtocolVersionHeader = "Connect-Protocol-Version"
 	// ConnectProtocolVersion is the only Connect protocol version RAMP speaks.
 	ConnectProtocolVersion = "1"
+	// ProtocolVersion is the RAMP protocol version stamped on the `ver` field of
+	// every RAMP message — NOT the Connect transport version above. It is the one
+	// source this value comes from, so a protocol bump is a single edit here
+	// rather than a literal hunt across every message builder. Senders MUST stamp
+	// it; receivers treat `ver` as advisory and reject only on an unrecognised
+	// MAJOR version (see "Protocol version" in ramp.proto). The
+	// /.well-known/ramp.json document carries its own schema version in a
+	// separate namespace, which this constant does NOT supply.
+	ProtocolVersion = "1.0"
 	// RequestIDHeader correlates a request across services and the edge.
 	RequestIDHeader = "X-Request-ID"
 	// SignatureAgentHeader carries the signer's Web Bot Auth key-directory URL

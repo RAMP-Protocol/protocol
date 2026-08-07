@@ -75,6 +75,35 @@ import "ramp/v1/vocab.proto";
 // ============================================================================
 
 // ============================================================================
+// Protocol version
+//
+// Every request and response carries `ver` at field 1. Senders MUST stamp the
+// current RAMP version — "1.0" — from a single constant, never a literal: the
+// SDK exports it as ProtocolVersion in all three languages, so a version bump
+// is one edit in one place.
+//
+// `ver` is ADVISORY on receive. A receiver MUST NOT reject a message on `ver`
+// alone — authenticity rides on the RFC 9421 request signature and the Ed25519
+// offer signature, not on this field, and no version-negotiation mechanism
+// exists for a rejection to be actionable against. A receiver that does
+// version-check MUST reject only an unrecognised MAJOR version; an unrecognised
+// MINOR version MUST be tolerated, minor revisions being additive by definition.
+//
+// This is deliberately not a buf.validate rule. An exact-match rule would
+// reject a "1.1" message before any peer could negotiate — the wrong semantics
+// for a version field. A major-version pattern would additionally make `ver`
+// structurally required on every message, a wire change no consumer has asked
+// for. The invariant that IS enforced is the one that can be: a source-level
+// guard pins the single-constant rule, so the value cannot silently skew across
+// a subset of authored messages. That guard binds what this project emits; it
+// cannot bind a third party, which is the accepted limit of the advisory model.
+//
+// WellKnownManifest.ver is a SEPARATE namespace — the schema version of the
+// /.well-known/ramp.json document, not of the RPC envelope. It is stated
+// MUST-equal there and is NOT stamped from ProtocolVersion. Do not couple them.
+// ============================================================================
+
+// ============================================================================
 // ExchangeService — THE core protocol.
 //
 // This is what SSPs, providers, or third parties deploy.
@@ -156,7 +185,8 @@ message AcceptableRestriction {
 // The Exchange evaluates its access policies, available inventory,
 // and reporting requirements before responding.
 message ResourceQuery {
-  // RAMP protocol version.
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Requester identity — who is making this request, what scopes they have,
@@ -217,7 +247,8 @@ message ResourceQuery {
 // via OfferGroup. When a single URI is queried, the Exchange MAY use
 // either the flat `offers` field or a single OfferGroup.
 message ResourceResponse {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Canonical domain of the responding Exchange.
@@ -1735,7 +1766,8 @@ message TransactionRequest {
   // single-offer mode was removed — a single offer is the degenerate 1-element
   // `items` list.
 
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns
@@ -1793,7 +1825,8 @@ message TransactionItem {
 // degenerate 1-element `items`. The per-item denials remain in-body on
 // TransactionResultItem as partial results of a successful request.
 message TransactionResponse {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK
@@ -1959,7 +1992,8 @@ service BrokerService {
 }
 
 message PushResourcesRequest {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
   // Tenant identifier
   string tenant_id = 2;
@@ -2043,7 +2077,8 @@ message ResourceEntry {
 }
 
 message PushResourcesResponse {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
   // Number of entries accepted
   int32 accepted = 2;
@@ -2068,7 +2103,8 @@ message PushResourcesResponse {
 }
 
 message RemoveResourcesRequest {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
   // Tenant identifier
   string tenant_id = 2;
@@ -2077,21 +2113,24 @@ message RemoveResourcesRequest {
 }
 
 message RemoveResourcesResponse {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
   // Number of entries removed
   int32 removed = 2;
 }
 
 message RefreshCatalogRequest {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
   // Tenant identifier
   string tenant_id = 2;
 }
 
 message RefreshCatalogResponse {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
   // Whether the refresh was started
   bool started = 2;
@@ -2131,7 +2170,8 @@ message ReportingObligation {
 // Filed by the agent or Broker after resource is used.
 // Failure to report may result in the Exchange blocking subsequent access.
 message UsageReport {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
@@ -2240,7 +2280,8 @@ message UsageReportResponse {
   // A successful response means the report was accepted; a rejection travels as
   // a non-OK transport error carrying ErrorDetail.usage_report_rejection.
 
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Exchange-assigned report identifier. Required for the dispute chain —
@@ -2274,7 +2315,8 @@ message UsageReportResponse {
 
 // DiscoveryRequest — Agent sends to Broker (Step 1).
 message DiscoveryRequest {
-  // RAMP protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Requester identity — who is making this request, what scopes they have.
@@ -2479,8 +2521,9 @@ message JsonWebKey {
 // Per-role fields are populated only when that role applies; consumers
 // MUST ignore non-applicable fields based on `role`.
 message WellKnownManifest {
-  // RAMP protocol version. MUST equal "1.0"; consumers REJECT
-  // unrecognised major versions.
+  // RAMP protocol version of THIS MANIFEST DOCUMENT's schema — a namespace
+  // separate from the RPC envelope `ver`, deliberately not coupled to it.
+  // MUST equal "1.0"; consumers REJECT unrecognised major versions.
   string ver = 1;
 
   // Role this manifest describes.
@@ -2677,6 +2720,8 @@ enum AuthMethod {
 // (transaction_id, billing_id, cost, delivery_method, retrieval endpoint, …)
 // is returned by TransactionResponse, not here.
 message DiscoveryResponse {
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Offers grouped by requested URI — the sole offer representation in this
@@ -2729,7 +2774,8 @@ message DiscoveryResponse {
 
 // DisputeRequest — Agent signals a problem with delivered resource.
 message DisputeRequest {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
@@ -2854,7 +2900,8 @@ message DisputeResponse {
   // refusal to file travels as a non-OK transport error carrying
   // ErrorDetail.dispute_failure.
 
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Exchange-assigned dispute case identifier.
@@ -2908,7 +2955,8 @@ message DisputeResponse {
 
 // DomainVerificationRequest — Provider requests a verification challenge.
 message DomainVerificationRequest {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // The provider domain to verify (e.g., "techcrunch.com").
@@ -2929,7 +2977,8 @@ message DomainVerificationRequest {
 
 // DomainVerificationChallenge — Exchange returns a challenge.
 message DomainVerificationChallenge {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Opaque challenge token. Provider must serve this at:
@@ -2954,7 +3003,8 @@ message DomainVerificationChallenge {
 
 // DomainVerificationConfirmation — Provider confirms the challenge is placed.
 message DomainVerificationConfirmation {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // The domain being verified.
@@ -2986,7 +3036,8 @@ message DomainVerificationResult {
   // A successful response means verification succeeded; a failure travels as a
   // non-OK transport error carrying ErrorDetail.domain_verification_failure.
 
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // If signing_key was provided: confirmation of key registration.
@@ -3022,7 +3073,8 @@ message DomainVerificationResult {
 
 // RegisterRequest — Agent asks the Exchange to create its account.
 message RegisterRequest {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Operator-defined registration payload; the business fields are not fixed
@@ -3046,7 +3098,8 @@ message RegisterResponse {
   // A successful response means the account exists; a refused registration
   // travels as a non-OK transport error carrying ErrorDetail.registration_failure.
 
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Opaque, long-lived, per-Exchange account handle minted by the Exchange.
@@ -3073,7 +3126,8 @@ message GetAccountStatusRequest {
   // Deliberately carries no identifying field: the Exchange resolves the
   // account from the verified request signature.
 
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // Extension point
@@ -3088,7 +3142,8 @@ message GetAccountStatusRequest {
 
 // GetAccountStatusResponse — Exchange reports the account's current state.
 message GetAccountStatusResponse {
-  // Protocol version
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
   // The account handle minted at registration (see RegisterResponse.billing_ref).

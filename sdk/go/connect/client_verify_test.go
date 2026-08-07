@@ -158,7 +158,7 @@ func (s *stubExchange) ExecuteTransaction(
 	if err := requireVerified(ctx); err != nil {
 		return nil, err
 	}
-	return connectrpc.NewResponse(&rampv1.TransactionResponse{Ver: "1.0"}), nil
+	return connectrpc.NewResponse(&rampv1.TransactionResponse{Ver: helpers.ProtocolVersion}), nil
 }
 
 // newVerifyingServer stands up an httptest server whose ExchangeService handler is

@@ -311,6 +311,11 @@
       "python": "parse_money",
       "ts": "parseMoney"
     },
+    "helpers.ProtocolVersion": {
+      "allowlist_reason": null,
+      "python": "ProtocolVersion",
+      "ts": "ProtocolVersion"
+    },
     "helpers.Reason": {
       "allowlist_reason": null,
       "python": "reason",

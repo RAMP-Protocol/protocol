@@ -88,6 +88,7 @@ from .wire import (
     ConnectProtocolVersionHeader,
     ContentTypeJSON,
     ContentTypeProto,
+    ProtocolVersion,
     RequestIDHeader,
     SignatureAgentHeader,
 )
@@ -109,6 +110,7 @@ __all__ = [
     "Mode",
     "MultisigVerdict",
     "NoEndpointError",
+    "ProtocolVersion",
     "RejectReason",
     "RejectedOffer",
     "ReplayStore",

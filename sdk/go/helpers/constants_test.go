@@ -20,6 +20,9 @@ func TestWireConstants(t *testing.T) {
 	if helpers.ConnectProtocolVersion != "1" {
 		t.Errorf("ConnectProtocolVersion = %q", helpers.ConnectProtocolVersion)
 	}
+	if helpers.ProtocolVersion != "1.0" {
+		t.Errorf("ProtocolVersion = %q", helpers.ProtocolVersion)
+	}
 
 	// L0 reachability: construct a generated message from L1's module.
 	if _, ok := any(&rampv1.DiscoveryRequest{}).(interface{ Reset() }); !ok {
