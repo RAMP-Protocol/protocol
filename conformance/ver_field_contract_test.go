@@ -20,16 +20,29 @@ package conformance
 // the comment text and the generated Go descriptor does not retain source
 // comments. That also matches what a human reads when integrating.
 //
-// This guard binds the comments; the value itself is bound one tier out by
-// helpers.ProtocolVersion and its SSOT guard. Neither can bind a third party —
-// `ver` is deliberately advisory on the wire, with no protovalidate rule. See
-// "Protocol version" in ramp.proto for why.
+// This guard binds the comments; the value itself is owned one tier out, by the
+// SDK's ProtocolVersion constant. Neither can bind a third party — `ver` is
+// deliberately advisory on the wire, with no protovalidate rule. See "Protocol
+// version" in ramp.proto for why.
+//
+// The expected value is READ from that owner rather than restated here. This
+// package cannot import sdk/go — nothing in conformance depends on sdk/, by
+// design: it is the descriptor/source-level layer BELOW the SDKs (contract.go).
+// So it reads the committed wire-constants vector, which is generated from the
+// real Go constant and already replayed by the Python and TS parity suites. That
+// is a data read, exactly like the corpus and the doc scans, not a dependency —
+// and it means a version bump that misses either side goes red instead of
+// leaving two copies of the literal to drift apart.
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -49,11 +62,56 @@ var verExemptMessages = map[string]string{
 		"namespace from the RPC envelope, stated MUST-equal rather than advisory",
 }
 
+// wireConstantsVectors is the committed cross-language oracle for the SDK's wire
+// constants, emitted from the real Go constants by the sdk/go/helpers vector
+// generator. Read as data (see the file header on why this is not an import).
+const wireConstantsVectors = "../sdk/go/helpers/testdata/wire-constants-vectors.json"
+
+// protocolVersion returns the RAMP protocol version the SDK exports, read from the
+// committed vector so this guard never restates the literal. Errors are fatal
+// rather than skipped: a missing file or entry means the guard has lost its
+// anchor, and silently passing would be worse than failing.
+var protocolVersion = sync.OnceValues(func() (string, error) {
+	b, err := os.ReadFile(wireConstantsVectors)
+	if err != nil {
+		return "", err
+	}
+	var doc struct {
+		Vectors []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"vectors"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		return "", err
+	}
+	for _, v := range doc.Vectors {
+		if v.Name == "ProtocolVersion" {
+			return v.Value, nil
+		}
+	}
+	return "", errNoProtocolVersionVector
+})
+
+var errNoProtocolVersionVector = errors.New(
+	wireConstantsVectors + " carries no ProtocolVersion entry — this guard reads the expected `ver` value from there")
+
+// expectedVersionToken is the quoted form a `ver` comment must contain, e.g. `"1.0"`.
+func expectedVersionToken(t *testing.T) string {
+	t.Helper()
+	v, err := protocolVersion()
+	if err != nil {
+		t.Fatalf("read the SDK protocol version: %v", err)
+	}
+	return strconv.Quote(v)
+}
+
 // statesExpectedValue is the obligation on EVERY `ver` comment: an integrator
 // reading the field must learn what to stamp. Required of exempt fields too —
-// the exemption is from the advisory rule, not from naming the value.
-func statesExpectedValue(comment string) bool {
-	return strings.Contains(comment, `"1.0"`)
+// the exemption is from the advisory rule, not from naming the value. `token` is
+// the SDK's version in quoted form, so the value lives in one place.
+func statesExpectedValue(comment, token string) bool {
+	return strings.Contains(comment, token)
 }
 
 // statesAdvisoryContract is the obligation on every RPC-envelope `ver`: the
@@ -116,15 +174,16 @@ func TestVerFieldsDocumentTheirContract(t *testing.T) {
 		t.Fatal("no `ver` fields found in the contract protos — the guard would vacuously pass; check the source paths derived from Contract")
 	}
 
+	token := expectedVersionToken(t)
 	for _, f := range fields {
 		if f.comment == "" {
 			t.Errorf("%s:%d %s.ver carries no doc comment — every `ver` must state the expected value and its receive-side rule",
 				f.file, f.line, f.message)
 			continue
 		}
-		if !statesExpectedValue(f.comment) {
-			t.Errorf(`%s:%d %s.ver does not state the expected value — the comment must name "1.0" so an integrator learns what to stamp`,
-				f.file, f.line, f.message)
+		if !statesExpectedValue(f.comment, token) {
+			t.Errorf("%s:%d %s.ver does not state the expected value — the comment must name %s (the SDK's ProtocolVersion, per %s) so an integrator learns what to stamp",
+				f.file, f.line, f.message, token, wireConstantsVectors)
 		}
 		if _, exempt := verExemptMessages[f.message]; exempt {
 			continue
@@ -163,27 +222,49 @@ func TestVerExemptionsAreUsedAndNecessary(t *testing.T) {
 // --- meta-tests: exercise the detectors against synthetic comment text -------
 
 func TestVerContractDetectors_MetaPositive(t *testing.T) {
-	std := `// RAMP protocol version — "1.0". Stamped by the sender from a single ` +
+	token := expectedVersionToken(t)
+	// Built from the token rather than a baked literal, so these fixtures cannot
+	// drift away from the real comments on a version bump.
+	std := "// RAMP protocol version — " + token + ". Stamped by the sender from a single " +
 		`// constant; advisory on receive. See "Protocol version" in the file header.`
-	if !statesExpectedValue(std) {
+	if !statesExpectedValue(std, token) {
 		t.Error("detector missed the expected value in the standard comment")
 	}
 	if !statesAdvisoryContract(std) {
 		t.Error("detector missed the advisory rule in the standard comment")
 	}
-	manifest := `// RAMP protocol version of THIS MANIFEST DOCUMENT's schema. MUST equal "1.0";`
-	if !statesExpectedValue(manifest) {
+	manifest := "// RAMP protocol version of THIS MANIFEST DOCUMENT's schema. MUST equal " + token + ";"
+	if !statesExpectedValue(manifest, token) {
 		t.Error("detector missed the expected value in the manifest comment")
 	}
 }
 
+// TestVerExpectedValueComesFromTheSDK pins the anchor itself: the token is READ
+// from the wire-constants vector, not restated here. A comment naming some other
+// version must fail — which is what makes a half-finished bump (constant moved,
+// comments not, or the reverse) go red instead of silently disagreeing.
+func TestVerExpectedValueComesFromTheSDK(t *testing.T) {
+	token := expectedVersionToken(t)
+	if token == "" || !strings.HasPrefix(token, `"`) {
+		t.Fatalf("expected a quoted version token, got %q", token)
+	}
+	other := `"9.9"`
+	if token == other {
+		t.Fatalf("the SDK version collides with this test's counter-example %s; pick another", other)
+	}
+	if statesExpectedValue("// RAMP protocol version — "+other+". advisory on receive.", token) {
+		t.Errorf("a comment naming %s satisfied the check against %s — the guard is not anchored to the SDK constant", other, token)
+	}
+}
+
 func TestVerContractDetectors_MetaNegative(t *testing.T) {
+	token := expectedVersionToken(t)
 	for _, c := range []string{
 		"// Protocol version",
 		"// RAMP protocol version.",
 		"",
 	} {
-		if statesExpectedValue(c) {
+		if statesExpectedValue(c, token) {
 			t.Errorf("detector false-positived on a comment that names no value: %q", c)
 		}
 		if statesAdvisoryContract(c) {
@@ -192,7 +273,7 @@ func TestVerContractDetectors_MetaNegative(t *testing.T) {
 	}
 	// The manifest comment states a value but NOT the advisory rule — that
 	// asymmetry is exactly what makes its exemption necessary.
-	if statesAdvisoryContract(`// MUST equal "1.0"; consumers REJECT unrecognised major versions.`) {
+	if statesAdvisoryContract("// MUST equal " + token + "; consumers REJECT unrecognised major versions.") {
 		t.Error("detector treated the MUST-equal manifest rule as the advisory contract")
 	}
 }

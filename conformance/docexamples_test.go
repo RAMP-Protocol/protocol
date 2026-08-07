@@ -146,6 +146,41 @@ func TestDocSignatureAlgorithm(t *testing.T) {
 	}
 }
 
+// TestDocNoBareVerLiteral: no Go example may stamp `ver` as a string literal.
+//
+// "Protocol version" in ramp.proto requires a sender to take the value from a
+// single constant, never a literal, and the sdk/go SSOT guard enforces that in
+// source — but it walks sdk/go only, so the published Go samples were free to
+// teach the one form the spec forbids, and did. A reader copies a doc sample far
+// more often than they read the proto header.
+//
+// Unlike its algorithm-name sibling this BANS a form rather than checking a
+// value: `Ver: "1.0"` is wrong even when "1.0" is right, because the point is the
+// single owner. Samples use helpers.ProtocolVersion instead.
+//
+// The matcher is the PascalCase Go field form, which is what makes it safe on a
+// docs tree full of correct wire payloads: the JSON key is lowercase `"ver"` and
+// quoted, so the ~100 `"ver": "1.0"` example payloads cannot match. `Verifier:`
+// and `VerifiedOffer:` cannot match either — `Ver` must be followed immediately
+// by optional whitespace and then `:` or `=`. walkDocs fatals on zero files
+// scanned, so this cannot pass vacuously.
+var goVerLiteralRe = regexp.MustCompile(`\bVer\s*[:=]+\s*"([^"]*)"`)
+
+func TestDocNoBareVerLiteral(t *testing.T) {
+	var bad []string
+	walkDocs(t, func(path, content string) {
+		for i, line := range strings.Split(content, "\n") {
+			if m := goVerLiteralRe.FindStringSubmatch(line); m != nil {
+				bad = append(bad, filepath.Base(path)+":"+strconv.Itoa(i+1)+
+					": Go example stamps Ver = \""+m[1]+"\" as a literal — use helpers.ProtocolVersion, the single owner of the protocol version")
+			}
+		}
+	})
+	for _, b := range bad {
+		t.Error(b)
+	}
+}
+
 // TestDocLicenseTermSemantics: a LicenseTerm example MUST set the `semantics`
 // discriminator — `TermSemantics` UNSPECIFIED=0 is rejected by protovalidate
 // itself (the license_term.semantics_specified CEL), so a term example without
