@@ -132,6 +132,11 @@ func sampleOffer(id string) *rampv1.Offer {
 type stubExchange struct {
 	rampv1connect.UnimplementedExchangeServiceHandler
 	offers []*rampv1.Offer
+	// gotExecute records the last TransactionRequest the origin observed, so a test
+	// can assert what the CLIENT put on the wire rather than only that the call
+	// succeeded. The SSOT guard bans a bare Ver literal but cannot see an OMITTED
+	// one, so this is what stops ver silently going missing again.
+	gotExecute *rampv1.TransactionRequest
 }
 
 // requireVerified mirrors the platform handlers' auth guard: no verified
@@ -153,8 +158,9 @@ func (s *stubExchange) DiscoverResources(
 }
 
 func (s *stubExchange) ExecuteTransaction(
-	ctx context.Context, _ *connectrpc.Request[rampv1.TransactionRequest],
+	ctx context.Context, req *connectrpc.Request[rampv1.TransactionRequest],
 ) (*connectrpc.Response[rampv1.TransactionResponse], error) {
+	s.gotExecute = req.Msg
 	if err := requireVerified(ctx); err != nil {
 		return nil, err
 	}
@@ -167,8 +173,18 @@ func (s *stubExchange) ExecuteTransaction(
 // This is the server side of the closed round-trip.
 func newVerifyingServer(t *testing.T, sig signingFixture, replay core.ReplayStore, offers []*rampv1.Offer) *httptest.Server {
 	t.Helper()
+	srv, _ := newVerifyingServerStub(t, sig, replay, offers)
+	return srv
+}
+
+// newVerifyingServerStub is newVerifyingServer plus a handle on the origin, for
+// the tests that assert what the client actually SENT rather than only that the
+// round-trip succeeded.
+func newVerifyingServerStub(t *testing.T, sig signingFixture, replay core.ReplayStore, offers []*rampv1.Offer) (*httptest.Server, *stubExchange) {
+	t.Helper()
+	origin := &stubExchange{offers: offers}
 	path, h := rampserver.NewExchangeServiceHandler(
-		&stubExchange{offers: offers},
+		origin,
 		rampserver.WithKeyResolver(sig.resolver),
 		rampserver.WithReplayStore(replay),
 	)
@@ -176,7 +192,7 @@ func newVerifyingServer(t *testing.T, sig signingFixture, replay core.ReplayStor
 	mux.Handle(path, h)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, origin
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +318,45 @@ func TestExecute_AcceptsVerifiedOffer(t *testing.T) {
 	// here would NOT compile; that guard is documented in doc_compileguard_test.go.
 	if _, err := client.Execute(context.Background(), res.Verified[0]); err != nil {
 		t.Fatalf("Execute on a verified offer must succeed, got: %v", err)
+	}
+}
+
+// TestExecute_StampsProtocolVersion pins the send-side half of the ver contract
+// ("Protocol version" in ramp.proto): a sender MUST stamp ver, from the single
+// constant. Execute builds the whole TransactionRequest, so the SDK is the sender
+// and owns the field — before this it shipped ver "" on every transaction.
+//
+// This asserts an OMISSION cannot return. The sdk/go SSOT guard scans source for a
+// bare `Ver: "…"` literal, which catches the wrong VALUE but is blind to a missing
+// field; only observing the request at the origin can catch that.
+func TestExecute_StampsProtocolVersion(t *testing.T) {
+	t.Parallel()
+	sig := newSigningFixture(t)
+	off := newOfferFixture(t)
+	srv, origin := newVerifyingServerStub(t, sig, newMemReplayStore(), []*rampv1.Offer{off.good})
+
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithOfferKey(off.exchangePub),
+	)
+
+	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(res.Verified) != 1 {
+		t.Fatalf("want 1 verified offer, got %d", len(res.Verified))
+	}
+	if _, err := client.Execute(context.Background(), res.Verified[0]); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if origin.gotExecute == nil {
+		t.Fatal("origin observed no TransactionRequest — the capture is wired wrong, so this test would pass vacuously")
+	}
+	if got := origin.gotExecute.GetVer(); got != helpers.ProtocolVersion {
+		t.Errorf("TransactionRequest.ver = %q, want %q — Execute must stamp the version from helpers.ProtocolVersion",
+			got, helpers.ProtocolVersion)
 	}
 }
 
