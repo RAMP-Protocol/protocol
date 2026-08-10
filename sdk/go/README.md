@@ -9,7 +9,7 @@ directly with no `replace` directive.
 | **L0** | `gen/go/ramp/v1`, `gen/go/vocab/*` | generated wire types (consumed, never rebuilt) |
 | **L1** | **`sdk/go/helpers`** | stateless, **IO-free** protocol helpers — RFC 9421/7638 crypto, offer/acceptance verify, static key resolution, validation |
 | L2 · I/O | **`sdk/go/resolvers`** | the network-fetching tier: well-known JWKS / WBA directory / `ramp.json` endpoint / offer-key resolvers + the SSRF-guarded HTTP client. Runs on a maintained `net/http` client behind the SSRF guard; composes L1, never the reverse |
-| L2 · transport | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + client options + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + server options + `AsConnectError` + `AttachErrorDetail`/`AttachDetail` + reject→code) | transport-neutral core + Connect client/server bindings (state injected) |
+| L2 · transport | `sdk/go/core` (transport-neutral: Verifier, {verified,rejected}, `DiscoveryResult` per-URI groups, VerifiedOffer guard, signing RoundTripper, ReplayStore — zero Connect) · `sdk/go/connect` (Connect **client** binding: `NewClient` + `NewBrokerClient` + the agent verbs **`Discover` · `Resolve` · `Execute` · `ReportUsage` · `Dispute` · `Fetch`** + client options + the `CallError` taxonomy + `ErrorDetailFrom`) · `sdk/go/connectserver` (Connect **server** binding: `NewExchangeServiceHandler` + server options + `AsConnectError` + `AttachErrorDetail`/`AttachDetail` + reject→code) | transport-neutral core + Connect client/server bindings (state injected) |
 | L3 | separate packages | framework adapters (convert, never replace) — later |
 
 The `L2` tier is split by kind: the **I/O** package (`resolvers`) is the only tier
@@ -74,8 +74,33 @@ wire, _ := helpers.FormatMoney(rate.Mul(decimal.NewFromInt(qty)))
 if err := helpers.Validate(req); err != nil { /* helpers.ValidationRuleIDs(err) */ }
 ```
 
+**Agent-binding proof of possession** (ADR-013) — the SIGN face of the header pair
+a bound delivery fetch presents. The covered set is exactly `@method` +
+`@target-uri`: a GET has no body to digest, and the signed URL is itself the
+credential. The key arrives as a `Signer` plus the public half, so custody never
+moves into the SDK:
+
+```go
+binding, _ := helpers.SignAgentBinding(ctx, signer, agentPub, helpers.PoPOptions{
+    URL: signedURL, Created: created, Expires: expires, // keep the window short
+})
+binding.Apply(req.Header) // X-RAMP-Agent-Key + Signature-Input + Signature
+```
+
+**Routing predicates** — the two pure checks that precede a signed call to an
+address a network party named (a manifest may point at itself or a subdomain of
+itself, and nothing else):
+
+```go
+bare, _ := helpers.IsBareHost(offer.GetExchange())      // no scheme/path/query
+ok, _ := helpers.HostAnchored(exchangeDomain, endpoint) // label-boundary match
+```
+
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
-`AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers.
+`AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,
+`RedactURL` (a signed URL carries its credential in the query — never log it raw),
+and `RetrievalAuthFailureReasonFromToken` (the delivery edge's refusal vocabulary,
+mapped onto the typed enum).
 
 ## L2 · I/O — `resolvers`
 
@@ -98,6 +123,18 @@ import "github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 - **SSRF-guarded client** — `NewGuardedClientFromEnv` is the single construction path
   every fetch uses; `SSRFGuard` / `SSRFCheckRedirect` are the injectable dial-time
   address guard and redirect re-vet for callers wiring their own `http.Client`.
+- **Content fetch** — `NewContentFetcher` retrieves the bytes a signed delivery URL
+  names, presenting a proof of possession through the injected `ProofSigner` seam
+  (so this tier holds no key material). Bounded body, bounded error body, media
+  type reported rather than sniffed, and a typed `FetchError` class.
+
+**Redirects: the guarded client follows, a signed leg refuses.** Following five
+hops is right for a public well-known document — the address is re-pinned and the
+scheme re-vetted on each. It is wrong for anything carrying a credential, so the
+content fetch and the RPC legs take only the guarded `.Transport` and install
+their own refusal: following a redirect either replays a proof bound to the old
+URL, or hands a fresh proof of possession of the agent's key to whatever host the
+first hop named.
 
 The guard is driven by exactly two orthogonal env flags — `SKIP_SSRF` (drop the
 dial-time address guard) and `ALLOW_INSECURE` (permit plaintext http) — both

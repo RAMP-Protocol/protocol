@@ -1,11 +1,21 @@
 """Doc-guard: the Go-only Connect client divergence must be a RECORDED decision.
 
 The whole point of the Connect-client parity work is to END the silent absence:
-Go ships a typed Connect client (NewClient/Discover/Execute) and Python + TS do not.
-The resolution is option (b) — document it as a deliberate runtime-native divergence
-in docs/sdk-parity-matrix.md, mirroring the sibling server-handler DECISION. This
-guard fails if that DECISION bullet is ever removed, so the gap cannot silently
-reappear or be miscounted as "parity complete".
+Go ships a typed Connect client and Python + TS do not. docs/sdk-parity-matrix.md
+must carry that as a DECISION bullet, mirroring the sibling server-handler one, so
+the gap cannot silently reappear or be miscounted as "parity complete".
+
+The decision is OPEN, not settled. The API-surface design document governs, and it
+specifies a thin Connect-unary JSON client for TypeScript and Python carrying the
+SAME verb names — so what stays divergent is the transport implementation, not the
+API. An earlier wording called this a "deliberate runtime-native divergence,
+DECISION resolved"; that was an allowlist reason written in the grammar of a
+decision, and it was substantively wrong, since every RAMP RPC is unary and
+nothing about it is runtime-native.
+
+This guard asserts only that the bullet EXISTS and still names the client and its
+verbs. It deliberately does not assert the resolved-versus-open wording: that is
+the part expected to change when the other two languages gain their client.
 """
 
 from __future__ import annotations
@@ -26,8 +36,9 @@ def test_connect_client_divergence_is_a_recorded_decision() -> None:
         "no Connect-client decision recorded in the parity matrix — the Go-only "
         "typed client gap is still silent"
     )
-    # It must be framed as a deliberate divergence, not an open TODO.
+    # It must name the verbs it covers, so a reader can tell what "the Go client"
+    # means without reading the code.
     assert "discover" in lowered and "execute" in lowered, (
-        "the Connect-client decision must reference the Discover/Execute "
-        "offer-lifecycle orchestration that scopes the reopen trigger"
+        "the Connect-client decision must name the verbs the Go client covers, "
+        "which is what scopes the divergence"
     )

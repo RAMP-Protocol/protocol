@@ -6,9 +6,12 @@ import (
 	"net/http"
 
 	connectrpc "connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
+	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
 // clientConfig is the resolved set of injected holders a Client is built from.
@@ -24,6 +27,13 @@ type clientConfig struct {
 	validation    Validation
 	requestID     core.RequestIDFunc
 	extra         []connectrpc.Interceptor
+
+	requester        *rampv1.Requester
+	acceptanceSigner helpers.Signer
+	agentKey         ed25519.PublicKey
+	proofWindow      core.Window
+	endpoints        EndpointResolver
+	fetchTransport   http.RoundTripper
 }
 
 // ClientOption configures a Client. Options are the ONLY way to inject the
@@ -88,6 +98,89 @@ func WithInterceptors(is ...connectrpc.Interceptor) ClientOption {
 	return func(c *clientConfig) { c.extra = append(c.extra, is...) }
 }
 
+// WithRequester injects the agent's own identity, forwarded on a purchase for
+// authorization and audit and covered by the detached offer acceptance.
+//
+// It is client-level rather than per-call on purpose: the requester IS the
+// identity the injected Signer already fixes for the transport signature, so a
+// per-call requester would let the two disagree about who is buying — the exact
+// ambiguity the acceptance exists to remove. A verifying Broker refuses a
+// requester id that does not normalise to the signer's own directory host.
+//
+// The message is cloned here, so a later mutation by the caller cannot reach a
+// request already in flight.
+func WithRequester(r *rampv1.Requester) ClientOption {
+	return func(c *clientConfig) {
+		if r == nil {
+			c.requester = nil
+			return
+		}
+		cloned, ok := proto.Clone(r).(*rampv1.Requester)
+		if !ok {
+			return
+		}
+		c.requester = cloned
+	}
+}
+
+// WithAcceptanceSigner injects the Signer that signs detached offer acceptances
+// and delivery-fetch proofs. It defaults to WithSigner's, which is the common
+// case: one agent key signs the transport, the acceptance, and the proof.
+//
+// It is separate because the acceptance key's thumbprint becomes the delivery
+// URL's agent_id — the key a later fetch must prove possession of — and a
+// deployment may hold that key in different custody from its transport key.
+func WithAcceptanceSigner(s helpers.Signer) ClientOption {
+	return func(c *clientConfig) { c.acceptanceSigner = s }
+}
+
+// WithAgentKey injects the PUBLIC half of the acceptance key. A delivery fetch
+// presents it in a header, and a Signer cannot yield it — custody keeps the
+// private half, so the public half has to be supplied alongside. Without it the
+// client can buy but cannot fetch what it bought.
+func WithAgentKey(pub ed25519.PublicKey) ClientOption {
+	return func(c *clientConfig) { c.agentKey = pub }
+}
+
+// WithProofWindow overrides the freshness window stamped on a delivery-fetch
+// proof. The default is 30 seconds from the wall clock.
+//
+// Deliberately NOT the signed URL's own expiry, which can be hours: the proof
+// covers only the method and the URL, so anyone who observes the request can
+// repeat it until the window closes.
+func WithProofWindow(w core.Window) ClientOption {
+	return func(c *clientConfig) { c.proofWindow = w }
+}
+
+// WithEndpointResolver injects the resolver that turns an offer's exchange domain
+// into the origin that Exchange advertises for itself. It defaults to the
+// SSRF-guarded well-known resolver.
+//
+// There is deliberately no option to supply an endpoint directly. A usage report
+// must reach the Exchange that issued the offer, and that address comes from the
+// Exchange's own manifest — never from configuration. Leaving no configuration
+// slot for it is what makes that structural rather than a convention.
+func WithEndpointResolver(r EndpointResolver) ClientOption {
+	return func(c *clientConfig) { c.endpoints = r }
+}
+
+// WithFetchTransport injects the round-tripper the content fetch dials through.
+// It defaults to the SSRF-guarded one, with redirects refused in every case —
+// the redirect policy is a property of the bound-fetch profile, not a detail a
+// caller supplies.
+func WithFetchTransport(rt http.RoundTripper) ClientOption {
+	return func(c *clientConfig) { c.fetchTransport = rt }
+}
+
+// resolveAcceptanceSigner returns the Signer that signs acceptances and fetch
+// proofs: the dedicated one if injected, otherwise the request signer.
+func (c clientConfig) resolveAcceptanceSigner() helpers.Signer {
+	if c.acceptanceSigner != nil {
+		return c.acceptanceSigner
+	}
+	return c.signer
+}
+
 // resolveOfferResolver returns the KeyResolver the offer Verifier uses. A custom
 // resolver (WithKeyResolver) wins; otherwise WithOfferKey produces a fixed-key
 // resolver that returns the injected key for any exchange id (the offer signature
@@ -120,4 +213,15 @@ type emptyResolver struct{}
 
 func (emptyResolver) Resolve(_ context.Context, keyID string) (ed25519.PublicKey, error) {
 	return nil, helpers.ErrUnknownKey
+}
+
+// resolveEndpointResolver returns the resolver an offer-derived call routes
+// through: the injected one, or the SSRF-guarded well-known resolver. The
+// endpoint is always read from the Exchange's own manifest — there is no
+// configuration path to it.
+func (c clientConfig) resolveEndpointResolver() EndpointResolver {
+	if c.endpoints != nil {
+		return c.endpoints
+	}
+	return resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{})
 }

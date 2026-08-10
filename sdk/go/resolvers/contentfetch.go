@@ -1,0 +1,373 @@
+package resolvers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"mime"
+	"net/http"
+	"net/url"
+	"regexp"
+	"time"
+
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+)
+
+// The content leg: fetching the bytes a signed delivery URL names, presenting the
+// agent key that URL is bound to.
+//
+// It lives in this tier because it DIALS — a retrieval endpoint is chosen by a
+// party on the network, not by configuration, which is the exact threat shape
+// this package exists to contain. The transport-neutral tiers above stay free of
+// any dialing surface.
+
+// DefaultContentTimeout bounds one content fetch. An agent is blocked on the call
+// that triggered it, so a fetch that has not answered by now is more useful as a
+// reported failure than as a hang.
+const DefaultContentTimeout = 30 * time.Second
+
+// DefaultMaxContentBytes caps one fetched body at 8 MiB. This is a memory bound
+// on the fetching process, not a judgement about how large licensed content may
+// be: the body is buffered whole and held for the life of the call, and a batch
+// fetches one per item.
+const DefaultMaxContentBytes int64 = 8 << 20
+
+// maxErrorBodyBytes caps how much of a refusal body is read before the edge's
+// reason is parsed out of it. The payload is a small JSON object; anything past
+// this is not a refusal that can be interpreted.
+const maxErrorBodyBytes int64 = 4 << 10
+
+// defaultContentMIMEType is what a body with no usable Content-Type is labelled.
+// Guessing from the bytes would be worse: the caller is told what the publisher
+// said, and "unknown" is a true answer where a sniffed guess might not be.
+const defaultContentMIMEType = "application/octet-stream"
+
+// ProofSigner mints the proof of possession for one bound fetch. It is an
+// injected seam so this tier never holds key material: the caller composes it
+// over whatever custody it uses, and decides the proof window.
+type ProofSigner interface {
+	// SignFetch returns the agent binding for a GET of targetURL. The URL is
+	// passed verbatim because the proof covers it as an exact string.
+	SignFetch(ctx context.Context, targetURL string) (helpers.AgentBinding, error)
+}
+
+// ContentFetchOptions configures a ContentFetcher. Every field has a safe default.
+type ContentFetchOptions struct {
+	// Transport is the underlying round-tripper. Defaults to the SSRF-guarded
+	// one.
+	//
+	// The seam is the transport rather than a whole client on purpose: the
+	// redirect policy is a security property of this profile, not a detail a
+	// caller supplies, so it is applied here in every case. A caller that injected
+	// its own client would be asserting against its own policy instead of the one
+	// production runs.
+	//
+	// The SCHEME policy is deliberately left to the transport as well, rather than
+	// re-checked here. The guarded client already refuses anything but https
+	// unless a deployment opts into plaintext, and a second hardcoded check would
+	// make that flag mean two different things in one SDK.
+	Transport http.RoundTripper
+	// Timeout bounds one fetch, proof minting included. Defaults to
+	// DefaultContentTimeout.
+	Timeout time.Duration
+	// MaxBytes caps one fetched body. Defaults to DefaultMaxContentBytes.
+	MaxBytes int64
+}
+
+// Content is one fetched resource.
+type Content struct {
+	// URL is the signed delivery URL that was fetched, echoed back so a caller
+	// correlating a batch does not have to keep its own map.
+	URL string
+	// MIMEType is the media type the edge served, parameters stripped.
+	MIMEType string
+	// Body is the fetched bytes.
+	Body []byte
+}
+
+// FetchFailure classifies why a content fetch failed, so a caller can branch on
+// the class without reading the message.
+type FetchFailure int
+
+const (
+	// FetchUnknown is the zero value; it carries no classification.
+	FetchUnknown FetchFailure = iota
+	// FetchRefused is an edge that answered and said no. Reason carries the
+	// edge's own token when it sent one.
+	FetchRefused
+	// FetchUnreachable is an edge that did not answer: dial failure, timeout, or
+	// a refused redirect.
+	FetchUnreachable
+	// FetchTooLarge is a body past the configured cap. Deliberately distinct from
+	// FetchRefused: the edge did nothing wrong and the URL is still good, so the
+	// caller can retry with a larger budget.
+	FetchTooLarge
+	// FetchNotSignable is the proof failing to be produced. No request leaves on
+	// this path — a custody backend that hangs lands here too, as a deadline,
+	// because the timeout covers proof minting.
+	FetchNotSignable
+	// FetchMalformed is a delivery URL this client cannot sign faithfully.
+	FetchMalformed
+)
+
+var fetchFailureNames = map[FetchFailure]string{
+	FetchRefused:     "refused",
+	FetchUnreachable: "unreachable",
+	FetchTooLarge:    "too_large",
+	FetchNotSignable: "not_signable",
+	FetchMalformed:   "malformed",
+}
+
+// String renders the failure class for logging and for the reason a caller sees
+// when the edge supplied none.
+func (f FetchFailure) String() string {
+	if s, ok := fetchFailureNames[f]; ok {
+		return s
+	}
+	return "unknown"
+}
+
+// FetchError is this tier's canonical content-fetch error.
+//
+// Reason exists so the edge's own refusal token survives as a value rather than
+// being flattened into a sentence here. Those tokens are the difference between
+// "the publisher refused us" and "our own key wiring is broken", and the layer
+// that decides how a refusal reads can only tell them apart if the token arrives
+// intact.
+type FetchError struct {
+	Failure FetchFailure
+	Op      string
+	Status  int    // HTTP status when the edge answered; 0 otherwise
+	Reason  string // the edge's refusal token when it sent one
+	Err     error
+}
+
+func (e *FetchError) Error() string {
+	msg := "resolvers: " + e.Op + ": " + e.Failure.String()
+	if e.Status != 0 {
+		// StatusText is empty for a code net/http does not know, and a bare
+		// "(HTTP 599 )" reads like a truncation. The number alone is the honest render.
+		if text := http.StatusText(e.Status); text != "" {
+			msg += fmt.Sprintf(" (HTTP %d %s)", e.Status, text)
+		} else {
+			msg += fmt.Sprintf(" (HTTP %d)", e.Status)
+		}
+	}
+	if e.Reason != "" {
+		msg += ": " + e.Reason
+	}
+	if e.Err != nil {
+		msg += ": " + e.Err.Error()
+	}
+	return msg
+}
+
+// Unwrap keeps the cause matchable, so a caller can still reach a custody
+// sentinel through errors.Is after the failure has been classified here.
+func (e *FetchError) Unwrap() error { return e.Err }
+
+// ReasonOf returns the most specific machine-readable reason available: the
+// edge's own token when it sent one, otherwise the failure class.
+func (e *FetchError) ReasonOf() string {
+	if e.Reason != "" {
+		return e.Reason
+	}
+	return e.Failure.String()
+}
+
+// ContentFetcher fetches licensed content from a signed delivery URL. Build it
+// with NewContentFetcher; it is safe for concurrent use.
+type ContentFetcher struct {
+	http     *http.Client
+	timeout  time.Duration
+	maxBytes int64
+}
+
+// NewContentFetcher returns a fetcher whose zero-value options are safe defaults:
+// the SSRF-guarded transport, a 30-second bound, an 8 MiB body cap, and redirects
+// refused.
+func NewContentFetcher(opts ContentFetchOptions) *ContentFetcher {
+	transport := opts.Transport
+	if transport == nil {
+		// Only the guarded client's TRANSPORT is taken, never the whole client:
+		// its redirect policy follows up to five hops, which is right for a public
+		// well-known document and wrong for anything carrying a credential.
+		transport = NewGuardedClientFromEnv().Transport
+	}
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DefaultContentTimeout
+	}
+	maxBytes := opts.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxContentBytes
+	}
+	return &ContentFetcher{
+		http:     &http.Client{Transport: transport, CheckRedirect: refuseContentRedirect},
+		timeout:  timeout,
+		maxBytes: maxBytes,
+	}
+}
+
+// refuseContentRedirect stops the client following any 3xx.
+//
+// Following one either replays a proof bound to the old URL — which the edge's
+// own check rejects — or, if the proof were re-minted per hop, hands a fresh
+// proof of possession of the agent's key to whatever host the first hop named.
+// The refusal names where it declined to go, redacted, because that target is the
+// most useful field on the failure.
+func refuseContentRedirect(req *http.Request, _ []*http.Request) error {
+	return fmt.Errorf("resolvers: refusing redirect to %s: a bound fetch is never redirected",
+		helpers.RedactURL(req.URL.String()))
+}
+
+// Fetch retrieves the content at signedURL, presenting the proof of possession
+// signer mints for it.
+func (f *ContentFetcher) Fetch(ctx context.Context, signedURL string, signer ProofSigner) (Content, error) {
+	const op = "fetch content"
+	if signer == nil {
+		return Content{}, &FetchError{Failure: FetchNotSignable, Op: op,
+			Err: fmt.Errorf("no proof signer supplied")}
+	}
+	// The deadline is derived BEFORE the request is built, because building it
+	// mints a proof — which may call out to a custody backend bounded only by that
+	// backend's own client otherwise. A timeout covering the round trip alone
+	// would leave "bounds one content fetch" untrue against a degraded custody
+	// service, and a batch pays that cost once per item.
+	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+	defer cancel()
+
+	req, err := f.request(ctx, op, signedURL, signer)
+	if err != nil {
+		return Content{}, err
+	}
+	resp, err := f.http.Do(req)
+	if err != nil {
+		return Content{}, &FetchError{Failure: FetchUnreachable, Op: op, Err: redactTransportError(err)}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return Content{}, &FetchError{
+			Failure: FetchRefused, Op: op, Status: resp.StatusCode, Reason: edgeReason(resp.Body),
+		}
+	}
+	body, err := f.read(resp.Body)
+	if err != nil {
+		return Content{}, err
+	}
+	return Content{URL: signedURL, MIMEType: mimeTypeOf(resp.Header.Get("Content-Type")), Body: body}, nil
+}
+
+// request builds the signed GET. It is separate from Fetch so the preconditions
+// are in one place and no partially-built request can reach the wire.
+//
+// The round-trip check runs BEFORE the proof is minted, so a URL that cannot be
+// sent faithfully never costs a signing operation.
+func (f *ContentFetcher) request(ctx context.Context, op, signedURL string, signer ProofSigner) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signedURL, nil)
+	if err != nil {
+		return nil, &FetchError{Failure: FetchMalformed, Op: op, Err: err}
+	}
+	// The proof covers @target-uri as the VERBATIM string, while the request line
+	// carries whatever the URL value re-serializes to. The signed-URL contract
+	// treats scheme/host/path as opaque bytes, so an Exchange can legitimately mint
+	// a URL those two disagree on — a raw space in the path is the reachable case,
+	// since the request line escapes it. The signature then cannot verify and the
+	// edge reports only an undifferentiated 403, so refusing here names the cause
+	// instead. (A percent-escape does not trip this: the URL value preserves it.)
+	if req.URL.String() != signedURL {
+		// The given URL is deliberately NOT echoed: this error reaches a log, and
+		// the value carries a live credential in its query. The re-serialized form
+		// is what an operator compares against what the Exchange minted.
+		return nil, &FetchError{
+			Failure: FetchMalformed, Op: op,
+			Err: fmt.Errorf("url is not round-trip stable: it re-serializes to %s (query redacted)",
+				helpers.RedactURL(req.URL.String())),
+		}
+	}
+	binding, err := signer.SignFetch(ctx, signedURL)
+	if err != nil {
+		// Wrapped, not replaced: a caller must still be able to reach a custody
+		// sentinel underneath through errors.Is.
+		return nil, &FetchError{Failure: FetchNotSignable, Op: op, Err: err}
+	}
+	binding.Apply(req.Header)
+	return req, nil
+}
+
+// redactTransportError strips the credential out of a transport failure.
+//
+// The HTTP client wraps every failure in a *url.Error carrying the full URL it
+// was dialing — query included. For a delivery fetch that query IS the
+// credential, and on a refused redirect it is the credential of a URL the FIRST
+// HOP chose, so the wrapper leaks even when this package's own message is already
+// redacted. Rebuilding it is the only way to keep the value out of whatever reads
+// the error; the underlying cause is preserved so errors.Is still reaches it.
+func redactTransportError(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return err
+	}
+	return fmt.Errorf("%s %s: %w", urlErr.Op, helpers.RedactURL(urlErr.URL), urlErr.Err)
+}
+
+// read consumes the body under the configured cap.
+//
+// It reads one byte past the cap so an oversized body is DETECTED rather than
+// silently truncated. Truncated content that looks whole is worse than a refusal:
+// the caller has paid for it and has no way to tell it is incomplete.
+func (f *ContentFetcher) read(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, f.maxBytes+1))
+	if err != nil {
+		return nil, &FetchError{Failure: FetchUnreachable, Op: "read content", Err: err}
+	}
+	if int64(len(body)) > f.maxBytes {
+		return nil, &FetchError{
+			Failure: FetchTooLarge, Op: "read content",
+			Err: fmt.Errorf("body exceeds the %d byte cap", f.maxBytes),
+		}
+	}
+	return body, nil
+}
+
+// edgeReason pulls the edge's own refusal token out of a rejection body. The edge
+// answers {"error": "...", "reason": "..."} on a binding failure; anything else
+// yields "", and the caller falls back to the failure class.
+func edgeReason(r io.Reader) string {
+	var payload struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r, maxErrorBodyBytes)).Decode(&payload); err != nil {
+		return ""
+	}
+	if !edgeReasonToken.MatchString(payload.Reason) {
+		return ""
+	}
+	return payload.Reason
+}
+
+// edgeReasonToken is the shape a refusal token may have.
+//
+// The body this is read from is written by the host just fetched from, and the
+// value is promoted over this SDK's own classification. Unchecked, a publisher
+// could answer any 4 KiB of text and have it render as though the SDK had said
+// it. Anything that is not token-shaped falls back to the failure class, which
+// the SDK does own.
+var edgeReasonToken = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
+// mimeTypeOf reduces a Content-Type to its media type, dropping parameters such
+// as charset. The charset belongs to whoever decodes the bytes; the content
+// carries the media type alone.
+func mimeTypeOf(header string) string {
+	if header == "" {
+		return defaultContentMIMEType
+	}
+	mediaType, _, err := mime.ParseMediaType(header)
+	if err != nil || mediaType == "" {
+		return defaultContentMIMEType
+	}
+	return mediaType
+}

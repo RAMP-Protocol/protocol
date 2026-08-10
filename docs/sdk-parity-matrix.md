@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 75 symbols at cross-language parity · 14 documented divergences · 99 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
+**At a glance:** 77 symbols at cross-language parity · 14 documented divergences · 133 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -25,6 +25,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | Go | python | ts |
 |---|---|---|
 | `AcceptanceSignatureAlgorithm` | `ACCEPTANCE_SIGNATURE_ALGORITHM` | `ACCEPTANCE_SIGNATURE_ALGORITHM` |
+| `AgentKeyHeader` | `AGENT_KEY_HEADER` | `AGENT_KEY_HEADER` |
 | `AppendSignature` | `append_signature` | `appendSignature` |
 | `ApplyScopes` | `apply_scopes` | `applyScopes` |
 | `CanonicalAcceptanceBytes` | `jcs_acceptance_payload` | `acceptancePayload` |
@@ -52,6 +53,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
 | `RetrievalAuthFailureDetail` | `retrieval_auth_failure_detail` | `retrievalAuthFailureDetail` |
 | `ScopesSubset` | `scopes_subset` | `scopesSubset` |
+| `SignAgentBinding` | `sign_agent_binding` | `signInbound` |
 | `SignOffer` | `sign_offer_jcs` | `signOffer` |
 | `SignOfferAcceptance` | `sign_offer_acceptance_jcs` | `signOfferAcceptance` |
 | `SignRequest` | `sign_request` | `signRequest` |
@@ -127,14 +129,14 @@ Deliberate, reason-backed asymmetries. The allowlist is **shrink-only** — a ne
 ### Architectural DECISIONs
 
 - **DECISION — full Connect handler binding.** Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md _(symbols: `connectserver.NewBrokerServiceHandler`, `connectserver.NewExchangeServiceHandler`)_
-- **DECISION — typed Connect **client**.** Go-only typed Connect client (Discover->Execute orchestration) — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md _(symbols: `connect.Client`, `connect.NewClient`)_
+- **DECISION — typed Connect **client** — OPEN.** Go-only typed Connect client covering the agent verb set (Discover, Resolve, Execute, ReportUsage, Dispute, Fetch) — OPEN DECISION in docs/sdk-parity-matrix.md: the API-surface design governs and specifies a thin Connect-unary JSON client for TypeScript and Python with the SAME verb names, so this is an implementation difference pending that work, not a settled API divergence _(symbols: `connect.Client`, `connect.NewClient`)_
 
 ### Mapped symbols with an intentional per-language gap
 
 | Go symbol | python | ts | rationale |
 |---|---|---|---|
-| `connect.Client` | — | — | Go-only typed Connect client (Discover->Execute orchestration) — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md |
-| `connect.NewClient` | — | — | Go-only typed Connect client constructor — deliberate runtime-native divergence, DECISION resolved in docs/sdk-parity-matrix.md |
+| `connect.Client` | — | — | Go-only typed Connect client covering the agent verb set (Discover, Resolve, Execute, ReportUsage, Dispute, Fetch) — OPEN DECISION in docs/sdk-parity-matrix.md: the API-surface design governs and specifies a thin Connect-unary JSON client for TypeScript and Python with the SAME verb names, so this is an implementation difference pending that work, not a settled API divergence |
+| `connect.NewClient` | — | — | Go-only typed Connect client constructor (NewClient plus NewBrokerClient) — OPEN DECISION in docs/sdk-parity-matrix.md, pending the TypeScript and Python unary client that carries the same verb names |
 | `connectserver.NewBrokerServiceHandler` | — | — | Go-only full Connect Broker handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `connectserver.NewExchangeServiceHandler` | — | — | Go-only full Connect Exchange handler binding — OPEN DECISION in docs/sdk-parity-matrix.md |
 | `core.NewVerifier` | — | `createVerifier` | Go NewVerifier factory folds into the Python class constructor (Verifier(...)); idiomatic Python exposes the class, not a separate factory symbol. TS keeps the createVerifier factory. |
@@ -154,16 +156,28 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 
 | Go symbol | why no py/ts face |
 |---|---|
-| `connect.ClientOption` | Part of the Go-only typed Connect client; see the Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.ExecuteOption` | Part of the Go-only typed Connect client; see the Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.BrokerClient` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.CallError` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.CallErrorKind` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.CallOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.ClientOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.EndpointResolver` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.ExecuteOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.NewBrokerClient` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
 | `connect.NewValidateInterceptor` | Go-only protovalidate interceptor (matrix SERVER-role validation row: TS/Py absent). |
-| `connect.Validation` | Part of the Go-only typed Connect client validation option; see the Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.Validation` | Part of the Go-only typed Connect client validation option; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.WithAcceptanceSigner` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithAgentKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithEndpointResolver` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithFetchTransport` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithHTTPClient` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithIdempotencyKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithInterceptors` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithKeyResolver` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithOfferKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithProofWindow` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithRequestIDFunc` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithRequester` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithSigner` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithValidation` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithVerification` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
@@ -189,7 +203,9 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connectserver.WithVerifyGate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connectserver.WithoutReplayStore` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.DefaultRequestID` | Go default request-id minter; py/ts mint request-ids inline. |
+| `core.DiscoveryResult` | Go per-URI discovery result carrying the fail-closed split plus the typed absence reasons; py/ts gain the same shape with their client verbs. |
 | `core.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `core.OfferGroupResult` | Go per-URI group within a discovery result; py/ts gain the same shape with their client verbs. |
 | `core.RequestIDFunc` | Go request-id function type; py/ts pass a callable inline. |
 | `core.RequestIDMiddleware` | Go-only request-id middleware (matrix SERVER-role request-id row: TS/Py absent). |
 | `core.SigningOption` | Go functional-option type for the signing transport; py/ts pass options objects. |
@@ -197,6 +213,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `core.WithSignPredicate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.WithWindow` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `helpers.AgentBinding` | Go value struct holding the three proof header values; Python returns a tuple of them and TS returns a prepared request, so neither names a public type. |
 | `helpers.AgentIDParam` | Signed-URL query-parameter name; language-idiomatic inline constant, no cross-language public face. |
 | `helpers.AlgEd25519` | RFC 9421 alg tag constant; inlined per language. |
 | `helpers.AllSignaturesFromContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
@@ -210,7 +227,9 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.ErrEmptyMoney` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrFutureCreated` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrInvalidHost` | Go errors.Is sentinel for an unusable host reference; py/ts raise/throw instead of exporting sentinels. |
 | `helpers.ErrInvalidKeyLength` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrKeyIDMismatch` | Go errors.Is sentinel for a keyid that is not the presented key's thumbprint; py/ts raise/throw instead of exporting sentinels. |
 | `helpers.ErrMalformedSignatureInput` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrMissingContentDigest` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrMissingCreated` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
@@ -218,6 +237,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.ErrMissingRequiredComponent` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrMissingSignature` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrMissingSignatureInput` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrMissingTargetURI` | Go errors.Is sentinel for a proof requested without the URL it binds; py/ts raise/throw instead of exporting sentinels. |
 | `helpers.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrOfferSignatureInvalid` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrProofOfPossessionMismatch` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
@@ -232,11 +252,18 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.ErrUnknownFields` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrUnsupportedAlgorithm` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.FromContext` | Go context.Context accessor; py/ts thread verified-request state explicitly. |
+| `helpers.HostAnchored` | Go label-boundary same-host predicate. Present in Python and TS only as a private resolver helper; exporting both is tracked follow-up work. |
+| `helpers.HostOf` | Go host-extraction helper behind the two routing predicates; Python and TS keep the equivalent private inside their resolver modules. |
+| `helpers.IsBareHost` | Go plain-hostname predicate for the report leg's first check. No other SDK exposes an equivalent today; exporting the pair in Python and TS is tracked follow-up work. |
 | `helpers.NewContext` | Go context.Context accessor; py/ts thread verified-request state explicitly. |
 | `helpers.NewEd25519Signer` | Go Ed25519 Signer constructor; py/ts inject a sign function rather than constructing a named signer. |
 | `helpers.NewEd25519SignerFromSeed` | Go Ed25519 Signer-from-seed constructor; py/ts inject a sign function rather than constructing a named signer. |
 | `helpers.NewMultisigContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
+| `helpers.PoPOptions` | Go options struct for the delivery-proof signer; Python takes the same values as keyword arguments and TS as an options object. |
+| `helpers.RedactURL` | Go query-stripping helper for a signed URL headed to a log; py/ts redact inline at the log site. |
+| `helpers.RetrievalAuthFailureReasonFromToken` | Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly. |
 | `helpers.SharedValidator` | Go protovalidate validator singleton; TS/Python ship no protovalidate face. |
+| `helpers.SignOfferAcceptanceWith` | Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer. |
 | `helpers.SignOptions` | Go options struct for SignRequest; py/ts pass options via kwargs/options objects. |
 | `helpers.SignatureAgentFromContext` | Go context.Context accessor; py/ts thread signature-agent state explicitly. |
 | `helpers.SignedURL` | Go signed-URL result value type; py/ts return language-native result objects. |
@@ -252,6 +279,15 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.VerifyRequestResolved` | Go resolver-injected VerifyRequest overload; py/ts expose a single verify entry point. |
 | `helpers.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `resolvers.ActiveKeyScanOptions` | Go scan-options struct; py/ts pass scan options inline. |
+| `resolvers.Content` | Go value struct for one fetched resource; py/ts return their runtime-native body/type pair. |
+| `resolvers.ContentFetchOptions` | Go options struct for the content-download leg; py/ts pass the same values as kwargs/an options object. |
+| `resolvers.ContentFetcher` | Part of the Go content-download leg; the TS/Python download verbs are tracked with their unary client work. |
+| `resolvers.DefaultContentTimeout` | Go default bound for one content fetch; py/ts carry the same default inline in their client. |
+| `resolvers.DefaultMaxContentBytes` | Go default body cap for one content fetch; py/ts carry the same default inline in their client. |
+| `resolvers.FetchError` | Go typed error for the content leg; py/ts raise/throw a runtime-native error carrying the same class and reason. |
+| `resolvers.FetchFailure` | Go failure-class enum for the content leg; py/ts express the same classes as string literals. |
+| `resolvers.NewContentFetcher` | Go constructor for the content-download leg; py/ts fold construction into their client. |
+| `resolvers.ProofSigner` | Go interface seam that keeps key custody out of the dialing tier; py/ts inject a signing callable instead of a named interface. |
 | `resolvers.SSRFCheckRedirect` | Go redirect-policy hook; py/ts fold redirect checks into the guard (async_ssrf_guard / the guarded fetch). |
 
 ## Cross-language conformance-vector replay

@@ -1,0 +1,636 @@
+package connect_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	connectrpc "connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
+
+	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
+	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
+	rampserver "github.com/RAMP-Protocol/protocol/sdk/go/connectserver"
+	"github.com/RAMP-Protocol/protocol/sdk/go/core"
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
+)
+
+// The four verbs this SDK was missing, plus the two shipped ones it had to fix,
+// driven through the outermost public surface: an SDK-built client over real HTTP
+// to a real Connect handler running the SDK's own server verify face.
+
+// ---------------------------------------------------------------------------
+// Origins
+// ---------------------------------------------------------------------------
+
+// groupExchange serves a ResourceResponse in whichever offer representation a
+// test needs, and records the report and dispute it received.
+type groupExchange struct {
+	rampv1connect.UnimplementedExchangeServiceHandler
+	groups []*rampv1.OfferGroup
+	flat   []*rampv1.Offer
+
+	gotReport  *rampv1.UsageReport
+	gotDispute *rampv1.DisputeRequest
+}
+
+func (g *groupExchange) DiscoverResources(
+	_ context.Context, _ *connectrpc.Request[rampv1.ResourceQuery],
+) (*connectrpc.Response[rampv1.ResourceResponse], error) {
+	return connectrpc.NewResponse(&rampv1.ResourceResponse{
+		Exchange:    "exchange.test",
+		Offers:      g.flat,
+		OfferGroups: g.groups,
+	}), nil
+}
+
+func (g *groupExchange) ReportUsage(
+	_ context.Context, req *connectrpc.Request[rampv1.UsageReport],
+) (*connectrpc.Response[rampv1.UsageReportResponse], error) {
+	g.gotReport = req.Msg
+	return connectrpc.NewResponse(&rampv1.UsageReportResponse{
+		Ver: helpers.ProtocolVersion, ReportId: "report-1",
+	}), nil
+}
+
+func (g *groupExchange) DisputeTransaction(
+	_ context.Context, req *connectrpc.Request[rampv1.DisputeRequest],
+) (*connectrpc.Response[rampv1.DisputeResponse], error) {
+	g.gotDispute = req.Msg
+	return connectrpc.NewResponse(&rampv1.DisputeResponse{
+		Ver: helpers.ProtocolVersion, DisputeId: proto.String("dispute-1"),
+	}), nil
+}
+
+// stubBroker serves one DiscoveryResponse.
+type stubBroker struct {
+	rampv1connect.UnimplementedBrokerServiceHandler
+	groups  []*rampv1.OfferGroup
+	absence *rampv1.OfferAbsenceReason
+}
+
+func (b *stubBroker) Resolve(
+	_ context.Context, _ *connectrpc.Request[rampv1.DiscoveryRequest],
+) (*connectrpc.Response[rampv1.DiscoveryResponse], error) {
+	return connectrpc.NewResponse(&rampv1.DiscoveryResponse{
+		Ver: helpers.ProtocolVersion, OfferGroups: b.groups, AbsenceReason: b.absence,
+	}), nil
+}
+
+func serveExchange(t *testing.T, sig signingFixture, svc rampv1connect.ExchangeServiceHandler) *httptest.Server {
+	t.Helper()
+	path, h := rampserver.NewExchangeServiceHandler(svc, rampserver.WithKeyResolver(sig.resolver))
+	mux := http.NewServeMux()
+	mux.Handle(path, h)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func absenceReason(r rampv1.OfferAbsenceReason) *rampv1.OfferAbsenceReason { return &r }
+
+// ---------------------------------------------------------------------------
+// Discover: the two offer representations
+// ---------------------------------------------------------------------------
+
+// A grouped answer keeps every URI, including the ones that yielded nothing —
+// which is the whole reason the result is grouped. A refused URI has no offer to
+// carry it back, so flattening would erase it entirely.
+func TestDiscover_KeepsPerURIGroupsAndReasons(t *testing.T) {
+	sig := newSigningFixture(t)
+	offers := newOfferFixture(t)
+	srv := serveExchange(t, sig, &groupExchange{groups: []*rampv1.OfferGroup{
+		{Uri: "https://site.test/a", Offers: []*rampv1.Offer{offers.good}},
+		{
+			Uri:           "https://site.test/b",
+			AbsenceReason: absenceReason(rampv1.OfferAbsenceReason_OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT),
+		},
+		{
+			Uri:                "https://site.test/c",
+			AbsenceReason:      absenceReason(rampv1.OfferAbsenceReason_OFFER_ABSENCE_REASON_RESTRICTION_FILTERED),
+			RestrictionFilters: []rampv1.RestrictionKind{rampv1.RestrictionKind_RESTRICTION_KIND_GEOGRAPHY},
+		},
+	}})
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer), rampconnect.WithOfferKey(offers.exchangePub))
+
+	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(res.Groups) != 3 {
+		t.Fatalf("want a group per requested URI, got %d", len(res.Groups))
+	}
+	if got := res.Groups[0].URI; got != "https://site.test/a" {
+		t.Errorf("group 0 URI = %q", got)
+	}
+	if len(res.Groups[0].Verified) != 1 {
+		t.Errorf("group 0 must carry its verified offer, got %d", len(res.Groups[0].Verified))
+	}
+	// The refusal is an ANSWER: the agent can tell "acquire an entitlement and
+	// retry" from "give up" only because the reason survived.
+	if res.Groups[1].AbsenceReason == nil ||
+		*res.Groups[1].AbsenceReason != rampv1.OfferAbsenceReason_OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT {
+		t.Errorf("group 1 absence reason = %v, want SCOPE_INSUFFICIENT", res.Groups[1].AbsenceReason)
+	}
+	if len(res.Groups[2].RestrictionFilters) != 1 {
+		t.Errorf("group 2 must carry the filtered axis, got %v", res.Groups[2].RestrictionFilters)
+	}
+	if res.Exchange != "exchange.test" {
+		t.Errorf("Exchange = %q, want the responding Exchange", res.Exchange)
+	}
+}
+
+// A responder that populates BOTH representations must not have its offers
+// counted twice: the flat list mirrors the grouped one.
+func TestDiscover_GroupsWinOverTheFlatMirrorWithoutDoubleCounting(t *testing.T) {
+	sig := newSigningFixture(t)
+	offers := newOfferFixture(t)
+	srv := serveExchange(t, sig, &groupExchange{
+		groups: []*rampv1.OfferGroup{{Uri: "https://site.test/a", Offers: []*rampv1.Offer{offers.good}}},
+		flat:   []*rampv1.Offer{offers.good}, // the same offer, mirrored
+	})
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer), rampconnect.WithOfferKey(offers.exchangePub))
+
+	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if n := len(res.Verified()); n != 1 {
+		t.Fatalf("the mirrored offer must be counted once, got %d", n)
+	}
+	if len(res.Groups) != 1 || res.Groups[0].URI != "https://site.test/a" {
+		t.Errorf("groups must win over the flat mirror, got %+v", res.Groups)
+	}
+}
+
+// A responder that sends only the flat list still works, and a single-URI query
+// lets the SDK attribute it. A multi-URI query does not, and the SDK does not
+// invent an attribution the wire never made.
+func TestDiscover_FlatFallback(t *testing.T) {
+	sig := newSigningFixture(t)
+	offers := newOfferFixture(t)
+	srv := serveExchange(t, sig, &groupExchange{flat: []*rampv1.Offer{offers.good}})
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer), rampconnect.WithOfferKey(offers.exchangePub))
+
+	single, err := client.Discover(context.Background(),
+		&rampv1.ResourceQuery{Uris: []string{"https://site.test/a"}})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(single.Groups) != 1 || single.Groups[0].URI != "https://site.test/a" {
+		t.Errorf("a single-URI flat answer takes that URI, got %+v", single.Groups)
+	}
+	multi, err := client.Discover(context.Background(),
+		&rampv1.ResourceQuery{Uris: []string{"https://site.test/a", "https://site.test/b"}})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(multi.Groups) != 1 || multi.Groups[0].URI != "" {
+		t.Errorf("a multi-URI flat answer carries no attribution, got %+v", multi.Groups)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Execute: the acceptance the shipped verb never sent
+// ---------------------------------------------------------------------------
+
+// A purchase must carry the requester and a detached acceptance that VERIFIES —
+// an Exchange checks it, so a request without one can only ever be refused.
+func TestExecute_SendsRequesterAndAVerifyingAcceptance(t *testing.T) {
+	sig := newSigningFixture(t)
+	offers := newOfferFixture(t)
+	origin := &groupExchange{groups: []*rampv1.OfferGroup{
+		{Uri: "https://site.test/a", Offers: []*rampv1.Offer{offers.good}},
+	}}
+	srv := serveExchange(t, sig, origin)
+
+	// The acceptance is signed by the agent's own key, and the Exchange verifies
+	// it against the public half — so the test needs both.
+	acceptPub, acceptSigner := newAcceptanceKey(t)
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithOfferKey(offers.exchangePub),
+		rampconnect.WithRequester(testRequester()),
+		rampconnect.WithAcceptanceSigner(acceptSigner),
+	)
+	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	verified := res.Verified()[0]
+
+	execOrigin := &recordingExecute{}
+	execSrv := serveExchange(t, sig, execOrigin)
+	execClient := rampconnect.NewClient(execSrv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithRequester(testRequester()),
+		rampconnect.WithAcceptanceSigner(acceptSigner),
+	)
+	if _, err = execClient.Execute(context.Background(), verified,
+		rampconnect.WithIdempotencyKey("pinned-key")); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	got := execOrigin.req
+	if got.GetRequester().GetId() != testRequester().GetId() {
+		t.Errorf("requester = %+v, want the configured identity", got.GetRequester())
+	}
+	item := got.GetItems()[0]
+	if item.GetAgentAcceptance().GetSignatureAlgorithm() != helpers.AcceptanceSignatureAlgorithm {
+		t.Errorf("acceptance algorithm = %q", item.GetAgentAcceptance().GetSignatureAlgorithm())
+	}
+	if err = helpers.VerifyOfferAcceptance(
+		item.GetOffer(), got.GetRequester(), got.GetIdempotencyKey(),
+		item.GetAgentAcceptance().GetSignature(), acceptPub,
+	); err != nil {
+		t.Errorf("the acceptance an Exchange would check does not verify: %v", err)
+	}
+}
+
+// Every precondition refuses BEFORE anything leaves the process — an unsigned
+// offer is reachable through the two named opt-outs, and an acceptance floating
+// free of a concrete offer is meaningless.
+func TestExecute_FailsClosedWithoutSendingAnything(t *testing.T) {
+	sig := newSigningFixture(t)
+	offers := newOfferFixture(t)
+	origin := &recordingExecute{}
+	srv := serveExchange(t, sig, origin)
+
+	unsigned := core.RejectedOffer{Offer: sampleOffer("offer-unsigned")}.Unsafe()
+	signedOffer := core.RejectedOffer{Offer: offers.good}.Unsafe()
+
+	tests := map[string]struct {
+		opts  []rampconnect.ClientOption
+		offer core.VerifiedOffer
+	}{
+		"no requester": {
+			[]rampconnect.ClientOption{rampconnect.WithSigner(sig.signer)}, signedOffer,
+		},
+		"unsigned offer": {
+			[]rampconnect.ClientOption{
+				rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()),
+			}, unsigned,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			client := rampconnect.NewClient(srv.URL, tc.opts...)
+			if _, err := client.Execute(context.Background(), tc.offer); err == nil {
+				t.Fatal("expected a refusal")
+			}
+			if origin.req != nil {
+				t.Error("the origin was contacted; the refusal must be local")
+			}
+		})
+	}
+}
+
+type recordingExecute struct {
+	rampv1connect.UnimplementedExchangeServiceHandler
+	req *rampv1.TransactionRequest
+}
+
+func (r *recordingExecute) ExecuteTransaction(
+	_ context.Context, req *connectrpc.Request[rampv1.TransactionRequest],
+) (*connectrpc.Response[rampv1.TransactionResponse], error) {
+	r.req = req.Msg
+	return connectrpc.NewResponse(&rampv1.TransactionResponse{Ver: helpers.ProtocolVersion}), nil
+}
+
+// ---------------------------------------------------------------------------
+// Resolve: the broker face
+// ---------------------------------------------------------------------------
+
+func TestBrokerResolve_SplitsThroughTheSameVerifier(t *testing.T) {
+	sig := newSigningFixture(t)
+	offers := newOfferFixture(t)
+	path, h := rampserver.NewBrokerServiceHandler(
+		&stubBroker{groups: []*rampv1.OfferGroup{{
+			Uri:    "https://site.test/a",
+			Offers: []*rampv1.Offer{offers.good, offers.doctored},
+		}}},
+		rampserver.WithKeyResolver(sig.resolver),
+	)
+	mux := http.NewServeMux()
+	mux.Handle(path, h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	broker := rampconnect.NewBrokerClient(srv.URL,
+		rampconnect.WithSigner(sig.signer), rampconnect.WithOfferKey(offers.exchangePub))
+	res, err := broker.Resolve(context.Background(),
+		&rampv1.DiscoveryRequest{Ver: helpers.ProtocolVersion})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	// A relayed offer is exactly the case the fail-closed rule exists for: the
+	// Broker forwards offers it did not mint.
+	if len(res.Groups) != 1 {
+		t.Fatalf("want one group, got %d", len(res.Groups))
+	}
+	if len(res.Groups[0].Verified) != 1 || len(res.Groups[0].Rejected) != 1 {
+		t.Errorf("want the doctored offer rejected in its own group, got %d verified / %d rejected",
+			len(res.Groups[0].Verified), len(res.Groups[0].Rejected))
+	}
+}
+
+// A resolve that finds nothing is a successful answer carrying a typed reason,
+// never an error.
+func TestBrokerResolve_WholeCallRefusalIsAnAnswer(t *testing.T) {
+	sig := newSigningFixture(t)
+	path, h := rampserver.NewBrokerServiceHandler(
+		&stubBroker{absence: absenceReason(rampv1.OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_AUTHORIZED)},
+		rampserver.WithKeyResolver(sig.resolver),
+	)
+	mux := http.NewServeMux()
+	mux.Handle(path, h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	broker := rampconnect.NewBrokerClient(srv.URL, rampconnect.WithSigner(sig.signer))
+	res, err := broker.Resolve(context.Background(),
+		&rampv1.DiscoveryRequest{Ver: helpers.ProtocolVersion})
+	if err != nil {
+		t.Fatalf("a refusal must not be raised as an error: %v", err)
+	}
+	if res.AbsenceReason == nil ||
+		*res.AbsenceReason != rampv1.OfferAbsenceReason_OFFER_ABSENCE_REASON_NOT_AUTHORIZED {
+		t.Errorf("whole-call absence reason = %v, want NOT_AUTHORIZED", res.AbsenceReason)
+	}
+	if len(res.Groups) != 0 {
+		t.Errorf("a refusal carries no groups, got %d", len(res.Groups))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ReportUsage: offer-driven routing and the checks before the send
+// ---------------------------------------------------------------------------
+
+// selfAdvertisingExchange stands up ONE host serving both the Exchange's RPC
+// endpoint and its own /.well-known/ramp.json — which is what a real Exchange
+// does, and what the same-host check requires. The manifest advertises the
+// server's own origin, so the endpoint is anchored to the domain it was resolved
+// from. It returns the bare domain a report routes on, plus the well-known fetch
+// counter.
+func selfAdvertisingExchange(t *testing.T, sig signingFixture, svc rampv1connect.ExchangeServiceHandler) (string, *atomic.Int64) {
+	t.Helper()
+	var (
+		hits   atomic.Int64
+		origin string
+	)
+	path, h := rampserver.NewExchangeServiceHandler(svc, rampserver.WithKeyResolver(sig.resolver))
+	mux := http.NewServeMux()
+	mux.Handle(path, h)
+	mux.HandleFunc("/.well-known/ramp.json", func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": origin})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	origin = srv.URL
+	return strings.TrimPrefix(srv.URL, "http://"), &hits
+}
+
+// crossHost serves a manifest advertising SOMEONE ELSE's origin — the case the
+// same-host check exists to refuse.
+func crossHost(t *testing.T, endpoint string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/ramp.json" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": endpoint})
+	}))
+	t.Cleanup(srv.Close)
+	return strings.TrimPrefix(srv.URL, "http://")
+}
+
+// plainOptions are the two seams a loopback test stack needs: the well-known
+// resolver reads http rather than https, and the offer-derived leg dials a
+// private address the production guard refuses by design.
+func plainOptions() []rampconnect.ClientOption {
+	return []rampconnect.ClientOption{
+		rampconnect.WithEndpointResolver(resolvers.NewWellKnownEndpointResolver(
+			resolvers.WellKnownOptions{Scheme: "http", HTTP: http.DefaultClient})),
+		rampconnect.WithFetchTransport(http.DefaultTransport),
+	}
+}
+
+func TestReportUsage_RoutesThroughTheIssuingExchangesOwnManifest(t *testing.T) {
+	sig := newSigningFixture(t)
+	origin := &groupExchange{}
+	domain, wkHits := selfAdvertisingExchange(t, sig, origin)
+
+	client := rampconnect.NewClient("http://home.invalid",
+		append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+
+	report := &rampv1.UsageReport{
+		Exchange:      proto.String(domain),
+		TransactionId: "txn-1",
+		Usage:         &rampv1.Usage{Function: []string{"ai-input"}},
+	}
+	resp, err := client.ReportUsage(context.Background(), report)
+	if err != nil {
+		t.Fatalf("ReportUsage: %v", err)
+	}
+	if resp.GetReportId() != "report-1" {
+		t.Errorf("report id = %q", resp.GetReportId())
+	}
+	if origin.gotReport.GetVer() != helpers.ProtocolVersion {
+		t.Errorf("ver = %q, want it stamped from the one constant", origin.gotReport.GetVer())
+	}
+	if origin.gotReport.GetIdempotencyKey() == "" {
+		t.Error("a fresh idempotency key must be minted by default")
+	}
+	// The caller's message crossed a package boundary as an argument, not a buffer.
+	if report.GetVer() != "" || report.GetIdempotencyKey() != "" {
+		t.Errorf("the caller's report was mutated: %+v", report)
+	}
+	// A second report to the same Exchange reuses the cached manifest.
+	if _, err = client.ReportUsage(context.Background(), report); err != nil {
+		t.Fatalf("second ReportUsage: %v", err)
+	}
+	if n := wkHits.Load(); n != 1 {
+		t.Errorf("well-known fetched %d times, want it cached per host", n)
+	}
+}
+
+// Every routing refusal happens before anything is sent, and says so: a caller
+// must be able to tell "we refused to dial it" from "it did not answer".
+func TestReportUsage_RefusesUnroutableAddressesWithoutSending(t *testing.T) {
+	sig := newSigningFixture(t)
+
+	// An "attacker" host that must never be contacted.
+	var attackerHits atomic.Int64
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attackerHits.Add(1)
+	}))
+	defer attacker.Close()
+
+	tests := map[string]string{
+		"no exchange on the report": "",
+		"scheme is not a bare host": "https://exchange.test",
+		"path is not a bare host":   "exchange.test/reports",
+		"query is not a bare host":  "exchange.test?x=1",
+		// A manifest advertising the attacker's origin — a different host.
+		"endpoint on another host": crossHost(t, attacker.URL),
+	}
+	for name, domain := range tests {
+		t.Run(name, func(t *testing.T) {
+			client := rampconnect.NewClient("http://home.invalid",
+				append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+			report := &rampv1.UsageReport{TransactionId: "txn-1"}
+			if domain != "" {
+				report.Exchange = proto.String(domain)
+			}
+			_, err := client.ReportUsage(context.Background(), report)
+			if err == nil {
+				t.Fatal("expected a refusal")
+			}
+			var cerr *rampconnect.CallError
+			if !errors.As(err, &cerr) || cerr.Kind != rampconnect.CallNotSent {
+				t.Fatalf("error = %v, want a CallNotSent CallError", err)
+			}
+		})
+	}
+	if n := attackerHits.Load(); n != 0 {
+		t.Errorf("the cross-host endpoint was contacted %d times; it must never be reached", n)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Dispute
+// ---------------------------------------------------------------------------
+
+func TestDispute_RoutesLikeAReportAndStampsTheEnvelope(t *testing.T) {
+	sig := newSigningFixture(t)
+	origin := &groupExchange{}
+	domain, _ := selfAdvertisingExchange(t, sig, origin)
+
+	client := rampconnect.NewClient("http://home.invalid",
+		append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+
+	req := &rampv1.DisputeRequest{
+		TransactionId: "txn-1",
+		ReportId:      "report-1",
+		Reason:        rampv1.DisputeReason_DISPUTE_REASON_DELIVERY_FAILED,
+	}
+	resp, err := client.Dispute(context.Background(), domain, req,
+		rampconnect.WithIdempotencyKey("pinned"))
+	if err != nil {
+		t.Fatalf("Dispute: %v", err)
+	}
+	if resp.GetDisputeId() != "dispute-1" {
+		t.Errorf("dispute id = %q", resp.GetDisputeId())
+	}
+	if origin.gotDispute.GetIdempotencyKey() != "pinned" {
+		t.Errorf("idempotency key = %q, want the pinned one", origin.gotDispute.GetIdempotencyKey())
+	}
+	if origin.gotDispute.GetVer() != helpers.ProtocolVersion {
+		t.Errorf("ver = %q", origin.gotDispute.GetVer())
+	}
+	if req.GetVer() != "" || req.GetIdempotencyKey() != "" {
+		t.Errorf("the caller's request was mutated: %+v", req)
+	}
+}
+
+// The same vetting guards both verbs, so a dispute cannot be aimed at an
+// unroutable address either.
+func TestDispute_SharesTheRoutingRefusals(t *testing.T) {
+	sig := newSigningFixture(t)
+	client := rampconnect.NewClient("http://home.invalid",
+		append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+
+	_, err := client.Dispute(context.Background(), "https://exchange.test",
+		&rampv1.DisputeRequest{TransactionId: "txn-1"})
+	var cerr *rampconnect.CallError
+	if !errors.As(err, &cerr) || cerr.Kind != rampconnect.CallNotSent {
+		t.Fatalf("error = %v, want a CallNotSent CallError", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Fetch
+// ---------------------------------------------------------------------------
+
+func TestFetch_PresentsTheProofAndSurfacesATypedRefusal(t *testing.T) {
+	sig := newSigningFixture(t)
+	acceptPub, acceptSigner := newAcceptanceKey(t)
+
+	var sawProof atomic.Bool
+	content := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(helpers.AgentKeyHeader) != "" && r.Header.Get("Signature") != "" {
+			sawProof.Store(true)
+		}
+		if r.URL.Query().Get("refuse") == "1" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"reason":"pop_expired"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("licensed bytes"))
+	}))
+	defer content.Close()
+
+	client := rampconnect.NewClient("http://home.invalid",
+		append(plainOptions(),
+			rampconnect.WithSigner(sig.signer),
+			rampconnect.WithAcceptanceSigner(acceptSigner),
+			rampconnect.WithAgentKey(acceptPub),
+		)...)
+
+	got, err := client.Fetch(context.Background(), content.URL+"/doc?agent_id=tp")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if string(got.Body) != "licensed bytes" || got.MIMEType != "text/plain" {
+		t.Errorf("content = %+v", got)
+	}
+	if !sawProof.Load() {
+		t.Error("the fetch presented no proof of possession")
+	}
+
+	// A refusal the edge names in its own vocabulary reaches the caller as the
+	// SAME typed reason an RPC refusal would, through the same accessor.
+	_, err = client.Fetch(context.Background(), content.URL+"/doc?refuse=1")
+	if err == nil {
+		t.Fatal("expected the edge refusal to surface")
+	}
+	detail, ok := rampconnect.ErrorDetailFrom(err)
+	if !ok {
+		t.Fatalf("no typed detail on a refused fetch: %v", err)
+	}
+	if got := detail.GetRetrievalAuthFailure().GetReason(); got !=
+		rampv1.RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_PROOF_EXPIRED {
+		t.Errorf("typed reason = %v, want PROOF_EXPIRED", got)
+	}
+	// The synthesized detail names the redacted host, never the credential.
+	if strings.Contains(detail.GetDomain(), "refuse=1") {
+		t.Errorf("detail domain carries the query: %q", detail.GetDomain())
+	}
+}
+
+// A client that can buy but was never given the public half of its agent key
+// cannot fetch, and says so rather than presenting a proof the edge will refuse.
+func TestFetch_RefusesWithoutTheAgentPublicKey(t *testing.T) {
+	sig := newSigningFixture(t)
+	client := rampconnect.NewClient("http://home.invalid",
+		append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+
+	_, err := client.Fetch(context.Background(), "http://cdn.invalid/doc")
+	var cerr *rampconnect.CallError
+	if !errors.As(err, &cerr) || cerr.Kind != rampconnect.CallNotSignable {
+		t.Fatalf("error = %v, want a CallNotSignable CallError", err)
+	}
+}

@@ -626,3 +626,73 @@ reason enum a Go exchange emitted, never on a human string. Emit and decode are 
 to one shared oracle corpus (`error-detail-vectors.json`) replayed by all three
 languages, so the typed-failure contract is verified end-to-end across the language
 boundary rather than trusted to match by inspection.
+
+## Discovery answers are grouped per URI, not flattened
+
+A discovery call is per-URI: an agent asks about several resources at once, and both
+`DiscoverResources` and the Broker's `Resolve` answer with one `OfferGroup` per
+requested URI, each either carrying offers or carrying a typed `OfferAbsenceReason`
+explaining why it carries none. The SDK returns that shape rather than a flat list,
+with the fail-closed `{verified, rejected}` split preserved **inside** each group and
+produced by the one `Verifier` — never a second verification path.
+
+Flattening loses two things, and the second is unrecoverable. It drops the
+attribution — which offer answers which URI — and it erases a REFUSED URI entirely,
+because an empty group has no offer to carry its identity back. That matters because
+the absence vocabulary is a set of different actions: `NOT_IN_CATALOG` means give up,
+`SCOPE_INSUFFICIENT` means acquire an entitlement and retry, `CONTENT_BLOCKED` means
+never retry. Flattened, all three read as "found nothing", which is the trial-and-error
+the field exists to prevent.
+
+Two consequences worth stating. The absence reasons are carried as POINTERS, because a
+responder may legitimately withhold a reason where the existence of a resource must
+itself stay hidden — so "absent" and "unspecified" have to stay distinguishable, and a
+generated getter collapses them. And `ResourceResponse` carries a grouped list *and* a
+flat one, with the flat one a single-URI convenience mirror; the two are read as
+alternatives, never concatenated, because a responder that populates both would
+otherwise have every offer counted twice.
+
+## A signed leg refuses redirects; the guarded fetch follows them
+
+The SSRF-guarded HTTP client follows up to five redirects, re-pinning the address and
+re-vetting the scheme at each hop. That is correct for what it was built for: fetching
+public well-known documents and key directories, where there is nothing to leak.
+
+It is wrong for any request carrying a credential. A usage report, a dispute and a
+delivery fetch all take only the guarded `.Transport` and install their own refusal.
+For the RPC legs, following a redirect would re-sign the caller's request for a target
+the peer chose — after the endpoint check had already passed, which is precisely the
+window that check exists to close. For the delivery fetch it is worse: the proof of
+possession covers `@target-uri`, so replaying it at a new location fails the edge's own
+check, and re-signing per hop would hand a fresh proof of possession of the agent's key
+to whatever host the first hop named. Redirect support on those legs would need per-hop
+re-signing plus host anchoring, and is deliberately not attempted.
+
+The transport error is rebuilt before it surfaces, because the HTTP client wraps every
+failure in a value carrying the full URL it was dialing — query included. On a refused
+redirect that is a credential belonging to a URL the *first hop* chose, so the wrapper
+leaks even when the SDK's own message is already redacted.
+
+## A usage report's destination comes off the message, not from configuration
+
+A usage report must reach the Exchange that ISSUED the offer, and that Exchange's
+address is read from its own `/.well-known/ramp.json` — never from configuration. A
+signature covers the `exchange` DOMAIN; it says nothing about where that domain's
+endpoint lives or where its DNS points.
+
+The SDK takes the domain off `UsageReport.exchange` rather than as an argument, and
+offers no option to supply an endpoint. Leaving no configuration slot for it is what
+makes the rule structural instead of a convention someone can quietly reverse: there is
+no parameter a configured origin could be passed as. (`Dispute` is the exception, and
+only because `DisputeRequest` carries no `exchange` field to read — it takes the domain
+as an argument and runs the identical checks.)
+
+Five checks precede the send, in order: refuse anything that is not a plain hostname,
+because the value is concatenated into a URL and a smuggled path would choose what gets
+fetched; resolve the endpoint from that host's own manifest, cached per host; require
+the endpoint to be that host or a subdomain of it, since the manifest is only as
+trustworthy as the host serving it and a dial-time address guard has no objection to an
+unrelated PUBLIC host; dial through the SSRF guard, applied to the report itself and
+not only to the manifest fetch; and refuse redirects. The per-origin client pool that
+follows is bounded and evicts least-recently-used, because which Exchanges appear is
+driven by incoming offers — an open-ended, caller-influenced key space.

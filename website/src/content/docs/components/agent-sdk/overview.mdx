@@ -3,6 +3,19 @@ title: "Agent SDK Overview"
 description: "The RAMP Agent SDK is an embeddable library that gives AI agents one-liner content access -- a single Fetch call handling discovery, negotiation, transaction, delivery, budget enforcement, and usage reporting."
 ---
 
+<Aside type="caution" title="Design for a deferred layer, not shipped API">
+These pages describe the **planned high-tier agent SDK** — a one-call `Fetch(url)`
+that orchestrates discovery, selection, purchase, delivery and reporting behind a
+single method. That layer is deferred and none of the API below is implemented.
+
+What ships today is the **low-tier client** in `sdk/go/connect`, and it is a
+different shape with a colliding name: its `NewClient` takes a base URL and
+functional options rather than a config struct with a licence key, and its `Fetch`
+retrieves one already-purchased signed delivery URL rather than running the whole
+flow. The verbs it covers are `Discover`, `Resolve`, `Execute`, `ReportUsage`,
+`Dispute` and `Fetch`. See `sdk/go/README.md` for the shipped surface.
+</Aside>
+
 import { Aside } from '@astrojs/starlight/components';
 
 ## What the SDK Provides

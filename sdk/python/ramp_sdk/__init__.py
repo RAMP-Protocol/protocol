@@ -64,7 +64,7 @@ from .httpsig import (
 from .idempotency import generate_idempotency_key, validate_idempotency_key
 from .keyresolver import KeyResolver, StaticKeyResolver
 from .money import canonicalize_money, format_money, parse_money
-from .pop import sign_agent_binding, verify_agent_binding
+from .pop import AGENT_KEY_HEADER, sign_agent_binding, verify_agent_binding
 from .resolvers import (
     WBA_DIRECTORY_PATH,
     DirectoryUnavailableError,
@@ -117,6 +117,7 @@ __all__ = [
     "RequestIDHeader",
     "ResolverError",
     "Result",
+    "AGENT_KEY_HEADER",
     "SignatureAgentHeader",
     "SignedOutbound",
     "SigningTransport",

@@ -16,6 +16,15 @@ import (
 // already-extracted detail) stays in sdk/go/helpers; the emit direction
 // (AsConnectError) lives in the server binding sdk/go/connectserver.
 func ErrorDetailFrom(err error) (*rampv1.ErrorDetail, bool) {
+	// The SDK's own typed failure is checked first, so ONE accessor serves every
+	// verb. On an RPC path the detail below was emitted by the peer; on the
+	// content path it was synthesized locally from the edge's refusal token,
+	// because a delivery edge answers a small JSON object rather than a protobuf.
+	// A synthesized detail names the redacted fetch host as its domain, so a
+	// reader can tell the two provenances apart.
+	if callErr, ok := asCallError(err); ok && callErr.Detail != nil {
+		return callErr.Detail, true
+	}
 	var cerr *connectrpc.Error
 	if !errors.As(err, &cerr) {
 		return nil, false
