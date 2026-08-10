@@ -2618,6 +2618,18 @@ message WellKnownManifest {
   // Absent = no published limit (Exchange applies its own default policy).
   optional int32 max_intermediary_hops = 28;
 
+  // Exchange-only. JSON Schema (draft 2020-12, max 16KB) describing the
+  // registration_data object this Exchange expects on Register.
+  //
+  // Present: this Exchange ENFORCES the schema — a RegisterRequest whose
+  // registration_data does not conform is refused with
+  // REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA and the offending
+  // members named in RegistrationFailure.field_errors.
+  // Absent: registration_data is passed through to the system of record
+  // uninspected, so an Exchange that publishes no schema needs no change to
+  // stay conformant.
+  google.protobuf.Struct registration_schema = 29;
+
   // Extension point
   google.protobuf.Struct ext = 15;
 
@@ -3072,9 +3084,12 @@ message DomainVerificationResult {
 // afterwards; the Exchange resolves the account from the verified request
 // signature on every call, never from anything the caller sends.
 //
-// The Exchange does not inspect or validate the business payload
-// (registration_data): its contents are operator-defined and enforced by the
-// registration front-end, not by this contract.
+// Whether the Exchange inspects the business payload (registration_data)
+// follows its manifest. An Exchange that publishes a registration_schema in
+// its WellKnownManifest ENFORCES that schema on Register and refuses a
+// non-conforming payload; one that publishes none accepts the payload
+// uninspected and passes it to its system of record, its contents
+// operator-defined and enforced outside this contract.
 // ============================================================================
 
 // RegisterRequest — Agent asks the Exchange to create its account.
@@ -3084,9 +3099,12 @@ message RegisterRequest {
   string ver = 1;
 
   // Operator-defined registration payload; the business fields are not fixed
-  // in the wire contract. The Exchange passes it through to its system of
-  // record without inspecting it. The caller's identity is taken from the
-  // verified request signature, never from this payload.
+  // in the wire contract. What the Exchange does with it follows its manifest:
+  // an Exchange publishing WellKnownManifest.registration_schema validates this
+  // payload against that schema and refuses a non-conforming one; an Exchange
+  // publishing no schema passes it through to its system of record without
+  // inspecting it. The caller's identity is taken from the verified request
+  // signature, never from this payload.
   google.protobuf.Struct registration_data = 2;
 
   // Extension point
@@ -3299,6 +3317,7 @@ enum RegistrationFailureReason {
   REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID = 3;   // request signature invalid
   REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED = 4;  // identity already registered
   REGISTRATION_FAILURE_REASON_QUOTA_EXCEEDED = 5;      // registration quota exceeded
+  REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA = 6; // registration_data does not conform to the Exchange's published registration_schema
 }
 
 // RegistrationFailure — a registration request could not be completed.
@@ -3307,6 +3326,30 @@ message RegistrationFailure {
   RegistrationFailureReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
+
+  // When reason = INVALID_REGISTRATION_DATA: the registration_data members
+  // that are missing or do not conform. Empty for every other reason.
+  repeated RegistrationFieldError field_errors = 2 [
+    (buf.validate.field).repeated.max_items = 64
+  ];
+}
+
+// RegistrationFieldError — one registration_data member that failed the
+// Exchange's published registration_schema (WellKnownManifest.
+// registration_schema).
+message RegistrationFieldError {
+  // RFC 6901 JSON Pointer to the offending member, relative to
+  // registration_data (e.g. "/vat_id", "/address/postal_code"). The empty
+  // string addresses registration_data itself, for whole-object failures
+  // (oneOf, minProperties) that belong to no single member.
+  string path = 1 [(buf.validate.field).string.max_len = 255];
+
+  // Developer-facing, NON-authoritative description of what failed
+  // (e.g. "required", "must match ^[A-Z]{2}[0-9]+$"). Wording is
+  // validator-defined and not stable across Exchanges; clients branch on
+  // `reason`, never on this text. States the constraint, NEVER the submitted
+  // value — the ErrorDetail leakage rule applies here too.
+  string error = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 }
 
 // DisputeFailureReason — why a DisputeTransaction filing was refused. Distinct

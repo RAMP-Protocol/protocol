@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+**Registration data becomes schema-enforceable: `WellKnownManifest.registration_schema`
+(field 29) + `REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA` (additive, no wire
+break).** An Exchange MAY publish, in its `ramp.json`, a JSON Schema (draft 2020-12, max
+16KB) describing the `registration_data` object it expects on `Register`. Publication and
+enforcement are one decision: an Exchange that publishes the schema validates incoming
+`registration_data` against it and refuses a non-conforming payload with the new failure
+reason; an Exchange that publishes none accepts the payload uninspected and passes it to
+its system of record exactly as before, so existing Exchanges stay conformant with no
+change. This replaces the former unconditional contract text ("the Exchange passes it
+through to its system of record without inspecting it") on the Agent Account Registration
+banner and on `RegisterRequest.registration_data`, both now conditioned on the manifest.
+
+The refusal names what to fix: `RegistrationFailure` gains
+`field_errors` (field 2, ≤64 items) carrying the new top-level `RegistrationFieldError`
+`{path, error}`. `path` is an RFC 6901 JSON Pointer relative to `registration_data`
+(`"/vat_id"`, `"/address/postal_code"`); the empty string addresses `registration_data`
+itself, which is how whole-object failures (`oneOf`, `minProperties`) that belong to no
+single member are reported. A free-text pair rather than a closed `kind` enum because
+JSON Schema's composite keywords do not attach to any one member and the standard is
+extensible by design, so a closed vocabulary could not stay complete. `error` is
+developer-facing and NON-authoritative — wording is validator-defined and varies across
+Exchanges, clients branch on `reason` — and, like `ErrorDetail.message`, it states the
+violated constraint and never the submitted value, so a refusal cannot echo an agent's
+business data back over the wire. A machine-readable `kind` can join at field 3 later
+without a wire break.
+
+Motivation: an agent integrating the SDK directly signs and sends `Register` itself and
+passes through no registration front-end, so a check only a front-end performs is a
+suggestion, not a rule — and the agent had nowhere to learn which fields a given Exchange
+expects. Both now resolve against the manifest the agent already fetches to find the
+Exchange's endpoint.
+
+*Tooling:* the corpus generator gained valid-item construction for repeated **message**
+fields (seed-or-autofill, mirroring the top-level baseline). `field_errors` is the
+contract's first repeated message field carrying its own `repeated.max_items`, and the
+generator previously produced only scalar list items.
+
 **The `ver` envelope field states its contract, and the version string gets one owner
 (no wire change).** All 29 `ver` fields — 25 in `ramp.proto`, 4 in `admin.proto` — now name
 the expected value `"1.0"` and the receive-side rule. Before this, 27 of them said only

@@ -5,6 +5,27 @@ description: "RAMP protocol changelog"
 
 ## Unreleased
 
+**Registration data becomes schema-enforceable: `WellKnownManifest.registration_schema`
+(field 29) + `REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA` (additive, no wire
+break).** An Exchange MAY publish, in its `ramp.json`, a JSON Schema (draft 2020-12, max
+16KB) describing the `registration_data` it expects on `Register`. Publication and
+enforcement are one decision: publish the schema and the Exchange validates against it,
+refusing a non-conforming payload with the new reason; publish none and the payload is
+accepted uninspected and passed to the system of record exactly as before, so existing
+Exchanges stay conformant unchanged. The former unconditional "passes it through without
+inspecting it" contract text is now conditioned on the manifest.
+
+The refusal names what to fix: `RegistrationFailure` gains `field_errors` (field 2, ≤64
+items) carrying the new `RegistrationFieldError` `{path, error}`. `path` is an RFC 6901
+JSON Pointer relative to `registration_data` (`"/vat_id"`, `"/address/postal_code"`), and
+the empty string addresses `registration_data` itself — how whole-object failures
+(`oneOf`, `minProperties`) that belong to no single member are reported. `error` is
+developer-facing and NON-authoritative: wording is validator-defined, clients branch on
+`reason`, and it states the violated constraint, never the submitted value, so a refusal
+cannot echo an agent's business data back. This closes the gap for an agent that
+integrates the SDK directly — it signs and sends `Register` itself, passing through no
+registration front-end, so a front-end-only check was never binding on it.
+
 **The `ver` envelope field states its contract, and the version string gets one owner
 (no wire change).** All 29 `ver` fields — 25 in `ramp.proto`, 4 in `admin.proto` — now name
 the expected value `"1.0"` and the receive-side rule. Before this, 27 of them said only

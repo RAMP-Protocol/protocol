@@ -141,7 +141,7 @@ func main() {
 		cases = append(cases, mkCase(short+"/valid", short, base.Interface(), true, nil, v))
 
 		for _, fd := range constrained {
-			for _, e := range edges(fd, rules(fd)) {
+			for _, e := range edges(fd, rules(fd), sd) {
 				m := proto.Clone(base.Interface()).ProtoReflect()
 				e.apply(m)
 				verr := v.Validate(m.Interface())
@@ -303,14 +303,31 @@ func enrichWKT(m protoreflect.Message) {
 	}
 }
 
+// validItem builds ONE valid element for a repeated field. Scalar items come
+// straight from validScalar; a message item is built the same way a top-level
+// baseline is — from its seed when one exists, otherwise auto-filled — because
+// validScalar deliberately returns an unset Value for MessageKind and appending
+// that to a list panics. Recursion terminates on the seed map or on a message
+// whose constrained fields are all scalar; a self-referential message with a
+// constrained message field would need a seed, and says so loudly if it lacks one.
+func validItem(fd protoreflect.FieldDescriptor, item *validate.FieldRules, sd map[string]proto.Message) (protoreflect.Value, error) {
+	if fd.Kind() != protoreflect.MessageKind {
+		return validScalar(fd, item)
+	}
+	sub, err := baseline(fd.Message(), sd)
+	if err != nil {
+		return protoreflect.Value{}, fmt.Errorf("repeated message item %s: %w", fd.Message().Name(), err)
+	}
+	return protoreflect.ValueOfMessage(sub), nil
+}
+
 func setValid(m protoreflect.Message, fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[string]proto.Message) error {
 	if fd.IsList() {
-		l := m.Mutable(fd).List()
-		v, err := validScalar(fd, itemRules(fr))
+		v, err := validItem(fd, itemRules(fr), sd)
 		if err != nil {
 			return err
 		}
-		l.Append(v)
+		m.Mutable(fd).List().Append(v)
 		return nil
 	}
 	v, err := validScalar(fd, fr)
@@ -379,13 +396,13 @@ type edge struct {
 	valid bool // a POSITIVE edge: Go must ACCEPT it (e.g. "" on a money field). want is unused.
 }
 
-func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
+func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[string]proto.Message) []edge {
 	var es []edge
 	if fr.GetRequired() {
 		es = append(es, edge{label: "missing", want: "required", apply: func(m protoreflect.Message) { m.Clear(fd) }})
 	}
 	if fd.IsList() {
-		return append(es, listEdges(fd, fr)...)
+		return append(es, listEdges(fd, fr, sd)...)
 	}
 	switch fd.Kind() {
 	case protoreflect.EnumKind:
@@ -562,11 +579,12 @@ func failingBadStringIdxs(pattern string) []int {
 	return idxs
 }
 
-func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
+func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[string]proto.Message) []edge {
 	var es []edge
 	r := fr.GetRepeated()
 	item := itemRules(fr)
-	good, _ := validScalar(fd, item) // a valid item value
+	good, err := validItem(fd, item, sd) // a valid item value
+	must(err)
 	if r != nil && r.GetMaxItems() > 0 {
 		n := int(r.GetMaxItems()) + 1
 		es = append(es, edge{label: "too_many", want: "repeated.max_items", apply: func(m protoreflect.Message) {

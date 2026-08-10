@@ -465,6 +465,12 @@ A registration request could not be completed.
 
 ::proto-message{name=RegistrationFailure}
 
+### RegistrationFieldError
+
+One `registration_data` member that failed the Exchange's published `registration_schema`. Carried on `RegistrationFailure.field_errors` when the reason is `REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA`. `path` is an RFC 6901 JSON Pointer relative to `registration_data`, and the empty string addresses `registration_data` itself — the case for whole-object failures (`oneOf`, `minProperties`) that belong to no single member. `error` is a developer-facing, non-authoritative description whose wording is validator-defined; clients branch on the reason enum, never on this text.
+
+::proto-message{name=RegistrationFieldError}
+
 ### DisputeFailure
 
 A dispute could not be filed (distinct from `DisputeReason`, why the agent disputes, and `DisputeStatus`, an accepted dispute's lifecycle).

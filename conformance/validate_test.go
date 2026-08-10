@@ -221,6 +221,16 @@ func TestErrorDetailConstraints(t *testing.T) {
 	runValidationCases(t, errorDetailCases())
 }
 
+// tooManyFieldErrors builds n valid RegistrationFieldError items, for the
+// repeated.max_items boundary on RegistrationFailure.field_errors.
+func tooManyFieldErrors(n int) []*rampv1.RegistrationFieldError {
+	out := make([]*rampv1.RegistrationFieldError, n)
+	for i := range out {
+		out[i] = &rampv1.RegistrationFieldError{Path: "/f", Error: "required"}
+	}
+	return out
+}
+
 func errorDetailCases() []validationCase {
 	return []validationCase{
 		// TransactionDenial — reuses DenialReason, including the entitlement family.
@@ -234,6 +244,23 @@ func errorDetailCases() []validationCase {
 		{"catalog_rejection unspecified rejected", &rampv1.CatalogRejection{Reason: rampv1.CatalogRejectionReason_CATALOG_REJECTION_REASON_UNSPECIFIED}, false, "enum.not_in"},
 		{"registration_failure valid", &rampv1.RegistrationFailure{Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_KEY}, true, ""},
 		{"registration_failure unspecified rejected", &rampv1.RegistrationFailure{Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_UNSPECIFIED}, false, "enum.not_in"},
+		// Schema-enforcement refusal: the reason travels with the offending
+		// registration_data members. The empty path is a legal RFC 6901 pointer to
+		// registration_data itself — the whole-object case (oneOf, minProperties)
+		// that belongs to no single member, so it must NOT be rejected as unset.
+		{"registration_failure invalid data with field errors valid", &rampv1.RegistrationFailure{
+			Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+			FieldErrors: []*rampv1.RegistrationFieldError{
+				{Path: "/vat_id", Error: "must match ^[A-Z]{2}[0-9]+$"},
+				{Path: "/address/postal_code", Error: "required"},
+			},
+		}, true, ""},
+		{"registration_field_error root path valid", &rampv1.RegistrationFieldError{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"}, true, ""},
+		{"registration_field_error empty error rejected", &rampv1.RegistrationFieldError{Path: "/vat_id", Error: ""}, false, "string.min_len"},
+		{"registration_failure too many field errors rejected", &rampv1.RegistrationFailure{
+			Reason:      rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+			FieldErrors: tooManyFieldErrors(65),
+		}, false, "repeated.max_items"},
 		{"dispute_failure valid", &rampv1.DisputeFailure{Reason: rampv1.DisputeFailureReason_DISPUTE_FAILURE_REASON_REPORT_NOT_FILED}, true, ""},
 		{"dispute_failure unspecified rejected", &rampv1.DisputeFailure{Reason: rampv1.DisputeFailureReason_DISPUTE_FAILURE_REASON_UNSPECIFIED}, false, "enum.not_in"},
 		{"domain_verification_failure valid", &rampv1.DomainVerificationFailure{Reason: rampv1.DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH}, true, ""},

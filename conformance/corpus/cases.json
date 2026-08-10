@@ -1708,13 +1708,293 @@
     }
   },
   {
+    "id": "RegistrationFailure/field_errors/too_many",
+    "message": "RegistrationFailure",
+    "valid": false,
+    "rules": [
+      "repeated.max_items"
+    ],
+    "json": {
+      "field_errors": [
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        },
+        {
+          "error": "x",
+          "path": "x"
+        }
+      ],
+      "reason": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED"
+    }
+  },
+  {
     "id": "RegistrationFailure/reason/not_in",
     "message": "RegistrationFailure",
     "valid": false,
     "rules": [
       "enum.not_in"
     ],
-    "json": {}
+    "json": {
+      "field_errors": [
+        {
+          "error": "x",
+          "path": "x"
+        }
+      ]
+    }
   },
   {
     "id": "RegistrationFailure/reason/undefined",
@@ -1724,7 +2004,13 @@
       "enum.defined_only"
     ],
     "json": {
-      "reason": 6
+      "field_errors": [
+        {
+          "error": "x",
+          "path": "x"
+        }
+      ],
+      "reason": 7
     }
   },
   {
@@ -1732,7 +2018,57 @@
     "message": "RegistrationFailure",
     "valid": true,
     "json": {
+      "field_errors": [
+        {
+          "error": "x",
+          "path": "x"
+        }
+      ],
       "reason": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED"
+    }
+  },
+  {
+    "id": "RegistrationFieldError/error/too_long",
+    "message": "RegistrationFieldError",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "error": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "x"
+    }
+  },
+  {
+    "id": "RegistrationFieldError/error/too_short",
+    "message": "RegistrationFieldError",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "path": "x"
+    }
+  },
+  {
+    "id": "RegistrationFieldError/path/too_long",
+    "message": "RegistrationFieldError",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "error": "x",
+      "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "RegistrationFieldError/valid",
+    "message": "RegistrationFieldError",
+    "valid": true,
+    "json": {
+      "error": "x",
+      "path": "x"
     }
   },
   {
