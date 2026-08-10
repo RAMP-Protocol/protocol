@@ -340,7 +340,10 @@ func TestExecute_StampsProtocolVersion(t *testing.T) {
 		rampconnect.WithOfferKey(off.exchangePub),
 	)
 
-	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
+	// Discover sends the caller's query unmodified, so this test is the sender for
+	// the discovery leg and stamps ver from the constant, as the contract requires.
+	res, err := client.Discover(context.Background(),
+		&rampv1.ResourceQuery{Ver: helpers.ProtocolVersion})
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
