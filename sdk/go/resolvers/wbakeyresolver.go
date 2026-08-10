@@ -230,11 +230,13 @@ func anyAddrBlocked(addrs []netip.Addr) bool {
 //
 // base==nil yields a fresh, minimal transport; a non-nil base is cloned so the
 // caller's other transport settings are kept. In BOTH cases the guard forces
-// Proxy=nil: a proxied transport dials the PROXY, so the dial-time check would vet
-// the proxy's address instead of the true target — a full bypass. The dial-time
-// SSRF pin and an egress proxy are therefore mutually exclusive by construction.
+// Proxy=nil and clears any custom TLS dialer: each would route the dial around
+// the address check, so each is mutually exclusive with the pin by construction.
 // Pair it with SSRFCheckRedirect on the *http.Client to also vet redirect schemes
 // and bound redirect depth.
+//
+// A caller's TLSClientConfig — client certificates, a pinned root set — is kept
+// and still applies; only the dialer itself is dropped.
 func SSRFGuard(base *http.Transport) *http.Transport {
 	if base == nil {
 		base = &http.Transport{}
@@ -245,6 +247,13 @@ func SSRFGuard(base *http.Transport) *http.Transport {
 	// would resolve+check the PROXY, not the destination). Force it off so the
 	// guard always vets the real target.
 	base.Proxy = nil
+	// net/http prefers a transport's OWN TLS dialer over DialContext whenever the
+	// scheme is https — which is every RAMP leg — so a base carrying one would
+	// take the dial through the caller's dialer and the pin below would never run.
+	// The control would be silently absent rather than weaker, so both the current
+	// and the legacy field are cleared. Dial needs no such treatment: DialContext
+	// supersedes it whenever it is set, and it is set on the next line.
+	base.DialTLSContext, base.DialTLS = nil, nil
 	base.DialContext = guardedDialContext
 	return base
 }

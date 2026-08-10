@@ -56,10 +56,14 @@ type ProofSigner interface {
 // ContentFetchOptions configures a ContentFetcher. Every field has a safe default.
 type ContentFetchOptions struct {
 	// BaseTransport carries the caller's own transport settings — a tuned
-	// connection pool, client certificates — UNDERNEATH the SSRF guard. It is
-	// never a replacement for the guard: a delivery URL names a host chosen by
-	// another party, so the address pin and the https-only scheme check are
-	// applied in every case. Nil means a fresh transport under the guard.
+	// connection pool, client certificates via TLSClientConfig — UNDERNEATH the
+	// SSRF guard. It is never a replacement for the guard: a delivery URL names a
+	// host chosen by another party, so the address pin and the https-only scheme
+	// check are applied in every case. Nil means a fresh transport under the guard.
+	//
+	// A custom TLS dialer on this base is dropped rather than honoured: net/http
+	// would prefer it over the pinned dialer on https and the address check would
+	// never run. Configure TLS through TLSClientConfig, which is kept.
 	//
 	// The redirect policy is likewise a property of this profile rather than a
 	// detail a caller supplies. A caller that could inject a whole client would be

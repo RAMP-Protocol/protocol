@@ -74,9 +74,11 @@ func NewGuardedClientFromEnv() *http.Client {
 // only way to drop the guard is the deliberate, deployment-level SKIP_SSRF /
 // ALLOW_INSECURE opt-out.
 //
-// SSRFGuard clones what it is given and forces Proxy off, so the caller's value
-// is never mutated and a configured proxy cannot tunnel a private target past the
-// address pin.
+// SSRFGuard clones what it is given, so the caller's value is never mutated, and
+// drops the two settings that would route a dial around the address pin: a proxy,
+// which would tunnel a private target past it, and a custom TLS dialer, which
+// net/http prefers over the pinned dialer on https. TLSClientConfig is kept, so
+// client certificates and a pinned root set are carried the way the pin allows.
 func NewGuardedTransport(base *http.Transport) http.RoundTripper {
 	var inner http.RoundTripper
 	switch {

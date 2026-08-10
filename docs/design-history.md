@@ -769,10 +769,26 @@ a goroutine and a socket indefinitely), the per-origin client pool, and the
 endpoint cache beneath it. The key space for both caches is the same open-ended,
 caller-influenced set of hosts, so both evict least-recently-used at a fixed cap.
 
-The guard on that leg is not removable by an option. A caller can supply a base
-transport — its own connection tuning, its own client certificates — and it is
+The base-transport option cannot remove the guard on that leg. A caller can supply
+a transport — its own connection tuning, its own client certificates — and it is
 composed UNDERNEATH the address and scheme guards rather than in place of them.
-The only opt-out is the deployment-level SKIP_SSRF / ALLOW_INSECURE pair, which is
-one decision recorded in one place instead of a per-caller copy of it. An option
-that could silently disarm the guard is exactly how a security property becomes
-advisory.
+The only opt-out through that seam is the deployment-level SKIP_SSRF /
+ALLOW_INSECURE pair, which is one decision recorded in one place instead of a
+per-caller copy of it. An option that could silently disarm the guard is exactly
+how a security property becomes advisory.
+
+Two settings on a supplied transport are dropped rather than carried, because
+each would route the dial around the address check rather than under it: a proxy,
+which would have the dialer resolve and vet the PROXY instead of the destination,
+and a custom TLS dialer, which `net/http` prefers over the pinned dialer whenever
+the scheme is https — which is every RAMP leg. The second is the more dangerous
+of the two because it fails silently and on the ordinary path: a transport that
+carries one dials wherever it likes and no error says the pin never ran. TLS
+itself stays configurable through `TLSClientConfig`, which is kept, so the
+customisation the seam exists for survives and only the dialer is refused.
+
+The claim is scoped to that seam deliberately. A caller that injects a whole
+`*http.Client` into a resolver, or supplies its own endpoint resolver, has taken
+ownership of that fetch and the guard is that caller's to install — which is a
+different bargain from an option that quietly weakens a fetch the SDK still
+performs.

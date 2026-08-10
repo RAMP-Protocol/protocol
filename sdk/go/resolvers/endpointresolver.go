@@ -1,6 +1,7 @@
 package resolvers
 
 import (
+	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
+	"golang.org/x/sync/singleflight"
 )
 
 // maxWellKnownDocBytes bounds the well-known / JWKS response body read. A hostile
@@ -67,6 +69,14 @@ func fetchWellKnownDoc(ctx context.Context, client *http.Client, url string) (*w
 	return &doc, nil
 }
 
+// maxCachedEndpoints bounds the per-host endpoint cache. The key is an
+// Offer.exchange host, so which entries appear is driven by incoming offers — an
+// open-ended, caller-influenced key space, and an unbounded map over one is
+// somewhere an authenticated caller can make the process grow without limit. A
+// real deployment reports to a handful of Exchanges. Mirrors the bound the
+// per-origin client pool above this resolver already carries.
+const maxCachedEndpoints = 256
+
 // WellKnownEndpointResolver resolves an Exchange domain to its self-advertised
 // ExchangeService endpoint by fetching https://{host}/.well-known/ramp.json and
 // reading WellKnownManifest.endpoint. Unlike WellKnownKeyResolver (one fixed
@@ -75,18 +85,25 @@ func fetchWellKnownDoc(ctx context.Context, client *http.Client, url string) (*w
 // coalescing are all per host. The pre-seeded registry is a TRUST overlay (the
 // Allow hook), never the source of the endpoint — that is the Offer.exchange
 // routing invariant: the endpoint always comes from the exchange's own manifest.
+//
+// Because that host space is caller-influenced, neither per-host structure may
+// grow without limit. The cache evicts least-recently-used at a fixed cap;
+// coalescing is a singleflight.Group, which drops a host's entry as soon as its
+// fetch completes and so holds nothing between calls.
 type WellKnownEndpointResolver struct {
 	http   *http.Client
 	ttl    time.Duration
 	now    func() time.Time
 	scheme string
 	allow  func(host string) bool
+	sf     singleflight.Group
 	mu     sync.Mutex
-	cache  map[string]endpointEntry
-	flight map[string]*sync.Mutex
+	order  *list.List // front is most-recently-used; values are *endpointEntry
+	cache  map[string]*list.Element
 }
 
 type endpointEntry struct {
+	host     string
 	endpoint string
 	exp      time.Time
 }
@@ -126,8 +143,8 @@ func NewWellKnownEndpointResolver(opts WellKnownOptions) *WellKnownEndpointResol
 		now:    now,
 		scheme: scheme,
 		allow:  opts.Allow,
-		cache:  map[string]endpointEntry{},
-		flight: map[string]*sync.Mutex{},
+		order:  list.New(),
+		cache:  map[string]*list.Element{},
 	}
 }
 
@@ -142,47 +159,89 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 	if ep, ok := r.cached(host); ok {
 		return ep, nil
 	}
-	fl := r.hostFlight(host)
-	fl.Lock()
-	defer fl.Unlock()
-	if ep, ok := r.cached(host); ok {
-		return ep, nil // another goroutine fetched while we waited
-	}
-	url := r.scheme + "://" + host + "/.well-known/ramp.json"
-	doc, err := fetchWellKnownDoc(ctx, r.http, url)
+	// A concurrent burst for one host issues ONE fetch and shares its result. The
+	// group holds a key only while its call is in flight, so coalescing state
+	// cannot accumulate over the caller-influenced host space — including for the
+	// hosts whose fetches fail, which is where a hand-rolled per-host mutex map
+	// grows fastest.
+	v, err, _ := r.sf.Do(host, func() (any, error) {
+		if ep, ok := r.cached(host); ok {
+			return ep, nil // another goroutine fetched while we waited
+		}
+		url := r.scheme + "://" + host + "/.well-known/ramp.json"
+		doc, ferr := fetchWellKnownDoc(ctx, r.http, url)
+		if ferr != nil {
+			return "", ferr
+		}
+		if doc.Endpoint == "" {
+			return "", fmt.Errorf("%w: host=%q", ErrNoEndpoint, host)
+		}
+		r.store(host, doc.Endpoint)
+		return doc.Endpoint, nil
+	})
 	if err != nil {
 		return "", err
 	}
-	if doc.Endpoint == "" {
-		return "", fmt.Errorf("%w: host=%q", ErrNoEndpoint, host)
-	}
-	r.store(host, doc.Endpoint)
-	return doc.Endpoint, nil
+	return v.(string), nil
 }
 
+// cached returns host's endpoint when the entry is present and fresh, promoting
+// it to most-recently-used. A stale entry is left in place rather than deleted:
+// it still holds a slot the LRU can reclaim, and the next successful fetch
+// overwrites it.
 func (r *WellKnownEndpointResolver) cached(host string) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	entry, ok := r.cache[host]
-	if !ok || r.now().After(entry.exp) {
+	el, ok := r.cache[host]
+	if !ok {
 		return "", false
 	}
+	entry := el.Value.(*endpointEntry)
+	if r.now().After(entry.exp) {
+		return "", false
+	}
+	r.order.MoveToFront(el)
 	return entry.endpoint, true
 }
 
+// store records host's endpoint, evicting the least-recently-used entry once the
+// cache is full.
+//
+// Least-recently-used and not drop-the-whole-map: dropping empties the cache
+// exactly when it is under most pressure, and it makes which entries survive a
+// function of the order a caller names hosts — a property the caller controls.
 func (r *WellKnownEndpointResolver) store(host, endpoint string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.cache[host] = endpointEntry{endpoint: endpoint, exp: r.now().Add(r.ttl)}
+	exp := r.now().Add(r.ttl)
+	if el, ok := r.cache[host]; ok {
+		entry := el.Value.(*endpointEntry)
+		entry.endpoint, entry.exp = endpoint, exp
+		r.order.MoveToFront(el)
+		return
+	}
+	if len(r.cache) >= maxCachedEndpoints {
+		if oldest := r.order.Back(); oldest != nil {
+			r.order.Remove(oldest)
+			delete(r.cache, oldest.Value.(*endpointEntry).host)
+		}
+	}
+	r.cache[host] = r.order.PushFront(&endpointEntry{host: host, endpoint: endpoint, exp: exp})
 }
 
-func (r *WellKnownEndpointResolver) hostFlight(host string) *sync.Mutex {
+// size reports how many hosts the cache currently holds, and holds reports
+// whether one is present without disturbing recency. Both exist for the eviction
+// test: the bound has no observable behaviour other than a fetch count, and
+// counting fetches cannot distinguish an eviction from a TTL expiry.
+func (r *WellKnownEndpointResolver) size() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	fl, ok := r.flight[host]
-	if !ok {
-		fl = &sync.Mutex{}
-		r.flight[host] = fl
-	}
-	return fl
+	return len(r.cache)
+}
+
+func (r *WellKnownEndpointResolver) holds(host string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.cache[host]
+	return ok
 }

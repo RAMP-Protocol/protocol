@@ -16,7 +16,6 @@
     "connect.WithAgentKey": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithClientOptions": "Go escape hatch for raw connectrpc.ClientOption values, mirroring connectserver.WithHandlerOptions; py/ts have no Connect option type to pass through.",
     "connect.WithEndpointResolver": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
-    "connect.WithFetchTransport": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithGuardedBaseTransport": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithHTTPClient": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithIdempotencyKey": "Go functional-option builder; py/ts pass options via kwargs/options objects.",

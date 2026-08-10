@@ -2,8 +2,10 @@ package connect_test
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,20 +68,75 @@ func TestReportUsage_GuardRefusesAPrivateEndpoint(t *testing.T) {
 // A caller-supplied transport goes UNDER the guard, never in place of it. Passing
 // one must not reopen the address guard — that coupling is the whole reason the
 // seam takes a base rather than a whole round-tripper.
+//
+// The TLS-dialer case is the one that matters: net/http prefers a transport's own
+// TLS dialer over DialContext on https, which is every RAMP leg, so a base
+// carrying one would take the dial past the address pin entirely. An empty base
+// cannot express that, which is why it alone proved less than it appeared to.
 func TestReportUsage_GuardSurvivesACallerSuppliedTransport(t *testing.T) {
+	bases := map[string]*http.Transport{
+		"empty": {},
+		"custom TLS dialer": {
+			DialTLSContext: func(_ context.Context, network, addr string) (net.Conn, error) {
+				return tls.Dial(network, addr, &tls.Config{InsecureSkipVerify: true}) //nolint:gosec // the point is that this dial must never happen
+			},
+		},
+		"legacy TLS dialer": {
+			DialTLS: func(network, addr string) (net.Conn, error) {
+				return tls.Dial(network, addr, &tls.Config{InsecureSkipVerify: true}) //nolint:gosec // the point is that this dial must never happen
+			},
+		},
+	}
+	for name, base := range bases {
+		t.Run(name, func(t *testing.T) {
+			sig := newSigningFixture(t)
+			client := rampconnect.NewClient("https://home.invalid",
+				rampconnect.WithSigner(sig.signer),
+				rampconnect.WithGuardedBaseTransport(base),
+				rampconnect.WithEndpointResolver(fixedEndpoint{endpoint: "https://localhost:1"}),
+			)
+
+			_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
+				Exchange:      proto.String("localhost"),
+				TransactionId: "txn-1",
+			})
+			if err == nil || !strings.Contains(err.Error(), "SSRF guard") {
+				t.Fatalf("error = %v, want the guard still installed under the injected transport", err)
+			}
+		})
+	}
+}
+
+// The content fetch is the leg the SDK's own contract names — it "dials only
+// through the SSRF-guarded client" — and it shares the same base-transport seam,
+// so it inherits the same bypass. A delivery URL names a host another party
+// chose, and the request carries a live proof of possession of the agent key, so
+// this is the leg where a bypass costs the most.
+func TestFetch_GuardSurvivesACallerSuppliedTLSDialer(t *testing.T) {
 	sig := newSigningFixture(t)
+	content := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("internal bytes"))
+	}))
+	defer content.Close()
+	tlsCfg := content.Client().Transport.(*http.Transport).TLSClientConfig
+
 	client := rampconnect.NewClient("https://home.invalid",
 		rampconnect.WithSigner(sig.signer),
-		rampconnect.WithGuardedBaseTransport(&http.Transport{}),
-		rampconnect.WithEndpointResolver(fixedEndpoint{endpoint: "https://localhost:1"}),
+		rampconnect.WithAgentKey(sig.pub),
+		rampconnect.WithGuardedBaseTransport(&http.Transport{
+			TLSClientConfig: tlsCfg,
+			DialTLSContext: func(_ context.Context, network, addr string) (net.Conn, error) {
+				return tls.Dial(network, addr, tlsCfg)
+			},
+		}),
 	)
 
-	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String("localhost"),
-		TransactionId: "txn-1",
-	})
-	if err == nil || !strings.Contains(err.Error(), "SSRF guard") {
-		t.Fatalf("error = %v, want the guard still installed under the injected transport", err)
+	_, err := client.Fetch(context.Background(), content.URL+"/doc")
+	if err == nil {
+		t.Fatal("a bound fetch reached a loopback delivery host — the dial guard was bypassed")
+	}
+	if !strings.Contains(err.Error(), "SSRF guard") {
+		t.Errorf("error = %v, want the dial-time address guard to be the refusal", err)
 	}
 }
 

@@ -4,6 +4,9 @@ package resolvers
 // unexported constructor, so it is exercised from inside the package.
 
 import (
+	"context"
+	"crypto/tls"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -126,6 +129,47 @@ func TestSSRFGuardNilsProxy(t *testing.T) {
 	client := &http.Client{Transport: guarded}
 	if _, err := client.Get(srv.URL); err == nil { // srv.URL is loopback
 		t.Fatal("guarded client over a proxied base reached a loopback target — Proxy was honored, bypassing the dial guard")
+	} else if !strings.Contains(err.Error(), "SSRF guard") {
+		t.Fatalf("dial refused for the wrong reason (want SSRF guard): %v", err)
+	}
+}
+
+// TestSSRFGuardNilsCustomTLSDialers: net/http prefers a transport's own TLS
+// dialer over DialContext for https, so a base carrying DialTLSContext (or the
+// legacy DialTLS) would take the dial through the caller's dialer and the
+// address pin would never run — on https, which is every RAMP leg. SSRFGuard
+// must clear both, so a guarded client built over such a base still refuses a
+// loopback target at the dial seam.
+//
+// The base also carries the server's own TLS config, which is what a caller
+// customising TLS legitimately supplies: that must keep working, and only the
+// dialer is dropped.
+func TestSSRFGuardNilsCustomTLSDialers(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	tlsCfg := srv.Client().Transport.(*http.Transport).TLSClientConfig
+
+	base := &http.Transport{
+		TLSClientConfig: tlsCfg,
+		DialTLSContext: func(_ context.Context, network, addr string) (net.Conn, error) {
+			return tls.Dial(network, addr, tlsCfg)
+		},
+		DialTLS: func(network, addr string) (net.Conn, error) {
+			return tls.Dial(network, addr, tlsCfg)
+		},
+	}
+	guarded := SSRFGuard(base)
+	if guarded.DialTLSContext != nil || guarded.DialTLS != nil {
+		t.Fatal("SSRFGuard left a custom TLS dialer installed — net/http prefers it over DialContext on https, so the address pin never runs")
+	}
+	if guarded.TLSClientConfig == nil {
+		t.Error("SSRFGuard dropped the caller's TLS config; only the dialer is mutually exclusive with the pin")
+	}
+	client := &http.Client{Transport: guarded}
+	if _, err := client.Get(srv.URL); err == nil { // srv.URL is loopback
+		t.Fatal("guarded client over a base with a custom TLS dialer reached a loopback target — the dial guard was bypassed")
 	} else if !strings.Contains(err.Error(), "SSRF guard") {
 		t.Fatalf("dial refused for the wrong reason (want SSRF guard): %v", err)
 	}

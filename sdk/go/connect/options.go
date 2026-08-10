@@ -162,15 +162,20 @@ func WithEndpointResolver(r EndpointResolver) ClientOption {
 }
 
 // WithGuardedBaseTransport carries the caller's own transport settings — a tuned
-// connection pool, client certificates — UNDERNEATH the SSRF guard on both legs
-// that dial an address another party named: the content fetch, and the RPCs that
-// route to the Exchange an offer identified.
+// connection pool, client certificates via TLSClientConfig — UNDERNEATH the SSRF
+// guard on both legs that dial an address another party named: the content fetch,
+// and the RPCs that route to the Exchange an offer identified.
 //
 // It is not a way to replace the guard. Those two legs dial hosts the client did
 // not configure, so the dial-time address pin and the https-only scheme check are
 // applied in every case; a caller supplies what sits under them. The only way to
 // reach a private or plaintext endpoint is the deliberate, deployment-level
 // SKIP_SSRF / ALLOW_INSECURE opt-out.
+//
+// One setting is dropped rather than carried: a custom TLS dialer. net/http
+// prefers a transport's own TLS dialer over the pinned one on https, so honouring
+// it would take every signed call around the address check. TLS itself is
+// configured through TLSClientConfig, which is kept.
 //
 // The home Exchange and the Broker are operator-configured origins and are
 // trusted as far as that configuration is, so they dial through WithHTTPClient's

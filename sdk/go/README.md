@@ -116,7 +116,9 @@ import "github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
   `NewWBAKeyResolver` (WBA directory, revocation/expiry-aware, with a `Run` poller).
 - **Endpoint resolver** — `NewWellKnownEndpointResolver` discovers an Exchange's
   own service endpoint (`WellKnownManifest.endpoint`) from `/.well-known/ramp.json`
-  (`ErrNoEndpoint` when absent), host-keyed and cached per host.
+  (`ErrNoEndpoint` when absent), host-keyed and cached per host. The key is an
+  offer-supplied host, so the cache evicts least-recently-used at a fixed cap and
+  concurrent lookups for one host coalesce to a single fetch.
 - **Active-key selection** — `ActiveEd25519Key` / `ActiveEd25519KeyWithExpiry` pick
   an identity's window-active key by document order; the `…Screened` variants fold in
   a revoked-thumbprint screen. `NewCachedOfferKeyResolver` caches the selected offer

@@ -299,6 +299,28 @@ def completeness_failures(go_symbols: dict[str, str], parity_map: ParityMap) -> 
     ]
 
 
+def staleness_failures(go_symbols: dict[str, str], parity_map: ParityMap) -> list[str]:
+    """Every map key must still name a live Go public symbol.
+
+    The mirror of completeness_failures. That walk starts from the live Go
+    surface, so it can only see a symbol that was ADDED without a map entry; an
+    entry left behind when its symbol was REMOVED is invisible to it, and stays
+    in the published matrix indefinitely claiming a surface that no longer
+    exists. Both directions are needed to keep the map an accurate description
+    of the oracle.
+
+    The live enumeration covers exactly _GO_PACKAGES, so a key naming any other
+    package reads as stale — correctly: the gate claims authority over those
+    packages and nothing else.
+    """
+    accounted = set(parity_map["symbols"]) | set(parity_map["go_exclusions"])
+    return [
+        f"{key}: mapped in symbol-map.json but no longer exported by Go — a removed "
+        f"symbol left in the map keeps appearing in the generated parity matrix"
+        for key in sorted(accounted - set(go_symbols))
+    ]
+
+
 # --------------------------------------------------------------------------- #
 # (ii) COMPLETENESS — needs the Go toolchain
 # --------------------------------------------------------------------------- #
@@ -313,6 +335,19 @@ def test_every_go_public_symbol_is_mapped_or_excluded() -> None:
     parity_map = _load_map()
     failures = completeness_failures(enumerate_go(), parity_map)
     assert not failures, "unmapped Go public symbols:\n  " + "\n  ".join(failures)
+
+
+def test_no_map_entry_outlives_its_go_symbol() -> None:
+    if not _go_available():
+        pytest.skip(
+            "LOUD SKIP: `go` toolchain not on PATH — cannot enumerate the Go oracle "
+            "surface, so the STALENESS half of the API-parity gate cannot run. CI's "
+            "sdk-l1 job has actions/setup-go and DOES run it; a green local run without "
+            "Go is NOT a green gate."
+        )
+    parity_map = _load_map()
+    failures = staleness_failures(enumerate_go(), parity_map)
+    assert not failures, "stale symbol-map entries:\n  " + "\n  ".join(failures)
 
 
 # --------------------------------------------------------------------------- #
@@ -496,3 +531,26 @@ def test_completeness_bites_on_an_unmapped_go_symbol() -> None:
     injected = {"helpers.FakeUnmappedSymbol": "FakeUnmappedSymbol"}
     failures = completeness_failures(injected, parity_map)
     assert any("FakeUnmappedSymbol" in f for f in failures), failures
+
+
+def test_staleness_bites_on_a_map_entry_with_no_go_symbol() -> None:
+    """A map entry naming a symbol Go no longer exports MUST turn the gate RED.
+
+    Checked on BOTH halves: an exclusion is the half that outlived its symbol in
+    practice, and a `symbols` entry would be just as invisible to the
+    live-Go-first walk.
+    """
+    live = {"helpers.RealSymbol": "RealSymbol"}
+    excluded_stale: ParityMap = {
+        "symbols": {},
+        "go_exclusions": {"helpers.RealSymbol": "reason", "connect.GoneOption": "reason"},
+    }
+    failures = staleness_failures(live, excluded_stale)
+    assert any("connect.GoneOption" in f for f in failures), failures
+    assert not any("RealSymbol" in f for f in failures), failures
+
+    mapped_stale: ParityMap = {
+        "symbols": {"helpers.GoneType": {"python": "gone", "ts": "gone", "allowlist_reason": None}},
+        "go_exclusions": {},
+    }
+    assert any("helpers.GoneType" in f for f in staleness_failures(live, mapped_stale))
