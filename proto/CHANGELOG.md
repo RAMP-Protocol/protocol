@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+**SDK (all 3 languages): the registration-failure builder can carry the field errors
+(additive, no wire change).** `helpers.RegistrationFailureDetail` (Go),
+`registration_failure_detail` (Python) and `registrationFailureDetail` (TS) now accept the
+offending `registration_data` members alongside the reason — variadic in Go, an optional
+trailing argument in Python and TS, so the six reasons that carry no per-member detail keep
+their three-argument call. Without this a service refusing a non-conforming registration had
+to build the `ErrorDetail` by hand or mutate the builder's result, defeating the rule these
+helpers exist for: one place per language where the ADR-019 envelope is constructed. This is
+the only `*Detail` builder that reaches past the reason enum — the schema refusal is useless
+without naming what failed, whereas the sibling detail lists
+(`TransactionDenial.restriction_mismatches`, `CatalogRejection.rejected_paths`) stay
+caller-set after construction.
+
+The shared oracle gains a `registration_failure_field_errors` vector and a `field_errors`
+projection, replayed on both halves in all three languages: the construct replays feed the
+members back through the builder and assert byte-parity with the Go wire, and the read
+replays assert a reader extracts them positionally. The vector carries both member shapes —
+a pointer into the payload and the empty root pointer for a whole-object failure. That
+second one caught a real divergence: canonical proto-JSON omits an empty scalar, so the wire
+form of a root-pointer entry has no `path` key at all, while the generated Pydantic model
+defaults `path` to `""` and the generated Zod schema declares `.default("")`, both
+materializing a member Go omits. Both builders now map an empty path to unpopulated, the
+exact inverse of the read side normalizing an absent path to `""`.
+
 **Registration data becomes schema-enforceable: `WellKnownManifest.registration_schema`
 (field 29) + `REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA` (additive, no wire
 break).** An Exchange MAY publish, in its `ramp.json`, a JSON Schema (draft 2020-12, max

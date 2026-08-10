@@ -57,7 +57,35 @@ type errorDetailVector struct {
 	Metadata    map[string]string `json:"metadata"`
 	ReasonField string            `json:"reason_field"`
 	ReasonEnum  string            `json:"reason_enum"`
-	WireJSON    any               `json:"wire_json"`
+	// FieldErrors is the RegistrationFailure per-member detail, null on every
+	// vector that carries none. It is projected separately from wire_json because
+	// the construct-side replays feed it BACK to the builder (the one builder that
+	// takes more than a reason), and the read-side replays assert a reader
+	// extracts it — the same double duty metadata already does.
+	FieldErrors []errorDetailFieldError `json:"field_errors"`
+	WireJSON    any                     `json:"wire_json"`
+}
+
+// errorDetailFieldError is the projection of one RegistrationFieldError.
+type errorDetailFieldError struct {
+	Path  string `json:"path"`
+	Error string `json:"error"`
+}
+
+// fieldErrorProjection reads the per-member detail back off d through the real
+// getters, so the projection cannot drift from what the builder set. Returns nil
+// when the detail carries none (every non-registration vector, and a registration
+// refusal whose reason needs no member list).
+func fieldErrorProjection(d *rampv1.ErrorDetail) []errorDetailFieldError {
+	fes := d.GetRegistrationFailure().GetFieldErrors()
+	if len(fes) == 0 {
+		return nil
+	}
+	out := make([]errorDetailFieldError, len(fes))
+	for i, fe := range fes {
+		out[i] = errorDetailFieldError{Path: fe.GetPath(), Error: fe.GetError()}
+	}
+	return out
 }
 
 // errorDetailJSONOptions is the PINNED proto-JSON option set the ErrorDetail wire
@@ -137,6 +165,7 @@ func vectorFrom(t *testing.T, name string, d *rampv1.ErrorDetail) errorDetailVec
 		Metadata:    d.GetMetadata(), // nil when the detail carries none
 		ReasonField: field,
 		ReasonEnum:  enum,
+		FieldErrors: fieldErrorProjection(d), // nil when the detail carries none
 		WireJSON:    wireOf(t, d),
 	}
 }
@@ -195,6 +224,19 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 		"ramp.v1.RegistrationService", "domain not verified",
 		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED)
 
+	// The schema-enforcement refusal: the one detail that carries per-member
+	// context, so it is the only vector proving a builder emits more than the
+	// reason enum. Both member shapes are present — a pointer INTO the payload,
+	// and the empty root pointer for a whole-object failure (oneOf, minProperties)
+	// that belongs to no single member, which is the boundary a client most
+	// plausibly gets wrong by treating "" as unset.
+	registrationInvalidData := RegistrationFailureDetail(
+		"ramp.v1.ExchangeService", "registration_data does not match the published registration_schema",
+		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+		&rampv1.RegistrationFieldError{Path: "/vat_id", Error: "must match ^[A-Z]{2}[0-9]+$"},
+		&rampv1.RegistrationFieldError{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"},
+	)
+
 	disputeFailure := DisputeFailureDetail(
 		"ramp.v1.ExchangeService", "no such transaction",
 		rampv1.DisputeFailureReason_DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND)
@@ -219,6 +261,7 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 		{"multi_key_metadata_with_reason", multiKey},
 		{"catalog_rejection_reason", catalogRejection},
 		{"registration_failure_reason", registrationFailure},
+		{"registration_failure_field_errors", registrationInvalidData},
 		{"dispute_failure_reason", disputeFailure},
 		{"domain_verification_failure_reason", domainVerificationFailure},
 		{"usage_report_rejection_reason", usageReportRejection},

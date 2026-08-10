@@ -95,9 +95,14 @@ def test_builder_emits_go_oracle_wire(vector: dict) -> None:
     and assert it serializes byte-for-byte to the Go oracle wire_json."""
     build = _BUILDERS[vector["reason_field"]]
 
-    # arity is exactly (domain, message, reason); the reason NAME string coerces to
-    # the generated enum member (proto-JSON enums are NAME strings).
-    detail = build(vector["domain"], vector["message"], vector["reason_enum"])
+    # Base arity is (domain, message, reason); the reason NAME string coerces to the
+    # generated enum member (proto-JSON enums are NAME strings). registration_failure
+    # is the one family whose builder takes a fourth argument — the per-member detail
+    # its INVALID_REGISTRATION_DATA reason is useless without — so a vector carrying
+    # field_errors feeds them BACK to the builder rather than setting them
+    # post-construction. Every other family's sub-fields stay caller-set.
+    extra = {"field_errors": vector["field_errors"]} if vector.get("field_errors") else {}
+    detail = build(vector["domain"], vector["message"], vector["reason_enum"], **extra)
 
     # metadata is set POST-construction, mirroring the Go emitter (multiKey.Metadata
     # after base()); the builder omits it by design.

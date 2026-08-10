@@ -48,7 +48,7 @@ from wire.models import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Iterable, Mapping, Sequence
     from enum import Enum
 
 # The fully-qualified proto name Connect stamps on an ErrorDetail transport detail.
@@ -119,21 +119,32 @@ def error_detail_from(err: Mapping[str, Any] | Iterable[Any]) -> ErrorDetail | N
     return None
 
 
-def _reason_detail(domain: str, message: str, reason_field: str, reason: Enum) -> ErrorDetail:
+def _reason_detail(
+    domain: str,
+    message: str,
+    reason_field: str,
+    reason: Enum,
+    extra: dict[str, Any] | None = None,
+) -> ErrorDetail:
     """Build an ErrorDetail carrying exactly one typed reason oneof block.
 
     The single place the WRITE half constructs the generated model — the analogue of
     Go's private ``base()`` plus a oneof assignment. Construction goes through
     ``ErrorDetail.model_validate`` (the same generated-model surface the READ half's
     :func:`parse_error_detail` uses), so the generated schema owns field names, enum
-    coercion, and — via :meth:`WireModel.model_dump` — the canonical proto-JSON. Only
-    the reason block is set; the reason message's extra sub-fields (``offer_id``,
-    ``rejected_paths``, …) and ``metadata`` are omitted, mirroring the Go builders. A
-    caller that needs them mutates the returned model post-construction.
+    coercion, and — via :meth:`WireModel.model_dump` — the canonical proto-JSON.
+
+    ``extra`` merges additional members into the reason block; only
+    :func:`registration_failure_detail` passes it, for the per-member detail its
+    reason is useless without. Every other reason message's sub-fields
+    (``offer_id``, ``restriction_mismatches``, ``rejected_paths``, …) and
+    ``metadata`` stay omitted, mirroring the Go builders — a caller that needs them
+    mutates the returned model post-construction.
     """
-    return ErrorDetail.model_validate(
-        {"domain": domain, "message": message, reason_field: {"reason": reason}}
-    )
+    block: dict[str, Any] = {"reason": reason}
+    if extra:
+        block.update(extra)
+    return ErrorDetail.model_validate({"domain": domain, "message": message, reason_field: block})
 
 
 def transaction_denial_detail(domain: str, message: str, reason: DenialReason) -> ErrorDetail:
@@ -166,14 +177,38 @@ def catalog_rejection_detail(
 
 
 def registration_failure_detail(
-    domain: str, message: str, reason: RegistrationFailureReason
+    domain: str,
+    message: str,
+    reason: RegistrationFailureReason,
+    field_errors: Sequence[Mapping[str, str]] | None = None,
 ) -> ErrorDetail:
     """Build an ErrorDetail carrying a typed RegistrationFailureReason.
 
     Python peer of Go ``helpers.RegistrationFailureDetail`` (agent/provider
     registration refused).
+
+    ``field_errors`` carries the offending ``registration_data`` members when the
+    reason is ``REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA`` — each a
+    ``{"path", "error"}`` mapping, ``path`` an RFC 6901 JSON Pointer relative to
+    ``registration_data`` (``""`` addresses the whole object). It is optional
+    rather than positional so the six reasons that carry no per-member detail keep
+    the three-argument call, matching Go's variadic. Passing it with any other
+    reason is a caller error — the field's contract says the list is empty then.
     """
-    return _reason_detail(domain, message, "registration_failure", reason)
+    extra = None
+    if field_errors:
+        # An empty path is "the whole object", and canonical proto-JSON omits an
+        # empty scalar — so the wire form of a root-pointer entry carries no `path`
+        # key at all. The generated model defaults `path` to "" rather than None,
+        # and model_dump only drops None, so passing "" through would emit a member
+        # Go omits. Map empty -> None here (this repo's proto3 "unpopulated"), which
+        # is the exact inverse of the read side normalizing absent -> "".
+        extra = {
+            "field_errors": [
+                {"path": fe.get("path") or None, "error": fe["error"]} for fe in field_errors
+            ]
+        }
+    return _reason_detail(domain, message, "registration_failure", reason, extra)
 
 
 def dispute_failure_detail(domain: str, message: str, reason: DisputeFailureReason) -> ErrorDetail:

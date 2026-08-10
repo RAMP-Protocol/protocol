@@ -209,21 +209,50 @@ export function catalogRejectionDetail(
 	});
 }
 
+/** One offending `registration_data` member on a schema-enforcement refusal. */
+export type RegistrationFieldError = {
+	/** RFC 6901 JSON Pointer relative to `registration_data`; "" is the whole object. */
+	path: string;
+	/** Non-authoritative description of what failed; states the constraint, never the value. */
+	error: string;
+};
+
 /**
  * Build an ErrorDetail carrying a typed RegistrationFailureReason.
  * TS peer of Go `helpers.RegistrationFailureDetail` (agent/provider registration
  * refused).
+ *
+ * `fieldErrors` carries the offending `registration_data` members when the reason
+ * is `REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA`. It is optional
+ * rather than positional so the six reasons that carry no per-member detail keep
+ * the three-argument call, matching Go's variadic. Passing it with any other
+ * reason is a caller error — the field's contract says the list is empty then.
  */
 export function registrationFailureDetail(
 	domain: string,
 	message: string,
 	reason: RegistrationFailureReason,
+	fieldErrors?: readonly RegistrationFieldError[],
 ): ErrorDetail {
-	return ErrorDetailSchema.parse({
+	const detail = ErrorDetailSchema.parse({
 		domain,
 		message,
-		registration_failure: { reason },
+		registration_failure: {
+			reason,
+			...(fieldErrors?.length ? { field_errors: [...fieldErrors] } : {}),
+		},
 	});
+	// An empty path is "the whole object", and canonical proto-JSON omits an empty
+	// scalar — so the wire form of a root-pointer entry carries no `path` key at
+	// all. The generated Zod schema declares `.default("")`, which materializes the
+	// member on parse, so it is dropped back off here. This is the exact inverse of
+	// the read side normalizing an absent path to "".
+	const rf = (detail as { registration_failure?: { field_errors?: { path?: string }[] } })
+		.registration_failure;
+	for (const fe of rf?.field_errors ?? []) {
+		if (fe.path === "") delete fe.path;
+	}
+	return detail;
 }
 
 /**
