@@ -164,6 +164,12 @@ func TestDocSignatureAlgorithm(t *testing.T) {
 // and `VerifiedOffer:` cannot match either — `Ver` must be followed immediately
 // by optional whitespace and then `:` or `=`. walkDocs fatals on zero files
 // scanned, so this cannot pass vacuously.
+//
+// It accepts `=` as well as `:` on purpose, and is therefore BROADER than the
+// sdk/go SSOT matcher, which reads the struct-literal form only. The asymmetry is
+// deliberate: prose samples are written both ways, and none of them construct a
+// WellKnownManifest, so the form that would false-positive in Go source cannot
+// occur here. Do not reconcile the two by loosening the source-side matcher.
 var goVerLiteralRe = regexp.MustCompile(`\bVer\s*[:=]+\s*"([^"]*)"`)
 
 func TestDocNoBareVerLiteral(t *testing.T) {
