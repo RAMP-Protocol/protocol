@@ -9,11 +9,7 @@ package connect_test
 // sdk/go/ramp on the core/connect split (ramp.ReplayStore → core.ReplayStore).
 
 import (
-	"crypto/ed25519"
-	"testing"
-
 	"context"
-	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"sync"
 	"time"
 
@@ -70,25 +66,4 @@ func testRequester() *rampv1.Requester {
 		Domain: "agent.test",
 		Type:   rampv1.RequesterType_REQUESTER_TYPE_AGENT,
 	}
-}
-
-// newAcceptanceKey mints the agent's own key: the one that signs offer
-// acceptances and delivery-fetch proofs, and whose thumbprint an Exchange binds a
-// delivery URL to. The public half is returned alongside because a Signer cannot
-// yield it and a bound fetch has to present it.
-func newAcceptanceKey(t *testing.T) (ed25519.PublicKey, helpers.Signer) {
-	t.Helper()
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatalf("generate acceptance key: %v", err)
-	}
-	thumb, err := helpers.Thumbprint(pub)
-	if err != nil {
-		t.Fatalf("thumbprint acceptance key: %v", err)
-	}
-	signer, err := helpers.NewEd25519Signer(thumb, priv)
-	if err != nil {
-		t.Fatalf("build acceptance signer: %v", err)
-	}
-	return pub, signer
 }

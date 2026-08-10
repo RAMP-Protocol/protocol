@@ -29,6 +29,13 @@ func ErrorDetailFrom(err error) (*rampv1.ErrorDetail, bool) {
 	if !errors.As(err, &cerr) {
 		return nil, false
 	}
+	return errorDetailFromConnect(cerr)
+}
+
+// errorDetailFromConnect reads the first RAMP ErrorDetail off an already-unwrapped
+// Connect error. Split out so the CallError bridge can reuse the one extraction
+// rather than restating it.
+func errorDetailFromConnect(cerr *connectrpc.Error) (*rampv1.ErrorDetail, bool) {
 	for _, d := range cerr.Details() {
 		msg, verr := d.Value()
 		if verr != nil {

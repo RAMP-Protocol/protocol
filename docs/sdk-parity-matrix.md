@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 77 symbols at cross-language parity · 14 documented divergences · 133 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
+**At a glance:** 77 symbols at cross-language parity · 14 documented divergences · 137 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -161,15 +161,18 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connect.CallErrorKind` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
 | `connect.CallOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
 | `connect.ClientOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.DefaultCallTimeout` | Go default deadline for a call to an offer-derived Exchange; py/ts carry the same default inline in their client. |
 | `connect.EndpointResolver` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
 | `connect.ExecuteOption` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
+| `connect.MaxRPCReadBytes` | Go default response-size bound for a Connect call; py/ts carry the same default inline in their unary client. |
 | `connect.NewBrokerClient` | Part of the Go-only typed Connect client; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
 | `connect.NewValidateInterceptor` | Go-only protovalidate interceptor (matrix SERVER-role validation row: TS/Py absent). |
 | `connect.Validation` | Part of the Go-only typed Connect client validation option; see the OPEN Connect-client DECISION in docs/sdk-parity-matrix.md. |
-| `connect.WithAcceptanceSigner` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithAgentKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithClientOptions` | Go escape hatch for raw connectrpc.ClientOption values, mirroring connectserver.WithHandlerOptions; py/ts have no Connect option type to pass through. |
 | `connect.WithEndpointResolver` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithFetchTransport` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithGuardedBaseTransport` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithHTTPClient` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithIdempotencyKey` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithInterceptors` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
@@ -287,6 +290,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `resolvers.FetchError` | Go typed error for the content leg; py/ts raise/throw a runtime-native error carrying the same class and reason. |
 | `resolvers.FetchFailure` | Go failure-class enum for the content leg; py/ts express the same classes as string literals. |
 | `resolvers.NewContentFetcher` | Go constructor for the content-download leg; py/ts fold construction into their client. |
+| `resolvers.NewGuardedTransport` | Go constructor composing the SSRF guard over a caller's base transport; py/ts expose their guarded fetch as a single factory with no separable base. |
 | `resolvers.ProofSigner` | Go interface seam that keeps key custody out of the dialing tier; py/ts inject a signing callable instead of a named interface. |
 | `resolvers.SSRFCheckRedirect` | Go redirect-policy hook; py/ts fold redirect checks into the guard (async_ssrf_guard / the guarded fetch). |
 

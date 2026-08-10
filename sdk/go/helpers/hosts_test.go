@@ -25,6 +25,7 @@ func TestIsBareHost(t *testing.T) {
 		"fragment":                 {"exchange.example#frag", false, false},
 		"userinfo":                 {"agent@exchange.example", false, false},
 		"scheme and path":          {"https://exchange.example/v1", false, false},
+		"trailing colon":           {"exchange.example:", false, false},
 		"empty":                    {"", false, true},
 		"whitespace":               {"   ", false, true},
 		"control character in ref": {"exchange.example\n", false, true},
@@ -88,17 +89,36 @@ func TestHostAnchored(t *testing.T) {
 	}
 }
 
-// A port on the anchor or the candidate is part of the host and is compared as
-// such, so an Exchange advertising a different port on the same name is NOT
-// anchored to it. Stated as its own case because it is the one place "same host"
+// The port is NOT part of the comparison. The property being enforced is "not an
+// unrelated host", and a service on another port of the same name is not another
+// host — TLS binds hostnames, not ports. Comparing with the port would leave any
+// Exchange not on 443 permanently unable to receive a usage report, for no
+// security gain. Stated as its own case because it is the one place "same host"
 // and "same origin" pull apart.
-func TestHostAnchored_PortIsPartOfTheHost(t *testing.T) {
-	anchored, err := helpers.HostAnchored("a.com:8443", "a.com:9000")
+func TestHostAnchored_IgnoresThePort(t *testing.T) {
+	cases := map[string][2]string{
+		"same name, different ports":   {"a.com:8443", "a.com:9000"},
+		"bare anchor, ported endpoint": {"a.com", "https://a.com:8443/v1"},
+		"subdomain on a port":          {"a.com", "https://cdn.a.com:8443/v1"},
+	}
+	for name, pair := range cases {
+		t.Run(name, func(t *testing.T) {
+			anchored, err := helpers.HostAnchored(pair[0], pair[1])
+			if err != nil {
+				t.Fatalf("HostAnchored: %v", err)
+			}
+			if !anchored {
+				t.Errorf("%q must be anchored to %q — the port is not part of the host", pair[1], pair[0])
+			}
+		})
+	}
+	// A different NAME is still refused, ported or not.
+	anchored, err := helpers.HostAnchored("a.com", "https://evil-a.com:8443")
 	if err != nil {
 		t.Fatalf("HostAnchored: %v", err)
 	}
 	if anchored {
-		t.Error("a.com:9000 must not be anchored to a.com:8443 — the port is part of the host")
+		t.Error("a port must not soften the label-boundary rule")
 	}
 }
 

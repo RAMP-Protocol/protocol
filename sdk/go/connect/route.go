@@ -3,6 +3,7 @@ package connect
 import (
 	"container/list"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
 // Routing a call to the Exchange that issued an offer.
@@ -35,10 +37,11 @@ type EndpointResolver interface {
 }
 
 // vetExchangeEndpoint resolves exchangeDomain to an origin a signed call may be
-// sent to, or refuses. Every refusal is a CallNotSent naming the check that
-// declined, because "the Exchange said no", "we could not reach it" and "we
-// refused to dial it" are three different outcomes and only the class tells them
-// apart.
+// sent to, or refuses — naming the check that declined, and classifying it by
+// CAUSE. "The Exchange said no", "we could not reach it" and "we refused to dial
+// it" are three different outcomes calling for three different responses, and
+// only the class tells them apart: a verdict is final, a transport failure is
+// worth retrying.
 //
 // It is one function so the vetting reads in one place: the checks are the part
 // that grows, and seeing them together is what makes it evident that no branch
@@ -64,7 +67,20 @@ func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchang
 	}
 	endpoint, err := resolver.ResolveEndpoint(ctx, exchangeDomain)
 	if err != nil {
-		return "", notSent(op, fmt.Errorf("resolve exchange %q: %w", exchangeDomain, err))
+		// Classified by CAUSE, not by position. Reaching the manifest is a network
+		// operation, and a DNS blip or a 500 from an otherwise healthy Exchange is
+		// TRANSIENT — reporting it as a refusal would tell a caller "we declined to
+		// send this, do not retry" and permanently drop a usage report over a
+		// momentary outage. Only a verdict is a refusal: the host was not allowed,
+		// or the manifest was read and advertises no endpoint at all.
+		kind := CallUnreachable
+		if errors.Is(err, resolvers.ErrNoEndpoint) {
+			kind = CallNotSent
+		}
+		return "", &CallError{
+			Kind: kind, Op: op,
+			Err: fmt.Errorf("resolve exchange %q: %w", exchangeDomain, err),
+		}
 	}
 	// The manifest that named this endpoint is served by the very host the call is
 	// bound for, so the endpoint is only as trustworthy as that host. Anchoring it
@@ -151,4 +167,15 @@ func (p *exchangePool) size() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return len(p.entries)
+}
+
+// holds reports whether origin is currently cached, without disturbing recency.
+// Both accessors exist for the eviction test: the LRU has no observable behaviour
+// other than a dial count, and counting dials would mean mocking the transport
+// the suite deliberately never mocks.
+func (p *exchangePool) holds(origin string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.entries[origin]
+	return ok
 }

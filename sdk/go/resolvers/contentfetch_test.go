@@ -118,13 +118,13 @@ func betweenQuotes(s, key string) string {
 	return rest[:end]
 }
 
-// plainTransport is what a test injects instead of the guarded transport: an
-// httptest server is plaintext http on a loopback address, which the production
-// posture refuses by design.
-func plainFetcher(opts resolvers.ContentFetchOptions) *resolvers.ContentFetcher {
-	if opts.Transport == nil {
-		opts.Transport = http.DefaultTransport
-	}
+// plainFetcher builds a fetcher that may reach a loopback httptest server. The
+// guard is not removable by option — a caller supplies what sits UNDER it — so a
+// test opts out the way a deployment does, through the two documented env flags.
+func plainFetcher(t *testing.T, opts resolvers.ContentFetchOptions) *resolvers.ContentFetcher {
+	t.Helper()
+	t.Setenv("SKIP_SSRF", "1")
+	t.Setenv("ALLOW_INSECURE", "1")
 	return resolvers.NewContentFetcher(opts)
 }
 
@@ -137,7 +137,7 @@ func TestContentFetcher_PresentsAVerifiableProof(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := plainFetcher(resolvers.ContentFetchOptions{}).
+	got, err := plainFetcher(t, resolvers.ContentFetchOptions{}).
 		Fetch(context.Background(), srv.URL+"/doc?agent_id=tp", signer)
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
@@ -175,7 +175,7 @@ func TestContentFetcher_MIMEFallback(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			got, err := plainFetcher(resolvers.ContentFetchOptions{}).
+			got, err := plainFetcher(t, resolvers.ContentFetchOptions{}).
 				Fetch(context.Background(), srv.URL+"/doc", signer)
 			if err != nil {
 				t.Fatalf("fetch: %v", err)
@@ -203,7 +203,7 @@ func TestContentFetcher_RefusesRedirectsAndNeverContactsTheTarget(t *testing.T) 
 	}))
 	defer origin.Close()
 
-	_, err := plainFetcher(resolvers.ContentFetchOptions{}).
+	_, err := plainFetcher(t, resolvers.ContentFetchOptions{}).
 		Fetch(context.Background(), origin.URL+"/doc", newPopSigner(t))
 	if err == nil {
 		t.Fatal("expected the redirect to be refused")
@@ -232,7 +232,7 @@ func TestContentFetcher_RefusesANonRoundTripStableURLWithoutSending(t *testing.T
 	// opaque bytes, so an Exchange can mint exactly this — but the request line
 	// escapes it to %20, so the bytes sent would not be the bytes the proof covers.
 	// (A percent-escape does NOT trip this: the URL value preserves the raw path.)
-	_, err := plainFetcher(resolvers.ContentFetchOptions{}).
+	_, err := plainFetcher(t, resolvers.ContentFetchOptions{}).
 		Fetch(context.Background(), srv.URL+"/a b/doc", newPopSigner(t))
 	if err == nil {
 		t.Fatal("expected the unstable URL to be refused")
@@ -259,7 +259,7 @@ func TestContentFetcher_UnsignableProofSendsNothing(t *testing.T) {
 	signer := newPopSigner(t)
 	signer.err = custodyDown
 
-	_, err := plainFetcher(resolvers.ContentFetchOptions{}).
+	_, err := plainFetcher(t, resolvers.ContentFetchOptions{}).
 		Fetch(context.Background(), srv.URL+"/doc", signer)
 	var ferr *resolvers.FetchError
 	if !errors.As(err, &ferr) || ferr.Failure != resolvers.FetchNotSignable {
@@ -281,7 +281,7 @@ func TestContentFetcher_OversizedBodyIsDetectedNotTruncated(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := plainFetcher(resolvers.ContentFetchOptions{MaxBytes: 16}).
+	_, err := plainFetcher(t, resolvers.ContentFetchOptions{MaxBytes: 16}).
 		Fetch(context.Background(), srv.URL+"/doc", newPopSigner(t))
 	var ferr *resolvers.FetchError
 	if !errors.As(err, &ferr) || ferr.Failure != resolvers.FetchTooLarge {
@@ -296,7 +296,7 @@ func TestContentFetcher_BodyAtTheCapIsServed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := plainFetcher(resolvers.ContentFetchOptions{MaxBytes: 16}).
+	got, err := plainFetcher(t, resolvers.ContentFetchOptions{MaxBytes: 16}).
 		Fetch(context.Background(), srv.URL+"/doc", newPopSigner(t))
 	if err != nil {
 		t.Fatalf("a body exactly at the cap must be served: %v", err)
@@ -325,7 +325,7 @@ func TestContentFetcher_EdgeRefusal(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			_, err := plainFetcher(resolvers.ContentFetchOptions{}).
+			_, err := plainFetcher(t, resolvers.ContentFetchOptions{}).
 				Fetch(context.Background(), srv.URL+"/doc", newPopSigner(t))
 			var ferr *resolvers.FetchError
 			if !errors.As(err, &ferr) || ferr.Failure != resolvers.FetchRefused {
@@ -359,7 +359,7 @@ func TestContentFetcher_ErrorsCarryNoCredential(t *testing.T) {
 	}))
 	defer origin.Close()
 
-	_, err := plainFetcher(resolvers.ContentFetchOptions{}).
+	_, err := plainFetcher(t, resolvers.ContentFetchOptions{}).
 		Fetch(context.Background(), origin.URL+"/doc?sig=ORIGINSECRET&agent_id=tp", newPopSigner(t))
 	if err == nil {
 		t.Fatal("expected a refusal")

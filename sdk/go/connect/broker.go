@@ -2,12 +2,15 @@ package connect
 
 import (
 	"context"
+	"errors"
 
 	connectrpc "connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
 // BrokerClient is the Connect client for BrokerService.
@@ -25,21 +28,29 @@ import (
 type BrokerClient struct {
 	rpc      rampv1connect.BrokerServiceClient
 	verifier core.Verifier
+	// requester is the agent identity a Broker resolves the caller from. Held
+	// here rather than demanded on every request for the same reason the exchange
+	// client holds it: one client speaks for one agent.
+	requester *rampv1.Requester
 }
 
 // NewBrokerClient builds a BrokerClient against a Broker's base URL. It takes the
-// same options as NewClient; the ones that do not apply to a Broker are simply
-// unused.
+// same options as NewClient, with one caveat worth stating: WithOfferKey pins a
+// SINGLE offer-verifying key for every exchange, which is the wrong shape here.
+// Broker fan-out returns offers minted by different Exchanges, so anything not
+// signed by that one key lands in Rejected. Inject WithKeyResolver instead — the
+// resolvers tier ships one that resolves each issuing Exchange's own key.
 //
 // BrokerService carries exactly one method today. The purchase path through a
 // Broker is still a relay route rather than an RPC; when it becomes one, this
 // type gains one method and nothing else here changes.
 func NewBrokerClient(baseURL string, opts ...ClientOption) *BrokerClient {
 	cfg := resolvedConfig(opts...)
-	httpClient, interceptors, verifier := plumbing(cfg)
+	httpClient, connectOpts, verifier := plumbing(cfg)
 	return &BrokerClient{
-		rpc:      rampv1connect.NewBrokerServiceClient(httpClient, baseURL, interceptors),
-		verifier: verifier,
+		rpc:       rampv1connect.NewBrokerServiceClient(httpClient, baseURL, connectOpts...),
+		verifier:  verifier,
+		requester: cfg.requester,
 	}
 }
 
@@ -60,12 +71,30 @@ func NewBrokerClient(baseURL string, opts ...ClientOption) *BrokerClient {
 // nothing, so there is nothing for a server to deduplicate — the request message
 // has no such field.
 //
-// The request is the CALLER's message and is sent unmodified, so the caller is
-// the sender for ver purposes and MUST set req.Ver = helpers.ProtocolVersion.
+// The request is CLONED before ver and the requester are filled in, so the message
+// the caller built stays untouched. Both are filled only when EMPTY: a value the
+// caller set is theirs. A Broker resolves the calling agent from requester.id and
+// refuses a request that names none, so leaving it to every caller to remember
+// would make the identity the client already holds useless exactly where it is
+// needed.
 func (b *BrokerClient) Resolve(ctx context.Context, req *rampv1.DiscoveryRequest) (core.DiscoveryResult, error) {
-	resp, err := b.rpc.Resolve(ctx, connectrpc.NewRequest(req))
+	const op = "resolve"
+	if req == nil {
+		return core.DiscoveryResult{}, malformed(op, errors.New("request is nil"))
+	}
+	sent, ok := proto.Clone(req).(*rampv1.DiscoveryRequest)
+	if !ok {
+		return core.DiscoveryResult{}, malformed(op, errors.New("cloned DiscoveryRequest has the wrong type"))
+	}
+	if sent.Ver == "" {
+		sent.Ver = helpers.ProtocolVersion
+	}
+	if sent.Requester == nil {
+		sent.Requester = b.requester
+	}
+	resp, err := b.rpc.Resolve(ctx, connectrpc.NewRequest(sent))
 	if err != nil {
-		return core.DiscoveryResult{}, err
+		return core.DiscoveryResult{}, sendError(op, err)
 	}
 	msg := resp.Msg
 	return core.DiscoveryResult{

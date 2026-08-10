@@ -2,11 +2,13 @@ package connect
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	connectrpc "connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
@@ -46,13 +48,27 @@ func resolvedConfig(opts ...ClientOption) clientConfig {
 	return cfg
 }
 
+// MaxRPCReadBytes caps the response body a single RAMP call will read. Connect
+// treats an unset cap as "any size" and compresses every exchange, so without one
+// a hostile or misconfigured peer can decompress an unbounded body into the
+// caller's memory. A RAMP response for a realistic batch is small; the bound is
+// what stops a peer — including one an offer named — spending the caller's memory
+// on its behalf. Override it per client with WithClientOptions.
+const MaxRPCReadBytes = 1 << 20 // 1 MiB
+
 // plumbing assembles what every client face is built from: the signing HTTP
-// client, the cross-cutting interceptors as a Connect option, and the offer
-// Verifier. Extracted so the exchange and broker faces cannot drift in how they
-// sign, correlate, validate, or verify.
-func plumbing(cfg clientConfig) (*http.Client, connectrpc.ClientOption, core.Verifier) {
-	return signedHTTPClient(cfg, cfg.httpClient.Transport),
+// client, the Connect options, and the offer Verifier. Extracted so the exchange
+// and broker faces cannot drift in how they sign, correlate, validate, verify, or
+// bound what they read.
+func plumbing(cfg clientConfig) (*http.Client, []connectrpc.ClientOption, core.Verifier) {
+	// The caller's options come last so an application can tighten (or widen) a
+	// default the SDK chose.
+	opts := append([]connectrpc.ClientOption{
 		connectrpc.WithInterceptors(clientInterceptors(cfg)...),
+		connectrpc.WithReadMaxBytes(MaxRPCReadBytes),
+	}, cfg.connectOpts...)
+	return signedHTTPClient(cfg, cfg.httpClient.Transport),
+		opts,
 		core.NewVerifier(cfg.mode, cfg.resolveOfferResolver(), time.Now)
 }
 
@@ -68,9 +84,9 @@ func plumbing(cfg clientConfig) (*http.Client, connectrpc.ClientOption, core.Ver
 // Exchange's own manifest, over a separately guarded transport.
 func NewClient(baseURL string, opts ...ClientOption) *Client {
 	cfg := resolvedConfig(opts...)
-	httpClient, interceptors, verifier := plumbing(cfg)
+	httpClient, connectOpts, verifier := plumbing(cfg)
 	return &Client{
-		rpc:      rampv1connect.NewExchangeServiceClient(httpClient, baseURL, interceptors),
+		rpc:      rampv1connect.NewExchangeServiceClient(httpClient, baseURL, connectOpts...),
 		verifier: verifier,
 		cfg:      cfg,
 		// A SECOND signing client for the offer-derived leg, over the guarded
@@ -78,11 +94,15 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		// endpoint, and a signed call then goes there. Without the guard one hop
 		// down, that is a signed request aimed at an arbitrary internal address.
 		// Redirects are refused outright — following one would re-sign the call for
-		// a target the peer chose, after the endpoint check had already passed.
-		exchanges: newExchangePool(signedHTTPClient(cfg, guardedFetchTransport(cfg)), interceptors),
+		// a target the peer chose, after the endpoint check had already passed. And
+		// it carries its own deadline, because an offer-named Exchange that accepts
+		// a connection and then never answers would otherwise hold the call, a
+		// goroutine and a socket open indefinitely.
+		exchanges: newExchangePool(
+			offerDerivedClient(cfg, resolvers.NewGuardedTransport(cfg.guardedBase)), connectOpts...),
 		endpoints: cfg.resolveEndpointResolver(),
 		fetcher: resolvers.NewContentFetcher(resolvers.ContentFetchOptions{
-			Transport: cfg.fetchTransport,
+			BaseTransport: cfg.guardedBase,
 		}),
 	}
 }
@@ -113,14 +133,22 @@ func refuseRPCRedirect(req *http.Request, _ []*http.Request) error {
 		helpers.RedactURL(req.URL.String()))
 }
 
-// guardedFetchTransport is the base transport for the offer-derived leg: the
-// SSRF-guarded one, or whatever the caller injected for the content path (a test
-// stack reaching a loopback Exchange injects its own).
-func guardedFetchTransport(cfg clientConfig) http.RoundTripper {
-	if cfg.fetchTransport != nil {
-		return cfg.fetchTransport
+// DefaultCallTimeout bounds one call on the offer-derived leg. A RAMP RPC is
+// interactive — something is waiting on the other end — so a request that has not
+// answered by now is more useful as an error than as a hang.
+const DefaultCallTimeout = 30 * time.Second
+
+// offerDerivedClient is signedHTTPClient plus a deadline. The home Exchange and
+// the Broker are operator-configured, so their timeout is the caller's to set
+// through WithHTTPClient; an Exchange an offer named is not, and a client with no
+// deadline against a host chosen by another party is a hang waiting to happen.
+// An explicit timeout on the injected client is respected.
+func offerDerivedClient(cfg clientConfig, base http.RoundTripper) *http.Client {
+	client := signedHTTPClient(cfg, base)
+	if client.Timeout <= 0 {
+		client.Timeout = DefaultCallTimeout
 	}
-	return resolvers.NewGuardedClientFromEnv().Transport
+	return client
 }
 
 // clientInterceptors assembles the cross-cutting interceptor stack (request-id ·
@@ -143,23 +171,38 @@ func clientInterceptors(cfg clientConfig) []connectrpc.Interceptor {
 // is verified against the exchange offer-signing key (resolved through the
 // injected resolver) before it is handed back. Neither an unverifiable nor a
 // doctored offer is silently dropped — it lands in Rejected with a reason. A URI
-// that yielded nothing keeps its group, carrying the typed reason, so a refusal
-// is an answer rather than an absence. Round-trip: client sign → HTTP → server
-// verify → origin → response, then the offer Verifier over the response.
+// that the responder GROUPED and left empty keeps its group, carrying the typed
+// reason, so a refusal is an answer rather than an absence. (A response carrying
+// no groups at all yields none — there is nothing to keep.) Round-trip: client
+// sign → HTTP → server verify → origin → response, then the offer Verifier over
+// the response.
 //
-// The query is the CALLER's message and is sent unmodified — unlike Execute,
-// which builds its own request, Discover cannot stamp fields without mutating
-// what it was handed. The caller is therefore the sender for ver purposes and
-// MUST set query.Ver = helpers.ProtocolVersion (see "Protocol version" in
-// ramp.proto: senders stamp it from one constant, never a literal).
+// The query is CLONED before ver and the requester are filled in, so the message
+// the caller built stays untouched — it crossed a package boundary as an
+// argument, not as a buffer. Both fields are filled only when EMPTY: a value the
+// caller set is theirs.
 func (c *Client) Discover(ctx context.Context, query *rampv1.ResourceQuery) (core.DiscoveryResult, error) {
-	resp, err := c.rpc.DiscoverResources(ctx, connectrpc.NewRequest(query))
+	const op = "discover"
+	if query == nil {
+		return core.DiscoveryResult{}, malformed(op, errors.New("query is nil"))
+	}
+	sent, ok := proto.Clone(query).(*rampv1.ResourceQuery)
+	if !ok {
+		return core.DiscoveryResult{}, malformed(op, errors.New("cloned ResourceQuery has the wrong type"))
+	}
+	if sent.Ver == "" {
+		sent.Ver = helpers.ProtocolVersion
+	}
+	if sent.Requester == nil {
+		sent.Requester = c.cfg.requester
+	}
+	resp, err := c.rpc.DiscoverResources(ctx, connectrpc.NewRequest(sent))
 	if err != nil {
-		return core.DiscoveryResult{}, err
+		return core.DiscoveryResult{}, sendError(op, err)
 	}
 	msg := resp.Msg
 	return core.DiscoveryResult{
-		Groups:    c.discoveredGroups(ctx, query, msg),
+		Groups:    c.discoveredGroups(ctx, sent, msg),
 		Exchange:  msg.GetExchange(),
 		RateLimit: msg.GetRateLimit(),
 	}, nil
@@ -220,15 +263,19 @@ func WithIdempotencyKey(key string) CallOption {
 	return func(e *callConfig) { e.idempotencyKey = key }
 }
 
-// idempotencyKeyFor resolves the key for one call: the pinned one, or a freshly
-// minted one.
-func idempotencyKeyFor(opts []CallOption) (string, error) {
+// idempotencyKeyFor resolves the key for one call, in precedence order: the key
+// pinned for this call, then whatever the caller already put on the message, then
+// a freshly minted one.
+func idempotencyKeyFor(opts []CallOption, onMessage string) (string, error) {
 	var cc callConfig
 	for _, o := range opts {
 		o(&cc)
 	}
 	if cc.idempotencyKey != "" {
 		return cc.idempotencyKey, nil
+	}
+	if onMessage != "" {
+		return onMessage, nil
 	}
 	return helpers.NewIdempotencyKey()
 }
@@ -245,10 +292,10 @@ func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...
 		return nil, malformed(op, fmt.Errorf(
 			"no requester configured; an Exchange resolves who is buying from it (see WithRequester)"))
 	}
-	signer := c.cfg.resolveAcceptanceSigner()
+	signer := c.cfg.signer
 	if signer == nil {
 		return nil, malformed(op, fmt.Errorf(
-			"no signer configured; a purchase carries a detached acceptance (see WithSigner or WithAcceptanceSigner)"))
+			"no signer configured; a purchase carries a detached acceptance signed with the agent's own key (see WithSigner)"))
 	}
 	// An acceptance floating free of a concrete offer is meaningless, and an
 	// unsigned offer is reachable here: WithVerification(Off) and
@@ -256,7 +303,7 @@ func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...
 	if offer.Offer().GetSignature() == "" {
 		return nil, malformed(op, fmt.Errorf("cannot accept an unsigned offer"))
 	}
-	key, err := idempotencyKeyFor(opts)
+	key, err := idempotencyKeyFor(opts, "")
 	if err != nil {
 		return nil, malformed(op, err)
 	}
@@ -288,7 +335,28 @@ func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...
 	}
 	resp, err := c.rpc.ExecuteTransaction(ctx, connectrpc.NewRequest(req))
 	if err != nil {
-		return nil, err
+		return nil, sendError(op, err)
 	}
 	return resp.Msg, nil
+}
+
+// stampEnvelope fills the two envelope fields the protocol requires on a
+// state-mutating call, WITHOUT overwriting what the caller already set.
+//
+// Fill-when-empty is the whole rule. `ver` has a single owner, so the SDK supplies
+// it rather than making every caller reach for the constant. The idempotency key
+// is REQUIRED and identifies the action rather than the attempt, so a value the
+// caller put there is theirs — discarding it would turn each of their retries into
+// a fresh action, which is the double-counting the field exists to prevent.
+// WithIdempotencyKey overrides both.
+func stampEnvelope(ver, idempotencyKey *string, opts []CallOption) error {
+	if *ver == "" {
+		*ver = helpers.ProtocolVersion
+	}
+	key, err := idempotencyKeyFor(opts, *idempotencyKey)
+	if err != nil {
+		return err
+	}
+	*idempotencyKey = key
+	return nil
 }

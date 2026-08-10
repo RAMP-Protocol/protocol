@@ -95,6 +95,7 @@ from .wire import (
 
 __all__ = [
     "ACCEPTANCE_SIGNATURE_ALGORITHM",
+    "AGENT_KEY_HEADER",
     "ERROR_DETAIL_TYPE",
     "OFFER_SIGNATURE_ALGORITHM",
     "REASON_FIELDS",
@@ -117,7 +118,6 @@ __all__ = [
     "RequestIDHeader",
     "ResolverError",
     "Result",
-    "AGENT_KEY_HEADER",
     "SignatureAgentHeader",
     "SignedOutbound",
     "SigningTransport",

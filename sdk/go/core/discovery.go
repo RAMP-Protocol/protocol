@@ -53,6 +53,10 @@ type DiscoveryResult struct {
 	// AbsenceReason says why the CALL as a whole yielded nothing. It is set only
 	// on that path — when any group carries offers it stays nil, and the per-URI
 	// causes ride on each group instead.
+	//
+	// Only a Broker resolve can set it: the Exchange's own discovery response has
+	// no whole-call reason field, so from Discover this is always nil and the
+	// per-URI groups carry everything the responder said.
 	AbsenceReason *rampv1.OfferAbsenceReason
 	// Exchange is the canonical domain of the responding Exchange. Empty from a
 	// Broker resolve, whose response names no single Exchange — each offer carries
@@ -102,6 +106,13 @@ func (v Verifier) SortGroups(ctx context.Context, groups []*rampv1.OfferGroup) [
 	}
 	out := make([]OfferGroupResult, 0, len(groups))
 	for _, g := range groups {
+		// A nil element is not a group with no offers — it is nothing at all, and
+		// surfacing it as an empty URI would invent an answer the responder never
+		// gave. Skipped rather than dereferenced, since an in-process caller can
+		// build the slice by hand.
+		if g == nil {
+			continue
+		}
 		out = append(out, OfferGroupResult{
 			URI: g.GetUri(),
 			// The raw fields, not the getters: a getter collapses an absent

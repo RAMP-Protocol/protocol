@@ -61,11 +61,3 @@ func TestExchangePool_ReusesTheClientForAKnownOrigin(t *testing.T) {
 		t.Errorf("pool size = %d, want 1", got)
 	}
 }
-
-// holds reports whether origin is currently cached, without disturbing recency.
-func (p *exchangePool) holds(origin string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	_, ok := p.entries[origin]
-	return ok
-}

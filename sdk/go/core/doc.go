@@ -1,10 +1,16 @@
 // Package core is the transport-neutral L2 substance of the RAMP SDK: the unified
 // offer Verifier, the fail-closed {verified, rejected} contract (Result), the
-// unforgeable VerifiedOffer compile guard with the loud RejectedOffer.Unsafe
-// escape, the client signing http.RoundTripper (NewSigningTransport), the injected
-// ReplayStore interface, and the neutral request-id mint/middleware — all built on
-// the sdk/go/helpers L1 primitives with net/http as the only transport dependency
-// (ADR-020 §2/§3).
+// per-URI discovery shape both discovery verbs return (DiscoveryResult /
+// OfferGroupResult, sorted by Verifier.SortGroups), the unforgeable VerifiedOffer
+// compile guard with the loud RejectedOffer.Unsafe escape, the client signing
+// http.RoundTripper (NewSigningTransport), the injected ReplayStore interface, and
+// the neutral request-id mint/middleware — all built on the sdk/go/helpers L1
+// primitives with net/http as the only transport dependency (ADR-020 §2/§3).
+//
+// The discovery shape is grouped rather than flat because a discovery call is
+// per-URI: a URI that yielded nothing has no offer to carry its identity back, so
+// flattening would erase both which resource was refused and the typed reason it
+// was — and those reasons are different agent actions, not shades of "none".
 //
 // core imports NOTHING from connectrpc: RAMP is an HTTP protocol, and this package
 // only needs net/http, so a team on grpc-go / plain net/http / any transport can

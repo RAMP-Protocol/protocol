@@ -3,6 +3,8 @@ title: "Agent SDK Overview"
 description: "The RAMP Agent SDK is an embeddable library that gives AI agents one-liner content access -- a single Fetch call handling discovery, negotiation, transaction, delivery, budget enforcement, and usage reporting."
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
 <Aside type="caution" title="Design for a deferred layer, not shipped API">
 These pages describe the **planned high-tier agent SDK** — a one-call `Fetch(url)`
 that orchestrates discovery, selection, purchase, delivery and reporting behind a
@@ -10,13 +12,12 @@ single method. That layer is deferred and none of the API below is implemented.
 
 What ships today is the **low-tier client** in `sdk/go/connect`, and it is a
 different shape with a colliding name: its `NewClient` takes a base URL and
-functional options rather than a config struct with a licence key, and its `Fetch`
+functional options rather than a config struct with a license key, and its `Fetch`
 retrieves one already-purchased signed delivery URL rather than running the whole
 flow. The verbs it covers are `Discover`, `Resolve`, `Execute`, `ReportUsage`,
 `Dispute` and `Fetch`. See `sdk/go/README.md` for the shipped surface.
 </Aside>
 
-import { Aside } from '@astrojs/starlight/components';
 
 ## What the SDK Provides
 
@@ -443,7 +444,7 @@ The concrete implementations differ in persistence strategy (in-memory vs Redis)
 
 | Language | Source | Status | Dependencies |
 |---|---|---|---|
-| Go | [`gen/go/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/go/) (types) + [`gen/go/ramp/v1/rampv1connect`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/go/ramp/v1/rampv1connect) (Connect client) | Generated, usable via Go modules | `connectrpc.com/connect` + `google.golang.org/protobuf` + stdlib |
+| Go | [`gen/go/`](https://github.com/RAMP-Protocol/protocol/tree/main/gen/go/) (types) + [`sdk/go/`](https://github.com/RAMP-Protocol/protocol/tree/main/sdk/go/) (the shipped hand-written SDK: `helpers`, `resolvers`, `core`, `connect`, `connectserver`) | Shipped and CI-gated | `connectrpc.com/connect` + `google.golang.org/protobuf` + stdlib |
 | TypeScript | — | Planned (npm package not yet published) | `@connectrpc/connect` + `@bufbuild/protobuf` |
 | Python | — | Planned (PyPI package not yet published) | `httpx` + `fastmcp` |
 

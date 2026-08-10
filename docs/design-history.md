@@ -696,3 +696,83 @@ unrelated PUBLIC host; dial through the SSRF guard, applied to the report itself
 not only to the manifest fetch; and refuse redirects. The per-origin client pool that
 follows is bounded and evicts least-recently-used, because which Exchanges appear is
 driven by incoming offers — an open-ended, caller-influenced key space.
+
+## Host anchoring compares hostnames, not origins
+
+A value a remote document supplies — an Exchange's advertised endpoint, a WBA
+directory's revocation URL — is checked against the host that served that document
+before anything signed is sent to it: it may name itself or one of its own
+subdomains, and nothing else. The match is on a full dot-delimited label boundary,
+so `evil-a.com` is not a subdomain of `a.com`; a bare suffix comparison gets that
+wrong, and it is the mistake an attacker registers a domain to exploit.
+
+The rule exists only in code — no proto comment and no published page states it —
+which is worth knowing before anyone assumes a conforming Exchange was told about
+it.
+
+The comparison deliberately ignores the PORT. The property being enforced is "not
+an unrelated host", and a service on another port of the same name is not another
+host: TLS binds hostnames, not ports. Including the port would leave an Exchange
+that advertises `https://exchange.example:8443` permanently unable to receive a
+usage report, refused by a check that was never protecting anything there. The
+scheme is likewise not compared here; it is the guarded transport's decision, in
+one place, driven by one flag.
+
+## What the manifest fetch does not guarantee, and why that is bounded
+
+The address a usage report goes to is read from the issuing Exchange's own
+`/.well-known/ramp.json`. That fetch runs on the guarded client, which FOLLOWS up
+to five redirects — re-pinning the address and re-vetting the scheme at each hop,
+but not anchoring the host. So the party that answers for the manifest can be one
+a redirect chose, and the answer is cached per host for the TTL.
+
+That is deliberate and it is bounded, but the bound comes from somewhere else:
+whatever the manifest says, the endpoint it advertises must still anchor to the
+ORIGINAL offer domain before a signed call goes there. A redirect can therefore
+change who answers the question, never where the report lands. What it can weaken
+is the assumption that a manifest served over TLS from the provider's own domain
+is thereby endorsed by it.
+
+Refusing redirects on that one fetch was considered and not taken here. The
+five-hop posture is stated as identical across all three languages, so a Go-only
+refusal would create a divergence in the transport policy rather than remove a
+risk — and the risk it removes is already contained by the anchoring above. Worth
+revisiting as a three-language change.
+
+## One agent identity, one key
+
+The protocol carries a single agent identity and the SDK does not offer a second.
+`agent_identity_hash` is defined as the RFC 7638 thumbprint of the agent's
+request-signing key; an Exchange verifies the detached offer acceptance against the
+key registered for whichever caller the request signature identified; and the
+delivery URL is bound to that same thumbprint, which a later fetch must prove
+possession of. A separately-custodied acceptance key would be refused at execute,
+and any URL it did produce could never be fetched — the presented key would not
+match the binding. So the client takes one Signer, and the public half of that
+same key for the fetch header, which a Signer cannot yield.
+
+One consequence for the cross-language surface: Go's `SignAgentBinding` takes a
+`Signer` plus the public half, while Python's counterpart takes raw seed bytes.
+The parity map records them as counterparts because the face exists in both, but
+the custody posture differs — the Go seam exists precisely so the SDK never holds
+key material, and closing that gap belongs with the TypeScript/Python client work.
+
+## Bounds on a leg that dials wherever an offer points
+
+`ReportUsage` and `Dispute` reach an Exchange named inside an offer, so the origin
+is discovered at runtime and chosen by another party. Everything about that leg is
+therefore bounded rather than open-ended: the response size (Connect treats an
+unset cap as "any size" while compressing every exchange, so an unbounded read is
+an unbounded decompression into the caller's memory), the call deadline (an
+Exchange that accepts a connection and never answers would otherwise hold a call,
+a goroutine and a socket indefinitely), the per-origin client pool, and the
+endpoint cache beneath it. The key space for both caches is the same open-ended,
+caller-influenced set of hosts, so both evict least-recently-used at a fixed cap.
+
+The guard on that leg is not removable by an option. A caller can supply a base
+transport — its own connection tuning, its own client certificates — and it is
+composed UNDERNEATH the address and scheme guards rather than in place of them.
+The only opt-out is the deployment-level SKIP_SSRF / ALLOW_INSECURE pair, which is
+one decision recorded in one place instead of a per-caller copy of it. An option
+that could silently disarm the guard is exactly how a security property becomes
+advisory.

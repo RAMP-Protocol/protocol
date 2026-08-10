@@ -22,6 +22,11 @@ import (
 // window is open anyone who observes the request can repeat it.
 const defaultProofWindow = 30 * time.Second
 
+// edgeErrorDomain is the ErrorDetail domain for a refusal by a delivery edge. It
+// is the failing surface, not the fetched resource: the field is a stable
+// grouping key for tooling, so it names the tier that refused.
+const edgeErrorDomain = "ramp.v1.Edge"
+
 // ReportUsage files a usage report with the Exchange that ISSUED the offer —
 // never through a Broker, and never to an address from configuration.
 //
@@ -39,9 +44,10 @@ const defaultProofWindow = 30 * time.Second
 // argument, not as a buffer to fill in.
 //
 // The idempotency key identifies the REPORT, not the attempt. A fresh one is
-// minted per call by default, so hold it and pass the same one back with
-// WithIdempotencyKey when retrying, or the Exchange sees a second report rather
-// than a repeat of the first.
+// minted only when the caller supplied none — a value already on the message, or
+// one pinned with WithIdempotencyKey, is left alone. That distinction matters: an
+// application that mints its own key for its own dedup would otherwise have it
+// silently discarded and see every retry counted as a second report.
 func (c *Client) ReportUsage(ctx context.Context, report *rampv1.UsageReport, opts ...CallOption) (*rampv1.UsageReportResponse, error) {
 	const op = "report usage"
 	if report == nil {
@@ -55,16 +61,12 @@ func (c *Client) ReportUsage(ctx context.Context, report *rampv1.UsageReport, op
 	if !ok {
 		return nil, malformed(op, errors.New("cloned UsageReport has the wrong type"))
 	}
-	key, err := idempotencyKeyFor(opts)
-	if err != nil {
+	if err = stampEnvelope(&stamped.Ver, &stamped.IdempotencyKey, opts); err != nil {
 		return nil, malformed(op, err)
 	}
-	stamped.Ver = helpers.ProtocolVersion
-	stamped.IdempotencyKey = key
-
 	resp, err := c.exchanges.clientFor(endpoint).ReportUsage(ctx, connectrpc.NewRequest(stamped))
 	if err != nil {
-		return nil, err
+		return nil, sendError(op, err)
 	}
 	return resp.Msg, nil
 }
@@ -94,16 +96,12 @@ func (c *Client) Dispute(ctx context.Context, exchangeDomain string, req *rampv1
 	if !ok {
 		return nil, malformed(op, errors.New("cloned DisputeRequest has the wrong type"))
 	}
-	key, err := idempotencyKeyFor(opts)
-	if err != nil {
+	if err = stampEnvelope(&stamped.Ver, &stamped.IdempotencyKey, opts); err != nil {
 		return nil, malformed(op, err)
 	}
-	stamped.Ver = helpers.ProtocolVersion
-	stamped.IdempotencyKey = key
-
 	resp, err := c.exchanges.clientFor(endpoint).DisputeTransaction(ctx, connectrpc.NewRequest(stamped))
 	if err != nil {
-		return nil, err
+		return nil, sendError(op, err)
 	}
 	return resp.Msg, nil
 }
@@ -124,8 +122,16 @@ func (c *Client) Dispute(ctx context.Context, exchangeDomain string, req *rampv1
 // A refusal from the edge arrives as a typed reason where the edge's vocabulary
 // maps onto the protocol's, so ErrorDetailFrom reads a fetch failure and an RPC
 // failure through the same accessor.
+//
 // It takes no CallOption: a fetch is a GET against an already-issued URL, so
 // there is no idempotency key to pin — nothing on this path mutates state.
+//
+// The URL is taken as given. Whether it is one this agent bought, and whether its
+// agent_id matches this agent's key, are the CALLER's checks to make — the SDK
+// exports helpers.VerifyURLEd25519 and VerifiedURL.CheckProofOfPossession for
+// exactly that, and running them first turns an edge 403 into a local answer.
+// Worth doing when the URL reached the caller from anywhere but its own execute
+// response: a proof of possession is minted for whatever URL is passed in.
 func (c *Client) Fetch(ctx context.Context, signedURL string) (resolvers.Content, error) {
 	const op = "fetch content"
 	signer, err := c.proofSigner()
@@ -143,9 +149,9 @@ func (c *Client) Fetch(ctx context.Context, signedURL string) (resolvers.Content
 // for. Both halves are required and neither can be derived from the other: the
 // Signer keeps the private half, and the header presents the public one.
 func (c *Client) proofSigner() (resolvers.ProofSigner, error) {
-	signer := c.cfg.resolveAcceptanceSigner()
+	signer := c.cfg.signer
 	if signer == nil {
-		return nil, errors.New("no signer configured; a bound fetch proves possession of the agent key (see WithSigner or WithAcceptanceSigner)")
+		return nil, errors.New("no signer configured; a bound fetch proves possession of the agent key (see WithSigner)")
 	}
 	if len(c.cfg.agentKey) == 0 {
 		return nil, errors.New("no agent public key configured; a bound fetch presents it alongside the proof (see WithAgentKey)")
@@ -176,8 +182,11 @@ func (p proofSigner) SignFetch(ctx context.Context, target string) (helpers.Agen
 // the vocabularies line up.
 //
 // The detail is SYNTHESIZED here rather than received: a delivery edge answers a
-// small JSON object, not a protobuf. Its domain is the redacted fetch host, so a
-// reader can tell a synthesized detail from one a peer emitted.
+// small JSON object, not a protobuf. Its domain names the delivery edge as the
+// failing SURFACE — a stable grouping, matching the value the cross-language
+// error-detail corpus already uses for this reason block. Deliberately not the
+// fetched URL: domain mirrors google.rpc.ErrorInfo.domain so generic tooling can
+// group errors, and a per-URL value has unbounded cardinality and groups nothing.
 func fetchCallError(op, signedURL string, err error) error {
 	var ferr *resolvers.FetchError
 	if !errors.As(err, &ferr) {
@@ -192,7 +201,7 @@ func fetchCallError(op, signedURL string, err error) error {
 	}
 	if reason, ok := helpers.RetrievalAuthFailureReasonFromToken(ferr.Reason); ok {
 		out.Detail = helpers.RetrievalAuthFailureDetail(
-			helpers.RedactURL(signedURL),
+			edgeErrorDomain,
 			fmt.Sprintf("delivery refused: %s", ferr.Reason),
 			reason,
 		)

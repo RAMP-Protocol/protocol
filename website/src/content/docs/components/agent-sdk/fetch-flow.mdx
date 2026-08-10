@@ -12,7 +12,7 @@ single method. That layer is deferred and none of the API below is implemented.
 
 What ships today is the **low-tier client** in `sdk/go/connect`, and it is a
 different shape with a colliding name: its `NewClient` takes a base URL and
-functional options rather than a config struct with a licence key, and its `Fetch`
+functional options rather than a config struct with a license key, and its `Fetch`
 retrieves one already-purchased signed delivery URL rather than running the whole
 flow. The verbs it covers are `Discover`, `Resolve`, `Execute`, `ReportUsage`,
 `Dispute` and `Fetch`. See `sdk/go/README.md` for the shipped surface.
@@ -338,7 +338,7 @@ Per-period persistence: by default, the SDK writes period budget state to a loca
 The SDK ships a `MockExchange` for testing agent code without network calls:
 
 ```go
-import "github.com/RAMP-Protocol/protocol/sdk-go/testutil"
+import "github.com/RAMP-Protocol/protocol/sdk/go/connect"
 
 func TestAgentLogic(t *testing.T) {
     mock := testutil.NewMockExchange(testutil.MockConfig{

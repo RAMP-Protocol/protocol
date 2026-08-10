@@ -44,6 +44,11 @@ type signingFixture struct {
 	signer   helpers.Signer
 	resolver *helpers.StaticKeyResolver
 	keyID    string
+	// pub is the public half of the same key. The protocol carries ONE agent
+	// identity: the key that signs requests also signs the detached acceptance and
+	// is the key a delivery URL is bound to, so tests that verify an acceptance or
+	// present a fetch proof need it alongside the Signer.
+	pub ed25519.PublicKey
 }
 
 // newSigningFixture builds a request-signing keypair, an L1 Signer over it, and a
@@ -55,7 +60,13 @@ func newSigningFixture(t *testing.T) signingFixture {
 	if err != nil {
 		t.Fatalf("generate request-signing key: %v", err)
 	}
-	const keyID = "agent.test.v1"
+	// keyid IS the RFC 7638 thumbprint: it is the anchor of the three-way identity
+	// an edge checks on a bound fetch, and the value an Exchange binds a delivery
+	// URL to. A fixture that used an opaque label could never mint a fetch proof.
+	keyID, err := helpers.Thumbprint(pub)
+	if err != nil {
+		t.Fatalf("thumbprint request-signing key: %v", err)
+	}
 	signer, err := helpers.NewEd25519Signer(keyID, priv)
 	if err != nil {
 		t.Fatalf("new signer: %v", err)
@@ -64,6 +75,7 @@ func newSigningFixture(t *testing.T) signingFixture {
 		signer:   signer,
 		resolver: helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{keyID: pub}),
 		keyID:    keyID,
+		pub:      pub,
 	}
 }
 

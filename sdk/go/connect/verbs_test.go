@@ -214,14 +214,13 @@ func TestExecute_SendsRequesterAndAVerifyingAcceptance(t *testing.T) {
 	}}
 	srv := serveExchange(t, sig, origin)
 
-	// The acceptance is signed by the agent's own key, and the Exchange verifies
-	// it against the public half — so the test needs both.
-	acceptPub, acceptSigner := newAcceptanceKey(t)
+	// One key signs the transport, the acceptance and any later fetch proof — the
+	// protocol carries a single agent identity, so the test uses a single key and
+	// verifies the acceptance against its public half.
 	client := rampconnect.NewClient(srv.URL,
 		rampconnect.WithSigner(sig.signer),
 		rampconnect.WithOfferKey(offers.exchangePub),
 		rampconnect.WithRequester(testRequester()),
-		rampconnect.WithAcceptanceSigner(acceptSigner),
 	)
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
 	if err != nil {
@@ -234,7 +233,6 @@ func TestExecute_SendsRequesterAndAVerifyingAcceptance(t *testing.T) {
 	execClient := rampconnect.NewClient(execSrv.URL,
 		rampconnect.WithSigner(sig.signer),
 		rampconnect.WithRequester(testRequester()),
-		rampconnect.WithAcceptanceSigner(acceptSigner),
 	)
 	if _, err = execClient.Execute(context.Background(), verified,
 		rampconnect.WithIdempotencyKey("pinned-key")); err != nil {
@@ -251,7 +249,7 @@ func TestExecute_SendsRequesterAndAVerifyingAcceptance(t *testing.T) {
 	}
 	if err = helpers.VerifyOfferAcceptance(
 		item.GetOffer(), got.GetRequester(), got.GetIdempotencyKey(),
-		item.GetAgentAcceptance().GetSignature(), acceptPub,
+		item.GetAgentAcceptance().GetSignature(), sig.pub,
 	); err != nil {
 		t.Errorf("the acceptance an Exchange would check does not verify: %v", err)
 	}
@@ -403,6 +401,11 @@ func selfAdvertisingExchange(t *testing.T, sig signingFixture, svc rampv1connect
 
 // crossHost serves a manifest advertising SOMEONE ELSE's origin — the case the
 // same-host check exists to refuse.
+//
+// The advertised name is a foreign hostname rather than another loopback server:
+// anchoring compares hostnames, and every httptest server shares 127.0.0.1, so
+// two local servers are the same host by the rule under test. A refusal must be
+// driven by a genuinely different NAME, which is also the production shape.
 func crossHost(t *testing.T, endpoint string) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -416,14 +419,21 @@ func crossHost(t *testing.T, endpoint string) string {
 	return strings.TrimPrefix(srv.URL, "http://")
 }
 
-// plainOptions are the two seams a loopback test stack needs: the well-known
-// resolver reads http rather than https, and the offer-derived leg dials a
-// private address the production guard refuses by design.
-func plainOptions() []rampconnect.ClientOption {
+// allowLoopback opts this test out of the production dial posture the way a
+// deployment does — through the two documented env flags, read when the client is
+// built. There is deliberately no option that removes the guard: injecting a
+// transport puts it UNDER the guard, never in place of it, so a test that wants a
+// loopback Exchange has to say so the same way an on-prem deployment would.
+//
+// The well-known resolver is still injected, because reading a manifest over http
+// is a scheme choice rather than a guard opt-out.
+func allowLoopback(t *testing.T) []rampconnect.ClientOption {
+	t.Helper()
+	t.Setenv("SKIP_SSRF", "1")
+	t.Setenv("ALLOW_INSECURE", "1")
 	return []rampconnect.ClientOption{
 		rampconnect.WithEndpointResolver(resolvers.NewWellKnownEndpointResolver(
 			resolvers.WellKnownOptions{Scheme: "http", HTTP: http.DefaultClient})),
-		rampconnect.WithFetchTransport(http.DefaultTransport),
 	}
 }
 
@@ -433,7 +443,7 @@ func TestReportUsage_RoutesThroughTheIssuingExchangesOwnManifest(t *testing.T) {
 	domain, wkHits := selfAdvertisingExchange(t, sig, origin)
 
 	client := rampconnect.NewClient("http://home.invalid",
-		append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	report := &rampv1.UsageReport{
 		Exchange:      proto.String(domain),
@@ -471,25 +481,19 @@ func TestReportUsage_RoutesThroughTheIssuingExchangesOwnManifest(t *testing.T) {
 func TestReportUsage_RefusesUnroutableAddressesWithoutSending(t *testing.T) {
 	sig := newSigningFixture(t)
 
-	// An "attacker" host that must never be contacted.
-	var attackerHits atomic.Int64
-	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		attackerHits.Add(1)
-	}))
-	defer attacker.Close()
-
 	tests := map[string]string{
 		"no exchange on the report": "",
 		"scheme is not a bare host": "https://exchange.test",
 		"path is not a bare host":   "exchange.test/reports",
 		"query is not a bare host":  "exchange.test?x=1",
-		// A manifest advertising the attacker's origin — a different host.
-		"endpoint on another host": crossHost(t, attacker.URL),
+		"trailing colon":            "exchange.test:",
+		// A manifest advertising an unrelated host — the case anchoring exists for.
+		"endpoint on another host": crossHost(t, "http://evil.invalid/v1"),
 	}
 	for name, domain := range tests {
 		t.Run(name, func(t *testing.T) {
 			client := rampconnect.NewClient("http://home.invalid",
-				append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+				append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 			report := &rampv1.UsageReport{TransactionId: "txn-1"}
 			if domain != "" {
 				report.Exchange = proto.String(domain)
@@ -504,9 +508,6 @@ func TestReportUsage_RefusesUnroutableAddressesWithoutSending(t *testing.T) {
 			}
 		})
 	}
-	if n := attackerHits.Load(); n != 0 {
-		t.Errorf("the cross-host endpoint was contacted %d times; it must never be reached", n)
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -519,7 +520,7 @@ func TestDispute_RoutesLikeAReportAndStampsTheEnvelope(t *testing.T) {
 	domain, _ := selfAdvertisingExchange(t, sig, origin)
 
 	client := rampconnect.NewClient("http://home.invalid",
-		append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	req := &rampv1.DisputeRequest{
 		TransactionId: "txn-1",
@@ -550,7 +551,7 @@ func TestDispute_RoutesLikeAReportAndStampsTheEnvelope(t *testing.T) {
 func TestDispute_SharesTheRoutingRefusals(t *testing.T) {
 	sig := newSigningFixture(t)
 	client := rampconnect.NewClient("http://home.invalid",
-		append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.Dispute(context.Background(), "https://exchange.test",
 		&rampv1.DisputeRequest{TransactionId: "txn-1"})
@@ -566,7 +567,6 @@ func TestDispute_SharesTheRoutingRefusals(t *testing.T) {
 
 func TestFetch_PresentsTheProofAndSurfacesATypedRefusal(t *testing.T) {
 	sig := newSigningFixture(t)
-	acceptPub, acceptSigner := newAcceptanceKey(t)
 
 	var sawProof atomic.Bool
 	content := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -584,10 +584,9 @@ func TestFetch_PresentsTheProofAndSurfacesATypedRefusal(t *testing.T) {
 	defer content.Close()
 
 	client := rampconnect.NewClient("http://home.invalid",
-		append(plainOptions(),
+		append(allowLoopback(t),
 			rampconnect.WithSigner(sig.signer),
-			rampconnect.WithAcceptanceSigner(acceptSigner),
-			rampconnect.WithAgentKey(acceptPub),
+			rampconnect.WithAgentKey(sig.pub),
 		)...)
 
 	got, err := client.Fetch(context.Background(), content.URL+"/doc?agent_id=tp")
@@ -626,7 +625,7 @@ func TestFetch_PresentsTheProofAndSurfacesATypedRefusal(t *testing.T) {
 func TestFetch_RefusesWithoutTheAgentPublicKey(t *testing.T) {
 	sig := newSigningFixture(t)
 	client := rampconnect.NewClient("http://home.invalid",
-		append(plainOptions(), rampconnect.WithSigner(sig.signer))...)
+		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.Fetch(context.Background(), "http://cdn.invalid/doc")
 	var cerr *rampconnect.CallError

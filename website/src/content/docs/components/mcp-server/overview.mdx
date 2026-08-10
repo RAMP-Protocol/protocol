@@ -3,6 +3,14 @@ title: "MCP Server"
 description: "Thin proxy that exposes RAMP ExchangeService as MCP tools -- zero-SDK resource access for any MCP-capable AI agent."
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution">
+The agent SDK described here is the **deferred high-tier** design, not shipped
+API. What exists today is the low-tier client in `sdk/go/connect`; see the
+[Agent SDK overview](/components/agent-sdk/overview/) for what that covers.
+</Aside>
+
 ## What It Is
 
 The RAMP MCP Server is a convenience interface layer that exposes ExchangeService RPCs as MCP tools. Any AI agent with MCP support can discover and access resources without custom SDK integration -- just add the MCP server to the agent's tool configuration.

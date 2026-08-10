@@ -28,12 +28,12 @@ type clientConfig struct {
 	requestID     core.RequestIDFunc
 	extra         []connectrpc.Interceptor
 
-	requester        *rampv1.Requester
-	acceptanceSigner helpers.Signer
-	agentKey         ed25519.PublicKey
-	proofWindow      core.Window
-	endpoints        EndpointResolver
-	fetchTransport   http.RoundTripper
+	requester   *rampv1.Requester
+	agentKey    ed25519.PublicKey
+	proofWindow core.Window
+	endpoints   EndpointResolver
+	guardedBase *http.Transport
+	connectOpts []connectrpc.ClientOption
 }
 
 // ClientOption configures a Client. Options are the ONLY way to inject the
@@ -123,21 +123,18 @@ func WithRequester(r *rampv1.Requester) ClientOption {
 	}
 }
 
-// WithAcceptanceSigner injects the Signer that signs detached offer acceptances
-// and delivery-fetch proofs. It defaults to WithSigner's, which is the common
-// case: one agent key signs the transport, the acceptance, and the proof.
+// WithAgentKey injects the PUBLIC half of the key WithSigner signs with. A
+// delivery fetch presents it in a header, and a Signer cannot yield it — custody
+// keeps the private half, so the public half has to be supplied alongside.
+// Without it the client can buy but cannot fetch what it bought.
 //
-// It is separate because the acceptance key's thumbprint becomes the delivery
-// URL's agent_id — the key a later fetch must prove possession of — and a
-// deployment may hold that key in different custody from its transport key.
-func WithAcceptanceSigner(s helpers.Signer) ClientOption {
-	return func(c *clientConfig) { c.acceptanceSigner = s }
-}
-
-// WithAgentKey injects the PUBLIC half of the acceptance key. A delivery fetch
-// presents it in a header, and a Signer cannot yield it — custody keeps the
-// private half, so the public half has to be supplied alongside. Without it the
-// client can buy but cannot fetch what it bought.
+// There is deliberately no option for a SEPARATE acceptance key. The protocol
+// carries one agent identity: agent_identity_hash is defined as the thumbprint of
+// the agent's request-signing key, an Exchange verifies the detached acceptance
+// against the key registered for the caller its request signature identified, and
+// the delivery URL is bound to that same thumbprint. A second key would be
+// refused at execute, and any URL it did produce could never be fetched — the
+// presented key would not match the binding.
 func WithAgentKey(pub ed25519.PublicKey) ClientOption {
 	return func(c *clientConfig) { c.agentKey = pub }
 }
@@ -164,21 +161,33 @@ func WithEndpointResolver(r EndpointResolver) ClientOption {
 	return func(c *clientConfig) { c.endpoints = r }
 }
 
-// WithFetchTransport injects the round-tripper the content fetch dials through.
-// It defaults to the SSRF-guarded one, with redirects refused in every case —
-// the redirect policy is a property of the bound-fetch profile, not a detail a
-// caller supplies.
-func WithFetchTransport(rt http.RoundTripper) ClientOption {
-	return func(c *clientConfig) { c.fetchTransport = rt }
+// WithGuardedBaseTransport carries the caller's own transport settings — a tuned
+// connection pool, client certificates — UNDERNEATH the SSRF guard on both legs
+// that dial an address another party named: the content fetch, and the RPCs that
+// route to the Exchange an offer identified.
+//
+// It is not a way to replace the guard. Those two legs dial hosts the client did
+// not configure, so the dial-time address pin and the https-only scheme check are
+// applied in every case; a caller supplies what sits under them. The only way to
+// reach a private or plaintext endpoint is the deliberate, deployment-level
+// SKIP_SSRF / ALLOW_INSECURE opt-out.
+//
+// The home Exchange and the Broker are operator-configured origins and are
+// trusted as far as that configuration is, so they dial through WithHTTPClient's
+// transport instead.
+func WithGuardedBaseTransport(base *http.Transport) ClientOption {
+	return func(c *clientConfig) { c.guardedBase = base }
 }
 
-// resolveAcceptanceSigner returns the Signer that signs acceptances and fetch
-// proofs: the dedicated one if injected, otherwise the request signer.
-func (c clientConfig) resolveAcceptanceSigner() helpers.Signer {
-	if c.acceptanceSigner != nil {
-		return c.acceptanceSigner
-	}
-	return c.signer
+// WithClientOptions appends raw Connect client options (a codec, a read cap
+// tighter than the SDK default) to every Connect client the SDK builds.
+// Interceptors belong in WithInterceptors; this is the escape hatch for the
+// remaining client-level knobs the SDK does not model, mirroring
+// connectserver.WithHandlerOptions on the server face.
+//
+// Options are appended AFTER the SDK's own, so a caller-supplied value wins.
+func WithClientOptions(opts ...connectrpc.ClientOption) ClientOption {
+	return func(c *clientConfig) { c.connectOpts = append(c.connectOpts, opts...) }
 }
 
 // resolveOfferResolver returns the KeyResolver the offer Verifier uses. A custom

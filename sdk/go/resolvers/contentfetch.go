@@ -55,20 +55,20 @@ type ProofSigner interface {
 
 // ContentFetchOptions configures a ContentFetcher. Every field has a safe default.
 type ContentFetchOptions struct {
-	// Transport is the underlying round-tripper. Defaults to the SSRF-guarded
-	// one.
+	// BaseTransport carries the caller's own transport settings — a tuned
+	// connection pool, client certificates — UNDERNEATH the SSRF guard. It is
+	// never a replacement for the guard: a delivery URL names a host chosen by
+	// another party, so the address pin and the https-only scheme check are
+	// applied in every case. Nil means a fresh transport under the guard.
 	//
-	// The seam is the transport rather than a whole client on purpose: the
-	// redirect policy is a security property of this profile, not a detail a
-	// caller supplies, so it is applied here in every case. A caller that injected
-	// its own client would be asserting against its own policy instead of the one
-	// production runs.
+	// The redirect policy is likewise a property of this profile rather than a
+	// detail a caller supplies. A caller that could inject a whole client would be
+	// asserting against its own policy instead of the one production runs.
 	//
-	// The SCHEME policy is deliberately left to the transport as well, rather than
-	// re-checked here. The guarded client already refuses anything but https
-	// unless a deployment opts into plaintext, and a second hardcoded check would
-	// make that flag mean two different things in one SDK.
-	Transport http.RoundTripper
+	// The only way to reach a private or plaintext endpoint is the deliberate,
+	// deployment-level SKIP_SSRF / ALLOW_INSECURE opt-out, which is one decision
+	// recorded in one place instead of a per-caller copy of it.
+	BaseTransport *http.Transport
 	// Timeout bounds one fetch, proof minting included. Defaults to
 	// DefaultContentTimeout.
 	Timeout time.Duration
@@ -189,13 +189,13 @@ type ContentFetcher struct {
 // the SSRF-guarded transport, a 30-second bound, an 8 MiB body cap, and redirects
 // refused.
 func NewContentFetcher(opts ContentFetchOptions) *ContentFetcher {
-	transport := opts.Transport
-	if transport == nil {
-		// Only the guarded client's TRANSPORT is taken, never the whole client:
-		// its redirect policy follows up to five hops, which is right for a public
-		// well-known document and wrong for anything carrying a credential.
-		transport = NewGuardedClientFromEnv().Transport
-	}
+	// The guard is composed here and cannot be handed in already-built: a caller
+	// supplies what sits UNDER it, never what replaces it.
+	//
+	// The redirect policy is this profile's own, which is why the guarded CLIENT
+	// is not reused: it follows up to five hops, which is right for a public
+	// well-known document and wrong for anything carrying a credential.
+	transport := NewGuardedTransport(opts.BaseTransport)
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = DefaultContentTimeout
@@ -269,7 +269,14 @@ func (f *ContentFetcher) Fetch(ctx context.Context, signedURL string, signer Pro
 func (f *ContentFetcher) request(ctx context.Context, op, signedURL string, signer ProofSigner) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signedURL, nil)
 	if err != nil {
-		return nil, &FetchError{Failure: FetchMalformed, Op: op, Err: err}
+		// The cause is NOT wrapped: a parse failure prints the offending URL, and a
+		// delivery URL carries a live credential in its query. Nothing safe can be
+		// named either — redaction itself needs a parseable value — so the class is
+		// the whole message.
+		return nil, &FetchError{
+			Failure: FetchMalformed, Op: op,
+			Err: errors.New("delivery url is not parseable (value withheld: it carries a live credential)"),
+		}
 	}
 	// The proof covers @target-uri as the VERBATIM string, while the request line
 	// carries whatever the URL value re-serializes to. The signed-URL contract

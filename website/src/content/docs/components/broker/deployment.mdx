@@ -3,6 +3,14 @@ title: "Broker Deployment"
 description: "Deployment models, configuration reference, caching strategy, failure modes, and scaling considerations for the RAMP Broker."
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution">
+The agent SDK described here is the **deferred high-tier** design, not shipped
+API. What exists today is the low-tier client in `sdk/go/connect`; see the
+[Agent SDK overview](/components/agent-sdk/overview/) for what that covers.
+</Aside>
+
 ## Deployment Models
 
 The Broker is designed for three deployment modes. The core logic (selection, budget, reporting) is identical across all three; what changes is the process model, configuration surface, and what the agent is responsible for.

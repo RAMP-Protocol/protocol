@@ -57,10 +57,17 @@ func IsBareHost(ref string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// A trailing colon parses as a host with an empty port and would otherwise
+	// compare equal to itself. It is not a domain anyone meant to write, and the
+	// callers here concatenate the value into a URL, so it is refused rather than
+	// quietly normalized away.
+	if strings.HasSuffix(host, ":") {
+		return false, nil
+	}
 	return host == ref, nil
 }
 
-// HostAnchored reports whether candidate's host is anchored to anchor's host —
+// HostAnchored reports whether candidate's hostname is anchored to anchor's —
 // equal to it, or a subdomain of it. Either side may be a bare domain, a
 // host:port pair, or a full URL; a reference that does not parse is returned as
 // an error, which callers treat as "not anchored".
@@ -70,16 +77,40 @@ func IsBareHost(ref string) (bool, error) {
 // and nothing else. Without it, a host could redirect a signed request — or a
 // revocation poll — to an unrelated third-party address that a dial-time address
 // guard would happily allow, because the address is perfectly public.
+//
+// The PORT is deliberately not part of the comparison. The property being
+// enforced is "not an unrelated host", and a service on a non-default port of the
+// same name is not another host — TLS binds hostnames, not ports. Comparing with
+// the port would leave an Exchange that advertises https://exchange.example:8443
+// permanently unable to receive a usage report, for no security gain.
 func HostAnchored(anchor, candidate string) (bool, error) {
-	anchorHost, err := HostOf(anchor)
+	anchorHost, err := hostnameOf(anchor)
 	if err != nil {
 		return false, fmt.Errorf("anchor host: %w", err)
 	}
-	candidateHost, err := HostOf(candidate)
+	candidateHost, err := hostnameOf(candidate)
 	if err != nil {
 		return false, fmt.Errorf("candidate host: %w", err)
 	}
 	return sameOrSubdomain(anchorHost, candidateHost), nil
+}
+
+// hostnameOf is HostOf without the port, and with IPv6 brackets removed. It backs
+// the anchoring comparison; IsBareHost keeps using HostOf, because there a port is
+// part of what the caller legitimately named.
+func hostnameOf(ref string) (string, error) {
+	host, err := HostOf(ref)
+	if err != nil {
+		return "", err
+	}
+	// url.URL.Hostname() strips a trailing :port and the brackets around an IPv6
+	// literal. Re-parsing the extracted authority is the cheapest way to reuse
+	// exactly that rule rather than restate it.
+	parsed, err := url.Parse("//" + host)
+	if err != nil {
+		return "", fmt.Errorf("%w: %q: %w", ErrInvalidHost, ref, err)
+	}
+	return parsed.Hostname(), nil
 }
 
 // sameOrSubdomain reports whether candidate equals anchor or is a subdomain of

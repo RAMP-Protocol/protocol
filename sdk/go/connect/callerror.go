@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	connectrpc "connectrpc.com/connect"
+
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
@@ -131,4 +133,40 @@ func asCallError(err error) (*CallError, bool) {
 		return cerr, true
 	}
 	return nil, false
+}
+
+// sendError classifies a failure the transport returned AFTER the routing checks
+// passed, so one verb answers with one error type however it failed.
+//
+// Without this a single method yields a *CallError when it declines to send and a
+// bare transport error when the peer refuses, which makes errors.As(&CallError{})
+// a coin flip on the very type callers are told to branch on.
+//
+// The Connect error is kept in the chain with %w, so errors.As still reaches it
+// and ErrorDetailFrom still finds the typed detail the peer attached.
+func sendError(op string, err error) error {
+	out := &CallError{Kind: CallUnreachable, Op: op, Err: err}
+	var cerr *connectrpc.Error
+	if !errors.As(err, &cerr) {
+		return out
+	}
+	// A peer that answered is a refusal, whatever it said. Unavailable and the
+	// deadline codes are the two Connect reports a transport failure as, so they
+	// stay unreachable — the distinction a caller needs is "it said no" versus "it
+	// never answered", and only the first is worth surfacing a reason for.
+	switch cerr.Code() {
+	case connectrpc.CodeUnavailable, connectrpc.CodeDeadlineExceeded:
+		out.Kind = CallUnreachable
+	case connectrpc.CodeResourceExhausted:
+		// The read cap, seen from this side: the peer's answer was larger than the
+		// client agreed to read.
+		out.Kind = CallTooLarge
+	default:
+		out.Kind = CallRefused
+	}
+	out.Reason = cerr.Code().String()
+	if detail, ok := errorDetailFromConnect(cerr); ok {
+		out.Detail = detail
+	}
+	return out
 }

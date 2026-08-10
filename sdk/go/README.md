@@ -14,9 +14,9 @@ directly with no `replace` directive.
 
 The `L2` tier is split by kind: the **I/O** package (`resolvers`) is the only tier
 that dials the network (it holds the maintained HTTP client and the SSRF guard),
-while the **transport** packages (`core` / `connect` / `connectserver`) are
-transport-neutral composition and Connect bindings with no network fetch of their
-own. An io-leaf guard (`helpers/io_leaf_guard_test.go`) fails the build if any pure
+while the **transport** packages (`core` / `connect` / `connectserver`) hold no
+dialing surface of their own — `connect` composes the I/O tier's guarded
+transport and content fetcher rather than opening a second one. An io-leaf guard (`helpers/io_leaf_guard_test.go`) fails the build if any pure
 L1 file drags in a dialing surface, so the fetch surface cannot leak back down.
 
 ## L1 — `helpers`
@@ -115,13 +115,16 @@ import "github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 - **Key resolvers** — `NewWellKnownKeyResolver` (well-known JWKS, TTL cache),
   `NewWBAKeyResolver` (WBA directory, revocation/expiry-aware, with a `Run` poller).
 - **Endpoint resolver** — `NewWellKnownEndpointResolver` discovers an Exchange's
-  `retrieval_endpoint` from `/.well-known/ramp.json` (`ErrNoEndpoint` when absent).
+  own service endpoint (`WellKnownManifest.endpoint`) from `/.well-known/ramp.json`
+  (`ErrNoEndpoint` when absent), host-keyed and cached per host.
 - **Active-key selection** — `ActiveEd25519Key` / `ActiveEd25519KeyWithExpiry` pick
   an identity's window-active key by document order; the `…Screened` variants fold in
   a revoked-thumbprint screen. `NewCachedOfferKeyResolver` caches the selected offer
   key with an expiry clamped to the key's `not_after`.
 - **SSRF-guarded client** — `NewGuardedClientFromEnv` is the single construction path
-  every fetch uses; `SSRFGuard` / `SSRFCheckRedirect` are the injectable dial-time
+  every fetch uses; `NewGuardedTransport` composes the same guard over a caller's
+  own base transport, so application settings ride UNDER the guard rather than
+  replacing it; `SSRFGuard` / `SSRFCheckRedirect` are the injectable dial-time
   address guard and redirect re-vet for callers wiring their own `http.Client`.
 - **Content fetch** — `NewContentFetcher` retrieves the bytes a signed delivery URL
   names, presenting a proof of possession through the injected `ProofSigner` seam

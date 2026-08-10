@@ -55,17 +55,39 @@ func allowInsecure() bool { return envFlag(envAllowInsecure) }
 // (non-skip) path dials through a no-proxy transport, so a set HTTP(S)_PROXY
 // cannot tunnel a private target past the dial-time address pin.
 func NewGuardedClientFromEnv() *http.Client {
-	var base http.RoundTripper
-	if skipSSRF() {
-		base = http.DefaultTransport // no address guard
-	} else {
-		base = SSRFGuard(nil) // dial-time address pin, no proxy
-	}
 	return &http.Client{
 		Timeout:       defaultWBAHTTPTimeout,
-		Transport:     &schemeGuardRoundTripper{base: base},
+		Transport:     NewGuardedTransport(nil),
 		CheckRedirect: schemeCheckRedirect,
 	}
+}
+
+// NewGuardedTransport returns the guarded round-tripper — the scheme guard over
+// the dial-time address pin — with base underneath it, honouring the same two env
+// flags NewGuardedClientFromEnv reads. A nil base gets a fresh transport.
+//
+// base exists so a caller can carry its OWN transport settings (a tuned
+// connection pool, client certificates) UNDER the guard rather than instead of
+// it. That distinction is the whole point: every consumer of this transport dials
+// a host some other party named, so the guard is not a default a caller may
+// replace. Handing over a base is the supported way to customise the dial; the
+// only way to drop the guard is the deliberate, deployment-level SKIP_SSRF /
+// ALLOW_INSECURE opt-out.
+//
+// SSRFGuard clones what it is given and forces Proxy off, so the caller's value
+// is never mutated and a configured proxy cannot tunnel a private target past the
+// address pin.
+func NewGuardedTransport(base *http.Transport) http.RoundTripper {
+	var inner http.RoundTripper
+	switch {
+	case !skipSSRF():
+		inner = SSRFGuard(base) // dial-time address pin, no proxy
+	case base != nil:
+		inner = base.Clone()
+	default:
+		inner = http.DefaultTransport // no address guard
+	}
+	return &schemeGuardRoundTripper{base: inner}
 }
 
 // schemeGuardRoundTripper enforces the scheme policy on the INITIAL request
