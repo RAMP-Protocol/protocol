@@ -14,9 +14,10 @@ package helpers_test
 // release blocker.
 //
 // helpers.ProtocolVersion is the one source. This guard pins that: no non-test
-// file under sdk/go may assign a string literal to a `Ver:` field. Echo sites
-// (`Ver: req.GetVer()`) relay an inbound peer's own version verbatim and are not
-// system-authored, so they never trip it — the matcher requires a quoted literal.
+// file under sdk/go may set a `Ver:` struct-literal field to a quoted string.
+// Echo sites (`Ver: req.GetVer()`) relay an inbound peer's own version verbatim
+// and are not system-authored, so they never trip it — the matcher requires a
+// quoted literal.
 //
 // The guard is green the day it lands (there are no such sites today) and that is
 // the point: it is a ratchet against the regression, not a cleanup of one.
@@ -38,6 +39,13 @@ import (
 // string. `Ver:` is required immediately before the colon, so `Verifier:` and
 // `VerifiedOffer:` never match; a quoted literal is required, so the echo form
 // `Ver: req.GetVer()` and the constant form `Ver: helpers.ProtocolVersion` do not.
+//
+// The struct-literal form is the whole scope, and widening it is not free: a
+// matcher that also read `x.Ver = "…"` would flag WellKnownManifest.Ver, whose
+// quoted literal is CORRECT — that field versions the /.well-known/ramp.json
+// document schema, a separate namespace stated MUST-equal and deliberately not
+// stamped from ProtocolVersion. Widening therefore needs a message-level
+// carve-out, not a looser regex.
 var bareVerLiteralRe = regexp.MustCompile(`\bVer:\s*"[^"]*"`)
 
 // stampsBareVerLiteral is the pure predicate, extracted so the meta-tests can
