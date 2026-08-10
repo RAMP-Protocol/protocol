@@ -12,7 +12,19 @@ reason; an Exchange that publishes none accepts the payload uninspected and pass
 its system of record exactly as before, so existing Exchanges stay conformant with no
 change. This replaces the former unconditional contract text ("the Exchange passes it
 through to its system of record without inspecting it") on the Agent Account Registration
-banner and on `RegisterRequest.registration_data`, both now conditioned on the manifest.
+banner and on `RegisterRequest.registration_data`, both of which now defer to the field
+that owns the contract rather than restating it.
+
+The field carries normative safety rules, because a consumer reads this schema out of a
+third party's manifest: the schema MUST be self-contained and a consumer MUST NOT resolve
+a remote `$ref` out of it — doing so would turn every reader into an SSRF vector aimed at
+a URL the schema's author chose — and a consumer SHOULD bound validation time and
+recursion depth, since draft 2020-12 `pattern` admits regexes with catastrophic
+backtracking. The 16KB cap is measured as the UTF-8 bytes of the member as served in
+`ramp.json`; an oversized schema SHOULD be rejected and its local pre-check skipped rather
+than truncated, which leaves the Exchange's own enforcement deciding exactly as it does
+when no schema is published. These are prose, not protovalidate rules: the field is a
+`Struct`, and no field-level rule can reach inside it.
 
 The refusal names what to fix: `RegistrationFailure` gains
 `field_errors` (field 2, ≤64 items) carrying the new top-level `RegistrationFieldError`
@@ -34,8 +46,13 @@ suggestion, not a rule — and the agent had nowhere to learn which fields a giv
 expects. Both now resolve against the manifest the agent already fetches to find the
 Exchange's endpoint.
 
-*Tooling:* the corpus generator gained valid-item construction for repeated **message**
-fields (seed-or-autofill, mirroring the top-level baseline). `field_errors` is the
+*Tooling:* `RegistrationFailure` is now seeded in the corpus generator with the new reason
+and an empty-path field error, so the cross-language oracle exercises the reason this
+change adds and pins the empty-path accept boundary in all three languages; without the
+seed the auto-filled baseline picked the first allowed reason and published a
+`DOMAIN_NOT_VERIFIED` refusal carrying `field_errors` as valid — the pairing the field
+comment rules out. The generator also gained valid-item construction for repeated
+**message** fields (seed-or-autofill, mirroring the top-level baseline). `field_errors` is the
 contract's first repeated message field carrying its own `repeated.max_items`, and the
 generator previously produced only scalar list items.
 

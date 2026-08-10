@@ -602,7 +602,7 @@ class RegisterRequest(WireModel):
     )
     registration_data: dict[str, Any] | None = Field(
         None,
-        description="Operator-defined registration payload; the business fields are not fixed\n in the wire contract. What the Exchange does with it follows its manifest:\n an Exchange publishing WellKnownManifest.registration_schema validates this\n payload against that schema and refuses a non-conforming one; an Exchange\n publishing no schema passes it through to its system of record without\n inspecting it. The caller's identity is taken from the verified request\n signature, never from this payload.",
+        description="Operator-defined registration payload; the business fields are not fixed\n in the wire contract. Whether the Exchange inspects it follows its\n manifest — see WellKnownManifest.registration_schema. The caller's\n identity is taken from the verified request signature, never from this\n payload.",
     )
     ver: str | None = Field(
         '',
@@ -1544,7 +1544,7 @@ class WellKnownManifest(WireModel):
     )
     registration_schema: dict[str, Any] | None = Field(
         None,
-        description='Present: this Exchange ENFORCES the schema — a RegisterRequest whose\n registration_data does not conform is refused with\n REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA and the offending\n members named in RegistrationFailure.field_errors.\n Absent: registration_data is passed through to the system of record\n uninspected, so an Exchange that publishes no schema needs no change to\n stay conformant.',
+        description="Exchange-only. JSON Schema (draft 2020-12) describing the\n RegisterRequest.registration_data object this Exchange expects. This field\n is the single home of the enforce/pass-through contract, and publishing it\n IS the enforcement switch. Present: this Exchange validates\n registration_data against the schema and refuses a non-conforming payload\n with REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the\n offending members in RegistrationFailure.field_errors. Absent:\n registration_data is passed through to the system of record uninspected,\n so an Exchange that publishes no schema needs no change to stay\n conformant. Safety rules, because a consumer reads this schema out of a\n third party's manifest: it MUST be self-contained, and a consumer MUST NOT\n resolve a remote $ref out of it — doing so turns every reader into an SSRF\n vector aimed at a URL the schema's author chose. A consumer SHOULD bound\n validation time and recursion depth; draft 2020-12 `pattern` admits\n regexes with catastrophic backtracking. Size is capped at 16KB, measured\n as the UTF-8 bytes of this member as served in ramp.json; a consumer\n SHOULD reject an oversized schema and skip its local pre-check rather than\n truncate it, which leaves the Exchange's own enforcement the deciding\n check exactly as when no schema is published.",
     )
     role: Role = Field(..., description='Role this manifest describes.')
     supported_auth_methods: list[AuthMethod] | None = Field(

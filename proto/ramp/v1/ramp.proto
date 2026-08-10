@@ -2618,16 +2618,25 @@ message WellKnownManifest {
   // Absent = no published limit (Exchange applies its own default policy).
   optional int32 max_intermediary_hops = 28;
 
-  // Exchange-only. JSON Schema (draft 2020-12, max 16KB) describing the
-  // registration_data object this Exchange expects on Register.
-  //
-  // Present: this Exchange ENFORCES the schema — a RegisterRequest whose
-  // registration_data does not conform is refused with
-  // REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA and the offending
-  // members named in RegistrationFailure.field_errors.
-  // Absent: registration_data is passed through to the system of record
-  // uninspected, so an Exchange that publishes no schema needs no change to
-  // stay conformant.
+  // Exchange-only. JSON Schema (draft 2020-12) describing the
+  // RegisterRequest.registration_data object this Exchange expects. This field
+  // is the single home of the enforce/pass-through contract, and publishing it
+  // IS the enforcement switch. Present: this Exchange validates
+  // registration_data against the schema and refuses a non-conforming payload
+  // with REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the
+  // offending members in RegistrationFailure.field_errors. Absent:
+  // registration_data is passed through to the system of record uninspected,
+  // so an Exchange that publishes no schema needs no change to stay
+  // conformant. Safety rules, because a consumer reads this schema out of a
+  // third party's manifest: it MUST be self-contained, and a consumer MUST NOT
+  // resolve a remote $ref out of it — doing so turns every reader into an SSRF
+  // vector aimed at a URL the schema's author chose. A consumer SHOULD bound
+  // validation time and recursion depth; draft 2020-12 `pattern` admits
+  // regexes with catastrophic backtracking. Size is capped at 16KB, measured
+  // as the UTF-8 bytes of this member as served in ramp.json; a consumer
+  // SHOULD reject an oversized schema and skip its local pre-check rather than
+  // truncate it, which leaves the Exchange's own enforcement the deciding
+  // check exactly as when no schema is published.
   google.protobuf.Struct registration_schema = 29;
 
   // Extension point
@@ -3085,11 +3094,8 @@ message DomainVerificationResult {
 // signature on every call, never from anything the caller sends.
 //
 // Whether the Exchange inspects the business payload (registration_data)
-// follows its manifest. An Exchange that publishes a registration_schema in
-// its WellKnownManifest ENFORCES that schema on Register and refuses a
-// non-conforming payload; one that publishes none accepts the payload
-// uninspected and passes it to its system of record, its contents
-// operator-defined and enforced outside this contract.
+// follows its manifest — see WellKnownManifest.registration_schema, which
+// states that contract.
 // ============================================================================
 
 // RegisterRequest — Agent asks the Exchange to create its account.
@@ -3099,12 +3105,10 @@ message RegisterRequest {
   string ver = 1;
 
   // Operator-defined registration payload; the business fields are not fixed
-  // in the wire contract. What the Exchange does with it follows its manifest:
-  // an Exchange publishing WellKnownManifest.registration_schema validates this
-  // payload against that schema and refuses a non-conforming one; an Exchange
-  // publishing no schema passes it through to its system of record without
-  // inspecting it. The caller's identity is taken from the verified request
-  // signature, never from this payload.
+  // in the wire contract. Whether the Exchange inspects it follows its
+  // manifest — see WellKnownManifest.registration_schema. The caller's
+  // identity is taken from the verified request signature, never from this
+  // payload.
   google.protobuf.Struct registration_data = 2;
 
   // Extension point

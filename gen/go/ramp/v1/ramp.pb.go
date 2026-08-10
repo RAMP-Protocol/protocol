@@ -6729,16 +6729,25 @@ type WellKnownManifest struct {
 	// publish their chain-depth tolerance so Brokers prune before forwarding.
 	// Absent = no published limit (Exchange applies its own default policy).
 	MaxIntermediaryHops *int32 `protobuf:"varint,28,opt,name=max_intermediary_hops,json=maxIntermediaryHops,proto3,oneof" json:"max_intermediary_hops,omitempty"`
-	// Exchange-only. JSON Schema (draft 2020-12, max 16KB) describing the
-	// registration_data object this Exchange expects on Register.
-	//
-	// Present: this Exchange ENFORCES the schema — a RegisterRequest whose
-	// registration_data does not conform is refused with
-	// REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA and the offending
-	// members named in RegistrationFailure.field_errors.
-	// Absent: registration_data is passed through to the system of record
-	// uninspected, so an Exchange that publishes no schema needs no change to
-	// stay conformant.
+	// Exchange-only. JSON Schema (draft 2020-12) describing the
+	// RegisterRequest.registration_data object this Exchange expects. This field
+	// is the single home of the enforce/pass-through contract, and publishing it
+	// IS the enforcement switch. Present: this Exchange validates
+	// registration_data against the schema and refuses a non-conforming payload
+	// with REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the
+	// offending members in RegistrationFailure.field_errors. Absent:
+	// registration_data is passed through to the system of record uninspected,
+	// so an Exchange that publishes no schema needs no change to stay
+	// conformant. Safety rules, because a consumer reads this schema out of a
+	// third party's manifest: it MUST be self-contained, and a consumer MUST NOT
+	// resolve a remote $ref out of it — doing so turns every reader into an SSRF
+	// vector aimed at a URL the schema's author chose. A consumer SHOULD bound
+	// validation time and recursion depth; draft 2020-12 `pattern` admits
+	// regexes with catastrophic backtracking. Size is capped at 16KB, measured
+	// as the UTF-8 bytes of this member as served in ramp.json; a consumer
+	// SHOULD reject an oversized schema and skip its local pre-check rather than
+	// truncate it, which leaves the Exchange's own enforcement the deciding
+	// check exactly as when no schema is published.
 	RegistrationSchema *structpb.Struct `protobuf:"bytes,29,opt,name=registration_schema,json=registrationSchema,proto3" json:"registration_schema,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -8002,12 +8011,10 @@ type RegisterRequest struct {
 	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Operator-defined registration payload; the business fields are not fixed
-	// in the wire contract. What the Exchange does with it follows its manifest:
-	// an Exchange publishing WellKnownManifest.registration_schema validates this
-	// payload against that schema and refuses a non-conforming one; an Exchange
-	// publishing no schema passes it through to its system of record without
-	// inspecting it. The caller's identity is taken from the verified request
-	// signature, never from this payload.
+	// in the wire contract. Whether the Exchange inspects it follows its
+	// manifest — see WellKnownManifest.registration_schema. The caller's
+	// identity is taken from the verified request signature, never from this
+	// payload.
 	RegistrationData *structpb.Struct `protobuf:"bytes,2,opt,name=registration_data,json=registrationData,proto3" json:"registration_data,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`

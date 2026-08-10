@@ -120,7 +120,7 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 | `gnap_grant_endpoint` | string | No | GNAP grant endpoint when GNAP is supported |
 | `supported_profiles` | string[] | No | Domain extension profiles this Exchange conforms to (e.g., `["ramp-academic-v1", "ramp-news-v1"]`) |
 | `base_currency` | string | No | ISO 4217 currency code for all `unit_cost` values in offers (e.g., `"USD"`) |
-| `registration_schema` | object | No | JSON Schema (draft 2020-12) for the `registration_data` an agent sends to `Register`. Present means this Exchange enforces it; absent means `registration_data` passes through uninspected |
+| `registration_schema` | object | No | JSON Schema (draft 2020-12, max 16KB) for the `registration_data` an agent sends to `Register`. Present means this Exchange enforces it; absent means `registration_data` passes through uninspected. Must be self-contained — consumers do not resolve a remote `$ref` out of it |
 | `contact` | string | No | Contact email for integration inquiries |
 | `terms_uri` | string | No | Terms of service URL |
 | `privacy_uri` | string | No | Privacy policy URL |

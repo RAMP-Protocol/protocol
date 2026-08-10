@@ -1717,8 +1717,7 @@
     "json": {
       "field_errors": [
         {
-          "error": "x",
-          "path": "x"
+          "error": "matched 2 branches of oneOf, exactly 1 required"
         },
         {
           "error": "x",
@@ -1977,7 +1976,7 @@
           "path": "x"
         }
       ],
-      "reason": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED"
+      "reason": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
     }
   },
   {
@@ -1990,8 +1989,7 @@
     "json": {
       "field_errors": [
         {
-          "error": "x",
-          "path": "x"
+          "error": "matched 2 branches of oneOf, exactly 1 required"
         }
       ]
     }
@@ -2006,8 +2004,7 @@
     "json": {
       "field_errors": [
         {
-          "error": "x",
-          "path": "x"
+          "error": "matched 2 branches of oneOf, exactly 1 required"
         }
       ],
       "reason": 7
@@ -2020,11 +2017,10 @@
     "json": {
       "field_errors": [
         {
-          "error": "x",
-          "path": "x"
+          "error": "matched 2 branches of oneOf, exactly 1 required"
         }
       ],
-      "reason": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED"
+      "reason": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
     }
   },
   {

@@ -89,6 +89,19 @@ func seeds() map[string]proto.Message {
 		// envelopes. RequiredFields MUST be exactly ["x"]: the repeated.unique
 		// duplicate_item edge appends the auto-filled good item (stringSamples[0]=="x")
 		// and relies on the baseline already holding it, so the mutant is ["x","x"].
+		// The refusal that carries per-member detail. Auto-fill would pick the
+		// FIRST allowed reason (DOMAIN_NOT_VERIFIED) and still populate
+		// field_errors, publishing as VALID the pairing the field comment rules
+		// out — and the branch's own reason would reach no corpus case, so a
+		// client that dropped it would stay green. The empty path is the
+		// whole-object failure (oneOf, minProperties) that belongs to no single
+		// member; seeding it pins that accept boundary in all three languages.
+		"RegistrationFailure": &rampv1.RegistrationFailure{
+			Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+			FieldErrors: []*rampv1.RegistrationFieldError{
+				{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"},
+			},
+		},
 		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
 		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},
 	}
@@ -307,9 +320,19 @@ func enrichWKT(m protoreflect.Message) {
 // straight from validScalar; a message item is built the same way a top-level
 // baseline is — from its seed when one exists, otherwise auto-filled — because
 // validScalar deliberately returns an unset Value for MessageKind and appending
-// that to a list panics. Recursion terminates on the seed map or on a message
-// whose constrained fields are all scalar; a self-referential message with a
-// constrained message field would need a seed, and says so loudly if it lacks one.
+// that to a list panics.
+//
+// It auto-fills where setValid's singular-message branch instead demands a seed.
+// The split is deliberate: a singular message field is usually a required
+// sub-message whose validity depends on cross-field CEL that auto-fill cannot
+// satisfy (the reason seeds exist at all), whereas a repeated element only has
+// to clear its own field rules, which auto-fill does handle. A repeated element
+// that needs more can still be seeded — the seed map is consulted first.
+//
+// Recursion terminates on the seed map or on a message whose constrained fields
+// are all scalar. The contract has no message cycle; if one is ever introduced
+// without a seed this recurses until the stack overflows, which is loud but
+// unhelpful — seed the cycle's entry point.
 func validItem(fd protoreflect.FieldDescriptor, item *validate.FieldRules, sd map[string]proto.Message) (protoreflect.Value, error) {
 	if fd.Kind() != protoreflect.MessageKind {
 		return validScalar(fd, item)

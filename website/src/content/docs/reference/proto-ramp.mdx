@@ -258,7 +258,7 @@ A successful response means verification succeeded; a failure travels as a non-O
 
 ### RegisterRequest
 
-Agent asks the Exchange to create its account. The caller's identity is proven by the verified request signature, never asserted in the body; the operator-defined business payload rides in `registration_data` and is passed through to the Exchange's system of record uninspected.
+Agent asks the Exchange to create its account. The caller's identity is proven by the verified request signature, never asserted in the body; the operator-defined business payload rides in `registration_data`. Whether the Exchange inspects that payload follows its manifest: one publishing `WellKnownManifest.registration_schema` validates against that schema and refuses a non-conforming payload, one publishing none passes it through to its system of record uninspected.
 
 ::proto-message{name=RegisterRequest}
 
@@ -467,7 +467,7 @@ A registration request could not be completed.
 
 ### RegistrationFieldError
 
-One `registration_data` member that failed the Exchange's published `registration_schema`. Carried on `RegistrationFailure.field_errors` when the reason is `REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA`. `path` is an RFC 6901 JSON Pointer relative to `registration_data`, and the empty string addresses `registration_data` itself — the case for whole-object failures (`oneOf`, `minProperties`) that belong to no single member. `error` is a developer-facing, non-authoritative description whose wording is validator-defined; clients branch on the reason enum, never on this text.
+One `registration_data` member that failed the Exchange's published `registration_schema`, carried on `RegistrationFailure.field_errors`.
 
 ::proto-message{name=RegistrationFieldError}
 
