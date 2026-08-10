@@ -387,9 +387,15 @@ def test_every_gap_is_resolved_or_documented() -> None:
     the gate non-vacuous.
 
     TS direction (python present, ts null): HARD zero — every real TS face is now in
-    package.json exports (money / idempotency / scopes / hashurl / wire / core.window /
-    verify-multisig-request / verify-request), including the UnknownKey error class
-    that completed the resolver error taxonomy in all three languages.
+    ``sdk/ts/package.json`` exports (money / idempotency / scopes / hashurl / wire /
+    core.window / verify-multisig-request / verify-request), including the UnknownKey
+    error class that completed the resolver error taxonomy in all three languages.
+
+    That is a claim about the SYMBOL, not about reachability. This gate reads the
+    development-time manifest; whether a consumer can actually import the module holding
+    the symbol depends on the repo-root ``package.json``, which is the map that ships.
+    Several of the modules named above are still unreachable there. See
+    ``test_ts_package_exports.py``, which owns that half and tracks the remainder.
 
     Python direction (ts present, python null): HARD zero (BASELINE_PY_ONLY_GAP = 0) —
     the original 19 gaps were each resolved (Python face exported) or documented

@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+**The `ver` envelope field states its contract, and the version string gets one owner
+(no wire change).** All 29 `ver` fields — 25 in `ramp.proto`, 4 in `admin.proto` — now name
+the expected value `"1.0"` and the receive-side rule. Before this, 27 of them said only
+"Protocol version" or "RAMP protocol version", and `DiscoveryResponse.ver` carried no comment
+at all — 28 fields from which an integrator could not learn what to stamp. Only
+`WellKnownManifest.ver` named the value. The contract: senders MUST stamp `ver` from a single
+constant, and receivers treat it as **advisory** — `ver` is not an authenticity or
+authorization control and MUST NOT be used as one, a receiver is not required to check it,
+and one that does check it MAY reject an unrecognised MAJOR version but MUST NOT reject an
+unrecognised MINOR version. Version negotiation, where it is needed, happens out of band via
+`WellKnownManifest.protocol_versions_supported`, which is why the in-band field need not be a
+rejection gate. `ver` deliberately carries no protovalidate rule: an exact-match rule would
+make every peer reject a `"1.1"` message outright, contradicting the
+reject-unrecognised-majors policy the manifest already states, and a major-version pattern
+would additionally make `ver` structurally required on every message — a wire change no
+consumer has asked for. The full reasoning is recorded under "Protocol version" in
+`ramp.proto`. `WellKnownManifest.ver` keeps its stronger MUST-equal rule and now says why it
+differs: it versions the `/.well-known/ramp.json` document schema, a namespace deliberately
+separate from the RPC envelope and not coupled to it.
+
+**SDK (all 3 languages): `ProtocolVersion` exported (additive, no wire change).** The RAMP
+`ver` value is now a public SDK symbol — `helpers.ProtocolVersion` in Go, `ProtocolVersion`
+in Python and TypeScript — pinned to the shared `wire-constants-vectors.json` oracle
+alongside the existing wire constants. It is the RAMP protocol version, not the Connect
+transport version that `ConnectProtocolVersion` carries. Consumers import it instead of
+minting their own constant, so a protocol bump is one edit here plus a re-pin rather than a
+literal hunt across every message builder. Two structural guards keep the pair honest: a
+conformance guard fails the build when a contract message declares `ver` without documenting
+its value and receive-side rule, and an SDK guard fails when a message builder in non-test
+`sdk/go` source stamps a bare string literal on a `Ver:` struct-literal field. Both bind what
+this project emits; neither can bind a third party, which is the accepted limit of an
+advisory field.
+
 **`ResourceEntry` gains typed `resource_mutability` (field 14) (additive, no wire break).**
 Publishers submit `resource_mutability` as a typed `ResourceEntry` field instead of inside
 `ext`/`ext_critical`; the Exchange reads the typed field, not `ext`. The field is `optional` —

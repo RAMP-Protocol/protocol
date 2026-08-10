@@ -239,7 +239,7 @@ func buildHashURLVectors(t *testing.T) []hashURLVector {
 	return out
 }
 
-// buildWireConstantsVectors emits the six wire constants by REFERENCING the real
+// buildWireConstantsVectors emits the seven wire constants by REFERENCING the real
 // exported constants — never by re-typing their string values.
 func buildWireConstantsVectors() []wireConstantVector {
 	return []wireConstantVector{
@@ -247,6 +247,7 @@ func buildWireConstantsVectors() []wireConstantVector {
 		{"ContentTypeJSON", ContentTypeJSON},
 		{"ConnectProtocolVersionHeader", ConnectProtocolVersionHeader},
 		{"ConnectProtocolVersion", ConnectProtocolVersion},
+		{"ProtocolVersion", ProtocolVersion},
 		{"RequestIDHeader", RequestIDHeader},
 		{"SignatureAgentHeader", SignatureAgentHeader},
 	}

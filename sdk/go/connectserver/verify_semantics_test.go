@@ -101,7 +101,7 @@ func signedDiscover(t *testing.T, srvURL string, f serverFixture, body []byte, c
 
 func discoverBody(t *testing.T) []byte {
 	t.Helper()
-	raw, err := protojson.Marshal(&rampv1.ResourceQuery{Ver: "1.0"})
+	raw, err := protojson.Marshal(&rampv1.ResourceQuery{Ver: helpers.ProtocolVersion})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -215,7 +215,7 @@ func (h *ExchangeHandler) DiscoverResources(
             })
         }
         return connect.NewResponse(&rampv1.ResourceResponse{
-            Ver:         "1.0",
+            Ver:         helpers.ProtocolVersion,
             Exchange: h.exchangeDomain,
             OfferGroups: groups,
         }), nil
@@ -224,7 +224,7 @@ func (h *ExchangeHandler) DiscoverResources(
     }
 
     return connect.NewResponse(&rampv1.ResourceResponse{
-        Ver:         "1.0",
+        Ver:         helpers.ProtocolVersion,
         Exchange: h.exchangeDomain,
         Offers:      offers,
     }), nil
@@ -632,7 +632,7 @@ func (h *ExchangeHandler) ExecuteTransaction(
     //    the top-level fields carry only shared aggregate state. Correlation is not
     //    in the body — it rides the X-Request-ID HTTP header across the round-trip.
     resp := &rampv1.TransactionResponse{
-        Ver:               "1.0",
+        Ver:               helpers.ProtocolVersion,
         AgentIdentityHash: agentHash,
         Items:             resultItems,
         TotalCost:         &rampv1.Cost{Amount: totalAmount, Currency: currency},

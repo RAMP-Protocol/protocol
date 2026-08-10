@@ -157,7 +157,7 @@ func (o *offerExchange) DiscoverResources(
 func (o *offerExchange) ExecuteTransaction(
 	_ context.Context, _ *connectrpc.Request[rampv1.TransactionRequest],
 ) (*connectrpc.Response[rampv1.TransactionResponse], error) {
-	return connectrpc.NewResponse(&rampv1.TransactionResponse{Ver: "1.0"}), nil
+	return connectrpc.NewResponse(&rampv1.TransactionResponse{Ver: helpers.ProtocolVersion}), nil
 }
 
 // serve stands up the SDK-wrapped handler over httptest with the given replay

@@ -79,6 +79,12 @@ func clientInterceptors(cfg clientConfig) []connectrpc.Interceptor {
 // back. Neither an unverifiable nor a doctored offer is silently dropped — it lands
 // in Rejected with a reason. Round-trip: client sign → HTTP → server verify →
 // origin → response, then the offer Verifier over the response.
+//
+// The query is the CALLER's message and is sent unmodified — unlike Execute,
+// which builds its own request, Discover cannot stamp fields without mutating
+// what it was handed. The caller is therefore the sender for ver purposes and
+// MUST set query.Ver = helpers.ProtocolVersion (see "Protocol version" in
+// ramp.proto: senders stamp it from one constant, never a literal).
 func (c *Client) Discover(ctx context.Context, query *rampv1.ResourceQuery) (core.Result, error) {
 	resp, err := c.rpc.DiscoverResources(ctx, connectrpc.NewRequest(query))
 	if err != nil {
@@ -105,7 +111,9 @@ func WithIdempotencyKey(key string) ExecuteOption {
 // Execute commits to a VERIFIED offer and returns the transaction response. It
 // accepts ONLY a core.VerifiedOffer — passing a RejectedOffer or a raw *rampv1.Offer
 // is a COMPILE error (the unforgeable-VerifiedOffer guard). A per-call idempotency
-// key is minted fresh unless WithIdempotencyKey pins one.
+// key is minted fresh unless WithIdempotencyKey pins one. Execute builds the whole
+// TransactionRequest, so it also stamps ver from helpers.ProtocolVersion — the
+// caller neither supplies nor overrides it.
 func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...ExecuteOption) (*rampv1.TransactionResponse, error) {
 	var ec executeConfig
 	for _, o := range opts {
@@ -123,7 +131,11 @@ func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...
 	// 1-element items list, each item reflecting its signed Offer back exactly as
 	// received at discovery. The authoritative identity is the reflected offer; the
 	// optional top-level offer_id correlation scalar is left unset.
+	//
+	// ver comes from helpers.ProtocolVersion — the single owner of the protocol
+	// version across all three SDKs — never a literal, so a bump is one edit.
 	req := &rampv1.TransactionRequest{
+		Ver:            helpers.ProtocolVersion,
 		IdempotencyKey: key,
 		Items:          []*rampv1.TransactionItem{{Offer: offer.Offer()}},
 	}

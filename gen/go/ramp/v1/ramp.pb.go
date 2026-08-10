@@ -1962,7 +1962,8 @@ func (x *AcceptableRestriction) GetValues() []string {
 // and reporting requirements before responding.
 type ResourceQuery struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// RAMP protocol version.
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Requester identity — who is making this request, what scopes they have,
 	// and optional delegation chain.
@@ -2096,7 +2097,8 @@ func (x *ResourceQuery) GetExtCritical() []string {
 // either the flat `offers` field or a single OfferGroup.
 type ResourceResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Canonical domain of the responding Exchange.
 	Exchange string `protobuf:"bytes,3,opt,name=exchange,proto3" json:"exchange,omitempty"`
@@ -4550,7 +4552,8 @@ func (x *AgentAcceptancePayload) GetIdempotencyKey() string {
 // delivery, and logs each transaction.
 type TransactionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns
 	// the original result rather than re-executing. The transaction's durable
@@ -4722,7 +4725,8 @@ func (x *TransactionItem) GetAgentAcceptance() *AgentAcceptance {
 // TransactionResultItem as partial results of a successful request.
 type TransactionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK
 	// Thumbprint of the agent's Ed25519 request-signing key (see "Retrieval-URL
@@ -5051,7 +5055,8 @@ func (x *Cost) GetUnitCost() string {
 
 type PushResourcesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Tenant identifier
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -5345,7 +5350,8 @@ func (x *ResourceEntry) GetExtCritical() []string {
 
 type PushResourcesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Number of entries accepted
 	Accepted int32 `protobuf:"varint,2,opt,name=accepted,proto3" json:"accepted,omitempty"`
@@ -5444,7 +5450,8 @@ func (x *PushResourcesResponse) GetExtCritical() []string {
 
 type RemoveResourcesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Tenant identifier
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -5507,7 +5514,8 @@ func (x *RemoveResourcesRequest) GetPaths() []string {
 
 type RemoveResourcesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Number of entries removed
 	Removed       int32 `protobuf:"varint,2,opt,name=removed,proto3" json:"removed,omitempty"`
@@ -5561,7 +5569,8 @@ func (x *RemoveResourcesResponse) GetRemoved() int32 {
 
 type RefreshCatalogRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Tenant identifier
 	TenantId      string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
@@ -5615,7 +5624,8 @@ func (x *RefreshCatalogRequest) GetTenantId() string {
 
 type RefreshCatalogResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Whether the refresh was started
 	Started       bool `protobuf:"varint,2,opt,name=started,proto3" json:"started,omitempty"`
@@ -5768,7 +5778,8 @@ func (x *ReportingObligation) GetExtCritical() []string {
 // Failure to report may result in the Exchange blocking subsequent access.
 type UsageReport struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
 	// report does not double-count usage. The report's durable identity is the
@@ -6138,7 +6149,8 @@ func (x *UsageAsset) GetPackageId() string {
 // UsageReportResponse — Acknowledgment of a usage report.
 type UsageReportResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Exchange-assigned report identifier. Required for the dispute chain —
 	// the agent must reference this report_id in DisputeRequest to prove that
@@ -6220,7 +6232,8 @@ func (x *UsageReportResponse) GetExtCritical() []string {
 // DiscoveryRequest — Agent sends to Broker (Step 1).
 type DiscoveryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// RAMP protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Requester identity — who is making this request, what scopes they have.
 	// The Broker forwards this to Exchanges in ResourceQuery.requester.
@@ -6650,8 +6663,9 @@ func (x *JsonWebKey) GetNotAfter() string {
 // MUST ignore non-applicable fields based on `role`.
 type WellKnownManifest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// RAMP protocol version. MUST equal "1.0"; consumers REJECT
-	// unrecognised major versions.
+	// RAMP protocol version of THIS MANIFEST DOCUMENT's schema — a namespace
+	// separate from the RPC envelope `ver`, deliberately not coupled to it.
+	// MUST equal "1.0"; consumers REJECT unrecognised major versions.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Role this manifest describes.
 	Role Role `protobuf:"varint,2,opt,name=role,proto3,enum=ramp.v1.Role" json:"role,omitempty"`
@@ -7220,7 +7234,9 @@ func (x *AuthorizedExchange) GetExtCritical() []string {
 // is returned by TransactionResponse, not here.
 type DiscoveryResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ver   string                 `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Offers grouped by requested URI — the sole offer representation in this
 	// response. One OfferGroup per URI the agent asked for (echoed in
 	// OfferGroup.uri); a group with no offers carries OfferGroup.absence_reason
@@ -7322,7 +7338,8 @@ func (x *DiscoveryResponse) GetExtCritical() []string {
 // DisputeRequest — Agent signals a problem with delivered resource.
 type DisputeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
 	// filing does not open a duplicate case. The dispute's durable identity is the
@@ -7473,7 +7490,8 @@ func (x *DisputeRequest) GetExtCritical() []string {
 // DisputeResponse — Exchange acknowledges the dispute.
 type DisputeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Exchange-assigned dispute case identifier.
 	DisputeId *string `protobuf:"bytes,2,opt,name=dispute_id,json=disputeId,proto3,oneof" json:"dispute_id,omitempty"`
@@ -7585,7 +7603,8 @@ func (x *DisputeResponse) GetExtCritical() []string {
 // DomainVerificationRequest — Provider requests a verification challenge.
 type DomainVerificationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The provider domain to verify (e.g., "techcrunch.com").
 	Domain string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
@@ -7670,7 +7689,8 @@ func (x *DomainVerificationRequest) GetExtCritical() []string {
 // DomainVerificationChallenge — Exchange returns a challenge.
 type DomainVerificationChallenge struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Opaque challenge token. Provider must serve this at:
 	// https://{domain}/.well-known/ramp-verify/{token}
@@ -7765,7 +7785,8 @@ func (x *DomainVerificationChallenge) GetExtCritical() []string {
 // DomainVerificationConfirmation — Provider confirms the challenge is placed.
 type DomainVerificationConfirmation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The domain being verified.
 	Domain string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
@@ -7870,7 +7891,8 @@ func (x *DomainVerificationConfirmation) GetExtCritical() []string {
 // DomainVerificationResult — Exchange confirms verification.
 type DomainVerificationResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// If signing_key was provided: confirmation of key registration.
 	KeyId *string `protobuf:"bytes,2,opt,name=key_id,json=keyId,proto3,oneof" json:"key_id,omitempty"`
@@ -7955,7 +7977,8 @@ func (x *DomainVerificationResult) GetExtCritical() []string {
 // RegisterRequest — Agent asks the Exchange to create its account.
 type RegisterRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Operator-defined registration payload; the business fields are not fixed
 	// in the wire contract. The Exchange passes it through to its system of
@@ -8034,7 +8057,8 @@ func (x *RegisterRequest) GetExtCritical() []string {
 // RegisterResponse — Exchange returns the minted account handle.
 type RegisterResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Opaque, long-lived, per-Exchange account handle minted by the Exchange.
 	// Means nothing on its own and is never accepted as caller input. A repeat
@@ -8122,7 +8146,8 @@ func (x *RegisterResponse) GetExtCritical() []string {
 // GetAccountStatusRequest — Agent asks whether its account is active.
 type GetAccountStatusRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Extension point
 	Ext *structpb.Struct `protobuf:"bytes,15,opt,name=ext,proto3" json:"ext,omitempty"`
@@ -8189,7 +8214,8 @@ func (x *GetAccountStatusRequest) GetExtCritical() []string {
 // GetAccountStatusResponse — Exchange reports the account's current state.
 type GetAccountStatusResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Protocol version
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// The account handle minted at registration (see RegisterResponse.billing_ref).
 	// Empty when the calling agent has no account yet.

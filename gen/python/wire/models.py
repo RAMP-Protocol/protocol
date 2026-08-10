@@ -237,7 +237,10 @@ class DisputeRequest(WireModel):
         description='Must reference a filed UsageReport. The agent MUST file a UsageReport\n (via ReportUsage RPC) and receive a report_id BEFORE filing a dispute.\n This prevents fire-and-forget disputes and ensures the Exchange has\n the complete evidence chain: what was offered, what was transacted,\n what the agent reported using, and what the agent disputes.\n The dispute chain: Transaction → UsageReport → Dispute.',
     )
     transaction_id: str | None = Field('', description='Transaction being disputed.')
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class DisputeStatus(Enum):
@@ -266,7 +269,10 @@ class DomainVerificationChallenge(WireModel):
         '',
         description='Opaque challenge token. Provider must serve this at:\n https://{domain}/.well-known/ramp-verify/{token}',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
     verification_url: str | None = Field(
         '', description='The exact URL the Exchange will fetch to verify.'
     )
@@ -287,7 +293,10 @@ class DomainVerificationConfirmation(WireModel):
     token: str | None = Field(
         '', description='The challenge token (echoed from DomainVerificationChallenge).'
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class DomainVerificationFailureReason(Enum):
@@ -323,7 +332,10 @@ class DomainVerificationRequest(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class DomainVerificationResult(WireModel):
@@ -340,7 +352,10 @@ class DomainVerificationResult(WireModel):
         None,
         description='Verification is valid until this time. Provider must re-verify periodically.',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class GetAccountStatusRequest(WireModel):
@@ -349,7 +364,10 @@ class GetAccountStatusRequest(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class GetAccountStatusResponse(WireModel):
@@ -365,7 +383,10 @@ class GetAccountStatusResponse(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class IngestionSource(Enum):
@@ -523,7 +544,10 @@ class PushResourcesResponse(WireModel):
     rejected: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Number of entries rejected'
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
     warnings: list[str] | None = Field(
         None,
         description='Non-fatal issues encountered during ingestion.\n Examples: unrecognized vocab token in a Restriction (term accepted but flagged),\n           REFERENCE_ONLY term missing License.uri (informational).\n Warnings do not cause rejection — they are surfaced so publishers can fix\n their feeds without a hard failure.',
@@ -556,12 +580,18 @@ class RateLimitInfo(WireModel):
 
 class RefreshCatalogRequest(WireModel):
     tenant_id: str | None = Field('', description='Tenant identifier')
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class RefreshCatalogResponse(WireModel):
     started: bool | None = Field(False, description='Whether the refresh was started')
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class RegisterRequest(WireModel):
@@ -574,7 +604,10 @@ class RegisterRequest(WireModel):
         None,
         description="Operator-defined registration payload; the business fields are not fixed\n in the wire contract. The Exchange passes it through to its system of\n record without inspecting it. The caller's identity is taken from the\n verified request signature, never from this payload.",
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class RegisterResponse(WireModel):
@@ -591,7 +624,10 @@ class RegisterResponse(WireModel):
         None,
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class RegistrationFailureReason(Enum):
@@ -613,14 +649,20 @@ class RegistrationFailureReason(Enum):
 class RemoveResourcesRequest(WireModel):
     paths: list[str] | None = Field(None, description='Paths to remove')
     tenant_id: str | None = Field('', description='Tenant identifier')
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class RemoveResourcesResponse(WireModel):
     removed: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Number of entries removed'
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class ReportingObligation(WireModel):
@@ -817,14 +859,20 @@ class SetReportingPolicyRequest(WireModel):
         ...,
         description='The reporting policy to apply. Required — an absent payload would otherwise\n skip validation of its fields.',
     )
-    ver: str | None = Field('', description='RAMP protocol version.')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in ramp.proto.',
+    )
 
 
 class SetReportingPolicyResponse(WireModel):
     policy: ReportingPolicy = Field(
         ..., description='The reporting policy as persisted.'
     )
-    ver: str | None = Field('', description='RAMP protocol version.')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in ramp.proto.',
+    )
 
 
 class SubscriptionQuotaInfo(WireModel):
@@ -955,7 +1003,10 @@ class UsageReportResponse(WireModel):
         '',
         description='Exchange-assigned report identifier. Required for the dispute chain —\n the agent must reference this report_id in DisputeRequest to prove that\n a usage report was filed before disputing. The complete evidence chain:\n   Offer → Transaction (transaction_id, billing_id)\n        → UsageReport → UsageReportResponse (report_id)\n        → DisputeRequest (transaction_id + report_id)',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class WBAFile(WireModel):
@@ -1054,7 +1105,10 @@ class DisputeResponse(WireModel):
         0,
         description='Current lifecycle status of the dispute. Tracks progression through\n the three-tier resolution process:\n   Tier 1 (automated, <1s): FILED → AUTO_RESOLVED or EVIDENCE_NEEDED\n   Tier 2 (rule-based, <24h): UNDER_REVIEW → RESOLVED\n   Tier 3 (pattern investigation, async): ESCALATED → SETTLED → FINAL\n Losing party may appeal: RESOLVED → APPEALED → back to UNDER_REVIEW.',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class DomainVerificationFailure(WireModel):
@@ -1241,7 +1295,10 @@ class ResourceQuery(WireModel):
     uris: list[str] | None = Field(
         None, description='Resource URIs being queried.', max_length=256
     )
-    ver: str | None = Field('', description='RAMP protocol version.')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class Restriction(WireModel):
@@ -1279,12 +1336,18 @@ class SetTenantFeeRateRequest(WireModel):
         ...,
         description='The fee rate to apply. Required — an absent payload would otherwise skip\n validation of its fields.',
     )
-    ver: str | None = Field('', description='RAMP protocol version.')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in ramp.proto.',
+    )
 
 
 class SetTenantFeeRateResponse(WireModel):
     rate: TenantFeeRate = Field(..., description='The fee rate as persisted.')
-    ver: str | None = Field('', description='RAMP protocol version.')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in ramp.proto.',
+    )
 
 
 class TransactionResponse(WireModel):
@@ -1308,7 +1371,10 @@ class TransactionResponse(WireModel):
     total_cost: Cost | None = Field(
         None, description='Aggregate cost across all items.'
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class Usage(WireModel):
@@ -1370,7 +1436,10 @@ class UsageReport(WireModel):
         '', description='Transaction ID from the delivery.'
     )
     usage: Usage | None = Field(None, description='How the resource was actually used.')
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class UsageReportRejection(WireModel):
@@ -1468,7 +1537,7 @@ class WellKnownManifest(WireModel):
     )
     ver: str | None = Field(
         '',
-        description='RAMP protocol version. MUST equal "1.0"; consumers REJECT\n unrecognised major versions.',
+        description='RAMP protocol version of THIS MANIFEST DOCUMENT\'s schema — a namespace\n separate from the RPC envelope `ver`, deliberately not coupled to it.\n MUST equal "1.0"; consumers REJECT unrecognised major versions.',
     )
 
 
@@ -1506,7 +1575,10 @@ class DiscoveryRequest(WireModel):
         description='Resource URIs the agent wants. The Broker forwards these to Exchanges in\n ResourceQuery.uris. Optional when `query` / `search_filters` drive\n Broker-side discovery instead.',
         max_length=256,
     )
-    ver: str | None = Field('', description='RAMP protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class ErrorDetail(WireModel):
@@ -1734,7 +1806,10 @@ class ResourceResponse(WireModel):
         None,
         description='Rate limit status for this caller.\n Present when the Exchange enforces per-caller rate limits on discovery.\n Enables agents/Brokers to throttle proactively rather than hitting\n hard limits. Particularly important when a Broker fans out the\n same batch query to multiple Exchanges — mid-batch rate limiting\n can cause partial results if not signaled early.',
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class TransactionItem(WireModel):
@@ -1766,7 +1841,10 @@ class TransactionRequest(WireModel):
     requester: Requester | None = Field(
         None, description='Requester identity — forwarded for authorization and audit.'
     )
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class DiscoveryResponse(WireModel):
@@ -1783,7 +1861,10 @@ class DiscoveryResponse(WireModel):
         None,
         description='Offers grouped by requested URI — the sole offer representation in this\n response. One OfferGroup per URI the agent asked for (echoed in\n OfferGroup.uri); a group with no offers carries OfferGroup.absence_reason\n explaining why. Each contained Offer is the full signed Offer the Exchange\n issued (including Offer.exchange, the execute-routing target), forwarded by\n the Broker unchanged so the agent can verify the signature end to end.',
     )
-    ver: str | None = ''
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )
 
 
 class PushResourcesRequest(WireModel):
@@ -1800,4 +1881,7 @@ class PushResourcesRequest(WireModel):
         description='Critical extension keys (COSE crit pattern, RFC 9052).\n Lists keys within ext that the consumer MUST understand.\n Unknown keys in this list → reject with UNKNOWN_CRITICAL_EXTENSION.\n Empty (default) → all ext keys are safe to ignore.',
     )
     tenant_id: str | None = Field('', description='Tenant identifier')
-    ver: str | None = Field('', description='Protocol version')
+    ver: str | None = Field(
+        '',
+        description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
+    )

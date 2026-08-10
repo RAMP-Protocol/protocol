@@ -18,6 +18,10 @@ on:
       - 'gen/ts/**'
       - 'sdk/ts/**'
       - 'sdk/python/**'
+      # The repo-root package.json is the map a CONSUMER resolves through (npm has
+      # no git-subdirectory support, so the package installs whole-repo). Without
+      # it here, editing the shipped export map triggers no job at all.
+      - 'package.json'
       - 'sdk/go/helpers/**'
       - 'sdk/go/resolvers/**'
       - '.github/workflows/sdk-types-ci.yml'

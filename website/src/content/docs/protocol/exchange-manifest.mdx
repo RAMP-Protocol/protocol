@@ -91,7 +91,7 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `ver` | string | Yes | RAMP protocol version (`"1.0"`) |
+| `ver` | string | Yes | Schema version of this manifest **document** — a namespace separate from the RPC envelope `ver`, not coupled to it. MUST equal `"1.0"`; consumers reject unrecognised major versions |
 | `role` | string | Yes | `ROLE_EXCHANGE` for an Exchange manifest |
 | `domain` | string | Yes | Canonical domain of this Exchange |
 | `name` | string | No | Human-readable Exchange name |
@@ -179,7 +179,7 @@ The Exchange manifest is a `WellKnownManifest` with `role=ROLE_EXCHANGE`, define
 
 ```protobuf
 message WellKnownManifest {
-  string ver = 1;                                  // "1.0"
+  string ver = 1;                                  // "1.0" — document schema, not the RPC envelope
   Role role = 2;                                   // ROLE_EXCHANGE here
   string domain = 3;
   optional string contact = 4;
