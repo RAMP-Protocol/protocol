@@ -602,7 +602,7 @@ class RegisterRequest(WireModel):
     )
     registration_data: dict[str, Any] | None = Field(
         None,
-        description="Operator-defined registration payload; the business fields are not fixed\n in the wire contract. The Exchange passes it through to its system of\n record without inspecting it. The caller's identity is taken from the\n verified request signature, never from this payload.",
+        description="Operator-defined registration payload; the business fields are not fixed\n in the wire contract. Whether the Exchange inspects it follows its\n manifest — see WellKnownManifest.registration_schema. The caller's\n identity is taken from the verified request signature, never from this\n payload.",
     )
     ver: str | None = Field(
         '',
@@ -643,6 +643,20 @@ class RegistrationFailureReason(Enum):
     )
     REGISTRATION_FAILURE_REASON_QUOTA_EXCEEDED = (
         'REGISTRATION_FAILURE_REASON_QUOTA_EXCEEDED'
+    )
+    REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA = (
+        'REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA'
+    )
+
+
+class RegistrationFieldError(WireModel):
+    error: constr(min_length=1, max_length=255) = Field(
+        ...,
+        description='Developer-facing, NON-authoritative description of what failed\n (e.g. "required", "must match ^[A-Z]{2}[0-9]+$"). Wording is\n validator-defined and not stable across Exchanges; clients branch on\n `reason`, never on this text. States the constraint, NEVER the submitted\n value — the ErrorDetail leakage rule applies here too.',
+    )
+    path: constr(max_length=255) | None = Field(
+        '',
+        description='RFC 6901 JSON Pointer to the offending member, relative to\n registration_data (e.g. "/vat_id", "/address/postal_code"). The empty\n string addresses registration_data itself, for whole-object failures\n (oneOf, minProperties) that belong to no single member.',
     )
 
 
@@ -1185,6 +1199,11 @@ class Quota(WireModel):
 
 
 class RegistrationFailure(WireModel):
+    field_errors: list[RegistrationFieldError] | None = Field(
+        None,
+        description='When reason = INVALID_REGISTRATION_DATA: the registration_data members\n that are missing or do not conform. Empty for every other reason.',
+        max_length=64,
+    )
     reason: RegistrationFailureReason = Field(
         ..., description='The failure reason (defined-only, non-zero)'
     )
@@ -1522,6 +1541,10 @@ class WellKnownManifest(WireModel):
     protocol_versions_supported: list[str] | None = Field(
         None,
         description='Exchange-only. Supported RAMP protocol versions (e.g. ["1.0"]).',
+    )
+    registration_schema: dict[str, Any] | None = Field(
+        None,
+        description="Exchange-only. JSON Schema (draft 2020-12) describing the\n RegisterRequest.registration_data object this Exchange expects. This field\n is the single home of the enforce/pass-through contract, and publishing it\n IS the enforcement switch. Present: this Exchange validates\n registration_data against the schema and refuses a non-conforming payload\n with REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the\n offending members in RegistrationFailure.field_errors. Absent:\n registration_data is passed through to the system of record uninspected,\n so an Exchange that publishes no schema needs no change to stay\n conformant. Safety rules, because a consumer reads this schema out of a\n third party's manifest: it MUST be self-contained, and a consumer MUST NOT\n resolve a remote $ref out of it — doing so turns every reader into an SSRF\n vector aimed at a URL the schema's author chose. A consumer SHOULD bound\n validation time and recursion depth; draft 2020-12 `pattern` admits\n regexes with catastrophic backtracking. Size is capped at 16KB, measured\n as the UTF-8 bytes of this member as served in ramp.json; a consumer\n SHOULD reject an oversized schema and skip its local pre-check rather than\n truncate it, which leaves the Exchange's own enforcement the deciding\n check exactly as when no schema is published.",
     )
     role: Role = Field(..., description='Role this manifest describes.')
     supported_auth_methods: list[AuthMethod] | None = Field(

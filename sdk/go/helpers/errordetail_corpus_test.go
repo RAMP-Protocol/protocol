@@ -66,7 +66,28 @@ func TestErrorDetailCorpusReplay(t *testing.T) {
 			}
 			assertMetadataEqual(t, got.GetMetadata(), v.Metadata)
 			assertReasonEqual(t, &got, v.ReasonField, v.ReasonEnum)
+			assertFieldErrorsEqual(t, &got, v.FieldErrors)
 		})
+	}
+}
+
+// assertFieldErrorsEqual compares the RegistrationFailure per-member detail a
+// reader extracts against the recorded projection. An absent list and an empty one
+// are equal (proto3 omits an empty repeated field on the wire). The empty path is
+// asserted positionally, so a decoder that drops "" as unset fails here rather
+// than shifting the list silently.
+func assertFieldErrorsEqual(t *testing.T, got *rampv1.ErrorDetail, want []errorDetailFieldError) {
+	t.Helper()
+	fes := got.GetRegistrationFailure().GetFieldErrors()
+	if len(fes) != len(want) {
+		t.Errorf("field_errors count = %d, want %d", len(fes), len(want))
+		return
+	}
+	for i, w := range want {
+		if fes[i].GetPath() != w.Path || fes[i].GetError() != w.Error {
+			t.Errorf("field_errors[%d] = {%q, %q}, want {%q, %q}",
+				i, fes[i].GetPath(), fes[i].GetError(), w.Path, w.Error)
+		}
 	}
 }
 

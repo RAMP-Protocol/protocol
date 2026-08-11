@@ -62,6 +62,16 @@ def test_reader_extracts_go_projection(vector: dict) -> None:
         assert got is not None
         assert got.value == vector["reason_enum"]
 
+    # The RegistrationFailure per-member detail, positionally. The empty path is the
+    # boundary a decoder most plausibly gets wrong: proto3 omits an empty string, so
+    # wire_json carries an entry with no "path" key at all and a reader must still
+    # extract "" rather than dropping or shifting the entry.
+    want_field_errors = vector.get("field_errors") or []
+    got_field_errors = getattr(detail.registration_failure, "field_errors", None) or []
+    assert [
+        {"path": fe.path or "", "error": fe.error} for fe in got_field_errors
+    ] == want_field_errors
+
 
 def test_error_detail_from_locates_detail_among_connect_error_details() -> None:
     """The ErrorDetailFrom-contract analog: find the ramp.v1.ErrorDetail in a

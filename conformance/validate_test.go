@@ -234,6 +234,22 @@ func errorDetailCases() []validationCase {
 		{"catalog_rejection unspecified rejected", &rampv1.CatalogRejection{Reason: rampv1.CatalogRejectionReason_CATALOG_REJECTION_REASON_UNSPECIFIED}, false, "enum.not_in"},
 		{"registration_failure valid", &rampv1.RegistrationFailure{Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_KEY}, true, ""},
 		{"registration_failure unspecified rejected", &rampv1.RegistrationFailure{Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_UNSPECIFIED}, false, "enum.not_in"},
+		// Schema-enforcement refusal: the reason travels with the offending
+		// registration_data members. The per-field length bounds and the
+		// max_items boundary are generated corpus coverage
+		// (RegistrationFieldError/*, RegistrationFailure/field_errors/too_many);
+		// what the generator cannot express is a MULTI-member refusal, and that
+		// the empty path — a legal RFC 6901 pointer to registration_data itself,
+		// for the whole-object failure that belongs to no single member — is
+		// accepted rather than read as an unset field.
+		{"registration_failure invalid data with field errors valid", &rampv1.RegistrationFailure{
+			Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+			FieldErrors: []*rampv1.RegistrationFieldError{
+				{Path: "/vat_id", Error: "must match ^[A-Z]{2}[0-9]+$"},
+				{Path: "/address/postal_code", Error: "required"},
+				{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"},
+			},
+		}, true, ""},
 		{"dispute_failure valid", &rampv1.DisputeFailure{Reason: rampv1.DisputeFailureReason_DISPUTE_FAILURE_REASON_REPORT_NOT_FILED}, true, ""},
 		{"dispute_failure unspecified rejected", &rampv1.DisputeFailure{Reason: rampv1.DisputeFailureReason_DISPUTE_FAILURE_REASON_UNSPECIFIED}, false, "enum.not_in"},
 		{"domain_verification_failure valid", &rampv1.DomainVerificationFailure{Reason: rampv1.DomainVerificationFailureReason_DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH}, true, ""},
