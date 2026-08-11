@@ -8,6 +8,7 @@
       "metadata": null,
       "reason_field": "",
       "reason_enum": "",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.ExchangeService",
         "message": "internal error"
@@ -22,6 +23,7 @@
       },
       "reason_field": "",
       "reason_enum": "",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.CatalogService",
         "message": "quota exceeded",
@@ -37,6 +39,7 @@
       "metadata": {},
       "reason_field": "",
       "reason_enum": "",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.ExchangeService",
         "message": "no metadata here"
@@ -49,6 +52,7 @@
       "metadata": null,
       "reason_field": "transaction_denial",
       "reason_enum": "DENIAL_REASON_INSUFFICIENT_BALANCE",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.ExchangeService",
         "message": "balance too low",
@@ -64,6 +68,7 @@
       "metadata": null,
       "reason_field": "retrieval_auth_failure",
       "reason_enum": "RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.Edge",
         "message": "signed URL expired",
@@ -83,6 +88,7 @@
       },
       "reason_field": "transaction_denial",
       "reason_enum": "DENIAL_REASON_RATE_LIMITED",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.ExchangeService",
         "message": "rate limited",
@@ -103,6 +109,7 @@
       "metadata": null,
       "reason_field": "catalog_rejection",
       "reason_enum": "CATALOG_REJECTION_REASON_TENANT_MISMATCH",
+      "field_errors": null,
       "wire_json": {
         "catalog_rejection": {
           "reason": "CATALOG_REJECTION_REASON_TENANT_MISMATCH"
@@ -118,11 +125,46 @@
       "metadata": null,
       "reason_field": "registration_failure",
       "reason_enum": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.RegistrationService",
         "message": "domain not verified",
         "registration_failure": {
           "reason": "REGISTRATION_FAILURE_REASON_DOMAIN_NOT_VERIFIED"
+        }
+      }
+    },
+    {
+      "name": "registration_failure_field_errors",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "registration_data does not match the published registration_schema",
+      "metadata": null,
+      "reason_field": "registration_failure",
+      "reason_enum": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA",
+      "field_errors": [
+        {
+          "path": "/vat_id",
+          "error": "must match ^[A-Z]{2}[0-9]+$"
+        },
+        {
+          "path": "",
+          "error": "matched 2 branches of oneOf, exactly 1 required"
+        }
+      ],
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "registration_data does not match the published registration_schema",
+        "registration_failure": {
+          "field_errors": [
+            {
+              "error": "must match ^[A-Z]{2}[0-9]+$",
+              "path": "/vat_id"
+            },
+            {
+              "error": "matched 2 branches of oneOf, exactly 1 required"
+            }
+          ],
+          "reason": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
         }
       }
     },
@@ -133,6 +175,7 @@
       "metadata": null,
       "reason_field": "dispute_failure",
       "reason_enum": "DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND",
+      "field_errors": null,
       "wire_json": {
         "dispute_failure": {
           "reason": "DISPUTE_FAILURE_REASON_TRANSACTION_NOT_FOUND"
@@ -148,6 +191,7 @@
       "metadata": null,
       "reason_field": "domain_verification_failure",
       "reason_enum": "DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_MISMATCH",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.ExchangeService",
         "domain_verification_failure": {
@@ -163,6 +207,7 @@
       "metadata": null,
       "reason_field": "usage_report_rejection",
       "reason_enum": "USAGE_REPORT_REJECTION_REASON_DUPLICATE",
+      "field_errors": null,
       "wire_json": {
         "domain": "ramp.v1.ExchangeService",
         "message": "duplicate report",

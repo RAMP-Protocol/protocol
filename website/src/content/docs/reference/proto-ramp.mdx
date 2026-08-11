@@ -258,7 +258,7 @@ A successful response means verification succeeded; a failure travels as a non-O
 
 ### RegisterRequest
 
-Agent asks the Exchange to create its account. The caller's identity is proven by the verified request signature, never asserted in the body; the operator-defined business payload rides in `registration_data` and is passed through to the Exchange's system of record uninspected.
+Agent asks the Exchange to create its account. The caller's identity is proven by the verified request signature, never asserted in the body; the operator-defined business payload rides in `registration_data`. Whether the Exchange inspects that payload follows its manifest: one publishing `WellKnownManifest.registration_schema` validates against that schema and refuses a non-conforming payload, one publishing none passes it through to its system of record uninspected.
 
 ::proto-message{name=RegisterRequest}
 
@@ -464,6 +464,12 @@ A CatalogService call could not be applied.
 A registration request could not be completed.
 
 ::proto-message{name=RegistrationFailure}
+
+### RegistrationFieldError
+
+One `registration_data` member that failed the Exchange's published `registration_schema`, carried on `RegistrationFailure.field_errors`.
+
+::proto-message{name=RegistrationFieldError}
 
 ### DisputeFailure
 

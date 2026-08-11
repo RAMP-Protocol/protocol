@@ -46,10 +46,23 @@ func CatalogRejectionDetail(domain, message string, reason rampv1.CatalogRejecti
 	return d
 }
 
-// RegistrationFailureDetail builds an ErrorDetail carrying a typed RegistrationFailureReason.
-func RegistrationFailureDetail(domain, message string, reason rampv1.RegistrationFailureReason) *rampv1.ErrorDetail {
+// RegistrationFailureDetail builds an ErrorDetail carrying a typed
+// RegistrationFailureReason, plus the offending registration_data members when the
+// reason is REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA.
+//
+// fieldErrors is variadic rather than a fourth required parameter so the six
+// reasons that carry no per-member detail keep calling this with three arguments.
+// It is the one *Detail builder that reaches past the reason enum: the schema
+// refusal is useless without naming what failed, whereas the sibling detail lists
+// (TransactionDenial.restriction_mismatches, CatalogRejection.rejected_paths) are
+// still caller-set post-construction. Passing field errors with any other reason
+// is a caller error — the field's contract says the list is empty otherwise.
+func RegistrationFailureDetail(domain, message string, reason rampv1.RegistrationFailureReason, fieldErrors ...*rampv1.RegistrationFieldError) *rampv1.ErrorDetail {
 	d := base(domain, message)
-	d.Reason = &rampv1.ErrorDetail_RegistrationFailure{RegistrationFailure: &rampv1.RegistrationFailure{Reason: reason}}
+	d.Reason = &rampv1.ErrorDetail_RegistrationFailure{RegistrationFailure: &rampv1.RegistrationFailure{
+		Reason:      reason,
+		FieldErrors: fieldErrors,
+	}}
 	return d
 }
 

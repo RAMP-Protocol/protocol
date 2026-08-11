@@ -89,6 +89,19 @@ func seeds() map[string]proto.Message {
 		// envelopes. RequiredFields MUST be exactly ["x"]: the repeated.unique
 		// duplicate_item edge appends the auto-filled good item (stringSamples[0]=="x")
 		// and relies on the baseline already holding it, so the mutant is ["x","x"].
+		// The refusal that carries per-member detail. Auto-fill would pick the
+		// FIRST allowed reason (DOMAIN_NOT_VERIFIED) and still populate
+		// field_errors, publishing as VALID the pairing the field comment rules
+		// out — and the branch's own reason would reach no corpus case, so a
+		// client that dropped it would stay green. The empty path is the
+		// whole-object failure (oneOf, minProperties) that belongs to no single
+		// member; seeding it pins that accept boundary in all three languages.
+		"RegistrationFailure": &rampv1.RegistrationFailure{
+			Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+			FieldErrors: []*rampv1.RegistrationFieldError{
+				{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"},
+			},
+		},
 		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
 		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},
 	}
@@ -141,7 +154,7 @@ func main() {
 		cases = append(cases, mkCase(short+"/valid", short, base.Interface(), true, nil, v))
 
 		for _, fd := range constrained {
-			for _, e := range edges(fd, rules(fd)) {
+			for _, e := range edges(fd, rules(fd), sd) {
 				m := proto.Clone(base.Interface()).ProtoReflect()
 				e.apply(m)
 				verr := v.Validate(m.Interface())
@@ -303,14 +316,41 @@ func enrichWKT(m protoreflect.Message) {
 	}
 }
 
+// validItem builds ONE valid element for a repeated field. Scalar items come
+// straight from validScalar; a message item is built the same way a top-level
+// baseline is — from its seed when one exists, otherwise auto-filled — because
+// validScalar deliberately returns an unset Value for MessageKind and appending
+// that to a list panics.
+//
+// It auto-fills where setValid's singular-message branch instead demands a seed.
+// The split is deliberate: a singular message field is usually a required
+// sub-message whose validity depends on cross-field CEL that auto-fill cannot
+// satisfy (the reason seeds exist at all), whereas a repeated element only has
+// to clear its own field rules, which auto-fill does handle. A repeated element
+// that needs more can still be seeded — the seed map is consulted first.
+//
+// Recursion terminates on the seed map or on a message whose constrained fields
+// are all scalar. The contract has no message cycle; if one is ever introduced
+// without a seed this recurses until the stack overflows, which is loud but
+// unhelpful — seed the cycle's entry point.
+func validItem(fd protoreflect.FieldDescriptor, item *validate.FieldRules, sd map[string]proto.Message) (protoreflect.Value, error) {
+	if fd.Kind() != protoreflect.MessageKind {
+		return validScalar(fd, item)
+	}
+	sub, err := baseline(fd.Message(), sd)
+	if err != nil {
+		return protoreflect.Value{}, fmt.Errorf("repeated message item %s: %w", fd.Message().Name(), err)
+	}
+	return protoreflect.ValueOfMessage(sub), nil
+}
+
 func setValid(m protoreflect.Message, fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[string]proto.Message) error {
 	if fd.IsList() {
-		l := m.Mutable(fd).List()
-		v, err := validScalar(fd, itemRules(fr))
+		v, err := validItem(fd, itemRules(fr), sd)
 		if err != nil {
 			return err
 		}
-		l.Append(v)
+		m.Mutable(fd).List().Append(v)
 		return nil
 	}
 	v, err := validScalar(fd, fr)
@@ -379,13 +419,13 @@ type edge struct {
 	valid bool // a POSITIVE edge: Go must ACCEPT it (e.g. "" on a money field). want is unused.
 }
 
-func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
+func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[string]proto.Message) []edge {
 	var es []edge
 	if fr.GetRequired() {
 		es = append(es, edge{label: "missing", want: "required", apply: func(m protoreflect.Message) { m.Clear(fd) }})
 	}
 	if fd.IsList() {
-		return append(es, listEdges(fd, fr)...)
+		return append(es, listEdges(fd, fr, sd)...)
 	}
 	switch fd.Kind() {
 	case protoreflect.EnumKind:
@@ -562,11 +602,12 @@ func failingBadStringIdxs(pattern string) []int {
 	return idxs
 }
 
-func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
+func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[string]proto.Message) []edge {
 	var es []edge
 	r := fr.GetRepeated()
 	item := itemRules(fr)
-	good, _ := validScalar(fd, item) // a valid item value
+	good, err := validItem(fd, item, sd) // a valid item value
+	must(err)
 	if r != nil && r.GetMaxItems() > 0 {
 		n := int(r.GetMaxItems()) + 1
 		es = append(es, edge{label: "too_many", want: "repeated.max_items", apply: func(m protoreflect.Message) {

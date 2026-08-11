@@ -18,6 +18,84 @@ hostnames rather than ports. The rule was already enforced by one SDK caller and
 enforced in the shared endpoint resolver, so every consumer inherits it. No field, message, or
 wire change — proto comments only, with `gen/` and the website mirror regenerated.
 
+**SDK (all 3 languages): the registration-failure builder can carry the field errors
+(additive, no wire change).** `helpers.RegistrationFailureDetail` (Go),
+`registration_failure_detail` (Python) and `registrationFailureDetail` (TS) now accept the
+offending `registration_data` members alongside the reason — variadic in Go, an optional
+trailing argument in Python and TS, so the six reasons that carry no per-member detail keep
+their three-argument call. Without this a service refusing a non-conforming registration had
+to build the `ErrorDetail` by hand or mutate the builder's result, defeating the rule these
+helpers exist for: one place per language where the ADR-019 envelope is constructed. This is
+the only `*Detail` builder that reaches past the reason enum — the schema refusal is useless
+without naming what failed, whereas the sibling detail lists
+(`TransactionDenial.restriction_mismatches`, `CatalogRejection.rejected_paths`) stay
+caller-set after construction.
+
+The shared oracle gains a `registration_failure_field_errors` vector and a `field_errors`
+projection, replayed on both halves in all three languages: the construct replays feed the
+members back through the builder and assert byte-parity with the Go wire, and the read
+replays assert a reader extracts them positionally. The vector carries both member shapes —
+a pointer into the payload and the empty root pointer for a whole-object failure. That
+second one caught a real divergence: canonical proto-JSON omits an empty scalar, so the wire
+form of a root-pointer entry has no `path` key at all, while the generated Pydantic model
+defaults `path` to `""` and the generated Zod schema declares `.default("")`, both
+materializing a member Go omits. Both builders now map an empty path to unpopulated, the
+exact inverse of the read side normalizing an absent path to `""`.
+
+**Registration data becomes schema-enforceable: `WellKnownManifest.registration_schema`
+(field 29) + `REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA` (additive, no wire
+break).** An Exchange MAY publish, in its `ramp.json`, a JSON Schema (draft 2020-12, max
+16KB) describing the `registration_data` object it expects on `Register`. Publication and
+enforcement are one decision: an Exchange that publishes the schema validates incoming
+`registration_data` against it and refuses a non-conforming payload with the new failure
+reason; an Exchange that publishes none accepts the payload uninspected and passes it to
+its system of record exactly as before, so existing Exchanges stay conformant with no
+change. This replaces the former unconditional contract text ("the Exchange passes it
+through to its system of record without inspecting it") on the Agent Account Registration
+banner and on `RegisterRequest.registration_data`, both of which now defer to the field
+that owns the contract rather than restating it.
+
+The field carries normative safety rules, because a consumer reads this schema out of a
+third party's manifest: the schema MUST be self-contained and a consumer MUST NOT resolve
+a remote `$ref` out of it — doing so would turn every reader into an SSRF vector aimed at
+a URL the schema's author chose — and a consumer SHOULD bound validation time and
+recursion depth, since draft 2020-12 `pattern` admits regexes with catastrophic
+backtracking. The 16KB cap is measured as the UTF-8 bytes of the member as served in
+`ramp.json`; an oversized schema SHOULD be rejected and its local pre-check skipped rather
+than truncated, which leaves the Exchange's own enforcement deciding exactly as it does
+when no schema is published. These are prose, not protovalidate rules: the field is a
+`Struct`, and no field-level rule can reach inside it.
+
+The refusal names what to fix: `RegistrationFailure` gains
+`field_errors` (field 2, ≤64 items) carrying the new top-level `RegistrationFieldError`
+`{path, error}`. `path` is an RFC 6901 JSON Pointer relative to `registration_data`
+(`"/vat_id"`, `"/address/postal_code"`); the empty string addresses `registration_data`
+itself, which is how whole-object failures (`oneOf`, `minProperties`) that belong to no
+single member are reported. A free-text pair rather than a closed `kind` enum because
+JSON Schema's composite keywords do not attach to any one member and the standard is
+extensible by design, so a closed vocabulary could not stay complete. `error` is
+developer-facing and NON-authoritative — wording is validator-defined and varies across
+Exchanges, clients branch on `reason` — and, like `ErrorDetail.message`, it states the
+violated constraint and never the submitted value, so a refusal cannot echo an agent's
+business data back over the wire. A machine-readable `kind` can join at field 3 later
+without a wire break.
+
+Motivation: an agent integrating the SDK directly signs and sends `Register` itself and
+passes through no registration front-end, so a check only a front-end performs is a
+suggestion, not a rule — and the agent had nowhere to learn which fields a given Exchange
+expects. Both now resolve against the manifest the agent already fetches to find the
+Exchange's endpoint.
+
+*Tooling:* `RegistrationFailure` is now seeded in the corpus generator with the new reason
+and an empty-path field error, so the cross-language oracle exercises the reason this
+change adds and pins the empty-path accept boundary in all three languages; without the
+seed the auto-filled baseline picked the first allowed reason and published a
+`DOMAIN_NOT_VERIFIED` refusal carrying `field_errors` as valid — the pairing the field
+comment rules out. The generator also gained valid-item construction for repeated
+**message** fields (seed-or-autofill, mirroring the top-level baseline). `field_errors` is the
+contract's first repeated message field carrying its own `repeated.max_items`, and the
+generator previously produced only scalar list items.
+
 **The `ver` envelope field states its contract, and the version string gets one owner
 (no wire change).** All 29 `ver` fields — 25 in `ramp.proto`, 4 in `admin.proto` — now name
 the expected value `"1.0"` and the receive-side rule. Before this, 27 of them said only

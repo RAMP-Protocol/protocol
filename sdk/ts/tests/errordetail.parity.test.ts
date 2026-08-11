@@ -32,6 +32,7 @@ type ErrorDetailVector = {
 	metadata: Record<string, string> | null;
 	reason_field: string;
 	reason_enum: string;
+	field_errors: { path: string; error: string }[] | null;
 	wire_json: unknown;
 };
 type VectorsFile = { canonicalization: string; vectors: ErrorDetailVector[] };
@@ -66,6 +67,19 @@ describe("sdk/ts ErrorDetail reader matches the sdk/go oracle vectors", () => {
 				expect(got?.field).toBe(v.reason_field);
 				expect(got?.value).toBe(v.reason_enum);
 			}
+
+			// The RegistrationFailure per-member detail, positionally. The empty path
+			// is the boundary a decoder most plausibly gets wrong: proto3 omits an
+			// empty string, so wire_json carries an entry with no "path" key at all
+			// and a reader must still extract "" rather than dropping the entry.
+			const rf = detail.registration_failure as
+				| { field_errors?: { path?: string; error: string }[] }
+				| undefined;
+			const gotFieldErrors = (rf?.field_errors ?? []).map((fe) => ({
+				path: fe.path ?? "",
+				error: fe.error,
+			}));
+			expect(gotFieldErrors).toEqual(v.field_errors ?? []);
 		});
 	}
 
