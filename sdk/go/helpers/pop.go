@@ -209,11 +209,14 @@ func validateAgentBinding(signer Signer, pub ed25519.PublicKey, opts PoPOptions)
 	// would stop describing the request the verifier reconstructs. Refused rather
 	// than escaped: no legitimate method or target URI contains one, and a
 	// signature base is the wrong place to be lenient.
+	// The offset is reported in BYTES, and named as such: strings.IndexFunc counts
+	// them, the Python and TS mirrors are written to count the same, and an
+	// unlabelled number under identical wording would otherwise mean three things.
 	if i := strings.IndexFunc(opts.URL, isControlByte); i >= 0 {
-		return "", fmt.Errorf("%w: target URI carries a control byte at %d", ErrInvalidPoPInput, i)
+		return "", fmt.Errorf("%w: target URI carries a control byte at byte %d", ErrInvalidPoPInput, i)
 	}
 	if i := strings.IndexFunc(opts.Method, isControlByte); i >= 0 {
-		return "", fmt.Errorf("%w: method carries a control byte at %d", ErrInvalidPoPInput, i)
+		return "", fmt.Errorf("%w: method carries a control byte at byte %d", ErrInvalidPoPInput, i)
 	}
 	// A proof carrying no created sails through as a signature claiming 1970: the
 	// edge bounds how far created may lead its clock, not how far it may lag, so

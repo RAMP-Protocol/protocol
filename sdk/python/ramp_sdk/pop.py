@@ -181,9 +181,15 @@ def sign_agent_binding(
     # base is the wrong place to be lenient. Mirrors the Go signer, which refuses
     # the same bytes in both the method and the URL; the method arm does not apply
     # here because this face always signs GET.
-    bad = next((i for i, ch in enumerate(url) if ord(ch) < 0x20 or ord(ch) == 0x7F), None)
+    #
+    # Scanned over the UTF-8 BYTES, not the code points, so the reported offset is
+    # the same number Go's strings.IndexFunc reports for the same input. Which
+    # inputs are refused is unaffected — a control byte is always a single UTF-8
+    # byte — but an unlabelled index under identical wording meant three units.
+    raw = url.encode("utf-8")
+    bad = next((i for i, b in enumerate(raw) if b < 0x20 or b == 0x7F), None)
     if bad is not None:
-        raise ValueError(f"target URI carries a control byte at {bad}")
+        raise ValueError(f"target URI carries a control byte at byte {bad}")
 
     priv = Ed25519PrivateKey.from_private_bytes(signer_seed)
     pub = priv.public_key().public_bytes_raw()

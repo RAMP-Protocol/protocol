@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	connectrpc "connectrpc.com/connect"
@@ -117,7 +118,7 @@ func TestReportUsage_NoAdvertisedEndpointIsNotSent(t *testing.T) {
 // budget" from "the Exchange said no".
 func TestSendError_ResourceExhaustedIsTooLarge(t *testing.T) {
 	sig := newSigningFixture(t)
-	domain := loopbackManifestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	domain, _ := loopbackManifestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"code":"resource_exhausted","message":"too big"}`))
@@ -142,5 +143,44 @@ func TestSendError_ResourceExhaustedIsTooLarge(t *testing.T) {
 	var connErr *connectrpc.Error
 	if !errors.As(err, &connErr) {
 		t.Error("the Connect error must stay reachable through the wrapper")
+	}
+}
+
+// A caller that cancels its own context has not been refused by anyone.
+// connect-go stamps CodeCanceled on a locally cancelled call, and reporting that
+// as CallRefused would tell the caller the Exchange declined a request the
+// Exchange may never have finished reading — a final verdict, invented locally,
+// about a peer that said nothing.
+func TestSendError_CallerCancellationIsNotARefusal(t *testing.T) {
+	sig := newSigningFixture(t)
+	release, reached := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	domain, _ := loopbackManifestServer(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		once.Do(func() { close(reached) })
+		<-release
+	}))
+	// Registered AFTER the server's own cleanup so it runs BEFORE it: Close blocks
+	// on the in-flight handler, which is parked on release until this fires.
+	t.Cleanup(func() { close(release) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-reached // the RPC is on the wire; nothing has answered it
+		cancel()
+	}()
+
+	client := rampconnect.NewClient("http://home.invalid",
+		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
+	_, err := client.ReportUsage(ctx, &rampv1.UsageReport{
+		Exchange:      proto.String(domain),
+		TransactionId: "txn-1",
+	})
+
+	var cerr *rampconnect.CallError
+	if !errors.As(err, &cerr) {
+		t.Fatalf("error = %v, want a CallError", err)
+	}
+	if cerr.Kind != rampconnect.CallUnreachable {
+		t.Errorf("kind = %v, want CallUnreachable — the caller gave up; the peer did not refuse", cerr.Kind)
 	}
 }

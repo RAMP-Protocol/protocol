@@ -204,7 +204,7 @@ func (f *ContentFetcher) Fetch(ctx context.Context, signedURL string, signer Pro
 	const op = "fetch content"
 	if signer == nil {
 		return Content{}, &FetchError{Failure: FetchNotSignable, Op: op,
-			Err: fmt.Errorf("no proof signer supplied")}
+			Err: errors.New("no proof signer supplied")}
 	}
 	// The deadline is derived BEFORE the request is built, because building it
 	// mints a proof — which may call out to a custody backend bounded only by that

@@ -6689,15 +6689,15 @@ type WellKnownManifest struct {
 	Operator *string `protobuf:"bytes,10,opt,name=operator,proto3,oneof" json:"operator,omitempty"`
 	// Exchange-only. Operator's corporate domain (may differ from domain).
 	OperatorDomain *string `protobuf:"bytes,11,opt,name=operator_domain,json=operatorDomain,proto3,oneof" json:"operator_domain,omitempty"`
-	// Exchange-only. ExchangeService endpoint URL.
-	//
-	// MUST be on the same host that serves this manifest, or on a subdomain of
-	// it, and MUST NOT carry userinfo. A consumer refuses an endpoint anywhere
-	// else: this document is only as trustworthy as the host that served it, so
-	// an endpoint naming an unrelated host would let whoever answers for the
-	// manifest redirect a signed call to a party the signature never covered. The
-	// match is on a full dot-delimited label boundary, so evil-a.com is not a
-	// subdomain of a.com.
+	// Exchange-only. ExchangeService endpoint URL. MUST be on the same host that
+	// serves this manifest, or on a subdomain of it, and MUST NOT carry userinfo.
+	// A consumer refuses an endpoint anywhere else: this document is only as
+	// trustworthy as the host that served it, so an endpoint naming an unrelated
+	// host would let whoever answers for the manifest redirect a signed call to a
+	// party the signature never covered. The match is on a full dot-delimited
+	// label boundary, so evil-a.com is not a subdomain of a.com. (One paragraph
+	// deliberately: a blank line here routes the first paragraph into the
+	// generated types' JSON-Schema title, which the Pydantic/Zod export drops.)
 	Endpoint *string `protobuf:"bytes,12,opt,name=endpoint,proto3,oneof" json:"endpoint,omitempty"`
 	// Exchange-only. Health check endpoint URL.
 	HealthEndpoint *string `protobuf:"bytes,13,opt,name=health_endpoint,json=healthEndpoint,proto3,oneof" json:"health_endpoint,omitempty"`

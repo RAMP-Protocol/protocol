@@ -159,6 +159,12 @@ func offerDerivedClient(cfg clientConfig, base http.RoundTripper) *http.Client {
 	if client.Timeout <= 0 {
 		client.Timeout = DefaultCallTimeout
 	}
+	// The caller's cookie jar does not come along. This leg already drops the
+	// caller's proxy, TLS dialer and redirect policy, and a jar is the same kind of
+	// ambient state: http.CookieJar is an interface, so what an arbitrary
+	// implementation sends to a host an offer named is not this package's to
+	// assume. A RAMP call carries its identity in the signature, never in a cookie.
+	client.Jar = nil
 	return client
 }
 
@@ -295,7 +301,7 @@ func idempotencyKeyFor(opts []CallOption, onMessage string) (string, error) {
 func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...CallOption) (*rampv1.TransactionResponse, error) {
 	const op = "execute"
 	if c.cfg.requester == nil {
-		return nil, malformed(op, fmt.Errorf(
+		return nil, malformed(op, errors.New(
 			"no requester configured; an Exchange resolves who is buying from it (see WithRequester)"))
 	}
 	signer := c.cfg.signer

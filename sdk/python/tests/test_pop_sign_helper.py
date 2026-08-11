@@ -156,7 +156,17 @@ def test_sign_agent_binding_in_ramp_sdk_all() -> None:
 # ---- control bytes in the target URI -------------------------------------
 
 
-def test_sign_agent_binding_refuses_control_bytes_in_the_url() -> None:
+@pytest.mark.parametrize(
+    "url",
+    [
+        'https://cdn.test/a\n"@authority": evil.test',
+        "https://cdn.test/a\r",
+        "https://cdn.test/a\x00",
+        "https://cdn.test/a\x7f",
+    ],
+    ids=["newline", "carriage_return", "nul", "delete"],
+)
+def test_sign_agent_binding_refuses_control_bytes_in_the_url(url: str) -> None:
     """A control byte in the URL must be refused, not signed.
 
     The signature base is line-delimited and the URL is written into it verbatim,
@@ -164,26 +174,17 @@ def test_sign_agent_binding_refuses_control_bytes_in_the_url() -> None:
     stop describing the request a verifier reconstructs. Mirrors the Go signer's
     refusal (helpers.SignAgentBinding / ErrInvalidPoPInput); Python raises rather
     than exporting a sentinel, which is the mapped-correct shape.
-    """
-    import pytest
-    from ramp_sdk.pop import sign_agent_binding
 
+    Parametrized rather than looped so a regression names the offending case: in a
+    loop, a DID-NOT-RAISE failure reports the line and not which URL reached it.
+    """
     seed = bytes(range(32))
-    for name, url in {
-        "newline": 'https://cdn.test/a\n"@authority": evil.test',
-        "carriage return": "https://cdn.test/a\r",
-        "nul": "https://cdn.test/a\x00",
-        "delete": "https://cdn.test/a\x7f",
-    }.items():
-        with pytest.raises(ValueError, match="control byte"):
-            sign_agent_binding(url=url, signer_seed=seed, created=1, expires=2)
-        assert name  # names are for the failure message only
+    with pytest.raises(ValueError, match="control byte"):
+        sign_agent_binding(url=url, signer_seed=seed, created=1, expires=2)
 
 
 def test_sign_agent_binding_still_signs_an_ordinary_url() -> None:
     """The refusal is narrow: a normal URL, and a percent-encoded one, still sign."""
-    from ramp_sdk.pop import sign_agent_binding
-
     seed = bytes(range(32))
     for url in ("https://cdn.test/a?agent_id=x", "https://cdn.test/a%20b%2Fc"):
         key, sig_input, sig = sign_agent_binding(

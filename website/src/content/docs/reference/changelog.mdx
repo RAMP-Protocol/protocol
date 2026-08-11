@@ -17,10 +17,10 @@ dot-delimited label boundary, so `evil-a.com` is not a subdomain of `a.com`; the
 compared, since TLS binds hostnames rather than ports.
 
 **This is the first entry in this changelog that changes what conforms without changing the
-wire.** The classifier is deliberately not `(breaking)`: every prior use of that word here marks
-a `buf breaking` delta, and this change has none — no field, message, or encoding moves, and
-`buf breaking` reports nothing. What it does instead is narrow what a conformant manifest may
-say. **An Exchange that serves its API from a separate domain — a CDN, a hosting provider — is
+wire.** The classifier is deliberately not `(breaking)`: this change moves no field, message, or
+encoding, and `buf breaking` reports nothing — while the bare `(breaking)` entries below all mark
+a descriptor delta, and the one qualified use ("breaking for the generated clients") names the
+audience it breaks. What this change does instead is narrow what a conformant manifest may say. **An Exchange that serves its API from a separate domain — a CDN, a hosting provider — is
 conformant today and will be refused after this.** Such a deployment should front the API under
 a subdomain of the domain serving its `ramp.json`. Operators of single-domain Exchanges, which
 is the documented shape, are unaffected.

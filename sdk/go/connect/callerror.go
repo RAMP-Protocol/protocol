@@ -125,12 +125,20 @@ func sendError(op string, err error) error {
 	if !errors.As(err, &cerr) {
 		return out
 	}
-	// A peer that answered is a refusal, whatever it said. Unavailable and the
-	// deadline codes are the two Connect reports a transport failure as, so they
-	// stay unreachable — the distinction a caller needs is "it said no" versus "it
-	// never answered", and only the first is worth surfacing a reason for.
+	// A peer that answered is a refusal, whatever it said. The distinction a caller
+	// needs is "it said no" versus "it never answered", and only the first is worth
+	// surfacing a reason for.
+	//
+	// Three codes land on the second side. Unavailable is the transport failure
+	// proper. The two context codes are LOCAL outcomes wearing a Connect code:
+	// connect-go stamps CodeDeadlineExceeded on a context that ran out and
+	// CodeCanceled on one the caller cancelled, so neither means the peer reached a
+	// verdict. Classifying a caller's own cancellation as CallRefused would tell it
+	// the Exchange declined a call the Exchange may never have seen.
 	switch cerr.Code() {
-	case connectrpc.CodeUnavailable, connectrpc.CodeDeadlineExceeded:
+	case connectrpc.CodeUnavailable,
+		connectrpc.CodeDeadlineExceeded,
+		connectrpc.CodeCanceled:
 		out.Kind = CallUnreachable
 	case connectrpc.CodeResourceExhausted:
 		// The read cap, seen from this side: the peer's answer was larger than the

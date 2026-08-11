@@ -30,7 +30,10 @@ def test_connect_client_divergence_is_a_recorded_decision() -> None:
     """docs/sdk-parity-matrix.md records the Go-only Connect client as intentional."""
     text = _MATRIX.read_text(encoding="utf-8")
     assert "DECISION —" in text, "parity matrix carries no DECISION bullets"
-    # The Connect-client decision must name the client and the runtime-native rationale.
+    # The decision must name the client. It deliberately does NOT assert the old
+    # "runtime-native" rationale, which the docstring above records as wrong: every
+    # RAMP RPC is unary, and the design specifies the same verbs in all three
+    # languages, so what diverges is the transport, not the API.
     lowered = text.lower()
     assert "connect client" in lowered or "connect-client" in lowered, (
         "no Connect-client decision recorded in the parity matrix — the Go-only "

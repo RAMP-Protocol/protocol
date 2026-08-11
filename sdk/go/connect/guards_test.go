@@ -195,7 +195,7 @@ func TestReportUsage_RefusesRedirectAndNeverContactsTheTarget(t *testing.T) {
 	defer target.Close()
 
 	// The Exchange answers the RPC with a redirect to somewhere else.
-	domain := loopbackManifestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	domain, _ := loopbackManifestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target.URL+"/stolen", http.StatusFound)
 	}))
 
@@ -223,7 +223,7 @@ func TestReportUsage_RefusesRedirectAndNeverContactsTheTarget(t *testing.T) {
 // depending on where it failed.
 func TestReportUsage_PeerRefusalIsATypedCallError(t *testing.T) {
 	sig := newSigningFixture(t)
-	domain := loopbackManifestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	domain, _ := loopbackManifestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"code":"permission_denied","message":"no"}`))

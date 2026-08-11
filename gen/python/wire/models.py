@@ -1494,7 +1494,7 @@ class WellKnownManifest(WireModel):
     )
     endpoint: str | None = Field(
         None,
-        description='MUST be on the same host that serves this manifest, or on a subdomain of\n it, and MUST NOT carry userinfo. A consumer refuses an endpoint anywhere\n else: this document is only as trustworthy as the host that served it, so\n an endpoint naming an unrelated host would let whoever answers for the\n manifest redirect a signed call to a party the signature never covered. The\n match is on a full dot-delimited label boundary, so evil-a.com is not a\n subdomain of a.com.',
+        description="Exchange-only. ExchangeService endpoint URL. MUST be on the same host that\n serves this manifest, or on a subdomain of it, and MUST NOT carry userinfo.\n A consumer refuses an endpoint anywhere else: this document is only as\n trustworthy as the host that served it, so an endpoint naming an unrelated\n host would let whoever answers for the manifest redirect a signed call to a\n party the signature never covered. The match is on a full dot-delimited\n label boundary, so evil-a.com is not a subdomain of a.com. (One paragraph\n deliberately: a blank line here routes the first paragraph into the\n generated types' JSON-Schema title, which the Pydantic/Zod export drops.)",
     )
     exchanges: list[AuthorizedExchange] | None = Field(
         None,

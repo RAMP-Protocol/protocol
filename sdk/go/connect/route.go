@@ -32,6 +32,15 @@ import (
 // advertises for itself. It is an interface so a test can drive reporting without
 // standing up a manifest server — and, more to the point, so this package has no
 // way to accept a report endpoint from configuration.
+//
+// An implementation's ERROR decides how a caller is told to react, so it is part
+// of the contract rather than an implementation detail. A failure that is a
+// VERDICT — the host is not allowed, the manifest advertises no endpoint, or it
+// advertises one that must not be used — MUST wrap resolvers.ErrNoEndpoint or
+// resolvers.ErrEndpointRefused; those two surface as CallNotSent, which tells the
+// caller not to retry. Anything else is read as a transport failure and reported
+// as CallUnreachable, i.e. worth retrying. An implementation that returns a bare
+// error for a refusal therefore has its final answer retried indefinitely.
 type EndpointResolver interface {
 	ResolveEndpoint(ctx context.Context, host string) (string, error)
 }

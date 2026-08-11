@@ -372,6 +372,44 @@ func TestBrokerResolve_WholeCallRefusalIsAnAnswer(t *testing.T) {
 	}
 }
 
+// A Broker resolves who is asking from the requester and declines a request that
+// names none, so the client refuses it HERE rather than spending a round trip to
+// be told — and names the remedy, which a relayed "requester required" cannot.
+// Execute refuses the same way and that arm is covered; without this one the
+// whole check could be deleted with every test still green.
+func TestBrokerResolve_RefusesARequesterlessRequestLocally(t *testing.T) {
+	sig := newSigningFixture(t)
+	var hits atomic.Int64
+	path, h := rampserver.NewBrokerServiceHandler(
+		&stubBroker{}, rampserver.WithKeyResolver(sig.resolver))
+	mux := http.NewServeMux()
+	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		h.ServeHTTP(w, r)
+	}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// Every option the face uses EXCEPT WithRequester.
+	broker := rampconnect.NewBrokerClient(srv.URL, rampconnect.WithSigner(sig.signer))
+	_, err := broker.Resolve(context.Background(),
+		&rampv1.DiscoveryRequest{Ver: helpers.ProtocolVersion})
+
+	var cerr *rampconnect.CallError
+	if !errors.As(err, &cerr) {
+		t.Fatalf("error = %v, want a CallError", err)
+	}
+	if cerr.Kind != rampconnect.CallMalformed {
+		t.Errorf("kind = %v, want CallMalformed — the request is unsendable, not refused", cerr.Kind)
+	}
+	if !strings.Contains(err.Error(), "WithRequester") {
+		t.Errorf("the refusal must name the remedy, got %q", err)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("the Broker was contacted %d time(s); this refusal must be local", n)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ReportUsage: offer-driven routing and the checks before the send
 // ---------------------------------------------------------------------------
@@ -384,21 +422,12 @@ func TestBrokerResolve_WholeCallRefusalIsAnAnswer(t *testing.T) {
 // counter.
 func selfAdvertisingExchange(t *testing.T, sig signingFixture, svc rampv1connect.ExchangeServiceHandler) (string, *atomic.Int64) {
 	t.Helper()
-	var (
-		hits   atomic.Int64
-		origin string
-	)
 	path, h := rampserver.NewExchangeServiceHandler(svc, rampserver.WithKeyResolver(sig.resolver))
-	mux := http.NewServeMux()
-	mux.Handle(path, h)
-	mux.HandleFunc("/.well-known/ramp.json", func(w http.ResponseWriter, _ *http.Request) {
-		hits.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": origin})
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	origin = srv.URL
-	return strings.TrimPrefix(srv.URL, "http://"), &hits
+	rpc := http.NewServeMux()
+	rpc.Handle(path, h)
+	// The manifest half is loopbackManifestServer's, so the self-advertising part
+	// is written once. This is the "a real RPC handler" case its catch-all takes.
+	return loopbackManifestServer(t, rpc)
 }
 
 // crossHost serves a manifest advertising SOMEONE ELSE's origin — the case the

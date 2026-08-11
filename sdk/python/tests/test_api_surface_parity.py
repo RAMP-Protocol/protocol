@@ -324,27 +324,32 @@ def staleness_failures(go_symbols: dict[str, str], parity_map: ParityMap) -> lis
 # --------------------------------------------------------------------------- #
 # (ii) COMPLETENESS — needs the Go toolchain
 # --------------------------------------------------------------------------- #
+def _skip_unless_go(half: str) -> None:
+    """Skip LOUDLY when the Go oracle cannot be enumerated.
+
+    Loud because a silent skip here reads as a passing gate: without `go` on PATH
+    neither half can run at all, and the whole point of this file is that the Go
+    surface is the oracle. CI's sdk-l1 job has actions/setup-go and DOES run it.
+    """
+    if _go_available():
+        return
+    pytest.skip(
+        f"LOUD SKIP: `go` toolchain not on PATH — cannot enumerate the Go oracle "
+        f"surface, so the {half} half of the API-parity gate cannot run. CI's "
+        "sdk-l1 job has actions/setup-go and DOES run it; a green local run without "
+        "Go is NOT a green gate."
+    )
+
+
 def test_every_go_public_symbol_is_mapped_or_excluded() -> None:
-    if not _go_available():
-        pytest.skip(
-            "LOUD SKIP: `go` toolchain not on PATH — cannot enumerate the Go oracle "
-            "surface, so the COMPLETENESS half of the API-parity gate cannot run. CI's "
-            "sdk-l1 job has actions/setup-go and DOES run it; a green local run without "
-            "Go is NOT a green gate."
-        )
+    _skip_unless_go("COMPLETENESS")
     parity_map = _load_map()
     failures = completeness_failures(enumerate_go(), parity_map)
     assert not failures, "unmapped Go public symbols:\n  " + "\n  ".join(failures)
 
 
 def test_no_map_entry_outlives_its_go_symbol() -> None:
-    if not _go_available():
-        pytest.skip(
-            "LOUD SKIP: `go` toolchain not on PATH — cannot enumerate the Go oracle "
-            "surface, so the STALENESS half of the API-parity gate cannot run. CI's "
-            "sdk-l1 job has actions/setup-go and DOES run it; a green local run without "
-            "Go is NOT a green gate."
-        )
+    _skip_unless_go("STALENESS")
     parity_map = _load_map()
     failures = staleness_failures(enumerate_go(), parity_map)
     assert not failures, "stale symbol-map entries:\n  " + "\n  ".join(failures)

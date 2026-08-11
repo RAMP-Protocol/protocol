@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,18 +35,24 @@ import (
 //
 // Returns the BARE domain, which is what a UsageReport carries: the exchange
 // field names a domain, never an origin.
-func loopbackManifestServer(t *testing.T, rest http.Handler) string {
+// It also returns the well-known FETCH COUNT, which is how the caching tests tell
+// a second resolve that hit the cache from one that went back to the network.
+func loopbackManifestServer(t *testing.T, rest http.Handler) (string, *atomic.Int64) {
 	t.Helper()
-	var origin string
+	var (
+		hits   atomic.Int64
+		origin string
+	)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/ramp.json", func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": origin})
 	})
 	mux.Handle("/", rest)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	origin = srv.URL
-	return strings.TrimPrefix(srv.URL, "http://")
+	return strings.TrimPrefix(srv.URL, "http://"), &hits
 }
 
 // memReplayStore is a minimal in-memory nonce store: SeenOrAdd reports whether a

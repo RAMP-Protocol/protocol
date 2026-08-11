@@ -12,6 +12,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"github.com/RAMP-Protocol/protocol/sdk/go/internal/endpointrule"
 	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 )
@@ -168,7 +169,23 @@ func NewWellKnownEndpointResolver(opts WellKnownOptions) *WellKnownEndpointResol
 // well-known manifest. A fresh cache entry short-circuits; a miss or TTL expiry
 // triggers a single coalesced per-host fetch. A host the Allow overlay rejects
 // never reaches the network.
+//
+// host must be a BARE hostname — no scheme, path, query or userinfo, though a
+// port is fine. That is checked here rather than assumed, for the same reason
+// vetAdvertisedEndpoint runs here: it is a property of building this URL, not of
+// any one caller's plans for it.
 func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host string) (string, error) {
+	// Checked BEFORE the Allow overlay and before the cache. The fetch URL below is
+	// built by concatenation, so a value carrying a path or a query would choose
+	// WHAT gets fetched rather than merely where from — and the raw string is the
+	// cache key, so admitting one would also put it in a shared map.
+	bare, err := helpers.IsBareHost(host)
+	if err != nil {
+		return "", fmt.Errorf("resolvers: resolve endpoint: %w", err)
+	}
+	if !bare {
+		return "", fmt.Errorf("resolvers: %w: %q is not a bare host", helpers.ErrInvalidHost, host)
+	}
 	if r.allow != nil && !r.allow(host) {
 		return "", fmt.Errorf("%w: host %q not allowed", ErrNoEndpoint, host)
 	}
@@ -194,8 +211,14 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 	//     context-aware, so without this the call would honour nobody's deadline:
 	//     a caller with 200ms would sit until the shared fetch finished. The fetch
 	//     continues for the others; only this caller gives up.
-	fetchCtx, cancelFetch := context.WithTimeout(context.WithoutCancel(ctx), maxManifestFetch)
 	shared := r.sf.DoChan(host, func() (any, error) {
+		// Derived INSIDE the closure, which singleflight runs for the leader alone.
+		// Built before DoChan instead, every coalesced follower would allocate a
+		// timer whose cancel func only the leader's closure ever calls — one live
+		// timer per waiter, held until its full expiry. go vet's lostcancel cannot
+		// see that, because cancelFetch is called on the path it can trace.
+		fetchCtx, cancelFetch := context.WithTimeout(
+			context.WithoutCancel(ctx), maxManifestFetch)
 		defer cancelFetch()
 		if ep, ok := r.cached(host); ok {
 			return ep, nil // another goroutine fetched while we waited
@@ -215,7 +238,6 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 		return doc.Endpoint, nil
 	})
 	var v any
-	var err error
 	select {
 	case <-ctx.Done():
 		return "", fmt.Errorf("resolvers: resolve endpoint for %q: %w", host, ctx.Err())
