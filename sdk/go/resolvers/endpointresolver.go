@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/endpointrule"
 	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 )
 
@@ -88,6 +87,15 @@ func fetchWellKnownDoc(ctx context.Context, client *http.Client, url string) (*w
 // real deployment reports to a handful of Exchanges. Mirrors the bound the
 // per-origin client pool above this resolver already carries.
 const maxCachedEndpoints = 256
+
+// maxManifestFetch bounds the SHARED manifest fetch — the one every coalesced
+// waiter is served from, which therefore cannot take any single caller's deadline.
+//
+// It exists because the alternative is no bound at all: WellKnownOptions.HTTP
+// accepts any *http.Client, the constructor doc invites one, and http.DefaultClient
+// has no timeout. A manifest is a small document from a host an offer named; a
+// fetch still running after this is not going to succeed.
+const maxManifestFetch = 30 * time.Second
 
 // WellKnownEndpointResolver resolves an Exchange domain to its self-advertised
 // ExchangeService endpoint by fetching https://{host}/.well-known/ramp.json and
@@ -173,14 +181,22 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 	// hosts whose fetches fail, which is where a hand-rolled per-host mutex map
 	// grows fastest.
 	//
-	// The shared fetch deliberately does NOT inherit the winning caller's
-	// cancellation. Every waiter receives whatever the leader returns, so a leader
-	// that walks away — or arrives with a nearly-spent deadline — would otherwise
-	// fail a burst of callers whose own contexts are still live, and each would
-	// read that as the Exchange being unreachable. The fetch stays bounded by the
-	// resolver's own HTTP client timeout rather than by whoever got there first.
-	fetchCtx := context.WithoutCancel(ctx)
-	v, err, _ := r.sf.Do(host, func() (any, error) {
+	// Two contexts, because one caller's deadline must not become everyone's and
+	// nobody's deadline must not become the fetch's:
+	//
+	//   - The SHARED fetch does not inherit the winning caller's cancellation.
+	//     Every waiter receives whatever the leader returns, so a leader that walks
+	//     away would otherwise fail a burst of callers whose own contexts are still
+	//     live, and each would read that as the Exchange being unreachable. It
+	//     carries maxManifestFetch instead, so it stays bounded whatever client was
+	//     injected — WellKnownOptions.HTTP admits one with no timeout at all.
+	//   - Each WAITER selects on its OWN context. singleflight is not
+	//     context-aware, so without this the call would honour nobody's deadline:
+	//     a caller with 200ms would sit until the shared fetch finished. The fetch
+	//     continues for the others; only this caller gives up.
+	fetchCtx, cancelFetch := context.WithTimeout(context.WithoutCancel(ctx), maxManifestFetch)
+	shared := r.sf.DoChan(host, func() (any, error) {
+		defer cancelFetch()
 		if ep, ok := r.cached(host); ok {
 			return ep, nil // another goroutine fetched while we waited
 		}
@@ -198,6 +214,14 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 		r.store(host, doc.Endpoint)
 		return doc.Endpoint, nil
 	})
+	var v any
+	var err error
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("resolvers: resolve endpoint for %q: %w", host, ctx.Err())
+	case res := <-shared:
+		v, err = res.Val, res.Err
+	}
 	if err != nil {
 		return "", err
 	}
@@ -225,22 +249,8 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 // net/http stamp an Authorization header the SDK never chose, on a leg that
 // already carries the agent's own signature.
 func vetAdvertisedEndpoint(host, endpoint string) error {
-	parsed, err := url.Parse(endpoint)
-	if err != nil {
-		return fmt.Errorf("%w: host=%q endpoint=%q is not a URL: %w",
-			ErrEndpointRefused, host, endpoint, err)
-	}
-	if parsed.User != nil {
-		return fmt.Errorf("%w: host=%q advertises an endpoint carrying userinfo",
-			ErrEndpointRefused, host)
-	}
-	anchored, err := helpers.HostAnchored(host, endpoint)
-	if err != nil {
-		return fmt.Errorf("%w: host=%q endpoint=%q: %w", ErrEndpointRefused, host, endpoint, err)
-	}
-	if !anchored {
-		return fmt.Errorf("%w: host=%q advertises endpoint %q on a different host",
-			ErrEndpointRefused, host, endpoint)
+	if err := endpointrule.Vet(host, endpoint); err != nil {
+		return fmt.Errorf("%w: %w", ErrEndpointRefused, err)
 	}
 	return nil
 }

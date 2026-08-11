@@ -10,6 +10,7 @@ import (
 
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/endpointrule"
 	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
@@ -82,20 +83,19 @@ func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchang
 			Err: fmt.Errorf("resolve exchange %q: %w", exchangeDomain, err),
 		}
 	}
-	// Re-checked here even though the SDK's own resolver already refuses an
-	// unanchored endpoint. The resolver is an injectable seam: a caller may supply
-	// one, and this package cannot make a signed call conditional on a stranger's
-	// implementation having remembered the rule. The cost is one string comparison
-	// on a path that just did a network fetch.
-	anchored, err := helpers.HostAnchored(exchangeDomain, endpoint)
-	if err != nil {
+	// Re-checked here even though the SDK's own resolver already refuses such an
+	// endpoint. The resolver is an injectable seam: a caller may supply one, and
+	// this package cannot make a signed call conditional on a stranger's
+	// implementation having remembered the rule. The cost is string work on a path
+	// that just did a network fetch.
+	//
+	// The SAME predicate both times, deliberately. Stated twice it drifts, and a
+	// half-mirrored version of this rule is how a signed call ends up carrying
+	// credentials the SDK never chose.
+	if err := endpointrule.Vet(exchangeDomain, endpoint); err != nil {
 		return "", notSent(op, fmt.Errorf(
-			"check exchange %q endpoint %q: %w", exchangeDomain, endpoint, err))
-	}
-	if !anchored {
-		return "", notSent(op, fmt.Errorf(
-			"exchange %q advertises endpoint %q on a different host — refusing to send a signed call there",
-			exchangeDomain, endpoint))
+			"refusing to send a signed call to the endpoint exchange %q advertises: %w",
+			exchangeDomain, err))
 	}
 	return endpoint, nil
 }

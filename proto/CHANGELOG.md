@@ -2,18 +2,34 @@
 
 ## Unreleased
 
-**`WellKnownManifest.endpoint` states its host binding (documentation only, no wire
-change).** The field said only "Exchange-only. ExchangeService endpoint URL", so nothing told
-an Exchange operator that the address it advertises must stay on its own domain. It now does:
-the endpoint MUST be on the host that serves the manifest, or a subdomain of it, and MUST NOT
-carry userinfo. The manifest is only as trustworthy as the host that served it, so an endpoint
-naming an unrelated host would let whoever answers for the manifest redirect a signed call to
-a party the offer's signature never covered — and a dial-time address guard has no objection
-to an unrelated PUBLIC host. The match is on a full dot-delimited label boundary, so
-`evil-a.com` is not a subdomain of `a.com`; the port is not compared, since TLS binds
-hostnames rather than ports. The rule was already enforced by one SDK caller and is now
-enforced in the shared endpoint resolver, so every consumer inherits it. No field, message, or
-wire change — proto comments only, with `gen/` and the website mirror regenerated.
+**`WellKnownManifest.endpoint` states its host binding (no wire change; conformance-affecting).**
+The field said only "Exchange-only. ExchangeService endpoint URL", so nothing told an Exchange
+operator that the address it advertises must stay on its own domain. It now does: the endpoint
+MUST be on the host that SERVES the manifest — not the self-asserted `domain` member inside it —
+or a subdomain of that host, and MUST NOT carry userinfo. The manifest is only as trustworthy as
+the host that served it, so an endpoint naming an unrelated host would let whoever answers for
+the manifest redirect a signed call to a party the offer's signature never covered — and a
+dial-time address guard has no objection to an unrelated PUBLIC host. The match is on a full
+dot-delimited label boundary, so `evil-a.com` is not a subdomain of `a.com`; the port is not
+compared, since TLS binds hostnames rather than ports.
+
+**This is the first entry in this changelog that changes what conforms without changing the
+wire.** The classifier is deliberately not `(breaking)`: every prior use of that word here marks
+a `buf breaking` delta, and this change has none — no field, message, or encoding moves, and
+`buf breaking` reports nothing. What it does instead is narrow what a conformant manifest may
+say. **An Exchange that serves its API from a separate domain — a CDN, a hosting provider — is
+conformant today and will be refused after this.** Such a deployment should front the API under
+a subdomain of the domain serving its `ramp.json`. Operators of single-domain Exchanges, which
+is the documented shape, are unaffected.
+
+Enforcement moved with the rule: it now runs in the SDK's shared endpoint resolver rather than
+in one client, so every consumer of that resolver inherits it without changing a line. Two
+consequences for anyone re-pinning. Resolution can now fail with a new `ErrEndpointRefused`
+sentinel, which is a VERDICT — the Exchange answered and the answer is unusable — and a
+classifier that branches only on the older `ErrNoEndpoint` will drop it into its
+transport-failure bucket and retry something that will never succeed; add the new sentinel
+alongside. And a Broker that resolves endpoints through this package inherits the rule for the
+paths that use it. `gen/` and the website mirror are regenerated; proto comments only.
 
 **SDK (all 3 languages): the registration-failure builder can carry the field errors
 (additive, no wire change).** `helpers.RegistrationFailureDetail` (Go),

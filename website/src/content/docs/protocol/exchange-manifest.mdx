@@ -106,7 +106,7 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 | `name` | string | No | Human-readable Exchange name |
 | `operator` | string | No | Organization operating this Exchange |
 | `operator_domain` | string | No | Operator's corporate domain |
-| `endpoint` | string | No | ExchangeService endpoint URL. **Must be on `domain` or a subdomain of it, and must not carry userinfo** — see [Endpoint host binding](#endpoint-host-binding) |
+| `endpoint` | string | No | ExchangeService endpoint URL. **Must be on the host that serves this manifest, or a subdomain of it, and must not carry userinfo** — see [Endpoint host binding](#endpoint-host-binding) |
 | (offer-signing keys) | — | — | Not in `ramp.json`. See the [WBA directory](#the-wba-directory) at `/.well-known/http-message-signatures-directory` |
 | `health_endpoint` | string | No | Health check endpoint URL |
 | `catalog_endpoint` | string | No | CatalogService endpoint URL |
@@ -132,6 +132,13 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 subdomain of it, and **MUST NOT** carry userinfo. An Exchange at
 `exchange.example` may advertise `https://exchange.example/v1` or
 `https://api.exchange.example/v1`; it may not advertise `https://cdn.other.example/v1`.
+
+The anchor is the host the consumer **fetched this document from** — not the
+`domain` field inside it. That distinction is the whole check: `domain` is
+self-asserted, so a hostile manifest that anchored to it could simply set `domain`
+to match whatever endpoint it wanted and validate itself. A conformant Exchange
+has the two agree, which is why the difference only shows against a manifest worth
+refusing.
 
 The reason is the trust chain. This document is fetched from the domain an offer
 named, and it is only as trustworthy as the host that served it. If it could name
@@ -221,7 +228,7 @@ message WellKnownManifest {
   optional string name = 9;
   optional string operator = 10;
   optional string operator_domain = 11;
-  optional string endpoint = 12;                   // ExchangeService URL (same host or a subdomain)
+  optional string endpoint = 12;                   // ExchangeService URL (serving host, or a subdomain)
   optional string health_endpoint = 13;
   optional string catalog_endpoint = 14;
   repeated string protocol_versions_supported = 16;

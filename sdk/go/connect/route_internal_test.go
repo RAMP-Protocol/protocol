@@ -31,7 +31,10 @@ func TestExchangePool_IsBoundedAtTheCap(t *testing.T) {
 	for i := range maxPooledExchanges + 10 {
 		pool.clientFor(string(rune('a'+i%26)) + string(rune('0'+i/26)))
 	}
-	if got := pool.clients.Len(); got > maxPooledExchanges {
-		t.Errorf("pool size = %d, want it to hold at %d", got, maxPooledExchanges)
+	// EXACTLY the cap, not merely at-or-under it: this is what pins that the
+	// pool passed its own constant to the shared cache rather than some other
+	// bound. Ordering is pinned once, on the shared type.
+	if got := pool.clients.Len(); got != maxPooledExchanges {
+		t.Errorf("pool size = %d, want exactly %d", got, maxPooledExchanges)
 	}
 }

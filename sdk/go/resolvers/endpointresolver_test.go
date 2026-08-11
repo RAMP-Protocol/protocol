@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -233,5 +234,91 @@ func TestWellKnownEndpointResolver_allowsASubdomainOfTheServingHost(t *testing.T
 	anchored, err := helpers.HostAnchored("exchange.example", "https://api.exchange.example/v1")
 	if err != nil || !anchored {
 		t.Fatalf("subdomain anchored = %v, %v; want true", anchored, err)
+	}
+}
+
+// A caller's own deadline bounds its own call, even while a shared fetch for the
+// same host is still running.
+//
+// singleflight is not context-aware, so a coalesced call honours nobody's deadline
+// unless each waiter selects on its own. Without that a 200ms caller sits until
+// the slow origin answers — which, with an injected client carrying no timeout, is
+// however long the origin feels like taking.
+func TestWellKnownEndpointResolver_honoursTheCallersOwnDeadline(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	// Defers run last-in-first-out, so release the handler BEFORE closing the
+	// server: Close waits on the in-flight request, and the shared fetch carries
+	// maxManifestFetch rather than this caller's spent deadline.
+	defer srv.Close()
+	defer close(release)
+
+	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{
+		TTL: time.Hour, Scheme: "http", HTTP: http.DefaultClient, // no timeout, deliberately
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := r.ResolveEndpoint(ctx, hostOf(t, srv))
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("a call past its own deadline must fail")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("error = %v, want the caller's own deadline to be the reason", err)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("returned after %v; the caller's deadline was not honoured", elapsed)
+	}
+}
+
+// ...and the leader walking away does not take the burst with it. The other half
+// of the same property: the shared fetch outlives whoever triggered it, so a
+// waiter with a live context still gets its answer.
+func TestWellKnownEndpointResolver_leaderCancellationDoesNotPoisonWaiters(t *testing.T) {
+	var ep string
+	gate := make(chan struct{})
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		<-gate // hold the fetch open until both callers are queued
+		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": ep})
+	}))
+	defer srv.Close()
+	ep = srv.URL + "/ramp.v1.ExchangeService"
+	host := hostOf(t, srv)
+
+	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{
+		TTL: time.Hour, Scheme: "http", HTTP: http.DefaultClient,
+	})
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); _, _ = r.ResolveEndpoint(leaderCtx, host) }()
+
+	waited := make(chan error, 1)
+	go func() {
+		time.Sleep(50 * time.Millisecond) // queue behind the leader's in-flight call
+		_, err := r.ResolveEndpoint(context.Background(), host)
+		waited <- err
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	cancelLeader() // the leader walks away mid-fetch
+	close(gate)    // let the origin answer
+
+	<-done
+	if err := <-waited; err != nil {
+		t.Fatalf("a waiter with a live context must still get the endpoint: %v", err)
+	}
+	if n := atomic.LoadInt32(&hits); n != 1 {
+		t.Errorf("origin hit %d times, want 1 — the burst must coalesce", n)
 	}
 }

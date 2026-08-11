@@ -17,8 +17,11 @@ func TestEndpointCache_IsBoundedAtTheCap(t *testing.T) {
 	for i := range maxCachedEndpoints + 10 {
 		r.store(string(rune('a'+i%26))+string(rune('0'+i/26))+".test", "https://ep.test")
 	}
-	if got := r.cache.Len(); got > maxCachedEndpoints {
-		t.Errorf("cache size = %d, want it to hold at %d", got, maxCachedEndpoints)
+	// EXACTLY the cap, not merely at-or-under it: this is what pins that the
+	// resolver passed its own constant to the shared cache rather than some other
+	// bound. Ordering is pinned once, on the shared type.
+	if got := r.cache.Len(); got != maxCachedEndpoints {
+		t.Errorf("cache size = %d, want exactly %d", got, maxCachedEndpoints)
 	}
 }
 

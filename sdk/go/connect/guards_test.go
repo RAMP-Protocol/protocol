@@ -139,6 +139,49 @@ func TestFetch_GuardSurvivesACallerSuppliedTLSDialer(t *testing.T) {
 	}
 }
 
+// The client re-checks the endpoint an INJECTED resolver hands back, and it
+// applies the whole rule — not the half of it that is about hosts.
+//
+// Credentials in the authority are the half that is easy to lose: the host
+// comparison reads the host and ignores any user:password before it, so an
+// endpoint carrying them passes an anchoring check and then has net/http stamp an
+// Authorization header the SDK never chose, on a leg that already carries the
+// agent's own signature. The resolver refuses this; so must the client, because
+// the resolver is a seam a caller can replace.
+func TestReportUsage_RefusesAnInjectedEndpointCarryingUserinfo(t *testing.T) {
+	sig := newSigningFixture(t)
+	client := rampconnect.NewClient("http://home.invalid",
+		append(allowLoopback(t),
+			rampconnect.WithSigner(sig.signer),
+			// Anchored to the domain, so only the userinfo arm can refuse it.
+			rampconnect.WithEndpointResolver(fixedEndpoint{
+				endpoint: "http://agent:s3cret@exchange.test",
+			}),
+		)...)
+
+	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
+		Exchange:      proto.String("exchange.test"),
+		TransactionId: "txn-1",
+	})
+	if err == nil {
+		t.Fatal("a signed report to an endpoint carrying credentials must be refused")
+	}
+	var cerr *rampconnect.CallError
+	if !errors.As(err, &cerr) {
+		t.Fatalf("error = %v, want a CallError", err)
+	}
+	if cerr.Kind != rampconnect.CallNotSent {
+		t.Errorf("kind = %v, want CallNotSent — nothing left the process", cerr.Kind)
+	}
+	if !strings.Contains(err.Error(), "userinfo") {
+		t.Errorf("error = %v, want it to name the credential as the reason", err)
+	}
+	// The refusal must not echo the credential it refused.
+	if strings.Contains(err.Error(), "s3cret") {
+		t.Errorf("the refusal leaked the credential: %v", err)
+	}
+}
+
 // A RAMP call is never legitimately redirected. Following one would re-sign the
 // caller's request for a target the peer chose — after the endpoint check had
 // already passed, which is the window that check exists to close.

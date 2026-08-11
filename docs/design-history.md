@@ -706,9 +706,23 @@ subdomains, and nothing else. The match is on a full dot-delimited label boundar
 so `evil-a.com` is not a subdomain of `a.com`; a bare suffix comparison gets that
 wrong, and it is the mistake an attacker registers a domain to exploit.
 
-The rule exists only in code — no proto comment and no published page states it —
-which is worth knowing before anyone assumes a conforming Exchange was told about
-it.
+The rule is now normative and stated where an implementer will find it: the
+`WellKnownManifest.endpoint` proto comment, and the manifest page on the docs site.
+It was not always — for most of this work it lived only in one client's code,
+inherited from a port rather than decided, which is why an Exchange advertising a
+separate domain could be conformant and then stop being so. Enforcement sits in
+the shared endpoint resolver, so every consumer of that resolver inherits it.
+
+The anchor is the host that SERVED the manifest, not the `domain` member inside
+it. That member is self-asserted, so anchoring to it would let a hostile manifest
+name whatever endpoint it liked and validate itself. For a conformant Exchange the
+two agree, which is exactly why the distinction only shows against a document
+worth refusing.
+
+One SDK enforces it. Python and TypeScript ship endpoint resolvers that do not,
+and the predicate they would need does not exist there — their private
+near-namesakes are the WBA variant and compare with the port. Closing that is
+tracked separately.
 
 The comparison deliberately ignores the PORT. The property being enforced is "not
 an unrelated host", and a service on another port of the same name is not another

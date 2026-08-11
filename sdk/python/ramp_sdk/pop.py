@@ -174,6 +174,17 @@ def sign_agent_binding(
     to the sdk/go signer (pinned by pop-vectors.json). ``created``/``expires`` are
     injected unix seconds: the helper reads no clock (L1-pure).
     """
+    # The signature base is line-delimited and ``url`` is written into it verbatim,
+    # so a control byte would add or split a component line and the bytes signed
+    # here would stop describing the request a verifier reconstructs. Refused
+    # rather than escaped: no legitimate target URI contains one, and a signature
+    # base is the wrong place to be lenient. Mirrors the Go signer, which refuses
+    # the same bytes in both the method and the URL; the method arm does not apply
+    # here because this face always signs GET.
+    bad = next((i for i, ch in enumerate(url) if ord(ch) < 0x20 or ord(ch) == 0x7F), None)
+    if bad is not None:
+        raise ValueError(f"target URI carries a control byte at {bad}")
+
     priv = Ed25519PrivateKey.from_private_bytes(signer_seed)
     pub = priv.public_key().public_bytes_raw()
     keyid = thumbprint(pub)
