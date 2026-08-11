@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"net/http"
+	"time"
 
 	connectrpc "connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
@@ -28,12 +29,15 @@ type clientConfig struct {
 	requestID     core.RequestIDFunc
 	extra         []connectrpc.Interceptor
 
-	requester   *rampv1.Requester
-	agentKey    ed25519.PublicKey
-	proofWindow core.Window
-	endpoints   EndpointResolver
-	guardedBase *http.Transport
-	connectOpts []connectrpc.ClientOption
+	requester    *rampv1.Requester
+	agentKey     ed25519.PublicKey
+	proofWindow  core.Window
+	signWindow   core.Window
+	endpoints    EndpointResolver
+	guardedBase  *http.Transport
+	connectOpts  []connectrpc.ClientOption
+	fetchTimeout time.Duration
+	fetchMaxByte int64
 }
 
 // ClientOption configures a Client. Options are the ONLY way to inject the
@@ -147,6 +151,48 @@ func WithAgentKey(pub ed25519.PublicKey) ClientOption {
 // repeat it until the window closes.
 func WithProofWindow(w core.Window) ClientOption {
 	return func(c *clientConfig) { c.proofWindow = w }
+}
+
+// WithSignWindow overrides the freshness window stamped on every outbound RFC
+// 9421 REQUEST signature — the home Exchange, the Broker, and the leg that routes
+// to the Exchange an offer named. The default is five minutes from the wall clock.
+//
+// Two reasons an application supplies its own. A deployment with a shorter
+// freshness policy sets its own TTL, and through this option the value it already
+// reads from configuration keeps meaning something. And a peer that screens
+// replays on (key id, signature) refuses a repeat: signature timestamps have
+// one-second resolution, so two identical requests inside one second sign to the
+// same bytes. core.MonotonicWindow keeps each signature unique for exactly that.
+//
+// Distinct from WithProofWindow, which stamps a delivery-fetch proof rather than a
+// request signature. Both take a core.Window; neither substitutes for the other.
+func WithSignWindow(w core.Window) ClientOption {
+	return func(c *clientConfig) { c.signWindow = w }
+}
+
+// WithContentTimeout bounds one delivery fetch, proof minting included. The
+// default is resolvers.DefaultContentTimeout.
+//
+// A delivery host is named by another party, so the bound is not optional — this
+// option moves it, it does not remove it. A value <= 0 keeps the default.
+func WithContentTimeout(d time.Duration) ClientOption {
+	return func(c *clientConfig) { c.fetchTimeout = d }
+}
+
+// WithMaxContentBytes caps one fetched body. The default is
+// resolvers.DefaultMaxContentBytes.
+//
+// Worth setting when the application carries its own per-item budget: a cap here
+// that disagrees with the one the caller accounts against makes that accounting
+// wrong, and an over-cap body is reported as CallTooLarge rather than truncated.
+// A value <= 0 keeps the default.
+//
+// The two bounds are separate scalars rather than one options struct because
+// ContentFetchOptions also carries the base transport, which arrives through
+// WithGuardedBaseTransport — a second way to set it would be a field that had to
+// be silently ignored.
+func WithMaxContentBytes(n int64) ClientOption {
+	return func(c *clientConfig) { c.fetchMaxByte = n }
 }
 
 // WithEndpointResolver injects the resolver that turns an offer's exchange domain

@@ -103,6 +103,8 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		endpoints: cfg.resolveEndpointResolver(),
 		fetcher: resolvers.NewContentFetcher(resolvers.ContentFetchOptions{
 			BaseTransport: cfg.guardedBase,
+			Timeout:       cfg.fetchTimeout,
+			MaxBytes:      cfg.fetchMaxByte,
 		}),
 	}
 }
@@ -118,9 +120,20 @@ func signedHTTPClient(cfg clientConfig, base http.RoundTripper) *http.Client {
 		base = http.DefaultTransport
 	}
 	signed := *cfg.httpClient
-	signed.Transport = core.NewSigningTransport(cfg.signer, base)
+	signed.Transport = core.NewSigningTransport(cfg.signer, base, signingOptions(cfg)...)
 	signed.CheckRedirect = refuseRPCRedirect
 	return &signed
+}
+
+// signingOptions renders the signing knobs the client models onto the transport's
+// own option type. It is the ONE place they meet, so every face the SDK builds —
+// the home Exchange, the Broker, and the offer-derived pool, which all reach the
+// wire through signedHTTPClient — signs on identical terms.
+func signingOptions(cfg clientConfig) []core.SigningOption {
+	if cfg.signWindow == nil {
+		return nil
+	}
+	return []core.SigningOption{core.WithWindow(cfg.signWindow)}
 }
 
 // refuseRPCRedirect stops the client following any 3xx on an RPC leg.
