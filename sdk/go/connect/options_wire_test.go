@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
@@ -139,6 +141,87 @@ func TestWithContentTimeout_BoundsTheFetch(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Errorf("fetch took %v; the supplied deadline was not applied", elapsed)
+	}
+}
+
+// An idempotency key the caller put ON THE MESSAGE survives to the wire.
+//
+// The middle tier of the precedence rule, and the one with consequences: minting
+// a default is intended, but overwriting a value the caller chose turns each of
+// their retries into a fresh action, which is the double-counting the field
+// exists to prevent. Fresh-mint and the per-call option are covered elsewhere;
+// this is the branch a regression to "always mint" would slip past.
+func TestReportUsage_KeepsAKeyTheCallerPutOnTheMessage(t *testing.T) {
+	sig := newSigningFixture(t)
+	origin := &groupExchange{}
+	domain, _ := selfAdvertisingExchange(t, sig, origin)
+
+	client := rampconnect.NewClient("http://home.invalid",
+		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
+
+	const own = "app-owned-key-1"
+	report := &rampv1.UsageReport{
+		Exchange:       proto.String(domain),
+		TransactionId:  "txn-1",
+		IdempotencyKey: own,
+	}
+	if _, err := client.ReportUsage(context.Background(), report); err != nil {
+		t.Fatalf("ReportUsage: %v", err)
+	}
+	if got := origin.gotReport.GetIdempotencyKey(); got != own {
+		t.Errorf("idempotency key = %q, want the caller's own %q", got, own)
+	}
+}
+
+// A supplied proof window reaches the delivery request's signature, so the
+// freshness of a bound fetch is the caller's policy rather than the SDK's
+// 30-second default.
+func TestWithProofWindow_ReachesTheFetchSignature(t *testing.T) {
+	const created, expires = 1_700_000_000, 1_700_000_045
+
+	var got string
+	content := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Signature-Input")
+		_, _ = w.Write([]byte("bytes"))
+	}))
+	defer content.Close()
+
+	sig := newSigningFixture(t)
+	opts := append(allowLoopback(t),
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithAgentKey(sig.pub),
+		rampconnect.WithProofWindow(func() (int64, int64) { return created, expires }),
+	)
+	if _, err := rampconnect.NewClient("http://home.invalid", opts...).
+		Fetch(context.Background(), content.URL+"/doc"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	for _, want := range []string{"created=1700000000", "expires=1700000045"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("proof Signature-Input = %q, want it to carry %s", got, want)
+		}
+	}
+}
+
+// Without the option the proof still carries a window, so it is a default rather
+// than something a caller must supply to fetch at all.
+func TestProofWindow_DefaultsWhenUnset(t *testing.T) {
+	var got string
+	content := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Signature-Input")
+		_, _ = w.Write([]byte("bytes"))
+	}))
+	defer content.Close()
+
+	sig := newSigningFixture(t)
+	opts := append(allowLoopback(t),
+		rampconnect.WithSigner(sig.signer), rampconnect.WithAgentKey(sig.pub))
+	if _, err := rampconnect.NewClient("http://home.invalid", opts...).
+		Fetch(context.Background(), content.URL+"/doc"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !strings.Contains(got, "created=") || !strings.Contains(got, "expires=") {
+		t.Errorf("proof Signature-Input = %q, want a stamped window from the default", got)
 	}
 }
 

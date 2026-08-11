@@ -239,6 +239,15 @@ func TestSignAgentBinding_RefusesBadPreconditions(t *testing.T) {
 		{"missing created", signer, pub, withWindow(ok, 0, expires), helpers.ErrMissingCreated},
 		{"missing expires", signer, pub, withWindow(ok, created, 0), helpers.ErrMissingExpires},
 		{"keyid is not the presented key's thumbprint", otherSigner, otherPub, ok, helpers.ErrKeyIDMismatch},
+		// Both values are written verbatim into a line-delimited signature base,
+		// so a control byte would add or split a component line and the signed
+		// bytes would stop describing the request a verifier reconstructs.
+		{"newline in the target uri", signer, pub,
+			withURL(ok, v.URL+"\n\"@authority\": evil.test"), helpers.ErrInvalidPoPInput},
+		{"carriage return in the target uri", signer, pub,
+			withURL(ok, v.URL+"\r"), helpers.ErrInvalidPoPInput},
+		{"newline in the method", signer, pub,
+			withMethod(ok, "GET\n\"@authority\": evil.test"), helpers.ErrInvalidPoPInput},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -278,5 +287,10 @@ func withURL(o helpers.PoPOptions, url string) helpers.PoPOptions {
 
 func withWindow(o helpers.PoPOptions, created, expires int64) helpers.PoPOptions {
 	o.Created, o.Expires = created, expires
+	return o
+}
+
+func withMethod(o helpers.PoPOptions, method string) helpers.PoPOptions {
+	o.Method = method
 	return o
 }

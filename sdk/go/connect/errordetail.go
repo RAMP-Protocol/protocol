@@ -20,8 +20,8 @@ func ErrorDetailFrom(err error) (*rampv1.ErrorDetail, bool) {
 	// verb. On an RPC path the detail below was emitted by the peer; on the
 	// content path it was synthesized locally from the edge's refusal token,
 	// because a delivery edge answers a small JSON object rather than a protobuf.
-	// A synthesized detail names the redacted fetch host as its domain, so a
-	// reader can tell the two provenances apart.
+	// What a synthesized detail names as its domain, and why, is recorded once on
+	// edgeErrorDomain rather than restated here.
 	if callErr, ok := asCallError(err); ok && callErr.Detail != nil {
 		return callErr.Detail, true
 	}

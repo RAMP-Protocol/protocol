@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/failure"
 )
 
 // The content leg: fetching the bytes a signed delivery URL names, presenting the
@@ -126,12 +127,7 @@ var fetchFailureNames = map[FetchFailure]string{
 
 // String renders the failure class for logging and for the reason a caller sees
 // when the edge supplied none.
-func (f FetchFailure) String() string {
-	if s, ok := fetchFailureNames[f]; ok {
-		return s
-	}
-	return "unknown"
-}
+func (f FetchFailure) String() string { return failure.Name(fetchFailureNames, f) }
 
 // FetchError is this tier's canonical content-fetch error.
 //
@@ -149,23 +145,7 @@ type FetchError struct {
 }
 
 func (e *FetchError) Error() string {
-	msg := "resolvers: " + e.Op + ": " + e.Failure.String()
-	if e.Status != 0 {
-		// StatusText is empty for a code net/http does not know, and a bare
-		// "(HTTP 599 )" reads like a truncation. The number alone is the honest render.
-		if text := http.StatusText(e.Status); text != "" {
-			msg += fmt.Sprintf(" (HTTP %d %s)", e.Status, text)
-		} else {
-			msg += fmt.Sprintf(" (HTTP %d)", e.Status)
-		}
-	}
-	if e.Reason != "" {
-		msg += ": " + e.Reason
-	}
-	if e.Err != nil {
-		msg += ": " + e.Err.Error()
-	}
-	return msg
+	return failure.Render("resolvers", e.Op, e.Failure.String(), e.Status, e.Reason, e.Err)
 }
 
 // Unwrap keeps the cause matchable, so a caller can still reach a custody
@@ -174,12 +154,7 @@ func (e *FetchError) Unwrap() error { return e.Err }
 
 // ReasonOf returns the most specific machine-readable reason available: the
 // edge's own token when it sent one, otherwise the failure class.
-func (e *FetchError) ReasonOf() string {
-	if e.Reason != "" {
-		return e.Reason
-	}
-	return e.Failure.String()
-}
+func (e *FetchError) ReasonOf() string { return failure.ReasonOr(e.Reason, e.Failure.String()) }
 
 // ContentFetcher fetches licensed content from a signed delivery URL. Build it
 // with NewContentFetcher; it is safe for concurrent use.
@@ -220,12 +195,8 @@ func NewContentFetcher(opts ContentFetchOptions) *ContentFetcher {
 // Following one either replays a proof bound to the old URL — which the edge's
 // own check rejects — or, if the proof were re-minted per hop, hands a fresh
 // proof of possession of the agent's key to whatever host the first hop named.
-// The refusal names where it declined to go, redacted, because that target is the
-// most useful field on the failure.
-func refuseContentRedirect(req *http.Request, _ []*http.Request) error {
-	return fmt.Errorf("resolvers: refusing redirect to %s: a bound fetch is never redirected",
-		helpers.RedactURL(req.URL.String()))
-}
+var refuseContentRedirect = failure.RefuseRedirect(
+	"resolvers", "a bound fetch is never redirected", helpers.RedactURL)
 
 // Fetch retrieves the content at signedURL, presenting the proof of possession
 // signer mints for it.

@@ -325,7 +325,8 @@ func TestBrokerResolve_SplitsThroughTheSameVerifier(t *testing.T) {
 	defer srv.Close()
 
 	broker := rampconnect.NewBrokerClient(srv.URL,
-		rampconnect.WithSigner(sig.signer), rampconnect.WithOfferKey(offers.exchangePub))
+		rampconnect.WithSigner(sig.signer), rampconnect.WithOfferKey(offers.exchangePub),
+		rampconnect.WithRequester(testRequester()))
 	res, err := broker.Resolve(context.Background(),
 		&rampv1.DiscoveryRequest{Ver: helpers.ProtocolVersion})
 	if err != nil {
@@ -355,7 +356,8 @@ func TestBrokerResolve_WholeCallRefusalIsAnAnswer(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	broker := rampconnect.NewBrokerClient(srv.URL, rampconnect.WithSigner(sig.signer))
+	broker := rampconnect.NewBrokerClient(srv.URL, rampconnect.WithSigner(sig.signer),
+		rampconnect.WithRequester(testRequester()))
 	res, err := broker.Resolve(context.Background(),
 		&rampv1.DiscoveryRequest{Ver: helpers.ProtocolVersion})
 	if err != nil {
@@ -614,9 +616,12 @@ func TestFetch_PresentsTheProofAndSurfacesATypedRefusal(t *testing.T) {
 		rampv1.RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_PROOF_EXPIRED {
 		t.Errorf("typed reason = %v, want PROOF_EXPIRED", got)
 	}
-	// The synthesized detail names the redacted host, never the credential.
-	if strings.Contains(detail.GetDomain(), "refuse=1") {
-		t.Errorf("detail domain carries the query: %q", detail.GetDomain())
+	// The domain names the failing SURFACE, not the fetched URL: it is a grouping
+	// key for tooling, and a per-URL value has unbounded cardinality and groups
+	// nothing. Asserted as the exact value the cross-language error-detail corpus
+	// uses, so a change here has to be a deliberate one.
+	if got := detail.GetDomain(); got != "ramp.v1.Edge" {
+		t.Errorf("detail domain = %q, want the delivery edge as the failing surface", got)
 	}
 }
 

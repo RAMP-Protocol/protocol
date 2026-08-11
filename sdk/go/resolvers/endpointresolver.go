@@ -1,18 +1,18 @@
 package resolvers
 
 import (
-	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
 	"golang.org/x/sync/singleflight"
+
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 )
 
 // maxWellKnownDocBytes bounds the well-known / JWKS response body read. A hostile
@@ -97,13 +97,10 @@ type WellKnownEndpointResolver struct {
 	scheme string
 	allow  func(host string) bool
 	sf     singleflight.Group
-	mu     sync.Mutex
-	order  *list.List // front is most-recently-used; values are *endpointEntry
-	cache  map[string]*list.Element
+	cache  *lrucache.Cache[string, endpointEntry]
 }
 
 type endpointEntry struct {
-	host     string
 	endpoint string
 	exp      time.Time
 }
@@ -143,8 +140,7 @@ func NewWellKnownEndpointResolver(opts WellKnownOptions) *WellKnownEndpointResol
 		now:    now,
 		scheme: scheme,
 		allow:  opts.Allow,
-		order:  list.New(),
-		cache:  map[string]*list.Element{},
+		cache:  lrucache.New[string, endpointEntry](maxCachedEndpoints),
 	}
 }
 
@@ -164,12 +160,20 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 	// cannot accumulate over the caller-influenced host space — including for the
 	// hosts whose fetches fail, which is where a hand-rolled per-host mutex map
 	// grows fastest.
+	//
+	// The shared fetch deliberately does NOT inherit the winning caller's
+	// cancellation. Every waiter receives whatever the leader returns, so a leader
+	// that walks away — or arrives with a nearly-spent deadline — would otherwise
+	// fail a burst of callers whose own contexts are still live, and each would
+	// read that as the Exchange being unreachable. The fetch stays bounded by the
+	// resolver's own HTTP client timeout rather than by whoever got there first.
+	fetchCtx := context.WithoutCancel(ctx)
 	v, err, _ := r.sf.Do(host, func() (any, error) {
 		if ep, ok := r.cached(host); ok {
 			return ep, nil // another goroutine fetched while we waited
 		}
 		url := r.scheme + "://" + host + "/.well-known/ramp.json"
-		doc, ferr := fetchWellKnownDoc(ctx, r.http, url)
+		doc, ferr := fetchWellKnownDoc(fetchCtx, r.http, url)
 		if ferr != nil {
 			return "", ferr
 		}
@@ -185,63 +189,19 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 	return v.(string), nil
 }
 
-// cached returns host's endpoint when the entry is present and fresh, promoting
-// it to most-recently-used. A stale entry is left in place rather than deleted:
-// it still holds a slot the LRU can reclaim, and the next successful fetch
-// overwrites it.
+// cached returns host's endpoint when the entry is present and fresh. Freshness
+// is this resolver's own concern and sits on top of the shared bound: a stale
+// entry is left in place rather than deleted, since it still holds a slot the
+// eviction policy can reclaim and the next successful fetch overwrites it.
 func (r *WellKnownEndpointResolver) cached(host string) (string, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	el, ok := r.cache[host]
-	if !ok {
+	entry, ok := r.cache.Get(host)
+	if !ok || r.now().After(entry.exp) {
 		return "", false
 	}
-	entry := el.Value.(*endpointEntry)
-	if r.now().After(entry.exp) {
-		return "", false
-	}
-	r.order.MoveToFront(el)
 	return entry.endpoint, true
 }
 
-// store records host's endpoint, evicting the least-recently-used entry once the
-// cache is full.
-//
-// Least-recently-used and not drop-the-whole-map: dropping empties the cache
-// exactly when it is under most pressure, and it makes which entries survive a
-// function of the order a caller names hosts — a property the caller controls.
+// store records host's endpoint with a fresh TTL.
 func (r *WellKnownEndpointResolver) store(host, endpoint string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	exp := r.now().Add(r.ttl)
-	if el, ok := r.cache[host]; ok {
-		entry := el.Value.(*endpointEntry)
-		entry.endpoint, entry.exp = endpoint, exp
-		r.order.MoveToFront(el)
-		return
-	}
-	if len(r.cache) >= maxCachedEndpoints {
-		if oldest := r.order.Back(); oldest != nil {
-			r.order.Remove(oldest)
-			delete(r.cache, oldest.Value.(*endpointEntry).host)
-		}
-	}
-	r.cache[host] = r.order.PushFront(&endpointEntry{host: host, endpoint: endpoint, exp: exp})
-}
-
-// size reports how many hosts the cache currently holds, and holds reports
-// whether one is present without disturbing recency. Both exist for the eviction
-// test: the bound has no observable behaviour other than a fetch count, and
-// counting fetches cannot distinguish an eviction from a TTL expiry.
-func (r *WellKnownEndpointResolver) size() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.cache)
-}
-
-func (r *WellKnownEndpointResolver) holds(host string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	_, ok := r.cache[host]
-	return ok
+	r.cache.Put(host, endpointEntry{endpoint: endpoint, exp: r.now().Add(r.ttl)})
 }

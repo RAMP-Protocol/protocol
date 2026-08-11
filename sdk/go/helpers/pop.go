@@ -53,6 +53,15 @@ var ErrMissingTargetURI = errors.New("helpers: missing target URI (required by t
 // symptom. Refusing here names it at the source.
 var ErrKeyIDMismatch = errors.New("helpers: keyid is not the thumbprint of the presented key")
 
+// ErrInvalidPoPInput signals a proof input that cannot be written into a
+// signature base without changing its shape — a control byte in the method or the
+// target URI, which the line-delimited base would read as a component boundary.
+var ErrInvalidPoPInput = errors.New("helpers: proof input is not usable in a signature base")
+
+// isControlByte reports whether r is a C0 control or DEL. Applied to the two
+// values written verbatim into the signature base.
+func isControlByte(r rune) bool { return r < 0x20 || r == 0x7f }
+
 // PoPOptions carries what a delivery-URL proof of possession needs beyond the
 // key material. Only URL, Created and Expires are required.
 type PoPOptions struct {
@@ -194,6 +203,17 @@ func validateAgentBinding(signer Signer, pub ed25519.PublicKey, opts PoPOptions)
 	}
 	if opts.URL == "" {
 		return "", ErrMissingTargetURI
+	}
+	// The base is line-delimited and both values are written into it verbatim, so
+	// a control byte in either would add or split a line and the bytes signed here
+	// would stop describing the request the verifier reconstructs. Refused rather
+	// than escaped: no legitimate method or target URI contains one, and a
+	// signature base is the wrong place to be lenient.
+	if i := strings.IndexFunc(opts.URL, isControlByte); i >= 0 {
+		return "", fmt.Errorf("%w: target URI carries a control byte at %d", ErrInvalidPoPInput, i)
+	}
+	if i := strings.IndexFunc(opts.Method, isControlByte); i >= 0 {
+		return "", fmt.Errorf("%w: method carries a control byte at %d", ErrInvalidPoPInput, i)
 	}
 	// A proof carrying no created sails through as a signature claiming 1970: the
 	// edge bounds how far created may lead its clock, not how far it may lag, so

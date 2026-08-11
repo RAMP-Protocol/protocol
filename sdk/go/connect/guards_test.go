@@ -3,7 +3,6 @@ package connect_test
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -153,23 +152,15 @@ func TestReportUsage_RefusesRedirectAndNeverContactsTheTarget(t *testing.T) {
 	defer target.Close()
 
 	// The Exchange answers the RPC with a redirect to somewhere else.
-	var origin string
-	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/ramp.json", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": origin})
-	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	domain := loopbackManifestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target.URL+"/stolen", http.StatusFound)
-	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	origin = srv.URL
+	}))
 
 	client := rampconnect.NewClient("http://home.invalid",
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String(strings.TrimPrefix(srv.URL, "http://")),
+		Exchange:      proto.String(domain),
 		TransactionId: "txn-1",
 	})
 	if err == nil {
@@ -189,25 +180,17 @@ func TestReportUsage_RefusesRedirectAndNeverContactsTheTarget(t *testing.T) {
 // depending on where it failed.
 func TestReportUsage_PeerRefusalIsATypedCallError(t *testing.T) {
 	sig := newSigningFixture(t)
-	var origin string
-	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/ramp.json", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": origin})
-	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	domain := loopbackManifestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"code":"permission_denied","message":"no"}`))
-	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	origin = srv.URL
+	}))
 
 	client := rampconnect.NewClient("http://home.invalid",
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String(strings.TrimPrefix(srv.URL, "http://")),
+		Exchange:      proto.String(domain),
 		TransactionId: "txn-1",
 	})
 	var cerr *rampconnect.CallError

@@ -14,6 +14,7 @@ import (
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/failure"
 	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
@@ -48,13 +49,14 @@ func resolvedConfig(opts ...ClientOption) clientConfig {
 	return cfg
 }
 
-// MaxRPCReadBytes caps the response body a single RAMP call will read. Connect
+// DefaultMaxRPCReadBytes caps the response body a single RAMP call will read.
+// Connect
 // treats an unset cap as "any size" and compresses every exchange, so without one
 // a hostile or misconfigured peer can decompress an unbounded body into the
 // caller's memory. A RAMP response for a realistic batch is small; the bound is
 // what stops a peer — including one an offer named — spending the caller's memory
 // on its behalf. Override it per client with WithClientOptions.
-const MaxRPCReadBytes = 1 << 20 // 1 MiB
+const DefaultMaxRPCReadBytes = 1 << 20 // 1 MiB
 
 // plumbing assembles what every client face is built from: the signing HTTP
 // client, the Connect options, and the offer Verifier. Extracted so the exchange
@@ -65,7 +67,7 @@ func plumbing(cfg clientConfig) (*http.Client, []connectrpc.ClientOption, core.V
 	// default the SDK chose.
 	opts := append([]connectrpc.ClientOption{
 		connectrpc.WithInterceptors(clientInterceptors(cfg)...),
-		connectrpc.WithReadMaxBytes(MaxRPCReadBytes),
+		connectrpc.WithReadMaxBytes(DefaultMaxRPCReadBytes),
 	}, cfg.connectOpts...)
 	return signedHTTPClient(cfg, cfg.httpClient.Transport),
 		opts,
@@ -136,15 +138,11 @@ func signingOptions(cfg clientConfig) []core.SigningOption {
 	return []core.SigningOption{core.WithWindow(cfg.signWindow)}
 }
 
-// refuseRPCRedirect stops the client following any 3xx on an RPC leg.
-//
-// The target is redacted rather than passed through url.URL.Redacted(): that
-// masks userinfo passwords only, and a RAMP target's query is not something to
-// render into a log on the assumption it holds nothing worth hiding.
-func refuseRPCRedirect(req *http.Request, _ []*http.Request) error {
-	return fmt.Errorf("connect: refusing redirect to %s: a RAMP call is never redirected",
-		helpers.RedactURL(req.URL.String()))
-}
+// refuseRPCRedirect stops the client following any 3xx on an RPC leg. Following
+// one would re-sign the caller's request for a target the peer chose, after the
+// endpoint check had already passed.
+var refuseRPCRedirect = failure.RefuseRedirect(
+	"connect", "a RAMP call is never redirected", helpers.RedactURL)
 
 // DefaultCallTimeout bounds one call on the offer-derived leg. A RAMP RPC is
 // interactive — something is waiting on the other end — so a request that has not
@@ -199,16 +197,11 @@ func (c *Client) Discover(ctx context.Context, query *rampv1.ResourceQuery) (cor
 	if query == nil {
 		return core.DiscoveryResult{}, malformed(op, errors.New("query is nil"))
 	}
-	sent, ok := proto.Clone(query).(*rampv1.ResourceQuery)
-	if !ok {
-		return core.DiscoveryResult{}, malformed(op, errors.New("cloned ResourceQuery has the wrong type"))
+	sent, err := cloneRequest(query, op)
+	if err != nil {
+		return core.DiscoveryResult{}, err
 	}
-	if sent.Ver == "" {
-		sent.Ver = helpers.ProtocolVersion
-	}
-	if sent.Requester == nil {
-		sent.Requester = c.cfg.requester
-	}
+	stampDiscovery(&sent.Ver, &sent.Requester, c.cfg.requester)
 	resp, err := c.rpc.DiscoverResources(ctx, connectrpc.NewRequest(sent))
 	if err != nil {
 		return core.DiscoveryResult{}, sendError(op, err)
@@ -307,14 +300,17 @@ func (c *Client) Execute(ctx context.Context, offer core.VerifiedOffer, opts ...
 	}
 	signer := c.cfg.signer
 	if signer == nil {
-		return nil, malformed(op, fmt.Errorf(
-			"no signer configured; a purchase carries a detached acceptance signed with the agent's own key (see WithSigner)"))
+		// CallNotSignable, matching what Fetch answers for the same missing
+		// holder: a caller branching on the kind sees one condition under one
+		// class, whichever verb met it first.
+		return nil, &CallError{Kind: CallNotSignable, Op: op, Err: errors.New(
+			"no signer configured; a purchase carries a detached acceptance signed with the agent's own key (see WithSigner)")}
 	}
 	// An acceptance floating free of a concrete offer is meaningless, and an
 	// unsigned offer is reachable here: WithVerification(Off) and
 	// RejectedOffer.Unsafe() both mint a VerifiedOffer without a signature check.
 	if offer.Offer().GetSignature() == "" {
-		return nil, malformed(op, fmt.Errorf("cannot accept an unsigned offer"))
+		return nil, malformed(op, errors.New("cannot accept an unsigned offer"))
 	}
 	key, err := idempotencyKeyFor(opts, "")
 	if err != nil {
@@ -372,4 +368,39 @@ func stampEnvelope(ver, idempotencyKey *string, opts []CallOption) error {
 	}
 	*idempotencyKey = key
 	return nil
+}
+
+// stampDiscovery fills the envelope a DISCOVERY call carries, which is the
+// mutating envelope minus the idempotency key: pure discovery buys nothing and
+// changes nothing, so there is no action for a key to identify.
+//
+// Both fills are only-when-empty. The caller's own value always wins — the
+// message crossed a package boundary as an argument, not as a buffer to fill in —
+// and the requester is filled because both reference services resolve the calling
+// agent from it and refuse a request that names none, while the client already
+// holds that identity.
+func stampDiscovery(ver *string, requester **rampv1.Requester, configured *rampv1.Requester) {
+	if *ver == "" {
+		*ver = helpers.ProtocolVersion
+	}
+	if *requester == nil {
+		*requester = configured
+	}
+}
+
+// cloneRequest copies a caller's message so the SDK can stamp its envelope
+// without touching what the caller still holds.
+//
+// The type assertion cannot fail for a concrete message — proto.Clone returns the
+// same dynamic type it was given — but it is checked rather than asserted blind,
+// because a silent nil would reach the wire as an empty request. One helper
+// rather than four copies of the same three lines.
+func cloneRequest[T proto.Message](msg T, op string) (T, error) {
+	cloned, ok := proto.Clone(msg).(T)
+	if !ok {
+		var zero T
+		return zero, malformed(op, fmt.Errorf(
+			"cloned %T has the wrong type", msg))
+	}
+	return cloned, nil
 }

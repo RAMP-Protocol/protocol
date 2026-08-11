@@ -10,13 +10,43 @@ package connect_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// loopbackManifestServer stands up an Exchange that advertises ITSELF in its
+// well-known manifest and serves everything else from rest.
+//
+// The manifest route and the late-bound origin are the same five lines wherever a
+// test drives the offer-derived leg; only the catch-all differs — a redirect, a
+// refusal, a real RPC handler. Parameterising the catch-all is what keeps the
+// self-advertising part from being retyped per test, where it can quietly drift
+// into advertising something else.
+//
+// Returns the BARE domain, which is what a UsageReport carries: the exchange
+// field names a domain, never an origin.
+func loopbackManifestServer(t *testing.T, rest http.Handler) string {
+	t.Helper()
+	var origin string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/ramp.json", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"endpoint": origin})
+	})
+	mux.Handle("/", rest)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	origin = srv.URL
+	return strings.TrimPrefix(srv.URL, "http://")
+}
 
 // memReplayStore is a minimal in-memory nonce store: SeenOrAdd reports whether a
 // nonce has been observed and records it if not. It ignores TTL expiry (a test

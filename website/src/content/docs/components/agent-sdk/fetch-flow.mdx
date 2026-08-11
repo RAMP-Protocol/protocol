@@ -3,20 +3,9 @@ title: "Fetch Flow"
 description: "Step-by-step walkthrough of how the RAMP Agent SDK discovers, transacts, and fetches licensed content -- from URL to delivered content."
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import DeferredSdkNoticeDetail from '../../../../components/DeferredSdkNoticeDetail.mdx';
 
-<Aside type="caution" title="Design for a deferred layer, not shipped API">
-These pages describe the **planned high-tier agent SDK** — a one-call `Fetch(url)`
-that orchestrates discovery, selection, purchase, delivery and reporting behind a
-single method. That layer is deferred and none of the API below is implemented.
-
-What ships today is the **low-tier client** in `sdk/go/connect`, and it is a
-different shape with a colliding name: its `NewClient` takes a base URL and
-functional options rather than a config struct with a license key, and its `Fetch`
-retrieves one already-purchased signed delivery URL rather than running the whole
-flow. The verbs it covers are `Discover`, `Resolve`, `Execute`, `ReportUsage`,
-`Dispute` and `Fetch`. See `sdk/go/README.md` for the shipped surface.
-</Aside>
+<DeferredSdkNoticeDetail />
 
 ## Single URL Fetch
 
@@ -335,10 +324,13 @@ Per-period persistence: by default, the SDK writes period budget state to a loca
 
 ## Testing with Mock Exchange
 
-The SDK ships a `MockExchange` for testing agent code without network calls:
+The design pairs the high-tier client with a `MockExchange` for testing agent code
+without network calls. Like the rest of this page it is part of the deferred
+design: no such package ships today, and the sample below is written against the
+planned API rather than the shipped one.
 
 ```go
-import "github.com/RAMP-Protocol/protocol/sdk/go/connect"
+import "example.com/ramp-agent-sdk/testutil" // planned; not a shipped package
 
 func TestAgentLogic(t *testing.T) {
     mock := testutil.NewMockExchange(testutil.MockConfig{

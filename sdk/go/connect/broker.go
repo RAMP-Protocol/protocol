@@ -5,12 +5,10 @@ import (
 	"errors"
 
 	connectrpc "connectrpc.com/connect"
-	"google.golang.org/protobuf/proto"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
-	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
 
 // BrokerClient is the Connect client for BrokerService.
@@ -34,12 +32,25 @@ type BrokerClient struct {
 	requester *rampv1.Requester
 }
 
-// NewBrokerClient builds a BrokerClient against a Broker's base URL. It takes the
-// same options as NewClient, with one caveat worth stating: WithOfferKey pins a
-// SINGLE offer-verifying key for every exchange, which is the wrong shape here.
-// Broker fan-out returns offers minted by different Exchanges, so anything not
-// signed by that one key lands in Rejected. Inject WithKeyResolver instead — the
-// resolvers tier ships one that resolves each issuing Exchange's own key.
+// NewBrokerClient builds a BrokerClient against a Broker's base URL. It accepts
+// the same option type as NewClient, but only the options a discovery call has
+// any use for actually do anything, and two of those need care:
+//
+//   - WithOfferKey pins a SINGLE offer-verifying key for every exchange, which is
+//     the wrong shape here. Broker fan-out returns offers minted by different
+//     Exchanges, so anything not signed by that one key lands in Rejected. Inject
+//     WithKeyResolver instead — the resolvers tier ships one that resolves each
+//     issuing Exchange's own key.
+//   - WithRequester is REQUIRED, not optional: a Broker resolves the calling agent
+//     from it and declines a request that names none, so Resolve refuses locally
+//     rather than spending a round trip to be told.
+//
+// The options that do nothing here are the ones belonging to legs a Broker client
+// does not have: WithAgentKey, WithProofWindow and WithContentTimeout /
+// WithMaxContentBytes configure the delivery fetch; WithEndpointResolver and
+// WithGuardedBaseTransport configure the offer-derived leg. Both legs live on the
+// exchange client. Passing them here is silently inert rather than an error, so
+// one shared option set can build both faces.
 //
 // BrokerService carries exactly one method today. The purchase path through a
 // Broker is still a relay route rather than an RPC; when it becomes one, this
@@ -82,15 +93,18 @@ func (b *BrokerClient) Resolve(ctx context.Context, req *rampv1.DiscoveryRequest
 	if req == nil {
 		return core.DiscoveryResult{}, malformed(op, errors.New("request is nil"))
 	}
-	sent, ok := proto.Clone(req).(*rampv1.DiscoveryRequest)
-	if !ok {
-		return core.DiscoveryResult{}, malformed(op, errors.New("cloned DiscoveryRequest has the wrong type"))
+	sent, err := cloneRequest(req, op)
+	if err != nil {
+		return core.DiscoveryResult{}, err
 	}
-	if sent.Ver == "" {
-		sent.Ver = helpers.ProtocolVersion
-	}
+	stampDiscovery(&sent.Ver, &sent.Requester, b.requester)
+	// Refused locally rather than sent: a Broker resolves the calling agent from
+	// the requester and declines a request that names none, so this is a verdict
+	// the client already knows, and naming the remedy beats relaying "requester
+	// required" from a round trip away. Execute refuses the same way.
 	if sent.Requester == nil {
-		sent.Requester = b.requester
+		return core.DiscoveryResult{}, malformed(op, errors.New(
+			"no requester configured; a Broker resolves who is asking (see WithRequester)"))
 	}
 	resp, err := b.rpc.Resolve(ctx, connectrpc.NewRequest(sent))
 	if err != nil {

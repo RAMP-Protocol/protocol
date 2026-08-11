@@ -7,7 +7,6 @@ import (
 	"time"
 
 	connectrpc "connectrpc.com/connect"
-	"google.golang.org/protobuf/proto"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
@@ -57,9 +56,9 @@ func (c *Client) ReportUsage(ctx context.Context, report *rampv1.UsageReport, op
 	if err != nil {
 		return nil, err
 	}
-	stamped, ok := proto.Clone(report).(*rampv1.UsageReport)
-	if !ok {
-		return nil, malformed(op, errors.New("cloned UsageReport has the wrong type"))
+	stamped, err := cloneRequest(report, op)
+	if err != nil {
+		return nil, err
 	}
 	if err = stampEnvelope(&stamped.Ver, &stamped.IdempotencyKey, opts); err != nil {
 		return nil, malformed(op, err)
@@ -92,9 +91,9 @@ func (c *Client) Dispute(ctx context.Context, exchangeDomain string, req *rampv1
 	if err != nil {
 		return nil, err
 	}
-	stamped, ok := proto.Clone(req).(*rampv1.DisputeRequest)
-	if !ok {
-		return nil, malformed(op, errors.New("cloned DisputeRequest has the wrong type"))
+	stamped, err := cloneRequest(req, op)
+	if err != nil {
+		return nil, err
 	}
 	if err = stampEnvelope(&stamped.Ver, &stamped.IdempotencyKey, opts); err != nil {
 		return nil, malformed(op, err)

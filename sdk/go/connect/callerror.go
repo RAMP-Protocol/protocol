@@ -2,12 +2,11 @@ package connect
 
 import (
 	"errors"
-	"fmt"
-	"net/http"
 
 	connectrpc "connectrpc.com/connect"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/failure"
 )
 
 // A refusal and a failure are different things, and a caller handles four
@@ -57,12 +56,7 @@ var callErrorKindNames = map[CallErrorKind]string{
 
 // String renders the kind for logging and for the reason a caller sees when the
 // peer supplied none.
-func (k CallErrorKind) String() string {
-	if s, ok := callErrorKindNames[k]; ok {
-		return s
-	}
-	return "unknown"
-}
+func (k CallErrorKind) String() string { return failure.Name(callErrorKindNames, k) }
 
 // CallError is the client's typed failure for the verbs that are not plain
 // Connect round trips — the ones that vet an address before sending, or that
@@ -83,21 +77,7 @@ type CallError struct {
 }
 
 func (e *CallError) Error() string {
-	msg := "connect: " + e.Op + ": " + e.Kind.String()
-	if e.Status != 0 {
-		if text := http.StatusText(e.Status); text != "" {
-			msg += fmt.Sprintf(" (HTTP %d %s)", e.Status, text)
-		} else {
-			msg += fmt.Sprintf(" (HTTP %d)", e.Status)
-		}
-	}
-	if e.Reason != "" {
-		msg += ": " + e.Reason
-	}
-	if e.Err != nil {
-		msg += ": " + e.Err.Error()
-	}
-	return msg
+	return failure.Render("connect", e.Op, e.Kind.String(), e.Status, e.Reason, e.Err)
 }
 
 // Unwrap keeps the cause matchable, so errors.Is still reaches a custody or
@@ -106,12 +86,7 @@ func (e *CallError) Unwrap() error { return e.Err }
 
 // ReasonOf returns the most specific machine-readable reason available: the
 // peer's own token when it sent one, otherwise the failure class.
-func (e *CallError) ReasonOf() string {
-	if e.Reason != "" {
-		return e.Reason
-	}
-	return e.Kind.String()
-}
+func (e *CallError) ReasonOf() string { return failure.ReasonOr(e.Reason, e.Kind.String()) }
 
 // notSent builds the refusal for an address that failed a routing check. It is
 // its own constructor because every such refusal must state which check declined

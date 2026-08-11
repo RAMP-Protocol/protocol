@@ -121,6 +121,11 @@ func WithRequester(r *rampv1.Requester) ClientOption {
 		}
 		cloned, ok := proto.Clone(r).(*rampv1.Requester)
 		if !ok {
+			// Unreachable for a concrete message, but the fallback must be
+			// nil rather than whatever was configured before: keeping a stale
+			// identity would send one agent's requester on another's behalf,
+			// where nil fails closed into "no requester configured".
+			c.requester = nil
 			return
 		}
 		c.requester = cloned
@@ -139,8 +144,17 @@ func WithRequester(r *rampv1.Requester) ClientOption {
 // the delivery URL is bound to that same thumbprint. A second key would be
 // refused at execute, and any URL it did produce could never be fetched — the
 // presented key would not match the binding.
+// The key is COPIED for the same reason WithRequester clones: the caller keeps
+// the slice it passed, and a later append or overwrite there would otherwise
+// change which key every subsequent fetch presents.
 func WithAgentKey(pub ed25519.PublicKey) ClientOption {
-	return func(c *clientConfig) { c.agentKey = pub }
+	return func(c *clientConfig) {
+		if pub == nil {
+			c.agentKey = nil
+			return
+		}
+		c.agentKey = append(ed25519.PublicKey(nil), pub...)
+	}
 }
 
 // WithProofWindow overrides the freshness window stamped on a delivery-fetch

@@ -1,17 +1,16 @@
 package connect
 
 import (
-	"container/list"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 
 	connectrpc "connectrpc.com/connect"
 
 	"github.com/RAMP-Protocol/protocol/gen/go/ramp/v1/rampv1connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
@@ -48,10 +47,10 @@ type EndpointResolver interface {
 // falls through to the send.
 func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchangeDomain, op string) (string, error) {
 	if resolver == nil {
-		return "", notSent(op, fmt.Errorf("no endpoint resolver configured"))
+		return "", notSent(op, errors.New("no endpoint resolver configured"))
 	}
 	if exchangeDomain == "" {
-		return "", notSent(op, fmt.Errorf("no exchange domain to route to; it comes from the signed offer"))
+		return "", notSent(op, errors.New("no exchange domain to route to; it comes from the signed offer"))
 	}
 	// A plain hostname, checked here even if the caller checked it. The resolver
 	// builds its URL by concatenating this value, so a path or query smuggled
@@ -108,12 +107,8 @@ func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchang
 // grow without limit. A real deployment talks to a handful of Exchanges.
 const maxPooledExchanges = 256
 
-// exchangePool caches one Connect client per vetted origin, evicting the
-// least-recently-used entry at the cap.
-//
-// Least-recently-used and not drop-the-whole-map: dropping empties the cache
-// exactly when it is under most pressure, and it makes which entries survive a
-// function of the order a caller names hosts — a property the caller controls.
+// exchangePool caches one Connect client per vetted origin over the SDK's shared
+// bounded map, which carries the eviction policy and the reason for it.
 //
 // Every pooled client shares the ONE signing HTTP client, so a cached client
 // still signs as the agent of the CURRENT request. The pool caches transport
@@ -121,61 +116,20 @@ const maxPooledExchanges = 256
 type exchangePool struct {
 	http    connectrpc.HTTPClient
 	opts    []connectrpc.ClientOption
-	mu      sync.Mutex
-	order   *list.List // front is most-recently-used; values are origins
-	entries map[string]*list.Element
-}
-
-// pooledClient is what the LRU list holds: the origin (so eviction can find its
-// map key) beside the client built for it.
-type pooledClient struct {
-	origin string
-	client rampv1connect.ExchangeServiceClient
+	clients *lrucache.Cache[string, rampv1connect.ExchangeServiceClient]
 }
 
 func newExchangePool(httpClient *http.Client, opts ...connectrpc.ClientOption) *exchangePool {
 	return &exchangePool{
 		http:    httpClient,
 		opts:    opts,
-		order:   list.New(),
-		entries: make(map[string]*list.Element),
+		clients: lrucache.New[string, rampv1connect.ExchangeServiceClient](maxPooledExchanges),
 	}
 }
 
-// clientFor returns the cached client for origin, creating it on first use and
-// evicting the least-recently-used entry once the pool is full.
+// clientFor returns the cached client for origin, creating it on first use.
 func (p *exchangePool) clientFor(origin string) rampv1connect.ExchangeServiceClient {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if el, ok := p.entries[origin]; ok {
-		p.order.MoveToFront(el)
-		return el.Value.(*pooledClient).client
-	}
-	if len(p.entries) >= maxPooledExchanges {
-		if oldest := p.order.Back(); oldest != nil {
-			p.order.Remove(oldest)
-			delete(p.entries, oldest.Value.(*pooledClient).origin)
-		}
-	}
-	client := rampv1connect.NewExchangeServiceClient(p.http, origin, p.opts...)
-	p.entries[origin] = p.order.PushFront(&pooledClient{origin: origin, client: client})
-	return client
-}
-
-// size reports how many origins the pool currently holds.
-func (p *exchangePool) size() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.entries)
-}
-
-// holds reports whether origin is currently cached, without disturbing recency.
-// Both accessors exist for the eviction test: the LRU has no observable behaviour
-// other than a dial count, and counting dials would mean mocking the transport
-// the suite deliberately never mocks.
-func (p *exchangePool) holds(origin string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	_, ok := p.entries[origin]
-	return ok
+	return p.clients.GetOrCreate(origin, func(o string) rampv1connect.ExchangeServiceClient {
+		return rampv1connect.NewExchangeServiceClient(p.http, o, p.opts...)
+	})
 }
