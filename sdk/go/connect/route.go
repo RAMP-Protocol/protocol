@@ -71,9 +71,10 @@ func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchang
 		// TRANSIENT — reporting it as a refusal would tell a caller "we declined to
 		// send this, do not retry" and permanently drop a usage report over a
 		// momentary outage. Only a verdict is a refusal: the host was not allowed,
-		// or the manifest was read and advertises no endpoint at all.
+		// the manifest was read and advertises no endpoint at all, or it advertises
+		// one the resolver will not hand back.
 		kind := CallUnreachable
-		if errors.Is(err, resolvers.ErrNoEndpoint) {
+		if errors.Is(err, resolvers.ErrNoEndpoint) || errors.Is(err, resolvers.ErrEndpointRefused) {
 			kind = CallNotSent
 		}
 		return "", &CallError{
@@ -81,13 +82,11 @@ func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchang
 			Err: fmt.Errorf("resolve exchange %q: %w", exchangeDomain, err),
 		}
 	}
-	// The manifest that named this endpoint is served by the very host the call is
-	// bound for, so the endpoint is only as trustworthy as that host. Anchoring it
-	// to the domain it was resolved from stops a manifest redirecting a signed call
-	// to an unrelated host: an Exchange may advertise itself or a subdomain of
-	// itself, and nothing else. The dial-time guard refuses private addresses
-	// independently; this is the half that stops delivery to an unrelated PUBLIC
-	// host, which no address guard would object to.
+	// Re-checked here even though the SDK's own resolver already refuses an
+	// unanchored endpoint. The resolver is an injectable seam: a caller may supply
+	// one, and this package cannot make a signed call conditional on a stranger's
+	// implementation having remembered the rule. The cost is one string comparison
+	// on a path that just did a network fetch.
 	anchored, err := helpers.HostAnchored(exchangeDomain, endpoint)
 	if err != nil {
 		return "", notSent(op, fmt.Errorf(

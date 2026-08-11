@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 )
 
@@ -28,6 +30,16 @@ const maxWellKnownDocBytes = 1 << 20 // 1 MiB
 // "defined-but-inert endpoint" gap. Callers can tell "Exchange unreachable" from
 // "Exchange reachable but not self-advertising an endpoint".
 var ErrNoEndpoint = errors.New("resolvers: well-known manifest has no endpoint")
+
+// ErrEndpointRefused signals that a manifest WAS read and advertises an endpoint
+// this resolver will not hand back: one on a host unrelated to the domain that
+// served the manifest, or one carrying userinfo.
+//
+// Distinct from ErrNoEndpoint and from a transport failure because it is a
+// VERDICT — the Exchange answered, and the answer is not usable. A caller that
+// classifies retryability reads this as final rather than as something to try
+// again in a moment.
+var ErrEndpointRefused = errors.New("resolvers: well-known manifest advertises an unusable endpoint")
 
 // wellKnownDoc is the JSON projection of the subset of WellKnownManifest the SDK
 // resolvers read: the RFC 7517 key set (field 5) and the self-advertised
@@ -180,6 +192,9 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 		if doc.Endpoint == "" {
 			return "", fmt.Errorf("%w: host=%q", ErrNoEndpoint, host)
 		}
+		if verr := vetAdvertisedEndpoint(host, doc.Endpoint); verr != nil {
+			return "", verr
+		}
 		r.store(host, doc.Endpoint)
 		return doc.Endpoint, nil
 	})
@@ -187,6 +202,47 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 		return "", err
 	}
 	return v.(string), nil
+}
+
+// vetAdvertisedEndpoint decides whether an endpoint a manifest advertises may be
+// handed back at all. It runs HERE, in the resolver, rather than in each caller.
+//
+// The manifest that named this endpoint is served by the very host the call is
+// bound for, so the endpoint is only as trustworthy as that host. An Exchange may
+// advertise itself or a subdomain of itself, and nothing else — an endpoint on an
+// unrelated host is one this resolver refuses to return, whatever the caller
+// intends to do with it. A dial-time address guard has no objection to an
+// unrelated PUBLIC host, so nothing below this catches it.
+//
+// It sits in the resolver because every consumer needs it and none of them can be
+// relied on to remember: the check is a property of reading an endpoint out of a
+// manifest, not of any one caller's plans for it. A caller may of course check
+// again.
+//
+// Userinfo is refused for a different reason with the same shape. The host
+// comparison reads the authority's host and ignores any user:password before it,
+// so an endpoint carrying credentials would pass the host check and then have
+// net/http stamp an Authorization header the SDK never chose, on a leg that
+// already carries the agent's own signature.
+func vetAdvertisedEndpoint(host, endpoint string) error {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return fmt.Errorf("%w: host=%q endpoint=%q is not a URL: %w",
+			ErrEndpointRefused, host, endpoint, err)
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("%w: host=%q advertises an endpoint carrying userinfo",
+			ErrEndpointRefused, host)
+	}
+	anchored, err := helpers.HostAnchored(host, endpoint)
+	if err != nil {
+		return fmt.Errorf("%w: host=%q endpoint=%q: %w", ErrEndpointRefused, host, endpoint, err)
+	}
+	if !anchored {
+		return fmt.Errorf("%w: host=%q advertises endpoint %q on a different host",
+			ErrEndpointRefused, host, endpoint)
+	}
+	return nil
 }
 
 // cached returns host's endpoint when the entry is present and fresh. Freshness

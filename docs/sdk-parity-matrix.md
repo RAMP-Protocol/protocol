@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 77 symbols at cross-language parity · 14 documented divergences · 140 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
+**At a glance:** 77 symbols at cross-language parity · 14 documented divergences · 141 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -290,6 +290,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `resolvers.ContentFetcher` | Part of the Go content-download leg; the TS/Python download verbs are tracked with their unary client work. |
 | `resolvers.DefaultContentTimeout` | Go default bound for one content fetch; py/ts carry the same default inline in their client. |
 | `resolvers.DefaultMaxContentBytes` | Go default body cap for one content fetch; py/ts carry the same default inline in their client. |
+| `resolvers.ErrEndpointRefused` | Go errors.Is sentinel for a manifest-advertised endpoint the resolver will not return (wrong host, or userinfo); py/ts have no endpoint resolver yet and will gain the rule with their client verbs. |
 | `resolvers.FetchError` | Go typed error for the content leg; py/ts raise/throw a runtime-native error carrying the same class and reason. |
 | `resolvers.FetchFailure` | Go failure-class enum for the content leg; py/ts express the same classes as string literals. |
 | `resolvers.NewContentFetcher` | Go constructor for the content-download leg; py/ts fold construction into their client. |

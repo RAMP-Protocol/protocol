@@ -1474,7 +1474,8 @@ class WellKnownManifest(WireModel):
         '', description='Canonical domain serving this manifest.'
     )
     endpoint: str | None = Field(
-        None, description='Exchange-only. ExchangeService endpoint URL.'
+        None,
+        description='MUST be on the same host that serves this manifest, or on a subdomain of\n it, and MUST NOT carry userinfo. A consumer refuses an endpoint anywhere\n else: this document is only as trustworthy as the host that served it, so\n an endpoint naming an unrelated host would let whoever answers for the\n manifest redirect a signed call to a party the signature never covered. The\n match is on a full dot-delimited label boundary, so evil-a.com is not a\n subdomain of a.com.',
     )
     exchanges: list[AuthorizedExchange] | None = Field(
         None,

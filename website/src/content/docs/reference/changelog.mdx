@@ -5,6 +5,19 @@ description: "RAMP protocol changelog"
 
 ## Unreleased
 
+**`WellKnownManifest.endpoint` states its host binding (documentation only, no wire
+change).** The field said only "Exchange-only. ExchangeService endpoint URL", so nothing told
+an Exchange operator that the address it advertises must stay on its own domain. It now does:
+the endpoint MUST be on the host that serves the manifest, or a subdomain of it, and MUST NOT
+carry userinfo. The manifest is only as trustworthy as the host that served it, so an endpoint
+naming an unrelated host would let whoever answers for the manifest redirect a signed call to
+a party the offer's signature never covered — and a dial-time address guard has no objection
+to an unrelated PUBLIC host. The match is on a full dot-delimited label boundary, so
+`evil-a.com` is not a subdomain of `a.com`; the port is not compared, since TLS binds
+hostnames rather than ports. The rule was already enforced by one SDK caller and is now
+enforced in the shared endpoint resolver, so every consumer inherits it. No field, message, or
+wire change — proto comments only, with `gen/` and the website mirror regenerated.
+
 **The `ver` envelope field states its contract, and the version string gets one owner
 (no wire change).** All 29 `ver` fields — 25 in `ramp.proto`, 4 in `admin.proto` — now name
 the expected value `"1.0"` and the receive-side rule. Before this, 27 of them said only

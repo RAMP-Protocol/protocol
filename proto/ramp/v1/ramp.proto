@@ -2561,6 +2561,14 @@ message WellKnownManifest {
   optional string operator_domain = 11;
 
   // Exchange-only. ExchangeService endpoint URL.
+  //
+  // MUST be on the same host that serves this manifest, or on a subdomain of
+  // it, and MUST NOT carry userinfo. A consumer refuses an endpoint anywhere
+  // else: this document is only as trustworthy as the host that served it, so
+  // an endpoint naming an unrelated host would let whoever answers for the
+  // manifest redirect a signed call to a party the signature never covered. The
+  // match is on a full dot-delimited label boundary, so evil-a.com is not a
+  // subdomain of a.com.
   optional string endpoint = 12;
 
   // Exchange-only. Health check endpoint URL.
