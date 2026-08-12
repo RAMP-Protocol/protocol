@@ -89,36 +89,43 @@ func TestHostAnchored(t *testing.T) {
 	}
 }
 
-// The port is NOT part of the comparison. The property being enforced is "not an
-// unrelated host", and a service on another port of the same name is not another
-// host — TLS binds hostnames, not ports. Comparing with the port would leave any
-// Exchange not on 443 permanently unable to receive a usage report, for no
-// security gain. Stated as its own case because it is the one place "same host"
-// and "same origin" pull apart.
-func TestHostAnchored_IgnoresThePort(t *testing.T) {
-	cases := map[string][2]string{
-		"same name, different ports":   {"a.com:8443", "a.com:9000"},
-		"bare anchor, ported endpoint": {"a.com", "https://a.com:8443/v1"},
-		"subdomain on a port":          {"a.com", "https://cdn.a.com:8443/v1"},
+// The port IS part of the comparison. What is being anchored is a place a signed
+// call is sent, and a different port is a different service — one the party that
+// published the anchor need not control.
+//
+// A DEFAULT port and its omission are the same port, which is the half worth
+// pinning: url.Parse does not materialize an implicit port, so a naive comparison
+// would refuse an operator who merely wrote :443 out in full. The SCHEME is still
+// not compared, and the default-port folding is scheme-relative precisely so it
+// cannot become a scheme check by accident.
+func TestHostAnchored_ComparesThePort(t *testing.T) {
+	cases := map[string]struct {
+		anchor, candidate string
+		want              bool
+	}{
+		"same name, different ports":       {"a.com:8443", "a.com:9000", false},
+		"bare anchor, ported endpoint":     {"a.com", "https://a.com:8443/v1", false},
+		"subdomain on an unnamed port":     {"a.com", "https://cdn.a.com:8443/v1", false},
+		"default written out":              {"a.com", "https://a.com:443/v1", true},
+		"default written on the anchor":    {"a.com:443", "https://a.com/v1", true},
+		"http default written out":         {"a.com", "http://a.com:80/v1", true},
+		"scheme alone does not divide":     {"a.com", "http://a.com/v1", true},
+		"same non-default port":            {"a.com:8443", "https://a.com:8443/v1", true},
+		"subdomain on the same port":       {"a.com:8443", "https://cdn.a.com:8443/v1", true},
+		"label boundary still holds":       {"a.com", "https://evil-a.com:8443", false},
+		"port does not soften a bad label": {"a.com:8443", "https://evil-a.com:8443", false},
 	}
-	for name, pair := range cases {
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			anchored, err := helpers.HostAnchored(pair[0], pair[1])
+			anchored, err := helpers.HostAnchored(tc.anchor, tc.candidate)
 			if err != nil {
-				t.Fatalf("HostAnchored: %v", err)
+				t.Fatalf("HostAnchored(%q, %q): %v", tc.anchor, tc.candidate, err)
 			}
-			if !anchored {
-				t.Errorf("%q must be anchored to %q — the port is not part of the host", pair[1], pair[0])
+			if anchored != tc.want {
+				t.Errorf("HostAnchored(%q, %q) = %v, want %v",
+					tc.anchor, tc.candidate, anchored, tc.want)
 			}
 		})
-	}
-	// A different NAME is still refused, ported or not.
-	anchored, err := helpers.HostAnchored("a.com", "https://evil-a.com:8443")
-	if err != nil {
-		t.Fatalf("HostAnchored: %v", err)
-	}
-	if anchored {
-		t.Error("a port must not soften the label-boundary rule")
 	}
 }
 

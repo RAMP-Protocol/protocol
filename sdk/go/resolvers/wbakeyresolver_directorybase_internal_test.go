@@ -281,6 +281,17 @@ func TestRevocationAnchored_schemeMayNotDowngrade(t *testing.T) {
 		{"http directory keeps http", "http://a.example", "a.example", "http://a.example/rev", true},
 		{"cross-host still refused", "https://a.example", "a.example", "https://evil.example/rev", false},
 		{"look-alike host refused", "https://a.example", "a.example", "https://evil-a.example/rev", false},
+		// The port is compared, after folding a scheme's default into its
+		// omission — so writing :443 out is not a refusal, and naming another
+		// port is.
+		{"default port written out", "https://a.example", "a.example", "https://a.example:443/rev", true},
+		{"another port refused", "https://a.example", "a.example", "https://a.example:8443/rev", false},
+		{"ported directory keeps its port", "https://a.example:8443", "a.example:8443", "https://a.example:8443/rev", true},
+		// A revocation_url must be ABSOLUTE. The shared predicate reads a
+		// schemeless reference as https, which is right for an exchange domain and
+		// wrong here — the base-less branch below returns before the scheme is
+		// ever compared, so nothing else would catch it.
+		{"schemeless candidate refused", "", "a.example", "a.example/rev", false},
 		// A directory cached before the base was threaded through falls back to the
 		// host check rather than refusing every poll.
 		{"empty base falls back to host only", "", "a.example", "http://a.example/rev", true},

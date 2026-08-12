@@ -23,8 +23,21 @@ var ErrInvalidHost = errors.New("helpers: reference is not a usable host")
 // pair, or a full URL. A ref with no scheme is parsed as though it carried https,
 // since a bare domain is otherwise indistinguishable from a path.
 func HostOf(ref string) (string, error) {
+	parsed, err := parseRef(ref)
+	if err != nil {
+		return "", err
+	}
+	return parsed.Host, nil
+}
+
+// parseRef reads a bare domain, a host:port pair, or a full URL into a URL with a
+// non-empty Host. A ref with no scheme is parsed as though it carried https, since
+// a bare domain is otherwise indistinguishable from a path. One parse behind both
+// host predicates, so neither can disagree with the other about what a reference
+// even is.
+func parseRef(ref string) (*url.URL, error) {
 	if strings.TrimSpace(ref) == "" {
-		return "", fmt.Errorf("%w: empty reference", ErrInvalidHost)
+		return nil, fmt.Errorf("%w: empty reference", ErrInvalidHost)
 	}
 	toParse := ref
 	if !strings.Contains(ref, "://") {
@@ -32,12 +45,12 @@ func HostOf(ref string) (string, error) {
 	}
 	parsed, err := url.Parse(toParse)
 	if err != nil {
-		return "", fmt.Errorf("%w: %q: %w", ErrInvalidHost, ref, err)
+		return nil, fmt.Errorf("%w: %q: %w", ErrInvalidHost, ref, err)
 	}
 	if parsed.Host == "" {
-		return "", fmt.Errorf("%w: %q has no host", ErrInvalidHost, ref)
+		return nil, fmt.Errorf("%w: %q has no host", ErrInvalidHost, ref)
 	}
-	return parsed.Host, nil
+	return parsed, nil
 }
 
 // IsBareHost reports whether ref is EXACTLY a host — nothing a URL could carry
@@ -67,10 +80,10 @@ func IsBareHost(ref string) (bool, error) {
 	return host == ref, nil
 }
 
-// HostAnchored reports whether candidate's hostname is anchored to anchor's —
-// equal to it, or a subdomain of it. Either side may be a bare domain, a
-// host:port pair, or a full URL; a reference that does not parse is returned as
-// an error, which callers treat as "not anchored".
+// HostAnchored reports whether candidate is anchored to anchor — the same host
+// and port, or a subdomain of that host on that port. Either side may be a bare
+// domain, a host:port pair, or a full URL; a reference that does not parse is
+// returned as an error, which callers treat as "not anchored".
 //
 // The use is checking a value a remote document supplied against the host that
 // served that document: it may point at itself or at one of its own subdomains,
@@ -78,39 +91,67 @@ func IsBareHost(ref string) (bool, error) {
 // revocation poll — to an unrelated third-party address that a dial-time address
 // guard would happily allow, because the address is perfectly public.
 //
-// The PORT is deliberately not part of the comparison. The property being
-// enforced is "not an unrelated host", and a service on a non-default port of the
-// same name is not another host — TLS binds hostnames, not ports. Comparing with
-// the port would leave an Exchange that advertises https://exchange.example:8443
-// permanently unable to receive a usage report, for no security gain.
+// The PORT is part of the comparison. What is being anchored is a place a signed
+// call is sent, and a different port is a different service — one the party that
+// published the anchor need not control. An Exchange reachable on a non-default
+// port says so on both sides: the port belongs in the value the offer names as
+// much as in the endpoint the manifest advertises.
+//
+// A DEFAULT port and its omission are the same port, so https://x, https://x:443
+// and x all anchor to one another. url.Parse does not materialize an implicit
+// port, and refusing an operator who merely wrote :443 out in full would be a
+// spelling check wearing a security check's clothes.
+//
+// The SCHEME is still not compared. Whether a leg may run in the clear is the
+// guarded transport's decision, made in one place from one flag, and the default
+// port normalization above is deliberately scheme-relative so that http://x and
+// https://x continue to anchor rather than diverging on 80 versus 443.
 func HostAnchored(anchor, candidate string) (bool, error) {
-	anchorHost, err := hostnameOf(anchor)
+	anchorHost, anchorPort, err := hostPortOf(anchor)
 	if err != nil {
 		return false, fmt.Errorf("anchor host: %w", err)
 	}
-	candidateHost, err := hostnameOf(candidate)
+	candidateHost, candidatePort, err := hostPortOf(candidate)
 	if err != nil {
 		return false, fmt.Errorf("candidate host: %w", err)
 	}
-	return sameOrSubdomain(anchorHost, candidateHost), nil
+	// Compared as two values rather than one joined string. Joined, the label
+	// boundary below would have to find ".a.com" at the end of "sub.a.com:8443"
+	// and would refuse a subdomain for having a port — the right answer reached
+	// through the wrong comparison is still the wrong comparison.
+	return sameOrSubdomain(anchorHost, candidateHost) && anchorPort == candidatePort, nil
 }
 
-// hostnameOf is HostOf without the port, and with IPv6 brackets removed. It backs
-// the anchoring comparison; IsBareHost keeps using HostOf, because there a port is
-// part of what the caller legitimately named.
-func hostnameOf(ref string) (string, error) {
-	host, err := HostOf(ref)
+// hostPortOf splits a reference into its hostname and its CANONICAL port. It backs
+// the anchoring comparison, which needs the two apart; IsBareHost keeps using
+// HostOf, because there a port is part of what the caller legitimately named and
+// the value is compared verbatim.
+//
+// url.URL.Hostname() drops a trailing :port and the brackets around an IPv6
+// literal, and Port() yields the port alone, so the split is the standard
+// library's rather than this package's.
+func hostPortOf(ref string) (host, port string, err error) {
+	parsed, err := parseRef(ref)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	// url.URL.Hostname() strips a trailing :port and the brackets around an IPv6
-	// literal. Re-parsing the extracted authority is the cheapest way to reuse
-	// exactly that rule rather than restate it.
-	parsed, err := url.Parse("//" + host)
-	if err != nil {
-		return "", fmt.Errorf("%w: %q: %w", ErrInvalidHost, ref, err)
+	return parsed.Hostname(), canonicalPort(parsed.Scheme, parsed.Port()), nil
+}
+
+// defaultPorts is the port a scheme reaches when none is written.
+var defaultPorts = map[string]string{"http": "80", "https": "443"}
+
+// canonicalPort renders "the same port" as one string, so a port written out in
+// full and the same port left implicit compare equal. An unknown scheme has no
+// default to fold, so its port is kept verbatim.
+func canonicalPort(scheme, port string) string {
+	if port == "" {
+		return ""
 	}
-	return parsed.Hostname(), nil
+	if def, ok := defaultPorts[strings.ToLower(scheme)]; ok && port == def {
+		return ""
+	}
+	return port
 }
 
 // sameOrSubdomain reports whether candidate equals anchor or is a subdomain of

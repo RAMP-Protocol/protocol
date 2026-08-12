@@ -5,13 +5,16 @@
 **`WellKnownManifest.endpoint` states its host binding (no wire change; conformance-affecting).**
 The field said only "Exchange-only. ExchangeService endpoint URL", so nothing told an Exchange
 operator that the address it advertises must stay on its own domain. It now does: the endpoint
-MUST be on the host that SERVES the manifest — not the self-asserted `domain` member inside it —
-or a subdomain of that host, and MUST NOT carry userinfo. The manifest is only as trustworthy as
-the host that served it, so an endpoint naming an unrelated host would let whoever answers for
-the manifest redirect a signed call to a party the offer's signature never covered — and a
-dial-time address guard has no objection to an unrelated PUBLIC host. The match is on a full
-dot-delimited label boundary, so `evil-a.com` is not a subdomain of `a.com`; the port is not
-compared, since TLS binds hostnames rather than ports.
+MUST be on the host AND PORT that SERVE the manifest — not the self-asserted `domain` member
+inside it — or on a subdomain of that host on that port, and MUST NOT carry userinfo. The manifest
+is only as trustworthy as the host that served it, so an endpoint naming an unrelated host would
+let whoever answers for the manifest redirect a signed call to a party the offer's signature never
+covered — and a dial-time address guard has no objection to an unrelated PUBLIC host. Another port
+is another service, which the party publishing the manifest need not control. The host match is on
+a full dot-delimited label boundary, so `evil-a.com` is not a subdomain of `a.com`. A port equal to
+the scheme's default and an omitted port are the SAME port, so `https://x`, `https://x:443` and `x`
+all match; the scheme itself is not compared, and the default-port folding is scheme-relative so
+that it cannot become a scheme check by accident.
 
 **This is the first entry in this changelog that changes what conforms without changing the
 wire.** The classifier is deliberately not `(breaking)`: this change moves no field, message, or

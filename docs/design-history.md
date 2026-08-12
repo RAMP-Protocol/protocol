@@ -724,13 +724,24 @@ and the predicate they would need does not exist there — their private
 near-namesakes are the WBA variant and compare with the port. Closing that is
 tracked separately.
 
-The comparison deliberately ignores the PORT. The property being enforced is "not
-an unrelated host", and a service on another port of the same name is not another
-host: TLS binds hostnames, not ports. Including the port would leave an Exchange
-that advertises `https://exchange.example:8443` permanently unable to receive a
-usage report, refused by a check that was never protecting anything there. The
-scheme is likewise not compared here; it is the guarded transport's decision, in
-one place, driven by one flag.
+The comparison includes the PORT. An earlier version of this rule ignored it, on
+the reasoning that TLS binds hostnames rather than ports, so a service on another
+port of the same name is not another host. That was overruled deliberately: what
+is being anchored is a place a signed call is sent, another port is another
+service that the party publishing the anchor need not control, and having one rule
+compare the port while another ignored it was the worse outcome of the two — the
+predicate existed twice in Go and the copies had already drifted apart on exactly
+this question. An Exchange reachable on a non-default port now names that port on
+both sides.
+
+One detail carries the whole decision: a DEFAULT port and an omitted port are the
+same port. `url.Parse` does not materialize an implicit port, so a comparison of
+raw authorities would refuse an operator who merely wrote `:443` out in full — a
+spelling check wearing a security check's clothes. The folding is scheme-relative,
+which is also what keeps it from becoming something it is not: the scheme is still
+not compared here — that is the guarded transport's decision, in one place, driven
+by one flag — and `http://x` and `https://x` both reduce to no port rather than
+diverging on 80 versus 443.
 
 ## What the manifest fetch does not guarantee, and why that is bounded
 

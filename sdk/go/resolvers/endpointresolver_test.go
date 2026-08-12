@@ -226,6 +226,44 @@ func TestWellKnownEndpointResolver_refusesAnEndpointOnAnotherHost(t *testing.T) 
 	}
 }
 
+// The PORT is part of the anchor. An endpoint on another port of the serving host
+// is a different service — one the party that published the manifest need not
+// control — so it is refused like any other mismatch.
+func TestWellKnownEndpointResolver_refusesAnEndpointOnAnotherPort(t *testing.T) {
+	// Port 1 is not the manifest server's, and nothing is listening there, so a
+	// refusal arriving from anywhere but the rule would show up as a dial error.
+	endpoint := "http://127.0.0.1:1/ramp.v1.ExchangeService"
+	srv := httptest.NewServer(manifestHandler(&endpoint, nil))
+	defer srv.Close()
+
+	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{
+		TTL: time.Hour, Scheme: "http", HTTP: http.DefaultClient,
+	})
+	got, err := r.ResolveEndpoint(context.Background(), hostOf(t, srv))
+	if err == nil {
+		t.Fatalf("resolve returned %q; an endpoint on another port must be refused", got)
+	}
+	if !errors.Is(err, resolvers.ErrEndpointRefused) {
+		t.Errorf("error = %v, want it to carry ErrEndpointRefused", err)
+	}
+}
+
+// A default port written out and the same port left implicit are the SAME port,
+// so an operator who spells :443 in full is not refused for spelling. Driven
+// through the predicate the resolver uses, since httptest always binds a
+// non-default port and a loopback server cannot express the case.
+func TestWellKnownEndpointResolver_acceptsAWrittenOutDefaultPort(t *testing.T) {
+	for _, tc := range [][2]string{
+		{"exchange.example", "https://exchange.example:443/v1"},
+		{"exchange.example:443", "https://exchange.example/v1"},
+	} {
+		anchored, err := helpers.HostAnchored(tc[0], tc[1])
+		if err != nil || !anchored {
+			t.Errorf("HostAnchored(%q, %q) = %v, %v; want true", tc[0], tc[1], anchored, err)
+		}
+	}
+}
+
 // A subdomain of the serving host IS allowed: an Exchange may delegate to its own
 // subdomain, and refusing that would be a rule about names rather than about
 // trust. Driven through the predicate the resolver uses, since a loopback server

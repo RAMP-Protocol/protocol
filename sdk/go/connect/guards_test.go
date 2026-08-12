@@ -43,13 +43,16 @@ func TestReportUsage_GuardRefusesAPrivateEndpoint(t *testing.T) {
 	sig := newSigningFixture(t)
 	client := rampconnect.NewClient("https://home.invalid",
 		rampconnect.WithSigner(sig.signer),
-		// Anchored to the domain, so the check passes: localhost advertises
-		// localhost. Only the dial-time address guard can refuse this.
+		// Anchored to the domain, so the check passes: localhost:1 advertises
+		// localhost:1. The PORT is named on both sides deliberately — anchoring
+		// compares it, so an endpoint on a port the exchange value does not carry
+		// would be refused by the routing check and this test would prove nothing
+		// about the guard. Only the dial-time address guard can refuse this.
 		rampconnect.WithEndpointResolver(fixedEndpoint{endpoint: "https://localhost:1"}),
 	)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String("localhost"),
+		Exchange:      proto.String("localhost:1"),
 		TransactionId: "txn-1",
 	})
 	if err == nil {
@@ -95,8 +98,10 @@ func TestReportUsage_GuardSurvivesACallerSuppliedTransport(t *testing.T) {
 				rampconnect.WithEndpointResolver(fixedEndpoint{endpoint: "https://localhost:1"}),
 			)
 
+			// Port named on both sides so the routing check passes and the dial is
+			// actually attempted; see the sibling test above.
 			_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-				Exchange:      proto.String("localhost"),
+				Exchange:      proto.String("localhost:1"),
 				TransactionId: "txn-1",
 			})
 			if err == nil || !strings.Contains(err.Error(), "SSRF guard") {

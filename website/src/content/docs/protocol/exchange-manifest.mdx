@@ -149,11 +149,18 @@ public host.
 
 Two details matter in practice:
 
-- The match is on a **full dot-delimited label boundary**. `evil-a.com` is not a
-  subdomain of `a.com`; a bare suffix comparison gets that wrong, and it is the
-  mistake an attacker registers a domain to exploit.
-- The **port is not compared**. TLS binds hostnames, not ports, so
-  `https://exchange.example:8443/v1` is a valid endpoint for `exchange.example`.
+- The host match is on a **full dot-delimited label boundary**. `evil-a.com` is
+  not a subdomain of `a.com`; a bare suffix comparison gets that wrong, and it is
+  the mistake an attacker registers a domain to exploit.
+- The **port is compared too**. Another port is another service, which the party
+  publishing the manifest need not control, so `https://exchange.example:8443/v1`
+  is a valid endpoint only where the port is named on both sides. A port equal to
+  the scheme's default and an omitted port are the **same** port, so
+  `https://exchange.example`, `https://exchange.example:443` and
+  `exchange.example` all match one another — writing `:443` out is not a refusal.
+- The **scheme is not compared** here. Whether a leg may run in the clear is the
+  transport's decision, and the default-port rule above is scheme-relative so that
+  it cannot become a scheme check by accident.
 
 An Exchange that serves its API from a separate domain should front it under its
 own subdomain rather than advertising the other domain directly.
