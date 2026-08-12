@@ -418,3 +418,78 @@ func TestContentFetcher_SendsNoCorrelationHeaderWithoutAMint(t *testing.T) {
 		t.Errorf("%s was sent with no mint configured", helpers.RequestIDHeader)
 	}
 }
+
+// hangingSigner stands in for a custody backend that has stopped answering: it
+// blocks until the context it was given is done, and reports why.
+type hangingSigner struct{}
+
+func (hangingSigner) SignFetch(ctx context.Context, _ string) (helpers.AgentBinding, error) {
+	<-ctx.Done()
+	return helpers.AgentBinding{}, ctx.Err()
+}
+
+// The fetch deadline covers PROOF MINTING, not just the round trip.
+//
+// The proof is minted while the request is being built, and a ProofSigner is
+// application code that may reach a custody backend bounded only by that backend's
+// own client. So the deadline is derived before the request is built rather than
+// around the transport: derived after, "bounds one content fetch" would be untrue
+// against a degraded custody service, and a batch would pay that cost once per
+// item with nothing to stop it.
+//
+// The sibling option test bounds a slow EDGE, which the transport's own deadline
+// already handles — it stays green if the ordering here is reversed. This one
+// blocks in the signer, which is the only place that tells the two apart.
+func TestContentFetcher_TheDeadlineCoversProofMinting(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte("must never be reached"))
+	}))
+	defer srv.Close()
+
+	f := plainFetcher(t, resolvers.ContentFetchOptions{Timeout: 50 * time.Millisecond})
+
+	// Run off the test goroutine and give up on our own terms. The failure this
+	// guards against is not a slow fetch, it is one that NEVER RETURNS: the signer
+	// waits on a context that, without the deadline, nothing ever cancels. Called
+	// inline, a regression would hang until the whole suite panicked ten minutes
+	// later; here it is a named failure in five seconds.
+	type result struct {
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		_, err := f.Fetch(context.Background(), srv.URL+"/doc?agent_id=tp", hangingSigner{})
+		done <- result{err: err}
+	}()
+
+	var err error
+	select {
+	case r := <-done:
+		err = r.err
+	case <-time.After(5 * time.Second):
+		t.Fatal("Fetch never returned; the configured deadline did not cover proof minting")
+	}
+
+	if err == nil {
+		t.Fatal("a signer that never answers must not produce a successful fetch")
+	}
+	// The classification a caller branches on: no request left, so this is not a
+	// refusal by the edge and not a transport failure.
+	var fe *resolvers.FetchError
+	if !errors.As(err, &fe) {
+		t.Fatalf("error = %v, want a *FetchError", err)
+	}
+	if fe.Failure != resolvers.FetchNotSignable {
+		t.Errorf("failure = %v, want FetchNotSignable", fe.Failure)
+	}
+	// The load-bearing assertion. Without it this test would pass on any signer
+	// error at all, rather than on the CONFIGURED deadline being what stopped it.
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("error = %v, want the configured deadline to be the cause", err)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("the edge was contacted %d time(s); no request leaves on this path", n)
+	}
+}
