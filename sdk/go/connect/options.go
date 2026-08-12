@@ -29,15 +29,16 @@ type clientConfig struct {
 	requestID     core.RequestIDFunc
 	extra         []connectrpc.Interceptor
 
-	requester    *rampv1.Requester
-	agentKey     ed25519.PublicKey
-	proofWindow  core.Window
-	signWindow   core.Window
-	endpoints    EndpointResolver
-	guardedBase  *http.Transport
-	connectOpts  []connectrpc.ClientOption
-	fetchTimeout time.Duration
-	fetchMaxByte int64
+	requester      *rampv1.Requester
+	agentKey       ed25519.PublicKey
+	proofWindow    core.Window
+	signWindow     core.Window
+	signatureAgent string
+	endpoints      EndpointResolver
+	guardedBase    *http.Transport
+	connectOpts    []connectrpc.ClientOption
+	fetchTimeout   time.Duration
+	fetchMaxByte   int64
 }
 
 // ClientOption configures a Client. Options are the ONLY way to inject the
@@ -182,6 +183,28 @@ func WithProofWindow(w core.Window) ClientOption {
 // request signature. Both take a core.Window; neither substitutes for the other.
 func WithSignWindow(w core.Window) ClientOption {
 	return func(c *clientConfig) { c.signWindow = w }
+}
+
+// WithSignatureAgent names the WBA directory origin this client signs as — the
+// place a peer fetches to find the key that signed the request. It is stamped into
+// the Signature-Agent header of every outbound RFC 9421 request.
+//
+// Leaving it unset does not omit the header: signature-agent is one of the five
+// REQUIRED covered components, so the signature covers it either way and an unset
+// client signs an EMPTY value. A peer that resolves the caller's key from that
+// origin then has nothing to resolve, and refuses the call at verification — after
+// the request was routed, signed and sent, which is why the symptom is a 401 from
+// a healthy Exchange rather than anything the routing checks would catch.
+//
+// One value per client, because one client speaks for one agent — the same reason
+// WithRequester is held rather than passed per call. An application signing as
+// several agents builds a client per agent.
+//
+// Stamped SET-IF-ABSENT. A request that already carries a Signature-Agent keeps
+// it, so a relay forwarding an originating agent's call does not overwrite the
+// value that agent's own signature covers.
+func WithSignatureAgent(dir string) ClientOption {
+	return func(c *clientConfig) { c.signatureAgent = dir }
 }
 
 // WithContentTimeout bounds one delivery fetch, proof minting included. The

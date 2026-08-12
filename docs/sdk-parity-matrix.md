@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 77 symbols at cross-language parity · 14 documented divergences · 141 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
+**At a glance:** 77 symbols at cross-language parity · 14 documented divergences · 142 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -183,6 +183,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `connect.WithRequestIDFunc` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithRequester` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithSignWindow` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
+| `connect.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithSigner` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithValidation` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `connect.WithVerification` | Go functional-option builder; py/ts pass options via kwargs/options objects. |

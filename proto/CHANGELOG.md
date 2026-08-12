@@ -49,6 +49,31 @@ transport-failure bucket and retry something that will never succeed; add the ne
 alongside. And a Broker that resolves endpoints through this package inherits the rule for the
 paths that use it. `gen/` and the website mirror are regenerated; proto comments only.
 
+**Go SDK: the Connect client covers the agent verb set, and its signing knobs are reachable
+(additive, no wire change).** `connect.Client` gained `ReportUsage`, `Dispute` and `Fetch`, and
+`connect.NewBrokerClient` gained `Resolve` — the client previously exposed `Discover` and
+`Execute` alone, so a caller needing any of the rest had to assemble its own from
+`rampv1connect` plus `core.NewSigningTransport`, which is the duplication the SDK exists to
+remove. `Resolve` returns the same fail-closed `{verified, rejected}` split `Discover` does,
+through the same `core.Verifier`; `Fetch` performs proof-of-possession on an agent-bound URL and
+dials only through the SSRF-guarded client.
+
+Five client options join them, each because a value the tier below already accepted had no way
+in: `WithSignWindow` (the RFC 9421 request freshness window — pair it with
+`core.MonotonicWindow` when the peer screens replays on `(key id, signature)`, since one-second
+timestamp resolution makes two identical requests inside a second sign to the same bytes),
+`WithSignatureAgent` (the WBA directory origin the client signs as), `WithProofWindow`,
+`WithContentTimeout` and `WithMaxContentBytes`.
+
+`WithSignatureAgent` is worth reading twice if you verify signatures. `signature-agent` is one
+of the five REQUIRED covered components, so the header is signed whether or not a value was
+supplied — a client that does not set it signs an EMPTY one. A peer that resolves the caller's
+key by fetching the WBA directory at that origin then has nothing to resolve and refuses the
+call at verification, which surfaces as a 401 from an otherwise healthy Exchange rather than as
+anything the routing checks would catch. The value is stamped set-if-absent, so a relay
+forwarding an originating agent's request does not overwrite the value that agent's own
+signature covers. See `docs/sdk-parity-matrix.md` for the per-language surface.
+
 **SDK (all 3 languages): the registration-failure builder can carry the field errors
 (additive, no wire change).** `helpers.RegistrationFailureDetail` (Go),
 `registration_failure_detail` (Python) and `registrationFailureDetail` (TS) now accept the

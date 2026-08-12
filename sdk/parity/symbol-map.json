@@ -28,6 +28,7 @@
     "connect.WithRequestIDFunc": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithRequester": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithSignWindow": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
+    "connect.WithSignatureAgent": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithSigner": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithValidation": "Go functional-option builder; py/ts pass options via kwargs/options objects.",
     "connect.WithVerification": "Go functional-option builder; py/ts pass options via kwargs/options objects.",

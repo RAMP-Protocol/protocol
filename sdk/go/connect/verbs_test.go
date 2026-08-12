@@ -667,3 +667,83 @@ func TestFetch_RefusesWithoutTheAgentPublicKey(t *testing.T) {
 		t.Fatalf("error = %v, want a CallNotSignable CallError", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Signature-Agent: the directory a peer resolves the caller's key from
+// ---------------------------------------------------------------------------
+
+// The configured directory must reach the WIRE, covered by the signature.
+//
+// signature-agent is one of the five REQUIRED covered components, so the header is
+// signed whether or not a value was supplied — an unset client signs an EMPTY one.
+// A peer that resolves the caller's key by fetching the WBA directory at that
+// origin then has nothing to resolve and refuses the call at verification, after
+// it was routed, signed and sent. That failure mode is why asserting the option
+// sets a field would prove nothing: what matters is the bytes that leave.
+func TestWithSignatureAgent_ReachesTheWireCovered(t *testing.T) {
+	const dir = "https://agent.example"
+	sig := newSigningFixture(t)
+
+	var gotAgent, gotSigInput string
+	path, h := rampserver.NewExchangeServiceHandler(
+		&groupExchange{}, rampserver.WithKeyResolver(sig.resolver))
+	mux := http.NewServeMux()
+	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAgent, gotSigInput = r.Header.Get("Signature-Agent"), r.Header.Get("Signature-Input")
+		h.ServeHTTP(w, r)
+	}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := rampconnect.NewClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSignatureAgent(dir),
+		rampconnect.WithRequester(testRequester()))
+
+	// The call must SUCCEED: the header participates in the signature, so a value
+	// that reached the wire without being covered correctly would fail here.
+	if _, err := client.Discover(context.Background(), &rampv1.ResourceQuery{
+		Uris: []string{"https://site.test/a"}, Ver: helpers.ProtocolVersion,
+	}); err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if gotAgent != dir {
+		t.Errorf("Signature-Agent = %q, want %q", gotAgent, dir)
+	}
+	// Present is not enough — an uncovered header is one any intermediary may
+	// rewrite, which is the whole reason the component is in the required set.
+	if !strings.Contains(gotSigInput, `"signature-agent"`) {
+		t.Errorf("Signature-Input = %q; want it to cover signature-agent", gotSigInput)
+	}
+}
+
+// The Broker face stamps it too. Both clients reach the wire through the same
+// plumbing, and that is the property worth pinning rather than assuming — a
+// second construction path is exactly where one knob gets dropped.
+func TestWithSignatureAgent_BrokerClientStampsItToo(t *testing.T) {
+	const dir = "https://agent.example"
+	sig := newSigningFixture(t)
+
+	var gotAgent string
+	path, h := rampserver.NewBrokerServiceHandler(
+		&stubBroker{}, rampserver.WithKeyResolver(sig.resolver))
+	mux := http.NewServeMux()
+	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAgent = r.Header.Get("Signature-Agent")
+		h.ServeHTTP(w, r)
+	}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	broker := rampconnect.NewBrokerClient(srv.URL,
+		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSignatureAgent(dir),
+		rampconnect.WithRequester(testRequester()))
+	if _, err := broker.Resolve(context.Background(),
+		&rampv1.DiscoveryRequest{Ver: helpers.ProtocolVersion}); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if gotAgent != dir {
+		t.Errorf("Signature-Agent = %q, want %q", gotAgent, dir)
+	}
+}

@@ -131,11 +131,19 @@ func signedHTTPClient(cfg clientConfig, base http.RoundTripper) *http.Client {
 // own option type. It is the ONE place they meet, so every face the SDK builds —
 // the home Exchange, the Broker, and the offer-derived pool, which all reach the
 // wire through signedHTTPClient — signs on identical terms.
+// It ACCUMULATES rather than returning on the first knob it finds. Written as an
+// early return for a single option, the second one to arrive is silently dropped
+// whenever the first is unset — which is how a client came to sign an empty
+// Signature-Agent while the option to fill it already existed a tier down.
 func signingOptions(cfg clientConfig) []core.SigningOption {
-	if cfg.signWindow == nil {
-		return nil
+	var opts []core.SigningOption
+	if cfg.signWindow != nil {
+		opts = append(opts, core.WithWindow(cfg.signWindow))
 	}
-	return []core.SigningOption{core.WithWindow(cfg.signWindow)}
+	if cfg.signatureAgent != "" {
+		opts = append(opts, core.WithSignatureAgent(cfg.signatureAgent))
+	}
+	return opts
 }
 
 // refuseRPCRedirect stops the client following any 3xx on an RPC leg. Following
