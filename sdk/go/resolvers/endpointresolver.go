@@ -211,7 +211,7 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 	//     context-aware, so without this the call would honour nobody's deadline:
 	//     a caller with 200ms would sit until the shared fetch finished. The fetch
 	//     continues for the others; only this caller gives up.
-	shared := r.sf.DoChan(host, func() (any, error) {
+	shared := r.sf.DoChan(host, func() (v any, err error) {
 		// Derived INSIDE the closure, which singleflight runs for the leader alone.
 		// Built before DoChan instead, every coalesced follower would allocate a
 		// timer whose cancel func only the leader's closure ever calls — one live
@@ -220,6 +220,17 @@ func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host st
 		fetchCtx, cancelFetch := context.WithTimeout(
 			context.WithoutCancel(ctx), maxManifestFetch)
 		defer cancelFetch()
+		// A panic is turned into this call's error, HERE, because nowhere above can
+		// do it: when a coalesced call has waiting channels singleflight re-raises
+		// the panic on a fresh goroutine — `go panic(e)` followed by `select{}` — so
+		// no caller's recover can reach it and the process dies. The two seams that
+		// can panic are application-supplied (WellKnownOptions.HTTP and .Now), which
+		// makes "one lookup fails" the right blast radius, not "the process exits".
+		defer func() {
+			if p := recover(); p != nil {
+				v, err = "", fmt.Errorf("resolvers: resolve endpoint for %q: panic: %v", host, p)
+			}
+		}()
 		if ep, ok := r.cached(host); ok {
 			return ep, nil // another goroutine fetched while we waited
 		}

@@ -23,7 +23,7 @@ var ErrInvalidHost = errors.New("helpers: reference is not a usable host")
 // pair, or a full URL. A ref with no scheme is parsed as though it carried https,
 // since a bare domain is otherwise indistinguishable from a path.
 func HostOf(ref string) (string, error) {
-	parsed, err := parseRef(ref)
+	parsed, _, err := parseRef(ref)
 	if err != nil {
 		return "", err
 	}
@@ -35,22 +35,28 @@ func HostOf(ref string) (string, error) {
 // a bare domain is otherwise indistinguishable from a path. One parse behind both
 // host predicates, so neither can disagree with the other about what a reference
 // even is.
-func parseRef(ref string) (*url.URL, error) {
+//
+// hadScheme reports whether the caller actually WROTE a scheme, which the assumed
+// https above would otherwise hide. Anchoring needs that: a scheme decides which
+// port counts as the default, so a value that named none must not be treated as
+// having named https.
+func parseRef(ref string) (parsed *url.URL, hadScheme bool, err error) {
 	if strings.TrimSpace(ref) == "" {
-		return nil, fmt.Errorf("%w: empty reference", ErrInvalidHost)
+		return nil, false, fmt.Errorf("%w: empty reference", ErrInvalidHost)
 	}
 	toParse := ref
-	if !strings.Contains(ref, "://") {
+	hadScheme = strings.Contains(ref, "://")
+	if !hadScheme {
 		toParse = "https://" + ref
 	}
-	parsed, err := url.Parse(toParse)
+	parsed, err = url.Parse(toParse)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %q: %w", ErrInvalidHost, ref, err)
+		return nil, false, fmt.Errorf("%w: %q: %w", ErrInvalidHost, ref, err)
 	}
 	if parsed.Host == "" {
-		return nil, fmt.Errorf("%w: %q has no host", ErrInvalidHost, ref)
+		return nil, false, fmt.Errorf("%w: %q has no host", ErrInvalidHost, ref)
 	}
-	return parsed, nil
+	return parsed, hadScheme, nil
 }
 
 // IsBareHost reports whether ref is EXACTLY a host — nothing a URL could carry
@@ -103,39 +109,39 @@ func IsBareHost(ref string) (bool, error) {
 // spelling check wearing a security check's clothes.
 //
 // The SCHEME is still not compared. Whether a leg may run in the clear is the
-// guarded transport's decision, made in one place from one flag, and the default
-// port normalization above is deliberately scheme-relative so that http://x and
-// https://x continue to anchor rather than diverging on 80 versus 443.
+// guarded transport's decision, made in one place from one flag. Its only job here
+// is choosing which port counts as the default — and a side that NAMED no scheme
+// borrows the other's for that purpose, rather than being assumed to mean https.
+//
+// That last part is load-bearing, not a nicety. Both anchors in this SDK arrive
+// schemeless: a WBA directory's authority and an Offer.exchange host are bare
+// host[:port] values. Assuming https for them meant an anchor of "a.example:80"
+// kept its port (80 is not https's default) while the candidate
+// "http://a.example:80" folded it away — the same authority reaching two answers,
+// which silently un-anchored every plaintext directory that spelled :80 in full.
 func HostAnchored(anchor, candidate string) (bool, error) {
-	anchorHost, anchorPort, err := hostPortOf(anchor)
+	anchorURL, anchorHadScheme, err := parseRef(anchor)
 	if err != nil {
 		return false, fmt.Errorf("anchor host: %w", err)
 	}
-	candidateHost, candidatePort, err := hostPortOf(candidate)
+	candidateURL, candidateHadScheme, err := parseRef(candidate)
 	if err != nil {
 		return false, fmt.Errorf("candidate host: %w", err)
+	}
+	anchorScheme, candidateScheme := anchorURL.Scheme, candidateURL.Scheme
+	if !anchorHadScheme {
+		anchorScheme = candidateScheme
+	}
+	if !candidateHadScheme {
+		candidateScheme = anchorScheme
 	}
 	// Compared as two values rather than one joined string. Joined, the label
 	// boundary below would have to find ".a.com" at the end of "sub.a.com:8443"
 	// and would refuse a subdomain for having a port — the right answer reached
 	// through the wrong comparison is still the wrong comparison.
-	return sameOrSubdomain(anchorHost, candidateHost) && anchorPort == candidatePort, nil
-}
-
-// hostPortOf splits a reference into its hostname and its CANONICAL port. It backs
-// the anchoring comparison, which needs the two apart; IsBareHost keeps using
-// HostOf, because there a port is part of what the caller legitimately named and
-// the value is compared verbatim.
-//
-// url.URL.Hostname() drops a trailing :port and the brackets around an IPv6
-// literal, and Port() yields the port alone, so the split is the standard
-// library's rather than this package's.
-func hostPortOf(ref string) (host, port string, err error) {
-	parsed, err := parseRef(ref)
-	if err != nil {
-		return "", "", err
-	}
-	return parsed.Hostname(), canonicalPort(parsed.Scheme, parsed.Port()), nil
+	return sameOrSubdomain(anchorURL.Hostname(), candidateURL.Hostname()) &&
+		canonicalPort(anchorScheme, anchorURL.Port()) ==
+			canonicalPort(candidateScheme, candidateURL.Port()), nil
 }
 
 // defaultPorts is the port a scheme reaches when none is written.

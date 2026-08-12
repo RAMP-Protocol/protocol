@@ -114,6 +114,17 @@ func TestHostAnchored_ComparesThePort(t *testing.T) {
 		"subdomain on the same port":       {"a.com:8443", "https://cdn.a.com:8443/v1", true},
 		"label boundary still holds":       {"a.com", "https://evil-a.com:8443", false},
 		"port does not soften a bad label": {"a.com:8443", "https://evil-a.com:8443", false},
+		// A schemeless anchor borrows the candidate's scheme to decide which port is
+		// the default. Both anchors in this SDK arrive schemeless — a WBA directory's
+		// authority, an Offer.exchange host — so assuming https for them made
+		// "a.example:80" keep its port while "http://a.example:80" folded the same
+		// port away, and the two stopped anchoring to each other.
+		"plaintext anchor, port spelled both sides": {"a.example:80", "http://a.example:80/rev", true},
+		"plaintext anchor, port spelled once":       {"a.example:80", "http://a.example/rev", true},
+		// Borrowing decides only WHICH port is default; it never makes two different
+		// ports equal. 443 is not http's default, and 80 is not https's.
+		"default of one scheme is not the other's": {"a.com:443", "http://a.com:80/v1", false},
+		"and not in the other direction":           {"a.com:80", "https://a.com:443/v1", false},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

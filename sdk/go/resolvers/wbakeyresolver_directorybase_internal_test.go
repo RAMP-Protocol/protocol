@@ -287,6 +287,13 @@ func TestRevocationAnchored_schemeMayNotDowngrade(t *testing.T) {
 		{"default port written out", "https://a.example", "a.example", "https://a.example:443/rev", true},
 		{"another port refused", "https://a.example", "a.example", "https://a.example:8443/rev", false},
 		{"ported directory keeps its port", "https://a.example:8443", "a.example:8443", "https://a.example:8443/rev", true},
+		// The anchor here is a bare authority, so which port counts as the default
+		// is decided by the revocation_url's scheme rather than by an assumed https.
+		// Without that, a plaintext directory that spells :80 in full stops anchoring
+		// its own revocation_url — and a poll that is skipped leaves a revoked key
+		// resolving, which is worse than the spelling it was refusing.
+		{"plaintext directory spelling :80", "http://a.example:80", "a.example:80", "http://a.example:80/rev", true},
+		{"plaintext directory, port spelled once", "http://a.example:80", "a.example:80", "http://a.example/rev", true},
 		// A revocation_url must be ABSOLUTE. The shared predicate reads a
 		// schemeless reference as https, which is right for an exchange domain and
 		// wrong here — the base-less branch below returns before the scheme is

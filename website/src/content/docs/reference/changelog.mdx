@@ -23,10 +23,25 @@ that it cannot become a scheme check by accident.
 wire.** The classifier is deliberately not `(breaking)`: this change moves no field, message, or
 encoding, and `buf breaking` reports nothing — while the bare `(breaking)` entries below all mark
 a descriptor delta, and the one qualified use ("breaking for the generated clients") names the
-audience it breaks. What this change does instead is narrow what a conformant manifest may say. **An Exchange that serves its API from a separate domain — a CDN, a hosting provider — is
-conformant today and will be refused after this.** Such a deployment should front the API under
-a subdomain of the domain serving its `ramp.json`. Operators of single-domain Exchanges, which
-is the documented shape, are unaffected.
+audience it breaks. What this change does instead is narrow what a conformant manifest may say.
+
+**Two shapes that are conformant today will be refused after this.** The first is an Exchange
+serving its API from a separate DOMAIN — a CDN, a hosting provider. The second is an Exchange on
+a separate PORT: a single-domain deployment serving `/.well-known/ramp.json` on its default port
+and advertising `"endpoint": "https://exchange.example:8443/v1"` is refused, as is the mirror
+image (a portless endpoint under a manifest served on `:8443`) and a subdomain reached across
+ports. A single domain is therefore no longer sufficient on its own — the authority must match on
+both halves.
+
+Remedies, by shape. For a separate domain, front the API under a subdomain of the domain serving
+the `ramp.json`. For a separate port, either move the API onto the port the manifest is served
+from, or serve the manifest from the API's own authority — `https://exchange.example:8443/.well-known/ramp.json`
+alongside `https://exchange.example:8443/v1`. Writing a scheme's default port out in full is NOT
+a mismatch and needs no change.
+
+Both are refused as `ErrEndpointRefused`, which classifies as a FINAL verdict rather than a
+transport failure — so a client will not retry its way out of a misconfiguration, and the symptom
+is a usage report that never lands rather than one that is slow.
 
 Enforcement moved with the rule: it now runs in the SDK's shared endpoint resolver rather than
 in one client, so every consumer of that resolver inherits it without changing a line. Two

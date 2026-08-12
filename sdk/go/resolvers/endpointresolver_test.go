@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -358,5 +359,47 @@ func TestWellKnownEndpointResolver_leaderCancellationDoesNotPoisonWaiters(t *tes
 	}
 	if n := atomic.LoadInt32(&hits); n != 1 {
 		t.Errorf("origin hit %d times, want 1 — the burst must coalesce", n)
+	}
+}
+
+// panicTransport panics on every round trip, standing in for an
+// application-supplied client that misbehaves.
+type panicTransport struct{}
+
+func (panicTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	panic("injected transport exploded")
+}
+
+// A panic from an injected seam fails ONE lookup; it does not take the process
+// down with it.
+//
+// The coalescing runs through singleflight.DoChan, and when a call has waiting
+// channels singleflight re-raises a panic on a fresh goroutine — `go panic(e)`
+// then `select{}` — deliberately, so waiters cannot block forever. Nothing above
+// the closure can recover from that, which is why the closure recovers for
+// itself. WellKnownOptions.HTTP and .Now are both application code, so this is a
+// reachable input rather than a hypothetical.
+func TestWellKnownEndpointResolver_survivesAPanickingTransport(t *testing.T) {
+	r := resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{
+		TTL:    time.Hour,
+		Scheme: "http",
+		HTTP:   &http.Client{Transport: panicTransport{}},
+	})
+
+	got, err := r.ResolveEndpoint(context.Background(), "exchange.example")
+	if err == nil {
+		t.Fatalf("resolve returned %q; a panicking transport must surface as an error", got)
+	}
+	// The host is named so the failure is attributable, and the panic value is
+	// carried so it is diagnosable rather than merely reported.
+	if !strings.Contains(err.Error(), "exchange.example") ||
+		!strings.Contains(err.Error(), "injected transport exploded") {
+		t.Errorf("error = %v, want it to name the host and carry the panic value", err)
+	}
+
+	// The resolver is still usable afterwards: a panic must not have poisoned the
+	// singleflight key or the cache.
+	if _, err := r.ResolveEndpoint(context.Background(), "exchange.example"); err == nil {
+		t.Error("the second call must fail the same way, not succeed from a poisoned cache")
 	}
 }

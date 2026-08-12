@@ -35,12 +35,13 @@ import (
 //
 // An implementation's ERROR decides how a caller is told to react, so it is part
 // of the contract rather than an implementation detail. A failure that is a
-// VERDICT — the host is not allowed, the manifest advertises no endpoint, or it
-// advertises one that must not be used — MUST wrap resolvers.ErrNoEndpoint or
-// resolvers.ErrEndpointRefused; those two surface as CallNotSent, which tells the
-// caller not to retry. Anything else is read as a transport failure and reported
-// as CallUnreachable, i.e. worth retrying. An implementation that returns a bare
-// error for a refusal therefore has its final answer retried indefinitely.
+// VERDICT — the host is unusable, the host is not allowed, the manifest advertises
+// no endpoint, or it advertises one that must not be used — MUST wrap
+// helpers.ErrInvalidHost, resolvers.ErrNoEndpoint or resolvers.ErrEndpointRefused;
+// those three surface as CallNotSent, which tells the caller not to retry.
+// Anything else is read as a transport failure and reported as CallUnreachable,
+// i.e. worth retrying. An implementation that returns a bare error for a refusal
+// therefore has its final answer retried indefinitely.
 type EndpointResolver interface {
 	ResolveEndpoint(ctx context.Context, host string) (string, error)
 }
@@ -80,11 +81,18 @@ func vetExchangeEndpoint(ctx context.Context, resolver EndpointResolver, exchang
 		// operation, and a DNS blip or a 500 from an otherwise healthy Exchange is
 		// TRANSIENT — reporting it as a refusal would tell a caller "we declined to
 		// send this, do not retry" and permanently drop a usage report over a
-		// momentary outage. Only a verdict is a refusal: the host was not allowed,
-		// the manifest was read and advertises no endpoint at all, or it advertises
-		// one the resolver will not hand back.
+		// momentary outage. Only a verdict is a refusal: the value was not a usable
+		// host, the host was not allowed, the manifest was read and advertises no
+		// endpoint at all, or it advertises one the resolver will not hand back.
+		//
+		// ErrInvalidHost is in the set because the resolver checks the host itself
+		// too, and a value that is not a host will not become one on a later attempt.
+		// This package checks it before resolving, so the SDK's own resolver never
+		// reaches here that way — an injected one can.
 		kind := CallUnreachable
-		if errors.Is(err, resolvers.ErrNoEndpoint) || errors.Is(err, resolvers.ErrEndpointRefused) {
+		if errors.Is(err, helpers.ErrInvalidHost) ||
+			errors.Is(err, resolvers.ErrNoEndpoint) ||
+			errors.Is(err, resolvers.ErrEndpointRefused) {
 			kind = CallNotSent
 		}
 		return "", &CallError{

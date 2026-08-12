@@ -697,7 +697,7 @@ not only to the manifest fetch; and refuse redirects. The per-origin client pool
 follows is bounded and evicts least-recently-used, because which Exchanges appear is
 driven by incoming offers — an open-ended, caller-influenced key space.
 
-## Host anchoring compares hostnames, not origins
+## Host anchoring compares host and port, but not scheme
 
 A value a remote document supplies — an Exchange's advertised endpoint, a WBA
 directory's revocation URL — is checked against the host that served that document
@@ -720,9 +720,12 @@ two agree, which is exactly why the distinction only shows against a document
 worth refusing.
 
 One SDK enforces it. Python and TypeScript ship endpoint resolvers that do not,
-and the predicate they would need does not exist there — their private
-near-namesakes are the WBA variant and compare with the port. Closing that is
-tracked separately.
+and the predicate they would need does not exist there — only private
+near-namesakes in their WBA modules, and neither is a counterpart. TypeScript's
+compares `URL.host`, which folds a default port away as this rule now requires,
+but it is not exported; Python's compares `netloc`, which keeps an explicit `:443`
+verbatim and carries any userinfo along with it. Closing that is tracked
+separately.
 
 The comparison includes the PORT. An earlier version of this rule ignored it, on
 the reasoning that TLS binds hostnames rather than ports, so a service on another
@@ -742,6 +745,20 @@ which is also what keeps it from becoming something it is not: the scheme is sti
 not compared here — that is the guarded transport's decision, in one place, driven
 by one flag — and `http://x` and `https://x` both reduce to no port rather than
 diverging on 80 versus 443.
+
+Scheme-relative folding needs a scheme on both sides, and both ANCHORS in this SDK
+arrive without one: a WBA directory's authority and an `Offer.exchange` host are
+bare `host[:port]` values. Reading those as https — the assumption that lets a bare
+domain be told apart from a path — quietly broke the rule for plaintext
+deployments: an anchor of `a.example:80` kept its port, because 80 is not https's
+default, while the candidate `http://a.example:80` folded the same port away, so
+one authority reached two answers and every plaintext WBA directory that spelled
+`:80` in full stopped anchoring its own revocation URL. A skipped revocation poll
+leaves a revoked key resolving, which is a great deal worse than the spelling it
+was refusing. A side that named no scheme therefore borrows the other's. That
+decides only WHICH port is the default, never whether two different ports are
+equal: an anchor of `x:443` still refuses `http://x:80`, since 443 is not http's
+default.
 
 ## What the manifest fetch does not guarantee, and why that is bounded
 
