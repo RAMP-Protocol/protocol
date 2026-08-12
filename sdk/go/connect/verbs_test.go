@@ -747,3 +747,63 @@ func TestWithSignatureAgent_BrokerClientStampsItToo(t *testing.T) {
 		t.Errorf("Signature-Agent = %q, want %q", gotAgent, dir)
 	}
 }
+
+// WithRequestIDFunc reaches the DELIVERY leg, not only the RPC legs.
+//
+// The two RPC legs correlate through an interceptor; a delivery fetch is a plain
+// GET that never reaches one, so the option had to be threaded to the fetcher
+// separately. A caller that passes one mint reasonably expects one id across every
+// leg of a call, and a delivery edge that mints its own when the header is absent
+// is where the gap surfaces — as two log lines under two ids and nothing joining
+// them.
+func TestFetch_CarriesTheClientsCorrelationID(t *testing.T) {
+	sig := newSigningFixture(t)
+
+	var got string
+	content := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get(helpers.RequestIDHeader)
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("licensed bytes"))
+	}))
+	defer content.Close()
+
+	client := rampconnect.NewClient("http://home.invalid",
+		append(allowLoopback(t),
+			rampconnect.WithSigner(sig.signer),
+			rampconnect.WithAgentKey(sig.pub),
+			rampconnect.WithRequestIDFunc(func() string { return "req-from-the-caller" }),
+		)...)
+
+	if _, err := client.Fetch(context.Background(), content.URL+"/doc?agent_id=tp"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if got != "req-from-the-caller" {
+		t.Errorf("%s = %q, want the client's own mint", helpers.RequestIDHeader, got)
+	}
+}
+
+// And with no mint configured the leg still correlates: the client falls back to
+// the same default source the RPC legs use, so the id is present rather than left
+// for the edge to invent.
+func TestFetch_CorrelatesEvenWithNoMintConfigured(t *testing.T) {
+	sig := newSigningFixture(t)
+
+	var got string
+	content := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get(helpers.RequestIDHeader)
+		_, _ = w.Write([]byte("bytes"))
+	}))
+	defer content.Close()
+
+	client := rampconnect.NewClient("http://home.invalid",
+		append(allowLoopback(t),
+			rampconnect.WithSigner(sig.signer), rampconnect.WithAgentKey(sig.pub),
+		)...)
+
+	if _, err := client.Fetch(context.Background(), content.URL+"/doc?agent_id=tp"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if got == "" {
+		t.Errorf("%s is empty; the client must fall back to the default mint", helpers.RequestIDHeader)
+	}
+}

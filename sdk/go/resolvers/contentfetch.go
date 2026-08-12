@@ -79,6 +79,20 @@ type ContentFetchOptions struct {
 	Timeout time.Duration
 	// MaxBytes caps one fetched body. Defaults to DefaultMaxContentBytes.
 	MaxBytes int64
+	// RequestID mints the value of the X-Request-ID correlation header stamped on
+	// each delivery GET. Nil sends no header.
+	//
+	// It matters on THIS leg in particular. The RPC legs correlate through an
+	// interceptor, which a plain GET never traverses, so without a hook here the
+	// delivery fetch is the one leg carrying no id — and a delivery edge that mints
+	// its own when the header is absent then logs a refusal under an id nothing
+	// else knows. That is the leg where delivery failures are diagnosed.
+	//
+	// A func rather than a string because one fetcher serves many requests, and the
+	// point of the header is that each carries its own id. It is `func() string`
+	// rather than the transport tier's named RequestIDFunc so this package needs no
+	// dependency on that tier for one alias; a named type is assignable here.
+	RequestID func() string
 }
 
 // Content is one fetched resource.
@@ -159,9 +173,10 @@ func (e *FetchError) ReasonOf() string { return failure.ReasonOr(e.Reason, e.Fai
 // ContentFetcher fetches licensed content from a signed delivery URL. Build it
 // with NewContentFetcher; it is safe for concurrent use.
 type ContentFetcher struct {
-	http     *http.Client
-	timeout  time.Duration
-	maxBytes int64
+	http      *http.Client
+	timeout   time.Duration
+	maxBytes  int64
+	requestID func() string
 }
 
 // NewContentFetcher returns a fetcher whose zero-value options are safe defaults:
@@ -184,9 +199,10 @@ func NewContentFetcher(opts ContentFetchOptions) *ContentFetcher {
 		maxBytes = DefaultMaxContentBytes
 	}
 	return &ContentFetcher{
-		http:     &http.Client{Transport: transport, CheckRedirect: refuseContentRedirect},
-		timeout:  timeout,
-		maxBytes: maxBytes,
+		http:      &http.Client{Transport: transport, CheckRedirect: refuseContentRedirect},
+		timeout:   timeout,
+		maxBytes:  maxBytes,
+		requestID: opts.RequestID,
 	}
 }
 
@@ -269,6 +285,13 @@ func (f *ContentFetcher) request(ctx context.Context, op, signedURL string, sign
 			Err: fmt.Errorf("url is not round-trip stable: it re-serializes to %s (query redacted)",
 				helpers.RedactURL(req.URL.String())),
 		}
+	}
+	// Stamped BEFORE the binding, so the covered headers are written last and
+	// nothing here can be mistaken for part of the proof. The correlation id is not
+	// covered by the signature and is not meant to be: it identifies the request in
+	// two sets of logs, it authorises nothing.
+	if f.requestID != nil {
+		req.Header.Set(helpers.RequestIDHeader, f.requestID())
 	}
 	binding, err := signer.SignFetch(ctx, signedURL)
 	if err != nil {

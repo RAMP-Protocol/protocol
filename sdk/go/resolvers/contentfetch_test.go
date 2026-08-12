@@ -370,3 +370,51 @@ func TestContentFetcher_ErrorsCarryNoCredential(t *testing.T) {
 		}
 	}
 }
+
+// The delivery GET carries the correlation header when a mint is supplied.
+//
+// This leg is the one that needs it most and is the one that would silently lose
+// it: the RPC legs correlate through an interceptor, which a plain GET never
+// traverses. A delivery edge that mints its own id when the header is absent then
+// records a refusal under a value nothing on this side can join it to — and the
+// delivery leg is where those refusals are diagnosed.
+func TestContentFetcher_StampsTheCorrelationHeader(t *testing.T) {
+	signer := newPopSigner(t)
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get(helpers.RequestIDHeader)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	f := plainFetcher(t, resolvers.ContentFetchOptions{
+		RequestID: func() string { return "req-abc123" },
+	})
+	if _, err := f.Fetch(context.Background(), srv.URL+"/doc?agent_id=tp", signer); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if got != "req-abc123" {
+		t.Errorf("%s = %q, want the injected mint's value", helpers.RequestIDHeader, got)
+	}
+}
+
+// With no mint the header is ABSENT rather than invented. This tier holds no clock
+// and no random source of its own — every such thing is injected — so a fetcher
+// built without a mint must not conjure an id the caller cannot correlate against.
+func TestContentFetcher_SendsNoCorrelationHeaderWithoutAMint(t *testing.T) {
+	signer := newPopSigner(t)
+	present := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, present = r.Header[http.CanonicalHeaderKey(helpers.RequestIDHeader)]
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	f := plainFetcher(t, resolvers.ContentFetchOptions{})
+	if _, err := f.Fetch(context.Background(), srv.URL+"/doc?agent_id=tp", signer); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if present {
+		t.Errorf("%s was sent with no mint configured", helpers.RequestIDHeader)
+	}
+}

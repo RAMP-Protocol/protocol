@@ -107,6 +107,11 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 			BaseTransport: cfg.guardedBase,
 			Timeout:       cfg.fetchTimeout,
 			MaxBytes:      cfg.fetchMaxByte,
+			// The same mint the RPC legs read, so WithRequestIDFunc reaches all
+			// three. Without it the delivery fetch is the one leg with no id, and
+			// an edge that mints its own logs a refusal under a value nothing here
+			// can join it to.
+			RequestID: requestIDMint(cfg.requestID),
 		}),
 	}
 }

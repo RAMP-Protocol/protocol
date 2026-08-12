@@ -52,6 +52,25 @@ transport-failure bucket and retry something that will never succeed; add the ne
 alongside. And a Broker that resolves endpoints through this package inherits the rule for the
 paths that use it. `gen/` and the website mirror are regenerated; proto comments only.
 
+**Go SDK: the delivery fetch correlates, and the offer-key cache is bounded (additive, no wire
+change).** `resolvers.ContentFetchOptions` gained a `RequestID` hook, and `connect.NewClient`
+feeds it the same mint the RPC legs read — so `WithRequestIDFunc` now reaches all three legs and
+a delivery GET carries `X-Request-ID`. It did not before, and could not: the RPC legs correlate
+through a Connect interceptor, which a plain GET never traverses, and there was no seam to add
+one. **This changes what arrives at a delivery edge.** An edge that mints its own id when the
+header is absent will now see the caller's instead, which is the point — a refused delivery used
+to produce two log records under two ids with nothing joining them, on the one leg where
+delivery failures are diagnosed. A fetcher built directly with no `RequestID` still sends no
+header: this tier mints nothing of its own.
+
+`resolvers.CachedOfferKeyResolver`'s per-domain cache now evicts least-recently-used at a fixed
+cap, like the endpoint cache and the per-origin client pool. Its key is a domain off
+`Offer.exchange`, so which entries appear is driven by incoming offers, and an entry's expiry is
+a freshness check rather than a removal — a stale entry held its slot indefinitely. Reaching it
+needed a resolvable host serving a valid directory per domain, so the case was narrow rather
+than open, but two sibling structures over the same key space were already bounded and this one
+was not.
+
 **Go SDK: the Connect client covers the agent verb set, and its signing knobs are reachable
 (additive, no wire change).** `connect.Client` gained `ReportUsage`, `Dispute` and `Fetch`, and
 `connect.NewBrokerClient` gained `Resolve` — the client previously exposed `Discover` and
