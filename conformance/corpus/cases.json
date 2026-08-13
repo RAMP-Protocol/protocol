@@ -152,19 +152,105 @@
     }
   },
   {
+    "id": "AuthorizedExchange/domain/missing_empty",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#0",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "two words",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#2",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "!!bad!!",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#3",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "\u0000ctl\u0000",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#4",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": " ",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#5",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "-5",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/too_long",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "domain": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
     "id": "AuthorizedExchange/relationship/not_in",
     "message": "AuthorizedExchange",
     "valid": false,
     "rules": [
       "enum.not_in"
     ],
-    "json": {}
+    "json": {
+      "domain": "x"
+    }
   },
   {
     "id": "AuthorizedExchange/valid",
     "message": "AuthorizedExchange",
     "valid": true,
     "json": {
+      "domain": "x",
       "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
     }
   },
@@ -3215,13 +3301,59 @@
     }
   },
   {
+    "id": "RequestConstraints/exchanges/item_pattern",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "two words"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_too_long",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
     "id": "RequestConstraints/max_unit_cost/empty_ok",
     "message": "RequestConstraints",
     "valid": true,
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": ""
+      "max_unit_cost": "",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3233,8 +3365,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "two words"
+      "max_unit_cost": "two words",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3246,8 +3384,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "1.2.3"
+      "max_unit_cost": "1.2.3",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3259,8 +3403,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "!!bad!!"
+      "max_unit_cost": "!!bad!!",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3272,8 +3422,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "\u0000ctl\u0000"
+      "max_unit_cost": "\u0000ctl\u0000",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3285,8 +3441,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": " "
+      "max_unit_cost": " ",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3298,8 +3460,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "-5"
+      "max_unit_cost": "-5",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3311,8 +3479,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "NaN"
+      "max_unit_cost": "NaN",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3324,8 +3498,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "Infinity"
+      "max_unit_cost": "Infinity",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3337,8 +3517,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "1E3"
+      "max_unit_cost": "1E3",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -3351,8 +3537,54 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "max_unit_cost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_pattern",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "two words"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_too_long",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
     }
   },
   {
@@ -3361,8 +3593,118 @@
     "valid": true,
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "0"
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "Requester/domain/missing_empty",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#0",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "two words",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#2",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "!!bad!!",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#3",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "\u0000ctl\u0000",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#4",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": " ",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#5",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "-5",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/too_long",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "domain": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
     }
   },
   {
@@ -3373,6 +3715,7 @@
       "repeated.max_items"
     ],
     "json": {
+      "domain": "x",
       "scopes": [
         "x",
         "x",
@@ -3451,6 +3794,7 @@
       "enum.not_in"
     ],
     "json": {
+      "domain": "x",
       "scopes": [
         "x"
       ]
@@ -3461,6 +3805,7 @@
     "message": "Requester",
     "valid": true,
     "json": {
+      "domain": "x",
       "scopes": [
         "x"
       ],
@@ -3898,6 +4243,89 @@
       "uris": [
         "x"
       ]
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/missing_empty",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#0",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#2",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#3",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#4",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " "
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#5",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/too_long",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "ResourceResponse/valid",
+    "message": "ResourceResponse",
+    "valid": true,
+    "json": {
+      "exchange": "x"
     }
   },
   {

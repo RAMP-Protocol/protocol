@@ -314,8 +314,15 @@ message ResourceResponse {
   // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
-  // Canonical domain of the responding Exchange.
-  string exchange = 3;
+  // Canonical domain of the responding Exchange, in the shape "Request
+  // recipient" defines in the file header. The response counterpart of the
+  // recipient field on the request: it names who answered.
+  string exchange = 3 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+    }
+  ];
 
   // Flat list of offers (for single-URI queries).
   repeated Offer offers = 4;
@@ -1553,9 +1560,18 @@ message Requester {
   // Unique requester identifier (e.g., "agent-research-bot-001").
   string id = 1;
 
-  // Domain the requester belongs to — used for public key lookup.
-  // Keys published at {domain}/.well-known/ramp.json (WellKnownManifest, role=ROLE_AGENT).
-  string domain = 2;
+  // Domain the requester belongs to — used for public key lookup, so the value
+  // is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,
+  // WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape
+  // "Request recipient" defines in the file header, for the same structural
+  // reason: a scheme, path or query smuggled in here would choose what gets
+  // fetched, not merely from where.
+  string domain = 2 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+    }
+  ];
 
   // What kind of entity is making this request.
   RequesterType type = 3 [(buf.validate.field).enum = {not_in: [0]}];
@@ -2502,8 +2518,16 @@ message DiscoveryRequest {
 
 // RequestConstraints — Budget and preference constraints.
 message RequestConstraints {
-  // Authorized Exchange domains. Broker queries only these.
-  repeated string exchanges = 1;
+  // Authorized Exchange domains, in the shape "Request recipient" defines in the
+  // file header. Broker queries only these. This is a FILTER over third parties,
+  // not an address — the recipient of the request carrying it is a separate
+  // question.
+  repeated string exchanges = 1 [
+    (buf.validate.field).repeated.items.string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+    }
+  ];
 
   // Maximum price the agent is willing to pay.
   optional Cost max_price = 2;
@@ -2520,7 +2544,12 @@ message RequestConstraints {
   // Exchanges the agent has existing relationships with (subscriptions,
   // contracts). The Broker SHOULD prefer these when resource is
   // available — subscription resource has zero marginal cost.
-  repeated string preferred_exchanges = 6;
+  repeated string preferred_exchanges = 6 [
+    (buf.validate.field).repeated.items.string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+    }
+  ];
 
   // Budget scope identifier for per-period tracking.
   // E.g. "user:u-12345" for per-user budgets, "team:eng" for per-team.
@@ -2873,8 +2902,14 @@ message CatalogContributor {
 
 // AuthorizedExchange — A Exchange authorized to sell this provider's resources.
 message AuthorizedExchange {
-  // Canonical domain of the Exchange.
-  string domain = 1;
+  // Canonical domain of the Exchange, in the shape "Request recipient" defines
+  // in the file header.
+  string domain = 1 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+    }
+  ];
 
   // RAMP ExchangeService endpoint URL.
   string endpoint = 2;

@@ -41,6 +41,21 @@ concatenated into a URL, not to check that a name looks like a DNS record. A str
 demanding a dotted name with an alphabetic suffix would reject single-label service hosts
 such as `exchange:8081`, which real deployments use.
 
+The same constraint is applied in one pass to the domain-carrying fields that until now
+accepted any string at all: `ResourceResponse.exchange`, `RequestConstraints.exchanges`,
+`RequestConstraints.preferred_exchanges`, `Requester.domain` and
+`AuthorizedExchange.domain`. Tightening them is breaking for the same reason the
+`UsageReport` promotion is — a value accepted today becomes a rejection — and it is done
+now because one value space with two contracts is the state that produces the bugs.
+`Requester.domain` earns it most: a verifier concatenates that value into
+`{domain}/.well-known/ramp.json` and fetches the result, so a smuggled path or query would
+choose WHAT gets fetched, not merely from where. A conformance guard walks the descriptor
+for every field carrying the shared pattern and asserts each refuses a scheme prefix, a
+path or query suffix, userinfo, a malformed port, a trailing root dot and an empty label —
+shapes the corpus generator cannot produce, because its bad-string table is shared with the
+money and token fields and widening it there would add a mutant to every pattern-ruled
+field in the contract.
+
 **`Offer.exchange` is presence-enforced (breaking, pre-1.0).** It was a plain string with no
 rule, so an empty value passed. It is the execute-routing target, the value a relaying
 Broker groups a mixed batch by, and — because `TransactionRequest` has no top-level

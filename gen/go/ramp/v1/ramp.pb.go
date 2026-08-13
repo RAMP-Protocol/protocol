@@ -2129,7 +2129,9 @@ type ResourceResponse struct {
 	// RAMP protocol version — "1.0". Stamped by the sender from a single
 	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// Canonical domain of the responding Exchange.
+	// Canonical domain of the responding Exchange, in the shape "Request
+	// recipient" defines in the file header. The response counterpart of the
+	// recipient field on the request: it names who answered.
 	Exchange string `protobuf:"bytes,3,opt,name=exchange,proto3" json:"exchange,omitempty"`
 	// Flat list of offers (for single-URI queries).
 	Offers []*Offer `protobuf:"bytes,4,rep,name=offers,proto3" json:"offers,omitempty"`
@@ -4078,8 +4080,12 @@ type Requester struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique requester identifier (e.g., "agent-research-bot-001").
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Domain the requester belongs to — used for public key lookup.
-	// Keys published at {domain}/.well-known/ramp.json (WellKnownManifest, role=ROLE_AGENT).
+	// Domain the requester belongs to — used for public key lookup, so the value
+	// is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,
+	// WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape
+	// "Request recipient" defines in the file header, for the same structural
+	// reason: a scheme, path or query smuggled in here would choose what gets
+	// fetched, not merely from where.
 	Domain string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	// What kind of entity is making this request.
 	Type RequesterType `protobuf:"varint,3,opt,name=type,proto3,enum=ramp.v1.RequesterType" json:"type,omitempty"`
@@ -6462,7 +6468,10 @@ func (x *DiscoveryRequest) GetExtCritical() []string {
 // RequestConstraints — Budget and preference constraints.
 type RequestConstraints struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Authorized Exchange domains. Broker queries only these.
+	// Authorized Exchange domains, in the shape "Request recipient" defines in the
+	// file header. Broker queries only these. This is a FILTER over third parties,
+	// not an address — the recipient of the request carrying it is a separate
+	// question.
 	Exchanges []string `protobuf:"bytes,1,rep,name=exchanges,proto3" json:"exchanges,omitempty"`
 	// Maximum price the agent is willing to pay.
 	MaxPrice *Cost `protobuf:"bytes,2,opt,name=max_price,json=maxPrice,proto3,oneof" json:"max_price,omitempty"`
@@ -7336,7 +7345,8 @@ func (x *CatalogContributor) GetRelationship() string {
 // AuthorizedExchange — A Exchange authorized to sell this provider's resources.
 type AuthorizedExchange struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Canonical domain of the Exchange.
+	// Canonical domain of the Exchange, in the shape "Request recipient" defines
+	// in the file header.
 	Domain string `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
 	// RAMP ExchangeService endpoint URL.
 	Endpoint string `protobuf:"bytes,2,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
@@ -9253,10 +9263,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	" \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\v\n" +
-	"\t_deadline\"\xb9\x02\n" +
+	"\t_deadline\"\xa7\x03\n" +
 	"\x10ResourceResponse\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1a\n" +
-	"\bexchange\x18\x03 \x01(\tR\bexchange\x12&\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x87\x01\n" +
+	"\bexchange\x18\x03 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12&\n" +
 	"\x06offers\x18\x04 \x03(\v2\x0e.ramp.v1.OfferR\x06offers\x126\n" +
 	"\foffer_groups\x18\x05 \x03(\v2\x13.ramp.v1.OfferGroupR\vofferGroups\x12:\n" +
 	"\n" +
@@ -9438,10 +9448,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
 	"\x05_unitB\v\n" +
-	"\t_metering\"\xc4\x02\n" +
+	"\t_metering\"\xb2\x03\n" +
 	"\tRequester\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
-	"\x06domain\x18\x02 \x01(\tR\x06domain\x124\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x83\x01\n" +
+	"\x06domain\x18\x02 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\x06domain\x124\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x16.ramp.v1.RequesterTypeB\b\xbaH\x05\x82\x01\x02 \x00R\x04type\x12\x17\n" +
 	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\x06 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x128\n" +
@@ -9662,14 +9672,14 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0e\n" +
 	"\f_constraintsB\b\n" +
 	"\x06_queryB\x11\n" +
-	"\x0f_search_filters\"\xec\x05\n" +
-	"\x12RequestConstraints\x12\x1c\n" +
-	"\texchanges\x18\x01 \x03(\tR\texchanges\x12/\n" +
+	"\x0f_search_filters\"\xd2\a\n" +
+	"\x12RequestConstraints\x12\x8e\x01\n" +
+	"\texchanges\x18\x01 \x03(\tBp\xbaHm\x92\x01j\"hrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\texchanges\x12/\n" +
 	"\tmax_price\x18\x02 \x01(\v2\r.ramp.v1.CostH\x00R\bmaxPrice\x88\x01\x01\x12I\n" +
 	"\rmax_unit_cost\x18\x03 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x01R\vmaxUnitCost\x88\x01\x01\x12H\n" +
 	"\x13delivery_preference\x18\x04 \x03(\x0e2\x17.ramp.v1.DeliveryMethodR\x12deliveryPreference\x120\n" +
-	"\x11reporting_capable\x18\x05 \x01(\bH\x02R\x10reportingCapable\x88\x01\x01\x12/\n" +
-	"\x13preferred_exchanges\x18\x06 \x03(\tR\x12preferredExchanges\x12&\n" +
+	"\x11reporting_capable\x18\x05 \x01(\bH\x02R\x10reportingCapable\x88\x01\x01\x12\xa1\x01\n" +
+	"\x13preferred_exchanges\x18\x06 \x03(\tBp\xbaHm\x92\x01j\"hrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\x12preferredExchanges\x12&\n" +
 	"\fbudget_scope\x18\a \x01(\tH\x03R\vbudgetScope\x88\x01\x01\x127\n" +
 	"\rperiod_budget\x18\b \x01(\v2\r.ramp.v1.CostH\x04R\fperiodBudget\x88\x01\x01\x12C\n" +
 	"\rbudget_period\x18\t \x01(\v2\x19.google.protobuf.DurationH\x05R\fbudgetPeriod\x88\x01\x01\x12@\n" +
@@ -9760,9 +9770,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\arevoked\x18\x02 \x03(\tR\arevoked\"P\n" +
 	"\x12CatalogContributor\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\"\n" +
-	"\frelationship\x18\x02 \x01(\tR\frelationship\"\xe3\x01\n" +
-	"\x12AuthorizedExchange\x12\x16\n" +
-	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x1a\n" +
+	"\frelationship\x18\x02 \x01(\tR\frelationship\"\xd1\x02\n" +
+	"\x12AuthorizedExchange\x12\x83\x01\n" +
+	"\x06domain\x18\x01 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\x06domain\x12\x1a\n" +
 	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12K\n" +
 	"\frelationship\x18\x03 \x01(\x0e2\x1d.ramp.v1.ProviderRelationshipB\b\xbaH\x05\x82\x01\x02 \x00R\frelationship\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +

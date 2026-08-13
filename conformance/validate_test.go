@@ -165,10 +165,10 @@ func licensingCases() []validationCase {
 		// rules are identical in shape to the ones above; covering them here keeps
 		// TestCELRuleCoverage's completeness assertion green for the whole proto,
 		// not just the licensing subtree.
-		{"authorized_exchange relationship set ok", &rampv1.AuthorizedExchange{Relationship: rampv1.ProviderRelationship_PROVIDER_RELATIONSHIP_DIRECT}, true, ""},
-		{"authorized_exchange relationship unspecified rejected", &rampv1.AuthorizedExchange{}, false, "enum.not_in"},
-		{"requester type set ok", &rampv1.Requester{Type: rampv1.RequesterType_REQUESTER_TYPE_AGENT}, true, ""},
-		{"requester type unspecified rejected", &rampv1.Requester{}, false, "enum.not_in"},
+		{"authorized_exchange relationship set ok", &rampv1.AuthorizedExchange{Domain: exampleExchange, Relationship: rampv1.ProviderRelationship_PROVIDER_RELATIONSHIP_DIRECT}, true, ""},
+		{"authorized_exchange relationship unspecified rejected", &rampv1.AuthorizedExchange{Domain: exampleExchange}, false, "enum.not_in"},
+		{"requester type set ok", &rampv1.Requester{Domain: "agent.example", Type: rampv1.RequesterType_REQUESTER_TYPE_AGENT}, true, ""},
+		{"requester type unspecified rejected", &rampv1.Requester{Domain: "agent.example"}, false, "enum.not_in"},
 		{"resource_identity mutability set ok", &rampv1.ResourceIdentity{ResourceMutability: rampv1.ResourceMutability_RESOURCE_MUTABILITY_STATIC}, true, ""},
 		{"resource_identity mutability unspecified rejected", &rampv1.ResourceIdentity{}, false, "enum.not_in"},
 		{"well_known_manifest role set ok", &rampv1.WellKnownManifest{Role: rampv1.Role_ROLE_AGENT}, true, ""},

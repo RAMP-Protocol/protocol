@@ -803,8 +803,17 @@ class RequestConstraints(WireModel):
     delivery_preference: list[DeliveryMethod] | None = Field(
         None, description='Preferred delivery methods, in order of preference.'
     )
-    exchanges: list[str] | None = Field(
-        None, description='Authorized Exchange domains. Broker queries only these.'
+    exchanges: (
+        list[
+            constr(
+                pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$',
+                max_length=260,
+            )
+        ]
+        | None
+    ) = Field(
+        None,
+        description='Authorized Exchange domains, in the shape "Request recipient" defines in the\n file header. Broker queries only these. This is a FILTER over third parties,\n not an address — the recipient of the request carrying it is a separate\n question.',
     )
     max_data_age: str | None = Field(
         None,
@@ -827,7 +836,15 @@ class RequestConstraints(WireModel):
         None,
         description='Per-period budget limit. The Broker tracks spend against this\n for the budget_scope. Transactions that would exceed are denied.',
     )
-    preferred_exchanges: list[str] | None = Field(
+    preferred_exchanges: (
+        list[
+            constr(
+                pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$',
+                max_length=260,
+            )
+        ]
+        | None
+    ) = Field(
         None,
         description='Exchanges the agent has existing relationships with (subscriptions,\n contracts). The Broker SHOULD prefer these when resource is\n available — subscription resource has zero marginal cost.',
     )
@@ -1145,7 +1162,13 @@ class AttributionDetail(WireModel):
 
 
 class AuthorizedExchange(WireModel):
-    domain: str | None = Field('', description='Canonical domain of the Exchange.')
+    domain: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='Canonical domain of the Exchange, in the shape "Request recipient" defines\n in the file header.',
+    )
     endpoint: str | None = Field('', description='RAMP ExchangeService endpoint URL.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1293,9 +1316,12 @@ class Requester(WireModel):
         None,
         description='Optional delegation — present when the requester acts on behalf of\n another entity (user, organization, upstream agent).',
     )
-    domain: str | None = Field(
-        '',
-        description='Domain the requester belongs to — used for public key lookup.\n Keys published at {domain}/.well-known/ramp.json (WellKnownManifest, role=ROLE_AGENT).',
+    domain: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='Domain the requester belongs to — used for public key lookup, so the value\n is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,\n WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape\n "Request recipient" defines in the file header, for the same structural\n reason: a scheme, path or query smuggled in here would choose what gets\n fetched, not merely from where.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1914,8 +1940,12 @@ class ResourceEntry(WireModel):
 
 
 class ResourceResponse(WireModel):
-    exchange: str | None = Field(
-        '', description='Canonical domain of the responding Exchange.'
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='Canonical domain of the responding Exchange, in the shape "Request\n recipient" defines in the file header. The response counterpart of the\n recipient field on the request: it names who answered.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
