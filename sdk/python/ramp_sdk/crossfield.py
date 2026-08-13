@@ -123,12 +123,28 @@ def _restriction_rules(o: dict[str, Any]) -> list[str]:
     return []
 
 
+
+def _well_known_manifest_rules(o: dict[str, Any]) -> list[str]:
+    """WellKnownManifest.terms_digest_requires_terms_uri.
+
+    ``this.terms_digest == '' || this.terms_uri != ''``. A digest pins the
+    document at ``terms_uri``, so publishing one without the address it pins
+    leaves nothing to check the bytes against. Mirror of the License rule above.
+    """
+    terms_digest = _str(_field(o, "terms_digest"))
+    terms_uri = _str(_field(o, "terms_uri"))
+    if terms_digest != "" and terms_uri == "":
+        return ["well_known_manifest.terms_digest_requires_terms_uri"]
+    return []
+
+
 _RULES_BY_MESSAGE: dict[str, Callable[[dict[str, Any]], list[str]]] = {
     "License": _license_rules,
     "LicenseTerm": _license_term_rules,
     "Obligation": _obligation_rules,
     "Pricing": _pricing_rules,
     "Restriction": _restriction_rules,
+    "WellKnownManifest": _well_known_manifest_rules,
 }
 
 

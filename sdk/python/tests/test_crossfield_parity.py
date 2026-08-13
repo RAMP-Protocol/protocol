@@ -41,12 +41,19 @@ from ramp_sdk import cross_field_rule_ids  # type: ignore[import-not-found]
 
 _CASES = load_json(CONFORMANCE_CORPUS / "crossfield.json")
 
-_EXPECTED_MESSAGES = {"License", "LicenseTerm", "Obligation", "Pricing", "Restriction"}
+_EXPECTED_MESSAGES = {
+    "License",
+    "LicenseTerm",
+    "Obligation",
+    "Pricing",
+    "Restriction",
+    "WellKnownManifest",
+}
 
 
 def test_crossfield_corpus_shape() -> None:
-    # >=7 mutants across exactly the 5 cross-field messages.
-    assert len(_CASES) >= 7
+    # >=8 mutants across exactly the 6 cross-field messages.
+    assert len(_CASES) >= 8
     assert {c["message"] for c in _CASES} == _EXPECTED_MESSAGES
 
 

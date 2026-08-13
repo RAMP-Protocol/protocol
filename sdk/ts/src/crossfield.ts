@@ -153,12 +153,28 @@ function restrictionRules(o: Obj): string[] {
   return [];
 }
 
+/**
+ * WellKnownManifest.terms_digest_requires_terms_uri:
+ * `this.terms_digest == '' || this.terms_uri != ''`. A digest pins the document
+ * at terms_uri, so publishing one without the address it pins leaves nothing to
+ * check the bytes against. Mirror of the License rule above.
+ */
+function wellKnownManifestRules(o: Obj): string[] {
+  const termsDigest = str(field(o, "terms_digest"));
+  const termsUri = str(field(o, "terms_uri"));
+  if (termsDigest !== "" && termsUri === "") {
+    return ["well_known_manifest.terms_digest_requires_terms_uri"];
+  }
+  return [];
+}
+
 const RULES_BY_MESSAGE: Record<string, (o: Obj) => string[]> = {
   License: licenseRules,
   LicenseTerm: licenseTermRules,
   Obligation: obligationRules,
   Pricing: pricingRules,
   Restriction: restrictionRules,
+  WellKnownManifest: wellKnownManifestRules,
 };
 
 /**

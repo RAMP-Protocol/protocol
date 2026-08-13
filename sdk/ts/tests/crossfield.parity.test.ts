@@ -50,11 +50,18 @@ const check = crossFieldRuleIds as CrossFieldRuleIds;
 describe("sdk/ts cross-field refinements reject the Go crossfield mutants with matching rule-ids", () => {
   const cases = crossfield as CorpusCase[];
 
-  it("crossfield corpus has the expected shape (>=7 mutants / 5 messages)", () => {
-    expect(cases.length).toBeGreaterThanOrEqual(7);
+  it("crossfield corpus has the expected shape (>=8 mutants / 6 messages)", () => {
+    expect(cases.length).toBeGreaterThanOrEqual(8);
     const messages = new Set(cases.map((c) => c.message));
     expect(messages).toEqual(
-      new Set(["License", "LicenseTerm", "Obligation", "Pricing", "Restriction"]),
+      new Set([
+        "License",
+        "LicenseTerm",
+        "Obligation",
+        "Pricing",
+        "Restriction",
+        "WellKnownManifest",
+      ]),
     );
   });
 
