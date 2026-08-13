@@ -1,25 +1,30 @@
-// RAMP Admin v1 — operator-plane configuration service.
+// RAMP Admin v1 — operator-plane configuration and forensics service.
 //
-// AdminService carries Exchange operator overrides: the tenant fee rate and
-// the tenant reporting policy. It is deliberately a separate package and
-// service from ramp.v1.ExchangeService — the operator/config plane is not
-// part of the agent hot-path contract, and keeping it out of ramp.v1 keeps
-// the agent-facing surface unchanged.
+// AdminService carries Exchange operator overrides — the tenant fee rate and
+// the tenant reporting policy — plus one forensic read: the append-once
+// evidence row the Exchange persists for every executed transaction. It is
+// deliberately a separate package and service from ramp.v1.ExchangeService —
+// the operator plane is not part of the agent hot-path contract, and keeping
+// it out of ramp.v1 keeps the agent-facing surface unchanged.
 //
 // Trust model: deployments MUST NOT expose AdminService on the public
 // agent-facing listener. Reachability is restricted at the network layer
 // (an internal listener plus a source allowlist); there is no per-operator
 // identity inside the service in v1. Because the admin plane carries no
 // RFC 9421 request signing, there is no verified signer to deduplicate
-// against — and both RPCs are full-replace overwrites, so they are naturally
-// idempotent and carry no idempotency_key.
+// against — and no RPC here needs one: the setters are full-replace
+// overwrites and the evidence read is side-effect-free, so every RPC is
+// naturally idempotent and carries no idempotency_key.
 //
-// Message shape: each RPC takes a thin {ver, <payload>} envelope wrapping a
+// Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is
 // stated ONCE; the read-back response cannot drift from the write. Responses
 // echo the payload as persisted, giving operator tooling a read-back
-// confirmation of the applied values.
+// confirmation of the applied values. The evidence read does not share this
+// shape — its request carries only a transaction id, and its response wraps
+// read-only payloads that exist on no write path (TransactionEvidence,
+// TransactionState, ReportingObligationState).
 //
 // Validation: every constraint here is a FIELD-level protovalidate rule so it
 // flows into the generated Pydantic/Zod types. Cross-field (message-level CEL)
@@ -45,6 +50,7 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -56,6 +62,69 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// ObligationState — lifecycle of a reporting obligation, exactly the
+// vocabulary the Exchange persists. Defined here rather than imported from
+// ramp.v1 (which carries no such enum — the agent plane states reporting
+// REQUIREMENTS, never their server-side lifecycle) so the admin package
+// stays self-contained.
+type ObligationState int32
+
+const (
+	ObligationState_OBLIGATION_STATE_UNSPECIFIED ObligationState = 0 // never sent — the server always maps a persisted state; rejected (not_in:[0]) on ReportingObligationState.state
+	ObligationState_OBLIGATION_STATE_PENDING     ObligationState = 1 // minted; no usage report received yet
+	ObligationState_OBLIGATION_STATE_RECEIVED    ObligationState = 2 // a usage report arrived and validated
+	ObligationState_OBLIGATION_STATE_ACCEPTED    ObligationState = 3 // the report was accepted as settled
+	ObligationState_OBLIGATION_STATE_CHALLENGED  ObligationState = 4 // the report was challenged and awaits resolution
+	ObligationState_OBLIGATION_STATE_EXPIRED     ObligationState = 5 // the reporting deadline passed with no report
+)
+
+// Enum value maps for ObligationState.
+var (
+	ObligationState_name = map[int32]string{
+		0: "OBLIGATION_STATE_UNSPECIFIED",
+		1: "OBLIGATION_STATE_PENDING",
+		2: "OBLIGATION_STATE_RECEIVED",
+		3: "OBLIGATION_STATE_ACCEPTED",
+		4: "OBLIGATION_STATE_CHALLENGED",
+		5: "OBLIGATION_STATE_EXPIRED",
+	}
+	ObligationState_value = map[string]int32{
+		"OBLIGATION_STATE_UNSPECIFIED": 0,
+		"OBLIGATION_STATE_PENDING":     1,
+		"OBLIGATION_STATE_RECEIVED":    2,
+		"OBLIGATION_STATE_ACCEPTED":    3,
+		"OBLIGATION_STATE_CHALLENGED":  4,
+		"OBLIGATION_STATE_EXPIRED":     5,
+	}
+)
+
+func (x ObligationState) Enum() *ObligationState {
+	p := new(ObligationState)
+	*p = x
+	return p
+}
+
+func (x ObligationState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObligationState) Descriptor() protoreflect.EnumDescriptor {
+	return file_ramp_admin_v1_admin_proto_enumTypes[0].Descriptor()
+}
+
+func (ObligationState) Type() protoreflect.EnumType {
+	return &file_ramp_admin_v1_admin_proto_enumTypes[0]
+}
+
+func (x ObligationState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObligationState.Descriptor instead.
+func (ObligationState) EnumDescriptor() ([]byte, []int) {
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{0}
+}
 
 // TenantFeeRate is the fee-rate payload shared by SetTenantFeeRate's request
 // and response. The field rules live here once, so the write and the echoed
@@ -431,11 +500,578 @@ func (x *SetReportingPolicyResponse) GetPolicy() *ReportingPolicy {
 	return nil
 }
 
+// TransactionEvidence — one append-once evidence row, exactly as the Exchange
+// persisted it for a successfully executed transaction. The row is written
+// only after both signatures verified, and a denied execute writes nothing,
+// so the row's existence is itself the success statement.
+//
+// The row re-verifies OFFLINE, from this message alone — no agent registry,
+// no Exchange key file, no live service:
+//   - the Exchange signed this exact offer:
+//     ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)
+//   - the agent accepted this exact offer:
+//     ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)
+//
+// Both verifying public keys ride along (not key ids) so re-verification
+// survives key rotation, which removes retired ids from the published JWKS.
+// The *_canonical_bytes are the verbatim RFC 8785 JCS bytes each signature
+// was computed over, stored as-signed and never re-derived: protobuf-binary
+// is non-canonical by protocol rule, and a stored-inputs-only row would stop
+// re-verifying the day the canonicalization recipe moved.
+//
+// SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
+// DELIVERED. transaction_id, signed_url_full, request_id and created_at are
+// this Exchange's own assertions about the delivery, outside both signatures;
+// the delivery witness is the edge delivery log, reconciled separately.
+type TransactionEvidence struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The evidenced transaction (Exchange-minted transaction identity).
+	TransactionId string `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	// The tenant the transaction executed under. The admin plane is
+	// deployment-scoped (cross-tenant), so the row states its tenant.
+	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// The signed Offer.offer_id (which IS the catalog resource_id). Duplicated
+	// from the offer JSON so the row reads standalone, without parsing it.
+	OfferId string `protobuf:"bytes,3,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
+	// The signed offer as a raw JSON string, for query and human audit.
+	// Deliberately NOT a Struct: a Struct re-normalizes, and the canonical
+	// bytes below remain the arbiter of what was signed.
+	OfferJson string `protobuf:"bytes,4,opt,name=offer_json,json=offerJson,proto3" json:"offer_json,omitempty"`
+	// Verbatim JCS bytes the Exchange's signature was computed over (the offer
+	// with its signature fields cleared).
+	OfferCanonicalBytes []byte `protobuf:"bytes,5,opt,name=offer_canonical_bytes,json=offerCanonicalBytes,proto3" json:"offer_canonical_bytes,omitempty"`
+	// The Exchange's Ed25519 signature over offer_canonical_bytes, hex-encoded
+	// in the verbatim wire form (either case — hex decoding accepts both, and a
+	// dispute should read the same characters a request log holds). Named after
+	// ramp.v1.AgentAcceptancePayload.offer_sig: it is the same value, the one
+	// the agent's acceptance binds to.
+	OfferSig string `protobuf:"bytes,6,opt,name=offer_sig,json=offerSig,proto3" json:"offer_sig,omitempty"`
+	// Signing-algorithm label, server-derived from the Exchange's own verify
+	// path — never echoed from the wire. The canonical payload clears the wire
+	// labels before signing, so an echoed label would sit outside signature
+	// coverage and could claim anything under an otherwise valid signature.
+	OfferSigAlgorithm string `protobuf:"bytes,7,opt,name=offer_sig_algorithm,json=offerSigAlgorithm,proto3" json:"offer_sig_algorithm,omitempty"`
+	// The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.
+	ExchangeSigningPublicKey []byte `protobuf:"bytes,8,opt,name=exchange_signing_public_key,json=exchangeSigningPublicKey,proto3" json:"exchange_signing_public_key,omitempty"`
+	// The agent's Ed25519 signature over agent_acceptance_canonical_bytes,
+	// hex-encoded verbatim as it arrived on the wire (either case).
+	AgentAcceptanceSignature string `protobuf:"bytes,9,opt,name=agent_acceptance_signature,json=agentAcceptanceSignature,proto3" json:"agent_acceptance_signature,omitempty"`
+	// Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.
+	AgentAcceptanceCanonicalBytes []byte `protobuf:"bytes,10,opt,name=agent_acceptance_canonical_bytes,json=agentAcceptanceCanonicalBytes,proto3" json:"agent_acceptance_canonical_bytes,omitempty"`
+	// Signing-algorithm label, server-derived (see offer_sig_algorithm).
+	AgentAcceptanceSignatureAlgorithm string `protobuf:"bytes,11,opt,name=agent_acceptance_signature_algorithm,json=agentAcceptanceSignatureAlgorithm,proto3" json:"agent_acceptance_signature_algorithm,omitempty"`
+	// The acceptance payload's remaining inputs (offer_sig above is the
+	// fourth), stored so the signed bytes can be independently rebuilt and
+	// audited rather than merely trusted.
+	//
+	// requester_id is the signed Requester.id VERBATIM — the bytes under the
+	// agent's signature, never rewritten. It NAMES the same agent as the
+	// Exchange's canonical agent identity but is not byte-equal to it: a signer
+	// may spell its directory any way it likes (the deployed identity service
+	// signs "scheme://host"), so the forensic join goes through directory-host
+	// normalization, not plain equality. No wire rule: the agent plane does not
+	// constrain Requester.id, and this row states what was signed.
+	RequesterId string `protobuf:"bytes,12,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	// The signed Requester.domain, verbatim. Bounded at the RFC 1035 maximum
+	// DNS name length in BYTES — the one caller-influenced value here that
+	// nothing upstream constrains.
+	RequesterDomain string `protobuf:"bytes,13,opt,name=requester_domain,json=requesterDomain,proto3" json:"requester_domain,omitempty"`
+	// The REQUEST-level idempotency key the acceptance signs
+	// (TransactionRequest.idempotency_key, same rule) — NOT the derived
+	// per-item key that TransactionState.idempotency_key carries.
+	RequestIdempotencyKey string `protobuf:"bytes,14,opt,name=request_idempotency_key,json=requestIdempotencyKey,proto3" json:"request_idempotency_key,omitempty"`
+	// The registry-pinned agent verifying key (raw 32-byte Ed25519) the
+	// acceptance verified against.
+	AgentPublicKey []byte `protobuf:"bytes,15,opt,name=agent_public_key,json=agentPublicKey,proto3" json:"agent_public_key,omitempty"`
+	// The anchored well-known directory agent_public_key was pinned from. The
+	// registry overwrites keys in place on rotation and keeps no history, so
+	// this — plus created_at — attests where and when this Exchange obtained
+	// the key. Empty when the agent carries no directory anchor: an append-once
+	// row states a value for every column, so ” is a stated fact, not a gap.
+	AgentDiscoveryUrl string `protobuf:"bytes,16,opt,name=agent_discovery_url,json=agentDiscoveryUrl,proto3" json:"agent_discovery_url,omitempty"`
+	// The full signed retrieval URL as delivered. sha256(signed_url_full) is
+	// the join key against the edge delivery log's url_hash.
+	SignedUrlFull string `protobuf:"bytes,17,opt,name=signed_url_full,json=signedUrlFull,proto3" json:"signed_url_full,omitempty"`
+	// Correlation id joining this row outward (edge delivery log,
+	// reconciliation sweep). Caller-asserted: the middleware accepts a
+	// conforming caller-supplied X-Request-ID verbatim and mints a UUID
+	// otherwise. Absent when no correlation id was recorded. Travels with
+	// request_id_minted — both absent or both present is a store-level
+	// constraint the server guarantees; field-level rules cannot express the
+	// pairing and this file carries no message-level CEL.
+	RequestId *string `protobuf:"bytes,18,opt,name=request_id,json=requestId,proto3,oneof" json:"request_id,omitempty"`
+	// Provenance of request_id: true = server-minted UUID, false = taken from
+	// the caller. The two are byte-indistinguishable in request_id alone, so a
+	// forensic read needs this flag to tell a server-derived correlation key
+	// from an attacker-influenceable one.
+	RequestIdMinted *bool `protobuf:"varint,19,opt,name=request_id_minted,json=requestIdMinted,proto3,oneof" json:"request_id_minted,omitempty"`
+	// When the Exchange wrote this row (server clock).
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransactionEvidence) Reset() {
+	*x = TransactionEvidence{}
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransactionEvidence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransactionEvidence) ProtoMessage() {}
+
+func (x *TransactionEvidence) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransactionEvidence.ProtoReflect.Descriptor instead.
+func (*TransactionEvidence) Descriptor() ([]byte, []int) {
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *TransactionEvidence) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetOfferId() string {
+	if x != nil {
+		return x.OfferId
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetOfferJson() string {
+	if x != nil {
+		return x.OfferJson
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetOfferCanonicalBytes() []byte {
+	if x != nil {
+		return x.OfferCanonicalBytes
+	}
+	return nil
+}
+
+func (x *TransactionEvidence) GetOfferSig() string {
+	if x != nil {
+		return x.OfferSig
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetOfferSigAlgorithm() string {
+	if x != nil {
+		return x.OfferSigAlgorithm
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetExchangeSigningPublicKey() []byte {
+	if x != nil {
+		return x.ExchangeSigningPublicKey
+	}
+	return nil
+}
+
+func (x *TransactionEvidence) GetAgentAcceptanceSignature() string {
+	if x != nil {
+		return x.AgentAcceptanceSignature
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetAgentAcceptanceCanonicalBytes() []byte {
+	if x != nil {
+		return x.AgentAcceptanceCanonicalBytes
+	}
+	return nil
+}
+
+func (x *TransactionEvidence) GetAgentAcceptanceSignatureAlgorithm() string {
+	if x != nil {
+		return x.AgentAcceptanceSignatureAlgorithm
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetRequesterId() string {
+	if x != nil {
+		return x.RequesterId
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetRequesterDomain() string {
+	if x != nil {
+		return x.RequesterDomain
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetRequestIdempotencyKey() string {
+	if x != nil {
+		return x.RequestIdempotencyKey
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetAgentPublicKey() []byte {
+	if x != nil {
+		return x.AgentPublicKey
+	}
+	return nil
+}
+
+func (x *TransactionEvidence) GetAgentDiscoveryUrl() string {
+	if x != nil {
+		return x.AgentDiscoveryUrl
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetSignedUrlFull() string {
+	if x != nil {
+		return x.SignedUrlFull
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetRequestId() string {
+	if x != nil && x.RequestId != nil {
+		return *x.RequestId
+	}
+	return ""
+}
+
+func (x *TransactionEvidence) GetRequestIdMinted() bool {
+	if x != nil && x.RequestIdMinted != nil {
+		return *x.RequestIdMinted
+	}
+	return false
+}
+
+func (x *TransactionEvidence) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+// TransactionState — the thin transaction-log facts a ledger renderer needs
+// next to the evidence row. The log row is the operational record (updated
+// when a usage report lands); the evidence row is the append-once proof.
+// There is deliberately no status field: a denied execute aborts before any
+// row is written, so evidence only ever describes a successful execute —
+// existence is the status, and a renderer derives its status cell from it.
+type TransactionState struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The transaction's per-item idempotency key as logged — derived from the
+	// request-level key and the item's offer, so it is NOT byte-equal to
+	// TransactionEvidence.request_idempotency_key. No upper bound: the
+	// derivation appends an id whose length nothing constrains.
+	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	// When the signed retrieval URL expires.
+	Expiry *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expiry,proto3" json:"expiry,omitempty"`
+	// sha256 of the signed retrieval URL — the thin reference the log keeps
+	// (the full URL lives on the evidence row).
+	SignedUrlHash []byte `protobuf:"bytes,3,opt,name=signed_url_hash,json=signedUrlHash,proto3" json:"signed_url_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransactionState) Reset() {
+	*x = TransactionState{}
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransactionState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransactionState) ProtoMessage() {}
+
+func (x *TransactionState) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransactionState.ProtoReflect.Descriptor instead.
+func (*TransactionState) Descriptor() ([]byte, []int) {
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TransactionState) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *TransactionState) GetExpiry() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Expiry
+	}
+	return nil
+}
+
+func (x *TransactionState) GetSignedUrlHash() []byte {
+	if x != nil {
+		return x.SignedUrlHash
+	}
+	return nil
+}
+
+// ReportingObligationState — the server-side lifecycle record of the
+// transaction's reporting obligation, as persisted. Named apart from
+// ramp.v1.ReportingObligation, which is the agent-facing requirements
+// contract; this is the state those requirements minted.
+type ReportingObligationState struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Lifecycle state. Always a real persisted state, never UNSPECIFIED.
+	State ObligationState `protobuf:"varint,1,opt,name=state,proto3,enum=ramp.admin.v1.ObligationState" json:"state,omitempty"`
+	// Reported consumed quantity as an exact decimal string, never a float —
+	// the same convention as every money-like value on the wire (see
+	// ramp.v1.Cost). Absent until a usage report has been received.
+	ConsumedQuantity *string `protobuf:"bytes,2,opt,name=consumed_quantity,json=consumedQuantity,proto3,oneof" json:"consumed_quantity,omitempty"`
+	// When the usage report is due.
+	Deadline *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=deadline,proto3" json:"deadline,omitempty"`
+	// When a usage report arrived. Absent while none has.
+	ReceivedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=received_at,json=receivedAt,proto3,oneof" json:"received_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportingObligationState) Reset() {
+	*x = ReportingObligationState{}
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportingObligationState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportingObligationState) ProtoMessage() {}
+
+func (x *ReportingObligationState) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportingObligationState.ProtoReflect.Descriptor instead.
+func (*ReportingObligationState) Descriptor() ([]byte, []int) {
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ReportingObligationState) GetState() ObligationState {
+	if x != nil {
+		return x.State
+	}
+	return ObligationState_OBLIGATION_STATE_UNSPECIFIED
+}
+
+func (x *ReportingObligationState) GetConsumedQuantity() string {
+	if x != nil && x.ConsumedQuantity != nil {
+		return *x.ConsumedQuantity
+	}
+	return ""
+}
+
+func (x *ReportingObligationState) GetDeadline() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Deadline
+	}
+	return nil
+}
+
+func (x *ReportingObligationState) GetReceivedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReceivedAt
+	}
+	return nil
+}
+
+type GetTransactionEvidenceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in ramp.proto.
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// The transaction whose evidence row to fetch. Same shape rule as the
+	// execute plane's transaction-scoped identifiers.
+	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTransactionEvidenceRequest) Reset() {
+	*x = GetTransactionEvidenceRequest{}
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTransactionEvidenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTransactionEvidenceRequest) ProtoMessage() {}
+
+func (x *GetTransactionEvidenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTransactionEvidenceRequest.ProtoReflect.Descriptor instead.
+func (*GetTransactionEvidenceRequest) Descriptor() ([]byte, []int) {
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetTransactionEvidenceRequest) GetVer() string {
+	if x != nil {
+		return x.Ver
+	}
+	return ""
+}
+
+func (x *GetTransactionEvidenceRequest) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+type GetTransactionEvidenceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// RAMP protocol version — "1.0". Stamped by the sender from a single
+	// constant; advisory on receive. See "Protocol version" in ramp.proto.
+	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
+	// The append-once evidence row. Required: it exists 1:1 for every found
+	// transaction — an unknown transaction_id is NOT_FOUND, never an empty
+	// response.
+	Evidence *TransactionEvidence `protobuf:"bytes,2,opt,name=evidence,proto3" json:"evidence,omitempty"`
+	// The transaction-log facts next to it. Required for the same 1:1 reason.
+	TransactionState *TransactionState `protobuf:"bytes,3,opt,name=transaction_state,json=transactionState,proto3" json:"transaction_state,omitempty"`
+	// The LATEST reporting obligation for the transaction (by creation time).
+	// The store does not make obligations unique per transaction — a
+	// transaction can mint several over its life — and this read carries the
+	// one the Exchange's own reporting path would act on. Absent when the
+	// transaction minted none.
+	ObligationState *ReportingObligationState `protobuf:"bytes,4,opt,name=obligation_state,json=obligationState,proto3" json:"obligation_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GetTransactionEvidenceResponse) Reset() {
+	*x = GetTransactionEvidenceResponse{}
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTransactionEvidenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTransactionEvidenceResponse) ProtoMessage() {}
+
+func (x *GetTransactionEvidenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ramp_admin_v1_admin_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTransactionEvidenceResponse.ProtoReflect.Descriptor instead.
+func (*GetTransactionEvidenceResponse) Descriptor() ([]byte, []int) {
+	return file_ramp_admin_v1_admin_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetTransactionEvidenceResponse) GetVer() string {
+	if x != nil {
+		return x.Ver
+	}
+	return ""
+}
+
+func (x *GetTransactionEvidenceResponse) GetEvidence() *TransactionEvidence {
+	if x != nil {
+		return x.Evidence
+	}
+	return nil
+}
+
+func (x *GetTransactionEvidenceResponse) GetTransactionState() *TransactionState {
+	if x != nil {
+		return x.TransactionState
+	}
+	return nil
+}
+
+func (x *GetTransactionEvidenceResponse) GetObligationState() *ReportingObligationState {
+	if x != nil {
+		return x.ObligationState
+	}
+	return nil
+}
+
 var File_ramp_admin_v1_admin_proto protoreflect.FileDescriptor
 
 const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\n" +
-	"\x19ramp/admin/v1/admin.proto\x12\rramp.admin.v1\x1a\x1bbuf/validate/validate.proto\"\x95\x01\n" +
+	"\x19ramp/admin/v1/admin.proto\x12\rramp.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x95\x01\n" +
 	"\rTenantFeeRate\x12'\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\x12,\n" +
@@ -463,10 +1099,69 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"n\n" +
 	"\x1aSetReportingPolicyResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12>\n" +
-	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy2\xde\x01\n" +
+	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\xa5\t\n" +
+	"\x13TransactionEvidence\x121\n" +
+	"\x0etransaction_id\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\rtransactionId\x12'\n" +
+	"\ttenant_id\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\x12\"\n" +
+	"\boffer_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aofferId\x12&\n" +
+	"\n" +
+	"offer_json\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tofferJson\x12;\n" +
+	"\x15offer_canonical_bytes\x18\x05 \x01(\fB\a\xbaH\x04z\x02\x10\x01R\x13offerCanonicalBytes\x126\n" +
+	"\toffer_sig\x18\x06 \x01(\tB\x19\xbaH\x16r\x142\x12^[0-9A-Fa-f]{128}$R\bofferSig\x127\n" +
+	"\x13offer_sig_algorithm\x18\a \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11offerSigAlgorithm\x12F\n" +
+	"\x1bexchange_signing_public_key\x18\b \x01(\fB\a\xbaH\x04z\x02h R\x18exchangeSigningPublicKey\x12W\n" +
+	"\x1aagent_acceptance_signature\x18\t \x01(\tB\x19\xbaH\x16r\x142\x12^[0-9A-Fa-f]{128}$R\x18agentAcceptanceSignature\x12P\n" +
+	" agent_acceptance_canonical_bytes\x18\n" +
+	" \x01(\fB\a\xbaH\x04z\x02\x10\x01R\x1dagentAcceptanceCanonicalBytes\x12X\n" +
+	"$agent_acceptance_signature_algorithm\x18\v \x01(\tB\a\xbaH\x04r\x02\x10\x01R!agentAcceptanceSignatureAlgorithm\x12!\n" +
+	"\frequester_id\x18\f \x01(\tR\vrequesterId\x123\n" +
+	"\x10requester_domain\x18\r \x01(\tB\b\xbaH\x05r\x03(\xfd\x01R\x0frequesterDomain\x12B\n" +
+	"\x17request_idempotency_key\x18\x0e \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x15requestIdempotencyKey\x121\n" +
+	"\x10agent_public_key\x18\x0f \x01(\fB\a\xbaH\x04z\x02h R\x0eagentPublicKey\x12.\n" +
+	"\x13agent_discovery_url\x18\x10 \x01(\tR\x11agentDiscoveryUrl\x12/\n" +
+	"\x0fsigned_url_full\x18\x11 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rsignedUrlFull\x12\"\n" +
+	"\n" +
+	"request_id\x18\x12 \x01(\tH\x00R\trequestId\x88\x01\x01\x12/\n" +
+	"\x11request_id_minted\x18\x13 \x01(\bH\x01R\x0frequestIdMinted\x88\x01\x01\x12A\n" +
+	"\n" +
+	"created_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAtB\r\n" +
+	"\v_request_idB\x14\n" +
+	"\x12_request_id_minted\"\xb1\x01\n" +
+	"\x10TransactionState\x120\n" +
+	"\x0fidempotency_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12:\n" +
+	"\x06expiry\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\x06expiry\x12/\n" +
+	"\x0fsigned_url_hash\x18\x03 \x01(\fB\a\xbaH\x04z\x02h R\rsignedUrlHash\"\xd6\x02\n" +
+	"\x18ReportingObligationState\x12>\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1e.ramp.admin.v1.ObligationStateB\b\xbaH\x05\x82\x01\x02 \x00R\x05state\x12R\n" +
+	"\x11consumed_quantity\x18\x02 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x00R\x10consumedQuantity\x88\x01\x01\x12>\n" +
+	"\bdeadline\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\bdeadline\x12@\n" +
+	"\vreceived_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\n" +
+	"receivedAt\x88\x01\x01B\x14\n" +
+	"\x12_consumed_quantityB\x0e\n" +
+	"\f_received_at\"d\n" +
+	"\x1dGetTransactionEvidenceRequest\x12\x10\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x121\n" +
+	"\x0etransaction_id\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\rtransactionId\"\xa4\x02\n" +
+	"\x1eGetTransactionEvidenceResponse\x12\x10\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x12F\n" +
+	"\bevidence\x18\x02 \x01(\v2\".ramp.admin.v1.TransactionEvidenceB\x06\xbaH\x03\xc8\x01\x01R\bevidence\x12T\n" +
+	"\x11transaction_state\x18\x03 \x01(\v2\x1f.ramp.admin.v1.TransactionStateB\x06\xbaH\x03\xc8\x01\x01R\x10transactionState\x12R\n" +
+	"\x10obligation_state\x18\x04 \x01(\v2'.ramp.admin.v1.ReportingObligationStateR\x0fobligationState*\xce\x01\n" +
+	"\x0fObligationState\x12 \n" +
+	"\x1cOBLIGATION_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18OBLIGATION_STATE_PENDING\x10\x01\x12\x1d\n" +
+	"\x19OBLIGATION_STATE_RECEIVED\x10\x02\x12\x1d\n" +
+	"\x19OBLIGATION_STATE_ACCEPTED\x10\x03\x12\x1f\n" +
+	"\x1bOBLIGATION_STATE_CHALLENGED\x10\x04\x12\x1c\n" +
+	"\x18OBLIGATION_STATE_EXPIRED\x10\x052\xd5\x02\n" +
 	"\fAdminService\x12c\n" +
 	"\x10SetTenantFeeRate\x12&.ramp.admin.v1.SetTenantFeeRateRequest\x1a'.ramp.admin.v1.SetTenantFeeRateResponse\x12i\n" +
-	"\x12SetReportingPolicy\x12(.ramp.admin.v1.SetReportingPolicyRequest\x1a).ramp.admin.v1.SetReportingPolicyResponseB\xb9\x01\n" +
+	"\x12SetReportingPolicy\x12(.ramp.admin.v1.SetReportingPolicyRequest\x1a).ramp.admin.v1.SetReportingPolicyResponse\x12u\n" +
+	"\x16GetTransactionEvidence\x12,.ramp.admin.v1.GetTransactionEvidenceRequest\x1a-.ramp.admin.v1.GetTransactionEvidenceResponseB\xb9\x01\n" +
 	"\x11com.ramp.admin.v1B\n" +
 	"AdminProtoP\x01ZBgithub.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1;rampadminv1\xa2\x02\x03RAX\xaa\x02\rRamp.Admin.V1\xca\x02\rRamp\\Admin\\V1\xe2\x02\x19Ramp\\Admin\\V1\\GPBMetadata\xea\x02\x0fRamp::Admin::V1b\x06proto3"
 
@@ -482,29 +1177,47 @@ func file_ramp_admin_v1_admin_proto_rawDescGZIP() []byte {
 	return file_ramp_admin_v1_admin_proto_rawDescData
 }
 
-var file_ramp_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_ramp_admin_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_ramp_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_ramp_admin_v1_admin_proto_goTypes = []any{
-	(*TenantFeeRate)(nil),              // 0: ramp.admin.v1.TenantFeeRate
-	(*ReportingPolicy)(nil),            // 1: ramp.admin.v1.ReportingPolicy
-	(*SetTenantFeeRateRequest)(nil),    // 2: ramp.admin.v1.SetTenantFeeRateRequest
-	(*SetTenantFeeRateResponse)(nil),   // 3: ramp.admin.v1.SetTenantFeeRateResponse
-	(*SetReportingPolicyRequest)(nil),  // 4: ramp.admin.v1.SetReportingPolicyRequest
-	(*SetReportingPolicyResponse)(nil), // 5: ramp.admin.v1.SetReportingPolicyResponse
+	(ObligationState)(0),                   // 0: ramp.admin.v1.ObligationState
+	(*TenantFeeRate)(nil),                  // 1: ramp.admin.v1.TenantFeeRate
+	(*ReportingPolicy)(nil),                // 2: ramp.admin.v1.ReportingPolicy
+	(*SetTenantFeeRateRequest)(nil),        // 3: ramp.admin.v1.SetTenantFeeRateRequest
+	(*SetTenantFeeRateResponse)(nil),       // 4: ramp.admin.v1.SetTenantFeeRateResponse
+	(*SetReportingPolicyRequest)(nil),      // 5: ramp.admin.v1.SetReportingPolicyRequest
+	(*SetReportingPolicyResponse)(nil),     // 6: ramp.admin.v1.SetReportingPolicyResponse
+	(*TransactionEvidence)(nil),            // 7: ramp.admin.v1.TransactionEvidence
+	(*TransactionState)(nil),               // 8: ramp.admin.v1.TransactionState
+	(*ReportingObligationState)(nil),       // 9: ramp.admin.v1.ReportingObligationState
+	(*GetTransactionEvidenceRequest)(nil),  // 10: ramp.admin.v1.GetTransactionEvidenceRequest
+	(*GetTransactionEvidenceResponse)(nil), // 11: ramp.admin.v1.GetTransactionEvidenceResponse
+	(*timestamppb.Timestamp)(nil),          // 12: google.protobuf.Timestamp
 }
 var file_ramp_admin_v1_admin_proto_depIdxs = []int32{
-	0, // 0: ramp.admin.v1.SetTenantFeeRateRequest.rate:type_name -> ramp.admin.v1.TenantFeeRate
-	0, // 1: ramp.admin.v1.SetTenantFeeRateResponse.rate:type_name -> ramp.admin.v1.TenantFeeRate
-	1, // 2: ramp.admin.v1.SetReportingPolicyRequest.policy:type_name -> ramp.admin.v1.ReportingPolicy
-	1, // 3: ramp.admin.v1.SetReportingPolicyResponse.policy:type_name -> ramp.admin.v1.ReportingPolicy
-	2, // 4: ramp.admin.v1.AdminService.SetTenantFeeRate:input_type -> ramp.admin.v1.SetTenantFeeRateRequest
-	4, // 5: ramp.admin.v1.AdminService.SetReportingPolicy:input_type -> ramp.admin.v1.SetReportingPolicyRequest
-	3, // 6: ramp.admin.v1.AdminService.SetTenantFeeRate:output_type -> ramp.admin.v1.SetTenantFeeRateResponse
-	5, // 7: ramp.admin.v1.AdminService.SetReportingPolicy:output_type -> ramp.admin.v1.SetReportingPolicyResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1,  // 0: ramp.admin.v1.SetTenantFeeRateRequest.rate:type_name -> ramp.admin.v1.TenantFeeRate
+	1,  // 1: ramp.admin.v1.SetTenantFeeRateResponse.rate:type_name -> ramp.admin.v1.TenantFeeRate
+	2,  // 2: ramp.admin.v1.SetReportingPolicyRequest.policy:type_name -> ramp.admin.v1.ReportingPolicy
+	2,  // 3: ramp.admin.v1.SetReportingPolicyResponse.policy:type_name -> ramp.admin.v1.ReportingPolicy
+	12, // 4: ramp.admin.v1.TransactionEvidence.created_at:type_name -> google.protobuf.Timestamp
+	12, // 5: ramp.admin.v1.TransactionState.expiry:type_name -> google.protobuf.Timestamp
+	0,  // 6: ramp.admin.v1.ReportingObligationState.state:type_name -> ramp.admin.v1.ObligationState
+	12, // 7: ramp.admin.v1.ReportingObligationState.deadline:type_name -> google.protobuf.Timestamp
+	12, // 8: ramp.admin.v1.ReportingObligationState.received_at:type_name -> google.protobuf.Timestamp
+	7,  // 9: ramp.admin.v1.GetTransactionEvidenceResponse.evidence:type_name -> ramp.admin.v1.TransactionEvidence
+	8,  // 10: ramp.admin.v1.GetTransactionEvidenceResponse.transaction_state:type_name -> ramp.admin.v1.TransactionState
+	9,  // 11: ramp.admin.v1.GetTransactionEvidenceResponse.obligation_state:type_name -> ramp.admin.v1.ReportingObligationState
+	3,  // 12: ramp.admin.v1.AdminService.SetTenantFeeRate:input_type -> ramp.admin.v1.SetTenantFeeRateRequest
+	5,  // 13: ramp.admin.v1.AdminService.SetReportingPolicy:input_type -> ramp.admin.v1.SetReportingPolicyRequest
+	10, // 14: ramp.admin.v1.AdminService.GetTransactionEvidence:input_type -> ramp.admin.v1.GetTransactionEvidenceRequest
+	4,  // 15: ramp.admin.v1.AdminService.SetTenantFeeRate:output_type -> ramp.admin.v1.SetTenantFeeRateResponse
+	6,  // 16: ramp.admin.v1.AdminService.SetReportingPolicy:output_type -> ramp.admin.v1.SetReportingPolicyResponse
+	11, // 17: ramp.admin.v1.AdminService.GetTransactionEvidence:output_type -> ramp.admin.v1.GetTransactionEvidenceResponse
+	15, // [15:18] is the sub-list for method output_type
+	12, // [12:15] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_ramp_admin_v1_admin_proto_init() }
@@ -514,18 +1227,21 @@ func file_ramp_admin_v1_admin_proto_init() {
 	}
 	file_ramp_admin_v1_admin_proto_msgTypes[0].OneofWrappers = []any{}
 	file_ramp_admin_v1_admin_proto_msgTypes[1].OneofWrappers = []any{}
+	file_ramp_admin_v1_admin_proto_msgTypes[6].OneofWrappers = []any{}
+	file_ramp_admin_v1_admin_proto_msgTypes[8].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ramp_admin_v1_admin_proto_rawDesc), len(file_ramp_admin_v1_admin_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   6,
+			NumEnums:      1,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_ramp_admin_v1_admin_proto_goTypes,
 		DependencyIndexes: file_ramp_admin_v1_admin_proto_depIdxs,
+		EnumInfos:         file_ramp_admin_v1_admin_proto_enumTypes,
 		MessageInfos:      file_ramp_admin_v1_admin_proto_msgTypes,
 	}.Build()
 	File_ramp_admin_v1_admin_proto = out.File

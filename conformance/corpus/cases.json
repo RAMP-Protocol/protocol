@@ -843,6 +843,109 @@
     }
   },
   {
+    "id": "GetTransactionEvidenceRequest/transaction_id/too_long",
+    "message": "GetTransactionEvidenceRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "transaction_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "GetTransactionEvidenceRequest/transaction_id/too_short",
+    "message": "GetTransactionEvidenceRequest",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {}
+  },
+  {
+    "id": "GetTransactionEvidenceRequest/valid",
+    "message": "GetTransactionEvidenceRequest",
+    "valid": true,
+    "json": {
+      "transaction_id": "x"
+    }
+  },
+  {
+    "id": "GetTransactionEvidenceResponse/evidence/missing",
+    "message": "GetTransactionEvidenceResponse",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {
+      "transaction_state": {
+        "expiry": "2026-01-02T03:04:05Z",
+        "idempotency_key": "idem-tx:offer-seed",
+        "signed_url_hash": "aGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGg="
+      }
+    }
+  },
+  {
+    "id": "GetTransactionEvidenceResponse/transaction_state/missing",
+    "message": "GetTransactionEvidenceResponse",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {
+      "evidence": {
+        "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+        "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+        "agent_acceptance_signature_algorithm": "ed25519",
+        "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+        "created_at": "2026-01-02T03:04:05Z",
+        "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+        "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+        "offer_id": "offer-seed",
+        "offer_json": "{\"offer_id\":\"offer-seed\"}",
+        "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+        "offer_sig_algorithm": "ed25519",
+        "request_idempotency_key": "idem-tx",
+        "requester_domain": "agent.example",
+        "requester_id": "agent-seed",
+        "signed_url_full": "https://content.example/article?sig=ab",
+        "tenant_id": "tenant-seed",
+        "transaction_id": "tx-seed"
+      }
+    }
+  },
+  {
+    "id": "GetTransactionEvidenceResponse/valid",
+    "message": "GetTransactionEvidenceResponse",
+    "valid": true,
+    "json": {
+      "evidence": {
+        "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+        "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+        "agent_acceptance_signature_algorithm": "ed25519",
+        "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+        "created_at": "2026-01-02T03:04:05Z",
+        "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+        "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+        "offer_id": "offer-seed",
+        "offer_json": "{\"offer_id\":\"offer-seed\"}",
+        "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+        "offer_sig_algorithm": "ed25519",
+        "request_idempotency_key": "idem-tx",
+        "requester_domain": "agent.example",
+        "requester_id": "agent-seed",
+        "signed_url_full": "https://content.example/article?sig=ab",
+        "tenant_id": "tenant-seed",
+        "transaction_id": "tx-seed"
+      },
+      "transaction_state": {
+        "expiry": "2026-01-02T03:04:05Z",
+        "idempotency_key": "idem-tx:offer-seed",
+        "signed_url_hash": "aGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGg="
+      }
+    }
+  },
+  {
     "id": "License/uri_digest/empty_ok",
     "message": "License",
     "valid": true,
@@ -2065,6 +2168,192 @@
     "json": {
       "error": "x",
       "path": "x"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/empty_ok",
+    "message": "ReportingObligationState",
+    "valid": true,
+    "json": {
+      "consumed_quantity": "",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#0",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "two words",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#1",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "1.2.3",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#2",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "!!bad!!",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#3",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "\u0000ctl\u0000",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#4",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": " ",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#5",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "-5",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#6",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "NaN",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#7",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "Infinity",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/pattern#8",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "1E3",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/consumed_quantity/too_long",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "string.max_len",
+      "string.pattern"
+    ],
+    "json": {
+      "consumed_quantity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/deadline/missing",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
+    }
+  },
+  {
+    "id": "ReportingObligationState/state/not_in",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "ReportingObligationState/valid",
+    "message": "ReportingObligationState",
+    "valid": true,
+    "json": {
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING"
     }
   },
   {
@@ -3337,6 +3626,883 @@
     }
   },
   {
+    "id": "TransactionEvidence/agent_acceptance_signature/missing_empty",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#0",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "two words",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#1",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "1.2.3",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#2",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "!!bad!!",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#3",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "\u0000ctl\u0000",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#4",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": " ",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#5",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "-5",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#6",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "NaN",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#7",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "Infinity",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature/pattern#8",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "1E3",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature_algorithm/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/created_at/missing",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_id/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_json/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/missing_empty",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#0",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "two words",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#1",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "1.2.3",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#2",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "!!bad!!",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#3",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "\u0000ctl\u0000",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#4",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": " ",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#5",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "-5",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#6",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "NaN",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#7",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "Infinity",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig/pattern#8",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "1E3",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig_algorithm/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/request_idempotency_key/too_long",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/request_idempotency_key/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/signed_url_full/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/tenant_id/too_long",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/tenant_id/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/transaction_id/too_long",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "TransactionEvidence/transaction_id/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/valid",
+    "message": "TransactionEvidence",
+    "valid": true,
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "ed25519",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
     "id": "TransactionItem/offer/missing",
     "message": "TransactionItem",
     "valid": false,
@@ -3419,6 +4585,40 @@
           }
         }
       ]
+    }
+  },
+  {
+    "id": "TransactionState/expiry/missing",
+    "message": "TransactionState",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {
+      "idempotency_key": "idem-tx:offer-seed",
+      "signed_url_hash": "aGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGg="
+    }
+  },
+  {
+    "id": "TransactionState/idempotency_key/too_short",
+    "message": "TransactionState",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "expiry": "2026-01-02T03:04:05Z",
+      "signed_url_hash": "aGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGg="
+    }
+  },
+  {
+    "id": "TransactionState/valid",
+    "message": "TransactionState",
+    "valid": true,
+    "json": {
+      "expiry": "2026-01-02T03:04:05Z",
+      "idempotency_key": "idem-tx:offer-seed",
+      "signed_url_hash": "aGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGg="
     }
   },
   {

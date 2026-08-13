@@ -1,25 +1,30 @@
-// RAMP Admin v1 — operator-plane configuration service.
+// RAMP Admin v1 — operator-plane configuration and forensics service.
 //
-// AdminService carries Exchange operator overrides: the tenant fee rate and
-// the tenant reporting policy. It is deliberately a separate package and
-// service from ramp.v1.ExchangeService — the operator/config plane is not
-// part of the agent hot-path contract, and keeping it out of ramp.v1 keeps
-// the agent-facing surface unchanged.
+// AdminService carries Exchange operator overrides — the tenant fee rate and
+// the tenant reporting policy — plus one forensic read: the append-once
+// evidence row the Exchange persists for every executed transaction. It is
+// deliberately a separate package and service from ramp.v1.ExchangeService —
+// the operator plane is not part of the agent hot-path contract, and keeping
+// it out of ramp.v1 keeps the agent-facing surface unchanged.
 //
 // Trust model: deployments MUST NOT expose AdminService on the public
 // agent-facing listener. Reachability is restricted at the network layer
 // (an internal listener plus a source allowlist); there is no per-operator
 // identity inside the service in v1. Because the admin plane carries no
 // RFC 9421 request signing, there is no verified signer to deduplicate
-// against — and both RPCs are full-replace overwrites, so they are naturally
-// idempotent and carry no idempotency_key.
+// against — and no RPC here needs one: the setters are full-replace
+// overwrites and the evidence read is side-effect-free, so every RPC is
+// naturally idempotent and carries no idempotency_key.
 //
-// Message shape: each RPC takes a thin {ver, <payload>} envelope wrapping a
+// Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is
 // stated ONCE; the read-back response cannot drift from the write. Responses
 // echo the payload as persisted, giving operator tooling a read-back
-// confirmation of the applied values.
+// confirmation of the applied values. The evidence read does not share this
+// shape — its request carries only a transaction id, and its response wraps
+// read-only payloads that exist on no write path (TransactionEvidence,
+// TransactionState, ReportingObligationState).
 //
 // Validation: every constraint here is a FIELD-level protovalidate rule so it
 // flows into the generated Pydantic/Zod types. Cross-field (message-level CEL)
@@ -38,11 +43,12 @@ syntax = "proto3";
 package ramp.admin.v1;
 
 import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1;rampadminv1";
 
-// Operator-plane configuration RPCs. See the file banner for the trust model
-// and why these setters carry no idempotency_key.
+// Operator-plane configuration and forensic-read RPCs. See the file banner
+// for the trust model and why no RPC here carries an idempotency_key.
 service AdminService {
   // Sets the tenant's fee rate (basis points) and optional operator note.
   // Full replace: the previous rate and note are overwritten.
@@ -51,6 +57,12 @@ service AdminService {
   // tolerance, reporting window). Full replace: omitted optional fields clear
   // their value so the receiving Exchange's defaults apply.
   rpc SetReportingPolicy(SetReportingPolicyRequest) returns (SetReportingPolicyResponse);
+  // Returns the append-once evidence row for one executed transaction — the
+  // full signed offer, both Ed25519 proofs and the verbatim bytes each was
+  // computed over — plus the transaction-log and reporting-obligation state
+  // needed to render it. Read-only: it exposes what the execute path already
+  // persisted and writes nothing. An unknown transaction_id is NOT_FOUND.
+  rpc GetTransactionEvidence(GetTransactionEvidenceRequest) returns (GetTransactionEvidenceResponse);
 }
 
 // TenantFeeRate is the fee-rate payload shared by SetTenantFeeRate's request
@@ -146,4 +158,225 @@ message SetReportingPolicyResponse {
 
   // The reporting policy as persisted.
   ReportingPolicy policy = 2 [(buf.validate.field).required = true];
+}
+
+// ObligationState — lifecycle of a reporting obligation, exactly the
+// vocabulary the Exchange persists. Defined here rather than imported from
+// ramp.v1 (which carries no such enum — the agent plane states reporting
+// REQUIREMENTS, never their server-side lifecycle) so the admin package
+// stays self-contained.
+enum ObligationState {
+  OBLIGATION_STATE_UNSPECIFIED = 0; // never sent — the server always maps a persisted state; rejected (not_in:[0]) on ReportingObligationState.state
+  OBLIGATION_STATE_PENDING = 1; // minted; no usage report received yet
+  OBLIGATION_STATE_RECEIVED = 2; // a usage report arrived and validated
+  OBLIGATION_STATE_ACCEPTED = 3; // the report was accepted as settled
+  OBLIGATION_STATE_CHALLENGED = 4; // the report was challenged and awaits resolution
+  OBLIGATION_STATE_EXPIRED = 5; // the reporting deadline passed with no report
+}
+
+// TransactionEvidence — one append-once evidence row, exactly as the Exchange
+// persisted it for a successfully executed transaction. The row is written
+// only after both signatures verified, and a denied execute writes nothing,
+// so the row's existence is itself the success statement.
+//
+// The row re-verifies OFFLINE, from this message alone — no agent registry,
+// no Exchange key file, no live service:
+//   * the Exchange signed this exact offer:
+//       ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)
+//   * the agent accepted this exact offer:
+//       ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)
+// Both verifying public keys ride along (not key ids) so re-verification
+// survives key rotation, which removes retired ids from the published JWKS.
+// The *_canonical_bytes are the verbatim RFC 8785 JCS bytes each signature
+// was computed over, stored as-signed and never re-derived: protobuf-binary
+// is non-canonical by protocol rule, and a stored-inputs-only row would stop
+// re-verifying the day the canonicalization recipe moved.
+//
+// SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
+// DELIVERED. transaction_id, signed_url_full, request_id and created_at are
+// this Exchange's own assertions about the delivery, outside both signatures;
+// the delivery witness is the edge delivery log, reconciled separately.
+message TransactionEvidence {
+  // The evidenced transaction (Exchange-minted transaction identity).
+  string transaction_id = 1 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
+
+  // The tenant the transaction executed under. The admin plane is
+  // deployment-scoped (cross-tenant), so the row states its tenant.
+  string tenant_id = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
+
+  // Exchange side: the signed offer.
+
+  // The signed Offer.offer_id (which IS the catalog resource_id). Duplicated
+  // from the offer JSON so the row reads standalone, without parsing it.
+  string offer_id = 3 [(buf.validate.field).string.min_len = 1];
+
+  // The signed offer as a raw JSON string, for query and human audit.
+  // Deliberately NOT a Struct: a Struct re-normalizes, and the canonical
+  // bytes below remain the arbiter of what was signed.
+  string offer_json = 4 [(buf.validate.field).string.min_len = 1];
+
+  // Verbatim JCS bytes the Exchange's signature was computed over (the offer
+  // with its signature fields cleared).
+  bytes offer_canonical_bytes = 5 [(buf.validate.field).bytes.min_len = 1];
+
+  // The Exchange's Ed25519 signature over offer_canonical_bytes, hex-encoded
+  // in the verbatim wire form (either case — hex decoding accepts both, and a
+  // dispute should read the same characters a request log holds). Named after
+  // ramp.v1.AgentAcceptancePayload.offer_sig: it is the same value, the one
+  // the agent's acceptance binds to.
+  string offer_sig = 6 [(buf.validate.field).string.pattern = "^[0-9A-Fa-f]{128}$"];
+
+  // Signing-algorithm label, server-derived from the Exchange's own verify
+  // path — never echoed from the wire. The canonical payload clears the wire
+  // labels before signing, so an echoed label would sit outside signature
+  // coverage and could claim anything under an otherwise valid signature.
+  string offer_sig_algorithm = 7 [(buf.validate.field).string.min_len = 1];
+
+  // The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.
+  bytes exchange_signing_public_key = 8 [(buf.validate.field).bytes.len = 32];
+
+  // Agent side: the acceptance.
+
+  // The agent's Ed25519 signature over agent_acceptance_canonical_bytes,
+  // hex-encoded verbatim as it arrived on the wire (either case).
+  string agent_acceptance_signature = 9 [(buf.validate.field).string.pattern = "^[0-9A-Fa-f]{128}$"];
+
+  // Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.
+  bytes agent_acceptance_canonical_bytes = 10 [(buf.validate.field).bytes.min_len = 1];
+
+  // Signing-algorithm label, server-derived (see offer_sig_algorithm).
+  string agent_acceptance_signature_algorithm = 11 [(buf.validate.field).string.min_len = 1];
+
+  // The acceptance payload's remaining inputs (offer_sig above is the
+  // fourth), stored so the signed bytes can be independently rebuilt and
+  // audited rather than merely trusted.
+  //
+  // requester_id is the signed Requester.id VERBATIM — the bytes under the
+  // agent's signature, never rewritten. It NAMES the same agent as the
+  // Exchange's canonical agent identity but is not byte-equal to it: a signer
+  // may spell its directory any way it likes (the deployed identity service
+  // signs "scheme://host"), so the forensic join goes through directory-host
+  // normalization, not plain equality. No wire rule: the agent plane does not
+  // constrain Requester.id, and this row states what was signed.
+  string requester_id = 12;
+
+  // The signed Requester.domain, verbatim. Bounded at the RFC 1035 maximum
+  // DNS name length in BYTES — the one caller-influenced value here that
+  // nothing upstream constrains.
+  string requester_domain = 13 [(buf.validate.field).string.max_bytes = 253];
+
+  // The REQUEST-level idempotency key the acceptance signs
+  // (TransactionRequest.idempotency_key, same rule) — NOT the derived
+  // per-item key that TransactionState.idempotency_key carries.
+  string request_idempotency_key = 14 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
+
+  // The registry-pinned agent verifying key (raw 32-byte Ed25519) the
+  // acceptance verified against.
+  bytes agent_public_key = 15 [(buf.validate.field).bytes.len = 32];
+
+  // The anchored well-known directory agent_public_key was pinned from. The
+  // registry overwrites keys in place on rotation and keeps no history, so
+  // this — plus created_at — attests where and when this Exchange obtained
+  // the key. Empty when the agent carries no directory anchor: an append-once
+  // row states a value for every column, so '' is a stated fact, not a gap.
+  string agent_discovery_url = 16;
+
+  // Delivery + correlation. Covered by neither signature.
+
+  // The full signed retrieval URL as delivered. sha256(signed_url_full) is
+  // the join key against the edge delivery log's url_hash.
+  string signed_url_full = 17 [(buf.validate.field).string.min_len = 1];
+
+  // Correlation id joining this row outward (edge delivery log,
+  // reconciliation sweep). Caller-asserted: the middleware accepts a
+  // conforming caller-supplied X-Request-ID verbatim and mints a UUID
+  // otherwise. Absent when no correlation id was recorded. Travels with
+  // request_id_minted — both absent or both present is a store-level
+  // constraint the server guarantees; field-level rules cannot express the
+  // pairing and this file carries no message-level CEL.
+  optional string request_id = 18;
+
+  // Provenance of request_id: true = server-minted UUID, false = taken from
+  // the caller. The two are byte-indistinguishable in request_id alone, so a
+  // forensic read needs this flag to tell a server-derived correlation key
+  // from an attacker-influenceable one.
+  optional bool request_id_minted = 19;
+
+  // When the Exchange wrote this row (server clock).
+  google.protobuf.Timestamp created_at = 20 [(buf.validate.field).required = true];
+}
+
+// TransactionState — the thin transaction-log facts a ledger renderer needs
+// next to the evidence row. The log row is the operational record (updated
+// when a usage report lands); the evidence row is the append-once proof.
+// There is deliberately no status field: a denied execute aborts before any
+// row is written, so evidence only ever describes a successful execute —
+// existence is the status, and a renderer derives its status cell from it.
+message TransactionState {
+  // The transaction's per-item idempotency key as logged — derived from the
+  // request-level key and the item's offer, so it is NOT byte-equal to
+  // TransactionEvidence.request_idempotency_key. No upper bound: the
+  // derivation appends an id whose length nothing constrains.
+  string idempotency_key = 1 [(buf.validate.field).string.min_len = 1];
+
+  // When the signed retrieval URL expires.
+  google.protobuf.Timestamp expiry = 2 [(buf.validate.field).required = true];
+
+  // sha256 of the signed retrieval URL — the thin reference the log keeps
+  // (the full URL lives on the evidence row).
+  bytes signed_url_hash = 3 [(buf.validate.field).bytes.len = 32];
+}
+
+// ReportingObligationState — the server-side lifecycle record of the
+// transaction's reporting obligation, as persisted. Named apart from
+// ramp.v1.ReportingObligation, which is the agent-facing requirements
+// contract; this is the state those requirements minted.
+message ReportingObligationState {
+  // Lifecycle state. Always a real persisted state, never UNSPECIFIED.
+  ObligationState state = 1 [(buf.validate.field).enum = {not_in: [0]}];
+
+  // Reported consumed quantity as an exact decimal string, never a float —
+  // the same convention as every money-like value on the wire (see
+  // ramp.v1.Cost). Absent until a usage report has been received.
+  optional string consumed_quantity = 2 [
+    (buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$",
+    (buf.validate.field).string.max_len = 32
+  ];
+
+  // When the usage report is due.
+  google.protobuf.Timestamp deadline = 3 [(buf.validate.field).required = true];
+
+  // When a usage report arrived. Absent while none has.
+  optional google.protobuf.Timestamp received_at = 4;
+}
+
+message GetTransactionEvidenceRequest {
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in ramp.proto.
+  string ver = 1;
+
+  // The transaction whose evidence row to fetch. Same shape rule as the
+  // execute plane's transaction-scoped identifiers.
+  string transaction_id = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
+}
+
+message GetTransactionEvidenceResponse {
+  // RAMP protocol version — "1.0". Stamped by the sender from a single
+  // constant; advisory on receive. See "Protocol version" in ramp.proto.
+  string ver = 1;
+
+  // The append-once evidence row. Required: it exists 1:1 for every found
+  // transaction — an unknown transaction_id is NOT_FOUND, never an empty
+  // response.
+  TransactionEvidence evidence = 2 [(buf.validate.field).required = true];
+
+  // The transaction-log facts next to it. Required for the same 1:1 reason.
+  TransactionState transaction_state = 3 [(buf.validate.field).required = true];
+
+  // The LATEST reporting obligation for the transaction (by creation time).
+  // The store does not make obligations unique per transaction — a
+  // transaction can mint several over its life — and this read carries the
+  // one the Exchange's own reporting path would act on. Absent when the
+  // transaction minted none.
+  ReportingObligationState obligation_state = 4;
 }

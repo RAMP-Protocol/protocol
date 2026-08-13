@@ -104,6 +104,38 @@ func seeds() map[string]proto.Message {
 		},
 		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
 		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},
+		// ramp.admin.v1 evidence-read payloads (required sub-messages of
+		// GetTransactionEvidenceResponse). Seeded wholesale: they carry rule
+		// shapes auto-fill does not handle — bytes rules (len=32 keys,
+		// non-empty canonical bytes) and required Timestamp fields.
+		"TransactionEvidence": &rampadminv1.TransactionEvidence{
+			TransactionId:                     "tx-seed",
+			TenantId:                          "tenant-seed",
+			OfferId:                           "offer-seed",
+			OfferJson:                         `{"offer_id":"offer-seed"}`,
+			OfferCanonicalBytes:               []byte(`{"offer_id":"offer-seed"}`),
+			OfferSig:                          strings.Repeat("ab", 64),
+			OfferSigAlgorithm:                 "ed25519",
+			ExchangeSigningPublicKey:          []byte(strings.Repeat("k", 32)),
+			AgentAcceptanceSignature:          strings.Repeat("ab", 64),
+			AgentAcceptanceCanonicalBytes:     []byte(`{"requester_id":"agent-seed"}`),
+			AgentAcceptanceSignatureAlgorithm: "ed25519",
+			RequesterId:                       "agent-seed",
+			RequesterDomain:                   "agent.example",
+			RequestIdempotencyKey:             "idem-tx",
+			AgentPublicKey:                    []byte(strings.Repeat("k", 32)),
+			SignedUrlFull:                     "https://content.example/article?sig=ab",
+			CreatedAt:                         timestamppb.New(fixedTime),
+		},
+		"TransactionState": &rampadminv1.TransactionState{
+			IdempotencyKey: "idem-tx:offer-seed",
+			Expiry:         timestamppb.New(fixedTime),
+			SignedUrlHash:  []byte(strings.Repeat("h", 32)),
+		},
+		"ReportingObligationState": &rampadminv1.ReportingObligationState{
+			State:    rampadminv1.ObligationState_OBLIGATION_STATE_PENDING,
+			Deadline: timestamppb.New(fixedTime),
+		},
 	}
 }
 

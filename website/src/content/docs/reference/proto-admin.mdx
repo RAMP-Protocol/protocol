@@ -1,6 +1,6 @@
 ---
 title: "Proto: Admin v1"
-description: "ramp.admin.v1 protobuf reference -- the operator-plane AdminService: tenant fee-rate and reporting-policy overrides"
+description: "ramp.admin.v1 protobuf reference -- the operator-plane AdminService: tenant fee-rate and reporting-policy overrides, plus the per-transaction evidence read"
 ---
 
 
@@ -9,7 +9,7 @@ Source: [`proto/ramp/admin/v1/admin.proto`](https://github.com/RAMP-Protocol/pro
 :::note[Operator plane, not agent wire]
 `ramp.admin.v1` is the Exchange **operator/config plane** — deliberately a separate package and service from `ExchangeService`, so the agent-facing contract is untouched. Deployments MUST NOT expose `AdminService` on the public agent-facing listener: reachability is restricted at the network layer (an internal listener plus a source allowlist), and there is no per-operator identity inside the service in v1.
 
-Both RPCs are **full-replace overwrites** and therefore idempotent — they carry no `idempotency_key` (the `ramp.v1` idempotency convention dedupes per verified RFC 9421 signer, and the admin plane has no request signing in v1) and no `ext`/`ext_critical` extension maps. Each request and response is a thin `{ver, payload}` envelope (`ver` is field 1, the RAMP protocol version — value `"1.0"`, stamped by the sender from the SDK's `ProtocolVersion` constant and advisory on receive, as on the agent-facing plane; the *reason* differs, since this plane rests on network-layer reachability rather than on a request signature) wrapping a required payload message — `TenantFeeRate` or `ReportingPolicy` — that is **shared by the request and its response**, so every field rule is stated once and the echoed read-back cannot drift from the write. Responses echo the payload **as persisted**, giving operator tooling a read-back confirmation.
+No RPC here carries an `idempotency_key` (the `ramp.v1` idempotency convention dedupes per verified RFC 9421 signer, and the admin plane has no request signing in v1) or `ext`/`ext_critical` extension maps — the two setters are **full-replace overwrites** and the evidence read is side-effect-free, so every RPC is naturally idempotent. Each request and response is a thin `{ver, payload}` envelope (`ver` is field 1, the RAMP protocol version — value `"1.0"`, stamped by the sender from the SDK's `ProtocolVersion` constant and advisory on receive, as on the agent-facing plane; the *reason* differs, since this plane rests on network-layer reachability rather than on a request signature). Each setter wraps a required payload message — `TenantFeeRate` or `ReportingPolicy` — that is **shared by the request and its response**, so every field rule is stated once and the echoed read-back cannot drift from the write; responses echo the payload **as persisted**, giving operator tooling a read-back confirmation. The evidence read does not share this shape: its request carries only a transaction id, and its response wraps read-only payloads that exist on no write path.
 
 Every constraint is a **field-level** protovalidate rule, so it flows into the generated Pydantic/Zod types; this package defines no cross-field (message-level CEL) rules.
 :::
@@ -18,7 +18,7 @@ Every constraint is a **field-level** protovalidate rule, so it flows into the g
 
 ### AdminService
 
-Exchange operator overrides: the tenant fee rate and the tenant reporting policy. `SetOfferPrice` and `SetDeliveryWitnessMode` are planned extensions of this service and are tracked separately.
+Exchange operator overrides — the tenant fee rate and the tenant reporting policy — plus one forensic read, `GetTransactionEvidence`, which returns the append-once evidence row the Exchange persists for every executed transaction. `SetOfferPrice` and `SetDeliveryWitnessMode` are planned extensions of this service and are tracked separately.
 
 ::proto-service{name=AdminService}
 
@@ -61,3 +61,41 @@ A thin `{ver, policy}` envelope carrying the required `ReportingPolicy` to apply
 Echoes the `ReportingPolicy` as persisted.
 
 ::proto-message{name=SetReportingPolicyResponse}
+
+## Messages -- Transaction Evidence
+
+### TransactionEvidence
+
+One append-once evidence row, exactly as the Exchange persisted it for a successfully executed transaction. The row is written only after both Ed25519 signatures verified — a denied execute writes nothing — so the row's existence is itself the success statement. It re-verifies **offline**, from this message alone: `ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)` proves the Exchange signed this exact offer, and `ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)` proves the agent accepted it. Both verifying public keys ride along (not key ids) so re-verification survives key rotation; the `*_canonical_bytes` are the verbatim JCS bytes each signature was computed over, stored as-signed and never re-derived. The signatures cover what was **agreed**, not what was **delivered** — `transaction_id`, `signed_url_full`, `request_id` and `created_at` are the Exchange's own assertions about the delivery.
+
+::proto-message{name=TransactionEvidence}
+
+### TransactionState
+
+The thin transaction-log facts a ledger renderer needs next to the evidence row: the logged per-item idempotency key (derived from the request-level key and the item's offer, so not byte-equal to `TransactionEvidence.request_idempotency_key`), the signed-URL expiry, and the sha256 of the signed retrieval URL. There is deliberately no status field — evidence only ever describes a successful execute, so existence is the status.
+
+::proto-message{name=TransactionState}
+
+### ObligationState
+
+Lifecycle of a reporting obligation, exactly the vocabulary the Exchange persists. Defined in this package rather than imported from `ramp.v1`, which states reporting *requirements*, never their server-side lifecycle.
+
+::proto-enum{name=ObligationState numbers}
+
+### ReportingObligationState
+
+The server-side lifecycle record of the transaction's reporting obligation: the `ObligationState`, the reported consumed quantity (an exact decimal string, absent until a report arrives), the report deadline, and when a report arrived. Named apart from `ramp.v1.ReportingObligation`, the agent-facing requirements contract this state was minted from.
+
+::proto-message{name=ReportingObligationState}
+
+### GetTransactionEvidenceRequest
+
+A thin `{ver, transaction_id}` envelope naming the transaction whose evidence row to fetch.
+
+::proto-message{name=GetTransactionEvidenceRequest}
+
+### GetTransactionEvidenceResponse
+
+The evidence row plus the transaction-log and reporting-obligation state needed to render it. `evidence` and `transaction_state` are required — they exist 1:1 for every found transaction, and an unknown `transaction_id` is `NOT_FOUND`, never an empty response. `obligation_state` carries the **latest** obligation by creation time (the store does not make obligations unique per transaction) and is absent when the transaction minted none.
+
+::proto-message{name=GetTransactionEvidenceResponse}

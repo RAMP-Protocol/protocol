@@ -1,25 +1,30 @@
-// RAMP Admin v1 — operator-plane configuration service.
+// RAMP Admin v1 — operator-plane configuration and forensics service.
 //
-// AdminService carries Exchange operator overrides: the tenant fee rate and
-// the tenant reporting policy. It is deliberately a separate package and
-// service from ramp.v1.ExchangeService — the operator/config plane is not
-// part of the agent hot-path contract, and keeping it out of ramp.v1 keeps
-// the agent-facing surface unchanged.
+// AdminService carries Exchange operator overrides — the tenant fee rate and
+// the tenant reporting policy — plus one forensic read: the append-once
+// evidence row the Exchange persists for every executed transaction. It is
+// deliberately a separate package and service from ramp.v1.ExchangeService —
+// the operator plane is not part of the agent hot-path contract, and keeping
+// it out of ramp.v1 keeps the agent-facing surface unchanged.
 //
 // Trust model: deployments MUST NOT expose AdminService on the public
 // agent-facing listener. Reachability is restricted at the network layer
 // (an internal listener plus a source allowlist); there is no per-operator
 // identity inside the service in v1. Because the admin plane carries no
 // RFC 9421 request signing, there is no verified signer to deduplicate
-// against — and both RPCs are full-replace overwrites, so they are naturally
-// idempotent and carry no idempotency_key.
+// against — and no RPC here needs one: the setters are full-replace
+// overwrites and the evidence read is side-effect-free, so every RPC is
+// naturally idempotent and carries no idempotency_key.
 //
-// Message shape: each RPC takes a thin {ver, <payload>} envelope wrapping a
+// Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is
 // stated ONCE; the read-back response cannot drift from the write. Responses
 // echo the payload as persisted, giving operator tooling a read-back
-// confirmation of the applied values.
+// confirmation of the applied values. The evidence read does not share this
+// shape — its request carries only a transaction id, and its response wraps
+// read-only payloads that exist on no write path (TransactionEvidence,
+// TransactionState, ReportingObligationState).
 //
 // Validation: every constraint here is a FIELD-level protovalidate rule so it
 // flows into the generated Pydantic/Zod types. Cross-field (message-level CEL)
@@ -74,6 +79,9 @@ const (
 	// AdminServiceSetReportingPolicyProcedure is the fully-qualified name of the AdminService's
 	// SetReportingPolicy RPC.
 	AdminServiceSetReportingPolicyProcedure = "/ramp.admin.v1.AdminService/SetReportingPolicy"
+	// AdminServiceGetTransactionEvidenceProcedure is the fully-qualified name of the AdminService's
+	// GetTransactionEvidence RPC.
+	AdminServiceGetTransactionEvidenceProcedure = "/ramp.admin.v1.AdminService/GetTransactionEvidence"
 )
 
 // AdminServiceClient is a client for the ramp.admin.v1.AdminService service.
@@ -85,6 +93,12 @@ type AdminServiceClient interface {
 	// tolerance, reporting window). Full replace: omitted optional fields clear
 	// their value so the receiving Exchange's defaults apply.
 	SetReportingPolicy(context.Context, *connect.Request[v1.SetReportingPolicyRequest]) (*connect.Response[v1.SetReportingPolicyResponse], error)
+	// Returns the append-once evidence row for one executed transaction — the
+	// full signed offer, both Ed25519 proofs and the verbatim bytes each was
+	// computed over — plus the transaction-log and reporting-obligation state
+	// needed to render it. Read-only: it exposes what the execute path already
+	// persisted and writes nothing. An unknown transaction_id is NOT_FOUND.
+	GetTransactionEvidence(context.Context, *connect.Request[v1.GetTransactionEvidenceRequest]) (*connect.Response[v1.GetTransactionEvidenceResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the ramp.admin.v1.AdminService service. By default,
@@ -110,13 +124,20 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("SetReportingPolicy")),
 			connect.WithClientOptions(opts...),
 		),
+		getTransactionEvidence: connect.NewClient[v1.GetTransactionEvidenceRequest, v1.GetTransactionEvidenceResponse](
+			httpClient,
+			baseURL+AdminServiceGetTransactionEvidenceProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("GetTransactionEvidence")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // adminServiceClient implements AdminServiceClient.
 type adminServiceClient struct {
-	setTenantFeeRate   *connect.Client[v1.SetTenantFeeRateRequest, v1.SetTenantFeeRateResponse]
-	setReportingPolicy *connect.Client[v1.SetReportingPolicyRequest, v1.SetReportingPolicyResponse]
+	setTenantFeeRate       *connect.Client[v1.SetTenantFeeRateRequest, v1.SetTenantFeeRateResponse]
+	setReportingPolicy     *connect.Client[v1.SetReportingPolicyRequest, v1.SetReportingPolicyResponse]
+	getTransactionEvidence *connect.Client[v1.GetTransactionEvidenceRequest, v1.GetTransactionEvidenceResponse]
 }
 
 // SetTenantFeeRate calls ramp.admin.v1.AdminService.SetTenantFeeRate.
@@ -129,6 +150,11 @@ func (c *adminServiceClient) SetReportingPolicy(ctx context.Context, req *connec
 	return c.setReportingPolicy.CallUnary(ctx, req)
 }
 
+// GetTransactionEvidence calls ramp.admin.v1.AdminService.GetTransactionEvidence.
+func (c *adminServiceClient) GetTransactionEvidence(ctx context.Context, req *connect.Request[v1.GetTransactionEvidenceRequest]) (*connect.Response[v1.GetTransactionEvidenceResponse], error) {
+	return c.getTransactionEvidence.CallUnary(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the ramp.admin.v1.AdminService service.
 type AdminServiceHandler interface {
 	// Sets the tenant's fee rate (basis points) and optional operator note.
@@ -138,6 +164,12 @@ type AdminServiceHandler interface {
 	// tolerance, reporting window). Full replace: omitted optional fields clear
 	// their value so the receiving Exchange's defaults apply.
 	SetReportingPolicy(context.Context, *connect.Request[v1.SetReportingPolicyRequest]) (*connect.Response[v1.SetReportingPolicyResponse], error)
+	// Returns the append-once evidence row for one executed transaction — the
+	// full signed offer, both Ed25519 proofs and the verbatim bytes each was
+	// computed over — plus the transaction-log and reporting-obligation state
+	// needed to render it. Read-only: it exposes what the execute path already
+	// persisted and writes nothing. An unknown transaction_id is NOT_FOUND.
+	GetTransactionEvidence(context.Context, *connect.Request[v1.GetTransactionEvidenceRequest]) (*connect.Response[v1.GetTransactionEvidenceResponse], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -159,12 +191,20 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("SetReportingPolicy")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceGetTransactionEvidenceHandler := connect.NewUnaryHandler(
+		AdminServiceGetTransactionEvidenceProcedure,
+		svc.GetTransactionEvidence,
+		connect.WithSchema(adminServiceMethods.ByName("GetTransactionEvidence")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/ramp.admin.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceSetTenantFeeRateProcedure:
 			adminServiceSetTenantFeeRateHandler.ServeHTTP(w, r)
 		case AdminServiceSetReportingPolicyProcedure:
 			adminServiceSetReportingPolicyHandler.ServeHTTP(w, r)
+		case AdminServiceGetTransactionEvidenceProcedure:
+			adminServiceGetTransactionEvidenceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -180,4 +220,8 @@ func (UnimplementedAdminServiceHandler) SetTenantFeeRate(context.Context, *conne
 
 func (UnimplementedAdminServiceHandler) SetReportingPolicy(context.Context, *connect.Request[v1.SetReportingPolicyRequest]) (*connect.Response[v1.SetReportingPolicyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ramp.admin.v1.AdminService.SetReportingPolicy is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) GetTransactionEvidence(context.Context, *connect.Request[v1.GetTransactionEvidenceRequest]) (*connect.Response[v1.GetTransactionEvidenceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ramp.admin.v1.AdminService.GetTransactionEvidence is not implemented"))
 }
