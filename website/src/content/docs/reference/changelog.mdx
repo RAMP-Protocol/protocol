@@ -5,6 +5,114 @@ description: "RAMP protocol changelog"
 
 ## Unreleased
 
+**Every addressed request names its recipient: `exchange` becomes required (breaking,
+pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`
+(field 3), `GetAccountStatusRequest` (field 2), `DomainVerificationRequest` (field 4),
+`DomainVerificationConfirmation` (field 6), `PushResourcesRequest` (field 5),
+`RemoveResourcesRequest` (field 4) and `RefreshCatalogRequest` (field 3) gain the field;
+`UsageReport.exchange` keeps field 8 and is promoted from `optional`, which is the breaking
+half — an absent or empty value used to skip the recipient check entirely, so the check was
+opt-in for the caller, and it is now a rejection. The value is the bare host of the
+recipient ("exchange.example", "exchange.example:8081"), never an endpoint URL: an endpoint
+in the payload would hand the caller the choice of where the next hop dials, which is the
+lever the well-known resolver exists to remove. A recipient MUST reject a request whose
+`exchange` is not one of its own domains, with `INVALID_ARGUMENT` and no typed reason — a
+mis-addressed request is malformed rather than a domain-level failure, and that same check
+is what stops a request captured at one recipient from being replayed at another.
+
+The signature does not already establish this, in either case that matters. On a relayed
+path each hop signs its own `@target-uri`, so the agent's signature covers the Broker's URL
+and the Exchange never sees an agent statement about where the request was meant to go. On
+a direct hop the signature does cover the recipient's URL, but that URL came from a fetched,
+cached manifest — so it proves the sender signed *the URL it dialled*, not that the URL was
+right. The body field is covered by the sender's content-digest, which a relaying
+intermediary cannot alter without breaking the inner signature. Two messages are exempt and
+both absences are load-bearing: `DiscoveryRequest` travels one direct hop and terminates at
+the Broker, which authors fresh per-Exchange `ResourceQuery` messages rather than
+forwarding it, and the agent cannot name the fan-out set in any case
+(`RequestConstraints.exchanges` stays its optional filter); `TransactionRequest` carries no
+top-level field because its audience statement is per item.
+
+The pattern is deliberately permissive — one or more labels, an optional port, no scheme,
+path, query, userinfo or trailing root dot, and case normalised (both sides lowercase
+before comparing). It matches the structural bare-host rule the reference clients already
+apply, whose job is to stop a path or query being smuggled into a value that gets
+concatenated into a URL, not to check that a name looks like a DNS record. A stricter rule
+demanding a dotted name with an alphabetic suffix would reject single-label service hosts
+such as `exchange:8081`, which real deployments use.
+
+**`Offer.exchange` is presence-enforced (breaking, pre-1.0).** It was a plain string with no
+rule, so an empty value passed. It is the execute-routing target, the value a relaying
+Broker groups a mixed batch by, and — because `TransactionRequest` has no top-level
+`exchange` — the audience statement of an execute: on receipt an Exchange MUST reject the
+request unless EVERY item's `offer.exchange` names one of its own domains. An empty value is
+unroutable, and the swap-protection the offer signature is supposed to provide is vacuous
+when the signed bytes carry no recipient at all. Adding the rule does not change any signed
+bytes: a protovalidate rule is a field option, not a field.
+
+**Manifest registration becomes a block: `WellKnownManifest.account_registration` (field 30)
+replaces `registration_schema` (field 29), and `terms_digest` (field 31) joins `terms_uri`
+(breaking, pre-1.0).** The new top-level `AccountRegistration` message carries the same JSON
+Schema, now as `data_schema`, with the same publish-is-enforce contract and the same safety
+rules. The block exists because registration has more than one publishable facet: field 2 is
+left free for a future web mode, a URL to a page where a human completes steps an API call
+cannot carry. The precedence rule is fixed now, while it is still cheap: an Exchange
+publishing `data_schema` MUST accept registration through the API, and a registration URL is
+an additional option an agent may offer its user, never a replacement. Field 29 is not
+reused — the manifest already leaves 5 and 6 free after the WBA split, and appending keeps
+the numbering legible.
+
+`terms_digest` pins the document served at `terms_uri` in the existing `method:hexdigest`
+form, and `RegisterRequest.terms_digest` (field 4) echoes it. A URL alone cannot say WHICH
+terms were accepted: its content changes, so after the first revision every earlier
+registration points at text that no longer says what was agreed. The echo is covered by the
+request signature, and the Exchange records the accepted digest with the account — which
+also makes keeping the historical terms documents retrievable the Exchange's obligation, since
+a digest identifies a document only while a copy of it still exists. It sits at the top level
+rather than inside the block so an Exchange with pass-through registration can still pin its
+terms version; a message rule (`well_known_manifest.terms_digest_requires_terms_uri`) keeps
+it from being published without the address it pins, mirroring the existing
+`license.digest_required_with_uri`. Operators should treat first publication as a
+coordinated change: it refuses every client that does not yet echo the value.
+
+**`REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE` (field 7) (additive, no wire break).** All
+four digest cases are now defined rather than only the stale one. Matching echo: the
+registration proceeds. Differing echo: refused with the new reason. Absent echo while the
+Exchange publishes a digest: refused with the SAME reason, because the caller's remedy is
+identical — read the manifest, echo, retry — and a second reason would split one fix in two.
+An echo sent to an Exchange that publishes no digest: ignored, and explicitly NOT recorded as
+an acceptance, since an Exchange publishing none cannot verify what document the value refers
+to and storing it would put an unverifiable claim exactly where the field exists to hold a
+verified one. A registering client MUST read the digest from a freshly fetched manifest
+rather than a cached copy: a client cannot detect staleness locally — only the Exchange can —
+so a warm cache would otherwise make it retry a refused value until the cache expired.
+Registration happens once per Exchange, so the extra fetch is cheap.
+
+**`DENIAL_REASON_BILLING_REF_INACTIVE` splits into `DENIAL_REASON_ACCOUNT_INACTIVE` (keeping
+field 1) and `DENIAL_REASON_ACCOUNT_NOT_REGISTERED` (field 18), and `TransactionDenial` gains
+`exchange` (field 4) (breaking, pre-1.0).** The agent hits this wall at execute, not at
+register, and the old single reason conflated two states of the caller with two different
+remedies: wait for an operator to activate an account that exists, versus call `Register`
+because none does — an action an agent can take unattended. The denial names the Exchange
+that produced it, which on a relayed or fanned-out execute need not be one the agent named,
+so the agent learns where to register without fetching a manifest to work it out. This
+reverses a recorded decision; the reasoning, and why the neighbouring
+`DELEGATION_EXPIRED` → `DENIAL_REASON_DELEGATION_INVALID` broadening still stands, are in
+`docs/design-history.md` under "DenialReason consolidation".
+
+**Contract text: `registration_data` is documented as business-registration data (no wire
+change).** The details an Exchange needs to open a commercial account — legal entity,
+address, jurisdiction, tax identifiers. The specific members stay operator-defined; what is
+now explicit is that this is not an identity claim, since the caller's identity comes from
+the verified request signature and nothing in the payload is trusted as authentication.
+
+*Tooling:* the corpus grows from 208 to 319 cases and `Offer` enters it for the first time,
+because a message with no field rules produces no cases at all and `Offer` previously had
+none. `WellKnownManifest` gains a seed: auto-fill populates `terms_digest` (it carries a
+pattern) but never `terms_uri` (no field rule to trigger on), so the generated baseline
+would otherwise violate the new message rule. The reviewable part of that diff is the seed
+and the pattern, not the generated output.
+
 **SDK (all 3 languages): the registration-failure builder can carry the field errors
 (additive, no wire change).** `helpers.RegistrationFailureDetail` (Go),
 `registration_failure_detail` (Python) and `registrationFailureDetail` (TS) now accept the

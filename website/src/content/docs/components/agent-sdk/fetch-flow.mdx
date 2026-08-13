@@ -253,8 +253,8 @@ type NoOfferError struct {
 
 // TransactionDeniedError -- Exchange denied the transaction.
 type TransactionDeniedError struct {
-    Reason      DenialReason // BILLING_REF_INACTIVE, DELEGATION_INVALID, etc.
-    Exchange string
+    Reason      DenialReason // ACCOUNT_NOT_REGISTERED, ACCOUNT_INACTIVE, DELEGATION_INVALID, etc.
+    Exchange string       // from TransactionDenial.exchange -- where to call Register
     OfferID     string
 }
 

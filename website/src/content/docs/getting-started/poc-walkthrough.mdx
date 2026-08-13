@@ -98,13 +98,14 @@ The response contains **OfferGroups** — one per requested URI — each with Ed
 ```json
 {
   "ver": "1.0",
-  "exchange": "ramp-exchange-v1.0",
+  "exchange": "exchange.ramp-protocol.org",
   "offer_groups": [
     {
       "uri": "https://cdn.ramp-protocol.org/2024/01/15/ai-startups-funding",
       "offers": [
         {
           "offer_id": "offer-cdn.ramp-protocol.org-1773682699693224366",
+          "exchange": "exchange.ramp-protocol.org",
           "ext": {
             "comp.package_id": "pkg-cdn.ramp-protocol.org/2024/01/15/ai-startups-funding"
           },
@@ -151,6 +152,7 @@ curl -s -X POST https://exchange.ramp-protocol.org/ramp.v1.ExchangeService/Execu
       {
         "offer": {
           "offer_id": "offer-cdn.ramp-protocol.org-1773682699693224366",
+          "exchange": "exchange.ramp-protocol.org",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "rate": "0.05",

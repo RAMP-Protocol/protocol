@@ -299,6 +299,7 @@ An agent queries for a Nature article. No institutional subscription is availabl
 ```json
 {
   "offer_id": "off_nat_2024_abc123",
+  "exchange": "academic-exchange.example.com",
   "title": "CRISPR-Cas9 gene editing in human embryos",
   "pricing": {
     "model": "PRICING_MODEL_PER_UNIT",
@@ -362,6 +363,7 @@ An agent queries for a PLOS ONE article. No payment required.
 ```json
 {
   "offer_id": "off_plos_2024_def456",
+  "exchange": "academic-exchange.example.com",
   "title": "Machine learning for protein structure prediction: a systematic review",
   "pricing": {
     "model": "PRICING_MODEL_FREE",
@@ -416,6 +418,7 @@ An agent at MIT queries for an Elsevier article. MIT has a subscription.
 ```json
 {
   "offer_id": "off_elsevier_2024_ghi789",
+  "exchange": "academic-exchange.example.com",
   "subscription_id": "inst:MIT:elsevier-freedom-2024",
   "title": "Quantum error correction with topological codes",
   "pricing": {
@@ -496,6 +499,7 @@ A Broker sends a batch query for 50 DOIs. This example shows two of the resultin
       "offers": [
         {
           "offer_id": "off_batch_001_item_01",
+          "exchange": "academic-exchange.example.com",
           "subscription_id": "inst:MIT:springer-2024",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
@@ -527,6 +531,7 @@ A Broker sends a batch query for 50 DOIs. This example shows two of the resultin
       "offers": [
         {
           "offer_id": "off_batch_001_item_27",
+          "exchange": "academic-exchange.example.com",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
             "unit_cost": "2999",
@@ -570,6 +575,7 @@ An agent discovers post-transaction that a paper was retracted but the Exchange 
 ```json
 {
   "ver": "1.0",
+  "exchange": "academic-exchange.example.com",
   "idempotency_key": "dispute_retraction_001",
   "transaction_id": "tx_abc123",
   "billing_id": "bill_abc123",

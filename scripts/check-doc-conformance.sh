@@ -26,9 +26,19 @@ patterns=(
   # conformance candidate detector (TestDocMarkedExamplesValidate), not this
   # grep — do not widen these into a proximity pattern; it would
   # false-positive on the live account-handle prose (e.g. the
-  # DENIAL_REASON_BILLING_REF_INACTIVE comment in ramp.proto).
+  # ACCOUNT_INACTIVE comment in ramp.proto, which keeps the words "account (the"
+  # between the possessive and the identifier so this pattern does not match it).
   '[Rr]equester\.billing\\?_ref' '[Rr]equester\.[Bb]illingRef'
   "[Rr]equester'?s?[[:space:]]+\`?billing\\\\?_ref"
+  # the manifest's registration field became a block: registration_schema (a flat
+  # Struct) is now account_registration.data_schema, so the old name must not
+  # linger in prose, tables or example payloads.
+  'registration_schema' 'registrationSchema'
+  # the single billing-reference denial split into ACCOUNT_NOT_REGISTERED ("no
+  # account — call Register") and ACCOUNT_INACTIVE ("account exists, awaiting
+  # operator activation"); the two are different agent actions, so the old
+  # conflated name must not survive anywhere it could still be read as live.
+  'BILLING_REF_INACTIVE'
   # request signatures live in HTTP headers (RFC 9421), not message fields
   'caller_signature' 'agent_signature' 'orchestrator_signature' 'broker_signature'
   # the scalar offer_signature pair is gone: the execute-request now reflects the

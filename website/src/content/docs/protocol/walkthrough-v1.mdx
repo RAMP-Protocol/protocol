@@ -65,6 +65,7 @@ The agent sends a `ResourceQuery` to the Exchange with its identity in the `Requ
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.ssp-alpha.com",
   "uris": [
     "https://techcrunch.com/2026/03/19/ai-agents-commerce.html"
   ],
@@ -103,6 +104,7 @@ The Exchange looks up the article in its catalog and returns an offer. It does n
       "offers": [
         {
           "offer_id": "offer-tc-agents-001",
+          "exchange": "exchange.ssp-alpha.com",
           "title": "AI Agents Are Rewriting Commerce",
           "ext": {
             "comp.package_id": "PKG-TC-AGENTS-COMMERCE",
@@ -188,6 +190,7 @@ The agent commits to the offer by sending the full signed `offer` back, reflecte
     {
       "offer": {
         "offer_id": "offer-tc-agents-001",
+        "exchange": "exchange.ssp-alpha.com",
         "title": "AI Agents Are Rewriting Commerce",
         "pricing": {
           "model": "PRICING_MODEL_PER_UNIT",
@@ -286,6 +289,7 @@ Usage reporting is mandatory. The agent reports actual consumption:
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.ssp-alpha.com",
   "idempotency_key": "ur-001",
   "transaction_id": "txn-tc-001",
   "billing_id": "bill-tc-001",
@@ -358,6 +362,7 @@ Here is where v1.0's `Requester` + `Delegation` model shows its power. The agent
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.marketdata-data.com",
   "uris": [
     "https://marketdata.example.com/earnings/NVDA/2026-Q1-transcript"
   ],
@@ -430,6 +435,7 @@ The Exchange verifies the JWT chain, confirms `earnings:*` covers the requested 
       "offers": [
         {
           "offer_id": "offer-bb-nvda-q1-001",
+          "exchange": "exchange.marketdata-data.com",
           "title": "NVIDIA Corp Q1 2026 Earnings Call Transcript",
           "ext": {
             "comp.package_id": "PKG-BB-NVDA-Q1-TRANSCRIPT",

@@ -6,6 +6,7 @@
 package conformance
 
 import (
+	"strings"
 	"testing"
 
 	protovalidate "buf.build/go/protovalidate"
@@ -172,8 +173,23 @@ func licensingCases() []validationCase {
 		{"resource_identity mutability unspecified rejected", &rampv1.ResourceIdentity{}, false, "enum.not_in"},
 		{"well_known_manifest role set ok", &rampv1.WellKnownManifest{Role: rampv1.Role_ROLE_AGENT}, true, ""},
 		{"well_known_manifest role unspecified rejected", &rampv1.WellKnownManifest{}, false, "enum.not_in"},
-		{"dispute_request reason set ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
-		{"dispute_request reason unspecified rejected", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x"}, false, "enum.not_in"},
+		// A digest pins the document at terms_uri, so publishing one without the
+		// address it pins leaves nothing to check the bytes against.
+		{"well_known_manifest terms_digest without terms_uri rejected", &rampv1.WellKnownManifest{
+			Role:        rampv1.Role_ROLE_EXCHANGE,
+			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+		}, false, "well_known_manifest.terms_digest_requires_terms_uri"},
+		{"well_known_manifest terms_digest with terms_uri ok", &rampv1.WellKnownManifest{
+			Role:        rampv1.Role_ROLE_EXCHANGE,
+			TermsUri:    proto.String("https://exchange.example/terms"),
+			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+		}, true, ""},
+		{"well_known_manifest terms_uri without digest ok", &rampv1.WellKnownManifest{
+			Role:     rampv1.Role_ROLE_EXCHANGE,
+			TermsUri: proto.String("https://exchange.example/terms"),
+		}, true, ""},
+		{"dispute_request reason set ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x", Exchange: exampleExchange, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
+		{"dispute_request reason unspecified rejected", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x", Exchange: exampleExchange}, false, "enum.not_in"},
 		{"usage consumed_unit empty ok", &rampv1.Usage{}, true, ""},
 		{"usage consumed_unit bare ok", &rampv1.Usage{ConsumedUnit: proto.String("tokens")}, true, ""},
 		{"usage consumed_unit space rejected", &rampv1.Usage{ConsumedUnit: proto.String("two words")}, false, "string.pattern"},
@@ -190,15 +206,21 @@ func TestIdempotencyKeyRequired(t *testing.T) {
 
 func idempotencyCases() []validationCase {
 	return []validationCase{
-		{"transaction empty key rejected", &rampv1.TransactionRequest{IdempotencyKey: "", Items: []*rampv1.TransactionItem{{Offer: &rampv1.Offer{OfferId: "of_1", Pricing: freePricing()}}}}, false, "string.min_len"},
-		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1", Items: []*rampv1.TransactionItem{{Offer: &rampv1.Offer{OfferId: "of_1", Pricing: freePricing()}}}}, true, ""},
+		{"transaction empty key rejected", &rampv1.TransactionRequest{IdempotencyKey: "", Items: []*rampv1.TransactionItem{{Offer: &rampv1.Offer{OfferId: "of_1", Exchange: exampleExchange, Pricing: freePricing()}}}}, false, "string.min_len"},
+		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1", Items: []*rampv1.TransactionItem{{Offer: &rampv1.Offer{OfferId: "of_1", Exchange: exampleExchange, Pricing: freePricing()}}}}, true, ""},
 		{"transaction empty items rejected", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-empty"}, false, "repeated.min_items"},
-		{"usage report empty key rejected", &rampv1.UsageReport{IdempotencyKey: ""}, false, "string.min_len"},
-		{"usage report key ok", &rampv1.UsageReport{IdempotencyKey: "idem-ur-1"}, true, ""},
-		{"dispute empty key rejected", &rampv1.DisputeRequest{IdempotencyKey: "", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, false, "string.min_len"},
-		{"dispute key ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-1", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
+		{"usage report empty key rejected", &rampv1.UsageReport{IdempotencyKey: "", Exchange: exampleExchange}, false, "string.min_len"},
+		{"usage report key ok", &rampv1.UsageReport{IdempotencyKey: "idem-ur-1", Exchange: exampleExchange}, true, ""},
+		{"dispute empty key rejected", &rampv1.DisputeRequest{IdempotencyKey: "", Exchange: exampleExchange, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, false, "string.min_len"},
+		{"dispute key ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-1", Exchange: exampleExchange, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
 	}
 }
+
+// exampleExchange is a valid recipient host for fixtures whose subject is some
+// OTHER constraint. Every addressed request now carries `exchange`, so a case
+// that omits it fails on the recipient rule instead of the rule it was written
+// to exercise.
+const exampleExchange = "exchange.example"
 
 func freePricing() *rampv1.Pricing {
 	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}

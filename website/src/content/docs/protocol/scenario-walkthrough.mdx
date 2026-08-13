@@ -247,6 +247,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.ssp-alpha.com",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
@@ -333,6 +334,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
   "offers": [
     {
       "offer_id": "offer-tc-reg-001",
+      "exchange": "exchange.ssp-alpha.com",
       "title": "AI Regulation: What Providers Need to Know",
       "pricing": {
         "model": "PRICING_MODEL_PER_UNIT",
@@ -376,6 +378,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
     },
     {
       "offer_id": "sub-offer-tc-reg-001",
+      "exchange": "exchange.ssp-alpha.com",
       "title": "AI Regulation: What Providers Need to Know",
       "pricing": {
         "model": "PRICING_MODEL_FREE",
@@ -472,6 +475,7 @@ Broker → SSP-Alpha (multi-URI batch query) — `POST https://exchange.ssp-alph
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.ssp-alpha.com",
   "requester": {
     "id": "claude-agent-001",
     "domain": "claude.ai",
@@ -503,6 +507,7 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
       "offers": [
         {
           "offer_id": "offer-tc-reg-001",
+          "exchange": "exchange.ssp-alpha.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit": "accesses", "unit_cost": "0.00001515", "estimated_quantity": 3300 },
           "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
           "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
@@ -511,6 +516,7 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
         },
         {
           "offer_id": "sub-offer-tc-reg-001",
+          "exchange": "exchange.ssp-alpha.com",
           "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD", "unit_cost": "0", "estimated_quantity": 3300 },
           "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
           "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
@@ -540,6 +546,7 @@ Note: SSP-Alpha returns an empty `offers` array for the `theverge.com` URI with 
   "offers": [
     {
       "offer_id": "offer-verge-reg-001",
+      "exchange": "exchange.ssp-beta.com",
       "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.07", "currency": "USD", "unit": "accesses", "unit_cost": "0.00002258", "estimated_quantity": 3100 },
       "identity": {
         "canonical_url": "https://theverge.com/premium/ai-regulation-republish.html",
@@ -625,6 +632,7 @@ SDK or Broker commits to the subscription offer.
     {
       "offer": {
         "offer_id": "sub-offer-tc-reg-001",
+        "exchange": "exchange.ssp-alpha.com",
         "title": "AI Regulation: What Providers Need to Know",
         "pricing": {
           "model": "PRICING_MODEL_FREE",
@@ -674,6 +682,7 @@ SDK or Broker commits to the subscription offer.
     {
       "offer": {
         "offer_id": "sub-offer-tc-reg-001",
+        "exchange": "exchange.ssp-alpha.com",
         "title": "AI Regulation: What Providers Need to Know",
         "pricing": {
           "model": "PRICING_MODEL_FREE",
@@ -829,6 +838,7 @@ The SDK auto-submits a usage report (background, non-blocking). Usage reporting 
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.ssp-alpha.com",
   "idempotency_key": "ur-claude-001",
   "transaction_id": "txn-alpha-001",
   "billing_id": "bill-sub-alpha-001",
@@ -840,7 +850,6 @@ The SDK auto-submits a usage report (background, non-blocking). Usage reporting 
     "citation_included": true
   },
   "timestamp": "2026-03-15T15:30:00Z",
-  "exchange": "exchange.ssp-alpha.com",
   "assets": [
     {
       "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
@@ -930,6 +939,7 @@ Response includes signed Offer snapshots for every transaction:
       "billing_id": "bill-sub-alpha-001",
       "offer_snapshot": {
         "offer_id": "sub-offer-tc-reg-001",
+        "exchange": "exchange.ssp-alpha.com",
         "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" },
         "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
         "signature": "base64-ed25519-sig-B...",

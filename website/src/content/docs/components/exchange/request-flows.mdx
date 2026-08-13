@@ -17,6 +17,7 @@ sequenceDiagram
     Agent->>Handler: DiscoverResources(ResourceQuery)
 
     Note over Handler: Validate request (proto validation)
+    Note over Handler: Reject unless request.exchange names one of this Exchange's own domains (INVALID_ARGUMENT)
     Note over Handler: Verify requester RFC 9421 HTTP Message Signature in the HTTP headers (Ed25519 via domain key lookup)
     Note over Handler: Verify the stack of forwarding HTTP Message Signatures (RFC 9421, one per hop; if present)
     Note over Handler: Extract tenant from ResourceQuery.uris[0] domain
@@ -330,6 +331,7 @@ sequenceDiagram
     Agent->>Handler: ExecuteTransaction(TransactionRequest{items})
 
     Note over Handler: Validate request
+    Note over Handler: Reject unless EVERY items[].offer.exchange names one of this Exchange's own domains (INVALID_ARGUMENT)
     Note over Handler: Verify requester RFC 9421 HTTP Message Signature
     Note over Handler: Check idempotency key
 
@@ -701,6 +703,7 @@ sequenceDiagram
     Agent->>Handler: ReportUsage(UsageReport)
 
     Note over Handler: Validate request fields
+    Note over Handler: Reject unless report.exchange names one of this Exchange's own domains (INVALID_ARGUMENT)
 
     Handler->>TxLog: LookupTransaction(ctx, txnID)
     TxLog-->>Handler: TransactionRecord (verify billing_id matches)
@@ -825,6 +828,7 @@ sequenceDiagram
     Agent->>Handler: DisputeTransaction(DisputeRequest)
 
     Note over Handler: Validate request (report_id required)
+    Note over Handler: Reject unless request.exchange names one of this Exchange's own domains (INVALID_ARGUMENT)
 
     Handler->>TxLog: LookupTransaction(ctx, transaction_id)
     TxLog-->>Handler: TransactionRecord + UsageReport

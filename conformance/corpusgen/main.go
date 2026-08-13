@@ -64,8 +64,11 @@ func seeds() map[string]proto.Message {
 	pricing := func() *rampv1.Pricing {
 		return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 	}
+	// Exchange is presence-enforced on Offer (it is the execute-routing target
+	// and the audience statement of a TransactionRequest), so a seed without it
+	// is not a valid baseline — seeds bypass auto-fill entirely.
 	offer := func() *rampv1.Offer {
-		return &rampv1.Offer{OfferId: "offer-seed", Pricing: pricing()}
+		return &rampv1.Offer{OfferId: "offer-seed", Exchange: "exchange.example", Pricing: pricing()}
 	}
 	return map[string]proto.Message{
 		"Pricing":     pricing(),
@@ -78,7 +81,7 @@ func seeds() map[string]proto.Message {
 		"Quota":                 &rampv1.Quota{Metric: "accesses", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY},
 		"LicenseTerm":           &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: pricing()},
 		"AcceptableRestriction": &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train"}},
-		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
+		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Exchange: "exchange.example", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
 		// Reflected-Offer execute contract (items-only): Offer is
 		// the required sub-message of TransactionItem (auto-fill needs its seed),
 		// and TransactionRequest needs a valid 1-item items[] baseline because its
@@ -102,6 +105,19 @@ func seeds() map[string]proto.Message {
 				{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"},
 			},
 		},
+		// terms_digest pins the document at terms_uri, so the two are joined by a
+		// message CEL rule. Auto-fill populates terms_digest (it carries a pattern)
+		// but never terms_uri (no field rule to trigger on), which is precisely the
+		// shape a seed exists for. Seeding BOTH also keeps the terms_digest pattern
+		// mutants honest: they trip the pattern alone rather than the pattern and
+		// the cross-field rule together.
+		"WellKnownManifest": &rampv1.WellKnownManifest{
+			Ver:         "1.0",
+			Role:        rampv1.Role_ROLE_EXCHANGE,
+			Domain:      "exchange.example",
+			TermsUri:    proto.String("https://exchange.example/terms"),
+			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+		},
 		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
 		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},
 	}
@@ -111,6 +127,11 @@ func seeds() map[string]proto.Message {
 // pattern and length bounds becomes the auto-filled value (generic — no per-field
 // table). badStrings are candidates that should FAIL a typical token/number/hash
 // pattern; the first that the pattern rejects becomes the violating value.
+//
+// APPEND-ONLY, for a different reason than badStrings: validString returns the
+// FIRST entry that matches, so appending cannot change what any existing field
+// auto-fills to, and the corpus diff stays additive. Inserting anywhere else can
+// silently re-value every field a new earlier entry happens to satisfy.
 var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), ""}
 
 // APPEND-ONLY: a badStrings entry's INDEX is baked into the emitted case IDs (see
@@ -219,6 +240,18 @@ func writeCrossField(v protovalidate.Validator) {
 			"License/cel/digest_required_with_uri",
 			&rampv1.License{Id: proto.String("CC-BY-4.0"), Uri: proto.String("https://example.com/license")},
 			"license.digest_required_with_uri",
+		},
+		{
+			// The manifest mirror of the rule above: a digest with no document
+			// address cannot be checked against anything.
+			"WellKnownManifest/cel/terms_digest_requires_terms_uri",
+			&rampv1.WellKnownManifest{
+				Ver:         "1.0",
+				Role:        rampv1.Role_ROLE_EXCHANGE,
+				Domain:      "exchange.example",
+				TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+			},
+			"well_known_manifest.terms_digest_requires_terms_uri",
 		},
 		{
 			"Restriction/cel/permitted_prohibited_disjoint",

@@ -105,5 +105,19 @@
         "ai-train"
       ]
     }
+  },
+  {
+    "id": "WellKnownManifest/cel/terms_digest_requires_terms_uri",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "well_known_manifest.terms_digest_requires_terms_uri"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab",
+      "ver": "1.0"
+    }
   }
 ]

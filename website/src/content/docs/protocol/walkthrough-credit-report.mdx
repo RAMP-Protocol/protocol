@@ -91,6 +91,7 @@ The Broker sends a `ResourceQuery` with the resolved D-U-N-S number as a `duns:`
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.dnb.com",
   "requester": {
     "id": "due-diligence-bot",
     "domain": "legalcorp.com",
@@ -133,6 +134,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
       "offers": [
         {
           "offer_id": "offer-dnb-acme-basic",
+          "exchange": "exchange.dnb.com",
           "title": "Acme Corporation — Basic Credit Summary",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -201,6 +203,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
         },
         {
           "offer_id": "offer-dnb-acme-standard",
+          "exchange": "exchange.dnb.com",
           "title": "Acme Corporation — Standard Credit Report",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -271,6 +274,7 @@ The Exchange returns an `OfferGroup` with **three tiered offers** for the same r
         },
         {
           "offer_id": "offer-dnb-acme-comprehensive",
+          "exchange": "exchange.dnb.com",
           "title": "Acme Corporation — Comprehensive Credit Report with Financials",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -405,6 +409,7 @@ The agent selects the **standard tier** ($61.99) — sufficient depth for due di
     {
       "offer": {
         "offer_id": "offer-dnb-acme-standard",
+        "exchange": "exchange.dnb.com",
         "title": "Acme Corporation — Standard Credit Report",
         "pricing": {
           "model": "PRICING_MODEL_PER_UNIT",
@@ -533,6 +538,7 @@ Usage reporting is mandatory. The agent reports actual consumption:
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.dnb.com",
   "idempotency_key": "ur-dnb-001",
   "transaction_id": "txn-dnb-acme-001",
   "billing_id": "bill-dnb-acme-001",
