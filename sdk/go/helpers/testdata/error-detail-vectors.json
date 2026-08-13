@@ -62,6 +62,22 @@
       }
     },
     {
+      "name": "transaction_denial_account_not_registered",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "no account at this Exchange — call Register first",
+      "metadata": null,
+      "reason_field": "transaction_denial",
+      "reason_enum": "DENIAL_REASON_ACCOUNT_NOT_REGISTERED",
+      "field_errors": null,
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "no account at this Exchange — call Register first",
+        "transaction_denial": {
+          "reason": "DENIAL_REASON_ACCOUNT_NOT_REGISTERED"
+        }
+      }
+    },
+    {
       "name": "retrieval_auth_failure_reason",
       "domain": "ramp.v1.Edge",
       "message": "signed URL expired",
