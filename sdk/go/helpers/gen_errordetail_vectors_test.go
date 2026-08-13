@@ -231,10 +231,21 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 	// that belongs to no single member, which is the boundary a client most
 	// plausibly gets wrong by treating "" as unset.
 	registrationInvalidData := RegistrationFailureDetail(
-		"ramp.v1.ExchangeService", "registration_data does not match the published registration_schema",
+		"ramp.v1.ExchangeService", "registration_data does not match the published data_schema",
 		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
 		&rampv1.RegistrationFieldError{Path: "/vat_id", Error: "must match ^[A-Z]{2}[0-9]+$"},
 		&rampv1.RegistrationFieldError{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"},
+	)
+
+	// The stale-terms refusal. It shares the registration_failure block with the
+	// case above but carries NO field_errors — the list is scoped to
+	// INVALID_REGISTRATION_DATA, and every other reason leaves it empty. Without
+	// this vector the reason would reach no cross-language case at all, so a
+	// client that never learned to decode it would stay green: the same gap the
+	// field-errors vector was added to close for its own branch.
+	registrationStaleTerms := RegistrationFailureDetail(
+		"ramp.v1.ExchangeService", "terms_digest does not match the currently published terms",
+		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE,
 	)
 
 	disputeFailure := DisputeFailureDetail(
@@ -262,6 +273,7 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 		{"catalog_rejection_reason", catalogRejection},
 		{"registration_failure_reason", registrationFailure},
 		{"registration_failure_field_errors", registrationInvalidData},
+		{"registration_failure_terms_digest_stale", registrationStaleTerms},
 		{"dispute_failure_reason", disputeFailure},
 		{"domain_verification_failure_reason", domainVerificationFailure},
 		{"usage_report_rejection_reason", usageReportRejection},
