@@ -77,6 +77,23 @@ export async function signInbound(
 	// string form ONCE at the boundary, so the signed @target-uri and the emitted
 	// Request carry the same verbatim bytes. No-op for string callers.
 	const target = opaqueUrl(url);
+	// The signature base is line-delimited and `target` is written into it
+	// verbatim, so a control byte would add or split a component line and the bytes
+	// signed here would stop describing the request a verifier reconstructs.
+	// Refused rather than escaped, mirroring the Go signer. Checked AFTER the
+	// coercion above so it inspects the bytes that actually get signed — and before
+	// `new Request(target, …)` below, which would otherwise throw an opaque
+	// TypeError instead of naming the reason.
+	// Scanned over the UTF-8 BYTES, not the code points, so the reported offset is
+	// the same number Go's strings.IndexFunc reports for the same input. Which
+	// inputs are refused is unaffected — a control byte is always a single UTF-8
+	// byte — but an unlabelled index under identical wording meant three units.
+	const badAt = new TextEncoder()
+		.encode(target)
+		.findIndex((b) => b < 0x20 || b === 0x7f);
+	if (badAt !== -1) {
+		throw new TypeError(`target URI carries a control byte at byte ${badAt}`);
+	}
 	const base = signatureBase("GET", target, rawParams);
 	const sig = await crypto.subtle.sign(
 		"Ed25519",

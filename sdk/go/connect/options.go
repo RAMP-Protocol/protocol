@@ -4,11 +4,15 @@ import (
 	"context"
 	"crypto/ed25519"
 	"net/http"
+	"time"
 
 	connectrpc "connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
+	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/core"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
 )
 
 // clientConfig is the resolved set of injected holders a Client is built from.
@@ -24,6 +28,17 @@ type clientConfig struct {
 	validation    Validation
 	requestID     core.RequestIDFunc
 	extra         []connectrpc.Interceptor
+
+	requester      *rampv1.Requester
+	agentKey       ed25519.PublicKey
+	proofWindow    core.Window
+	signWindow     core.Window
+	signatureAgent string
+	endpoints      EndpointResolver
+	guardedBase    *http.Transport
+	connectOpts    []connectrpc.ClientOption
+	fetchTimeout   time.Duration
+	fetchMaxByte   int64
 }
 
 // ClientOption configures a Client. Options are the ONLY way to inject the
@@ -88,6 +103,181 @@ func WithInterceptors(is ...connectrpc.Interceptor) ClientOption {
 	return func(c *clientConfig) { c.extra = append(c.extra, is...) }
 }
 
+// WithRequester injects the agent's own identity, forwarded on a purchase for
+// authorization and audit and covered by the detached offer acceptance.
+//
+// It is client-level rather than per-call on purpose: the requester IS the
+// identity the injected Signer already fixes for the transport signature, so a
+// per-call requester would let the two disagree about who is buying — the exact
+// ambiguity the acceptance exists to remove. A verifying Broker refuses a
+// requester id that does not normalise to the signer's own directory host.
+//
+// The message is cloned here, so a later mutation by the caller cannot reach a
+// request already in flight.
+func WithRequester(r *rampv1.Requester) ClientOption {
+	return func(c *clientConfig) {
+		if r == nil {
+			c.requester = nil
+			return
+		}
+		cloned, ok := proto.Clone(r).(*rampv1.Requester)
+		if !ok {
+			// Unreachable for a concrete message, but the fallback must be
+			// nil rather than whatever was configured before: keeping a stale
+			// identity would send one agent's requester on another's behalf,
+			// where nil fails closed into "no requester configured".
+			c.requester = nil
+			return
+		}
+		c.requester = cloned
+	}
+}
+
+// WithAgentKey injects the PUBLIC half of the key WithSigner signs with. A
+// delivery fetch presents it in a header, and a Signer cannot yield it — custody
+// keeps the private half, so the public half has to be supplied alongside.
+// Without it the client can buy but cannot fetch what it bought.
+//
+// There is deliberately no option for a SEPARATE acceptance key. The protocol
+// carries one agent identity: agent_identity_hash is defined as the thumbprint of
+// the agent's request-signing key, an Exchange verifies the detached acceptance
+// against the key registered for the caller its request signature identified, and
+// the delivery URL is bound to that same thumbprint. A second key would be
+// refused at execute, and any URL it did produce could never be fetched — the
+// presented key would not match the binding.
+// The key is COPIED for the same reason WithRequester clones: the caller keeps
+// the slice it passed, and a later append or overwrite there would otherwise
+// change which key every subsequent fetch presents.
+func WithAgentKey(pub ed25519.PublicKey) ClientOption {
+	return func(c *clientConfig) {
+		if pub == nil {
+			c.agentKey = nil
+			return
+		}
+		c.agentKey = append(ed25519.PublicKey(nil), pub...)
+	}
+}
+
+// WithProofWindow overrides the freshness window stamped on a delivery-fetch
+// proof. The default is 30 seconds from the wall clock.
+//
+// Deliberately NOT the signed URL's own expiry, which can be hours: the proof
+// covers only the method and the URL, so anyone who observes the request can
+// repeat it until the window closes.
+func WithProofWindow(w core.Window) ClientOption {
+	return func(c *clientConfig) { c.proofWindow = w }
+}
+
+// WithSignWindow overrides the freshness window stamped on every outbound RFC
+// 9421 REQUEST signature — the home Exchange, the Broker, and the leg that routes
+// to the Exchange an offer named. The default is five minutes from the wall clock.
+//
+// Two reasons an application supplies its own. A deployment with a shorter
+// freshness policy sets its own TTL, and through this option the value it already
+// reads from configuration keeps meaning something. And a peer that screens
+// replays on (key id, signature) refuses a repeat: signature timestamps have
+// one-second resolution, so two identical requests inside one second sign to the
+// same bytes. core.MonotonicWindow keeps each signature unique for exactly that.
+//
+// Distinct from WithProofWindow, which stamps a delivery-fetch proof rather than a
+// request signature. Both take a core.Window; neither substitutes for the other.
+func WithSignWindow(w core.Window) ClientOption {
+	return func(c *clientConfig) { c.signWindow = w }
+}
+
+// WithSignatureAgent names the WBA directory origin this client signs as — the
+// place a peer fetches to find the key that signed the request. It is stamped into
+// the Signature-Agent header of every outbound RFC 9421 request.
+//
+// Leaving it unset does not omit the header: signature-agent is one of the five
+// REQUIRED covered components, so the signature covers it either way and an unset
+// client signs an EMPTY value. A peer that resolves the caller's key from that
+// origin then has nothing to resolve, and refuses the call at verification — after
+// the request was routed, signed and sent, which is why the symptom is a 401 from
+// a healthy Exchange rather than anything the routing checks would catch.
+//
+// One value per client, because one client speaks for one agent — the same reason
+// WithRequester is held rather than passed per call. An application signing as
+// several agents builds a client per agent.
+//
+// Stamped SET-IF-ABSENT. A request that already carries a Signature-Agent keeps
+// it, so a relay forwarding an originating agent's call does not overwrite the
+// value that agent's own signature covers.
+func WithSignatureAgent(dir string) ClientOption {
+	return func(c *clientConfig) { c.signatureAgent = dir }
+}
+
+// WithContentTimeout bounds one delivery fetch, proof minting included. The
+// default is resolvers.DefaultContentTimeout.
+//
+// A delivery host is named by another party, so the bound is not optional — this
+// option moves it, it does not remove it. A value <= 0 keeps the default.
+func WithContentTimeout(d time.Duration) ClientOption {
+	return func(c *clientConfig) { c.fetchTimeout = d }
+}
+
+// WithMaxContentBytes caps one fetched body. The default is
+// resolvers.DefaultMaxContentBytes.
+//
+// Worth setting when the application carries its own per-item budget: a cap here
+// that disagrees with the one the caller accounts against makes that accounting
+// wrong, and an over-cap body is reported as CallTooLarge rather than truncated.
+// A value <= 0 keeps the default.
+//
+// The two bounds are separate scalars rather than one options struct because
+// ContentFetchOptions also carries the base transport, which arrives through
+// WithGuardedBaseTransport — a second way to set it would be a field that had to
+// be silently ignored.
+func WithMaxContentBytes(n int64) ClientOption {
+	return func(c *clientConfig) { c.fetchMaxByte = n }
+}
+
+// WithEndpointResolver injects the resolver that turns an offer's exchange domain
+// into the origin that Exchange advertises for itself. It defaults to the
+// SSRF-guarded well-known resolver.
+//
+// There is deliberately no option to supply an endpoint directly. A usage report
+// must reach the Exchange that issued the offer, and that address comes from the
+// Exchange's own manifest — never from configuration. Leaving no configuration
+// slot for it is what makes that structural rather than a convention.
+func WithEndpointResolver(r EndpointResolver) ClientOption {
+	return func(c *clientConfig) { c.endpoints = r }
+}
+
+// WithGuardedBaseTransport carries the caller's own transport settings — a tuned
+// connection pool, client certificates via TLSClientConfig — UNDERNEATH the SSRF
+// guard on both legs that dial an address another party named: the content fetch,
+// and the RPCs that route to the Exchange an offer identified.
+//
+// It is not a way to replace the guard. Those two legs dial hosts the client did
+// not configure, so the dial-time address pin and the https-only scheme check are
+// applied in every case; a caller supplies what sits under them. The only way to
+// reach a private or plaintext endpoint is the deliberate, deployment-level
+// SKIP_SSRF / ALLOW_INSECURE opt-out.
+//
+// One setting is dropped rather than carried: a custom TLS dialer. net/http
+// prefers a transport's own TLS dialer over the pinned one on https, so honouring
+// it would take every signed call around the address check. TLS itself is
+// configured through TLSClientConfig, which is kept.
+//
+// The home Exchange and the Broker are operator-configured origins and are
+// trusted as far as that configuration is, so they dial through WithHTTPClient's
+// transport instead.
+func WithGuardedBaseTransport(base *http.Transport) ClientOption {
+	return func(c *clientConfig) { c.guardedBase = base }
+}
+
+// WithClientOptions appends raw Connect client options (a codec, a read cap
+// tighter than the SDK default) to every Connect client the SDK builds.
+// Interceptors belong in WithInterceptors; this is the escape hatch for the
+// remaining client-level knobs the SDK does not model, mirroring
+// connectserver.WithHandlerOptions on the server face.
+//
+// Options are appended AFTER the SDK's own, so a caller-supplied value wins.
+func WithClientOptions(opts ...connectrpc.ClientOption) ClientOption {
+	return func(c *clientConfig) { c.connectOpts = append(c.connectOpts, opts...) }
+}
+
 // resolveOfferResolver returns the KeyResolver the offer Verifier uses. A custom
 // resolver (WithKeyResolver) wins; otherwise WithOfferKey produces a fixed-key
 // resolver that returns the injected key for any exchange id (the offer signature
@@ -120,4 +310,15 @@ type emptyResolver struct{}
 
 func (emptyResolver) Resolve(_ context.Context, keyID string) (ed25519.PublicKey, error) {
 	return nil, helpers.ErrUnknownKey
+}
+
+// resolveEndpointResolver returns the resolver an offer-derived call routes
+// through: the injected one, or the SSRF-guarded well-known resolver. The
+// endpoint is always read from the Exchange's own manifest — there is no
+// configuration path to it.
+func (c clientConfig) resolveEndpointResolver() EndpointResolver {
+	if c.endpoints != nil {
+		return c.endpoints
+	}
+	return resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{})
 }

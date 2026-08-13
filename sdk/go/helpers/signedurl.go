@@ -267,6 +267,27 @@ func (v VerifiedURL) CheckProofOfPossession(presentedPub ed25519.PublicKey) erro
 	return nil
 }
 
+// RedactURL reduces a signed URL to scheme://host/path, for a value headed
+// somewhere more durable than the caller who already holds it — a log line, or an
+// error an operator will read.
+//
+// url.URL.Redacted() is NOT the tool for this. It masks userinfo passwords, and a
+// delivery URL carries its credential in the QUERY: sig, kid, exp and agent_id.
+// Redacted() would pass the signature through untouched while reading like a
+// redaction, which is worse than not redacting at all.
+//
+// An unparseable input yields "" rather than the original: a value that could not
+// be sanitized is not one to emit.
+func RedactURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	stripped := *parsed
+	stripped.RawQuery, stripped.Fragment, stripped.User = "", "", nil
+	return stripped.String()
+}
+
 // HashURL returns the SHA-256 digest of a signed URL (the
 // transaction_log.signed_url_hash value, 32 bytes).
 func HashURL(signed string) []byte {

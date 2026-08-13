@@ -167,34 +167,39 @@ func replaceFirst(s, old, new string) string {
 	return s
 }
 
-// signEdgePoP produces an edge-form RFC 9421 GET PoP over exactly the two
-// covered components the edge verifier (src/edge/src/pop.ts) checks: @method and
-// @target-uri. It reuses the oracle's buildSignatureBase / signatureInputInner so
-// the emitted Signature-Input header and the signed bytes are the canonical Go
-// byte contract. keyid is the agent thumbprint (the 3-way identity anchor).
+// signEdgePoP produces the positive PoP vector through the SHIPPED signer, so the
+// goldens the other two languages replay are the bytes production emits rather
+// than a second implementation living in a test. keyid is the agent thumbprint
+// (the 3-way identity anchor).
 func signEdgePoP(t *testing.T, priv ed25519.PrivateKey, keyid, method, rawURL string, created, expires int64) (sigInput, sig string) {
 	t.Helper()
-	req, err := http.NewRequest(method, rawURL, nil)
+	signer, err := NewEd25519Signer(keyid, priv)
 	if err != nil {
-		t.Fatalf("new request: %v", err)
+		t.Fatalf("build agent-binding signer: %v", err)
 	}
-	params := sigParams{
-		Label:   "sig1",
-		Covered: plainComponents("@method", "@target-uri"),
-		KeyID:   keyid,
-		Alg:     AlgEd25519,
-		Created: created,
-		Expires: expires,
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	if !ok {
+		t.Fatal("signing key has no ed25519 public half")
 	}
-	base, err := buildSignatureBase(req, params)
+	binding, err := SignAgentBinding(context.Background(), signer, pub, PoPOptions{
+		URL: rawURL, KeyID: keyid, Created: created, Expires: expires, Method: method,
+	})
 	if err != nil {
-		t.Fatalf("build signature base: %v", err)
+		t.Fatalf("sign agent binding: %v", err)
 	}
-	raw := ed25519.Sign(priv, []byte(base))
-	inner := signatureInputInner(params)
-	// Edge Signature-Input header carries "sig1=" + inner list; Signature carries
-	// the std-base64 byte string (label=:...:), matching pop.ts parseSignature.
-	return params.Label + "=" + inner, params.Label + "=:" + base64.StdEncoding.EncodeToString(raw) + ":"
+	return binding.SignatureInput, binding.Signature
+}
+
+// signEdgePoPMispairedKey hand-builds a proof that declares one keyid while
+// signing with a DIFFERENT key — the input the shipped signer refuses outright,
+// because refusing it is the whole point of the thumbprint check. The negative
+// vector therefore cannot come from the signer, and building it here is what
+// keeps it honest: it reproduces what a hostile fetcher would actually put on the
+// wire, which is the thing the edge verifier has to reject.
+func signEdgePoPMispairedKey(priv ed25519.PrivateKey, declaredKeyID, method, rawURL string, created, expires int64) (sigInput, sig string) {
+	params := popSignatureParams(declaredKeyID, created, expires)
+	raw := ed25519.Sign(priv, []byte(popSignatureBase(method, rawURL, params)))
+	return popLabel + "=" + params, popLabel + "=:" + base64.StdEncoding.EncodeToString(raw) + ":"
 }
 
 func buildPopVectors(t *testing.T) []popVector {
@@ -229,7 +234,7 @@ func buildPopVectors(t *testing.T) []popVector {
 	// thumbprint != agent_id, so the 3-way identity check rejects it.
 	wrongPriv := ed25519.NewKeyFromSeed(fixedSeed(0x44))
 	wrongPub := wrongPriv.Public().(ed25519.PublicKey)
-	wrongInput, wrongSig := signEdgePoP(t, wrongPriv, agentTP, method, url, created, expires)
+	wrongInput, wrongSig := signEdgePoPMispairedKey(wrongPriv, agentTP, method, url, created, expires)
 	wrongPresented := b64urlNoPad(wrongPub)
 
 	return []popVector{

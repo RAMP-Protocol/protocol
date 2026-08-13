@@ -22,8 +22,15 @@ on:
       # no git-subdirectory support, so the package installs whole-repo). Without
       # it here, editing the shipped export map triggers no job at all.
       - 'package.json'
-      - 'sdk/go/helpers/**'
-      - 'sdk/go/resolvers/**'
+      # Every Go SDK package, because this workflow owns the API-surface gate:
+      # it walks the LIVE Go surface with `go doc` and fails when an export is
+      # neither mapped nor excluded. Listing only two packages meant a change
+      # that added exports to any of the others — and edited the symbol map to
+      # match — triggered no job at all, so nothing checked the edit.
+      - 'sdk/go/**'
+      - 'sdk/parity/**'
+      - 'docs/sdk-parity-matrix.md'
+      - 'scripts/gen-parity-matrix.py'
       - '.github/workflows/sdk-types-ci.yml'
   pull_request:
     paths: *paths

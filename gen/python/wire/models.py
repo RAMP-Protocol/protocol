@@ -1493,7 +1493,8 @@ class WellKnownManifest(WireModel):
         '', description='Canonical domain serving this manifest.'
     )
     endpoint: str | None = Field(
-        None, description='Exchange-only. ExchangeService endpoint URL.'
+        None,
+        description="Exchange-only. ExchangeService endpoint URL. MUST be on the same host AND\n PORT that serve this manifest, or on a subdomain of that host on that port,\n and MUST NOT carry userinfo. A consumer refuses an endpoint anywhere else:\n this document is only as trustworthy as the host that served it, so an\n endpoint naming an unrelated host would let whoever answers for the manifest\n redirect a signed call to a party the signature never covered, and another\n port is another service the publisher of the manifest need not control. The\n host match is on a full dot-delimited label boundary, so evil-a.com is not a\n subdomain of a.com. A port equal to the scheme's default and an omitted port\n are the SAME port, so https://x, https://x:443 and x all match. An Exchange\n reachable on a non-default port names that port on both sides. (One\n paragraph deliberately: a blank line here routes the first paragraph into\n the generated types' JSON-Schema title, which the Pydantic/Zod export drops.)",
     )
     exchanges: list[AuthorizedExchange] | None = Field(
         None,

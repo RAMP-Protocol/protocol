@@ -2,6 +2,97 @@
 
 ## Unreleased
 
+**`WellKnownManifest.endpoint` states its host binding (no wire change; conformance-affecting).**
+The field said only "Exchange-only. ExchangeService endpoint URL", so nothing told an Exchange
+operator that the address it advertises must stay on its own domain. It now does: the endpoint
+MUST be on the host AND PORT that SERVE the manifest — not the self-asserted `domain` member
+inside it — or on a subdomain of that host on that port, and MUST NOT carry userinfo. The manifest
+is only as trustworthy as the host that served it, so an endpoint naming an unrelated host would
+let whoever answers for the manifest redirect a signed call to a party the offer's signature never
+covered — and a dial-time address guard has no objection to an unrelated PUBLIC host. Another port
+is another service, which the party publishing the manifest need not control. The host match is on
+a full dot-delimited label boundary, so `evil-a.com` is not a subdomain of `a.com`. A port equal to
+the scheme's default and an omitted port are the SAME port, so `https://x`, `https://x:443` and `x`
+all match; the scheme itself is not compared, and the default-port folding is scheme-relative so
+that it cannot become a scheme check by accident.
+
+**This is the first entry in this changelog that changes what conforms without changing the
+wire.** The classifier is deliberately not `(breaking)`: this change moves no field, message, or
+encoding, and `buf breaking` reports nothing — while the bare `(breaking)` entries below all mark
+a descriptor delta, and the one qualified use ("breaking for the generated clients") names the
+audience it breaks. What this change does instead is narrow what a conformant manifest may say.
+
+**Two shapes that are conformant today will be refused after this.** The first is an Exchange
+serving its API from a separate DOMAIN — a CDN, a hosting provider. The second is an Exchange on
+a separate PORT: a single-domain deployment serving `/.well-known/ramp.json` on its default port
+and advertising `"endpoint": "https://exchange.example:8443/v1"` is refused, as is the mirror
+image (a portless endpoint under a manifest served on `:8443`) and a subdomain reached across
+ports. A single domain is therefore no longer sufficient on its own — the authority must match on
+both halves.
+
+Remedies, by shape. For a separate domain, front the API under a subdomain of the domain serving
+the `ramp.json`. For a separate port, either move the API onto the port the manifest is served
+from, or serve the manifest from the API's own authority — `https://exchange.example:8443/.well-known/ramp.json`
+alongside `https://exchange.example:8443/v1`. Writing a scheme's default port out in full is NOT
+a mismatch and needs no change.
+
+Both are refused as `ErrEndpointRefused`, which classifies as a FINAL verdict rather than a
+transport failure — so a client will not retry its way out of a misconfiguration, and the symptom
+is a usage report that never lands rather than one that is slow.
+
+Enforcement moved with the rule: it now runs in the SDK's shared endpoint resolver rather than
+in one client, so every consumer of that resolver inherits it without changing a line. Two
+consequences for anyone re-pinning. Resolution can now fail with a new `ErrEndpointRefused`
+sentinel, which is a VERDICT — the Exchange answered and the answer is unusable — and a
+classifier that branches only on the older `ErrNoEndpoint` will drop it into its
+transport-failure bucket and retry something that will never succeed; add the new sentinel
+alongside. And a Broker that resolves endpoints through this package inherits the rule for the
+paths that use it. `gen/` and the website mirror are regenerated; proto comments only.
+
+**Go SDK: the delivery fetch correlates, and the offer-key cache is bounded (additive, no wire
+change).** `resolvers.ContentFetchOptions` gained a `RequestID` hook, and `connect.NewClient`
+feeds it the same mint the RPC legs read — so `WithRequestIDFunc` now reaches all three legs and
+a delivery GET carries `X-Request-ID`. It did not before, and could not: the RPC legs correlate
+through a Connect interceptor, which a plain GET never traverses, and there was no seam to add
+one. **This changes what arrives at a delivery edge.** An edge that mints its own id when the
+header is absent will now see the caller's instead, which is the point — a refused delivery used
+to produce two log records under two ids with nothing joining them, on the one leg where
+delivery failures are diagnosed. A fetcher built directly with no `RequestID` still sends no
+header: this tier mints nothing of its own.
+
+`resolvers.CachedOfferKeyResolver`'s per-domain cache now evicts least-recently-used at a fixed
+cap, like the endpoint cache and the per-origin client pool. Its key is a domain off
+`Offer.exchange`, so which entries appear is driven by incoming offers, and an entry's expiry is
+a freshness check rather than a removal — a stale entry held its slot indefinitely. Reaching it
+needed a resolvable host serving a valid directory per domain, so the case was narrow rather
+than open, but two sibling structures over the same key space were already bounded and this one
+was not.
+
+**Go SDK: the Connect client covers the agent verb set, and its signing knobs are reachable
+(additive, no wire change).** `connect.Client` gained `ReportUsage`, `Dispute` and `Fetch`, and
+`connect.NewBrokerClient` gained `Resolve` — the client previously exposed `Discover` and
+`Execute` alone, so a caller needing any of the rest had to assemble its own from
+`rampv1connect` plus `core.NewSigningTransport`, which is the duplication the SDK exists to
+remove. `Resolve` returns the same fail-closed `{verified, rejected}` split `Discover` does,
+through the same `core.Verifier`; `Fetch` performs proof-of-possession on an agent-bound URL and
+dials only through the SSRF-guarded client.
+
+Five client options join them, each because a value the tier below already accepted had no way
+in: `WithSignWindow` (the RFC 9421 request freshness window — pair it with
+`core.MonotonicWindow` when the peer screens replays on `(key id, signature)`, since one-second
+timestamp resolution makes two identical requests inside a second sign to the same bytes),
+`WithSignatureAgent` (the WBA directory origin the client signs as), `WithProofWindow`,
+`WithContentTimeout` and `WithMaxContentBytes`.
+
+`WithSignatureAgent` is worth reading twice if you verify signatures. `signature-agent` is one
+of the five REQUIRED covered components, so the header is signed whether or not a value was
+supplied — a client that does not set it signs an EMPTY one. A peer that resolves the caller's
+key by fetching the WBA directory at that origin then has nothing to resolve and refuses the
+call at verification, which surfaces as a 401 from an otherwise healthy Exchange rather than as
+anything the routing checks would catch. The value is stamped set-if-absent, so a relay
+forwarding an originating agent's request does not overwrite the value that agent's own
+signature covers. See `docs/sdk-parity-matrix.md` for the per-language surface.
+
 **SDK (all 3 languages): the registration-failure builder can carry the field errors
 (additive, no wire change).** `helpers.RegistrationFailureDetail` (Go),
 `registration_failure_detail` (Python) and `registrationFailureDetail` (TS) now accept the

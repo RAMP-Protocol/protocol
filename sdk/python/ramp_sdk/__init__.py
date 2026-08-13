@@ -64,7 +64,7 @@ from .httpsig import (
 from .idempotency import generate_idempotency_key, validate_idempotency_key
 from .keyresolver import KeyResolver, StaticKeyResolver
 from .money import canonicalize_money, format_money, parse_money
-from .pop import sign_agent_binding, verify_agent_binding
+from .pop import AGENT_KEY_HEADER, sign_agent_binding, verify_agent_binding
 from .resolvers import (
     WBA_DIRECTORY_PATH,
     DirectoryUnavailableError,
@@ -95,6 +95,7 @@ from .wire import (
 
 __all__ = [
     "ACCEPTANCE_SIGNATURE_ALGORITHM",
+    "AGENT_KEY_HEADER",
     "ERROR_DETAIL_TYPE",
     "OFFER_SIGNATURE_ALGORITHM",
     "REASON_FIELDS",

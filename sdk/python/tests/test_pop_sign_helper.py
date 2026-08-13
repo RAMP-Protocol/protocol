@@ -151,3 +151,43 @@ def test_sign_agent_binding_in_ramp_sdk_all() -> None:
     import ramp_sdk
 
     assert "sign_agent_binding" in ramp_sdk.__all__
+
+
+# ---- control bytes in the target URI -------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        'https://cdn.test/a\n"@authority": evil.test',
+        "https://cdn.test/a\r",
+        "https://cdn.test/a\x00",
+        "https://cdn.test/a\x7f",
+    ],
+    ids=["newline", "carriage_return", "nul", "delete"],
+)
+def test_sign_agent_binding_refuses_control_bytes_in_the_url(url: str) -> None:
+    """A control byte in the URL must be refused, not signed.
+
+    The signature base is line-delimited and the URL is written into it verbatim,
+    so a newline would add or split a component line and the signed bytes would
+    stop describing the request a verifier reconstructs. Mirrors the Go signer's
+    refusal (helpers.SignAgentBinding / ErrInvalidPoPInput); Python raises rather
+    than exporting a sentinel, which is the mapped-correct shape.
+
+    Parametrized rather than looped so a regression names the offending case: in a
+    loop, a DID-NOT-RAISE failure reports the line and not which URL reached it.
+    """
+    seed = bytes(range(32))
+    with pytest.raises(ValueError, match="control byte"):
+        sign_agent_binding(url=url, signer_seed=seed, created=1, expires=2)
+
+
+def test_sign_agent_binding_still_signs_an_ordinary_url() -> None:
+    """The refusal is narrow: a normal URL, and a percent-encoded one, still sign."""
+    seed = bytes(range(32))
+    for url in ("https://cdn.test/a?agent_id=x", "https://cdn.test/a%20b%2Fc"):
+        key, sig_input, sig = sign_agent_binding(
+            url=url, signer_seed=seed, created=1, expires=2
+        )
+        assert key and sig_input.startswith("sig1=") and sig.startswith("sig1=:")

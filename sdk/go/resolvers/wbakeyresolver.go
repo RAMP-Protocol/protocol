@@ -230,11 +230,13 @@ func anyAddrBlocked(addrs []netip.Addr) bool {
 //
 // base==nil yields a fresh, minimal transport; a non-nil base is cloned so the
 // caller's other transport settings are kept. In BOTH cases the guard forces
-// Proxy=nil: a proxied transport dials the PROXY, so the dial-time check would vet
-// the proxy's address instead of the true target — a full bypass. The dial-time
-// SSRF pin and an egress proxy are therefore mutually exclusive by construction.
+// Proxy=nil and clears any custom TLS dialer: each would route the dial around
+// the address check, so each is mutually exclusive with the pin by construction.
 // Pair it with SSRFCheckRedirect on the *http.Client to also vet redirect schemes
 // and bound redirect depth.
+//
+// A caller's TLSClientConfig — client certificates, a pinned root set — is kept
+// and still applies; only the dialer itself is dropped.
 func SSRFGuard(base *http.Transport) *http.Transport {
 	if base == nil {
 		base = &http.Transport{}
@@ -245,6 +247,13 @@ func SSRFGuard(base *http.Transport) *http.Transport {
 	// would resolve+check the PROXY, not the destination). Force it off so the
 	// guard always vets the real target.
 	base.Proxy = nil
+	// net/http prefers a transport's OWN TLS dialer over DialContext whenever the
+	// scheme is https — which is every RAMP leg — so a base carrying one would
+	// take the dial through the caller's dialer and the pin below would never run.
+	// The control would be silently absent rather than weaker, so both the current
+	// and the legacy field are cleared. Dial needs no such treatment: DialContext
+	// supersedes it whenever it is set, and it is set on the next line.
+	base.DialTLSContext, base.DialTLS = nil, nil
 	base.DialContext = guardedDialContext
 	return base
 }
@@ -1262,20 +1271,23 @@ func wbaKeyActiveAt(k *rampv1.JsonWebKey, now time.Time) bool {
 	return !now.Before(notBefore) && now.Before(notAfter)
 }
 
-// wbaHostAnchored reports whether candidate's host is anchored to anchor —
-// equal to it or a subdomain of it (case-insensitive, full label boundary, so
-// "evil-a.com" is NOT a subdomain of "a.com"). candidate may be a full URL.
+// wbaHostAnchored reports whether candidate is anchored to anchor — the same host
+// and port, or a subdomain of that host on that port.
+//
+// The predicate itself is helpers.HostAnchored, which is the ONE place the rule is
+// written; this wrapper exists for the two things that are local to WBA. It answers
+// bool rather than (bool, error), because a directory that names an unparseable
+// revocation_url is simply not anchored and its caller logs a skip. And it requires
+// an ABSOLUTE reference: helpers.HostOf reads a schemeless value as https, which is
+// right for an exchange domain but wrong here, where the scheme is the other half
+// of the check and one branch below returns before reaching it.
 func wbaHostAnchored(anchor, candidate string) bool {
 	u, err := url.Parse(candidate)
 	if err != nil || u.Host == "" {
 		return false
 	}
-	a := strings.ToLower(strings.TrimSuffix(anchor, "."))
-	c := strings.ToLower(strings.TrimSuffix(u.Host, "."))
-	if a == "" {
-		return false
-	}
-	return c == a || strings.HasSuffix(c, "."+a)
+	anchored, err := helpers.HostAnchored(anchor, candidate)
+	return err == nil && anchored
 }
 
 // wbaRevocationAnchored reports whether a directory's advertised revocation_url

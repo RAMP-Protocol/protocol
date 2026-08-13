@@ -7,10 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
+	"golang.org/x/sync/singleflight"
+
+	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/endpointrule"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 )
 
 // maxWellKnownDocBytes bounds the well-known / JWKS response body read. A hostile
@@ -26,6 +30,16 @@ const maxWellKnownDocBytes = 1 << 20 // 1 MiB
 // "defined-but-inert endpoint" gap. Callers can tell "Exchange unreachable" from
 // "Exchange reachable but not self-advertising an endpoint".
 var ErrNoEndpoint = errors.New("resolvers: well-known manifest has no endpoint")
+
+// ErrEndpointRefused signals that a manifest WAS read and advertises an endpoint
+// this resolver will not hand back: one on a host unrelated to the domain that
+// served the manifest, or one carrying userinfo.
+//
+// Distinct from ErrNoEndpoint and from a transport failure because it is a
+// VERDICT — the Exchange answered, and the answer is not usable. A caller that
+// classifies retryability reads this as final rather than as something to try
+// again in a moment.
+var ErrEndpointRefused = errors.New("resolvers: well-known manifest advertises an unusable endpoint")
 
 // wellKnownDoc is the JSON projection of the subset of WellKnownManifest the SDK
 // resolvers read: the RFC 7517 key set (field 5) and the self-advertised
@@ -67,6 +81,23 @@ func fetchWellKnownDoc(ctx context.Context, client *http.Client, url string) (*w
 	return &doc, nil
 }
 
+// maxCachedEndpoints bounds the per-host endpoint cache. The key is an
+// Offer.exchange host, so which entries appear is driven by incoming offers — an
+// open-ended, caller-influenced key space, and an unbounded map over one is
+// somewhere an authenticated caller can make the process grow without limit. A
+// real deployment reports to a handful of Exchanges. Mirrors the bound the
+// per-origin client pool above this resolver already carries.
+const maxCachedEndpoints = 256
+
+// maxManifestFetch bounds the SHARED manifest fetch — the one every coalesced
+// waiter is served from, which therefore cannot take any single caller's deadline.
+//
+// It exists because the alternative is no bound at all: WellKnownOptions.HTTP
+// accepts any *http.Client, the constructor doc invites one, and http.DefaultClient
+// has no timeout. A manifest is a small document from a host an offer named; a
+// fetch still running after this is not going to succeed.
+const maxManifestFetch = 30 * time.Second
+
 // WellKnownEndpointResolver resolves an Exchange domain to its self-advertised
 // ExchangeService endpoint by fetching https://{host}/.well-known/ramp.json and
 // reading WellKnownManifest.endpoint. Unlike WellKnownKeyResolver (one fixed
@@ -75,15 +106,19 @@ func fetchWellKnownDoc(ctx context.Context, client *http.Client, url string) (*w
 // coalescing are all per host. The pre-seeded registry is a TRUST overlay (the
 // Allow hook), never the source of the endpoint — that is the Offer.exchange
 // routing invariant: the endpoint always comes from the exchange's own manifest.
+//
+// Because that host space is caller-influenced, neither per-host structure may
+// grow without limit. The cache evicts least-recently-used at a fixed cap;
+// coalescing is a singleflight.Group, which drops a host's entry as soon as its
+// fetch completes and so holds nothing between calls.
 type WellKnownEndpointResolver struct {
 	http   *http.Client
 	ttl    time.Duration
 	now    func() time.Time
 	scheme string
 	allow  func(host string) bool
-	mu     sync.Mutex
-	cache  map[string]endpointEntry
-	flight map[string]*sync.Mutex
+	sf     singleflight.Group
+	cache  *lrucache.Cache[string, endpointEntry]
 }
 
 type endpointEntry struct {
@@ -126,8 +161,7 @@ func NewWellKnownEndpointResolver(opts WellKnownOptions) *WellKnownEndpointResol
 		now:    now,
 		scheme: scheme,
 		allow:  opts.Allow,
-		cache:  map[string]endpointEntry{},
-		flight: map[string]*sync.Mutex{},
+		cache:  lrucache.New[string, endpointEntry](maxCachedEndpoints),
 	}
 }
 
@@ -135,54 +169,138 @@ func NewWellKnownEndpointResolver(opts WellKnownOptions) *WellKnownEndpointResol
 // well-known manifest. A fresh cache entry short-circuits; a miss or TTL expiry
 // triggers a single coalesced per-host fetch. A host the Allow overlay rejects
 // never reaches the network.
+//
+// host must be a BARE hostname — no scheme, path, query or userinfo, though a
+// port is fine. That is checked here rather than assumed, for the same reason
+// vetAdvertisedEndpoint runs here: it is a property of building this URL, not of
+// any one caller's plans for it.
 func (r *WellKnownEndpointResolver) ResolveEndpoint(ctx context.Context, host string) (string, error) {
+	// Checked BEFORE the Allow overlay and before the cache. The fetch URL below is
+	// built by concatenation, so a value carrying a path or a query would choose
+	// WHAT gets fetched rather than merely where from — and the raw string is the
+	// cache key, so admitting one would also put it in a shared map.
+	bare, err := helpers.IsBareHost(host)
+	if err != nil {
+		return "", fmt.Errorf("resolvers: resolve endpoint: %w", err)
+	}
+	if !bare {
+		return "", fmt.Errorf("resolvers: %w: %q is not a bare host", helpers.ErrInvalidHost, host)
+	}
 	if r.allow != nil && !r.allow(host) {
 		return "", fmt.Errorf("%w: host %q not allowed", ErrNoEndpoint, host)
 	}
 	if ep, ok := r.cached(host); ok {
 		return ep, nil
 	}
-	fl := r.hostFlight(host)
-	fl.Lock()
-	defer fl.Unlock()
-	if ep, ok := r.cached(host); ok {
-		return ep, nil // another goroutine fetched while we waited
+	// A concurrent burst for one host issues ONE fetch and shares its result. The
+	// group holds a key only while its call is in flight, so coalescing state
+	// cannot accumulate over the caller-influenced host space — including for the
+	// hosts whose fetches fail, which is where a hand-rolled per-host mutex map
+	// grows fastest.
+	//
+	// Two contexts, because one caller's deadline must not become everyone's and
+	// nobody's deadline must not become the fetch's:
+	//
+	//   - The SHARED fetch does not inherit the winning caller's cancellation.
+	//     Every waiter receives whatever the leader returns, so a leader that walks
+	//     away would otherwise fail a burst of callers whose own contexts are still
+	//     live, and each would read that as the Exchange being unreachable. It
+	//     carries maxManifestFetch instead, so it stays bounded whatever client was
+	//     injected — WellKnownOptions.HTTP admits one with no timeout at all.
+	//   - Each WAITER selects on its OWN context. singleflight is not
+	//     context-aware, so without this the call would honour nobody's deadline:
+	//     a caller with 200ms would sit until the shared fetch finished. The fetch
+	//     continues for the others; only this caller gives up.
+	shared := r.sf.DoChan(host, func() (v any, err error) {
+		// Derived INSIDE the closure, which singleflight runs for the leader alone.
+		// Built before DoChan instead, every coalesced follower would allocate a
+		// timer whose cancel func only the leader's closure ever calls — one live
+		// timer per waiter, held until its full expiry. go vet's lostcancel cannot
+		// see that, because cancelFetch is called on the path it can trace.
+		fetchCtx, cancelFetch := context.WithTimeout(
+			context.WithoutCancel(ctx), maxManifestFetch)
+		defer cancelFetch()
+		// A panic is turned into this call's error, HERE, because nowhere above can
+		// do it: when a coalesced call has waiting channels singleflight re-raises
+		// the panic on a fresh goroutine — `go panic(e)` followed by `select{}` — so
+		// no caller's recover can reach it and the process dies. The two seams that
+		// can panic are application-supplied (WellKnownOptions.HTTP and .Now), which
+		// makes "one lookup fails" the right blast radius, not "the process exits".
+		defer func() {
+			if p := recover(); p != nil {
+				v, err = "", fmt.Errorf("resolvers: resolve endpoint for %q: panic: %v", host, p)
+			}
+		}()
+		if ep, ok := r.cached(host); ok {
+			return ep, nil // another goroutine fetched while we waited
+		}
+		url := r.scheme + "://" + host + "/.well-known/ramp.json"
+		doc, ferr := fetchWellKnownDoc(fetchCtx, r.http, url)
+		if ferr != nil {
+			return "", ferr
+		}
+		if doc.Endpoint == "" {
+			return "", fmt.Errorf("%w: host=%q", ErrNoEndpoint, host)
+		}
+		if verr := vetAdvertisedEndpoint(host, doc.Endpoint); verr != nil {
+			return "", verr
+		}
+		r.store(host, doc.Endpoint)
+		return doc.Endpoint, nil
+	})
+	var v any
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("resolvers: resolve endpoint for %q: %w", host, ctx.Err())
+	case res := <-shared:
+		v, err = res.Val, res.Err
 	}
-	url := r.scheme + "://" + host + "/.well-known/ramp.json"
-	doc, err := fetchWellKnownDoc(ctx, r.http, url)
 	if err != nil {
 		return "", err
 	}
-	if doc.Endpoint == "" {
-		return "", fmt.Errorf("%w: host=%q", ErrNoEndpoint, host)
-	}
-	r.store(host, doc.Endpoint)
-	return doc.Endpoint, nil
+	return v.(string), nil
 }
 
+// vetAdvertisedEndpoint decides whether an endpoint a manifest advertises may be
+// handed back at all. It runs HERE, in the resolver, rather than in each caller.
+//
+// The manifest that named this endpoint is served by the very host the call is
+// bound for, so the endpoint is only as trustworthy as that host. An Exchange may
+// advertise itself or a subdomain of itself, and nothing else — an endpoint on an
+// unrelated host is one this resolver refuses to return, whatever the caller
+// intends to do with it. A dial-time address guard has no objection to an
+// unrelated PUBLIC host, so nothing below this catches it.
+//
+// It sits in the resolver because every consumer needs it and none of them can be
+// relied on to remember: the check is a property of reading an endpoint out of a
+// manifest, not of any one caller's plans for it. A caller may of course check
+// again.
+//
+// Userinfo is refused for a different reason with the same shape. The host
+// comparison reads the authority's host and ignores any user:password before it,
+// so an endpoint carrying credentials would pass the host check and then have
+// net/http stamp an Authorization header the SDK never chose, on a leg that
+// already carries the agent's own signature.
+func vetAdvertisedEndpoint(host, endpoint string) error {
+	if err := endpointrule.Vet(host, endpoint); err != nil {
+		return fmt.Errorf("%w: %w", ErrEndpointRefused, err)
+	}
+	return nil
+}
+
+// cached returns host's endpoint when the entry is present and fresh. Freshness
+// is this resolver's own concern and sits on top of the shared bound: a stale
+// entry is left in place rather than deleted, since it still holds a slot the
+// eviction policy can reclaim and the next successful fetch overwrites it.
 func (r *WellKnownEndpointResolver) cached(host string) (string, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entry, ok := r.cache[host]
+	entry, ok := r.cache.Get(host)
 	if !ok || r.now().After(entry.exp) {
 		return "", false
 	}
 	return entry.endpoint, true
 }
 
+// store records host's endpoint with a fresh TTL.
 func (r *WellKnownEndpointResolver) store(host, endpoint string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.cache[host] = endpointEntry{endpoint: endpoint, exp: r.now().Add(r.ttl)}
-}
-
-func (r *WellKnownEndpointResolver) hostFlight(host string) *sync.Mutex {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	fl, ok := r.flight[host]
-	if !ok {
-		fl = &sync.Mutex{}
-		r.flight[host] = fl
-	}
-	return fl
+	r.cache.Put(host, endpointEntry{endpoint: endpoint, exp: r.now().Add(r.ttl)})
 }

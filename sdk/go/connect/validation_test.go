@@ -36,25 +36,25 @@ func TestWithValidation_StrictRejectsInvalidRequest(t *testing.T) {
 	// Client A (validation Off) surfaces the offer so we can obtain a VerifiedOffer
 	// wrapping the proto-minimal fixture (no pricing.model).
 	surfacer := rampconnect.NewClient(srv.URL,
-		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()),
 		rampconnect.WithVerification(core.Off),
 	)
 	res, err := surfacer.Discover(context.Background(), &rampv1.ResourceQuery{})
 	if err != nil {
 		t.Fatalf("Discover under Off verification must surface the offer: %v", err)
 	}
-	if len(res.Verified) != 1 {
-		t.Fatalf("want 1 surfaced offer, got %d", len(res.Verified))
+	if len(res.Verified()) != 1 {
+		t.Fatalf("want 1 surfaced offer, got %d", len(res.Verified()))
 	}
 
 	// Client B opts into strict validation: its outbound Execute request reflects
 	// the model-less offer, which the bidirectional validate interceptor must reject
 	// with CodeInvalidArgument BEFORE the round-trip.
 	strict := rampconnect.NewClient(srv.URL,
-		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()),
 		rampconnect.WithValidation(rampconnect.ValidationStrict),
 	)
-	_, err = strict.Execute(context.Background(), res.Verified[0])
+	_, err = strict.Execute(context.Background(), res.Verified()[0])
 	if err == nil {
 		t.Fatal("strict validation must reject an offer with no pricing.model")
 	}

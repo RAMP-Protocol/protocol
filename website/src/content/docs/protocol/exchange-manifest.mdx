@@ -106,7 +106,7 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 | `name` | string | No | Human-readable Exchange name |
 | `operator` | string | No | Organization operating this Exchange |
 | `operator_domain` | string | No | Operator's corporate domain |
-| `endpoint` | string | No | ExchangeService endpoint URL |
+| `endpoint` | string | No | ExchangeService endpoint URL. **Must be on the host and port that serve this manifest, or a subdomain of that host on that port, and must not carry userinfo** — see [Endpoint host binding](#endpoint-host-binding) |
 | (offer-signing keys) | — | — | Not in `ramp.json`. See the [WBA directory](#the-wba-directory) at `/.well-known/http-message-signatures-directory` |
 | `health_endpoint` | string | No | Health check endpoint URL |
 | `catalog_endpoint` | string | No | CatalogService endpoint URL |
@@ -125,6 +125,47 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 | `terms_uri` | string | No | Terms of service URL |
 | `privacy_uri` | string | No | Privacy policy URL |
 | `ext` | object | No | Extension fields (forward-compatible) |
+
+### Endpoint host binding
+
+`endpoint` **MUST** be on the same host **and port** that serve this manifest, or
+on a subdomain of that host on that port, and **MUST NOT** carry userinfo. An
+Exchange at `exchange.example` may advertise `https://exchange.example/v1` or
+`https://api.exchange.example/v1`; it may not advertise
+`https://cdn.other.example/v1`, nor `https://exchange.example:8443/v1` unless its
+`ramp.json` is served from `:8443` too.
+
+The anchor is the host the consumer **fetched this document from** — not the
+`domain` field inside it. That distinction is the whole check: `domain` is
+self-asserted, so a hostile manifest that anchored to it could simply set `domain`
+to match whatever endpoint it wanted and validate itself. A conformant Exchange
+has the two agree, which is why the difference only shows against a manifest worth
+refusing.
+
+The reason is the trust chain. This document is fetched from the domain an offer
+named, and it is only as trustworthy as the host that served it. If it could name
+an endpoint on an unrelated host, whoever answers for the manifest could redirect
+a signed call to a party the offer's signature never covered — and a dial-time
+address guard would not object, because the destination is a perfectly ordinary
+public host.
+
+Two details matter in practice:
+
+- The host match is on a **full dot-delimited label boundary**. `evil-a.com` is
+  not a subdomain of `a.com`; a bare suffix comparison gets that wrong, and it is
+  the mistake an attacker registers a domain to exploit.
+- The **port is compared too**. Another port is another service, which the party
+  publishing the manifest need not control, so `https://exchange.example:8443/v1`
+  is a valid endpoint only where the port is named on both sides. A port equal to
+  the scheme's default and an omitted port are the **same** port, so
+  `https://exchange.example`, `https://exchange.example:443` and
+  `exchange.example` all match one another — writing `:443` out is not a refusal.
+- The **scheme is not compared** here. Whether a leg may run in the clear is the
+  transport's decision, and the default-port rule above is scheme-relative so that
+  it cannot become a scheme check by accident.
+
+An Exchange that serves its API from a separate domain should front it under its
+own subdomain rather than advertising the other domain directly.
 
 ## The Unified RAMP Well-Known File
 
@@ -196,7 +237,7 @@ message WellKnownManifest {
   optional string name = 9;
   optional string operator = 10;
   optional string operator_domain = 11;
-  optional string endpoint = 12;                   // ExchangeService URL
+  optional string endpoint = 12;                   // ExchangeService URL (serving host+port, or a subdomain)
   optional string health_endpoint = 13;
   optional string catalog_endpoint = 14;
   repeated string protocol_versions_supported = 16;

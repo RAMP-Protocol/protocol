@@ -3,6 +3,10 @@ title: "Fetch Flow"
 description: "Step-by-step walkthrough of how the RAMP Agent SDK discovers, transacts, and fetches licensed content -- from URL to delivered content."
 ---
 
+import DeferredSdkNoticeDetail from '../../../../components/DeferredSdkNoticeDetail.mdx';
+
+<DeferredSdkNoticeDetail />
+
 ## Single URL Fetch
 
 Step-by-step what happens inside `client.Fetch(ctx, url)`:
@@ -320,10 +324,13 @@ Per-period persistence: by default, the SDK writes period budget state to a loca
 
 ## Testing with Mock Exchange
 
-The SDK ships a `MockExchange` for testing agent code without network calls:
+The design pairs the high-tier client with a `MockExchange` for testing agent code
+without network calls. Like the rest of this page it is part of the deferred
+design: no such package ships today, and the sample below is written against the
+planned API rather than the shipped one.
 
 ```go
-import "github.com/RAMP-Protocol/protocol/sdk-go/testutil"
+import "example.com/ramp-agent-sdk/testutil" // planned; not a shipped package
 
 func TestAgentLogic(t *testing.T) {
     mock := testutil.NewMockExchange(testutil.MockConfig{
