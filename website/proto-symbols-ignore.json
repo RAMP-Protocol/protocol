@@ -3,6 +3,7 @@
   "ignore": [
     "Requester.billing_ref",
     "WellKnownManifest.registration_schema",
+    "DENIAL_REASON_BILLING_REF_INACTIVE",
     "Offer.quality",
     "Offer.restrictions",
     "ResourceQuery.intermediaries",
