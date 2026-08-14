@@ -31,9 +31,13 @@ const minItemsRuleID = "repeated.min_items"
 // must itself be valid. FREE/0 is the simplest valid pricing and matches the
 // corpusgen Offer seed. (sampleOffer() in offer_test.go is shaped for SIGNATURE
 // tests — PER_UNIT without a unit — which protovalidate rejects.)
+// Exchange is presence-enforced: it is the execute-routing target, and a
+// TransactionRequest's audience statement is per item, so an offer without it is
+// unroutable and does not validate.
 func validOffer() *rampv1.Offer {
 	return &rampv1.Offer{
-		OfferId: "of_valid_1",
+		OfferId:  "of_valid_1",
+		Exchange: "exchange.example",
 		Pricing: &rampv1.Pricing{
 			Model: rampv1.PricingModel_PRICING_MODEL_FREE,
 			Rate:  "0",

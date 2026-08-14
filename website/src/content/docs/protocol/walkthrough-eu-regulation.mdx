@@ -80,6 +80,7 @@ The Broker fans out the same query to both Exchanges. The agent identifies the r
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.eurlex.europa.eu",
   "requester": {
     "id": "legal-research-agent",
     "domain": "lawfirm.eu",
@@ -119,6 +120,7 @@ The Broker receives one response from each Exchange. Here are both offers side b
       "offers": [
         {
           "offer_id": "offer-eurlex-aiact-001",
+          "exchange": "exchange.eurlex.europa.eu",
           "title": "Regulation (EU) 2024/1689 — EU AI Act",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
@@ -217,6 +219,7 @@ The Broker receives one response from each Exchange. Here are both offers side b
       "offers": [
         {
           "offer_id": "offer-wk-aiact-001",
+          "exchange": "exchange.wk-legal.com",
           "title": "EU AI Act — Annotated & Consolidated (Wolters Kluwer)",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -343,6 +346,7 @@ Assume the agent chooses EUR-Lex (free). The `ExecuteTransaction` follows the st
     {
       "offer": {
         "offer_id": "offer-eurlex-aiact-001",
+        "exchange": "exchange.eurlex.europa.eu",
         "title": "Regulation (EU) 2024/1689 — EU AI Act",
         "pricing": {
           "model": "PRICING_MODEL_FREE",
@@ -435,6 +439,7 @@ Even for free access, usage reporting is required for transparency:
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.eurlex.europa.eu",
   "idempotency_key": "ur-eli-001",
   "transaction_id": "txn-eurlex-001",
   "billing_id": "bill-eurlex-001",

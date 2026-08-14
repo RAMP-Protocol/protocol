@@ -457,6 +457,7 @@ An offer from an Exchange connected to EUR-Lex, providing the GDPR in German:
 ```json
 {
   "offer_id": "off-gdpr-de-001",
+  "exchange": "exchange.eurlex.europa.eu",
   "pricing": {
     "model": "PRICING_MODEL_FREE",
     "unit_cost": "0",
@@ -509,6 +510,7 @@ An offer from a Legal Exchange for a specific filing in a Southern District of N
 ```json
 {
   "offer_id": "off-pacer-sdny-45",
+  "exchange": "exchange.pacer-data.com",
   "pricing": {
     "model": "PRICING_MODEL_PER_UNIT",
     "unit_cost": "0.10",
@@ -560,6 +562,7 @@ An offer for a granted US patent from a commercial patent aggregator:
 ```json
 {
   "offer_id": "off-patent-us11234567",
+  "exchange": "exchange.patentaggregator.com",
   "pricing": {
     "model": "PRICING_MODEL_PER_UNIT",
     "unit_cost": "5.00",
@@ -632,6 +635,7 @@ The Exchange returns an OfferGroup with two offers -- one free from EUR-Lex, one
   "offers": [
     {
       "offer_id": "off-eurlex-gdpr-de-consol",
+      "exchange": "exchange.eurlex.europa.eu",
       "pricing": { "model": "PRICING_MODEL_FREE", "unit_cost": "0" },
       "ext": {
         "legal.language": "de",
@@ -647,6 +651,7 @@ The Exchange returns an OfferGroup with two offers -- one free from EUR-Lex, one
     },
     {
       "offer_id": "off-wk-gdpr-de-annotated",
+      "exchange": "exchange.eurlex.europa.eu",
       "pricing": { "model": "PRICING_MODEL_PER_UNIT", "unit_cost": "75.00", "unit": "items", "currency": "EUR" },
       "ext": {
         "legal.language": "de",
@@ -676,6 +681,7 @@ An agent researches a patent that has been through opposition at the EPO. The or
   "offers": [
     {
       "offer_id": "off-ep-3456789-a1",
+      "exchange": "exchange.eurlex.europa.eu",
       "pricing": { "model": "PRICING_MODEL_FREE", "unit_cost": "0" },
       "identity": {
         "ext": {
@@ -698,6 +704,7 @@ An agent researches a patent that has been through opposition at the EPO. The or
     },
     {
       "offer_id": "off-ep-3456789-b1",
+      "exchange": "exchange.eurlex.europa.eu",
       "identity": {
         "ext": {
           "legal.jurisdiction": "EP",
@@ -719,6 +726,7 @@ An agent researches a patent that has been through opposition at the EPO. The or
     },
     {
       "offer_id": "off-ep-3456789-b2",
+      "exchange": "exchange.eurlex.europa.eu",
       "identity": {
         "ext": {
           "legal.jurisdiction": "EP",
@@ -766,6 +774,7 @@ An agent requested the German version of an EU directive but received French:
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.eurlex.europa.eu",
   "idempotency_key": "disp-lang-001",
   "transaction_id": "txn-eurlex-dir-2024",
   "billing_id": "bill-eurlex-dir-2024",
@@ -787,6 +796,7 @@ An agent requested legislation consolidated as of 2024-01-15 but received a vers
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.eurlex.europa.eu",
   "idempotency_key": "disp-version-002",
   "transaction_id": "txn-wk-reg-2024",
   "billing_id": "bill-wk-reg-2024",

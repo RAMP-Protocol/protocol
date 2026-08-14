@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/proto"
-
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
 	"github.com/RAMP-Protocol/protocol/sdk/go/resolvers"
@@ -161,7 +159,7 @@ func TestReportUsage_KeepsAKeyTheCallerPutOnTheMessage(t *testing.T) {
 
 	const own = "app-owned-key-1"
 	report := &rampv1.UsageReport{
-		Exchange:       proto.String(domain),
+		Exchange:       domain,
 		TransactionId:  "txn-1",
 		IdempotencyKey: own,
 	}

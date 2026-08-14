@@ -10,6 +10,13 @@ from enum import Enum
 
 
 
+class AccountRegistration(WireModel):
+    data_schema: dict[str, Any] | None = Field(
+        None,
+        description="JSON Schema (draft 2020-12) describing the RegisterRequest.registration_data\n object this Exchange expects. This field is the single home of the\n enforce/pass-through contract, and publishing it IS the enforcement switch.\n Present: this Exchange validates registration_data against the schema and\n refuses a non-conforming payload with\n REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the offending\n members in RegistrationFailure.field_errors. Absent: registration_data is\n passed through to the system of record uninspected, so an Exchange that\n publishes no schema needs no change to stay conformant. Safety rules,\n because a consumer reads this schema out of a third party's manifest: it\n MUST be self-contained, and a consumer MUST NOT resolve a remote $ref out of\n it — doing so turns every reader into an SSRF vector aimed at a URL the\n schema's author chose. A consumer SHOULD bound validation time and recursion\n depth; draft 2020-12 `pattern` admits regexes with catastrophic\n backtracking. Size is capped at 16KB, measured as the UTF-8 bytes of this\n member as served in ramp.json; a consumer SHOULD reject an oversized schema\n and skip its local pre-check rather than truncate it, which leaves the\n Exchange's own enforcement the deciding check exactly as when no schema is\n published.",
+    )
+
+
 class AgentAcceptance(WireModel):
     signature: constr(min_length=1) = Field(
         ...,
@@ -163,7 +170,7 @@ class DeliveryMethod(Enum):
 
 
 class DenialReason(Enum):
-    DENIAL_REASON_BILLING_REF_INACTIVE = 'DENIAL_REASON_BILLING_REF_INACTIVE'
+    DENIAL_REASON_ACCOUNT_INACTIVE = 'DENIAL_REASON_ACCOUNT_INACTIVE'
     DENIAL_REASON_INSUFFICIENT_BALANCE = 'DENIAL_REASON_INSUFFICIENT_BALANCE'
     DENIAL_REASON_RATE_LIMITED = 'DENIAL_REASON_RATE_LIMITED'
     DENIAL_REASON_CONTENT_UNAVAILABLE = 'DENIAL_REASON_CONTENT_UNAVAILABLE'
@@ -180,6 +187,7 @@ class DenialReason(Enum):
     DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 'DENIAL_REASON_ENTITLEMENT_WRONG_BUYER'
     DENIAL_REASON_SUBSCRIPTION_LAPSED = 'DENIAL_REASON_SUBSCRIPTION_LAPSED'
     DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 'DENIAL_REASON_ENTITLEMENT_NOT_GRANTED'
+    DENIAL_REASON_ACCOUNT_NOT_REGISTERED = 'DENIAL_REASON_ACCOUNT_NOT_REGISTERED'
 
 
 class DiscoveryMethod(Enum):
@@ -214,6 +222,13 @@ class DisputeRequest(WireModel):
     )
     description: str | None = Field(
         None, description='Human-readable description of the issue.'
+    )
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. The dispute\'s subject identifiers above cannot stand in for\n it: transaction_id, billing_id and report_id are opaque and Exchange-scoped,\n so verifying one means a database lookup, while the recipient check must run\n before any lookup happens.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -281,6 +296,13 @@ class DomainVerificationChallenge(WireModel):
 class DomainVerificationConfirmation(WireModel):
     cdn_type: str | None = Field(None, description='CDN type this key is for.')
     domain: str | None = Field('', description='The domain being verified.')
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. Distinct from `domain` above, which is the provider domain\n being verified — the subject of the request, not its recipient.',
+    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
         None,
@@ -327,6 +349,13 @@ class DomainVerificationRequest(WireModel):
     domain: str | None = Field(
         '', description='The provider domain to verify (e.g., "techcrunch.com").'
     )
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. Distinct from `domain` above, which is the provider domain\n being verified — the subject of the request, not its recipient.',
+    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
         None,
@@ -359,6 +388,13 @@ class DomainVerificationResult(WireModel):
 
 
 class GetAccountStatusRequest(WireModel):
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. Accounts are per-Exchange, so "which Exchange am I asking\n about" is not derivable from anything else in this message.',
+    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
         None,
@@ -602,6 +638,13 @@ class RateLimitInfo(WireModel):
 
 
 class RefreshCatalogRequest(WireModel):
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. Distinct from `tenant_id` above, which names a publisher\n tenant WITHIN an Exchange, not the Exchange itself.',
+    )
     tenant_id: str | None = Field('', description='Tenant identifier')
     ver: str | None = Field(
         '',
@@ -618,6 +661,13 @@ class RefreshCatalogResponse(WireModel):
 
 
 class RegisterRequest(WireModel):
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. It matters most here: the caller reaches this endpoint by\n resolving a fetched, cached manifest, so the RFC 9421 signature covers only\n the URL that was dialled — this field is what lets the genuine Exchange\n refuse a registration that was meant for a different one.',
+    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
         None,
@@ -625,7 +675,16 @@ class RegisterRequest(WireModel):
     )
     registration_data: dict[str, Any] | None = Field(
         None,
-        description="Operator-defined registration payload; the business fields are not fixed\n in the wire contract. Whether the Exchange inspects it follows its\n manifest — see WellKnownManifest.registration_schema. The caller's\n identity is taken from the verified request signature, never from this\n payload.",
+        description="Business-registration data about the operator behind this agent — the\n details an Exchange needs to open a commercial account (legal entity,\n address, jurisdiction, tax identifiers and the like). The specific members\n are operator-defined and not fixed in the wire contract; whether the\n Exchange inspects them follows its manifest — see\n AccountRegistration.data_schema. This is NOT an identity claim: the caller's\n identity is taken from the verified request signature, never from this\n payload, so nothing here is trusted as authentication.",
+    )
+    terms_digest: (
+        constr(
+            pattern=r'^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$'
+        )
+        | None
+    ) = Field(
+        None,
+        description="Echo of WellKnownManifest.terms_digest, stating WHICH terms document the\n operator accepted. The request signature covers this statement, so it is the\n durable record a later dispute asks for; the Exchange stores the accepted\n value with the account. Four cases, all defined: the Exchange publishes a\n digest and this matches — registration proceeds; it publishes one and this\n differs — refused with REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE; it\n publishes one and this is absent — refused with the SAME reason, because the\n caller's remedy is identical (read the manifest, echo, retry) and a second\n reason would split one fix in two; it publishes none and this is present —\n the Exchange MUST ignore the value and MUST NOT record it as an acceptance,\n since it publishes no digest and therefore cannot verify what document the\n value refers to, and storing it would put an unverifiable claim exactly\n where this field exists to hold a verified one. A registering client MUST\n read the digest from a FRESHLY fetched manifest rather than a cached copy —\n a cached endpoint is fine, a cached digest is not, because a client cannot\n detect staleness locally and a warm cache would otherwise make it retry a\n refused value until the cache expired. Registration happens once per\n Exchange, so the extra fetch is cheap.",
     )
     ver: str | None = Field(
         '',
@@ -670,6 +729,9 @@ class RegistrationFailureReason(Enum):
     REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA = (
         'REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA'
     )
+    REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE = (
+        'REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE'
+    )
 
 
 class RegistrationFieldError(WireModel):
@@ -684,6 +746,13 @@ class RegistrationFieldError(WireModel):
 
 
 class RemoveResourcesRequest(WireModel):
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. Distinct from `tenant_id` above, which names a publisher\n tenant WITHIN an Exchange, not the Exchange itself.',
+    )
     paths: list[str] | None = Field(None, description='Paths to remove')
     tenant_id: str | None = Field('', description='Tenant identifier')
     ver: str | None = Field(
@@ -776,8 +845,17 @@ class RequestConstraints(WireModel):
     delivery_preference: list[DeliveryMethod] | None = Field(
         None, description='Preferred delivery methods, in order of preference.'
     )
-    exchanges: list[str] | None = Field(
-        None, description='Authorized Exchange domains. Broker queries only these.'
+    exchanges: (
+        list[
+            constr(
+                pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+                max_length=260,
+            )
+        ]
+        | None
+    ) = Field(
+        None,
+        description='Authorized Exchange domains, in the shape "Request recipient" defines in the\n file header. Broker queries only these. This is a FILTER over third parties,\n not an address — the recipient of the request carrying it is a separate\n question.',
     )
     max_data_age: str | None = Field(
         None,
@@ -800,7 +878,15 @@ class RequestConstraints(WireModel):
         None,
         description='Per-period budget limit. The Broker tracks spend against this\n for the budget_scope. Transactions that would exceed are denied.',
     )
-    preferred_exchanges: list[str] | None = Field(
+    preferred_exchanges: (
+        list[
+            constr(
+                pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+                max_length=260,
+            )
+        ]
+        | None
+    ) = Field(
         None,
         description='Exchanges the agent has existing relationships with (subscriptions,\n contracts). The Broker SHOULD prefer these when resource is\n available — subscription resource has zero marginal cost.',
     )
@@ -984,6 +1070,16 @@ class TermSemantics(Enum):
 
 
 class TransactionDenial(WireModel):
+    exchange: (
+        constr(
+            pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+            max_length=260,
+        )
+        | None
+    ) = Field(
+        None,
+        description='Bare host of the Exchange that PRODUCED this denial, in the form "Request\n recipient" defines in the file header. Not an echo of what the caller sent:\n on a relayed or fanned-out execute the request went to a Broker, so the\n Exchange that refused may not be one the agent named. Carrying it here is\n what lets ACCOUNT_NOT_REGISTERED be actionable — the agent learns where to\n call Register without fetching a manifest to work it out. NOTHING SIGNS THIS\n VALUE: it rides in a response, and on a relayed path the response passed\n through an intermediary, so this field is exactly the unsigned addressing\n the request-side `exchange` field exists to refuse. Treat it as a HINT, not\n an instruction. Before acting on it — and registering is a consequential act,\n handing an operator\'s business data and a signed acceptance of that\n Exchange\'s terms to whoever answers — a caller MUST check the value against\n a domain it already trusts for this transaction: the signed `offer.exchange`\n of the denied item, or its own RequestConstraints.exchanges set. A value\n matching neither is reported to the caller and never dialled, because a\n hostile intermediary that could choose it would be choosing where an\n unattended agent registers.',
+    )
     offer_id: str | None = Field(
         None, description='Batch mode: the offer this denial pertains to.'
     )
@@ -1006,7 +1102,8 @@ class OfferSigAlgorithm(Enum):
 
 class TransactionEvidence(WireModel):
     agent_acceptance_canonical_bytes: constr(
-        pattern=r'^[A-Za-z0-9+/_-]{2,}={0,2}$', min_length=2
+        pattern=r'^(?:[A-Za-z0-9+/]{4}(?:[A-Za-z0-9+/]{4})*|[A-Za-z0-9+/]{2}(?:[A-Za-z0-9+/]{4})*(?:==)?|[A-Za-z0-9+/]{3}(?:[A-Za-z0-9+/]{4})*=?|[A-Za-z0-9_-]{4}(?:[A-Za-z0-9_-]{4})*|[A-Za-z0-9_-]{2}(?:[A-Za-z0-9_-]{4})*(?:==)?|[A-Za-z0-9_-]{3}(?:[A-Za-z0-9_-]{4})*=?)$',
+        min_length=2,
     ) = Field(
         ...,
         description='Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.\n Unbounded for the same reason as offer_canonical_bytes. Same rule as\n ramp.admin.v1.TransactionEvidence.offer_canonical_bytes (drift-gated).',
@@ -1024,7 +1121,9 @@ class TransactionEvidence(WireModel):
         description="The anchored well-known directory agent_public_key was pinned from. The\n registry overwrites keys in place on rotation and keeps no history, so\n this — plus created_at — attests where and when this Exchange obtained\n the key. Empty when the agent carries no directory anchor: an append-once\n row states a value for every column, so '' is a stated fact, not a gap.",
     )
     agent_public_key: constr(
-        pattern=r'^[A-Za-z0-9+/_-]{43}=?$', min_length=43, max_length=44
+        pattern=r'^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?)$',
+        min_length=43,
+        max_length=44,
     ) = Field(
         ...,
         description='The registry-pinned agent verifying key (raw 32-byte Ed25519) the\n acceptance verified against. Same rule as\n ramp.admin.v1.TransactionEvidence.exchange_signing_public_key\n (drift-gated).',
@@ -1033,13 +1132,16 @@ class TransactionEvidence(WireModel):
         ..., description='When the Exchange wrote this row (server clock).'
     )
     exchange_signing_public_key: constr(
-        pattern=r'^[A-Za-z0-9+/_-]{43}=?$', min_length=43, max_length=44
+        pattern=r'^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?)$',
+        min_length=43,
+        max_length=44,
     ) = Field(
         ...,
         description='The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.',
     )
     offer_canonical_bytes: constr(
-        pattern=r'^[A-Za-z0-9+/_-]{2,}={0,2}$', min_length=2
+        pattern=r'^(?:[A-Za-z0-9+/]{4}(?:[A-Za-z0-9+/]{4})*|[A-Za-z0-9+/]{2}(?:[A-Za-z0-9+/]{4})*(?:==)?|[A-Za-z0-9+/]{3}(?:[A-Za-z0-9+/]{4})*=?|[A-Za-z0-9_-]{4}(?:[A-Za-z0-9_-]{4})*|[A-Za-z0-9_-]{2}(?:[A-Za-z0-9_-]{4})*(?:==)?|[A-Za-z0-9_-]{3}(?:[A-Za-z0-9_-]{4})*=?)$',
+        min_length=2,
     ) = Field(
         ...,
         description="Verbatim JCS bytes the Exchange's signature was computed over (the offer\n with its signature fields cleared). min_len only, no ceiling: same\n rationale as offer_json — the bytes under the signature are whatever size\n the signed offer was, and a bound could invalidate a legitimate row.",
@@ -1082,7 +1184,7 @@ class TransactionEvidence(WireModel):
     )
     transaction_id: constr(min_length=1, max_length=255) = Field(
         ...,
-        description='The evidenced transaction (Exchange-minted transaction identity). The\n 255 bound is NEW to this plane — ramp.v1 leaves transaction ids\n unconstrained — and is safe here because the Exchange mints the id\n itself and both documented schemes (26-char ULID, 36-char UUID) sit far\n below it; it exists so the selector stays storable and indexable.',
+        description='The evidenced transaction (Exchange-minted transaction identity). The\n format is implementation-defined, exactly as in ramp.v1 (the documented\n storage model mints a 26-char ULID). The 255 bound is NEW to this plane —\n ramp.v1 leaves transaction ids unconstrained — and is safe here because\n the Exchange mints the id itself, far below that bound; it exists so the\n selector stays storable and indexable.',
     )
 
 
@@ -1145,7 +1247,9 @@ class TransactionState(WireModel):
         description='The transaction\'s per-item idempotency key as logged. The Exchange\n derives it as TransactionEvidence.request_idempotency_key + ":" +\n offer_id — unconditionally, single-item requests included — so distinct\n items of a batch dedupe independently, and this value is NEVER byte-equal\n to the request-level key. A ledger joining this row against a log export\n matches on this derived form, not on the bare request key. No upper\n bound: the derivation appends an id whose length nothing constrains.',
     )
     signed_url_hash: constr(
-        pattern=r'^[A-Za-z0-9+/_-]{43}=?$', min_length=43, max_length=44
+        pattern=r'^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?)$',
+        min_length=43,
+        max_length=44,
     ) = Field(
         ...,
         description="sha256 of the signed retrieval URL — the join key against the edge\n delivery log's url_hash. Hash-only by design: the full URL is a live\n bearer capability until expiry and is deliberately absent from this\n plane (see TransactionEvidence's delivery section).",
@@ -1230,7 +1334,13 @@ class AttributionDetail(WireModel):
 
 
 class AuthorizedExchange(WireModel):
-    domain: str | None = Field('', description='Canonical domain of the Exchange.')
+    domain: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='Canonical domain of the Exchange, in the shape "Request recipient" defines\n in the file header.',
+    )
     endpoint: str | None = Field('', description='RAMP ExchangeService endpoint URL.')
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1384,7 +1494,7 @@ class Quota(WireModel):
 class RegistrationFailure(WireModel):
     field_errors: list[RegistrationFieldError] | None = Field(
         None,
-        description='When reason = INVALID_REGISTRATION_DATA: the registration_data members\n that are missing or do not conform. Empty for every other reason.',
+        description='When reason = INVALID_REGISTRATION_DATA: the registration_data members\n that are missing or do not conform. Empty for every other reason — enforced\n by the message rule above, not left to prose.',
         max_length=64,
     )
     reason: RegistrationFailureReason = Field(
@@ -1397,9 +1507,12 @@ class Requester(WireModel):
         None,
         description='Optional delegation — present when the requester acts on behalf of\n another entity (user, organization, upstream agent).',
     )
-    domain: str | None = Field(
-        '',
-        description='Domain the requester belongs to — used for public key lookup.\n Keys published at {domain}/.well-known/ramp.json (WellKnownManifest, role=ROLE_AGENT).',
+    domain: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='Domain the requester belongs to — used for public key lookup, so the value\n is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,\n WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape\n "Request recipient" defines in the file header, for the same structural\n reason: a scheme, path or query smuggled in here would choose what gets\n fetched, not merely from where.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1480,6 +1593,13 @@ class ResourceQuery(WireModel):
     deadline: str | None = Field(
         None,
         description='Maximum time the caller will wait for a response.\n Exchange SHOULD prioritize speed over completeness when tight.\n Absent = "0.5s" default (proto-JSON encodes Duration as seconds).',
+    )
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header for the full contract, including the recipient\'s duty to\n reject a request that names someone else.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1621,7 +1741,13 @@ class UsageReport(WireModel):
         '',
         description='Billing record identifier from the delivery (TransactionResultItem.billing_id).',
     )
-    exchange: str | None = Field(None, description='Exchange this report is for.')
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this report is addressed to (e.g.\n "exchange.example" or "exchange.example:8081") — the Exchange that issued\n the offer and therefore holds the reporting obligation. See "Request\n recipient" in the file header for the full contract. Promoted from optional:\n an absent or empty value used to skip the recipient check entirely, which\n made the check opt-in for the caller.',
+    )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
         None,
@@ -1654,6 +1780,10 @@ class WellKnownManifest(WireModel):
     accepted_verifiers: list[str] | None = Field(
         None,
         description='Exchange-only. Trusted attestation verification vendors (domains).',
+    )
+    account_registration: AccountRegistration | None = Field(
+        None,
+        description='Exchange-only. How to open an account here — see AccountRegistration, which\n owns the contract. Absent: registration_data is accepted uninspected,\n exactly as before this field existed.',
     )
     base_currency: str | None = Field(
         None,
@@ -1726,10 +1856,6 @@ class WellKnownManifest(WireModel):
         None,
         description='Exchange-only. Supported RAMP protocol versions (e.g. ["1.0"]).',
     )
-    registration_schema: dict[str, Any] | None = Field(
-        None,
-        description="Exchange-only. JSON Schema (draft 2020-12) describing the\n RegisterRequest.registration_data object this Exchange expects. This field\n is the single home of the enforce/pass-through contract, and publishing it\n IS the enforcement switch. Present: this Exchange validates\n registration_data against the schema and refuses a non-conforming payload\n with REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the\n offending members in RegistrationFailure.field_errors. Absent:\n registration_data is passed through to the system of record uninspected,\n so an Exchange that publishes no schema needs no change to stay\n conformant. Safety rules, because a consumer reads this schema out of a\n third party's manifest: it MUST be self-contained, and a consumer MUST NOT\n resolve a remote $ref out of it — doing so turns every reader into an SSRF\n vector aimed at a URL the schema's author chose. A consumer SHOULD bound\n validation time and recursion depth; draft 2020-12 `pattern` admits\n regexes with catastrophic backtracking. Size is capped at 16KB, measured\n as the UTF-8 bytes of this member as served in ramp.json; a consumer\n SHOULD reject an oversized schema and skip its local pre-check rather than\n truncate it, which leaves the Exchange's own enforcement the deciding\n check exactly as when no schema is published.",
-    )
     role: Role = Field(..., description='Role this manifest describes.')
     supported_auth_methods: list[AuthMethod] | None = Field(
         None,
@@ -1738,6 +1864,15 @@ class WellKnownManifest(WireModel):
     supported_profiles: list[str] | None = Field(
         None,
         description='Exchange-only. Domain extension profiles this Exchange conforms to.\n See standards-layering docs.',
+    )
+    terms_digest: (
+        constr(
+            pattern=r'^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$'
+        )
+        | None
+    ) = Field(
+        None,
+        description='Exchange-only. Digest of the document served at `terms_uri`, in\n "method:hexdigest" form (e.g. "sha256:9f86d081..."), pinning WHICH terms\n document this manifest is currently offering. `terms_uri` alone cannot\n answer that: it is a URL, and its content changes, so after the first\n revision every earlier registration points at a document that no longer says\n what was agreed. RegisterRequest.terms_digest echoes this value, the request\n signature covers that echo, and the Exchange records the accepted digest\n with the account — which is what makes "which terms did this operator\n accept" answerable later. Because a digest identifies a document only while\n a copy of it still exists, keeping the historical terms documents\n retrievable is the Exchange\'s obligation. It sits at the top level rather\n than inside account_registration on purpose: an Exchange with pass-through\n registration publishes no block yet still needs to pin its terms version,\n and coupling "I enforce a schema" to "I version my terms" would tie together\n two independent decisions. Operator note: publishing this field for the\n first time refuses every client that does not yet echo it, so it is a\n coordinated change rather than a safe addition.',
     )
     terms_uri: str | None = Field(
         None, description='Exchange-only. Terms of service URL.'
@@ -1873,9 +2008,12 @@ class Offer(WireModel):
         | conint(ge=-2147483648, le=2147483647)
         | None
     ) = Field(0, description='How resource will be delivered.')
-    exchange: str | None = Field(
-        '',
-        description='Canonical domain of the Exchange that issued this offer (e.g.\n "exchange.example.com"). This is the execute-routing target: the agent (or\n a relaying Broker) sends the ExecuteTransaction call for this offer to this\n Exchange. Because it is an ordinary Offer field it falls inside the signed\n bytes (see `signature` below — the signature covers every field except\n `signature` / `signature_algorithm`), so an intermediary cannot redirect\n the execute call to a different Exchange without invalidating the offer.\n This enables multi-Exchange fan-out routing from the offer itself,\n retiring the X-RAMP-Exchange-Endpoint transport header.',
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the Exchange that issued this offer (e.g.\n "exchange.example" or "exchange.example:8081"), in the form "Request\n recipient" defines in the file header. This is the execute-routing target:\n the agent, or a relaying Broker, sends the ExecuteTransaction call for this\n offer to this Exchange, and a Broker relaying a mixed batch groups the items\n by this value. Because it is an ordinary Offer field it falls inside the\n signed bytes (see `signature` below — the signature covers every field\n except `signature` / `signature_algorithm`), so an intermediary cannot\n redirect the execute call to a different Exchange without invalidating the\n offer, and it is what retires the X-RAMP-Exchange-Endpoint transport header.\n It is also the audience statement of an ExecuteTransaction, which is why\n TransactionRequest carries no top-level `exchange`: on receipt, an Exchange\n MUST reject the request unless EVERY item\'s offer.exchange names one of its\n own domains. Presence is enforced because an empty value is unroutable — a\n relaying Broker has nothing to group or dial on, and the swap-protection\n above is vacuous when the signed bytes carry no recipient at all.',
     )
     expires_at: AwareDatetime | None = Field(
         None, description='When this offer expires (ISO 8601).'
@@ -1994,8 +2132,12 @@ class ResourceEntry(WireModel):
 
 
 class ResourceResponse(WireModel):
-    exchange: str | None = Field(
-        '', description='Canonical domain of the responding Exchange.'
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='Canonical domain of the responding Exchange, in the shape "Request\n recipient" defines in the file header. The response counterpart of the\n recipient field on the request: it names who answered.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -2081,6 +2223,13 @@ class PushResourcesRequest(WireModel):
     )
     entries: list[ResourceEntry] | None = Field(
         None, description='Content entries to push'
+    )
+    exchange: constr(
+        pattern=r'^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$',
+        max_length=260,
+    ) = Field(
+        ...,
+        description='REQUIRED. Bare host of the recipient this request is addressed to (e.g.\n "exchange.example" or "exchange.example:8081"). See "Request recipient" in\n the file header. Distinct from `tenant_id` above, which names a publisher\n tenant WITHIN an Exchange, not the Exchange itself.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(

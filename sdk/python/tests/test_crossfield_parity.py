@@ -41,12 +41,20 @@ from ramp_sdk import cross_field_rule_ids  # type: ignore[import-not-found]
 
 _CASES = load_json(CONFORMANCE_CORPUS / "crossfield.json")
 
-_EXPECTED_MESSAGES = {"License", "LicenseTerm", "Obligation", "Pricing", "Restriction"}
+_EXPECTED_MESSAGES = {
+    "License",
+    "LicenseTerm",
+    "Obligation",
+    "Pricing",
+    "RegistrationFailure",
+    "Restriction",
+    "WellKnownManifest",
+}
 
 
 def test_crossfield_corpus_shape() -> None:
-    # >=7 mutants across exactly the 5 cross-field messages.
-    assert len(_CASES) >= 7
+    # >=8 mutants across exactly the 6 cross-field messages.
+    assert len(_CASES) >= 8
     assert {c["message"] for c in _CASES} == _EXPECTED_MESSAGES
 
 
@@ -124,7 +132,54 @@ _VALID_INSTANCES: list[dict[str, object]] = [
             "prohibited": [AI_INPUT],
         },
     },
+    {
+        # field_errors_scoped_to_invalid_data: the member list WITH the one
+        # reason it belongs to.
+        "name": "RegistrationFailure INVALID_REGISTRATION_DATA with field_errors",
+        "message": "RegistrationFailure",
+        "json": {
+            "reason": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA",
+            "field_errors": [{"path": "/vat_id", "error": "required"}],
+        },
+    },
+    {
+        # The other side: any other reason, carrying no member list.
+        "name": "RegistrationFailure TERMS_DIGEST_STALE without field_errors",
+        "message": "RegistrationFailure",
+        "json": {"reason": "REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE"},
+    },
+    {
+        # terms_digest_requires_terms_uri: a digest WITH the address it pins.
+        "name": "WellKnownManifest with terms_uri+terms_digest",
+        "message": "WellKnownManifest",
+        "json": {
+            "ver": "1.0",
+            "role": "ROLE_EXCHANGE",
+            "domain": "exchange.example",
+            "terms_uri": "https://exchange.example/terms",
+            "terms_digest": "sha256:" + "ab" * 32,
+        },
+    },
+    {
+        # The common case the rule must NOT reject: no terms document at all.
+        # Both members are optional, so a manifest publishing neither is clean —
+        # this is the instance that catches a predicate inverted to fire on a
+        # missing terms_uri rather than on an unpinned digest.
+        "name": "WellKnownManifest with neither terms member",
+        "message": "WellKnownManifest",
+        "json": {"ver": "1.0", "role": "ROLE_EXCHANGE", "domain": "exchange.example"},
+    },
 ]
+
+
+def test_every_registered_message_has_a_valid_instance() -> None:
+    """Pins the two lists together. A cross-field rule registered without a valid
+    instance is a rule whose predicate can be inverted while the suite stays green:
+    the corpus mutants only prove OVER-acceptance is caught, never over-rejection."""
+    covered = {str(i["message"]) for i in _VALID_INSTANCES}
+    assert covered == _EXPECTED_MESSAGES, (
+        f"messages without a valid instance: {sorted(_EXPECTED_MESSAGES - covered)}"
+    )
 
 
 @pytest.mark.parametrize(

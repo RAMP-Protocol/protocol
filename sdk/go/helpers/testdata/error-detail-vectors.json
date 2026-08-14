@@ -62,6 +62,22 @@
       }
     },
     {
+      "name": "transaction_denial_account_not_registered",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "no account at this Exchange — call Register first",
+      "metadata": null,
+      "reason_field": "transaction_denial",
+      "reason_enum": "DENIAL_REASON_ACCOUNT_NOT_REGISTERED",
+      "field_errors": null,
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "no account at this Exchange — call Register first",
+        "transaction_denial": {
+          "reason": "DENIAL_REASON_ACCOUNT_NOT_REGISTERED"
+        }
+      }
+    },
+    {
       "name": "retrieval_auth_failure_reason",
       "domain": "ramp.v1.Edge",
       "message": "signed URL expired",
@@ -137,7 +153,7 @@
     {
       "name": "registration_failure_field_errors",
       "domain": "ramp.v1.ExchangeService",
-      "message": "registration_data does not match the published registration_schema",
+      "message": "registration_data does not match the published data_schema",
       "metadata": null,
       "reason_field": "registration_failure",
       "reason_enum": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA",
@@ -153,7 +169,7 @@
       ],
       "wire_json": {
         "domain": "ramp.v1.ExchangeService",
-        "message": "registration_data does not match the published registration_schema",
+        "message": "registration_data does not match the published data_schema",
         "registration_failure": {
           "field_errors": [
             {
@@ -165,6 +181,22 @@
             }
           ],
           "reason": "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
+        }
+      }
+    },
+    {
+      "name": "registration_failure_terms_digest_stale",
+      "domain": "ramp.v1.ExchangeService",
+      "message": "terms_digest does not match the currently published terms",
+      "metadata": null,
+      "reason_field": "registration_failure",
+      "reason_enum": "REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE",
+      "field_errors": null,
+      "wire_json": {
+        "domain": "ramp.v1.ExchangeService",
+        "message": "terms_digest does not match the currently published terms",
+        "registration_failure": {
+          "reason": "REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE"
         }
       }
     },

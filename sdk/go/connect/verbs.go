@@ -36,7 +36,7 @@ const edgeErrorDomain = "ramp.v1.Edge"
 // parameter a configured origin could be passed as, so it cannot become the
 // default by anyone's convenience. Set it from the offer being reported:
 //
-//	report.Exchange = proto.String(verified.Offer().GetExchange())
+//	report.Exchange = verified.Offer().GetExchange()
 //
 // The report is cloned before ver and the idempotency key are stamped, so the
 // message the caller built stays untouched — it crossed a package boundary as an
@@ -73,21 +73,24 @@ func (c *Client) ReportUsage(ctx context.Context, report *rampv1.UsageReport, op
 // Dispute files a dispute with the Exchange that issued the offer, over the same
 // vetted routing a usage report takes.
 //
-// The exchange domain is an ARGUMENT here rather than a field, because
-// DisputeRequest carries no exchange field to read it from — an asymmetry forced
-// by the message shape, not chosen. It is still the offer's signed domain and
-// still goes through the identical checks, so a configured value cannot reach the
-// wire unvetted.
+// The destination comes off the request, exactly as it does for a usage report:
+// DisputeRequest.exchange carries the recipient, and the endpoint is resolved
+// from that Exchange's own well-known manifest. It used to be an argument here,
+// because the message carried no field to read it from — an asymmetry the
+// message shape forced. The field now exists, so the asymmetry would be a choice,
+// and the reason it was tolerated is the reason to remove it: a parameter is
+// something a configured origin can be passed as, and reading the destination off
+// the signed message leaves no such seam.
 //
 // The dispute chain is a structural invariant: an agent must have filed a usage
 // report and received a report_id before it can dispute, so req.ReportId and
 // req.TransactionId both name links the Exchange already holds.
-func (c *Client) Dispute(ctx context.Context, exchangeDomain string, req *rampv1.DisputeRequest, opts ...CallOption) (*rampv1.DisputeResponse, error) {
+func (c *Client) Dispute(ctx context.Context, req *rampv1.DisputeRequest, opts ...CallOption) (*rampv1.DisputeResponse, error) {
 	const op = "dispute"
 	if req == nil {
 		return nil, malformed(op, errors.New("request is nil"))
 	}
-	endpoint, err := vetExchangeEndpoint(ctx, c.endpoints, exchangeDomain, op)
+	endpoint, err := vetExchangeEndpoint(ctx, c.endpoints, req.GetExchange(), op)
 	if err != nil {
 		return nil, err
 	}

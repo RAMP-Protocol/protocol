@@ -41,6 +41,7 @@ Content-Type: application/json
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.ssp-example.com",
   "requester": {
     "id": "research-bot",
     "domain": "buyer.example.com",
@@ -69,6 +70,7 @@ Key fields:
   "offers": [
     {
       "offer_id": "offer-tc-4921",
+      "exchange": "exchange.ssp-example.com",
       "title": "The Future of AI Infrastructure",
       "ext": {
         "comp.package_id": "PKG-TC-AI-INFRA",
@@ -148,6 +150,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
       "offers": [
         {
           "offer_id": "offer-tc-4921",
+          "exchange": "exchange.ssp-example.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
           "signature": "a1b2c3...",
           "signature_algorithm": "EdDSA"
@@ -159,6 +162,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
       "offers": [
         {
           "offer_id": "offer-tc-4922",
+          "exchange": "exchange.ssp-example.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001200", "unit": "accesses" },
           "signature": "d4e5f6...",
           "signature_algorithm": "EdDSA"
@@ -184,12 +188,14 @@ When the requester has a subscription, the Exchange includes both per-request an
   "offers": [
     {
       "offer_id": "offer-tc-4921",
+      "exchange": "exchange.ssp-example.com",
       "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
       "signature": "a1b2c3...",
       "signature_algorithm": "EdDSA"
     },
     {
       "offer_id": "sub-offer-tc-4921",
+      "exchange": "exchange.ssp-example.com",
       "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD", "unit_cost": "0" },
       "subscription_id": "SUB-12345",
       "terms": [ { "semantics": "TERM_SEMANTICS_ENUMERATED", "scopes": ["subscription:SUB-12345"] } ],
@@ -228,6 +234,7 @@ When the requester holds a subscription, the Exchange attaches `SubscriptionQuot
   "offers": [
     {
       "offer_id": "sub-offer-tc-4921",
+      "exchange": "exchange.ssp-example.com",
       "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" },
       "subscription_id": "SUB-12345",
       "terms": [ { "semantics": "TERM_SEMANTICS_ENUMERATED", "scopes": ["subscription:SUB-12345"] } ],
@@ -284,6 +291,7 @@ Content-Type: application/json
     {
       "offer": {
         "offer_id": "offer-tc-4921",
+        "exchange": "exchange.ssp-example.com",
         "title": "The Future of AI Infrastructure",
         "pricing": {
           "model": "PRICING_MODEL_PER_UNIT",
@@ -366,6 +374,7 @@ For batch transactions, use the `items` array:
     {
       "offer": {
         "offer_id": "offer-tc-4921",
+        "exchange": "exchange.ssp-example.com",
         "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
         "expires_at": "2026-03-14T02:30:00Z",
         "signature": "a1b2c3...",
@@ -375,6 +384,7 @@ For batch transactions, use the `items` array:
     {
       "offer": {
         "offer_id": "offer-tc-4922",
+        "exchange": "exchange.ssp-example.com",
         "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001200", "unit": "accesses" },
         "expires_at": "2026-03-14T02:30:00Z",
         "signature": "d4e5f6...",
@@ -450,6 +460,7 @@ Content-Type: application/json
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.ssp-example.com",
   "idempotency_key": "ur-e4f2a1",
   "transaction_id": "txn-mp-93a7f2",
   "billing_id": "bill-93a7f2-001",
@@ -461,7 +472,6 @@ Content-Type: application/json
     "citation_included": true
   },
   "timestamp": "2026-03-14T01:45:00Z",
-  "exchange": "exchange.ssp-example.com",
   "assets": [{
     "uri": "https://cdn.ramp-protocol.org/premium/ai-infrastructure.html",
     "title": "The Future of AI Infrastructure",
@@ -573,6 +583,7 @@ Content-Type: application/json
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.ssp-example.com",
   "idempotency_key": "dsp-20260318-abc123",
   "transaction_id": "txn-mp-93a7f2",
   "billing_id": "bill-93a7f2-001",
@@ -629,6 +640,7 @@ message Preview {
 ```json
 {
   "offer_id": "offer-reuters-001",
+  "exchange": "exchange.ssp-example.com",
   "title": "Climate Summit Photo - Reuters",
   "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.50", "currency": "USD", "unit": "accesses" },
   "previews": [

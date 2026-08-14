@@ -110,6 +110,60 @@ import "ramp/v1/vocab.proto";
 // ============================================================================
 
 // ============================================================================
+// Request recipient
+//
+// Every addressed request carries `exchange`: the bare host of the recipient the
+// request is meant for — "exchange.example" or "exchange.example:8081". A port
+// is allowed and must be a usable one, 1-65535: the rule spells the range out
+// rather than counting digits, so ":0" and ":99999" are refused like any other
+// value that cannot name a listening service. A scheme, path, query, userinfo
+// or trailing root dot is not allowed, and
+// the value is case-normalised (sender and recipient lowercase it before
+// comparing). The PORT is part of the identity and is compared, with one
+// folding: an absent port and the default port for the scheme in use are the
+// same port, so "exchange.example" and "exchange.example:443" name the same
+// recipient over HTTPS while "exchange.example:8443" names a different one.
+// Stated because it is otherwise the obvious place for two implementations to
+// disagree — another port is another service, which the party answering for the
+// first need not control. It is NOT an endpoint URL. The endpoint is resolved from the
+// recipient's own /.well-known/ramp.json, never from a value the caller
+// supplies — an endpoint in the payload would hand the caller the choice of
+// where the next hop dials, which is exactly what this field is not for.
+//
+// Why a body field, when the RFC 9421 signature already covers `@target-uri`:
+// the signature proves the sender signed THE URL IT DIALLED, not that the URL
+// was the right one. The dial target is resolved from a fetched, cached
+// /.well-known/ramp.json, so a poisoned or stale resolution redirects the
+// request while every signature still verifies. This field states whom the
+// sender MEANT, independently of that resolution, and the genuine recipient
+// rejects a request that names someone else. The field is stamped by whoever
+// authors each request — the agent on the requests it signs, a Broker on the
+// legs it authors as sender (the discovery fan-out, a re-packaged
+// transaction). It is a statement BY that sender, not tamper-evidence against
+// it; for transactions the binding audience statement is per item,
+// Offer.exchange inside the Exchange-signed offer (see below).
+//
+// A recipient MUST reject a request whose `exchange` is not one of its own
+// domains. That rejection is INVALID_ARGUMENT with NO typed reason: a
+// mis-addressed request is malformed rather than a domain-level failure, and no
+// ErrorDetail reason family covers it.
+//
+// Two messages deliberately do NOT carry the field, and both absences are
+// load-bearing rather than oversights. DiscoveryRequest travels one direct hop
+// and terminates at the Broker: the Broker does not forward it, it authors new
+// per-Exchange ResourceQuery messages from it, and those fan-out legs carry
+// `exchange` stamped by the Broker as sender. The agent could not name the
+// recipients in any case — choosing the fan-out set is the Broker's job, and
+// RequestConstraints.exchanges is the agent's optional filter over that choice,
+// not an address. TransactionRequest carries no top-level field because its
+// recipient statement already exists per item: every TransactionItem carries the
+// full signed Offer, and Offer.exchange is the execute-routing target, covered
+// by the issuing Exchange's own offer signature. The receive-side rule there is
+// that EVERY item's offer.exchange names this Exchange; a redundant top-level
+// copy would only add a top-level-vs-items mismatch to police.
+// ============================================================================
+
+// ============================================================================
 // ExchangeService — THE core protocol.
 //
 // This is what SSPs, providers, or third parties deploy.
@@ -213,6 +267,12 @@ message ResourceQuery {
   // RFC 9421 HTTP Message Signature (Signature / Signature-Input), and each
   // signature covers the request plus the prior hop's signature — so the ordered
   // set of signatures IS the forwarding chain, tamper-evident and order-bound.
+  // On this verbatim-forwarded path the originating agent signs its
+  // `@target-uri` against the FINAL recipient's resolved endpoint (the
+  // Exchange), not the relay URL it dials; each forwarding party then chains
+  // its own signature over the request as received. A message that TERMINATES
+  // at the Broker (DiscoveryRequest) is not forwarding: there the Broker is
+  // the final recipient, and the agent signs the Broker's URL.
   // The Exchange resolves each hop's key (keyid → domain → /.well-known/ramp.json),
   // verifies every signature, and enforces RequestConstraints.max_hops /
   // WellKnownManifest.max_intermediary_hops by counting them. (Field 5 unused.)
@@ -237,6 +297,17 @@ message ResourceQuery {
   // Examples: ["ramp-news-v1", "ramp-academic-v1", "ramp-legal-v1"]
   repeated string supported_profiles = 7;
 
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header for the full contract, including the recipient's duty to
+  // reject a request that names someone else.
+  string exchange = 10 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
+
   // Extension point
   google.protobuf.Struct ext = 15;
 
@@ -257,8 +328,15 @@ message ResourceResponse {
   // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
-  // Canonical domain of the responding Exchange.
-  string exchange = 3;
+  // Canonical domain of the responding Exchange, in the shape "Request
+  // recipient" defines in the file header. The response counterpart of the
+  // recipient field on the request: it names who answered.
+  string exchange = 3 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // Flat list of offers (for single-URI queries).
   repeated Offer offers = 4;
@@ -464,16 +542,28 @@ message Offer {
   // different Exchanges and compare pricing.
   optional ResourceIdentity identity = 7;
 
-  // Canonical domain of the Exchange that issued this offer (e.g.
-  // "exchange.example.com"). This is the execute-routing target: the agent (or
-  // a relaying Broker) sends the ExecuteTransaction call for this offer to this
-  // Exchange. Because it is an ordinary Offer field it falls inside the signed
-  // bytes (see `signature` below — the signature covers every field except
-  // `signature` / `signature_algorithm`), so an intermediary cannot redirect
-  // the execute call to a different Exchange without invalidating the offer.
-  // This enables multi-Exchange fan-out routing from the offer itself,
-  // retiring the X-RAMP-Exchange-Endpoint transport header.
-  string exchange = 8;
+  // REQUIRED. Bare host of the Exchange that issued this offer (e.g.
+  // "exchange.example" or "exchange.example:8081"), in the form "Request
+  // recipient" defines in the file header. This is the execute-routing target:
+  // the agent, or a relaying Broker, sends the ExecuteTransaction call for this
+  // offer to this Exchange, and a Broker relaying a mixed batch groups the items
+  // by this value. Because it is an ordinary Offer field it falls inside the
+  // signed bytes (see `signature` below — the signature covers every field
+  // except `signature` / `signature_algorithm`), so an intermediary cannot
+  // redirect the execute call to a different Exchange without invalidating the
+  // offer, and it is what retires the X-RAMP-Exchange-Endpoint transport header.
+  // It is also the audience statement of an ExecuteTransaction, which is why
+  // TransactionRequest carries no top-level `exchange`: on receipt, an Exchange
+  // MUST reject the request unless EVERY item's offer.exchange names one of its
+  // own domains. Presence is enforced because an empty value is unroutable — a
+  // relaying Broker has nothing to group or dial on, and the swap-protection
+  // above is vacuous when the signed bytes carry no recipient at all.
+  string exchange = 8 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
   // Offer — every field, including `pricing`, `terms` (the full licensing
@@ -1484,9 +1574,18 @@ message Requester {
   // Unique requester identifier (e.g., "agent-research-bot-001").
   string id = 1;
 
-  // Domain the requester belongs to — used for public key lookup.
-  // Keys published at {domain}/.well-known/ramp.json (WellKnownManifest, role=ROLE_AGENT).
-  string domain = 2;
+  // Domain the requester belongs to — used for public key lookup, so the value
+  // is concatenated into a URL the verifier fetches ({domain}/.well-known/ramp.json,
+  // WellKnownManifest with role=ROLE_AGENT). It carries the same bare-host shape
+  // "Request recipient" defines in the file header, for the same structural
+  // reason: a scheme, path or query smuggled in here would choose what gets
+  // fetched, not merely from where.
+  string domain = 2 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // What kind of entity is making this request.
   RequesterType type = 3 [(buf.validate.field).enum = {not_in: [0]}];
@@ -1929,7 +2028,7 @@ message Cost {
 // of denial patterns across the ecosystem.
 enum DenialReason {
   DENIAL_REASON_UNSPECIFIED = 0;  // output enum; zero = not-applicable on TransactionResultItem.denial_reason, rejected (not_in:[0]) where set on TransactionDenial.reason
-  DENIAL_REASON_BILLING_REF_INACTIVE = 1; // the requester's account (the billing_ref minted at Register) is not active / not recognized by the billing system
+  DENIAL_REASON_ACCOUNT_INACTIVE = 1;     // the requester's account (the billing_ref minted at Register) exists but is not active — typically awaiting the Exchange operator's out-of-band activation; the remedy is to wait or contact the operator, NOT to register again
   DENIAL_REASON_INSUFFICIENT_BALANCE = 2; // Requester's balance too low
   DENIAL_REASON_RATE_LIMITED = 3;         // Too many requests
   DENIAL_REASON_CONTENT_UNAVAILABLE = 4;  // Resource no longer available
@@ -1954,6 +2053,16 @@ enum DenialReason {
   DENIAL_REASON_ENTITLEMENT_WRONG_BUYER = 15;        // token's subscriber_org does not match the asserted requester
   DENIAL_REASON_SUBSCRIPTION_LAPSED = 16;            // the covering subscription contract has lapsed
   DENIAL_REASON_ENTITLEMENT_NOT_GRANTED = 17;        // subscription exists but no buyer-side grant ties this caller to it
+
+  // Split out of the former single billing-reference reason. An agent hits the
+  // wall at execute, not at register, and "no account here" and "account awaiting
+  // activation" are two different states of the caller with two different
+  // remedies — call Register, which an agent can do unattended, versus wait for
+  // a human. Neither value discloses the Exchange's internal billing state; both
+  // describe the caller's own account, which it may already query with
+  // GetAccountStatus. TransactionDenial.exchange names WHERE to register, so the
+  // agent converges without fetching a manifest first.
+  DENIAL_REASON_ACCOUNT_NOT_REGISTERED = 18;         // no account exists for this caller at this Exchange — the remedy is to call Register
 }
 
 // IngestionSource — How the catalog entry was discovered.
@@ -2015,6 +2124,17 @@ message PushResourcesRequest {
   // Identity of the caller (who is pushing this data).
   // The Exchange verifies this matches a registered CatalogService client.
   string caller_id = 4;
+
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header. Distinct from `tenant_id` above, which names a publisher
+  // tenant WITHIN an Exchange, not the Exchange itself.
+  string exchange = 5 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -2122,6 +2242,17 @@ message RemoveResourcesRequest {
   string tenant_id = 2;
   // Paths to remove
   repeated string paths = 3;
+
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header. Distinct from `tenant_id` above, which names a publisher
+  // tenant WITHIN an Exchange, not the Exchange itself.
+  string exchange = 4 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 }
 
 message RemoveResourcesResponse {
@@ -2138,6 +2269,17 @@ message RefreshCatalogRequest {
   string ver = 1;
   // Tenant identifier
   string tenant_id = 2;
+
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header. Distinct from `tenant_id` above, which names a publisher
+  // tenant WITHIN an Exchange, not the Exchange itself.
+  string exchange = 3 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 }
 
 message RefreshCatalogResponse {
@@ -2208,8 +2350,18 @@ message UsageReport {
   // When the resource was used (ISO 8601).
   google.protobuf.Timestamp timestamp = 6;
 
-  // Exchange this report is for.
-  optional string exchange = 8;
+  // REQUIRED. Bare host of the recipient this report is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081") — the Exchange that issued
+  // the offer and therefore holds the reporting obligation. See "Request
+  // recipient" in the file header for the full contract. Promoted from optional:
+  // an absent or empty value used to skip the recipient check entirely, which
+  // made the check opt-in for the caller.
+  string exchange = 8 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // Assets that were delivered and used.
   repeated UsageAsset assets = 9;
@@ -2386,8 +2538,16 @@ message DiscoveryRequest {
 
 // RequestConstraints — Budget and preference constraints.
 message RequestConstraints {
-  // Authorized Exchange domains. Broker queries only these.
-  repeated string exchanges = 1;
+  // Authorized Exchange domains, in the shape "Request recipient" defines in the
+  // file header. Broker queries only these. This is a FILTER over third parties,
+  // not an address — the recipient of the request carrying it is a separate
+  // question.
+  repeated string exchanges = 1 [
+    (buf.validate.field).repeated.items.string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // Maximum price the agent is willing to pay.
   optional Cost max_price = 2;
@@ -2404,7 +2564,12 @@ message RequestConstraints {
   // Exchanges the agent has existing relationships with (subscriptions,
   // contracts). The Broker SHOULD prefer these when resource is
   // available — subscription resource has zero marginal cost.
-  repeated string preferred_exchanges = 6;
+  repeated string preferred_exchanges = 6 [
+    (buf.validate.field).repeated.items.string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // Budget scope identifier for per-period tracking.
   // E.g. "user:u-12345" for per-user budgets, "team:eng" for per-team.
@@ -2523,6 +2688,46 @@ message JsonWebKey {
   string not_after = 8;
 }
 
+// AccountRegistration — how to open an account at this Exchange. Published as an
+// optional block on WellKnownManifest; an Exchange that omits the whole block
+// keeps today's behaviour, accepting RegisterRequest.registration_data
+// uninspected. The block exists rather than a flat field because registration
+// has more than one publishable facet: `data_schema` describes the API mode
+// below, and field 2 is deliberately left free for a future web mode — a URL to
+// a registration page on the Exchange's own site, where a human completes the
+// steps an API call cannot carry (explicit terms confirmation, identity checks,
+// manual review). Flat siblings on a manifest this size would give a reader no
+// signal that they are one subject. Precedence between the modes is fixed now,
+// before both can be published: an Exchange that publishes `data_schema` MUST
+// accept registration through the API, and a registration URL is an additional
+// option an agent MAY offer its user instead — never a replacement for the API
+// path. An Exchange that wants web-only registration publishes the URL and no
+// schema. Note that terms versioning is NOT in this block: WellKnownManifest.
+// terms_digest sits at the top level so an Exchange with pass-through
+// registration can still pin which terms document it is serving.
+message AccountRegistration {
+  // JSON Schema (draft 2020-12) describing the RegisterRequest.registration_data
+  // object this Exchange expects. This field is the single home of the
+  // enforce/pass-through contract, and publishing it IS the enforcement switch.
+  // Present: this Exchange validates registration_data against the schema and
+  // refuses a non-conforming payload with
+  // REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the offending
+  // members in RegistrationFailure.field_errors. Absent: registration_data is
+  // passed through to the system of record uninspected, so an Exchange that
+  // publishes no schema needs no change to stay conformant. Safety rules,
+  // because a consumer reads this schema out of a third party's manifest: it
+  // MUST be self-contained, and a consumer MUST NOT resolve a remote $ref out of
+  // it — doing so turns every reader into an SSRF vector aimed at a URL the
+  // schema's author chose. A consumer SHOULD bound validation time and recursion
+  // depth; draft 2020-12 `pattern` admits regexes with catastrophic
+  // backtracking. Size is capped at 16KB, measured as the UTF-8 bytes of this
+  // member as served in ramp.json; a consumer SHOULD reject an oversized schema
+  // and skip its local pre-check rather than truncate it, which leaves the
+  // Exchange's own enforcement the deciding check exactly as when no schema is
+  // published.
+  google.protobuf.Struct data_schema = 1;
+}
+
 // WellKnownManifest — RAMP commercial overlay, served at /.well-known/ramp.json
 // by every RAMP participant (agent, exchange, broker, publisher).
 //
@@ -2533,6 +2738,15 @@ message JsonWebKey {
 // Per-role fields are populated only when that role applies; consumers
 // MUST ignore non-applicable fields based on `role`.
 message WellKnownManifest {
+  // terms_digest pins the document at terms_uri, so it is meaningless without
+  // one — a digest of a document with no address cannot be checked against
+  // anything. Mirrors the license.digest_required_with_uri rule.
+  option (buf.validate.message).cel = {
+    id: "well_known_manifest.terms_digest_requires_terms_uri"
+    message: "terms_digest is only allowed when terms_uri is set"
+    expression: "this.terms_digest == '' || this.terms_uri != ''"
+  };
+
   // RAMP protocol version of THIS MANIFEST DOCUMENT's schema — a namespace
   // separate from the RPC envelope `ver`, deliberately not coupled to it.
   // MUST equal "1.0"; consumers REJECT unrecognised major versions.
@@ -2636,26 +2850,31 @@ message WellKnownManifest {
   // Absent = no published limit (Exchange applies its own default policy).
   optional int32 max_intermediary_hops = 28;
 
-  // Exchange-only. JSON Schema (draft 2020-12) describing the
-  // RegisterRequest.registration_data object this Exchange expects. This field
-  // is the single home of the enforce/pass-through contract, and publishing it
-  // IS the enforcement switch. Present: this Exchange validates
-  // registration_data against the schema and refuses a non-conforming payload
-  // with REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the
-  // offending members in RegistrationFailure.field_errors. Absent:
-  // registration_data is passed through to the system of record uninspected,
-  // so an Exchange that publishes no schema needs no change to stay
-  // conformant. Safety rules, because a consumer reads this schema out of a
-  // third party's manifest: it MUST be self-contained, and a consumer MUST NOT
-  // resolve a remote $ref out of it — doing so turns every reader into an SSRF
-  // vector aimed at a URL the schema's author chose. A consumer SHOULD bound
-  // validation time and recursion depth; draft 2020-12 `pattern` admits
-  // regexes with catastrophic backtracking. Size is capped at 16KB, measured
-  // as the UTF-8 bytes of this member as served in ramp.json; a consumer
-  // SHOULD reject an oversized schema and skip its local pre-check rather than
-  // truncate it, which leaves the Exchange's own enforcement the deciding
-  // check exactly as when no schema is published.
-  google.protobuf.Struct registration_schema = 29;
+  // Exchange-only. How to open an account here — see AccountRegistration, which
+  // owns the contract. Absent: registration_data is accepted uninspected,
+  // exactly as before this field existed.
+  optional AccountRegistration account_registration = 30;
+
+  // Exchange-only. Digest of the document served at `terms_uri`, in
+  // "method:hexdigest" form (e.g. "sha256:9f86d081..."), pinning WHICH terms
+  // document this manifest is currently offering. `terms_uri` alone cannot
+  // answer that: it is a URL, and its content changes, so after the first
+  // revision every earlier registration points at a document that no longer says
+  // what was agreed. RegisterRequest.terms_digest echoes this value, the request
+  // signature covers that echo, and the Exchange records the accepted digest
+  // with the account — which is what makes "which terms did this operator
+  // accept" answerable later. Because a digest identifies a document only while
+  // a copy of it still exists, keeping the historical terms documents
+  // retrievable is the Exchange's obligation. It sits at the top level rather
+  // than inside account_registration on purpose: an Exchange with pass-through
+  // registration publishes no block yet still needs to pin its terms version,
+  // and coupling "I enforce a schema" to "I version my terms" would tie together
+  // two independent decisions. Operator note: publishing this field for the
+  // first time refuses every client that does not yet echo it, so it is a
+  // coordinated change rather than a safe addition.
+  optional string terms_digest = 31 [
+    (buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$"
+  ];
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -2715,8 +2934,14 @@ message CatalogContributor {
 
 // AuthorizedExchange — A Exchange authorized to sell this provider's resources.
 message AuthorizedExchange {
-  // Canonical domain of the Exchange.
-  string domain = 1;
+  // Canonical domain of the Exchange, in the shape "Request recipient" defines
+  // in the file header.
+  string domain = 1 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // RAMP ExchangeService endpoint URL.
   string endpoint = 2;
@@ -2859,6 +3084,19 @@ message DisputeRequest {
   // what the agent reported using, and what the agent disputes.
   // The dispute chain: Transaction → UsageReport → Dispute.
   string report_id = 9;
+
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header. The dispute's subject identifiers above cannot stand in for
+  // it: transaction_id, billing_id and report_id are opaque and Exchange-scoped,
+  // so verifying one means a database lookup, while the recipient check must run
+  // before any lookup happens.
+  string exchange = 10 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -3010,6 +3248,17 @@ message DomainVerificationRequest {
   // Caller identity (registered with the Exchange).
   optional string caller_id = 3;
 
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header. Distinct from `domain` above, which is the provider domain
+  // being verified — the subject of the request, not its recipient.
+  string exchange = 4 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
+
   // Extension point
   google.protobuf.Struct ext = 15;
 
@@ -3066,6 +3315,17 @@ message DomainVerificationConfirmation {
   // CDN type this key is for.
   optional string cdn_type = 5;  // "cloudfront", "akamai", "fastly", "hmac"
 
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header. Distinct from `domain` above, which is the provider domain
+  // being verified — the subject of the request, not its recipient.
+  string exchange = 6 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
+
   // Extension point
   google.protobuf.Struct ext = 15;
 
@@ -3112,8 +3372,14 @@ message DomainVerificationResult {
 // signature on every call, never from anything the caller sends.
 //
 // Whether the Exchange inspects the business payload (registration_data)
-// follows its manifest — see WellKnownManifest.registration_schema, which
-// states that contract.
+// follows its manifest — see AccountRegistration.data_schema, which states that
+// contract, and which an Exchange publishes through
+// WellKnownManifest.account_registration.
+//
+// Submitting a registration also states which terms the operator accepted: the
+// request echoes WellKnownManifest.terms_digest, the request signature covers
+// that echo, and the Exchange records the accepted digest with the account. See
+// RegisterRequest.terms_digest for the four cases and the freshness rule.
 // ============================================================================
 
 // RegisterRequest — Agent asks the Exchange to create its account.
@@ -3122,12 +3388,50 @@ message RegisterRequest {
   // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
 
-  // Operator-defined registration payload; the business fields are not fixed
-  // in the wire contract. Whether the Exchange inspects it follows its
-  // manifest — see WellKnownManifest.registration_schema. The caller's
+  // Business-registration data about the operator behind this agent — the
+  // details an Exchange needs to open a commercial account (legal entity,
+  // address, jurisdiction, tax identifiers and the like). The specific members
+  // are operator-defined and not fixed in the wire contract; whether the
+  // Exchange inspects them follows its manifest — see
+  // AccountRegistration.data_schema. This is NOT an identity claim: the caller's
   // identity is taken from the verified request signature, never from this
-  // payload.
+  // payload, so nothing here is trusted as authentication.
   google.protobuf.Struct registration_data = 2;
+
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header. It matters most here: the caller reaches this endpoint by
+  // resolving a fetched, cached manifest, so the RFC 9421 signature covers only
+  // the URL that was dialled — this field is what lets the genuine Exchange
+  // refuse a registration that was meant for a different one.
+  string exchange = 3 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
+
+  // Echo of WellKnownManifest.terms_digest, stating WHICH terms document the
+  // operator accepted. The request signature covers this statement, so it is the
+  // durable record a later dispute asks for; the Exchange stores the accepted
+  // value with the account. Four cases, all defined: the Exchange publishes a
+  // digest and this matches — registration proceeds; it publishes one and this
+  // differs — refused with REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE; it
+  // publishes one and this is absent — refused with the SAME reason, because the
+  // caller's remedy is identical (read the manifest, echo, retry) and a second
+  // reason would split one fix in two; it publishes none and this is present —
+  // the Exchange MUST ignore the value and MUST NOT record it as an acceptance,
+  // since it publishes no digest and therefore cannot verify what document the
+  // value refers to, and storing it would put an unverifiable claim exactly
+  // where this field exists to hold a verified one. A registering client MUST
+  // read the digest from a FRESHLY fetched manifest rather than a cached copy —
+  // a cached endpoint is fine, a cached digest is not, because a client cannot
+  // detect staleness locally and a warm cache would otherwise make it retry a
+  // refused value until the cache expired. Registration happens once per
+  // Exchange, so the extra fetch is cheap.
+  optional string terms_digest = 4 [
+    (buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$"
+  ];
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -3169,12 +3473,24 @@ message RegisterResponse {
 
 // GetAccountStatusRequest — Agent asks whether its account is active.
 message GetAccountStatusRequest {
-  // Deliberately carries no identifying field: the Exchange resolves the
-  // account from the verified request signature.
+  // Deliberately carries no field identifying the CALLER: the Exchange resolves
+  // the account from the verified request signature. `exchange` below identifies
+  // the RECIPIENT, which is a different question.
 
   // RAMP protocol version — "1.0". Stamped by the sender from a single
   // constant; advisory on receive. See "Protocol version" in the file header.
   string ver = 1;
+
+  // REQUIRED. Bare host of the recipient this request is addressed to (e.g.
+  // "exchange.example" or "exchange.example:8081"). See "Request recipient" in
+  // the file header. Accounts are per-Exchange, so "which Exchange am I asking
+  // about" is not derivable from anything else in this message.
+  string exchange = 2 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 
   // Extension point
   google.protobuf.Struct ext = 15;
@@ -3293,6 +3609,30 @@ message TransactionDenial {
 
   // Batch mode: the offer this denial pertains to.
   optional string offer_id = 3;
+
+  // Bare host of the Exchange that PRODUCED this denial, in the form "Request
+  // recipient" defines in the file header. Not an echo of what the caller sent:
+  // on a relayed or fanned-out execute the request went to a Broker, so the
+  // Exchange that refused may not be one the agent named. Carrying it here is
+  // what lets ACCOUNT_NOT_REGISTERED be actionable — the agent learns where to
+  // call Register without fetching a manifest to work it out. NOTHING SIGNS THIS
+  // VALUE: it rides in a response, and on a relayed path the response passed
+  // through an intermediary, so this field is exactly the unsigned addressing
+  // the request-side `exchange` field exists to refuse. Treat it as a HINT, not
+  // an instruction. Before acting on it — and registering is a consequential act,
+  // handing an operator's business data and a signed acceptance of that
+  // Exchange's terms to whoever answers — a caller MUST check the value against
+  // a domain it already trusts for this transaction: the signed `offer.exchange`
+  // of the denied item, or its own RequestConstraints.exchanges set. A value
+  // matching neither is reported to the caller and never dialled, because a
+  // hostile intermediary that could choose it would be choosing where an
+  // unattended agent registers.
+  optional string exchange = 4 [
+    (buf.validate.field).string = {
+      max_len: 260,
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+    }
+  ];
 }
 
 // CatalogRejectionReason — why a CatalogService call was rejected. Replaces the
@@ -3339,26 +3679,38 @@ enum RegistrationFailureReason {
   REGISTRATION_FAILURE_REASON_SIGNATURE_INVALID = 3;   // request signature invalid
   REGISTRATION_FAILURE_REASON_ALREADY_REGISTERED = 4;  // identity already registered
   REGISTRATION_FAILURE_REASON_QUOTA_EXCEEDED = 5;      // registration quota exceeded
-  REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA = 6; // registration_data does not conform to the Exchange's published registration_schema
+  REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA = 6; // registration_data does not conform to the Exchange's published AccountRegistration.data_schema
+  REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE = 7;        // terms_digest does not match the currently published WellKnownManifest.terms_digest, or was omitted while the Exchange publishes one
 }
 
 // RegistrationFailure — a registration request could not be completed.
 message RegistrationFailure {
+  // field_errors names the registration_data members that failed the published
+  // schema, so it is meaningful for exactly one reason. Carried with any other
+  // reason it is member-level detail that does not apply to the refusal, and one
+  // client renders it while another ignores it. The prose said this on the field
+  // from the start; the rule is what makes it checkable.
+  option (buf.validate.message).cel = {
+    id: "registration_failure.field_errors_scoped_to_invalid_data"
+    message: "field_errors is only allowed when reason is REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
+    expression: "this.field_errors.size() == 0 || this.reason == 6"
+  };
+
   // The failure reason (defined-only, non-zero)
   RegistrationFailureReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
 
   // When reason = INVALID_REGISTRATION_DATA: the registration_data members
-  // that are missing or do not conform. Empty for every other reason.
+  // that are missing or do not conform. Empty for every other reason — enforced
+  // by the message rule above, not left to prose.
   repeated RegistrationFieldError field_errors = 2 [
     (buf.validate.field).repeated.max_items = 64
   ];
 }
 
 // RegistrationFieldError — one registration_data member that failed the
-// Exchange's published registration_schema (WellKnownManifest.
-// registration_schema).
+// Exchange's published schema (AccountRegistration.data_schema).
 message RegistrationFieldError {
   // RFC 6901 JSON Pointer to the offending member, relative to
   // registration_data (e.g. "/vat_id", "/address/postal_code"). The empty

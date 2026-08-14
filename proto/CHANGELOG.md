@@ -38,8 +38,13 @@ sha256 hash) now renders in the Pydantic/Zod export as the exact encoded forms o
 loose character window protoschema emits would also admit an N+1-byte value — and the pattern
 accepts standard and url-safe base64 alike, because Go `protojson` accepts either on decode; a
 client rejecting base64url (e.g. a JWK `x` value pasted verbatim) would refuse input the server
-accepts. The signing-algorithm labels are pinned `string.const = "EdDSA"` rather than
-`min_len: 1`, so a generated client also rejects a claimed `"none"`. `bytes.min_len = 1` (the
+accepts. It accepts them as two ALTERNATIVES — one alphabet per value — because that is what the
+decoder does: `protojson` switches to the url-safe alphabet as soon as the string contains `-` or
+`_`, then decodes strictly, so a value mixing `+` with `_` is refused, and the generated pattern
+refuses it too. Padding is derived from the payload length mod 4 rather than left as a free tail,
+so `"AA="`, `"AAA=="` and `"AAAAA"` — none of them a legal encoded length — are rejected exactly
+as the server rejects them. The signing-algorithm labels are pinned `string.const = "EdDSA"`
+rather than `min_len: 1`, so a generated client also rejects a claimed `"none"`. `bytes.min_len = 1` (the
 canonical-bytes fields) is translated the same way: the generated pattern now requires the
 encoded payload characters of at least one real byte before the padding tail, so the
 two-character string `"=="` — pure padding, zero bytes, which Go `protojson` refuses to
@@ -50,7 +55,143 @@ The conformance tooling grew with the surface: the corpus generator understands 
 and fails closed on any rule shape it cannot classify, and the restated-rule drift gate now
 derives its scope from the descriptor itself — every rule-identical field group must carry a
 `Same rule as` directive or an explicit coincidence exemption — instead of an opt-in comment
-marker plus a hand-maintained list.
+marker plus a hand-maintained list. The base64 wire forms the two generated clients must decide
+identically now live in one shared vector file (`conformance/testdata/bytes_wire_forms.json`)
+that a conformance test pins against Go `protojson` + protovalidate, so each row is written once,
+cannot drift between the Pydantic and Zod suites, and states the server's real verdict rather
+than a belief about it.
+
+**Every addressed request names its recipient: `exchange` becomes required (breaking,
+pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`
+(field 3), `GetAccountStatusRequest` (field 2), `DomainVerificationRequest` (field 4),
+`DomainVerificationConfirmation` (field 6), `PushResourcesRequest` (field 5),
+`RemoveResourcesRequest` (field 4) and `RefreshCatalogRequest` (field 3) gain the field;
+`UsageReport.exchange` keeps field 8 and is promoted from `optional`, which is the breaking
+half — an absent or empty value used to skip the recipient check entirely, so the check was
+opt-in for the caller, and it is now a rejection. The value is the bare host of the
+recipient ("exchange.example", "exchange.example:8081"), never an endpoint URL: an endpoint
+in the payload would hand the caller the choice of where the next hop dials, which is the
+lever the well-known resolver exists to remove. A recipient MUST reject a request whose
+`exchange` is not one of its own domains, with `INVALID_ARGUMENT` and no typed reason — a
+mis-addressed request is malformed rather than a domain-level failure.
+
+The signature does not already establish this. It proves the sender signed *the URL it
+dialled*, not that the URL was right: the dial target is resolved from a fetched, cached
+manifest, so a poisoned or stale resolution redirects the request while every signature
+still verifies. The body field states whom the sender meant, independently of that
+resolution, and the genuine recipient rejects a request naming someone else. The field is
+stamped by whoever authors each request — the agent on the requests it signs, a Broker on
+the legs it authors as sender — so it is a statement by that sender, not tamper-evidence
+against it. On a verbatim-forwarded path the agent signs its `@target-uri` against the
+final recipient's endpoint, not the Broker's. Two messages are exempt and
+both absences are load-bearing: `DiscoveryRequest` travels one direct hop and terminates at
+the Broker, which authors fresh per-Exchange `ResourceQuery` messages rather than
+forwarding it, and the agent cannot name the fan-out set in any case
+(`RequestConstraints.exchanges` stays its optional filter); `TransactionRequest` carries no
+top-level field because its audience statement is per item.
+
+The pattern is deliberately permissive — one or more labels, an optional port, no scheme,
+path, query, userinfo or trailing root dot, and case normalised (both sides lowercase
+before comparing). It matches the structural bare-host rule the reference clients already
+apply, whose job is to stop a path or query being smuggled into a value that gets
+concatenated into a URL, not to check that a name looks like a DNS record. A stricter rule
+demanding a dotted name with an alphabetic suffix would reject single-label service hosts
+such as `exchange:8081`, which real deployments use.
+
+The same constraint is applied in one pass to the domain-carrying fields that until now
+accepted any string at all: `ResourceResponse.exchange`, `RequestConstraints.exchanges`,
+`RequestConstraints.preferred_exchanges`, `Requester.domain` and
+`AuthorizedExchange.domain`. Tightening them is breaking for the same reason the
+`UsageReport` promotion is — a value accepted today becomes a rejection — and it is done
+now because one value space with two contracts is the state that produces the bugs.
+`Requester.domain` earns it most: a verifier concatenates that value into
+`{domain}/.well-known/ramp.json` and fetches the result, so a smuggled path or query would
+choose WHAT gets fetched, not merely from where.
+The port group spells the range out rather than counting digits: `:0` and `:99999` are
+refused like any other value that cannot name a listening service, where a `[0-9]{1,5}`
+group would have admitted both. And `TransactionDenial.exchange` is documented as a HINT,
+not an instruction — it rides in a response, a relayed response passed through an
+intermediary, so nothing signs it. A caller MUST check it against a domain it already
+trusts for the transaction (the denied item's signed `offer.exchange`, or its own
+`RequestConstraints.exchanges`) before acting, because registering hands an operator's
+business data and a signed acceptance of that Exchange's terms to whoever answers. A conformance guard walks the descriptor
+for every field carrying the shared pattern and asserts each refuses a scheme prefix, a
+path or query suffix, userinfo, a malformed port, a trailing root dot and an empty label —
+shapes the corpus generator cannot produce, because its bad-string table is shared with the
+money and token fields and widening it there would add a mutant to every pattern-ruled
+field in the contract.
+
+**`Offer.exchange` is presence-enforced (breaking, pre-1.0).** It was a plain string with no
+rule, so an empty value passed. It is the execute-routing target, the value a relaying
+Broker groups a mixed batch by, and — because `TransactionRequest` has no top-level
+`exchange` — the audience statement of an execute: on receipt an Exchange MUST reject the
+request unless EVERY item's `offer.exchange` names one of its own domains. An empty value is
+unroutable, and the swap-protection the offer signature is supposed to provide is vacuous
+when the signed bytes carry no recipient at all. Adding the rule does not change any signed
+bytes: a protovalidate rule is a field option, not a field.
+
+**Manifest registration becomes a block: `WellKnownManifest.account_registration` (field 30)
+replaces `registration_schema` (field 29), and `terms_digest` (field 31) joins `terms_uri`
+(breaking, pre-1.0).** The new top-level `AccountRegistration` message carries the same JSON
+Schema, now as `data_schema`, with the same publish-is-enforce contract and the same safety
+rules. The block exists because registration has more than one publishable facet: field 2 is
+left free for a future web mode, a URL to a page where a human completes steps an API call
+cannot carry. The precedence rule is fixed now, while it is still cheap: an Exchange
+publishing `data_schema` MUST accept registration through the API, and a registration URL is
+an additional option an agent may offer its user, never a replacement. Field 29 is not
+reused — the manifest already leaves 5 and 6 free after the WBA split, and appending keeps
+the numbering legible.
+
+`terms_digest` pins the document served at `terms_uri` in the existing `method:hexdigest`
+form, and `RegisterRequest.terms_digest` (field 4) echoes it. A URL alone cannot say WHICH
+terms were accepted: its content changes, so after the first revision every earlier
+registration points at text that no longer says what was agreed. The echo is covered by the
+request signature, and the Exchange records the accepted digest with the account — which
+also makes keeping the historical terms documents retrievable the Exchange's obligation, since
+a digest identifies a document only while a copy of it still exists. It sits at the top level
+rather than inside the block so an Exchange with pass-through registration can still pin its
+terms version; a message rule (`well_known_manifest.terms_digest_requires_terms_uri`) keeps
+it from being published without the address it pins, mirroring the existing
+`license.digest_required_with_uri`. Operators should treat first publication as a
+coordinated change: it refuses every client that does not yet echo the value.
+
+**`REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE` (additive, no wire break).** All
+four digest cases are now defined rather than only the stale one. Matching echo: the
+registration proceeds. Differing echo: refused with the new reason. Absent echo while the
+Exchange publishes a digest: refused with the SAME reason, because the caller's remedy is
+identical — read the manifest, echo, retry — and a second reason would split one fix in two.
+An echo sent to an Exchange that publishes no digest: ignored, and explicitly NOT recorded as
+an acceptance, since an Exchange publishing none cannot verify what document the value refers
+to and storing it would put an unverifiable claim exactly where the field exists to hold a
+verified one. A registering client MUST read the digest from a freshly fetched manifest
+rather than a cached copy: a client cannot detect staleness locally — only the Exchange can —
+so a warm cache would otherwise make it retry a refused value until the cache expired.
+Registration happens once per Exchange, so the extra fetch is cheap.
+
+**`DENIAL_REASON_BILLING_REF_INACTIVE` splits into `DENIAL_REASON_ACCOUNT_INACTIVE` (keeping
+its wire number) and `DENIAL_REASON_ACCOUNT_NOT_REGISTERED`, and `TransactionDenial` gains
+`exchange` (field 4) (breaking, pre-1.0).** The agent hits this wall at execute, not at
+register, and the old single reason conflated two states of the caller with two different
+remedies: wait for an operator to activate an account that exists, versus call `Register`
+because none does — an action an agent can take unattended. The denial names the Exchange
+that produced it, which on a relayed or fanned-out execute need not be one the agent named,
+so the agent learns where to register without fetching a manifest to work it out. This
+reverses a recorded decision; the reasoning, and why the neighbouring
+`DELEGATION_EXPIRED` → `DENIAL_REASON_DELEGATION_INVALID` broadening still stands, are in
+`docs/design-history.md` under "DenialReason consolidation".
+
+**Contract text: `registration_data` is documented as business-registration data (no wire
+change).** The details an Exchange needs to open a commercial account — legal entity,
+address, jurisdiction, tax identifiers. The specific members stay operator-defined; what is
+now explicit is that this is not an identity claim, since the caller's identity comes from
+the verified request signature and nothing in the payload is trusted as authentication.
+
+*Tooling:* the corpus grows from 208 to 319 cases and `Offer` enters it for the first time,
+because a message with no field rules produces no cases at all and `Offer` previously had
+none. `WellKnownManifest` gains a seed: auto-fill populates `terms_digest` (it carries a
+pattern) but never `terms_uri` (no field rule to trigger on), so the generated baseline
+would otherwise violate the new message rule. The reviewable part of that diff is the seed
+and the pattern, not the generated output.
 
 **`WellKnownManifest.endpoint` states its host binding (no wire change; conformance-affecting).**
 The field said only "Exchange-only. ExchangeService endpoint URL", so nothing told an Exchange

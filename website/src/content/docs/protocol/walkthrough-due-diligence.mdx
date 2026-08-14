@@ -115,6 +115,7 @@ The Broker sends 6 `ResourceQuery` requests in parallel. Each query targets a sp
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.creditdata.com",
   "requester": {
     "id": "dd-analyst",
     "domain": "lawfirm.com",
@@ -139,6 +140,7 @@ The Broker sends 6 `ResourceQuery` requests in parallel. Each query targets a sp
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.legaldata.com",
   "requester": {
     "id": "dd-analyst",
     "domain": "lawfirm.com",
@@ -165,6 +167,7 @@ The Broker sends 6 `ResourceQuery` requests in parallel. Each query targets a sp
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.secdata.com",
   "requester": {
     "id": "dd-analyst",
     "domain": "lawfirm.com",
@@ -202,6 +205,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-credit-acme-001",
+          "exchange": "exchange.creditdata.com",
           "title": "D&B Comprehensive Business Report — Acme Corp",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -278,6 +282,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-legal-001",
+          "exchange": "exchange.legaldata.com",
           "title": "Acme Corp v. Widget Inc — Complete Docket",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -337,6 +342,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-legal-002",
+          "exchange": "exchange.legaldata.com",
           "title": "State of CA v. Acme Corp — Environmental Complaint",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -364,6 +370,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-legal-003",
+          "exchange": "exchange.legaldata.com",
           "title": "Acme Corp v. Former CTO — IP Dispute",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -404,6 +411,7 @@ Each Exchange returns offers in its domain-specific pricing model. The Broker ag
       "offers": [
         {
           "offer_id": "offer-sec-10k-2025",
+          "exchange": "exchange.secdata.com",
           "title": "Acme Corp 10-K Annual Report FY2025",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
@@ -520,6 +528,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
     {
       "offer": {
         "offer_id": "offer-credit-acme-001",
+        "exchange": "exchange.creditdata.com",
         "title": "D&B Comprehensive Business Report — Acme Corp",
         "pricing": {
           "model": "PRICING_MODEL_PER_UNIT",
@@ -563,6 +572,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
     {
       "offer": {
         "offer_id": "offer-legal-001",
+        "exchange": "exchange.legaldata.com",
         "title": "Acme Corp v. Widget Inc — Complete Docket",
         "pricing": {
           "model": "PRICING_MODEL_PER_UNIT",
@@ -587,6 +597,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
     {
       "offer": {
         "offer_id": "offer-legal-002",
+        "exchange": "exchange.legaldata.com",
         "title": "State of CA v. Acme Corp — Environmental Complaint",
         "pricing": {
           "model": "PRICING_MODEL_PER_UNIT",
@@ -606,6 +617,7 @@ The Broker sends batch `TransactionRequest` to each Exchange. One request per Ex
     {
       "offer": {
         "offer_id": "offer-legal-003",
+        "exchange": "exchange.legaldata.com",
         "title": "Acme Corp v. Former CTO — IP Dispute",
         "pricing": {
           "model": "PRICING_MODEL_PER_UNIT",
@@ -701,6 +713,7 @@ The Broker files a `UsageReport` for every transaction, to every Exchange. All r
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.creditdata.com",
   "idempotency_key": "ur-dd-credit-001",
   "transaction_id": "txn-credit-001",
   "billing_id": "bill-credit-001",
@@ -733,6 +746,7 @@ The Broker files a `UsageReport` for every transaction, to every Exchange. All r
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.legaldata.com",
   "idempotency_key": "ur-dd-legal-001",
   "transaction_id": "txn-legal-001",
   "billing_id": "bill-legal-001",

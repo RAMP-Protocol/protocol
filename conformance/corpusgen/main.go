@@ -64,8 +64,11 @@ func seeds() map[string]proto.Message {
 	pricing := func() *rampv1.Pricing {
 		return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
 	}
+	// Exchange is presence-enforced on Offer (it is the execute-routing target
+	// and the audience statement of a TransactionRequest), so a seed without it
+	// is not a valid baseline — seeds bypass auto-fill entirely.
 	offer := func() *rampv1.Offer {
-		return &rampv1.Offer{OfferId: "offer-seed", Pricing: pricing()}
+		return &rampv1.Offer{OfferId: "offer-seed", Exchange: "exchange.example", Pricing: pricing()}
 	}
 	return map[string]proto.Message{
 		"Pricing":     pricing(),
@@ -78,7 +81,7 @@ func seeds() map[string]proto.Message {
 		"Quota":                 &rampv1.Quota{Metric: "accesses", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY},
 		"LicenseTerm":           &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: pricing()},
 		"AcceptableRestriction": &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train"}},
-		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
+		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Exchange: "exchange.example", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
 		// Reflected-Offer execute contract (items-only): Offer is
 		// the required sub-message of TransactionItem (auto-fill needs its seed),
 		// and TransactionRequest needs a valid 1-item items[] baseline because its
@@ -101,6 +104,19 @@ func seeds() map[string]proto.Message {
 			FieldErrors: []*rampv1.RegistrationFieldError{
 				{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"},
 			},
+		},
+		// terms_digest pins the document at terms_uri, so the two are joined by a
+		// message CEL rule. Auto-fill populates terms_digest (it carries a pattern)
+		// but never terms_uri (no field rule to trigger on), which is precisely the
+		// shape a seed exists for. Seeding BOTH also keeps the terms_digest pattern
+		// mutants honest: they trip the pattern alone rather than the pattern and
+		// the cross-field rule together.
+		"WellKnownManifest": &rampv1.WellKnownManifest{
+			Ver:         "1.0",
+			Role:        rampv1.Role_ROLE_EXCHANGE,
+			Domain:      "exchange.example",
+			TermsUri:    proto.String("https://exchange.example/terms"),
+			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
 		},
 		"TenantFeeRate":   &rampadminv1.TenantFeeRate{TenantId: "tenant-seed", FeeRateBps: 0},
 		"ReportingPolicy": &rampadminv1.ReportingPolicy{TenantId: "tenant-seed", RequiredFields: []string{"x"}},
@@ -145,6 +161,11 @@ func seeds() map[string]proto.Message {
 // pattern and length bounds becomes the auto-filled value (generic — no per-field
 // table). badStrings are candidates that should FAIL a typical token/number/hash
 // pattern; the first that the pattern rejects becomes the violating value.
+//
+// APPEND-ONLY, for a different reason than badStrings: validString returns the
+// FIRST entry that matches, so appending cannot change what any existing field
+// auto-fills to, and the corpus diff stays additive. Inserting anywhere else can
+// silently re-value every field a new earlier entry happens to satisfy.
 var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), ""}
 
 // APPEND-ONLY: a badStrings entry's INDEX is baked into the emitted case IDs (see
@@ -153,6 +174,42 @@ var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256
 // killers — numbers a naive Decimal would accept (negative / NaN / Infinity / exponent)
 // but the decimal-string money pattern rejects; they are the money-value blind spot.
 var badStrings = []string{"two words", "1.2.3", "!!bad!!", "\x00ctl\x00", " ", "-5", "NaN", "Infinity", "1E3"}
+
+// patternKillers are bad values chosen FOR A SPECIFIC pattern, keyed by the
+// pattern string itself. badStrings is shared with every pattern-ruled field in
+// the contract, so widening it to cover one family's shapes would add a mutant
+// to money, quota and token fields that has nothing to do with them. This table
+// is the narrow alternative: the values only reach the fields whose rule is that
+// exact pattern.
+//
+// APPEND-ONLY per entry, like badStrings: the index is baked into the emitted
+// case id (killer#<idx>).
+//
+// The domain family's entries are the shapes the constraint exists to refuse.
+// Scheme and path are the load-bearing pair — a domain value is concatenated
+// into a URL a resolver fetches, so smuggling either one in chooses WHAT is
+// fetched, not merely from where.
+var patternKillers = map[string][]string{
+	bareDomainPattern: {
+		"https://exchange.example",  // scheme prefix
+		"exchange.example/register", // path suffix
+		"exchange.example?x=1",      // query suffix
+		"user@exchange.example",     // userinfo
+		"exchange.example:123456",   // port out of range
+		"exchange.example:",         // empty port
+		"exchange.example.",         // trailing root dot
+		"exchange..example",         // empty label
+		"-exchange.example",         // leading hyphen
+		"[::1]:443",                 // bracketed IPv6 literal
+		"exchange.example:0",        // port 0 names no listening service
+		"exchange.example:99999",    // port above 65535
+	},
+}
+
+// bareDomainPattern is the recipient-host shape, quoted from the proto so the
+// killer table above can be keyed by it. A drift between this copy and the
+// fields is caught by conformance's own descriptor guard, not here.
+const bareDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$`
 
 func main() {
 	v, err := protovalidate.New()
@@ -267,6 +324,28 @@ func writeCrossField(v protovalidate.Validator) {
 			"License/cel/digest_required_with_uri",
 			&rampv1.License{Id: proto.String("CC-BY-4.0"), Uri: proto.String("https://example.com/license")},
 			"license.digest_required_with_uri",
+		},
+		{
+			// field_errors is scoped to the schema refusal; any other reason
+			// carrying it publishes member detail that does not apply.
+			"RegistrationFailure/cel/field_errors_scoped_to_invalid_data",
+			&rampv1.RegistrationFailure{
+				Reason:      rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE,
+				FieldErrors: []*rampv1.RegistrationFieldError{{Path: "/vat_id", Error: "required"}},
+			},
+			"registration_failure.field_errors_scoped_to_invalid_data",
+		},
+		{
+			// The manifest mirror of the rule above: a digest with no document
+			// address cannot be checked against anything.
+			"WellKnownManifest/cel/terms_digest_requires_terms_uri",
+			&rampv1.WellKnownManifest{
+				Ver:         "1.0",
+				Role:        rampv1.Role_ROLE_EXCHANGE,
+				Domain:      "exchange.example",
+				TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
+			},
+			"well_known_manifest.terms_digest_requires_terms_uri",
 		},
 		{
 			"Restriction/cel/permitted_prohibited_disjoint",
@@ -649,6 +728,18 @@ func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edg
 			es = append(es, edge{label: fmt.Sprintf("pattern#%d", i), want: "string.pattern",
 				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(bad)) }})
 		}
+		// Pattern-specific killers, so a family's own refusal shapes reach the
+		// corpus — and therefore the Pydantic and Zod replays — without widening
+		// the shared table. Each is asserted to actually fail its pattern, so a
+		// stale entry cannot sit here as a silent no-op.
+		re := regexp.MustCompile(p)
+		for i, bad := range patternKillers[p] {
+			if re.MatchString(bad) {
+				die("patternKillers[%q][%d] = %q is ACCEPTED by the pattern — it would emit a case asserting the opposite", p, i, bad)
+			}
+			es = append(es, edge{label: fmt.Sprintf("killer#%d", i), want: "string.pattern",
+				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(bad)) }})
+		}
 		// The empty-string boundary: if the pattern ACCEPTS "" it is a positive case
 		// (money — the empty-money blind spot; proves clients accept ""); if it REJECTS "" then
 		// the zero value is invalid, so omission must be rejected (pattern-derived
@@ -816,6 +907,18 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[
 			if p := s.GetPattern(); p != "" {
 				if bad, ok := badString(p); ok {
 					es = append(es, edge{label: "item_pattern", want: "string.pattern",
+						apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(protoreflect.ValueOfString(bad)) }})
+				}
+				// Pattern-specific killers reach list items too — a repeated
+				// domain field admits the same smuggled scheme or path as a
+				// singular one, and the acceptance criterion says every field
+				// carrying the constraint, not every singular field.
+				re := regexp.MustCompile(p)
+				for i, bad := range patternKillers[p] {
+					if re.MatchString(bad) {
+						die("patternKillers[%q][%d] = %q is ACCEPTED by the pattern", p, i, bad)
+					}
+					es = append(es, edge{label: fmt.Sprintf("item_killer#%d", i), want: "string.pattern",
 						apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(protoreflect.ValueOfString(bad)) }})
 				}
 			}

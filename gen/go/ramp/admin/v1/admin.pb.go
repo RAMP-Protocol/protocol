@@ -561,10 +561,11 @@ func (x *SetReportingPolicyResponse) GetPolicy() *ReportingPolicy {
 type TransactionEvidence struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The evidenced transaction (Exchange-minted transaction identity). The
-	// 255 bound is NEW to this plane — ramp.v1 leaves transaction ids
-	// unconstrained — and is safe here because the Exchange mints the id
-	// itself and both documented schemes (26-char ULID, 36-char UUID) sit far
-	// below it; it exists so the selector stays storable and indexable.
+	// format is implementation-defined, exactly as in ramp.v1 (the documented
+	// storage model mints a 26-char ULID). The 255 bound is NEW to this plane —
+	// ramp.v1 leaves transaction ids unconstrained — and is safe here because
+	// the Exchange mints the id itself, far below that bound; it exists so the
+	// selector stays storable and indexable.
 	TransactionId string `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// The tenant the transaction executed under. The admin plane is
 	// deployment-scoped (cross-tenant), so the row states its tenant. Same rule
