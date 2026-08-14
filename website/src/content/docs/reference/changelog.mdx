@@ -22,7 +22,7 @@ mismatch is `NOT_FOUND`, byte-identical to an unknown id, so existence under ano
 not revealed. The row re-verifies OFFLINE, and the contract states the trust boundary
 explicitly: offline verification proves the row is internally consistent, while authenticity
 requires comparing the embedded keys against independently obtained copies (the published JWKS;
-the agent directory named by `agent_discovery_url`). The delivery join is hash-only
+the agent directory named by `agent_directory_url`). The delivery join is hash-only
 (`TransactionState.signed_url_hash` against the edge log) — the full signed URL, a live bearer
 capability, never appears on this plane, so a signed-URL *signature* match assertion is
 deliberately unproducible from this contract. The correlation id the Exchange persisted rides in

@@ -178,7 +178,7 @@ The admin plane (`ramp.admin.v1`) adds one high-value asset: the append-once evi
 
 ### T-ADM-4: Fabricated evidence row
 **Attack**: Anyone able to write to the store (or to man-in-the-middle the read) mints a row whose signatures verify against the keys embedded in the same row — internally consistent, but proving nothing.
-**Countermeasure**: The contract states the trust boundary explicitly: authenticity requires comparing the embedded keys against independently obtained copies — the Exchange's published JWKS and the agent's directory (`agent_discovery_url`). The in-row keys are convenience copies for rotation-survival, not the root of trust.
+**Countermeasure**: The contract states the trust boundary explicitly: authenticity requires comparing the embedded keys against independently obtained copies — the Exchange's published JWKS and the agent's directory (`agent_directory_url`). The in-row keys are convenience copies for rotation-survival, not the root of trust.
 
 ## Prevention Taxonomy
 

@@ -151,8 +151,8 @@ func seeds() map[string]proto.Message {
 			SignedUrlHash:  []byte(strings.Repeat("h", 32)),
 		},
 		"ReportingObligationState": &rampadminv1.ReportingObligationState{
-			State:    rampadminv1.ObligationState_OBLIGATION_STATE_PENDING,
-			Deadline: timestamppb.New(fixedTime),
+			State:     rampadminv1.ObligationState_OBLIGATION_STATE_PENDING,
+			WindowEnd: timestamppb.New(fixedTime),
 		},
 	}
 }

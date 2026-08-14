@@ -55,7 +55,7 @@ func evidenceRow() *rampadminv1.TransactionEvidence {
 		RequesterDomain:                   "agent.example",
 		RequestIdempotencyKey:             "idem-verify",
 		AgentPublicKey:                    agentKey.Public().(ed25519.PublicKey),
-		AgentDiscoveryUrl:                 "https://agent.example/.well-known/ramp-agent.json",
+		AgentDirectoryUrl:                 "https://agent.example/.well-known/ramp-agent.json",
 		CreatedAt:                         timestamppb.New(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)),
 	}
 }

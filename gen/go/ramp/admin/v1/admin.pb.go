@@ -543,7 +543,7 @@ func (x *SetReportingPolicyResponse) GetPolicy() *ReportingPolicy {
 // To prove AUTHENTICITY — that these parties actually operated these keys —
 // a verifier must compare the embedded keys against copies obtained
 // independently: the Exchange's published JWKS (the authority per
-// protocol/authentication) and the agent's directory (agent_discovery_url
+// protocol/authentication) and the agent's directory (agent_directory_url
 // names where this Exchange pinned agent_public_key from). The in-row keys
 // are convenience copies that keep old rows verifiable after rotation; they
 // are not the root of trust. After matching a key against its authority, a
@@ -602,6 +602,20 @@ type TransactionEvidence struct {
 	// reserved for RFC 9421 HTTP request signatures and never appears here.
 	// const (not min_len) so a generated client also rejects a claimed "none"
 	// or "HS256".
+	//
+	// Spelled sig_algorithm, not signature_algorithm, which is how ramp.v1 and
+	// the sibling agent_acceptance_signature_algorithm spell it. The short form
+	// is INHERITED, not chosen: this label names the neighbouring offer_sig, and
+	// that field copies an upstream field name verbatim
+	// (ramp.v1.AgentAcceptancePayload.offer_sig). A label that renamed the field
+	// it describes would be the worse inconsistency.
+	//
+	// The long spelling is also not available: ramp.v1 retired a scalar
+	// offer-signature field in RAMP-103 (the execute request now reflects the
+	// full signed Offer instead), and scripts/check-doc-conformance.sh bans that
+	// identifier across the protos and the docs so the removed name cannot be
+	// read as live anywhere. A field named after it here would either fail that
+	// gate or force it open.
 	OfferSigAlgorithm string `protobuf:"bytes,7,opt,name=offer_sig_algorithm,json=offerSigAlgorithm,proto3" json:"offer_sig_algorithm,omitempty"`
 	// The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.
 	ExchangeSigningPublicKey []byte `protobuf:"bytes,8,opt,name=exchange_signing_public_key,json=exchangeSigningPublicKey,proto3" json:"exchange_signing_public_key,omitempty"`
@@ -655,7 +669,12 @@ type TransactionEvidence struct {
 	// this — plus created_at — attests where and when this Exchange obtained
 	// the key. Empty when the agent carries no directory anchor: an append-once
 	// row states a value for every column, so ” is a stated fact, not a gap.
-	AgentDiscoveryUrl string `protobuf:"bytes,16,opt,name=agent_discovery_url,json=agentDiscoveryUrl,proto3" json:"agent_discovery_url,omitempty"`
+	//
+	// Named directory, not discovery: ramp.v1 uses "discovery" for RESOURCE
+	// discovery (DiscoveryRequest, OfferGroup.discovery_method), a different
+	// thing entirely. This is the agent's well-known directory document, which
+	// is what every sentence describing the field already calls it.
+	AgentDirectoryUrl string `protobuf:"bytes,16,opt,name=agent_directory_url,json=agentDirectoryUrl,proto3" json:"agent_directory_url,omitempty"`
 	// Correlation id joining this row outward (edge delivery log,
 	// reconciliation sweep), with its provenance. One message, not two
 	// sibling fields: presence of the message is the pairing — id and
@@ -804,9 +823,9 @@ func (x *TransactionEvidence) GetAgentPublicKey() []byte {
 	return nil
 }
 
-func (x *TransactionEvidence) GetAgentDiscoveryUrl() string {
+func (x *TransactionEvidence) GetAgentDirectoryUrl() string {
 	if x != nil {
-		return x.AgentDiscoveryUrl
+		return x.AgentDirectoryUrl
 	}
 	return ""
 }
@@ -989,6 +1008,12 @@ func (x *TransactionState) GetBroker() string {
 // transaction's reporting obligation, as persisted. Named apart from
 // ramp.v1.ReportingObligation, which is the agent-facing requirements
 // contract; this is the state those requirements minted.
+//
+// The timestamp fields carry the store's own column names (WindowEnd,
+// FulfilledAt, CreatedAt) in snake_case, so a reader can join this record
+// against the storage model by name and see there is no translation step in
+// between. consumed_quantity is the one field with no column behind it: it
+// comes from the accepted usage report, not from the obligation row.
 type ReportingObligationState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Lifecycle state. Always a real persisted state, never UNSPECIFIED.
@@ -1004,10 +1029,16 @@ type ReportingObligationState struct {
 	// and a decimal-string shape here could express values (e.g. "3.5") no
 	// report can produce. Absent until a usage report has been accepted.
 	ConsumedQuantity *int32 `protobuf:"varint,2,opt,name=consumed_quantity,json=consumedQuantity,proto3,oneof" json:"consumed_quantity,omitempty"`
-	// When the usage report is due.
-	Deadline *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=deadline,proto3" json:"deadline,omitempty"`
-	// When a usage report arrived. Absent while none has.
-	ReceivedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=received_at,json=receivedAt,proto3,oneof" json:"received_at,omitempty"`
+	// When the usage report is due (the store's WindowEnd). An absolute
+	// instant, not the ramp.v1.ReportingObligation.window Duration it was
+	// derived from: this record states what the store holds, and the store
+	// resolved the window against created_at when it minted the obligation.
+	WindowEnd *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=window_end,json=windowEnd,proto3" json:"window_end,omitempty"`
+	// When a usage report was ACCEPTED (the store's FulfilledAt) — the same
+	// event that moves state to OBLIGATION_STATE_FULFILLED. Not "when a report
+	// arrived": a report that arrived and was rejected leaves this absent, and
+	// the obligation still expires on window_end.
+	FulfilledAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=fulfilled_at,json=fulfilledAt,proto3,oneof" json:"fulfilled_at,omitempty"`
 	// When the obligation was minted (the store's CreatedAt).
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1058,16 +1089,16 @@ func (x *ReportingObligationState) GetConsumedQuantity() int32 {
 	return 0
 }
 
-func (x *ReportingObligationState) GetDeadline() *timestamppb.Timestamp {
+func (x *ReportingObligationState) GetWindowEnd() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Deadline
+		return x.WindowEnd
 	}
 	return nil
 }
 
-func (x *ReportingObligationState) GetReceivedAt() *timestamppb.Timestamp {
+func (x *ReportingObligationState) GetFulfilledAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ReceivedAt
+		return x.FulfilledAt
 	}
 	return nil
 }
@@ -1287,7 +1318,7 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x17request_idempotency_key\x18\x0e \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x15requestIdempotencyKey\x121\n" +
 	"\x10agent_public_key\x18\x0f \x01(\fB\a\xbaH\x04z\x02h R\x0eagentPublicKey\x12.\n" +
-	"\x13agent_discovery_url\x18\x10 \x01(\tR\x11agentDiscoveryUrl\x12R\n" +
+	"\x13agent_directory_url\x18\x10 \x01(\tR\x11agentDirectoryUrl\x12R\n" +
 	"\x13request_correlation\x18\x11 \x01(\v2!.ramp.admin.v1.RequestCorrelationR\x12requestCorrelation\x12A\n" +
 	"\n" +
 	"created_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt\"a\n" +
@@ -1299,18 +1330,18 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12:\n" +
 	"\x06expiry\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\x06expiry\x12/\n" +
 	"\x0fsigned_url_hash\x18\x03 \x01(\fB\a\xbaH\x04z\x02h R\rsignedUrlHash\x12\x16\n" +
-	"\x06broker\x18\x04 \x01(\tR\x06broker\"\xf9\x02\n" +
+	"\x06broker\x18\x04 \x01(\tR\x06broker\"\xff\x02\n" +
 	"\x18ReportingObligationState\x12@\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1e.ramp.admin.v1.ObligationStateB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x05state\x120\n" +
-	"\x11consumed_quantity\x18\x02 \x01(\x05H\x00R\x10consumedQuantity\x88\x01\x01\x12>\n" +
-	"\bdeadline\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\bdeadline\x12@\n" +
-	"\vreceived_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\n" +
-	"receivedAt\x88\x01\x01\x12A\n" +
+	"\x11consumed_quantity\x18\x02 \x01(\x05H\x00R\x10consumedQuantity\x88\x01\x01\x12A\n" +
+	"\n" +
+	"window_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\twindowEnd\x12B\n" +
+	"\ffulfilled_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\vfulfilledAt\x88\x01\x01\x12A\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAtB\x14\n" +
-	"\x12_consumed_quantityB\x0e\n" +
-	"\f_received_at\"\x8d\x01\n" +
+	"\x12_consumed_quantityB\x0f\n" +
+	"\r_fulfilled_at\"\x8d\x01\n" +
 	"\x1dGetTransactionEvidenceRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x121\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tB\n" +
@@ -1375,8 +1406,8 @@ var file_ramp_admin_v1_admin_proto_depIdxs = []int32{
 	13, // 5: ramp.admin.v1.TransactionEvidence.created_at:type_name -> google.protobuf.Timestamp
 	13, // 6: ramp.admin.v1.TransactionState.expiry:type_name -> google.protobuf.Timestamp
 	0,  // 7: ramp.admin.v1.ReportingObligationState.state:type_name -> ramp.admin.v1.ObligationState
-	13, // 8: ramp.admin.v1.ReportingObligationState.deadline:type_name -> google.protobuf.Timestamp
-	13, // 9: ramp.admin.v1.ReportingObligationState.received_at:type_name -> google.protobuf.Timestamp
+	13, // 8: ramp.admin.v1.ReportingObligationState.window_end:type_name -> google.protobuf.Timestamp
+	13, // 9: ramp.admin.v1.ReportingObligationState.fulfilled_at:type_name -> google.protobuf.Timestamp
 	13, // 10: ramp.admin.v1.ReportingObligationState.created_at:type_name -> google.protobuf.Timestamp
 	7,  // 11: ramp.admin.v1.GetTransactionEvidenceResponse.evidence:type_name -> ramp.admin.v1.TransactionEvidence
 	9,  // 12: ramp.admin.v1.GetTransactionEvidenceResponse.transaction_state:type_name -> ramp.admin.v1.TransactionState

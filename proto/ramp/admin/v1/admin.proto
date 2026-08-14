@@ -221,7 +221,7 @@ enum ObligationState {
 // To prove AUTHENTICITY — that these parties actually operated these keys —
 // a verifier must compare the embedded keys against copies obtained
 // independently: the Exchange's published JWKS (the authority per
-// protocol/authentication) and the agent's directory (agent_discovery_url
+// protocol/authentication) and the agent's directory (agent_directory_url
 // names where this Exchange pinned agent_public_key from). The in-row keys
 // are convenience copies that keep old rows verifiable after rotation; they
 // are not the root of trust. After matching a key against its authority, a
@@ -287,6 +287,20 @@ message TransactionEvidence {
   // reserved for RFC 9421 HTTP request signatures and never appears here.
   // const (not min_len) so a generated client also rejects a claimed "none"
   // or "HS256".
+  //
+  // Spelled sig_algorithm, not signature_algorithm, which is how ramp.v1 and
+  // the sibling agent_acceptance_signature_algorithm spell it. The short form
+  // is INHERITED, not chosen: this label names the neighbouring offer_sig, and
+  // that field copies an upstream field name verbatim
+  // (ramp.v1.AgentAcceptancePayload.offer_sig). A label that renamed the field
+  // it describes would be the worse inconsistency.
+  //
+  // The long spelling is also not available: ramp.v1 retired a scalar
+  // offer-signature field in RAMP-103 (the execute request now reflects the
+  // full signed Offer instead), and scripts/check-doc-conformance.sh bans that
+  // identifier across the protos and the docs so the removed name cannot be
+  // read as live anywhere. A field named after it here would either fail that
+  // gate or force it open.
   string offer_sig_algorithm = 7 [(buf.validate.field).string.const = "EdDSA"];
 
   // The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.
@@ -351,7 +365,12 @@ message TransactionEvidence {
   // this — plus created_at — attests where and when this Exchange obtained
   // the key. Empty when the agent carries no directory anchor: an append-once
   // row states a value for every column, so '' is a stated fact, not a gap.
-  string agent_discovery_url = 16;
+  //
+  // Named directory, not discovery: ramp.v1 uses "discovery" for RESOURCE
+  // discovery (DiscoveryRequest, OfferGroup.discovery_method), a different
+  // thing entirely. This is the agent's well-known directory document, which
+  // is what every sentence describing the field already calls it.
+  string agent_directory_url = 16;
 
   // Delivery + correlation. Covered by neither signature.
   //
@@ -441,6 +460,12 @@ message TransactionState {
 // transaction's reporting obligation, as persisted. Named apart from
 // ramp.v1.ReportingObligation, which is the agent-facing requirements
 // contract; this is the state those requirements minted.
+//
+// The timestamp fields carry the store's own column names (WindowEnd,
+// FulfilledAt, CreatedAt) in snake_case, so a reader can join this record
+// against the storage model by name and see there is no translation step in
+// between. consumed_quantity is the one field with no column behind it: it
+// comes from the accepted usage report, not from the obligation row.
 message ReportingObligationState {
   // Lifecycle state. Always a real persisted state, never UNSPECIFIED.
   // Server-output enum: {defined_only, not_in: [0]} — a reader must never
@@ -457,11 +482,17 @@ message ReportingObligationState {
   // report can produce. Absent until a usage report has been accepted.
   optional int32 consumed_quantity = 2;
 
-  // When the usage report is due.
-  google.protobuf.Timestamp deadline = 3 [(buf.validate.field).required = true];
+  // When the usage report is due (the store's WindowEnd). An absolute
+  // instant, not the ramp.v1.ReportingObligation.window Duration it was
+  // derived from: this record states what the store holds, and the store
+  // resolved the window against created_at when it minted the obligation.
+  google.protobuf.Timestamp window_end = 3 [(buf.validate.field).required = true];
 
-  // When a usage report arrived. Absent while none has.
-  optional google.protobuf.Timestamp received_at = 4;
+  // When a usage report was ACCEPTED (the store's FulfilledAt) — the same
+  // event that moves state to OBLIGATION_STATE_FULFILLED. Not "when a report
+  // arrived": a report that arrived and was rejected leaves this absent, and
+  // the obligation still expires on window_end.
+  optional google.protobuf.Timestamp fulfilled_at = 4;
 
   // When the obligation was minted (the store's CreatedAt).
   google.protobuf.Timestamp created_at = 5 [(buf.validate.field).required = true];

@@ -4744,22 +4744,9 @@
       "required"
     ],
     "json": {
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/deadline/missing",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "required"
-    ],
-    "json": {
-      "created_at": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
+      "fulfilled_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING",
+      "window_end": "2026-01-02T03:04:05Z"
     }
   },
   {
@@ -4771,8 +4758,8 @@
     ],
     "json": {
       "created_at": "2026-01-02T03:04:05Z",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z"
+      "fulfilled_at": "2026-01-02T03:04:05Z",
+      "window_end": "2026-01-02T03:04:05Z"
     }
   },
   {
@@ -4784,9 +4771,9 @@
     ],
     "json": {
       "created_at": "2026-01-02T03:04:05Z",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": 6
+      "fulfilled_at": "2026-01-02T03:04:05Z",
+      "state": 6,
+      "window_end": "2026-01-02T03:04:05Z"
     }
   },
   {
@@ -4795,8 +4782,21 @@
     "valid": true,
     "json": {
       "created_at": "2026-01-02T03:04:05Z",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
+      "fulfilled_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_PENDING",
+      "window_end": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "ReportingObligationState/window_end/missing",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "required"
+    ],
+    "json": {
+      "created_at": "2026-01-02T03:04:05Z",
+      "fulfilled_at": "2026-01-02T03:04:05Z",
       "state": "OBLIGATION_STATE_PENDING"
     }
   },

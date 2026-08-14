@@ -801,13 +801,17 @@ class ReportingObligationState(WireModel):
     created_at: AwareDatetime = Field(
         ..., description="When the obligation was minted (the store's CreatedAt)."
     )
-    deadline: AwareDatetime = Field(..., description='When the usage report is due.')
-    received_at: AwareDatetime | None = Field(
-        None, description='When a usage report arrived. Absent while none has.'
+    fulfilled_at: AwareDatetime | None = Field(
+        None,
+        description='When a usage report was ACCEPTED (the store\'s FulfilledAt) — the same\n event that moves state to OBLIGATION_STATE_FULFILLED. Not "when a report\n arrived": a report that arrived and was rejected leaves this absent, and\n the obligation still expires on window_end.',
     )
     state: ObligationState = Field(
         ...,
         description='Lifecycle state. Always a real persisted state, never UNSPECIFIED.\n Server-output enum: {defined_only, not_in: [0]} — a reader must never\n see a number its schema cannot name. Same rule as\n ramp.v1.TransactionDenial.reason (drift-gated) — the discipline the\n ErrorDetail reason discriminators establish for server-output enums.',
+    )
+    window_end: AwareDatetime = Field(
+        ...,
+        description="When the usage report is due (the store's WindowEnd). An absolute\n instant, not the ramp.v1.ReportingObligation.window Duration it was\n derived from: this record states what the store holds, and the store\n resolved the window against created_at when it minted the obligation.",
     )
 
 
@@ -1116,9 +1120,9 @@ class TransactionEvidence(WireModel):
         ...,
         description='Signing-algorithm label, server-derived (see offer_sig_algorithm).\n Pinned to "EdDSA". Same rule as\n ramp.admin.v1.TransactionEvidence.offer_sig_algorithm (drift-gated).',
     )
-    agent_discovery_url: str | None = Field(
+    agent_directory_url: str | None = Field(
         '',
-        description="The anchored well-known directory agent_public_key was pinned from. The\n registry overwrites keys in place on rotation and keeps no history, so\n this — plus created_at — attests where and when this Exchange obtained\n the key. Empty when the agent carries no directory anchor: an append-once\n row states a value for every column, so '' is a stated fact, not a gap.",
+        description='Named directory, not discovery: ramp.v1 uses "discovery" for RESOURCE\n discovery (DiscoveryRequest, OfferGroup.discovery_method), a different\n thing entirely. This is the agent\'s well-known directory document, which\n is what every sentence describing the field already calls it.',
     )
     agent_public_key: constr(
         pattern=r'^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?)$',
@@ -1160,7 +1164,7 @@ class TransactionEvidence(WireModel):
     )
     offer_sig_algorithm: OfferSigAlgorithm = Field(
         ...,
-        description='Signing-algorithm label, server-derived from the Exchange\'s own verify\n path — never echoed from the wire. The canonical payload clears the wire\n labels before signing, so an echoed label would sit outside signature\n coverage and could claim anything under an otherwise valid signature.\n Pinned to "EdDSA" — the content-signature label\n ramp.v1.Offer.signature_algorithm pins; "ed25519" is the separate label\n reserved for RFC 9421 HTTP request signatures and never appears here.\n const (not min_len) so a generated client also rejects a claimed "none"\n or "HS256".',
+        description='Spelled sig_algorithm, not signature_algorithm, which is how ramp.v1 and\n the sibling agent_acceptance_signature_algorithm spell it. The short form\n is INHERITED, not chosen: this label names the neighbouring offer_sig, and\n that field copies an upstream field name verbatim\n (ramp.v1.AgentAcceptancePayload.offer_sig). A label that renamed the field\n it describes would be the worse inconsistency.\n\n The long spelling is also not available: ramp.v1 retired a scalar\n offer-signature field in RAMP-103 (the execute request now reflects the\n full signed Offer instead), and scripts/check-doc-conformance.sh bans that\n identifier across the protos and the docs so the removed name cannot be\n read as live anywhere. A field named after it here would either fail that\n gate or force it open.',
     )
     request_correlation: RequestCorrelation | None = Field(
         None,
