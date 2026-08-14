@@ -97,11 +97,14 @@ func IsBareHost(ref string) (bool, error) {
 // with an optional ":port", never a URL. "sub.example.com:443" passes; a value
 // carrying a scheme, a path, userinfo, or a query never does.
 //
-// It is the SINGLE definition of that shape: these bytes are the protovalidate
-// pattern carried by every domain-valued field in ramp.proto, so the check a
-// client makes before sending and the check the wire makes on arrival cannot
-// answer differently. The shared conformance vectors record the pattern beside
-// the cases so a guard can hold the two together.
+// One rule, three copies, all gated. These bytes are the protovalidate pattern
+// carried by the contract's recipient-addressing fields — the `exchange` field on
+// each addressed request, Offer.exchange and their neighbours, NOT every field in
+// ramp.proto that happens to hold a domain — so the check a client makes before
+// sending and the check the wire makes on arrival cannot answer differently. The
+// shared conformance vectors record the pattern beside the cases, and a guard in
+// the conformance tier holds it against the descriptor; which fields belong to
+// the family is pinned there too.
 //
 // The port is a real 1-65535 range rather than "one to five digits", which is
 // why it is spelled out at this length. That distinction is load-bearing on

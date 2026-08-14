@@ -245,15 +245,20 @@ since the wire rule's port group is a real 1-65535 range rather than a digit
 count.
 
 That rule is carried in two places on purpose — the protovalidate pattern on the
-contract's domain-valued fields, and an exported constant in each SDK so a client
-can refuse a bad value before sending it. Exporting it breaks the precedent set by
+contract's recipient-addressing fields, and an exported constant in each SDK so a
+client can refuse a bad value before sending it. It is *not* on every field that
+happens to hold a domain; several carry no rule, and whether they should is a
+separate question from this one. Exporting the constant breaks the precedent set by
 the money pattern, which mirrors a wire rule and stays private in all three
 languages. The difference is who needs it: money's is an internal detail of
 formatting a decimal, while this one is a protocol constant an implementer writes
-their own validator against, and the conformance guard reads it to hold the two
-copies together. Its length bound of 260 is the `max_len` the contract carries on
-every one of those fields; it is not derived from DNS's 253, and trying to
-reconstruct it from that plus a port will not land on the same number.
+their own validator against — and in TypeScript the export is structural, since the
+parity test imports the constant to assert it against the shared vectors. It is not
+exported for the conformance guard's sake; that guard reads the vectors file, and
+the emitter that writes it sits inside the same package as the constant either way.
+Its length bound of 260 is the `max_len` the contract carries on every one of those
+fields; it is not derived from DNS's 253, and trying to reconstruct it from that
+plus a port will not land on the same number.
 
 ## CoMP as an extension; attestations instead of quality scores
 

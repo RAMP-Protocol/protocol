@@ -2,9 +2,10 @@ package conformance
 
 // Drift guard: the domain rule the SDK ships IS the domain rule on the wire.
 //
-// The bare-domain shape now exists twice — as the protovalidate pattern on every
-// domain-valued field of the contract, and as the constant the three SDKs export
-// so a client can refuse a bad value before sending it. The whole point of the
+// The bare-domain shape now exists twice — as the protovalidate pattern on the
+// contract's recipient-addressing fields (not on every field that happens to hold
+// a domain; several deliberately carry no rule), and as the constant the three
+// SDKs export so a client can refuse a bad value before sending it. The point of the
 // second copy is that a value the SDK accepts is one the wire accepts, which
 // holds only while the two are byte-identical. Nothing made them so; they were
 // kept aligned by whoever remembered.
@@ -19,10 +20,21 @@ package conformance
 //
 // Division of labour with the neighbouring guard in domain_constraint_test.go:
 // that one owns MEMBERSHIP — which fields carry the rule, that they all carry the
-// SAME rule, and an exact-count ratchet so a new domain-valued field cannot skip
-// it. This one owns AGREEMENT with the SDK, and nothing else. It leans on that
-// membership check for its field set, so if the two ever disagree about the
-// contract's shape, the neighbour fails first and more precisely.
+// SAME pattern, and a count that catches a field LOSING it. Note what that count
+// does not do: a newly added field that never carried the rule leaves the total
+// where it was, so neither guard notices. This one owns AGREEMENT with the SDK,
+// and nothing else.
+//
+// The two halves of that agreement are not equally direct, and it is worth saying
+// which is which. The max_len comparison is a live descriptor read: nothing else
+// in the package pins that number, so a rule whose bound moved is caught here and
+// only here. The pattern comparison is one step removed — findDomainFields selects
+// fields BY equality to the neighbour's sharedDomainPattern literal, so what this
+// file really compares is the SDK's copy against that literal. The chain still
+// closes, because the neighbour pins the descriptor to the same literal and an
+// edit to it that no field carries empties the set and trips the fatal below. But
+// a failure here names the conformance package's literal, not a byte read from the
+// descriptor in this function.
 //
 // The proto is authoritative. On failure the wire has not moved to meet the SDK;
 // the SDK must be brought to the proto's bytes and its vectors regenerated.
@@ -110,9 +122,9 @@ func TestSDKBareDomainRuleMatchesTheWire(t *testing.T) {
 		s := stringRules(t, df)
 		if got := s.GetPattern(); got != want.Pattern {
 			t.Errorf("%s: the wire and the SDK disagree about the domain pattern.\n"+
-				"  wire (authoritative): %s\n"+
-				"  SDK  (%s): %s\n"+
-				"Bring the SDK to the wire's bytes and regenerate its vectors.",
+				"  contract (authoritative, via the shared literal): %s\n"+
+				"  SDK      (%s): %s\n"+
+				"Bring the SDK to the contract's bytes and regenerate its vectors.",
 				name, got, audienceVectors, want.Pattern)
 		}
 		if got := s.GetMaxLen(); got != want.MaxLen {

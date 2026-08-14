@@ -19,10 +19,12 @@
 /**
  * bareDomainPattern is the wire shape of a domain-valued field: a bare domain
  * with an optional ":port", never a URL. It carries the same bytes as the Go
- * `helpers.BareDomainPattern` and as the protovalidate pattern on every
- * domain-valued field in ramp.proto — one definition, so the check a client makes
- * before sending and the check the wire makes on arrival cannot answer
- * differently. The parity suite asserts these bytes against the shared vectors.
+ * `helpers.BareDomainPattern` and as the protovalidate pattern on the contract's
+ * recipient-addressing fields — the `exchange` field on each addressed request,
+ * `Offer.exchange` and their neighbours, not every field in ramp.proto that
+ * happens to hold a domain. One rule, so the check a client makes before sending
+ * and the check the wire makes on arrival cannot answer differently. The parity
+ * suite asserts these bytes against the shared vectors.
  *
  * The port is a real 1-65535 range rather than "one to five digits", which is why
  * it is spelled out at this length: `:0`, `:65536` and `:99999` name no port at

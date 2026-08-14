@@ -134,9 +134,11 @@ you.
 
 The match is EXACT — a subdomain is a different party — which is narrower than
 the endpoint rule above, where a manifest MAY advertise a subdomain of itself. The
-shape both sides admit is `helpers.IsBareDomain`, whose `BareDomainPattern` is the
-same protovalidate pattern the wire's domain-valued fields carry — so a value this
-SDK accepts before sending is one the wire accepts on arrival.
+shape both sides admit is `helpers.IsBareDomain`, whose `BareDomainPattern` is byte
+for byte the protovalidate pattern the contract's recipient-addressing fields carry,
+held there by a conformance guard. Reach for it wherever you vet a domain that
+arrived in a message; note that the client's own send path still vets with the wider
+`IsBareHost`, so passing that one is not yet evidence the wire will accept a value.
 
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,

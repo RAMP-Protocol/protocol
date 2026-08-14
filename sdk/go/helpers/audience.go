@@ -19,11 +19,18 @@ import (
 //
 // The field is stamped by whoever authors each request — the agent on the
 // requests it signs, a Broker on the legs it authors as sender. It is a statement
-// BY that sender, not tamper-evidence against it, and it is not what stops
-// cross-recipient replay either: a recipient that rebuilds @target-uri from its
-// own identity refuses a replayed capture at signature verification, before this
-// check runs. For transactions the binding audience statement is per item —
-// Offer.exchange inside the Exchange-signed offer.
+// BY that sender, not tamper-evidence against it. For transactions the binding
+// audience statement is per item — Offer.exchange inside the Exchange-signed
+// offer.
+//
+// It also backstops cross-recipient replay, and for THIS SDK that is not a
+// secondary benefit. A recipient that rebuilds @target-uri from its own
+// configured identity refuses a replayed capture at signature verification, and
+// needs no help here. This SDK rebuilds it from the ARRIVING request instead —
+// see reconstructTargetURI, which falls back to the Host header, and the server
+// binding takes no expected-host option — so a capture signed for one Exchange
+// and replayed at another with a forged Host verifies. This check is what
+// refuses it.
 //
 // Pure string work over a value the caller already holds — no IO, no state, and
 // no lookup — which is why it sits in the IO-free tier and can run before any
@@ -152,9 +159,14 @@ func CheckAudience(self string, claimed ...string) (AudienceVerdict, error) {
 // question scheme-relatively for values that may be full URLs, which is why it
 // takes a scheme at all, while both operands here are already regex-gated bare
 // domains that name no scheme. Reusing it would mean parsing a URL to learn what
-// the pattern has already established. The repo has been bitten by a duplicated
-// host predicate before, so the cost of the split is this comment and the vectors
-// that pin both — see the port-folding entry in docs/design-history.md.
+// the pattern has already established. On the schemeless values this one sees the
+// two agree exactly, 443 folded and 80 not, so the split costs no behaviour.
+//
+// The repo has been bitten by a duplicated host predicate before, so the cost of
+// the split is this comment and two separate test surfaces: the shared vectors pin
+// the fold here, and TestHostAnchored_ComparesThePort pins canonicalPort's. See
+// "The audience match is exact; the endpoint rule is not" in
+// docs/design-history.md for why the two rules differ at all.
 func normalizeDomain(v string) string {
 	host, port := v, ""
 	if i := strings.LastIndex(v, ":"); i >= 0 {
