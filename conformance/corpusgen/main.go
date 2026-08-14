@@ -939,25 +939,23 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[
 
 // ── rule helpers ─────────────────────────────────────────────────────────────
 
+// rules resolves fd's field rules through the shared helper, which panics on a
+// resolver failure: it is not "no rules", and treating it as nil would silently
+// drop every corpus case the field should have.
 func rules(fd protoreflect.FieldDescriptor) *validate.FieldRules {
-	fr, err := protovalidate.ResolveFieldRules(fd)
-	if err != nil {
-		// A resolution failure is not "no rules" — treating it as nil would
-		// silently drop every corpus case the field should have.
-		die("resolving rules for field %s: %v", fd.FullName(), err)
-	}
-	return fr
+	return conformance.FieldRules(fd)
 }
 
 // itemRules is the per-item FieldRules of a repeated field (repeated.items).
 func itemRules(fr *validate.FieldRules) *validate.FieldRules { return fr.GetRepeated().GetItems() }
 
 // classifiedRuleMembers is the closed set of (rule kind, member) pairs
-// hasConstraint/edges() know how to turn into corpus cases. Field-level `cel`
-// and `required` are handled outside this table (cel is server-only by scope;
-// required gets the `missing` edge). assertRulesClassified dies on anything
-// set outside this table, so a new rule shape MUST be taught to edges() (and
-// added here) before it can ship — the allowlist fails CLOSED.
+// hasConstraint/edges() know how to turn into corpus cases, and the SINGLE
+// inventory of them: hasConstraint reads this table rather than restating it.
+// Field-level `cel` and `required` are handled outside it (cel is server-only by
+// scope; required gets the `missing` edge). assertRulesClassified dies on
+// anything set outside this table, so a new rule shape MUST be taught to edges()
+// (and added here) before it can ship — the allowlist fails CLOSED.
 var classifiedRuleMembers = map[string]map[string]bool{
 	// string.max_bytes is classified but FORWARD-PROVISIONED: requiredgen's
 	// assertNoStringByteLengthRules currently forbids it contract-wide (see the
@@ -1016,37 +1014,77 @@ func checkMembers(short string, fd protoreflect.FieldDescriptor, fr *validate.Fi
 // hasConstraint reports whether fr carries a FIELD-level rule we generate edges
 // for. CEL-only (cross-field) field rules are excluded — they are not client-
 // enforceable and belong to the server.
+//
+// It is DERIVED from the classified tables above, not from a third hand-written
+// list of the same rules. The hand-written version drifted: the tables (and
+// listEdges) covered repeated.items.string.min_len/max_len while this function's
+// repeated branch fired only on an item pattern, so a repeated field whose only
+// rules were item lengths would pass the fail-closed classification and then get
+// ZERO corpus cases with every gate green. One inventory, one place to edit.
+//
+// Membership is by rule member SET, not by value: an explicitly zero-valued rule
+// (min_len: 0, unique: false) now counts as a constraint and produces no edges,
+// which the caller turns into a loud "has rules but produced no edges" failure.
+// That is the intended direction — such a rule constrains nothing and is a
+// contract error (bytesgen fails the same way on a zero-valued bytes length).
 func hasConstraint(fr *validate.FieldRules) bool {
 	if fr.GetRequired() {
 		return true
 	}
-	if e := fr.GetEnum(); e != nil && (e.GetDefinedOnly() || len(e.GetNotIn()) > 0) {
-		return true
-	}
-	if s := fr.GetString(); s != nil && (s.Const != nil || s.GetPattern() != "" || s.GetMinLen() > 0 || s.GetMaxLen() > 0 || s.GetMaxBytes() > 0) {
-		return true
-	}
-	if b := fr.GetBytes(); b != nil && (b.Len != nil || b.GetMinLen() > 0) {
-		return true
-	}
-	if i := fr.GetInt64(); i != nil && i.GetGreaterThan() != nil {
-		return true
-	}
-	if i := fr.GetInt32(); i != nil && (i.GetGreaterThan() != nil || i.GetLessThan() != nil) {
-		return true
-	}
-	if d := fr.GetDouble(); d != nil && (d.GetGreaterThan() != nil || d.GetLessThan() != nil) {
-		return true
-	}
-	if r := fr.GetRepeated(); r != nil {
-		if r.GetMaxItems() > 0 || r.GetMinItems() > 0 || r.GetUnique() {
+	found := false
+	fr.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		name := string(f.Name())
+		// `cel` is server-scope and `required` is handled above; anything not in
+		// the table already died in assertRulesClassified, which runs first.
+		if name == "cel" || name == "required" || f.Kind() != protoreflect.MessageKind || f.IsList() {
 			return true
 		}
-		if it := r.GetItems(); it != nil && it.GetString().GetPattern() != "" {
+		members, ok := classifiedRuleMembers[name]
+		if !ok {
 			return true
 		}
-	}
-	return false
+		v.Message().Range(func(mf protoreflect.FieldDescriptor, mv protoreflect.Value) bool {
+			mname := string(mf.Name())
+			// repeated.items is a nested FieldRules, so it contributes through the
+			// item table (what listEdges actually mutates), not by its presence.
+			if name == "repeated" && mname == "items" {
+				if hasItemConstraint(mv.Message()) {
+					found = true
+				}
+				return true
+			}
+			if members[mname] {
+				found = true
+			}
+			return true
+		})
+		return true
+	})
+	return found
+}
+
+// hasItemConstraint is hasConstraint for a repeated field's per-item rules,
+// derived the same way from classifiedItemMembers.
+func hasItemConstraint(item protoreflect.Message) bool {
+	found := false
+	item.Range(func(f protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		name := string(f.Name())
+		if name == "cel" || name == "required" || f.Kind() != protoreflect.MessageKind || f.IsList() {
+			return true
+		}
+		members, ok := classifiedItemMembers[name]
+		if !ok {
+			return true
+		}
+		v.Message().Range(func(mf protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
+			if members[string(mf.Name())] {
+				found = true
+			}
+			return true
+		})
+		return true
+	})
+	return found
 }
 
 func firstAllowedEnum(ed protoreflect.EnumDescriptor, r *validate.EnumRules) protoreflect.EnumNumber {

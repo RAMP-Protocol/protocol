@@ -1,0 +1,96 @@
+{
+  "$comment": [
+    "The base64 wire forms of a bytes-rule field, and the verdict all three languages must",
+    "reach on each one. Go protovalidate + protojson is the oracle (bytes_wire_forms_test.go",
+    "checks every row against it); the Pydantic and Zod harnesses",
+    "(gen/python/tests/test_bytes_wire_forms.py, gen/ts/tests/bytes_wire_forms.test.ts) assert",
+    "the same rows against the generated schemas, so a row lands here once instead of being",
+    "hand-copied into two suites that can drift.",
+    "",
+    "WHY THIS AXIS NEEDS ITS OWN VECTORS. The generated validation corpus cannot carry these",
+    "cases: corpusgen sets values through protoreflect and protojson always re-encodes bytes",
+    "into ONE canonical form (padded, standard alphabet), so no unpadded, url-safe or",
+    "malformed-base64 STRING can ever appear in a corpus case. Dropping the optional-padding",
+    "tail from a generated pattern would keep every corpus gate green while the clients then",
+    "reject the unpadded 43-char key Go accepts.",
+    "",
+    "WHAT GO ACCEPTS (protojson's decoder, which merge_schema.tighten_bytes_len mirrors as a",
+    "regex): the string is p payload characters plus padding. The alphabet is url-safe when",
+    "the string contains '-' or '_', standard otherwise, and decoding is strict afterwards —",
+    "so a MIXED string is refused. p % 4 == 1 is not a legal encoded length in any form, 4k",
+    "characters take no padding, 4k+2 take an optional '==', 4k+3 an optional '='.",
+    "",
+    "bases are the corpus valid baselines (proto-JSON, snake_case) — a whole valid message so",
+    "the Go oracle can validate it too. Each field entry pairs a bytes field with the form set",
+    "for its rule kind."
+  ],
+  "bases": {
+    "TransactionEvidence": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "EdDSA",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "EdDSA",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    },
+    "TransactionState": {
+      "expiry": "2026-01-02T03:04:05Z",
+      "idempotency_key": "idem-tx:offer-seed",
+      "signed_url_hash": "aGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGg="
+    }
+  },
+  "form_sets": {
+    "bytes_len_32": {
+      "rule": "bytes.len = 32",
+      "why": "protoschema rendered this as a 43..44 CHARACTER window, which also admits a 33-byte value (44 unpadded chars) and a 31-byte padded one. The rewrite pins the payload to exactly 43 characters of ONE alphabet plus optional exact padding.",
+      "forms": [
+        {"value": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=", "accepted": true, "why": "padded canonical form — what protojson emits"},
+        {"value": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s", "accepted": true, "why": "unpadded (raw) form; protojson decodes it, the corpus never shows it"},
+        {"value": "++/77/vv++/77/vv++/77/vv++/77/vv++/77/vv++8=", "accepted": true, "why": "standard alphabet with real '+' and '/'"},
+        {"value": "--_77_vv--_77_vv--_77_vv--_77_vv--_77_vv--8=", "accepted": true, "why": "url-safe alphabet — a JWK \"x\" value pasted verbatim"},
+        {"value": "++_77_vv--/77/vv++/77/vv++/77/vv++/77/vv++8=", "accepted": false, "why": "MIXED alphabets: protojson sees '-'/'_', switches to url-safe, then refuses '+' and '/'. A merged character class accepted this"},
+        {"value": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tr", "accepted": false, "why": "33 bytes (44 unpadded chars) — inside the old character window"},
+        {"value": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2traw==", "accepted": false, "why": "31 bytes padded, also 44 chars — the other side of the old window"},
+        {"value": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s==", "accepted": false, "why": "wrong padding length for a 32-byte payload"},
+        {"value": "", "accepted": false, "why": "zero bytes"}
+      ]
+    },
+    "bytes_min_len_1": {
+      "rule": "bytes.min_len = 1",
+      "why": "protoschema counted padding as content, so \"==\" (zero payload bytes, which protojson refuses to decode) passed. The rewrite requires the encoded payload characters of at least 1 byte BEFORE the padding tail, with the padding derived from the payload length mod 4.",
+      "forms": [
+        {"value": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==", "accepted": true, "why": "padded canonical form"},
+        {"value": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ", "accepted": true, "why": "same value, unpadded"},
+        {"value": "AA", "accepted": true, "why": "exactly 1 byte, unpadded"},
+        {"value": "AA==", "accepted": true, "why": "exactly 1 byte, padded"},
+        {"value": "-_", "accepted": true, "why": "url-safe alphabet"},
+        {"value": "+/", "accepted": true, "why": "standard alphabet"},
+        {"value": "AA=", "accepted": false, "why": "2 payload characters take two '=' or none; one is not a legal encoded length"},
+        {"value": "AAA==", "accepted": false, "why": "3 payload characters take one '=' or none"},
+        {"value": "AAAAA", "accepted": false, "why": "5 payload characters — 4k+1 is not a legal base64 length in any form"},
+        {"value": "+_", "accepted": false, "why": "MIXED alphabets — the free ={0,2} tail over a merged character class accepted this"},
+        {"value": "==", "accepted": false, "why": "pure padding: ZERO payload bytes; protojson refuses to decode it"},
+        {"value": "=", "accepted": false, "why": "pure padding, odd length"},
+        {"value": "A=", "accepted": false, "why": "one payload character never decodes"},
+        {"value": "", "accepted": false, "why": "zero bytes, under the min_len 1 floor"}
+      ]
+    }
+  },
+  "fields": [
+    {"message": "TransactionEvidence", "field": "exchange_signing_public_key", "form_set": "bytes_len_32"},
+    {"message": "TransactionEvidence", "field": "agent_public_key", "form_set": "bytes_len_32"},
+    {"message": "TransactionState", "field": "signed_url_hash", "form_set": "bytes_len_32"},
+    {"message": "TransactionEvidence", "field": "offer_canonical_bytes", "form_set": "bytes_min_len_1"},
+    {"message": "TransactionEvidence", "field": "agent_acceptance_canonical_bytes", "form_set": "bytes_min_len_1"}
+  ]
+}

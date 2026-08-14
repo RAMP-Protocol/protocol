@@ -59,7 +59,8 @@ marker plus a hand-maintained list. The base64 wire forms the two generated clie
 identically now live in one shared vector file (`conformance/testdata/bytes_wire_forms.json`)
 that a conformance test pins against Go `protojson` + protovalidate, so each row is written once,
 cannot drift between the Pydantic and Zod suites, and states the server's real verdict rather
-than a belief about it.
+than a belief about it. The evidence-read messages add 87 corpus cases on top of the
+recipient-addressing revision below, taking the committed corpus to 636.
 
 **Every addressed request names its recipient: `exchange` becomes required (breaking,
 pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`
@@ -186,7 +187,7 @@ address, jurisdiction, tax identifiers. The specific members stay operator-defin
 now explicit is that this is not an identity claim, since the caller's identity comes from
 the verified request signature and nothing in the payload is trusted as authentication.
 
-*Tooling:* the corpus grows from 208 to 319 cases and `Offer` enters it for the first time,
+*Tooling:* the corpus grows from 208 to 549 cases and `Offer` enters it for the first time,
 because a message with no field rules produces no cases at all and `Offer` previously had
 none. `WellKnownManifest` gains a seed: auto-fill populates `terms_digest` (it carries a
 pattern) but never `terms_uri` (no field rule to trigger on), so the generated baseline

@@ -20,7 +20,6 @@ import (
 	"sort"
 
 	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	protovalidate "buf.build/go/protovalidate"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/RAMP-Protocol/protocol/conformance"
@@ -40,19 +39,14 @@ func main() {
 		out = os.Args[1]
 	}
 	req := map[string][]string{}
-	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
-		var names []string
-		for i := 0; i < md.Fields().Len(); i++ {
-			fd := md.Fields().Get(i)
-			if zeroRejected(fd) {
-				names = append(names, string(fd.Name()))
-			}
-		}
-		if len(names) > 0 {
-			sort.Strings(names)
-			req[string(md.Name())] = names
+	conformance.EachRuledField(func(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
+		if zeroRejected(fd, fr) {
+			req[string(md.Name())] = append(req[string(md.Name())], string(fd.Name()))
 		}
 	})
+	for _, names := range req {
+		sort.Strings(names)
+	}
 	b, err := json.MarshalIndent(req, "", "  ")
 	if err != nil {
 		panic(err)
@@ -71,32 +65,20 @@ func main() {
 // field carries these rules today; implement a byte-count refine in the
 // sdk-types pipeline before adding one.
 func assertNoStringByteLengthRules() {
-	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
-		for i := 0; i < md.Fields().Len(); i++ {
-			fd := md.Fields().Get(i)
-			fr, err := protovalidate.ResolveFieldRules(fd)
-			if err != nil {
-				panic(fmt.Sprintf("requiredgen: resolving rules for field %s: %v", fd.FullName(), err))
-			}
-			if fr == nil {
-				continue
-			}
-			if s := fr.GetString(); s != nil && (s.GetMinBytes() > 0 || s.GetMaxBytes() > 0) {
-				panic(fmt.Sprintf("requiredgen: string byte-length rule on field %s — protoschema translates it to a CHARACTER count; implement a byte-count refine in the sdk-types pipeline first", fd.FullName()))
-			}
+	conformance.EachRuledField(func(_ protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
+		if s := fr.GetString(); s != nil && (s.GetMinBytes() > 0 || s.GetMaxBytes() > 0) {
+			panic(fmt.Sprintf("requiredgen: string byte-length rule on field %s — protoschema translates it to a CHARACTER count; implement a byte-count refine in the sdk-types pipeline first", fd.FullName()))
 		}
 	})
 }
 
 // zeroRejected reports whether fd's zero/absent value is rejected by its own
-// field rule. Fields with explicit presence (optional, message, oneof member)
-// are exempt unless they carry an explicit `required` — protovalidate skips an
-// unset presence-tracking field, so its absence is valid.
-func zeroRejected(fd protoreflect.FieldDescriptor) bool {
-	fr, err := protovalidate.ResolveFieldRules(fd)
-	if err != nil || fr == nil {
-		return false
-	}
+// field rule fr (already resolved by the EachRuledField walk, which panics
+// rather than reading a resolver error as "no rules"). Fields with explicit
+// presence (optional, message, oneof member) are exempt unless they carry an
+// explicit `required` — protovalidate skips an unset presence-tracking field,
+// so its absence is valid.
+func zeroRejected(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) bool {
 	if fr.GetRequired() {
 		return true
 	}

@@ -335,7 +335,7 @@ func TestCELRuleCoverage(t *testing.T) {
 			}
 		}
 		for j := 0; j < md.Fields().Len(); j++ {
-			if fr, err := protovalidate.ResolveFieldRules(md.Fields().Get(j)); err == nil && fr != nil {
+			if fr := FieldRules(md.Fields().Get(j)); fr != nil {
 				for _, r := range fr.GetCel() {
 					declared[r.GetId()] = true
 				}

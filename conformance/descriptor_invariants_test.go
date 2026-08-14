@@ -136,7 +136,7 @@ func TestRequiredEnumDiscriminatorsRejectZero(t *testing.T) {
 // value: a field-level enum not_in:[0], a field-level CEL mentioning UNSPECIFIED,
 // or a message-level CEL referencing `this.<field>` together with UNSPECIFIED.
 func fieldRejectsZero(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor) bool {
-	if fr, err := protovalidate.ResolveFieldRules(fd); err == nil && fr != nil {
+	if fr := FieldRules(fd); fr != nil {
 		if er := fr.GetEnum(); er != nil {
 			for _, v := range er.GetNotIn() {
 				if v == 0 {
@@ -198,8 +198,7 @@ func TestCELIDPrefixMatchesMessage(t *testing.T) {
 			}
 		}
 		for j := 0; j < md.Fields().Len(); j++ {
-			fd := md.Fields().Get(j)
-			if fr, err := protovalidate.ResolveFieldRules(fd); err == nil && fr != nil {
+			if fr := FieldRules(md.Fields().Get(j)); fr != nil {
 				for _, r := range fr.GetCel() {
 					check(r.GetId())
 				}

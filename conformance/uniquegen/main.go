@@ -20,7 +20,7 @@ import (
 	"os"
 	"sort"
 
-	protovalidate "buf.build/go/protovalidate"
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/RAMP-Protocol/protocol/conformance"
@@ -39,19 +39,14 @@ func main() {
 		out = os.Args[1]
 	}
 	uniq := map[string][]string{}
-	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
-		var names []string
-		for i := 0; i < md.Fields().Len(); i++ {
-			fd := md.Fields().Get(i)
-			if uniqueItems(fd) {
-				names = append(names, string(fd.Name()))
-			}
-		}
-		if len(names) > 0 {
-			sort.Strings(names)
-			uniq[string(md.Name())] = names
+	conformance.EachRuledField(func(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
+		if fd.IsList() && fr.GetRepeated().GetUnique() {
+			uniq[string(md.Name())] = append(uniq[string(md.Name())], string(fd.Name()))
 		}
 	})
+	for _, names := range uniq {
+		sort.Strings(names)
+	}
 	b, err := json.MarshalIndent(uniq, "", "  ")
 	if err != nil {
 		panic(err)
@@ -59,16 +54,4 @@ func main() {
 	if err := os.WriteFile(out, append(b, '\n'), 0o644); err != nil {
 		panic(err)
 	}
-}
-
-// uniqueItems reports whether fd is a repeated field whose items must be unique.
-func uniqueItems(fd protoreflect.FieldDescriptor) bool {
-	if !fd.IsList() {
-		return false
-	}
-	fr, err := protovalidate.ResolveFieldRules(fd)
-	if err != nil || fr == nil {
-		return false
-	}
-	return fr.GetRepeated().GetUnique()
 }

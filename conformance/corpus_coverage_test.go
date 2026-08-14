@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	protovalidate "buf.build/go/protovalidate"
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -262,6 +262,7 @@ func TestCorpusCoverage(t *testing.T) {
 		if !stringMaxBytes {
 			return // no max_bytes rule in the schema — nothing to pin
 		}
+		limits := maxBytesLimits()
 		for _, c := range cases {
 			if c.Valid || !ruleMatches(c.Rules, "string.max_bytes") {
 				continue
@@ -270,15 +271,25 @@ func TestCorpusCoverage(t *testing.T) {
 			// an unanchored whole-JSON scan would be satisfied by a multibyte
 			// value in an unrelated auto-filled field, proving nothing about
 			// the byte-vs-character counting of the field under test.
-			for _, s := range fieldStringValues(decodeCaseJSON(t, c.JSON), mutatedField(c.ID)) {
-				if len(s) > len([]rune(s)) {
-					return // found a multibyte max_bytes mutant on the mutated field
+			field := mutatedField(c.ID)
+			limit, ok := limits[c.Message+"/"+field]
+			if !ok {
+				continue // the mutated field carries no max_bytes limit to straddle
+			}
+			for _, s := range fieldStringValues(decodeCaseJSON(t, c.JSON), field) {
+				// The property under test is the STRADDLE, not "is multibyte":
+				// over the limit in bytes AND within it in characters. A mutant
+				// over the limit in both units is rejected by a character-counting
+				// client too, so it would leave the bug class uncovered while this
+				// guard stayed green.
+				if uint64(len(s)) > limit && uint64(len([]rune(s))) <= limit {
+					return // found a straddling max_bytes mutant on the mutated field
 				}
 			}
 		}
-		t.Errorf("MISSING CLASS 6 (multibyte max_bytes): every string.max_bytes mutant is "+
-			"ASCII, where byte count == character count; a client that counts characters "+
-			"instead of bytes stays green (%d cases scanned)", len(cases))
+		t.Errorf("MISSING CLASS 6 (multibyte max_bytes): no string.max_bytes mutant straddles "+
+			"its field's limit — over it in BYTES while within it in characters. Without that "+
+			"straddle a client that counts characters instead of bytes stays green (%d cases scanned)", len(cases))
 	})
 }
 
@@ -286,27 +297,40 @@ func TestCorpusCoverage(t *testing.T) {
 // schema currently carries (top-level field rules, matching corpusgen's edge
 // scope). The class 6 guard requires corpus coverage only for shapes that are
 // actually in the schema.
+//
+// The walk goes through EachRuledField (contract.go), which panics on a resolver
+// error. This guard used to resolve the rules itself and skip an unresolvable
+// field, which read as "the schema has no such rule" and turned the whole class-6
+// requirement off with every gate green.
 func schemaRuleShapes() (bytesLen, bytesMinLen, stringMaxBytes bool) {
-	EachMessage(func(md protoreflect.MessageDescriptor) {
-		for i := 0; i < md.Fields().Len(); i++ {
-			fr, err := protovalidate.ResolveFieldRules(md.Fields().Get(i))
-			if err != nil || fr == nil {
-				continue
+	EachRuledField(func(_ protoreflect.MessageDescriptor, _ protoreflect.FieldDescriptor, fr *validate.FieldRules) {
+		if b := fr.GetBytes(); b != nil {
+			if b.Len != nil {
+				bytesLen = true
 			}
-			if b := fr.GetBytes(); b != nil {
-				if b.Len != nil {
-					bytesLen = true
-				}
-				if b.GetMinLen() > 0 {
-					bytesMinLen = true
-				}
+			if b.GetMinLen() > 0 {
+				bytesMinLen = true
 			}
-			if s := fr.GetString(); s != nil && s.GetMaxBytes() > 0 {
-				stringMaxBytes = true
-			}
+		}
+		if s := fr.GetString(); s != nil && s.GetMaxBytes() > 0 {
+			stringMaxBytes = true
 		}
 	})
 	return
+}
+
+// maxBytesLimits maps "<Message>/<field>" to the field's string.max_bytes limit,
+// for every contract field carrying one. The multibyte half of the class-6 guard
+// needs the real limit: "is multibyte" alone is satisfied by a mutant that is
+// over the limit in characters too, which proves nothing about byte counting.
+func maxBytesLimits() map[string]uint64 {
+	out := map[string]uint64{}
+	EachRuledField(func(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
+		if s := fr.GetString(); s != nil && s.GetMaxBytes() > 0 {
+			out[string(md.Name())+"/"+string(fd.Name())] = s.GetMaxBytes()
+		}
+	})
+	return out
 }
 
 // mutatedField extracts the mutated field's JSON name from a corpus case id,

@@ -108,35 +108,24 @@ func findDomainFields(t *testing.T) []domainField {
 func findFieldsWithPattern(t *testing.T, pattern string) []domainField {
 	t.Helper()
 	var out []domainField
-	EachMessage(func(md protoreflect.MessageDescriptor) {
-		for i := 0; i < md.Fields().Len(); i++ {
-			fd := md.Fields().Get(i)
-			rules, has := fieldRules(fd)
-			if !has {
-				continue
-			}
-			if s := rules.GetString(); s != nil && s.GetPattern() == pattern {
-				out = append(out, domainField{md, fd, false})
-				continue
-			}
-			if r := rules.GetRepeated(); r != nil && r.GetItems() != nil {
-				if s := r.GetItems().GetString(); s != nil && s.GetPattern() == pattern {
-					out = append(out, domainField{md, fd, true})
-				}
+	// EachRuledField (contract.go) reads the rules through the library's own
+	// resolver rather than pulling the extension by hand — the same call every
+	// generator in this package makes, so a change in how rules are carried (a
+	// predefined rule, say) reaches this guard without a second implementation to
+	// remember — and it panics on a resolver error instead of reading it as "this
+	// field has no rules", which would drop the field out of the family silently.
+	EachRuledField(func(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, rules *validate.FieldRules) {
+		if s := rules.GetString(); s != nil && s.GetPattern() == pattern {
+			out = append(out, domainField{md, fd, false})
+			return
+		}
+		if r := rules.GetRepeated(); r != nil && r.GetItems() != nil {
+			if s := r.GetItems().GetString(); s != nil && s.GetPattern() == pattern {
+				out = append(out, domainField{md, fd, true})
 			}
 		}
 	})
 	return out
-}
-
-// fieldRules reads a field's protovalidate rules through the library's own
-// resolver rather than pulling the extension by hand — the same call the three
-// generators in this package already make, so a change in how rules are carried
-// (a predefined rule, say) reaches this guard without a second implementation to
-// remember.
-func fieldRules(fd protoreflect.FieldDescriptor) (*validate.FieldRules, bool) {
-	fr, err := protovalidate.ResolveFieldRules(fd)
-	return fr, err == nil && fr != nil
 }
 
 // messageWith returns a fresh instance of the field's message carrying v in that

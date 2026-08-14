@@ -45,7 +45,7 @@ import (
 	"strings"
 	"testing"
 
-	protovalidate "buf.build/go/protovalidate"
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -97,16 +97,10 @@ func TestSameRuleDirectivesHoldByteForByte(t *testing.T) {
 			t.Errorf("restated rule PRESENCE mismatch: %s declares 'Same rule as %s' but HasPresence differs (source %v, target %v) — protovalidate skips an unset presence-tracked field, so the copies diverge at runtime on omission",
 				src, dst, srcFD.HasPresence(), dstFD.HasPresence())
 		}
-		srcRules, err := protovalidate.ResolveFieldRules(srcFD)
-		if err != nil {
-			t.Errorf("resolving rules for %s: %v", src, err)
-			continue
-		}
-		dstRules, err := protovalidate.ResolveFieldRules(dstFD)
-		if err != nil {
-			t.Errorf("resolving rules for %s (target of %s's directive): %v", dst, src, err)
-			continue
-		}
+		// FieldRules (contract.go) panics on a resolver error — one policy for
+		// every rule-reading guard in the package.
+		srcRules := FieldRules(srcFD)
+		dstRules := FieldRules(dstFD)
 		if srcRules == nil {
 			t.Errorf("%s declares 'Same rule as %s' but itself carries no field rules", src, dst)
 			continue
@@ -136,25 +130,15 @@ func TestRuleIdenticalGroupsAreDeclared(t *testing.T) {
 	// Group every ruled non-message field by its deterministically serialized
 	// resolved rules.
 	groups := map[string][]string{}
-	EachMessage(func(md protoreflect.MessageDescriptor) {
-		for i := 0; i < md.Fields().Len(); i++ {
-			fd := md.Fields().Get(i)
-			if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
-				continue
-			}
-			fr, err := protovalidate.ResolveFieldRules(fd)
-			if err != nil {
-				t.Fatalf("resolving rules for %s: %v", fd.FullName(), err)
-			}
-			if fr == nil {
-				continue
-			}
-			key, err := proto.MarshalOptions{Deterministic: true}.Marshal(fr)
-			if err != nil {
-				t.Fatalf("serializing rules for %s: %v", fd.FullName(), err)
-			}
-			groups[string(key)] = append(groups[string(key)], string(fd.FullName()))
+	EachRuledField(func(_ protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
+		if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+			return
 		}
+		key, err := proto.MarshalOptions{Deterministic: true}.Marshal(fr)
+		if err != nil {
+			t.Fatalf("serializing rules for %s: %v", fd.FullName(), err)
+		}
+		groups[string(key)] = append(groups[string(key)], string(fd.FullName()))
 	})
 
 	inTwinGroup := map[string]bool{}

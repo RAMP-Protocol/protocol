@@ -288,6 +288,43 @@ def base64_encoded_form(n):
     return 4 * full + (0, 2, 3)[rem], (0, 2, 1)[rem]
 
 
+# The two base64 alphabets, as JSON-Schema (ECMA-262 / RE2-compatible) character
+# classes. They are kept SEPARATE, never merged into one class: Go's protojson
+# picks the alphabet by presence of '-' or '_' and then decodes strictly, so a
+# string mixing '+' with '_' is refused. A merged [A-Za-z0-9+/_-] class accepts
+# that mix, which is the accept-direction divergence these patterns exist to
+# close. ('-' sits last in the url class so it is a literal, not a range.)
+BASE64_ALPHABETS = ("A-Za-z0-9+/", "A-Za-z0-9_-")
+
+
+def base64_block_forms(chars, pad):
+    """Regex branches for base64 of an EXACT payload length: `chars` payload
+    characters, then the padding that completes the 4-character block (none, one
+    '=', or two). Padding is OPTIONAL because protojson decodes the unpadded
+    (raw) form too."""
+    tail = {0: "", 1: "=?", 2: "(?:==)?"}[pad]
+    return ["[%s]{%d}%s" % (a, chars, tail) for a in BASE64_ALPHABETS]
+
+
+def base64_floor_forms(chars):
+    """Regex branches for base64 of AT LEAST `chars` payload characters.
+
+    A base64 string is p payload characters plus padding, and Go accepts it only
+    when p % 4 != 1 — 4k characters carry no padding, 4k+2 take an optional '==',
+    4k+3 an optional '='. (4k+1 is not a legal encoded length in any form, which
+    is why "AA=", "AAA==" and "AAAAA" are all refused.) So each accepted residue
+    gets its own branch, anchored at the smallest payload length that both has
+    that residue and clears the floor; `(?:[A]{4})*` then walks it up in whole
+    blocks. This is plain arithmetic in the pattern — no lookahead — because
+    Pydantic v2 compiles patterns with the Rust regex engine, which has none."""
+    out = []
+    for a in BASE64_ALPHABETS:
+        for residue, tail in ((0, ""), (2, "(?:==)?"), (3, "=?")):
+            floor = chars + (residue - chars) % 4  # smallest p >= chars, p % 4 == residue
+            out.append("[%s]{%d}(?:[%s]{4})*%s" % (a, floor, a, tail))
+    return out
+
+
 def tighten_bytes_len(defs, bytes_len):
     """A bytes field with a length rule arrives from protoschema too loose in
     both rule kinds, so the generated clients accept values the Go server
@@ -310,11 +347,16 @@ def tighten_bytes_len(defs, bytes_len):
     shape, so every manifest entry is one of the two kinds above. Byte length
     becomes enforceable at the schema layer without decoding.
 
-    The alphabet admits BOTH standard (+/) and url-safe (-_) base64: Go's
-    protojson accepts either on decode, so a client that rejected base64url
-    (e.g. a JWK "x" value pasted verbatim) would refuse input the server
-    accepts. Length arithmetic is alphabet-independent, so the length
-    guarantees are unchanged.
+    Both patterns are an ALTERNATION of the two base64 alphabets, standard (+/)
+    and url-safe (-_), never one merged character class. Go's protojson accepts
+    either alphabet on decode — so a client rejecting base64url (a JWK "x" value
+    pasted verbatim) would refuse input the server takes — but it accepts only
+    ONE of them per value: it selects url-safe when the string contains '-' or
+    '_', then decodes strictly, so a mixed string is refused. Length arithmetic
+    is alphabet-independent, so the length guarantees are the same in both arms.
+    Padding is derived from the payload length mod 4 rather than left as a free
+    ={0,2} tail, which is what makes "AA=", "AAA==" and "AAAAA" — none of them
+    legal encoded lengths — rejected here as they are by Go.
 
     Loud guards: every manifest entry MUST match a string property in the
     rendered schema, and MUST carry a rule kind this function translates. A
@@ -335,19 +377,26 @@ def tighten_bytes_len(defs, bytes_len):
             if not isinstance(rule, dict) or set(rule) not in ({"len"}, {"min_len"}):
                 missing.append(f"{msg}.{jname} (untranslatable rule {rule!r})")
                 continue
+            n = next(iter(rule.values()))
+            if not isinstance(n, int) or n < 1:
+                # bytesgen panics on a zero-valued length rule; this is the same
+                # check on the consuming side, so a manifest that lost its value
+                # (or carries a zero) cannot produce a pattern the empty string
+                # satisfies.
+                missing.append(f"{msg}.{jname} (rule value must be a positive integer: {rule!r})")
+                continue
             if "len" in rule:
                 chars, pad = base64_encoded_form(rule["len"])
-                tail = {0: "", 1: "=?", 2: "(==)?"}[pad]
-                prop["pattern"] = "^[A-Za-z0-9+/_-]{%d}%s$" % (chars, tail)
+                prop["pattern"] = "^(?:%s)$" % "|".join(base64_block_forms(chars, pad))
                 # unpadded (chars) .. padded to the block (chars + pad)
                 prop["minLength"] = chars
                 prop["maxLength"] = chars + pad
             else:
                 chars, _ = base64_encoded_form(rule["min_len"])
-                # Open-ended payload run: at least the encoded chars of min_len
-                # bytes, then at most a full padding tail. No exact-length
-                # arithmetic applies, so no maxLength.
-                prop["pattern"] = "^[A-Za-z0-9+/_-]{%d,}={0,2}$" % chars
+                # Open-ended: at least the encoded payload characters of min_len
+                # bytes, extended a whole 4-character block at a time. No
+                # exact-length arithmetic applies, so no maxLength.
+                prop["pattern"] = "^(?:%s)$" % "|".join(base64_floor_forms(chars))
                 prop["minLength"] = chars
                 prop.pop("maxLength", None)
     if missing:
