@@ -44,6 +44,11 @@ type signingFixture struct {
 	signer   helpers.Signer
 	resolver *helpers.StaticKeyResolver
 	keyID    string
+	// pub is the public half of the same key. The protocol carries ONE agent
+	// identity: the key that signs requests also signs the detached acceptance and
+	// is the key a delivery URL is bound to, so tests that verify an acceptance or
+	// present a fetch proof need it alongside the Signer.
+	pub ed25519.PublicKey
 }
 
 // newSigningFixture builds a request-signing keypair, an L1 Signer over it, and a
@@ -55,7 +60,13 @@ func newSigningFixture(t *testing.T) signingFixture {
 	if err != nil {
 		t.Fatalf("generate request-signing key: %v", err)
 	}
-	const keyID = "agent.test.v1"
+	// keyid IS the RFC 7638 thumbprint: it is the anchor of the three-way identity
+	// an edge checks on a bound fetch, and the value an Exchange binds a delivery
+	// URL to. A fixture that used an opaque label could never mint a fetch proof.
+	keyID, err := helpers.Thumbprint(pub)
+	if err != nil {
+		t.Fatalf("thumbprint request-signing key: %v", err)
+	}
 	signer, err := helpers.NewEd25519Signer(keyID, priv)
 	if err != nil {
 		t.Fatalf("new signer: %v", err)
@@ -64,6 +75,7 @@ func newSigningFixture(t *testing.T) signingFixture {
 		signer:   signer,
 		resolver: helpers.NewStaticKeyResolver(map[string]ed25519.PublicKey{keyID: pub}),
 		keyID:    keyID,
+		pub:      pub,
 	}
 }
 
@@ -215,7 +227,7 @@ func TestClientSign_RoundTripsThroughServerVerify(t *testing.T) {
 	replay := newMemReplayStore()
 	srv := newVerifyingServer(t, sig, replay, nil)
 
-	client := rampconnect.NewClient(srv.URL, rampconnect.WithSigner(sig.signer))
+	client := rampconnect.NewClient(srv.URL, rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()))
 
 	// Execute needs a VerifiedOffer; but this test only asserts transport
 	// acceptance, so a discover round-trip (empty offer set) is the minimal
@@ -263,7 +275,7 @@ func TestDiscover_SortsVerifiedAndRejected(t *testing.T) {
 	srv := newVerifyingServer(t, sig, replay, []*rampv1.Offer{off.good, off.doctored})
 
 	client := rampconnect.NewClient(srv.URL,
-		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()),
 		rampconnect.WithOfferKey(off.exchangePub), // exchange offer-verifying key
 	)
 
@@ -271,23 +283,23 @@ func TestDiscover_SortsVerifiedAndRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(res.Verified) != 1 {
-		t.Fatalf("want exactly 1 verified offer, got %d", len(res.Verified))
+	if len(res.Verified()) != 1 {
+		t.Fatalf("want exactly 1 verified offer, got %d", len(res.Verified()))
 	}
-	if got := res.Verified[0].Offer().GetOfferId(); got != "offer-good" {
+	if got := res.Verified()[0].Offer().GetOfferId(); got != "offer-good" {
 		t.Fatalf("verified offer id: want offer-good, got %q", got)
 	}
-	if len(res.Rejected) != 1 {
-		t.Fatalf("want exactly 1 rejected offer, got %d", len(res.Rejected))
+	if len(res.Rejected()) != 1 {
+		t.Fatalf("want exactly 1 rejected offer, got %d", len(res.Rejected()))
 	}
-	if got := res.Rejected[0].Offer.GetOfferId(); got != "offer-doctored" {
+	if got := res.Rejected()[0].Offer.GetOfferId(); got != "offer-doctored" {
 		t.Fatalf("rejected offer id: want offer-doctored, got %q", got)
 	}
-	if res.Rejected[0].Reason == nil {
+	if res.Rejected()[0].Reason == nil {
 		t.Fatal("rejected offer must carry a non-nil reason")
 	}
-	if !errors.Is(res.Rejected[0].Reason, helpers.ErrOfferSignatureInvalid) {
-		t.Fatalf("rejected reason: want ErrOfferSignatureInvalid, got %v", res.Rejected[0].Reason)
+	if !errors.Is(res.Rejected()[0].Reason, helpers.ErrOfferSignatureInvalid) {
+		t.Fatalf("rejected reason: want ErrOfferSignatureInvalid, got %v", res.Rejected()[0].Reason)
 	}
 }
 
@@ -302,7 +314,7 @@ func TestExecute_AcceptsVerifiedOffer(t *testing.T) {
 	srv := newVerifyingServer(t, sig, replay, []*rampv1.Offer{off.good})
 
 	client := rampconnect.NewClient(srv.URL,
-		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()),
 		rampconnect.WithOfferKey(off.exchangePub),
 	)
 
@@ -310,13 +322,13 @@ func TestExecute_AcceptsVerifiedOffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(res.Verified) != 1 {
-		t.Fatalf("want 1 verified offer, got %d", len(res.Verified))
+	if len(res.Verified()) != 1 {
+		t.Fatalf("want 1 verified offer, got %d", len(res.Verified()))
 	}
-	// Execute takes ONLY a VerifiedOffer — this compiles because res.Verified[0]
-	// is one. Passing res.Rejected[0] (a RejectedOffer) or a raw *rampv1.Offer
+	// Execute takes ONLY a VerifiedOffer — this compiles because res.Verified()[0]
+	// is one. Passing res.Rejected()[0] (a RejectedOffer) or a raw *rampv1.Offer
 	// here would NOT compile; that guard is documented in doc_compileguard_test.go.
-	if _, err := client.Execute(context.Background(), res.Verified[0]); err != nil {
+	if _, err := client.Execute(context.Background(), res.Verified()[0]); err != nil {
 		t.Fatalf("Execute on a verified offer must succeed, got: %v", err)
 	}
 }
@@ -336,7 +348,7 @@ func TestExecute_StampsProtocolVersion(t *testing.T) {
 	srv, origin := newVerifyingServerStub(t, sig, newMemReplayStore(), []*rampv1.Offer{off.good})
 
 	client := rampconnect.NewClient(srv.URL,
-		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()),
 		rampconnect.WithOfferKey(off.exchangePub),
 	)
 
@@ -347,10 +359,10 @@ func TestExecute_StampsProtocolVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(res.Verified) != 1 {
-		t.Fatalf("want 1 verified offer, got %d", len(res.Verified))
+	if len(res.Verified()) != 1 {
+		t.Fatalf("want 1 verified offer, got %d", len(res.Verified()))
 	}
-	if _, err := client.Execute(context.Background(), res.Verified[0]); err != nil {
+	if _, err := client.Execute(context.Background(), res.Verified()[0]); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -380,7 +392,7 @@ func TestRejectedOffer_RequiresUnsafeToExecute(t *testing.T) {
 	srv := newVerifyingServer(t, sig, replay, []*rampv1.Offer{off.doctored})
 
 	client := rampconnect.NewClient(srv.URL,
-		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()),
 		rampconnect.WithOfferKey(off.exchangePub),
 	)
 
@@ -388,13 +400,13 @@ func TestRejectedOffer_RequiresUnsafeToExecute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(res.Rejected) != 1 {
-		t.Fatalf("want 1 rejected offer, got %d", len(res.Rejected))
+	if len(res.Rejected()) != 1 {
+		t.Fatalf("want 1 rejected offer, got %d", len(res.Rejected()))
 	}
 	// The explicit escape: .Unsafe() converts a RejectedOffer into the executable
 	// VerifiedOffer shape. This is the single documented bypass; without it
 	// Execute(ctx, rejected) does not compile.
-	forced := res.Rejected[0].Unsafe()
+	forced := res.Rejected()[0].Unsafe()
 	if _, err := client.Execute(context.Background(), forced); err != nil {
 		t.Fatalf("Execute on an explicitly-unsafed offer must reach the server, got: %v", err)
 	}
@@ -416,17 +428,17 @@ func TestWithVerification_StrictRejectsUnverifiable(t *testing.T) {
 
 	// No WithOfferKey → the client cannot resolve the exchange offer key, so even
 	// the genuinely-signed offer is UNVERIFIABLE and must be rejected under Strict.
-	client := rampconnect.NewClient(srv.URL, rampconnect.WithSigner(sig.signer))
+	client := rampconnect.NewClient(srv.URL, rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()))
 
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(res.Verified) != 0 {
-		t.Fatalf("Strict with no resolvable offer key must verify nothing, got %d verified", len(res.Verified))
+	if len(res.Verified()) != 0 {
+		t.Fatalf("Strict with no resolvable offer key must verify nothing, got %d verified", len(res.Verified()))
 	}
-	if len(res.Rejected) != 1 {
-		t.Fatalf("Strict must surface the unverifiable offer as rejected, got %d rejected", len(res.Rejected))
+	if len(res.Rejected()) != 1 {
+		t.Fatalf("Strict must surface the unverifiable offer as rejected, got %d rejected", len(res.Rejected()))
 	}
 }
 
@@ -442,7 +454,7 @@ func TestWithVerification_OffSurfacesUnverified(t *testing.T) {
 	srv := newVerifyingServer(t, sig, replay, []*rampv1.Offer{off.good})
 
 	client := rampconnect.NewClient(srv.URL,
-		rampconnect.WithSigner(sig.signer),
+		rampconnect.WithSigner(sig.signer), rampconnect.WithRequester(testRequester()),
 		rampconnect.WithVerification(core.Off), // loud, named opt-out
 	)
 
@@ -450,10 +462,10 @@ func TestWithVerification_OffSurfacesUnverified(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(res.Verified) != 1 {
-		t.Fatalf("WithVerification(Off) must surface the offer without verification, got %d verified", len(res.Verified))
+	if len(res.Verified()) != 1 {
+		t.Fatalf("WithVerification(Off) must surface the offer without verification, got %d verified", len(res.Verified()))
 	}
-	if len(res.Rejected) != 0 {
-		t.Fatalf("WithVerification(Off) must not reject, got %d rejected", len(res.Rejected))
+	if len(res.Rejected()) != 0 {
+		t.Fatalf("WithVerification(Off) must not reject, got %d rejected", len(res.Rejected()))
 	}
 }

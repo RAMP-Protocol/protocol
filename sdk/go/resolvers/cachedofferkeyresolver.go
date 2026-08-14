@@ -5,15 +5,24 @@ import (
 	"crypto/ed25519"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
+	"github.com/RAMP-Protocol/protocol/sdk/go/internal/lrucache"
 )
 
 // defaultOfferKeyTTL bounds how long a fetched offer-signing key is served from the
 // per-domain cache when no TTL is configured.
 const defaultOfferKeyTTL = 5 * time.Minute
+
+// maxCachedOfferKeys bounds the per-domain key cache. The key is a domain off
+// Offer.exchange, so which entries appear is driven by incoming offers — an
+// open-ended, caller-influenced key space, and an unbounded map over one is
+// somewhere a caller can make the process grow without limit. An expiry is a
+// FRESHNESS check rather than a removal, so a stale entry holds its slot until
+// something reclaims it. A real deployment sees a handful of exchanges. Mirrors the
+// bound the endpoint cache and the per-origin client pool already carry.
+const maxCachedOfferKeys = 256
 
 // OfferDirectoryFetcher fetches a domain's WBA identity directory. It is the
 // injected IO seam of CachedOfferKeyResolver: the default (NewWBADirectoryFetcher)
@@ -55,8 +64,10 @@ type CachedOfferKeyResolver struct {
 	now     func() time.Time
 	revoked func(string) bool
 
-	mu    sync.Mutex
-	cache map[string]offerKeyEntry
+	// cache evicts least-recently-used at a fixed cap and carries its own lock, so
+	// this type holds no mutex. Concurrent misses for one domain still both fetch,
+	// exactly as they did when the read and the write were separately locked.
+	cache *lrucache.Cache[string, offerKeyEntry]
 }
 
 type offerKeyEntry struct {
@@ -84,7 +95,7 @@ func NewCachedOfferKeyResolver(cfg CachedOfferKeyResolverConfig) *CachedOfferKey
 		ttl:     ttl,
 		now:     now,
 		revoked: cfg.Revoked,
-		cache:   map[string]offerKeyEntry{},
+		cache:   lrucache.New[string, offerKeyEntry](maxCachedOfferKeys),
 	}
 }
 
@@ -96,12 +107,9 @@ func NewCachedOfferKeyResolver(cfg CachedOfferKeyResolverConfig) *CachedOfferKey
 // rejects the offer fail-closed.
 func (r *CachedOfferKeyResolver) Resolve(ctx context.Context, domain string) (ed25519.PublicKey, error) {
 	now := r.now()
-	r.mu.Lock()
-	if e, ok := r.cache[domain]; ok && now.Before(e.exp) {
-		r.mu.Unlock()
+	if e, ok := r.cache.Get(domain); ok && now.Before(e.exp) {
 		return e.key, nil
 	}
-	r.mu.Unlock()
 
 	dir, err := r.fetch(ctx, domain)
 	if err != nil {
@@ -115,9 +123,7 @@ func (r *CachedOfferKeyResolver) Resolve(ctx context.Context, domain string) (ed
 	// the window is only re-checked on a cache miss, so a key could keep verifying up
 	// to a full TTL beyond its not_after.
 	exp := clampOfferKeyExpiry(now, r.ttl, notAfter)
-	r.mu.Lock()
-	r.cache[domain] = offerKeyEntry{key: key, exp: exp}
-	r.mu.Unlock()
+	r.cache.Put(domain, offerKeyEntry{key: key, exp: exp})
 	return key, nil
 }
 

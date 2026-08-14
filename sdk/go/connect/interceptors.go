@@ -19,11 +19,23 @@ type requestIDInterceptor struct {
 	mint core.RequestIDFunc
 }
 
-func newRequestIDInterceptor(mint core.RequestIDFunc) connectrpc.Interceptor {
+// requestIDMint resolves the correlation-id source once, so every leg of a client
+// reads the same one.
+//
+// It is a named function rather than a nil check at each site because the legs do
+// not share a mechanism: the RPC legs correlate through the interceptor below, and
+// the delivery fetch is a plain GET that never reaches an interceptor and takes its
+// own hook. Two nil checks are two places for the default to drift, and the leg
+// that would drift silently is the one carrying no id at all.
+func requestIDMint(mint core.RequestIDFunc) core.RequestIDFunc {
 	if mint == nil {
-		mint = core.DefaultRequestID
+		return core.DefaultRequestID
 	}
-	return &requestIDInterceptor{mint: mint}
+	return mint
+}
+
+func newRequestIDInterceptor(mint core.RequestIDFunc) connectrpc.Interceptor {
+	return &requestIDInterceptor{mint: requestIDMint(mint)}
 }
 
 func (i *requestIDInterceptor) WrapUnary(next connectrpc.UnaryFunc) connectrpc.UnaryFunc {

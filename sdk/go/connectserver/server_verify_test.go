@@ -227,15 +227,22 @@ func TestServerVerify_FirstRequestAcceptedReplayRejected(t *testing.T) {
 	client := rampconnect.NewClient(srv.URL,
 		rampconnect.WithSigner(f.signer),
 		rampconnect.WithOfferKey(off.exchangePub),
+		// A purchase carries a detached acceptance covering the requester, so a
+		// client that has not been told who it is cannot buy.
+		rampconnect.WithRequester(&rampv1.Requester{
+			Id:     "https://agent.test",
+			Domain: "agent.test",
+			Type:   rampv1.RequesterType_REQUESTER_TYPE_AGENT,
+		}),
 	)
 	res, err := client.Discover(context.Background(), &rampv1.ResourceQuery{})
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(res.Verified) != 1 {
-		t.Fatalf("want 1 verified offer to Execute, got %d", len(res.Verified))
+	if len(res.Verified()) != 1 {
+		t.Fatalf("want 1 verified offer to Execute, got %d", len(res.Verified()))
 	}
-	verified := res.Verified[0]
+	verified := res.Verified()[0]
 
 	// Fixed idempotency key pins the nonce across both Execute calls so the second
 	// is a genuine replay of the first.

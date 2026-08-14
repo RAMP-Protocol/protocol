@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
@@ -100,6 +101,35 @@ func SignOfferAcceptance(priv ed25519.PrivateKey, offer *rampv1.Offer, requester
 		return "", err
 	}
 	return hex.EncodeToString(ed25519.Sign(priv, payload)), nil
+}
+
+// SignOfferAcceptanceWith signs the canonical acceptance payload through an
+// injected Signer, so an application whose key lives in a KMS or an HSM can
+// produce an acceptance without ever handing the key over. It is the form the
+// SDK's own client uses; SignOfferAcceptance above is the direct-key form for a
+// caller that already holds the bytes. Both cover the identical payload from
+// CanonicalAcceptanceBytes, so the two are interchangeable on the wire.
+//
+// The acceptance is signed with the same key that signs the caller's requests:
+// its thumbprint becomes the delivery URL's agent_id, which is what the edge
+// later requires proof of possession of.
+func SignOfferAcceptanceWith(ctx context.Context, signer Signer, offer *rampv1.Offer, requester *rampv1.Requester, idempotencyKey string) (string, error) {
+	if signer == nil {
+		return "", errors.New("helpers: acceptance signer is nil")
+	}
+	if signer.Algorithm() != AlgEd25519 {
+		return "", fmt.Errorf("%w: offer acceptance requires %q, signer offers %q",
+			ErrUnsupportedAlgorithm, AlgEd25519, signer.Algorithm())
+	}
+	payload, err := CanonicalAcceptanceBytes(offer, requester, idempotencyKey)
+	if err != nil {
+		return "", err
+	}
+	sig, err := signer.Sign(ctx, payload)
+	if err != nil {
+		return "", fmt.Errorf("helpers: sign offer acceptance: %w", err)
+	}
+	return hex.EncodeToString(sig), nil
 }
 
 // VerifyOfferAcceptance verifies signatureHex (an AgentAcceptance.signature)

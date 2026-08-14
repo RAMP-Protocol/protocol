@@ -707,3 +707,211 @@ reason enum a Go exchange emitted, never on a human string. Emit and decode are 
 to one shared oracle corpus (`error-detail-vectors.json`) replayed by all three
 languages, so the typed-failure contract is verified end-to-end across the language
 boundary rather than trusted to match by inspection.
+
+## Discovery answers are grouped per URI, not flattened
+
+A discovery call is per-URI: an agent asks about several resources at once, and both
+`DiscoverResources` and the Broker's `Resolve` answer with one `OfferGroup` per
+requested URI, each either carrying offers or carrying a typed `OfferAbsenceReason`
+explaining why it carries none. The SDK returns that shape rather than a flat list,
+with the fail-closed `{verified, rejected}` split preserved **inside** each group and
+produced by the one `Verifier` — never a second verification path.
+
+Flattening loses two things, and the second is unrecoverable. It drops the
+attribution — which offer answers which URI — and it erases a REFUSED URI entirely,
+because an empty group has no offer to carry its identity back. That matters because
+the absence vocabulary is a set of different actions: `NOT_IN_CATALOG` means give up,
+`SCOPE_INSUFFICIENT` means acquire an entitlement and retry, `CONTENT_BLOCKED` means
+never retry. Flattened, all three read as "found nothing", which is the trial-and-error
+the field exists to prevent.
+
+Two consequences worth stating. The absence reasons are carried as POINTERS, because a
+responder may legitimately withhold a reason where the existence of a resource must
+itself stay hidden — so "absent" and "unspecified" have to stay distinguishable, and a
+generated getter collapses them. And `ResourceResponse` carries a grouped list *and* a
+flat one, with the flat one a single-URI convenience mirror; the two are read as
+alternatives, never concatenated, because a responder that populates both would
+otherwise have every offer counted twice.
+
+## A signed leg refuses redirects; the guarded fetch follows them
+
+The SSRF-guarded HTTP client follows up to five redirects, re-pinning the address and
+re-vetting the scheme at each hop. That is correct for what it was built for: fetching
+public well-known documents and key directories, where there is nothing to leak.
+
+It is wrong for any request carrying a credential. A usage report, a dispute and a
+delivery fetch all take only the guarded `.Transport` and install their own refusal.
+For the RPC legs, following a redirect would re-sign the caller's request for a target
+the peer chose — after the endpoint check had already passed, which is precisely the
+window that check exists to close. For the delivery fetch it is worse: the proof of
+possession covers `@target-uri`, so replaying it at a new location fails the edge's own
+check, and re-signing per hop would hand a fresh proof of possession of the agent's key
+to whatever host the first hop named. Redirect support on those legs would need per-hop
+re-signing plus host anchoring, and is deliberately not attempted.
+
+The transport error is rebuilt before it surfaces, because the HTTP client wraps every
+failure in a value carrying the full URL it was dialing — query included. On a refused
+redirect that is a credential belonging to a URL the *first hop* chose, so the wrapper
+leaks even when the SDK's own message is already redacted.
+
+## A usage report's destination comes off the message, not from configuration
+
+A usage report must reach the Exchange that ISSUED the offer, and that Exchange's
+address is read from its own `/.well-known/ramp.json` — never from configuration. A
+signature covers the `exchange` DOMAIN; it says nothing about where that domain's
+endpoint lives or where its DNS points.
+
+The SDK takes the domain off `UsageReport.exchange` rather than as an argument, and
+offers no option to supply an endpoint. Leaving no configuration slot for it is what
+makes the rule structural instead of a convention someone can quietly reverse: there is
+no parameter a configured origin could be passed as. (`Dispute` is the exception, and
+only because `DisputeRequest` carries no `exchange` field to read — it takes the domain
+as an argument and runs the identical checks.)
+
+Five checks precede the send, in order: refuse anything that is not a plain hostname,
+because the value is concatenated into a URL and a smuggled path would choose what gets
+fetched; resolve the endpoint from that host's own manifest, cached per host; require
+the endpoint to be that host or a subdomain of it, since the manifest is only as
+trustworthy as the host serving it and a dial-time address guard has no objection to an
+unrelated PUBLIC host; dial through the SSRF guard, applied to the report itself and
+not only to the manifest fetch; and refuse redirects. The per-origin client pool that
+follows is bounded and evicts least-recently-used, because which Exchanges appear is
+driven by incoming offers — an open-ended, caller-influenced key space.
+
+## Host anchoring compares host and port, but not scheme
+
+A value a remote document supplies — an Exchange's advertised endpoint, a WBA
+directory's revocation URL — is checked against the host that served that document
+before anything signed is sent to it: it may name itself or one of its own
+subdomains, and nothing else. The match is on a full dot-delimited label boundary,
+so `evil-a.com` is not a subdomain of `a.com`; a bare suffix comparison gets that
+wrong, and it is the mistake an attacker registers a domain to exploit.
+
+The rule is now normative and stated where an implementer will find it: the
+`WellKnownManifest.endpoint` proto comment, and the manifest page on the docs site.
+It was not always — for most of this work it lived only in one client's code,
+inherited from a port rather than decided, which is why an Exchange advertising a
+separate domain could be conformant and then stop being so. Enforcement sits in
+the shared endpoint resolver, so every consumer of that resolver inherits it.
+
+The anchor is the host that SERVED the manifest, not the `domain` member inside
+it. That member is self-asserted, so anchoring to it would let a hostile manifest
+name whatever endpoint it liked and validate itself. For a conformant Exchange the
+two agree, which is exactly why the distinction only shows against a document
+worth refusing.
+
+One SDK enforces it. Python and TypeScript ship endpoint resolvers that do not,
+and the predicate they would need does not exist there — only private
+near-namesakes in their WBA modules, and neither is a counterpart. TypeScript's
+compares `URL.host`, which folds a default port away as this rule now requires,
+but it is not exported; Python's compares `netloc`, which keeps an explicit `:443`
+verbatim and carries any userinfo along with it. Closing that is tracked
+separately.
+
+The comparison includes the PORT. An earlier version of this rule ignored it, on
+the reasoning that TLS binds hostnames rather than ports, so a service on another
+port of the same name is not another host. That was overruled deliberately: what
+is being anchored is a place a signed call is sent, another port is another
+service that the party publishing the anchor need not control, and having one rule
+compare the port while another ignored it was the worse outcome of the two — the
+predicate existed twice in Go and the copies had already drifted apart on exactly
+this question. An Exchange reachable on a non-default port now names that port on
+both sides.
+
+One detail carries the whole decision: a DEFAULT port and an omitted port are the
+same port. `url.Parse` does not materialize an implicit port, so a comparison of
+raw authorities would refuse an operator who merely wrote `:443` out in full — a
+spelling check wearing a security check's clothes. The folding is scheme-relative,
+which is also what keeps it from becoming something it is not: the scheme is still
+not compared here — that is the guarded transport's decision, in one place, driven
+by one flag — and `http://x` and `https://x` both reduce to no port rather than
+diverging on 80 versus 443.
+
+Scheme-relative folding needs a scheme on both sides, and both ANCHORS in this SDK
+arrive without one: a WBA directory's authority and an `Offer.exchange` host are
+bare `host[:port]` values. Reading those as https — the assumption that lets a bare
+domain be told apart from a path — quietly broke the rule for plaintext
+deployments: an anchor of `a.example:80` kept its port, because 80 is not https's
+default, while the candidate `http://a.example:80` folded the same port away, so
+one authority reached two answers and every plaintext WBA directory that spelled
+`:80` in full stopped anchoring its own revocation URL. A skipped revocation poll
+leaves a revoked key resolving, which is a great deal worse than the spelling it
+was refusing. A side that named no scheme therefore borrows the other's. That
+decides only WHICH port is the default, never whether two different ports are
+equal: an anchor of `x:443` still refuses `http://x:80`, since 443 is not http's
+default.
+
+## What the manifest fetch does not guarantee, and why that is bounded
+
+The address a usage report goes to is read from the issuing Exchange's own
+`/.well-known/ramp.json`. That fetch runs on the guarded client, which FOLLOWS up
+to five redirects — re-pinning the address and re-vetting the scheme at each hop,
+but not anchoring the host. So the party that answers for the manifest can be one
+a redirect chose, and the answer is cached per host for the TTL.
+
+That is deliberate and it is bounded, but the bound comes from somewhere else:
+whatever the manifest says, the endpoint it advertises must still anchor to the
+ORIGINAL offer domain before a signed call goes there. A redirect can therefore
+change who answers the question, never where the report lands. What it can weaken
+is the assumption that a manifest served over TLS from the provider's own domain
+is thereby endorsed by it.
+
+Refusing redirects on that one fetch was considered and not taken here. The
+five-hop posture is stated as identical across all three languages, so a Go-only
+refusal would create a divergence in the transport policy rather than remove a
+risk — and the risk it removes is already contained by the anchoring above. Worth
+revisiting as a three-language change.
+
+## One agent identity, one key
+
+The protocol carries a single agent identity and the SDK does not offer a second.
+`agent_identity_hash` is defined as the RFC 7638 thumbprint of the agent's
+request-signing key; an Exchange verifies the detached offer acceptance against the
+key registered for whichever caller the request signature identified; and the
+delivery URL is bound to that same thumbprint, which a later fetch must prove
+possession of. A separately-custodied acceptance key would be refused at execute,
+and any URL it did produce could never be fetched — the presented key would not
+match the binding. So the client takes one Signer, and the public half of that
+same key for the fetch header, which a Signer cannot yield.
+
+One consequence for the cross-language surface: Go's `SignAgentBinding` takes a
+`Signer` plus the public half, while Python's counterpart takes raw seed bytes.
+The parity map records them as counterparts because the face exists in both, but
+the custody posture differs — the Go seam exists precisely so the SDK never holds
+key material, and closing that gap belongs with the TypeScript/Python client work.
+
+## Bounds on a leg that dials wherever an offer points
+
+`ReportUsage` and `Dispute` reach an Exchange named inside an offer, so the origin
+is discovered at runtime and chosen by another party. Everything about that leg is
+therefore bounded rather than open-ended: the response size (Connect treats an
+unset cap as "any size" while compressing every exchange, so an unbounded read is
+an unbounded decompression into the caller's memory), the call deadline (an
+Exchange that accepts a connection and never answers would otherwise hold a call,
+a goroutine and a socket indefinitely), the per-origin client pool, and the
+endpoint cache beneath it. The key space for both caches is the same open-ended,
+caller-influenced set of hosts, so both evict least-recently-used at a fixed cap.
+
+The base-transport option cannot remove the guard on that leg. A caller can supply
+a transport — its own connection tuning, its own client certificates — and it is
+composed UNDERNEATH the address and scheme guards rather than in place of them.
+The only opt-out through that seam is the deployment-level SKIP_SSRF /
+ALLOW_INSECURE pair, which is one decision recorded in one place instead of a
+per-caller copy of it. An option that could silently disarm the guard is exactly
+how a security property becomes advisory.
+
+Two settings on a supplied transport are dropped rather than carried, because
+each would route the dial around the address check rather than under it: a proxy,
+which would have the dialer resolve and vet the PROXY instead of the destination,
+and a custom TLS dialer, which `net/http` prefers over the pinned dialer whenever
+the scheme is https — which is every RAMP leg. The second is the more dangerous
+of the two because it fails silently and on the ordinary path: a transport that
+carries one dials wherever it likes and no error says the pin never ran. TLS
+itself stays configurable through `TLSClientConfig`, which is kept, so the
+customisation the seam exists for survives and only the dialer is refused.
+
+The claim is scoped to that seam deliberately. A caller that injects a whole
+`*http.Client` into a resolver, or supplies its own endpoint resolver, has taken
+ownership of that fetch and the guard is that caller's to install — which is a
+different bargain from an option that quietly weakens a fetch the SDK still
+performs.

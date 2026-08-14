@@ -43,7 +43,7 @@ func TestEnforceCreatedExpires_MaxAgeClamp(t *testing.T) {
 			maxAge: 5 * time.Minute, wantErr: ErrSignatureLifetimeTooLong,
 		},
 		{
-			name: "clamp: signer-chosen 10y window rejected under a minutes clamp",
+			name:    "clamp: signer-chosen 10y window rejected under a minutes clamp",
 			created: nowUnix, expires: nowUnix + int64((10 * 365 * 24 * time.Hour).Seconds()),
 			maxAge: 5 * time.Minute, wantErr: ErrSignatureLifetimeTooLong,
 		},
