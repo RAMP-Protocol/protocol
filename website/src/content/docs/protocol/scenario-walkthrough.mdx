@@ -491,7 +491,7 @@ Broker → SSP-Alpha (multi-URI batch query) — `POST https://exchange.ssp-alph
 }
 ```
 
-The forwarding chain travels in the HTTP headers, not the request body: the agent's labeled RFC 9421 signature and the Broker's labeled RFC 9421 signature both sit in the `Signature`/`Signature-Input` headers. SSP-Alpha's Exchange verifies the full stack:
+The forwarding chain travels in the HTTP headers, not the request body: the agent's labeled RFC 9421 signature and the Broker's labeled RFC 9421 signature both sit in the `Signature`/`Signature-Input` headers. The agent's signature covers `@target-uri` against the Exchange's endpoint -- the final recipient -- not the Broker's relay URL. SSP-Alpha's Exchange verifies the full stack:
 1. The agent's RFC 9421 HTTP Message Signature (alg=ed25519) -- fetch public key from `claude.ai/.well-known/ramp.json`, Ed25519 verify
 2. Each forwarding hop's labeled RFC 9421 HTTP Message Signature -- for each one, fetch public key from `{hop.domain}/.well-known/ramp.json`, Ed25519 verify (each hop signs the request plus the prior hop's signature)
 

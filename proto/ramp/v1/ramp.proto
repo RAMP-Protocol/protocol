@@ -132,22 +132,21 @@ import "ramp/v1/vocab.proto";
 //
 // Why a body field, when the RFC 9421 signature already covers `@target-uri`:
 // the signature proves the sender signed THE URL IT DIALLED, not that the URL
-// was the right one. On a relayed path (Agent → Broker → … → Exchange) each hop
-// signs its own `@target-uri`, so the agent's signature covers the Broker's URL
-// and the Exchange receives no agent statement about where the request was meant
-// to go. On a direct hop the dial target itself came from a fetched, cached
-// manifest, so signing it proves only that the sender trusted that document at
-// that moment. This field rides inside the body, covered by the sender's own
-// content-digest, which a relaying intermediary cannot alter without breaking
-// the inner signature — so it is the statement of intended recipient that
-// survives both cases. It is the same reasoning `Offer.exchange` already
-// carries for the execute-routing target.
+// was the right one. The dial target is resolved from a fetched, cached
+// /.well-known/ramp.json, so a poisoned or stale resolution redirects the
+// request while every signature still verifies. This field states whom the
+// sender MEANT, independently of that resolution, and the genuine recipient
+// rejects a request that names someone else. The field is stamped by whoever
+// authors each request — the agent on the requests it signs, a Broker on the
+// legs it authors as sender (the discovery fan-out, a re-packaged
+// transaction). It is a statement BY that sender, not tamper-evidence against
+// it; for transactions the binding audience statement is per item,
+// Offer.exchange inside the Exchange-signed offer (see below).
 //
 // A recipient MUST reject a request whose `exchange` is not one of its own
 // domains. That rejection is INVALID_ARGUMENT with NO typed reason: a
 // mis-addressed request is malformed rather than a domain-level failure, and no
-// ErrorDetail reason family covers it. The same check is what stops a request
-// captured at one recipient from being replayed at another.
+// ErrorDetail reason family covers it.
 //
 // Two messages deliberately do NOT carry the field, and both absences are
 // load-bearing rather than oversights. DiscoveryRequest travels one direct hop
@@ -268,6 +267,12 @@ message ResourceQuery {
   // RFC 9421 HTTP Message Signature (Signature / Signature-Input), and each
   // signature covers the request plus the prior hop's signature — so the ordered
   // set of signatures IS the forwarding chain, tamper-evident and order-bound.
+  // On this verbatim-forwarded path the originating agent signs its
+  // `@target-uri` against the FINAL recipient's resolved endpoint (the
+  // Exchange), not the relay URL it dials; each forwarding party then chains
+  // its own signature over the request as received. A message that TERMINATES
+  // at the Broker (DiscoveryRequest) is not forwarding: there the Broker is
+  // the final recipient, and the agent signs the Broker's URL.
   // The Exchange resolves each hop's key (keyid → domain → /.well-known/ramp.json),
   // verifies every signature, and enforces RequestConstraints.max_hops /
   // WellKnownManifest.max_intermediary_hops by counting them. (Field 5 unused.)

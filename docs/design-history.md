@@ -181,15 +181,25 @@ independent, so the fields are too.
 Every addressed request carries `exchange`, the bare host of its intended
 recipient, and a recipient rejects a request naming someone else. The obvious
 objection is that the RFC 9421 request signature already covers `@target-uri`, so
-the recipient is established without a body field. It is not, in either of the
-two cases that matter. On a relayed path each hop signs its own `@target-uri`, so
-the agent's signature covers the Broker's URL and the Exchange never receives an
-agent-authenticated statement about where the request was meant to go. On a
-direct hop the signature does cover the Exchange's own URL — but that URL was
-resolved out of a fetched, cached manifest, so the signature proves the sender
-signed *the URL it dialled*, not that the URL was the right one. A body field is
-covered by the sender's own content-digest, which a relaying intermediary cannot
-alter without breaking the inner signature, so it survives both.
+the recipient is established without a body field. It is not. The signature proves the sender signed *the URL it dialled*, not that
+the URL was the right one: the dial target is resolved from a fetched, cached
+manifest, so a poisoned or stale resolution redirects the request while the
+signature still verifies. The body field states whom the sender meant,
+independently of that resolution, and the recipient rejects a request naming
+someone else. On a verbatim-forwarded path the agent signs its `@target-uri`
+against the final recipient's endpoint, not the Broker's, so the field is a
+redundant cross-check there, same as on a direct hop. On the legs a Broker
+authors itself (the discovery fan-out, a re-packaged transaction) the Broker
+stamps the field as sender — the field is a statement by whoever signed the
+request it rides in, never tamper-evidence against that party. For transactions
+the binding audience statement is `Offer.exchange` inside the Exchange-signed
+offer.
+
+Cross-recipient replay is not this field's job. A recipient that reconstructs
+`@target-uri` from its own configured identity rejects a replayed capture at
+signature verification already. The body field backstops only a recipient that
+rebuilds `@target-uri` from the arriving request, where a forged Host can make
+a signature over another party's URL verify.
 
 The value is a bare host and never an endpoint URL. An endpoint in the payload
 would hand the caller the choice of where the next hop dials, which is the lever

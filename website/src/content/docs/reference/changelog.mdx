@@ -17,16 +17,17 @@ recipient ("exchange.example", "exchange.example:8081"), never an endpoint URL: 
 in the payload would hand the caller the choice of where the next hop dials, which is the
 lever the well-known resolver exists to remove. A recipient MUST reject a request whose
 `exchange` is not one of its own domains, with `INVALID_ARGUMENT` and no typed reason — a
-mis-addressed request is malformed rather than a domain-level failure, and that same check
-is what stops a request captured at one recipient from being replayed at another.
+mis-addressed request is malformed rather than a domain-level failure.
 
-The signature does not already establish this, in either case that matters. On a relayed
-path each hop signs its own `@target-uri`, so the agent's signature covers the Broker's URL
-and the Exchange never sees an agent statement about where the request was meant to go. On
-a direct hop the signature does cover the recipient's URL, but that URL came from a fetched,
-cached manifest — so it proves the sender signed *the URL it dialled*, not that the URL was
-right. The body field is covered by the sender's content-digest, which a relaying
-intermediary cannot alter without breaking the inner signature. Two messages are exempt and
+The signature does not already establish this. It proves the sender signed *the URL it
+dialled*, not that the URL was right: the dial target is resolved from a fetched, cached
+manifest, so a poisoned or stale resolution redirects the request while every signature
+still verifies. The body field states whom the sender meant, independently of that
+resolution, and the genuine recipient rejects a request naming someone else. The field is
+stamped by whoever authors each request — the agent on the requests it signs, a Broker on
+the legs it authors as sender — so it is a statement by that sender, not tamper-evidence
+against it. On a verbatim-forwarded path the agent signs its `@target-uri` against the
+final recipient's endpoint, not the Broker's. Two messages are exempt and
 both absences are load-bearing: `DiscoveryRequest` travels one direct hop and terminates at
 the Broker, which authors fresh per-Exchange `ResourceQuery` messages rather than
 forwarding it, and the agent cannot name the fan-out set in any case
