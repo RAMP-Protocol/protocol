@@ -565,7 +565,7 @@ func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[stri
 	case protoreflect.StringKind:
 		es = append(es, stringEdges(fd, fr.GetString())...)
 	case protoreflect.BytesKind:
-		es = append(es, bytesEdges(fd, fr.GetBytes())...)
+		es = append(es, bytesEdges(fd, fr)...)
 	case protoreflect.Int64Kind:
 		if r := fr.GetInt64(); r != nil {
 			if _, ok := r.GetGreaterThan().(*validate.Int64Rules_Gte); ok {
@@ -778,9 +778,14 @@ func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edg
 	// string.max_bytes while requiredgen's assertNoStringByteLengthRules panics
 	// on it (protoschema renders it as a CHARACTER count, so the generated
 	// clients would diverge from Go). The mutants below — and the max_bytes
-	// entry in classifiedRuleMembers — exist so the corpus and its class-6
-	// coverage guard arm themselves the day the sdk-types pipeline gets a
-	// byte-count refine and that panic is lifted.
+	// entry in classifiedRuleMembers — are what this generator would emit the day
+	// the sdk-types pipeline gets a byte-count refine and that panic is lifted.
+	//
+	// They stay because the cost is one branch inside a generator that already
+	// walks the rule. The class-6 corpus coverage guard did NOT stay: a coverage
+	// assertion that can never run is coverage on paper, and it also carried
+	// helpers no test ever exercised. Reintroducing max_bytes means writing the
+	// guard then, against the mutants below.
 	if n := r.GetMaxBytes(); n > 0 {
 		ascii := strings.Repeat("a", int(n)+1)
 		es = append(es, edge{label: "too_many_bytes", want: "string.max_bytes",
@@ -801,21 +806,28 @@ func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edg
 // len-1 is the empty value when min_len==1; protovalidate still reports
 // bytes.min_len for it (no presence on proto3 singular bytes), which the
 // generator's oracle check confirms at emit time.
-func bytesEdges(fd protoreflect.FieldDescriptor, r *validate.BytesRules) []edge {
+//
+// The rule is read through conformance.MustBytesLength so this generator, the
+// bytes_len.json manifest and the class-6 coverage guard cannot disagree about
+// which fields carry a length rule. It also means a zero-valued length rule dies
+// there with the field's name instead of reaching bytesOf(-1) and surfacing as
+// "strings: negative Repeat count".
+func bytesEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) []edge {
 	var es []edge
+	r := conformance.MustBytesLength(fd, fr)
 	if r == nil {
 		return es
 	}
-	if r.Len != nil {
-		short := bytesOf(int(r.GetLen()) - 1)
-		long := bytesOf(int(r.GetLen()) + 1)
+	if r.Kind == "len" {
+		short := bytesOf(int(r.Value) - 1)
+		long := bytesOf(int(r.Value) + 1)
 		es = append(es,
 			edge{label: "wrong_len_short", want: "bytes.len",
 				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfBytes(short)) }},
 			edge{label: "wrong_len_long", want: "bytes.len",
 				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfBytes(long)) }})
 	}
-	if n := r.GetMinLen(); r.Len == nil && n > 0 {
+	if n := r.Value; r.Kind == "min_len" {
 		short := bytesOf(int(n) - 1)
 		set := func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfBytes(short)) }
 		if n == 1 && !fd.HasPresence() {

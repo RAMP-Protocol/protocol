@@ -17,9 +17,11 @@ import (
 	"strings"
 	"testing"
 
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protovalidate "buf.build/go/protovalidate"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	rampadminv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/admin/v1"
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
@@ -225,6 +227,150 @@ func messageSnake(name string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// ─── INV-4: every bytes length rule is well formed ───────────────────────────
+//
+// A bytes length rule is ill formed when it sets len and min_len together, or
+// when its value is zero. Both make "does this field carry a length rule" answer
+// differently depending on whether the asker reads by presence or by value, and
+// four consumers ask it: corpusgen (mutants), bytesgen (the bytes_len.json
+// manifest), requiredgen (the required-fields manifest) and the class-6 corpus
+// coverage guard. conformance.BytesLength rejects both shapes for all of them.
+//
+// This test exists so `go test ./conformance` is where a developer SEES the
+// problem. Without it, ci-local.sh reaches corpusgen (line 66) before any test,
+// and a bytes.len:0 used to surface there as "strings: negative Repeat count"
+// from bytesOf(-1) — a message that names neither the field nor the rule.
+// corpusgen now dies with the same field-naming text this test prints, and the
+// test reports every offender instead of stopping at the first.
+func TestBytesLengthRulesWellFormed(t *testing.T) {
+	checked := 0
+	EachRuleSet(func(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, prefix string, fr *validate.FieldRules) {
+		if fr.GetBytes() == nil {
+			return
+		}
+		checked++
+		if _, err := BytesLength(fr); err != nil {
+			t.Errorf("%s.%s (%sbytes) %v", md.Name(), fd.Name(), prefix, err)
+		}
+	})
+	if checked == 0 {
+		t.Fatal("no bytes rules found in the contract — this guard would be vacuous; " +
+			"if the evidence rows really lost every bytes rule, delete the guard deliberately")
+	}
+}
+
+// TestBytesLengthAccessor is the anti-vacuity control for INV-4 and for the
+// shared accessor every consumer now reads: the walk above passes trivially if
+// BytesLength stops returning errors. It also pins the two-level descent, which
+// is what keeps a repeated.items rule from walking past a fail-closed guard.
+func TestBytesLengthAccessor(t *testing.T) {
+	lenRule := func(n uint64) *validate.FieldRules {
+		return &validate.FieldRules{Type: &validate.FieldRules_Bytes{Bytes: &validate.BytesRules{Len: &n}}}
+	}
+	minLenRule := func(n uint64) *validate.FieldRules {
+		return &validate.FieldRules{Type: &validate.FieldRules_Bytes{Bytes: &validate.BytesRules{MinLen: &n}}}
+	}
+
+	if r, err := BytesLength(lenRule(32)); err != nil || r == nil || r.Kind != "len" || r.Value != 32 {
+		t.Errorf("BytesLength(bytes.len:32) = %+v, %v; want {len 32}, nil", r, err)
+	}
+	if r, err := BytesLength(minLenRule(1)); err != nil || r == nil || r.Kind != "min_len" || r.Value != 1 {
+		t.Errorf("BytesLength(bytes.min_len:1) = %+v, %v; want {min_len 1}, nil", r, err)
+	}
+	if r, err := BytesLength(&validate.FieldRules{}); err != nil || r != nil {
+		t.Errorf("BytesLength(no bytes rule) = %+v, %v; want nil, nil", r, err)
+	}
+	// The two ill-formed shapes MUST be errors, not a silent "no length rule" —
+	// that reading is what let a zero-valued rule enter one consumer's view of the
+	// contract and vanish from another's.
+	if _, err := BytesLength(lenRule(0)); err == nil {
+		t.Error("BytesLength(bytes.len:0) returned no error; an explicit zero length must be a contract error")
+	}
+	if _, err := BytesLength(minLenRule(0)); err == nil {
+		t.Error("BytesLength(bytes.min_len:0) returned no error; an explicit zero floor must be a contract error")
+	}
+	both := lenRule(32)
+	one := uint64(1)
+	both.GetBytes().MinLen = &one
+	if _, err := BytesLength(both); err == nil {
+		t.Error("BytesLength(bytes.len:32 + bytes.min_len:1) returned no error; one of the two rules would be enforced and the other silently dropped")
+	}
+
+	// The generators call MustBytesLength, so its panic — not the error above —
+	// is what a developer actually reads. It must name the offending field: the
+	// message it replaced was "strings: negative Repeat count" from bytesOf(-1).
+	fd := (&rampadminv1.TransactionState{}).ProtoReflect().Descriptor().Fields().ByName("signed_url_hash")
+	if fd == nil {
+		t.Fatal("TransactionState has no signed_url_hash field — pick another bytes field for this control")
+	}
+	func() {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Error("MustBytesLength did not panic on bytes.len:0 — a generator would read it as 'no length rule' and carry on")
+				return
+			}
+			if msg, _ := r.(string); !strings.Contains(msg, string(fd.FullName())) {
+				t.Errorf("MustBytesLength panicked with %q, which does not name the field %s", r, fd.FullName())
+			}
+		}()
+		MustBytesLength(fd, lenRule(0))
+	}()
+}
+
+// TestRuleSetsDescendIntoItems pins the descent the fail-closed guards depend on.
+// The guards' predicates run per rule SET, so a top-level-only sweep leaves them
+// open on every repeated field. A repeated.items.string.max_bytes rule — exactly
+// the shape requiredgen's assertNoStringByteLengthRules forbids contract-wide —
+// must be visible through RuleSets and invisible to a top-level-only read.
+func TestRuleSetsDescendIntoItems(t *testing.T) {
+	maxBytes := uint64(64)
+	fr := &validate.FieldRules{Type: &validate.FieldRules_Repeated{Repeated: &validate.RepeatedRules{
+		Items: &validate.FieldRules{Type: &validate.FieldRules_String_{String_: &validate.StringRules{MaxBytes: &maxBytes}}},
+	}}}
+
+	if _, _, ok := StringByteLength(fr); ok {
+		t.Fatal("StringByteLength saw an item-level rule in the top-level rule set — the test's premise is wrong")
+	}
+	sets := RuleSets(fr)
+	if len(sets) != 2 || sets[0].Prefix != "" || sets[1].Prefix != "repeated.items." {
+		t.Fatalf("RuleSets returned %d sets with prefixes %q — want the field's own rules then repeated.items.", len(sets), prefixesOf(sets))
+	}
+	found := false
+	for _, rs := range sets {
+		if member, n, ok := StringByteLength(rs.Rules); ok {
+			found = true
+			if rs.Prefix != "repeated.items." || member != "max_bytes" || n != 64 {
+				t.Errorf("StringByteLength found %s%s:%d; want repeated.items.max_bytes:64", rs.Prefix, member, n)
+			}
+		}
+	}
+	if !found {
+		t.Error("a repeated.items.string.max_bytes rule was invisible to the sweep — every guard built on it is open on repeated fields")
+	}
+
+	// The contract really uses this shape, so the descent is not theoretical: the
+	// real walk must reach item rules too, or the guards are wide on live fields.
+	items := 0
+	EachRuleSet(func(_ protoreflect.MessageDescriptor, _ protoreflect.FieldDescriptor, prefix string, _ *validate.FieldRules) {
+		if prefix == "repeated.items." {
+			items++
+		}
+	})
+	if items == 0 {
+		t.Error("EachRuleSet visited no repeated.items rule set, but the contract declares them " +
+			"(ListRequest.filters and five ramp.v1 fields) — the descent regressed")
+	}
+}
+
+func prefixesOf(sets []RuleSet) []string {
+	out := make([]string, 0, len(sets))
+	for _, rs := range sets {
+		out = append(out, rs.Prefix)
+	}
+	return out
 }
 
 // ─── INV-3 removed ───────────────────────────────────────────────────────────

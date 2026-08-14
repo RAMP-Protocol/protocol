@@ -6,11 +6,16 @@
 // These classes were the blind spots that let money/validation bugs ship
 // green: money's divergent value space, the empty-money
 // positive ” accept, repeated-item length bounds, pattern-derived
-// required-presence, presence-tracked-enum omitted-is-valid, and the bytes /
-// max_bytes rule shapes corpusgen once skipped silently. Each is
+// required-presence, presence-tracked-enum omitted-is-valid, and the bytes
+// length rule shapes corpusgen once skipped silently. Each is
 // asserted over the corpus JSON — the behavioral
 // artifact the clients consume — not over corpusgen source. When corpusgen is
 // updated to emit these mutants, each assertion flips to green.
+//
+// Every class here guards a rule shape that CAN reach the corpus. A guard
+// waiting for a shape the contract forbids never runs, so it is coverage on
+// paper only; string.max_bytes was such a case and was removed rather than kept
+// as forward provisioning (see class 6).
 package conformance
 
 import (
@@ -116,7 +121,7 @@ func ruleMatches(rules []string, substr string) bool {
 // gate stayed green: (1) money-specific killer values, (2) the accepted-empty
 // money edge, (3) repeated-item length bounds, (4) pattern-derived required
 // presence, (5) presence-tracked-enum omitted-is-valid, and (6) the
-// bytes.len / bytes.min_len / string.max_bytes rule shapes. Each subtest is an
+// bytes.len / bytes.min_len rule shapes. Each subtest is an
 // independent coverage assertion whose failure names exactly which mutant
 // class the corpus lacks; a class fails RED until corpusgen emits its mutants
 // and turns red again if a regeneration drops them.
@@ -226,21 +231,26 @@ func TestCorpusCoverage(t *testing.T) {
 			"reject every omitting feed with all gates green (%d cases scanned)", len(cases))
 	})
 
-	// Class 6 — bytes.len / bytes.min_len / string.max_bytes. These rule shapes
-	// (the evidence rows' Ed25519 keys, canonical-bytes fields, signed_url_hash)
-	// once reached ZERO corpus cases because corpusgen skipped unknown rule
-	// shapes silently. Each shape is required only while the SCHEMA carries it
-	// (derived from the contract descriptors, not hardcoded), so dropping a rule
-	// from the contract does not strand the guard, and reintroducing one arms it
-	// again. For string.max_bytes, additionally require a multibyte mutant —
-	// over the limit in BYTES while under it in characters — so a client that
-	// counts characters cannot pass.
-	t.Run("invalid_bytes_and_max_bytes_rules", func(t *testing.T) {
-		bytesLen, bytesMinLen, stringMaxBytes := schemaRuleShapes()
+	// Class 6 — bytes.len / bytes.min_len. These rule shapes (the evidence rows'
+	// Ed25519 keys, canonical-bytes fields, signed_url_hash) once reached ZERO
+	// corpus cases because corpusgen skipped unknown rule shapes silently. Each
+	// shape is required only while the SCHEMA carries it (derived from the
+	// contract descriptors, not hardcoded), so dropping a rule from the contract
+	// does not strand the guard, and reintroducing one arms it again.
+	//
+	// string.max_bytes is NOT part of this class. The byte-vs-character bug it
+	// would guard (protoschema renders max_bytes as a CHARACTER-counting
+	// minLength/maxLength) is prevented one step earlier, at the contract:
+	// requiredgen's assertNoStringByteLengthRules panics on any string
+	// byte-length rule at any rule level, so the rule cannot be committed and no
+	// corpus case for it can ever exist. A branch here waiting for one would
+	// never run. If the sdk-types pipeline gains a byte-count refine and that
+	// panic is lifted, the corpus coverage for max_bytes comes back with it.
+	t.Run("invalid_bytes_rules", func(t *testing.T) {
+		bytesLen, bytesMinLen := schemaRuleShapes()
 		needRules := map[string]bool{
-			"bytes.len":        bytesLen,
-			"bytes.min_len":    bytesMinLen,
-			"string.max_bytes": stringMaxBytes,
+			"bytes.len":     bytesLen,
+			"bytes.min_len": bytesMinLen,
 		}
 		for rule, need := range needRules {
 			if !need {
@@ -259,121 +269,34 @@ func TestCorpusCoverage(t *testing.T) {
 					rule, rule, len(cases))
 			}
 		}
-		if !stringMaxBytes {
-			return // no max_bytes rule in the schema — nothing to pin
-		}
-		limits := maxBytesLimits()
-		for _, c := range cases {
-			if c.Valid || !ruleMatches(c.Rules, "string.max_bytes") {
-				continue
-			}
-			// Anchored to the MUTATED field (the case id's second segment):
-			// an unanchored whole-JSON scan would be satisfied by a multibyte
-			// value in an unrelated auto-filled field, proving nothing about
-			// the byte-vs-character counting of the field under test.
-			field := mutatedField(c.ID)
-			limit, ok := limits[c.Message+"/"+field]
-			if !ok {
-				continue // the mutated field carries no max_bytes limit to straddle
-			}
-			for _, s := range fieldStringValues(decodeCaseJSON(t, c.JSON), field) {
-				// The property under test is the STRADDLE, not "is multibyte":
-				// over the limit in bytes AND within it in characters. A mutant
-				// over the limit in both units is rejected by a character-counting
-				// client too, so it would leave the bug class uncovered while this
-				// guard stayed green.
-				if uint64(len(s)) > limit && uint64(len([]rune(s))) <= limit {
-					return // found a straddling max_bytes mutant on the mutated field
-				}
-			}
-		}
-		t.Errorf("MISSING CLASS 6 (multibyte max_bytes): no string.max_bytes mutant straddles "+
-			"its field's limit — over it in BYTES while within it in characters. Without that "+
-			"straddle a client that counts characters instead of bytes stays green (%d cases scanned)", len(cases))
 	})
 }
 
 // schemaRuleShapes reports which of the once-skipped rule shapes the contract
-// schema currently carries (top-level field rules, matching corpusgen's edge
-// scope). The class 6 guard requires corpus coverage only for shapes that are
-// actually in the schema.
+// schema currently carries. The class 6 guard requires corpus coverage only for
+// shapes that are actually in the schema.
 //
-// The walk goes through EachRuledField (contract.go), which panics on a resolver
+// The walk goes through EachRuleSet (contract.go), which panics on a resolver
 // error. This guard used to resolve the rules itself and skip an unresolvable
 // field, which read as "the schema has no such rule" and turned the whole class-6
 // requirement off with every gate green.
-func schemaRuleShapes() (bytesLen, bytesMinLen, stringMaxBytes bool) {
-	EachRuledField(func(_ protoreflect.MessageDescriptor, _ protoreflect.FieldDescriptor, fr *validate.FieldRules) {
-		if b := fr.GetBytes(); b != nil {
-			if b.Len != nil {
+//
+// The sweep descends into repeated.items, which is WIDER than corpusgen's edge
+// scope on purpose: a bytes length rule added at item level would arm this guard
+// while corpusgen emits no mutant for it, so the guard fails loudly instead of
+// staying quiet about a rule shape nothing exercises. Rule membership is read
+// through MustBytesLength so "the schema carries bytes.len" means the same thing
+// here as it does in corpusgen and the bytes_len.json manifest.
+func schemaRuleShapes() (bytesLen, bytesMinLen bool) {
+	EachRuleSet(func(_ protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, _ string, fr *validate.FieldRules) {
+		if r := MustBytesLength(fd, fr); r != nil {
+			switch r.Kind {
+			case "len":
 				bytesLen = true
-			}
-			if b.GetMinLen() > 0 {
+			case "min_len":
 				bytesMinLen = true
 			}
 		}
-		if s := fr.GetString(); s != nil && s.GetMaxBytes() > 0 {
-			stringMaxBytes = true
-		}
 	})
 	return
-}
-
-// maxBytesLimits maps "<Message>/<field>" to the field's string.max_bytes limit,
-// for every contract field carrying one. The multibyte half of the class-6 guard
-// needs the real limit: "is multibyte" alone is satisfied by a mutant that is
-// over the limit in characters too, which proves nothing about byte counting.
-func maxBytesLimits() map[string]uint64 {
-	out := map[string]uint64{}
-	EachRuledField(func(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
-		if s := fr.GetString(); s != nil && s.GetMaxBytes() > 0 {
-			out[string(md.Name())+"/"+string(fd.Name())] = s.GetMaxBytes()
-		}
-	})
-	return out
-}
-
-// mutatedField extracts the mutated field's JSON name from a corpus case id,
-// which corpusgen shapes as "Message/field/edge".
-func mutatedField(id string) string {
-	parts := strings.Split(id, "/")
-	if len(parts) < 2 {
-		return ""
-	}
-	return parts[1]
-}
-
-// fieldStringValues walks a decoded proto-JSON value and returns every string
-// found under the given key — directly, or as elements of an array under that
-// key — at any nesting depth (the mutated field may sit inside an auto-filled
-// sub-message).
-func fieldStringValues(v any, field string) []string {
-	var out []string
-	var walk func(any)
-	walk = func(x any) {
-		switch t := x.(type) {
-		case map[string]any:
-			for k, val := range t {
-				if k == field {
-					switch fv := val.(type) {
-					case string:
-						out = append(out, fv)
-					case []any:
-						for _, e := range fv {
-							if s, ok := e.(string); ok {
-								out = append(out, s)
-							}
-						}
-					}
-				}
-				walk(val)
-			}
-		case []any:
-			for _, e := range t {
-				walk(e)
-			}
-		}
-	}
-	walk(v)
-	return out
 }

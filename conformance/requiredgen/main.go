@@ -64,10 +64,15 @@ func main() {
 // so the required/HasPresence early returns there cannot skip it. No contract
 // field carries these rules today; implement a byte-count refine in the
 // sdk-types pipeline before adding one.
+//
+// The sweep is EachRuleSet, not EachRuledField: the rule is just as wrong at
+// repeated.items.string.max_bytes, and the contract already uses item-level
+// string rules on six fields, so a top-level-only sweep would be a guard with a
+// hole exactly where the shape is most likely to be added.
 func assertNoStringByteLengthRules() {
-	conformance.EachRuledField(func(_ protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
-		if s := fr.GetString(); s != nil && (s.GetMinBytes() > 0 || s.GetMaxBytes() > 0) {
-			panic(fmt.Sprintf("requiredgen: string byte-length rule on field %s — protoschema translates it to a CHARACTER count; implement a byte-count refine in the sdk-types pipeline first", fd.FullName()))
+	conformance.EachRuleSet(func(_ protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, prefix string, fr *validate.FieldRules) {
+		if member, n, ok := conformance.StringByteLength(fr); ok {
+			panic(fmt.Sprintf("requiredgen: string byte-length rule %sstring.%s:%d on field %s — protoschema translates it to a CHARACTER count; implement a byte-count refine in the sdk-types pipeline first", prefix, member, n, fd.FullName()))
 		}
 	})
 }
@@ -113,14 +118,14 @@ func zeroRejected(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) bool
 		// too (TransactionRequest.items — the corpus too_few mutant).
 		return true
 	}
-	if b := fr.GetBytes(); b != nil {
-		// A non-empty floor (min_len≥1) or an exact non-zero length (len>0)
-		// rejects the zero value (empty bytes), so omission must be rejected
-		// by the clients too — these are the evidence rows' Ed25519 keys and
-		// canonical-bytes fields.
-		if b.GetMinLen() >= 1 || (b.Len != nil && b.GetLen() > 0) {
-			return true
-		}
+	// Any bytes length rule rejects the zero value (empty bytes) — a floor of at
+	// least 1 and an exact length of at least 1 both do — so omission must be
+	// rejected by the clients too. These are the evidence rows' Ed25519 keys and
+	// canonical-bytes fields. conformance.MustBytesLength owns the "at least 1"
+	// part: a zero-valued length rule is a contract error there, not a rule that
+	// reaches here.
+	if conformance.MustBytesLength(fd, fr) != nil {
+		return true
 	}
 	if i := fr.GetInt64(); i != nil {
 		switch x := i.GetGreaterThan().(type) {

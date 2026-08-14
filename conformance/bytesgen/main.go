@@ -22,9 +22,11 @@
 // Anything this pipeline cannot translate fails the generator closed, because
 // protoschema's rendering of an untranslated shape must not ship silently loose
 // (the convention requiredgen uses for string.min_bytes): any OTHER bytes rule
-// member (max_len, pattern, prefix, …), len and min_len set together on one
-// field, and an explicitly zero-valued length rule. See lengthRule for why each
-// one is fatal rather than skipped.
+// member (max_len, pattern, prefix, …) and a length rule sitting at
+// repeated.items level both die in assertTranslatable, while len and min_len set
+// together on one field and an explicitly zero-valued length rule die in
+// conformance.BytesLength — they are contract errors for every consumer, not a
+// bytesgen-only opinion.
 //
 // Like requiredgen and uniquegen, this is a Go program because Go protovalidate
 // is the authoritative view of the rules (the same engine the conformance corpus
@@ -57,16 +59,24 @@ func main() {
 		out = os.Args[1]
 	}
 	lens := map[string]map[string]map[string]uint64{}
-	conformance.EachRuledField(func(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
-		r, ok := lengthRule(fd, fr)
-		if !ok {
+	// EachRuleSet, not EachRuledField: the manifest can only express a length rule
+	// on the field itself, so an item-level one must be caught rather than walked
+	// past. assertTranslatable dies on it; the prefix check below keeps item rules
+	// out of the manifest.
+	conformance.EachRuleSet(func(md protoreflect.MessageDescriptor, fd protoreflect.FieldDescriptor, prefix string, fr *validate.FieldRules) {
+		assertTranslatable(fd, prefix, fr)
+		if prefix != "" {
+			return
+		}
+		r := conformance.MustBytesLength(fd, fr)
+		if r == nil {
 			return
 		}
 		msg := string(md.Name())
 		if lens[msg] == nil {
 			lens[msg] = map[string]map[string]uint64{}
 		}
-		lens[msg][string(fd.Name())] = r
+		lens[msg][string(fd.Name())] = map[string]uint64{r.Kind: r.Value}
 	})
 	b, err := json.MarshalIndent(lens, "", "  ")
 	if err != nil {
@@ -77,57 +87,37 @@ func main() {
 	}
 }
 
-// lengthRule reports fd's bytes length rule as a one-entry {"len": N} or
-// {"min_len": N} map, if fd carries one. fr is the field's resolved rules
-// (conformance.EachRuledField already turned a resolver error into a panic —
-// it is not "no rule", and swallowing it would drop the field from the manifest
-// and lose its length enforcement).
+// assertTranslatable dies on any bytes rule shape merge_schema.py's
+// tighten_bytes_len cannot translate. Anything it cannot represent must stop the
+// build rather than ship with protoschema's loose rendering and every gate green
+// (fail closed, the requiredgen convention for string.min_bytes).
 //
-// Three shapes panic, all for the same reason: the manifest carries ONE rule
-// kind per field, and merge_schema.py's tighten_bytes_len translates exactly
-// that. Anything it cannot represent must stop the build rather than ship with
-// protoschema's loose rendering and every gate green (fail closed, the
-// requiredgen convention for string.min_bytes).
+// Two shapes are fatal here:
 //
 //  1. Any bytes rule member outside len/min_len (max_len, pattern, prefix, …):
 //     no translation exists for it.
-//  2. len AND min_len both set: the manifest entry would carry only the len
-//     window and drop the floor silently across the boundary.
-//  3. A zero-valued length rule (len: 0 / min_len: 0): it constrains nothing,
-//     yet corpusgen, requiredgen, and the class-6 coverage guard all read bytes
-//     rules by VALUE (GetMinLen() > 0), so a zero here would enter the manifest
-//     while every other view of the contract treats the field as unruled. It is
-//     a contract error, not a rule.
+//  2. A bytes length rule at repeated.items level: the manifest keys by
+//     "<Message>/<field>" and tighten_bytes_len rewrites the field's own schema
+//     node, so it has no way to reach a list's items. Without this check the
+//     rule would tighten nothing and every gate would stay green.
 //
-// With (3) fatal, the value checks below cannot disagree with a presence check
-// on the same member — one reading of "carries a length rule" across the repo.
-func lengthRule(fd protoreflect.FieldDescriptor, fr *validate.FieldRules) (map[string]uint64, bool) {
+// The remaining two — len and min_len both set, and a zero-valued length — are
+// rejected by conformance.BytesLength, so they are contract errors for every
+// consumer rather than a bytesgen-only opinion.
+func assertTranslatable(fd protoreflect.FieldDescriptor, prefix string, fr *validate.FieldRules) {
 	b := fr.GetBytes()
 	if b == nil {
-		return nil, false
+		return
 	}
 	b.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
 		switch f.Name() {
 		case "len", "min_len":
 			return true
 		default:
-			panic(fmt.Sprintf("bytesgen: field %s carries bytes rule %q — merge_schema.py has no translation for it; teach tighten_bytes_len its shape before shipping it", fd.FullName(), f.Name()))
+			panic(fmt.Sprintf("bytesgen: field %s carries rule %sbytes.%s — merge_schema.py has no translation for it; teach tighten_bytes_len its shape before shipping it", fd.FullName(), prefix, f.Name()))
 		}
 	})
-	if b.Len != nil && b.MinLen != nil {
-		panic(fmt.Sprintf("bytesgen: field %s carries BOTH bytes.len:%d and bytes.min_len:%d — the manifest holds one rule kind per field, so merge_schema.py would enforce the exact length and silently drop the floor; express the intent as a single rule", fd.FullName(), b.GetLen(), b.GetMinLen()))
+	if prefix != "" {
+		panic(fmt.Sprintf("bytesgen: field %s carries a %sbytes length rule — the manifest holds one entry per FIELD and tighten_bytes_len rewrites that field's schema node, so it cannot reach list items; teach the manifest an item level before shipping it", fd.FullName(), prefix))
 	}
-	if b.Len != nil && b.GetLen() == 0 {
-		panic(fmt.Sprintf("bytesgen: field %s carries bytes.len:0 — an explicit zero length is a contract error, not a rule (corpusgen and the coverage guard read length rules by value and would treat the field as unruled)", fd.FullName()))
-	}
-	if b.MinLen != nil && b.GetMinLen() == 0 {
-		panic(fmt.Sprintf("bytesgen: field %s carries bytes.min_len:0 — an explicit zero floor is a contract error, not a rule (corpusgen and the coverage guard read length rules by value and would treat the field as unruled)", fd.FullName()))
-	}
-	if b.GetLen() > 0 {
-		return map[string]uint64{"len": b.GetLen()}, true
-	}
-	if b.GetMinLen() > 0 {
-		return map[string]uint64{"min_len": b.GetMinLen()}, true
-	}
-	return nil, false
 }
