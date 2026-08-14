@@ -477,7 +477,7 @@ func TestReportUsage_RoutesThroughTheIssuingExchangesOwnManifest(t *testing.T) {
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	report := &rampv1.UsageReport{
-		Exchange:      proto.String(domain),
+		Exchange:      domain,
 		TransactionId: "txn-1",
 		Usage:         &rampv1.Usage{Function: []string{"ai-input"}},
 	}
@@ -527,7 +527,7 @@ func TestReportUsage_RefusesUnroutableAddressesWithoutSending(t *testing.T) {
 				append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 			report := &rampv1.UsageReport{TransactionId: "txn-1"}
 			if domain != "" {
-				report.Exchange = proto.String(domain)
+				report.Exchange = domain
 			}
 			_, err := client.ReportUsage(context.Background(), report)
 			if err == nil {

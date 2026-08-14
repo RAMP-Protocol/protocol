@@ -36,7 +36,7 @@ const edgeErrorDomain = "ramp.v1.Edge"
 // parameter a configured origin could be passed as, so it cannot become the
 // default by anyone's convenience. Set it from the offer being reported:
 //
-//	report.Exchange = proto.String(verified.Offer().GetExchange())
+//	report.Exchange = verified.Offer(.GetExchange())
 //
 // The report is cloned before ver and the idempotency key are stamped, so the
 // message the caller built stays untouched — it crossed a package boundary as an
