@@ -50,6 +50,13 @@ from .errordetail import (
     usage_report_rejection_detail,
 )
 from .hashurl import hash_url
+from .hosts import (
+    BARE_DOMAIN_PATTERN,
+    MAX_BARE_DOMAIN_LEN,
+    AudienceVerdict,
+    check_audience,
+    is_bare_domain,
+)
 from .httpsig import (
     MultisigVerdict,
     RejectReason,
@@ -96,10 +103,13 @@ from .wire import (
 __all__ = [
     "ACCEPTANCE_SIGNATURE_ALGORITHM",
     "AGENT_KEY_HEADER",
+    "BARE_DOMAIN_PATTERN",
     "ERROR_DETAIL_TYPE",
+    "MAX_BARE_DOMAIN_LEN",
     "OFFER_SIGNATURE_ALGORITHM",
     "REASON_FIELDS",
     "WBA_DIRECTORY_PATH",
+    "AudienceVerdict",
     "ConnectProtocolVersion",
     "ConnectProtocolVersionHeader",
     "ContentTypeJSON",
@@ -137,6 +147,7 @@ __all__ = [
     "canonical_offer_payload",
     "canonicalize_money",
     "catalog_rejection_detail",
+    "check_audience",
     "clock_window",
     "content_digest",
     "cross_field_rule_ids",
@@ -146,6 +157,7 @@ __all__ = [
     "format_money",
     "generate_idempotency_key",
     "hash_url",
+    "is_bare_domain",
     "jcs_acceptance_payload",
     "monotonic_window",
     "normalize_scopes",

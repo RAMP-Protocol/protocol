@@ -72,6 +72,7 @@
     "helpers.ComponentParam": "Go value type for an RFC 9421 covered-component parameter; py/ts model components inline.",
     "helpers.CoveredComponent": "Go value type for an RFC 9421 covered component; py/ts model components inline.",
     "helpers.ErrAcceptanceSignatureInvalid": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
+    "helpers.ErrAudienceIdentity": "Go errors.Is sentinel for an unusable configured Exchange identity; py/ts raise/throw instead of exporting sentinels.",
     "helpers.ErrBrokenSignatureChain": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrDigestMismatch": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
     "helpers.ErrEmptyIdempotencyKey": "Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels.",
@@ -259,6 +260,16 @@
       "python": "apply_scopes",
       "ts": "applyScopes"
     },
+    "helpers.AudienceVerdict": {
+      "allowlist_reason": null,
+      "python": "AudienceVerdict",
+      "ts": "AudienceVerdict"
+    },
+    "helpers.BareDomainPattern": {
+      "allowlist_reason": null,
+      "python": "BARE_DOMAIN_PATTERN",
+      "ts": "bareDomainPattern"
+    },
     "helpers.CanonicalAcceptanceBytes": {
       "allowlist_reason": null,
       "python": "jcs_acceptance_payload",
@@ -278,6 +289,11 @@
       "allowlist_reason": null,
       "python": "catalog_rejection_detail",
       "ts": "catalogRejectionDetail"
+    },
+    "helpers.CheckAudience": {
+      "allowlist_reason": null,
+      "python": "check_audience",
+      "ts": "checkAudience"
     },
     "helpers.ConnectProtocolVersion": {
       "allowlist_reason": null,
@@ -329,10 +345,20 @@
       "python": "hash_url",
       "ts": "hashUrl"
     },
+    "helpers.IsBareDomain": {
+      "allowlist_reason": null,
+      "python": "is_bare_domain",
+      "ts": "isBareDomain"
+    },
     "helpers.KeyResolver": {
       "allowlist_reason": null,
       "python": "KeyResolver",
       "ts": "RequestKeyResolver"
+    },
+    "helpers.MaxBareDomainLen": {
+      "allowlist_reason": null,
+      "python": "MAX_BARE_DOMAIN_LEN",
+      "ts": "maxBareDomainLen"
     },
     "helpers.NewIdempotencyKey": {
       "allowlist_reason": null,

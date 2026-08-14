@@ -96,6 +96,39 @@ bare, _ := helpers.IsBareHost(offer.GetExchange())      // no scheme/path/query
 ok, _ := helpers.HostAnchored(exchangeDomain, endpoint) // label-boundary match
 ```
 
+**Audience check** — the other direction: a request arrived, does it name THIS
+Exchange? The recipient's domain travels in a body field because that is the only
+agent-authenticated statement of intended recipient that survives a relay — each
+hop signs its own `@target-uri`, so the Exchange never sees an agent signature
+over its own URL. The check is pure, so it runs before any lookup:
+
+```go
+verdict, err := helpers.CheckAudience(cfg.ExchangeDomain, report.GetExchange())
+if err != nil {           // this deployment's identity is unusable -> internal
+    return err
+}
+if verdict != helpers.AudienceAccepted {   // "empty" | "malformed" | "mismatch"
+    return reject(verdict.String())        // the request's fault -> invalid argument
+}
+```
+
+Pass one value, or many where the audience lives per item — a `TransactionRequest`
+states it once per item, inside each item's signed offer:
+
+```go
+claimed := make([]string, 0, len(req.GetItems()))
+for _, it := range req.GetItems() {
+    claimed = append(claimed, it.GetOffer().GetExchange())
+}
+verdict, err := helpers.CheckAudience(cfg.ExchangeDomain, claimed...)
+```
+
+The match is EXACT — a subdomain is a different party — which is narrower than
+the endpoint rule above, where a manifest MAY advertise a subdomain of itself. The
+shape both sides admit is `helpers.IsBareDomain`, carrying the same
+`BareDomainPattern` bytes as the protovalidate rule on the wire fields, so a value
+this SDK accepts before sending is one the wire accepts on arrival.
+
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,
 `RedactURL` (a signed URL carries its credential in the query — never log it raw),

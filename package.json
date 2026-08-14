@@ -16,6 +16,7 @@
     "./offer-sign": "./sdk/ts/src/offer-sign.ts",
     "./pop": "./sdk/ts/src/pop.ts",
     "./crossfield": "./sdk/ts/src/crossfield.ts",
+    "./hosts": "./sdk/ts/src/hosts.ts",
     "./wire": "./sdk/ts/src/wire.ts",
     "./core": "./sdk/ts/core/verifier.ts",
     "./core/sign": "./sdk/ts/core/sign.ts",
