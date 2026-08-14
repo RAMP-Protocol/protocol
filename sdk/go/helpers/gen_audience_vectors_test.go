@@ -135,6 +135,22 @@ func buildBareDomainVectors(t *testing.T) []bareDomainVector {
 		// its punycode form — the same name, and accepted.
 		{"non_ascii", "exchänge.example", false},
 		{"punycode_of_the_same_name", "xn--exchnge-8wa.example", true},
+		// Two homographs that look like ASCII labels and are not. They are here
+		// because the ONLY thing that refuses them is running this shape check
+		// before any case or width normalization, and they fail differently:
+		//
+		//   U+212A KELVIN SIGN lowercases to a plain ASCII "k" — so lowercasing
+		//   first turns this value INTO a valid domain, and an implementation
+		//   that folds case before checking the shape would admit it.
+		//
+		//   U+FF25 FULLWIDTH LATIN CAPITAL E lowercases to fullwidth "ｅ", which
+		//   is still outside the alphabet, so it survives the case mutant
+		//   untouched. It becomes ASCII only under NFKC.
+		//
+		// Neither is redundant: each is the only case in the corpus that catches
+		// its own wrong ordering. Deleting either re-opens a homograph bypass.
+		{"kelvin_sign_label", "mar\u212Aet.example", false},
+		{"fullwidth_letter", "\uFF25xchange.example", false},
 
 		// Refused — over the length bound.
 		{"over_max_length", maxLenDomain() + "b", false},
@@ -174,6 +190,12 @@ func buildAudienceVectors(t *testing.T) []audienceVector {
 		{"default_port_on_both", "exchange.example:443", []string{"exchange.example:443"}, "accepted", false},
 		{"same_non_default_port", "exchange:8081", []string{"exchange:8081"}, "accepted", false},
 		{"many_all_match", self, []string{self, "Exchange.Example", "exchange.example:443"}, "accepted", false},
+		// Case folding CROSSED with a port that is not the folded one. Every other
+		// accepted case folds case on a bare name or folds :443 on a lowercase
+		// name, so an implementation that lowercased only inside its "no port or
+		// :443" branch would pass all of them and answer mismatch here.
+		{"case_folded_on_a_non_default_port", "exchange:8081", []string{"Exchange:8081"}, "accepted", false},
+		{"case_folded_identity_on_a_non_default_port", "Exchange.Example:8443", []string{"exchange.example:8443"}, "accepted", false},
 
 		// Refused — names somebody else.
 		{"unrelated_host", self, []string{"other.example"}, "mismatch", false},
@@ -215,6 +237,13 @@ func buildAudienceVectors(t *testing.T) []audienceVector {
 		// this would have had to be caught as a mismatch instead — the two rules
 		// have to be read together to see that neither lets it through.
 		{"claim_has_a_padded_port", self, []string{"exchange.example:0443"}, "malformed", false},
+		// A claim that becomes the identity if it is normalized before its shape
+		// is checked. Both are refused for their shape and never reach the
+		// comparison — which is the whole reason the shape check runs first, and
+		// the only place in this corpus where getting that order wrong is visible
+		// as an ACCEPTANCE rather than as a differently-worded refusal.
+		{"claim_is_a_kelvin_homograph", "market.example", []string{"mar\u212Aet.example"}, "malformed", false},
+		{"claim_is_a_fullwidth_homograph", self, []string{"\uFF25xchange.example"}, "malformed", false},
 		{"many_one_malformed", self, []string{self, "https://other.example"}, "malformed", false},
 		// A malformed claim is refused for its shape, before it is compared — so
 		// a value that would have matched had it been spelled properly is still

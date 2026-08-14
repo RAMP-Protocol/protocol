@@ -75,6 +75,24 @@
       "identity_error": false
     },
     {
+      "name": "case_folded_on_a_non_default_port",
+      "self": "exchange:8081",
+      "claimed": [
+        "Exchange:8081"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "case_folded_identity_on_a_non_default_port",
+      "self": "Exchange.Example:8443",
+      "claimed": [
+        "exchange.example:8443"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
       "name": "unrelated_host",
       "self": "exchange.example",
       "claimed": [
@@ -303,6 +321,24 @@
       "self": "exchange.example",
       "claimed": [
         "exchange.example:0443"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_is_a_kelvin_homograph",
+      "self": "market.example",
+      "claimed": [
+        "marKet.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_is_a_fullwidth_homograph",
+      "self": "exchange.example",
+      "claimed": [
+        "Ｅxchange.example"
       ],
       "expected_verdict": "malformed",
       "identity_error": false
@@ -622,6 +658,16 @@
       "name": "punycode_of_the_same_name",
       "value": "xn--exchnge-8wa.example",
       "valid": true
+    },
+    {
+      "name": "kelvin_sign_label",
+      "value": "marKet.example",
+      "valid": false
+    },
+    {
+      "name": "fullwidth_letter",
+      "value": "Ｅxchange.example",
+      "valid": false
     },
     {
       "name": "over_max_length",
