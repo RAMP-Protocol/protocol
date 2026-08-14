@@ -30,7 +30,8 @@ import (
 // see reconstructTargetURI, which falls back to the Host header, and the server
 // binding takes no expected-host option — so a capture signed for one Exchange
 // and replayed at another with a forged Host verifies. This check is what
-// refuses it.
+// refuses it — once a recipient calls it. Nothing in this SDK calls it for you;
+// wiring it into a server is the caller's, and it is the reason to.
 //
 // Pure string work over a value the caller already holds — no IO, no state, and
 // no lookup — which is why it sits in the IO-free tier and can run before any
@@ -118,9 +119,11 @@ func (v AudienceVerdict) String() string {
 //
 // Two spellings of the same identity still match: case is folded, and a port of
 // 443 written out is the same as leaving it off, since a schemeless domain is
-// read as https throughout this SDK. Port 80 is not folded, for the same reason
-// it is not folded anywhere else here — it is not the default of the scheme a
-// bare domain implies.
+// read as https throughout this SDK. Port 80 is NOT folded here: it is not the
+// default of the scheme a bare domain implies. Elsewhere in the package
+// canonicalPort does fold it, because there the caller supplies a scheme and 80
+// is http's default — a difference between two comparisons, not an inconsistency
+// between them.
 //
 // The returned error is non-nil only when self is unusable, and it always
 // carries AudienceNoVerdict. Everything a request can get wrong is a verdict,
@@ -158,9 +161,11 @@ func CheckAudience(self string, claimed ...string) (AudienceVerdict, error) {
 // off are one port. They are not merged deliberately: canonicalPort answers the
 // question scheme-relatively for values that may be full URLs, which is why it
 // takes a scheme at all, while both operands here are already regex-gated bare
-// domains that name no scheme. Reusing it would mean parsing a URL to learn what
-// the pattern has already established. On the schemeless values this one sees the
-// two agree exactly, 443 folded and 80 not, so the split costs no behaviour.
+// domains that name no scheme. Reusing it would mean passing a scheme this path
+// does not have and cannot learn — a literal "https" invented at the call site to
+// satisfy a parameter, which is a worse dependency than the six lines below. On
+// the schemeless values this one sees, the two agree exactly, 443 folded and 80
+// not, so the split costs no behaviour.
 //
 // The repo has been bitten by a duplicated host predicate before, so the cost of
 // the split is this comment and two separate test surfaces: the shared vectors pin

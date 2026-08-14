@@ -38,10 +38,20 @@ type AudienceVectorsFile = {
 
 const doc = vectorsFile as AudienceVectorsFile;
 
+// Partitioned the way the Python sibling partitions it, so both suites guard the
+// same four things. The two partitions matter on their own: the loop below picks a
+// throw assertion or a value assertion per case, so a corpus that lost every
+// identity-fault case would register zero throw assertions and this file would
+// report green with the throw contract untested.
+const identityFaults = doc.audience.filter((v) => v.identity_error);
+const requestCases = doc.audience.filter((v) => !v.identity_error);
+
 describe("sdk/ts bare-domain + audience faces match the sdk/go oracle vectors", () => {
 	it("audience vector sets are non-empty", () => {
 		expect(doc.bare_domain.length).toBeGreaterThan(0);
 		expect(doc.audience.length).toBeGreaterThan(0);
+		expect(identityFaults.length).toBeGreaterThan(0);
+		expect(requestCases.length).toBeGreaterThan(0);
 	});
 
 	// The rule is one definition or it is nothing.
