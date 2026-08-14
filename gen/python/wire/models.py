@@ -1303,7 +1303,7 @@ class Quota(WireModel):
 class RegistrationFailure(WireModel):
     field_errors: list[RegistrationFieldError] | None = Field(
         None,
-        description='When reason = INVALID_REGISTRATION_DATA: the registration_data members\n that are missing or do not conform. Empty for every other reason.',
+        description='When reason = INVALID_REGISTRATION_DATA: the registration_data members\n that are missing or do not conform. Empty for every other reason — enforced\n by the message rule above, not left to prose.',
         max_length=64,
     )
     reason: RegistrationFailureReason = Field(

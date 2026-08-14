@@ -21,7 +21,15 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from pydantic import model_validator
-from wire.models import License, LicenseTerm, Obligation, Pricing, Restriction
+from wire.models import (
+    License,
+    LicenseTerm,
+    Obligation,
+    Pricing,
+    RegistrationFailure,
+    Restriction,
+    WellKnownManifest,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -29,6 +37,7 @@ if TYPE_CHECKING:
 # ---- generated enum members (reused, not forked) --------------------------
 _OBLIGATION_KIND_SHARE_ALIKE = "OBLIGATION_KIND_SHARE_ALIKE"
 _TERM_SEMANTICS_REFERENCE_ONLY = "TERM_SEMANTICS_REFERENCE_ONLY"
+_REGISTRATION_FAILURE_INVALID_DATA = "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
 _PRICING_MODEL_FREE = "PRICING_MODEL_FREE"
 _PRICING_MODEL_PER_UNIT = "PRICING_MODEL_PER_UNIT"
 
@@ -138,12 +147,28 @@ def _well_known_manifest_rules(o: dict[str, Any]) -> list[str]:
     return []
 
 
+
+def _registration_failure_rules(o: dict[str, Any]) -> list[str]:
+    """RegistrationFailure.field_errors_scoped_to_invalid_data.
+
+    ``this.field_errors.size() == 0 || this.reason == 6``. The member list names
+    what failed the published schema, so any other reason carrying it publishes
+    detail that does not apply to the refusal.
+    """
+    field_errors = _field(o, "field_errors")
+    if isinstance(field_errors, list) and field_errors:
+        if _str(_field(o, "reason")) != _REGISTRATION_FAILURE_INVALID_DATA:
+            return ["registration_failure.field_errors_scoped_to_invalid_data"]
+    return []
+
+
 _RULES_BY_MESSAGE: dict[str, Callable[[dict[str, Any]], list[str]]] = {
     "License": _license_rules,
     "LicenseTerm": _license_term_rules,
     "Obligation": _obligation_rules,
     "Pricing": _pricing_rules,
     "Restriction": _restriction_rules,
+    "RegistrationFailure": _registration_failure_rules,
     "WellKnownManifest": _well_known_manifest_rules,
 }
 
@@ -191,3 +216,5 @@ LicenseTermCrossField = _make_cross_field(LicenseTerm, "LicenseTerm")
 ObligationCrossField = _make_cross_field(Obligation, "Obligation")
 PricingCrossField = _make_cross_field(Pricing, "Pricing")
 RestrictionCrossField = _make_cross_field(Restriction, "Restriction")
+RegistrationFailureCrossField = _make_cross_field(RegistrationFailure, "RegistrationFailure")
+WellKnownManifestCrossField = _make_cross_field(WellKnownManifest, "WellKnownManifest")

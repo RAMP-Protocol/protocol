@@ -184,6 +184,19 @@ func licensingCases() []validationCase {
 			TermsUri:    proto.String("https://exchange.example/terms"),
 			TermsDigest: proto.String("sha256:" + strings.Repeat("ab", 32)),
 		}, true, ""},
+		// field_errors is member-level detail for the schema refusal; any other
+		// reason carrying it is detail that does not apply to the refusal.
+		{"registration_failure field_errors with stale-terms reason rejected", &rampv1.RegistrationFailure{
+			Reason:      rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE,
+			FieldErrors: []*rampv1.RegistrationFieldError{{Path: "/vat_id", Error: "required"}},
+		}, false, "registration_failure.field_errors_scoped_to_invalid_data"},
+		{"registration_failure field_errors with invalid-data reason ok", &rampv1.RegistrationFailure{
+			Reason:      rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+			FieldErrors: []*rampv1.RegistrationFieldError{{Path: "/vat_id", Error: "required"}},
+		}, true, ""},
+		{"registration_failure stale-terms without field_errors ok", &rampv1.RegistrationFailure{
+			Reason: rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE,
+		}, true, ""},
 		{"well_known_manifest terms_uri without digest ok", &rampv1.WellKnownManifest{
 			Role:     rampv1.Role_ROLE_EXCHANGE,
 			TermsUri: proto.String("https://exchange.example/terms"),

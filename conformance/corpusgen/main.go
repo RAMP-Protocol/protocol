@@ -141,6 +141,40 @@ var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256
 // but the decimal-string money pattern rejects; they are the money-value blind spot.
 var badStrings = []string{"two words", "1.2.3", "!!bad!!", "\x00ctl\x00", " ", "-5", "NaN", "Infinity", "1E3"}
 
+// patternKillers are bad values chosen FOR A SPECIFIC pattern, keyed by the
+// pattern string itself. badStrings is shared with every pattern-ruled field in
+// the contract, so widening it to cover one family's shapes would add a mutant
+// to money, quota and token fields that has nothing to do with them. This table
+// is the narrow alternative: the values only reach the fields whose rule is that
+// exact pattern.
+//
+// APPEND-ONLY per entry, like badStrings: the index is baked into the emitted
+// case id (killer#<idx>).
+//
+// The domain family's entries are the shapes the constraint exists to refuse.
+// Scheme and path are the load-bearing pair — a domain value is concatenated
+// into a URL a resolver fetches, so smuggling either one in chooses WHAT is
+// fetched, not merely from where.
+var patternKillers = map[string][]string{
+	bareDomainPattern: {
+		"https://exchange.example",  // scheme prefix
+		"exchange.example/register", // path suffix
+		"exchange.example?x=1",      // query suffix
+		"user@exchange.example",     // userinfo
+		"exchange.example:123456",   // port out of range
+		"exchange.example:",         // empty port
+		"exchange.example.",         // trailing root dot
+		"exchange..example",         // empty label
+		"-exchange.example",         // leading hyphen
+		"[::1]:443",                 // bracketed IPv6 literal
+	},
+}
+
+// bareDomainPattern is the recipient-host shape, quoted from the proto so the
+// killer table above can be keyed by it. A drift between this copy and the
+// fields is caught by conformance's own descriptor guard, not here.
+const bareDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$`
+
 func main() {
 	v, err := protovalidate.New()
 	must(err)
@@ -240,6 +274,16 @@ func writeCrossField(v protovalidate.Validator) {
 			"License/cel/digest_required_with_uri",
 			&rampv1.License{Id: proto.String("CC-BY-4.0"), Uri: proto.String("https://example.com/license")},
 			"license.digest_required_with_uri",
+		},
+		{
+			// field_errors is scoped to the schema refusal; any other reason
+			// carrying it publishes member detail that does not apply.
+			"RegistrationFailure/cel/field_errors_scoped_to_invalid_data",
+			&rampv1.RegistrationFailure{
+				Reason:      rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE,
+				FieldErrors: []*rampv1.RegistrationFieldError{{Path: "/vat_id", Error: "required"}},
+			},
+			"registration_failure.field_errors_scoped_to_invalid_data",
 		},
 		{
 			// The manifest mirror of the rule above: a digest with no document
@@ -595,6 +639,18 @@ func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edg
 			es = append(es, edge{label: fmt.Sprintf("pattern#%d", i), want: "string.pattern",
 				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(bad)) }})
 		}
+		// Pattern-specific killers, so a family's own refusal shapes reach the
+		// corpus — and therefore the Pydantic and Zod replays — without widening
+		// the shared table. Each is asserted to actually fail its pattern, so a
+		// stale entry cannot sit here as a silent no-op.
+		re := regexp.MustCompile(p)
+		for i, bad := range patternKillers[p] {
+			if re.MatchString(bad) {
+				die("patternKillers[%q][%d] = %q is ACCEPTED by the pattern — it would emit a case asserting the opposite", p, i, bad)
+			}
+			es = append(es, edge{label: fmt.Sprintf("killer#%d", i), want: "string.pattern",
+				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(bad)) }})
+		}
 		// The empty-string boundary: if the pattern ACCEPTS "" it is a positive case
 		// (money — the empty-money blind spot; proves clients accept ""); if it REJECTS "" then
 		// the zero value is invalid, so omission must be rejected (pattern-derived
@@ -663,6 +719,18 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[
 			if p := s.GetPattern(); p != "" {
 				if bad, ok := badString(p); ok {
 					es = append(es, edge{label: "item_pattern", want: "string.pattern",
+						apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(protoreflect.ValueOfString(bad)) }})
+				}
+				// Pattern-specific killers reach list items too — a repeated
+				// domain field admits the same smuggled scheme or path as a
+				// singular one, and the acceptance criterion says every field
+				// carrying the constraint, not every singular field.
+				re := regexp.MustCompile(p)
+				for i, bad := range patternKillers[p] {
+					if re.MatchString(bad) {
+						die("patternKillers[%q][%d] = %q is ACCEPTED by the pattern", p, i, bad)
+					}
+					es = append(es, edge{label: fmt.Sprintf("item_killer#%d", i), want: "string.pattern",
 						apply: func(m protoreflect.Message) { m.Mutable(fd).List().Append(protoreflect.ValueOfString(bad)) }})
 				}
 			}

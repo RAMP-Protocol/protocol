@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -39,6 +40,52 @@ var malformedDomains = []struct{ name, value string }{
 	{"whitespace", "exchange example"},
 }
 
+// wantDomainFields is the number of fields the shared domain constraint is meant
+// to be on. It is a ratchet, not a description: see the exact-count check below.
+const wantDomainFields = 17
+
+// digestPattern is the "method:hexdigest" shape, carried by License.uri_digest,
+// WellKnownManifest.terms_digest and RegisterRequest.terms_digest. Three copies
+// of one rule is exactly the shape that drifts, so it gets the same
+// descriptor-derived membership check as the domain family.
+const digestPattern = `^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$`
+
+const wantDigestFields = 3
+
+func fieldNames(fs []domainField) string {
+	names := make([]string, 0, len(fs))
+	for _, f := range fs {
+		names = append(names, string(f.msg.Name())+"."+string(f.fd.Name()))
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
+}
+
+// TestDigestPatternMembership pins the digest family the same way. The pattern is
+// repeated per field because protovalidate has no way to share one, so the only
+// available guard is to assert the copies stay identical and stay counted.
+func TestDigestPatternMembership(t *testing.T) {
+	fields := findFieldsWithPattern(t, digestPattern)
+	if len(fields) != wantDigestFields {
+		t.Fatalf("the digest pattern is on %d fields, expected %d — a copy drifted or a "+
+			"new digest field was added without it.\nFields: %s",
+			len(fields), wantDigestFields, fieldNames(fields))
+	}
+	// Every copy admits the same values, which is the property the three
+	// hand-written copies exist to preserve.
+	for _, df := range fields {
+		name := string(df.msg.Name()) + "." + string(df.fd.Name())
+		for _, bad := range []string{"md5:" + strings.Repeat("a", 32), "sha256:dead", "sha256:" + strings.Repeat("g", 64)} {
+			if validateDomainValue(t, df, bad) {
+				t.Errorf("%s accepted %q — a weak or malformed digest defeats the swap-protection the field exists for", name, bad)
+			}
+		}
+		if !validateDomainValue(t, df, "sha256:"+strings.Repeat("ab", 32)) {
+			t.Errorf("%s refused a well-formed sha256 digest", name)
+		}
+	}
+}
+
 // domainField is one field carrying the shared constraint.
 type domainField struct {
 	msg      protoreflect.MessageDescriptor
@@ -51,6 +98,14 @@ type domainField struct {
 // repeated-item form.
 func findDomainFields(t *testing.T) []domainField {
 	t.Helper()
+	return findFieldsWithPattern(t, sharedDomainPattern)
+}
+
+// findFieldsWithPattern walks the contract for every field whose protovalidate
+// rule carries the given pattern, on the singular string form and on the
+// repeated-item form.
+func findFieldsWithPattern(t *testing.T, pattern string) []domainField {
+	t.Helper()
 	var out []domainField
 	EachMessage(func(md protoreflect.MessageDescriptor) {
 		for i := 0; i < md.Fields().Len(); i++ {
@@ -59,12 +114,12 @@ func findDomainFields(t *testing.T) []domainField {
 			if !has {
 				continue
 			}
-			if s := rules.GetString(); s != nil && s.GetPattern() == sharedDomainPattern {
+			if s := rules.GetString(); s != nil && s.GetPattern() == pattern {
 				out = append(out, domainField{md, fd, false})
 				continue
 			}
 			if r := rules.GetRepeated(); r != nil && r.GetItems() != nil {
-				if s := r.GetItems().GetString(); s != nil && s.GetPattern() == sharedDomainPattern {
+				if s := r.GetItems().GetString(); s != nil && s.GetPattern() == pattern {
 					out = append(out, domainField{md, fd, true})
 				}
 			}
@@ -82,6 +137,65 @@ func fieldRules(fd protoreflect.FieldDescriptor) (*validate.FieldRules, bool) {
 	return fr, fr != nil
 }
 
+// validateDomainValue sets v on the field and reports whether the pattern rule
+// accepted it — i.e. whether string.pattern or string.max_len fired. Other rules
+// on the same message are ignored on purpose: the question is what the FIELD's
+// own shape rule said, not whether the whole instance is valid.
+func validateDomainValue(t *testing.T, df domainField, v string) bool {
+	t.Helper()
+	mt, err := protoregistry.GlobalTypes.FindMessageByName(df.msg.FullName())
+	if err != nil {
+		t.Fatalf("FindMessageByName %s: %v", df.msg.FullName(), err)
+	}
+	val, err := protovalidate.New()
+	if err != nil {
+		t.Fatalf("protovalidate.New: %v", err)
+	}
+	m := mt.New()
+	if df.repeated {
+		m.Mutable(df.fd).List().Append(protoreflect.ValueOfString(v))
+	} else {
+		m.Set(df.fd, protoreflect.ValueOfString(v))
+	}
+	verr, isVE := val.Validate(m.Interface()).(*protovalidate.ValidationError)
+	if !isVE {
+		return true
+	}
+	// Only violations ON THIS FIELD count. A sibling field's rule firing — a
+	// required recipient left unset on the same message, say — says nothing about
+	// whether the value under test was admitted, and treating it as a verdict
+	// would make this helper report the opposite of the truth.
+	return !fieldViolatedShape(verr, df.fd)
+}
+
+// fieldViolatedShape reports whether the given field was rejected by its own
+// shape rule (pattern or max_len), ignoring every other field's violations.
+//
+// Matching is on the violation's field PATH rather than its FieldDescriptor,
+// because for a repeated field's item the descriptor is nil and the field is
+// named only in the path (with the item's index appended). Reading the
+// descriptor alone would silently classify every list-item refusal as "some
+// other field's problem".
+func fieldViolatedShape(verr *protovalidate.ValidationError, fd protoreflect.FieldDescriptor) bool {
+	for _, v := range verr.Violations {
+		switch v.Proto.GetRuleId() {
+		case "string.pattern", "string.max_len":
+		default:
+			continue
+		}
+		if els := v.Proto.GetField().GetElements(); len(els) > 0 {
+			if els[0].GetFieldName() == string(fd.Name()) {
+				return true
+			}
+			continue
+		}
+		if v.FieldDescriptor != nil && v.FieldDescriptor.FullName() == fd.FullName() {
+			return true
+		}
+	}
+	return false
+}
+
 // TestSharedDomainConstraintRejectsMalformedValues is the acceptance guard for
 // the recipient-host shape: on EVERY field carrying the shared constraint, a
 // scheme prefix, a path or query suffix, and a bad port are rejected — and the
@@ -93,11 +207,16 @@ func TestSharedDomainConstraintRejectsMalformedValues(t *testing.T) {
 		t.Fatalf("protovalidate.New: %v", err)
 	}
 	fields := findDomainFields(t)
-	// Anti-vacuity: a refactor that renamed the pattern out from under this test
-	// would otherwise leave it green over an empty set.
-	if len(fields) < 15 {
-		t.Fatalf("expected the shared domain constraint on at least 15 fields, found %d — "+
-			"if the pattern was edited, update sharedDomainPattern to match the proto", len(fields))
+	// An EXACT count, not a floor. A floor below the real number lets a field
+	// silently lose the constraint — the failure this guard exists to catch —
+	// while the suite stays green. Adding a domain-valued field is meant to
+	// require touching this number, so the addition gets a moment's thought
+	// about whether it belongs to the family.
+	if len(fields) != wantDomainFields {
+		t.Fatalf("the shared domain constraint is on %d fields, expected %d.\n"+
+			"A field gained or lost it — if that was deliberate, update wantDomainFields; "+
+			"if the pattern itself was edited, update sharedDomainPattern too.\nFields: %s",
+			len(fields), wantDomainFields, fieldNames(fields))
 	}
 	for _, df := range fields {
 		name := fmt.Sprintf("%s.%s", df.msg.Name(), df.fd.Name())
@@ -119,8 +238,11 @@ func TestSharedDomainConstraintRejectsMalformedValues(t *testing.T) {
 				if !ok {
 					t.Fatalf("%s = %q must be rejected, but validation passed", name, bad.value)
 				}
-				if !violationsContain(verr, "string.pattern") {
-					t.Errorf("%s = %q was rejected, but not by string.pattern (got %v) — "+
+				// Scoped to THIS field: a sibling's rule firing on the same
+				// bare message would otherwise let the case pass without the
+				// value under test being refused at all.
+				if !fieldViolatedShape(verr, df.fd) {
+					t.Errorf("%s = %q was rejected, but not by its own string.pattern (got %v) — "+
 						"the case would pass for the wrong reason", name, bad.value, violationIDs(verr))
 				}
 			})
@@ -140,8 +262,8 @@ func TestSharedDomainConstraintAcceptsRealHosts(t *testing.T) {
 	good := []string{
 		"exchange.example",
 		"exchange.example:8081",
-		"exchange",          // single-label service host
-		"exchange-b:8081",   // compose service name with a port
+		"exchange",        // single-label service host
+		"exchange-b:8081", // compose service name with a port
 		"sub.example.com:443",
 		"xn--80ak6aa92e.com", // punycode: interior double hyphen
 		"Exchange.Example",   // case is normalised by the reader, not refused here
@@ -162,8 +284,8 @@ func TestSharedDomainConstraintAcceptsRealHosts(t *testing.T) {
 					m.Set(df.fd, protoreflect.ValueOfString(ok))
 				}
 				if verr, isVE := v.Validate(m.Interface()).(*protovalidate.ValidationError); isVE {
-					if violationsContain(verr, "string.pattern") {
-						t.Errorf("%s = %q must be accepted by the domain pattern, but string.pattern fired", name, ok)
+					if fieldViolatedShape(verr, df.fd) {
+						t.Errorf("%s = %q must be accepted by the domain pattern, but its own shape rule fired", name, ok)
 					}
 				}
 			})

@@ -116,7 +116,13 @@ import "ramp/v1/vocab.proto";
 // request is meant for — "exchange.example" or "exchange.example:8081". A port
 // is allowed; a scheme, path, query, userinfo or trailing root dot is not, and
 // the value is case-normalised (sender and recipient lowercase it before
-// comparing). It is NOT an endpoint URL. The endpoint is resolved from the
+// comparing). The PORT is part of the identity and is compared, with one
+// folding: an absent port and the default port for the scheme in use are the
+// same port, so "exchange.example" and "exchange.example:443" name the same
+// recipient over HTTPS while "exchange.example:8443" names a different one.
+// Stated because it is otherwise the obvious place for two implementations to
+// disagree — another port is another service, which the party answering for the
+// first need not control. It is NOT an endpoint URL. The endpoint is resolved from the
 // recipient's own /.well-known/ramp.json, never from a value the caller
 // supplies — an endpoint in the payload would hand the caller the choice of
 // where the next hop dials, which is exactly what this field is not for.
@@ -3654,13 +3660,25 @@ enum RegistrationFailureReason {
 
 // RegistrationFailure — a registration request could not be completed.
 message RegistrationFailure {
+  // field_errors names the registration_data members that failed the published
+  // schema, so it is meaningful for exactly one reason. Carried with any other
+  // reason it is member-level detail that does not apply to the refusal, and one
+  // client renders it while another ignores it. The prose said this on the field
+  // from the start; the rule is what makes it checkable.
+  option (buf.validate.message).cel = {
+    id: "registration_failure.field_errors_scoped_to_invalid_data"
+    message: "field_errors is only allowed when reason is REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA"
+    expression: "this.field_errors.size() == 0 || this.reason == 6"
+  };
+
   // The failure reason (defined-only, non-zero)
   RegistrationFailureReason reason = 1 [
     (buf.validate.field).enum = {defined_only: true, not_in: [0]}
   ];
 
   // When reason = INVALID_REGISTRATION_DATA: the registration_data members
-  // that are missing or do not conform. Empty for every other reason.
+  // that are missing or do not conform. Empty for every other reason — enforced
+  // by the message rule above, not left to prose.
   repeated RegistrationFieldError field_errors = 2 [
     (buf.validate.field).repeated.max_items = 64
   ];

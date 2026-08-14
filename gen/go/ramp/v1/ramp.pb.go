@@ -8959,7 +8959,8 @@ type RegistrationFailure struct {
 	// The failure reason (defined-only, non-zero)
 	Reason RegistrationFailureReason `protobuf:"varint,1,opt,name=reason,proto3,enum=ramp.v1.RegistrationFailureReason" json:"reason,omitempty"`
 	// When reason = INVALID_REGISTRATION_DATA: the registration_data members
-	// that are missing or do not conform. Empty for every other reason.
+	// that are missing or do not conform. Empty for every other reason — enforced
+	// by the message rule above, not left to prose.
 	FieldErrors   []*RegistrationFieldError `protobuf:"bytes,2,rep,name=field_errors,json=fieldErrors,proto3" json:"field_errors,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -9921,11 +9922,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x10CatalogRejection\x12C\n" +
 	"\x06reason\x18\x01 \x01(\x0e2\x1f.ramp.v1.CatalogRejectionReasonB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x06reason\x12%\n" +
-	"\x0erejected_paths\x18\x02 \x03(\tR\rrejectedPaths\"\xab\x01\n" +
+	"\x0erejected_paths\x18\x02 \x03(\tR\rrejectedPaths\"\x85\x03\n" +
 	"\x13RegistrationFailure\x12F\n" +
 	"\x06reason\x18\x01 \x01(\x0e2\".ramp.v1.RegistrationFailureReasonB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x06reason\x12L\n" +
-	"\ffield_errors\x18\x02 \x03(\v2\x1f.ramp.v1.RegistrationFieldErrorB\b\xbaH\x05\x92\x01\x02\x10@R\vfieldErrors\"X\n" +
+	"\ffield_errors\x18\x02 \x03(\v2\x1f.ramp.v1.RegistrationFieldErrorB\b\xbaH\x05\x92\x01\x02\x10@R\vfieldErrors:\xd7\x01\xbaH\xd3\x01\x1a\xd0\x01\n" +
+	"8registration_failure.field_errors_scoped_to_invalid_data\x12afield_errors is only allowed when reason is REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA\x1a1this.field_errors.size() == 0 || this.reason == 6\"X\n" +
 	"\x16RegistrationFieldError\x12\x1c\n" +
 	"\x04path\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x18\xff\x01R\x04path\x12 \n" +
 	"\x05error\x18\x02 \x01(\tB\n" +
