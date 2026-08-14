@@ -117,15 +117,35 @@ import "ramp/v1/vocab.proto";
 // is allowed and must be a usable one, 1-65535: the rule spells the range out
 // rather than counting digits, so ":0" and ":99999" are refused like any other
 // value that cannot name a listening service. A scheme, path, query, userinfo
-// or trailing root dot is not allowed, and
-// the value is case-normalised (sender and recipient lowercase it before
-// comparing). The PORT is part of the identity and is compared, with one
-// folding: an absent port and the default port for the scheme in use are the
-// same port, so "exchange.example" and "exchange.example:443" name the same
-// recipient over HTTPS while "exchange.example:8443" names a different one.
-// Stated because it is otherwise the obvious place for two implementations to
-// disagree — another port is another service, which the party answering for the
-// first need not control. It is NOT an endpoint URL. The endpoint is resolved from the
+// or trailing root dot is not allowed, and the alphabet is ASCII: an
+// internationalised name travels in its punycode (A-label) form, and a consumer
+// MUST NOT widen the rule with an IDN or Unicode-folding pre-pass.
+//
+// The value is case-normalised — sender and recipient lowercase it before
+// comparing — but ONLY AFTER it satisfies the shape rule above, which applies to
+// the value exactly as sent. The order is load-bearing, not incidental: several
+// non-ASCII codepoints lowercase or NFKC-fold INTO ASCII letters (U+212A KELVIN
+// SIGN becomes "k"), so a consumer that normalises first turns a homograph into
+// an exact match on somebody else's identity.
+//
+// A recipient's identity is ONE domain, matched exactly. A subdomain of it is a
+// different party: "eu.exchange.example" does not name "exchange.example". This
+// is deliberately narrower than the `WellKnownManifest.endpoint` rule below,
+// which does admit a subdomain — that rule answers which addresses one Exchange
+// can be reached at, this one answers who the Exchange is, and reusing one
+// anchored match for both would let anyone holding a subdomain claim the parent.
+//
+// The PORT is part of the identity and is compared, with one
+// folding: an absent port and an explicit ":443" are the same port, so
+// "exchange.example" and "exchange.example:443" name the same recipient while
+// "exchange.example:8443" names a different one. 443 and no other, because the
+// value carries no scheme to take a default from — the field forbids one — and a
+// bare domain is read as https. ":80" is therefore a distinct port here even on a
+// deployment serving plaintext. Stated because it is otherwise the obvious place
+// for two implementations to disagree — another port is another service, which
+// the party answering for the first need not control.
+//
+// It is NOT an endpoint URL. The endpoint is resolved from the
 // recipient's own /.well-known/ramp.json, never from a value the caller
 // supplies — an endpoint in the payload would hand the caller the choice of
 // where the next hop dials, which is exactly what this field is not for.
@@ -143,8 +163,10 @@ import "ramp/v1/vocab.proto";
 // it; for transactions the binding audience statement is per item,
 // Offer.exchange inside the Exchange-signed offer (see below).
 //
-// A recipient MUST reject a request whose `exchange` is not one of its own
-// domains. That rejection is INVALID_ARGUMENT with NO typed reason: a
+// A recipient MUST reject a request whose `exchange` is not its own domain — an
+// Exchange has exactly one identity, the domain it stamps into the offers it
+// issues, which may differ from the host it listens on. That rejection is
+// INVALID_ARGUMENT with NO typed reason: a
 // mis-addressed request is malformed rather than a domain-level failure, and no
 // ErrorDetail reason family covers it.
 //
@@ -554,8 +576,8 @@ message Offer {
   // offer, and it is what retires the X-RAMP-Exchange-Endpoint transport header.
   // It is also the audience statement of an ExecuteTransaction, which is why
   // TransactionRequest carries no top-level `exchange`: on receipt, an Exchange
-  // MUST reject the request unless EVERY item's offer.exchange names one of its
-  // own domains. Presence is enforced because an empty value is unroutable — a
+  // MUST reject the request unless EVERY item's offer.exchange names its own
+  // domain. Presence is enforced because an empty value is unroutable — a
   // relaying Broker has nothing to group or dial on, and the swap-protection
   // above is vacuous when the signed bytes carry no recipient at all.
   string exchange = 8 [

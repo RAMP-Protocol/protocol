@@ -2554,8 +2554,8 @@ type Offer struct {
 	// offer, and it is what retires the X-RAMP-Exchange-Endpoint transport header.
 	// It is also the audience statement of an ExecuteTransaction, which is why
 	// TransactionRequest carries no top-level `exchange`: on receipt, an Exchange
-	// MUST reject the request unless EVERY item's offer.exchange names one of its
-	// own domains. Presence is enforced because an empty value is unroutable — a
+	// MUST reject the request unless EVERY item's offer.exchange names its own
+	// domain. Presence is enforced because an empty value is unroutable — a
 	// relaying Broker has nothing to group or dial on, and the swap-protection
 	// above is vacuous when the signed bytes carry no recipient at all.
 	Exchange string `protobuf:"bytes,8,opt,name=exchange,proto3" json:"exchange,omitempty"`

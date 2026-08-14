@@ -217,6 +217,49 @@ top-level-versus-items mismatch to police. That last exemption is why
 string: an empty value is unroutable, and the swap-protection its signature is
 supposed to provide is vacuous when the signed bytes carry no recipient at all.
 
+## The audience match is exact; the endpoint rule is not
+
+Two host comparisons sit a few sections apart in this document and answer
+deliberately different questions, so they compare differently and neither should
+be relaxed into the other.
+
+The endpoint rule admits a **set**: a manifest may advertise its service on the
+host that served the document or on a subdomain of that host. The question there
+is which addresses one Exchange can be reached at, and an operator fronting
+`exchange.example` from `api.exchange.example` is the ordinary case.
+
+The audience check admits **one** value. An Exchange has exactly one identity —
+the domain it stamps into the offers it issues — and a subdomain of it is a
+different party, not another address for the same one. `eu.exchange.example` does
+not name `exchange.example`. Widening this to the endpoint rule's shape would let
+anyone who controls a subdomain claim to be the parent, which is precisely what
+the check exists to refuse. The configured value is the identity domain and never
+the host the process listens on; when those differ, taking the listening host
+refuses every correctly addressed request.
+
+What survives normalization is only spelling. Case folds, and a port of 443
+written out is the same as leaving it off, because a schemeless domain reads as
+https throughout the SDK. Port 80 does not fold — it is not that scheme's
+default — and a padded `:0443` is refused for its shape before any comparison,
+since the wire rule's port group is a real 1-65535 range rather than a digit
+count.
+
+That rule is carried in two places on purpose — the protovalidate pattern on the
+contract's recipient-addressing fields, and an exported constant in each SDK so a
+client can refuse a bad value before sending it. It is *not* on every field that
+happens to hold a domain; several carry no rule, and whether they should is a
+separate question from this one. Exporting the constant breaks the precedent set by
+the money pattern, which mirrors a wire rule and stays private in all three
+languages. The difference is who needs it: money's is an internal detail of
+formatting a decimal, while this one is a protocol constant an implementer writes
+their own validator against — and in TypeScript the export is structural, since the
+parity test imports the constant to assert it against the shared vectors. It is not
+exported for the conformance guard's sake; that guard reads the vectors file, and
+the emitter that writes it sits inside the same package as the constant either way.
+Its length bound of 260 is the `max_len` the contract carries on every one of those
+fields; it is not derived from DNS's 253, and trying to reconstruct it from that
+plus a port will not land on the same number.
+
 ## CoMP as an extension; attestations instead of quality scores
 
 Two earlier couplings were undone. The core protocol no longer imports IAB CoMP;

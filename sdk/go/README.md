@@ -96,6 +96,50 @@ bare, _ := helpers.IsBareHost(offer.GetExchange())      // no scheme/path/query
 ok, _ := helpers.HostAnchored(exchangeDomain, endpoint) // label-boundary match
 ```
 
+**Audience check** — the other direction: a request arrived, does it name THIS
+Exchange? The signature does not already answer that: it proves the sender signed
+*the URL it dialled*, and that URL came out of a fetched, cached `ramp.json`, so a
+poisoned resolution redirects the request while every signature still verifies.
+The body field says whom the sender meant. The check is pure, so it runs before
+any lookup:
+
+```go
+verdict, err := helpers.CheckAudience(cfg.ExchangeDomain, report.GetExchange())
+if err != nil {           // this deployment's identity is unusable -> internal
+    return err
+}
+if verdict != helpers.AudienceAccepted {   // "empty" | "malformed" | "mismatch"
+    return reject(verdict.String())        // the request's fault -> invalid argument
+}
+```
+
+Pass one value, or many where the audience lives per item — a `TransactionRequest`
+states it once per item, inside each item's signed offer:
+
+```go
+claimed := make([]string, 0, len(req.GetItems()))
+for _, it := range req.GetItems() {
+    claimed = append(claimed, it.GetOffer().GetExchange())
+}
+verdict, err := helpers.CheckAudience(cfg.ExchangeDomain, claimed...)
+```
+
+`cfg.ExchangeDomain` is the domain this Exchange publishes as its **identity** —
+the value it stamps into the offers it issues — never the host the process listens
+on. The two may differ: an Exchange at `exchange.example` may serve its API from
+`api.exchange.example`. Configure it from the listening host and every correctly
+addressed request is refused, so a *global* mismatch storm means check your own
+identity before suspecting callers; the check is pure and cannot detect this for
+you.
+
+The match is EXACT — a subdomain is a different party — which is narrower than
+the endpoint rule above, where a manifest MAY advertise a subdomain of itself. The
+shape both sides admit is `helpers.IsBareDomain`, whose `BareDomainPattern` is byte
+for byte the protovalidate pattern the contract's recipient-addressing fields carry,
+held there by a conformance guard. Reach for it wherever you vet a domain that
+arrived in a message; note that the client's own send path still vets with the wider
+`IsBareHost`, so passing that one is not yet evidence the wire will accept a value.
+
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,
 `RedactURL` (a signed URL carries its credential in the query — never log it raw),

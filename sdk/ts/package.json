@@ -17,6 +17,7 @@
     "./idempotency": "./src/idempotency.ts",
     "./scopes": "./src/scopes.ts",
     "./hashurl": "./src/hashurl.ts",
+    "./hosts": "./src/hosts.ts",
     "./wire": "./src/wire.ts",
     "./core": "./core/verifier.ts",
     "./core/wire-canon": "./core/wire-canon.ts",

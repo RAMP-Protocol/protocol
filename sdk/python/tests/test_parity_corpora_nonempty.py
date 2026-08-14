@@ -64,6 +64,8 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
     (GO_TESTDATA / "signedurl-vectors.json", _whole, "signedurl"),
     (GO_TESTDATA / "scopes-vectors.json", lambda d: d["normalize"], "scopes-normalize"),
     (GO_TESTDATA / "scopes-vectors.json", lambda d: d["subset"], "scopes-subset"),
+    (GO_TESTDATA / "audience-vectors.json", lambda d: d["bare_domain"], "bare-domain"),
+    (GO_TESTDATA / "audience-vectors.json", lambda d: d["audience"], "audience"),
     (CONFORMANCE_CORPUS / "crossfield.json", _whole, "crossfield"),
 ]
 

@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 77 symbols at cross-language parity · 14 documented divergences · 142 Go-idiomatic exclusions · 23 conformance corpora, each tri-replayed.
+**At a glance:** 82 symbols at cross-language parity · 14 documented divergences · 143 Go-idiomatic exclusions · 24 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -28,10 +28,13 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `AgentKeyHeader` | `AGENT_KEY_HEADER` | `AGENT_KEY_HEADER` |
 | `AppendSignature` | `append_signature` | `appendSignature` |
 | `ApplyScopes` | `apply_scopes` | `applyScopes` |
+| `AudienceVerdict` | `AudienceVerdict` | `AudienceVerdict` |
+| `BareDomainPattern` | `BARE_DOMAIN_PATTERN` | `bareDomainPattern` |
 | `CanonicalAcceptanceBytes` | `jcs_acceptance_payload` | `acceptancePayload` |
 | `CanonicalOfferBytes` | `canonical_offer_payload` | `canonicalOfferPayload` |
 | `CanonicalizeMoney` | `canonicalize_money` | `canonicalizeMoney` |
 | `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
+| `CheckAudience` | `check_audience` | `checkAudience` |
 | `ConnectProtocolVersion` | `ConnectProtocolVersion` | `ConnectProtocolVersion` |
 | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` |
 | `ContentDigest` | `content_digest` | `contentDigest` |
@@ -42,7 +45,9 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `ErrUnknownKey` | `UnknownKeyError` | `UnknownKey` |
 | `FormatMoney` | `format_money` | `formatMoney` |
 | `HashURL` | `hash_url` | `hashUrl` |
+| `IsBareDomain` | `is_bare_domain` | `isBareDomain` |
 | `KeyResolver` | `KeyResolver` | `RequestKeyResolver` |
+| `MaxBareDomainLen` | `MAX_BARE_DOMAIN_LEN` | `maxBareDomainLen` |
 | `NewIdempotencyKey` | `generate_idempotency_key` | `generateIdempotencyKey` |
 | `NormalizeScopes` | `normalize_scopes` | `normalizeScopes` |
 | `OfferSignatureAlgorithm` | `OFFER_SIGNATURE_ALGORITHM` | `OFFER_SIGNATURE_ALGORITHM` |
@@ -227,6 +232,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.ComponentParam` | Go value type for an RFC 9421 covered-component parameter; py/ts model components inline. |
 | `helpers.CoveredComponent` | Go value type for an RFC 9421 covered component; py/ts model components inline. |
 | `helpers.ErrAcceptanceSignatureInvalid` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `helpers.ErrAudienceIdentity` | Go errors.Is sentinel for an unusable configured Exchange identity; py/ts raise/throw instead of exporting sentinels. |
 | `helpers.ErrBrokenSignatureChain` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrDigestMismatch` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `helpers.ErrEmptyIdempotencyKey` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
@@ -306,6 +312,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | Corpus | go | python | ts |
 |---|---|---|---|
 | `helpers/testdata/acceptance-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/audience-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/error-detail-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/hashurl-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/idempotency-validate-vectors.json` | ✅ | ✅ | ✅ |
