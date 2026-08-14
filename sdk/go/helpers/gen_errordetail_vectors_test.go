@@ -202,6 +202,18 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 		"ramp.v1.ExchangeService", "balance too low",
 		rampv1.DenialReason_DENIAL_REASON_INSUFFICIENT_BALANCE)
 
+	// The register-first half of the denial split. It would otherwise reach no
+	// cross-language case at all: the corpus generator auto-fills the FIRST
+	// allowed enum value, so it lands on ACCOUNT_INACTIVE and never on this one,
+	// and a client that never learned to decode the new reason would stay green.
+	// The vector deliberately carries the reason ALONE. TransactionDenial.exchange
+	// is already covered cross-language by the field corpus, and this family's
+	// sub-fields stay caller-set — feeding one back through the builder here would
+	// assert a construction the builder does not perform.
+	denialNotRegistered := TransactionDenialDetail(
+		"ramp.v1.ExchangeService", "no account at this Exchange — call Register first",
+		rampv1.DenialReason_DENIAL_REASON_ACCOUNT_NOT_REGISTERED)
+
 	retrievalAuth := RetrievalAuthFailureDetail(
 		"ramp.v1.Edge", "signed URL expired",
 		rampv1.RetrievalAuthFailureReason_RETRIEVAL_AUTH_FAILURE_REASON_URL_EXPIRED)
@@ -231,10 +243,21 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 	// that belongs to no single member, which is the boundary a client most
 	// plausibly gets wrong by treating "" as unset.
 	registrationInvalidData := RegistrationFailureDetail(
-		"ramp.v1.ExchangeService", "registration_data does not match the published registration_schema",
+		"ramp.v1.ExchangeService", "registration_data does not match the published data_schema",
 		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
 		&rampv1.RegistrationFieldError{Path: "/vat_id", Error: "must match ^[A-Z]{2}[0-9]+$"},
 		&rampv1.RegistrationFieldError{Path: "", Error: "matched 2 branches of oneOf, exactly 1 required"},
+	)
+
+	// The stale-terms refusal. It shares the registration_failure block with the
+	// case above but carries NO field_errors — the list is scoped to
+	// INVALID_REGISTRATION_DATA, and every other reason leaves it empty. Without
+	// this vector the reason would reach no cross-language case at all, so a
+	// client that never learned to decode it would stay green: the same gap the
+	// field-errors vector was added to close for its own branch.
+	registrationStaleTerms := RegistrationFailureDetail(
+		"ramp.v1.ExchangeService", "terms_digest does not match the currently published terms",
+		rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE,
 	)
 
 	disputeFailure := DisputeFailureDetail(
@@ -257,11 +280,13 @@ func buildErrorDetailVectors(t *testing.T) []errorDetailVector {
 		{"with_single_metadata", withMetadata},
 		{"empty_metadata_omitted", emptyMetadata},
 		{"transaction_denial_reason", denial},
+		{"transaction_denial_account_not_registered", denialNotRegistered},
 		{"retrieval_auth_failure_reason", retrievalAuth},
 		{"multi_key_metadata_with_reason", multiKey},
 		{"catalog_rejection_reason", catalogRejection},
 		{"registration_failure_reason", registrationFailure},
 		{"registration_failure_field_errors", registrationInvalidData},
+		{"registration_failure_terms_digest_stale", registrationStaleTerms},
 		{"dispute_failure_reason", disputeFailure},
 		{"domain_verification_failure_reason", domainVerificationFailure},
 		{"usage_report_rejection_reason", usageReportRejection},

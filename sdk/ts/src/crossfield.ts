@@ -4,12 +4,14 @@ import {
   LicenseTermSchema,
   ObligationSchema,
   PricingSchema,
+  RegistrationFailureSchema,
   RestrictionSchema,
+  WellKnownManifestSchema,
 } from "../../../gen/ts/wire/schemas.ts";
 
 // Cross-field (message-CEL) refinements — the one genuinely net-new L1 surface.
 //
-// The 7 cross-field rules live ONLY in proto/ramp/v1/ramp.proto as protovalidate
+// The 9 cross-field rules live ONLY in proto/ramp/v1/ramp.proto as protovalidate
 // message-CEL options; the Go oracle executes them via protovalidate. Field-level
 // Zod (gen/ts/wire/schemas.ts) and Pydantic cannot express them. This layer
 // closes that gap on the TS side: it transcribes each CEL predicate VERBATIM
@@ -55,6 +57,7 @@ function str(v: unknown): string {
 // ---- generated enum members (reused, not forked) --------------------------
 const OBLIGATION_KIND_SHARE_ALIKE = "OBLIGATION_KIND_SHARE_ALIKE";
 const TERM_SEMANTICS_REFERENCE_ONLY = "TERM_SEMANTICS_REFERENCE_ONLY";
+const REGISTRATION_FAILURE_INVALID_DATA = "REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA";
 const PRICING_MODEL_FREE = "PRICING_MODEL_FREE";
 const PRICING_MODEL_PER_UNIT = "PRICING_MODEL_PER_UNIT";
 
@@ -153,12 +156,45 @@ function restrictionRules(o: Obj): string[] {
   return [];
 }
 
+/**
+ * WellKnownManifest.terms_digest_requires_terms_uri:
+ * `this.terms_digest == '' || this.terms_uri != ''`. A digest pins the document
+ * at terms_uri, so publishing one without the address it pins leaves nothing to
+ * check the bytes against. Mirror of the License rule above.
+ */
+function wellKnownManifestRules(o: Obj): string[] {
+  const termsDigest = str(field(o, "terms_digest"));
+  const termsUri = str(field(o, "terms_uri"));
+  if (termsDigest !== "" && termsUri === "") {
+    return ["well_known_manifest.terms_digest_requires_terms_uri"];
+  }
+  return [];
+}
+
+/**
+ * RegistrationFailure.field_errors_scoped_to_invalid_data:
+ * `this.field_errors.size() == 0 || this.reason == 6`. The member list names what
+ * failed the published schema, so any other reason carrying it publishes detail
+ * that does not apply to the refusal.
+ */
+function registrationFailureRules(o: Obj): string[] {
+  const fieldErrors = field(o, "field_errors");
+  if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
+    if (str(field(o, "reason")) !== REGISTRATION_FAILURE_INVALID_DATA) {
+      return ["registration_failure.field_errors_scoped_to_invalid_data"];
+    }
+  }
+  return [];
+}
+
 const RULES_BY_MESSAGE: Record<string, (o: Obj) => string[]> = {
   License: licenseRules,
   LicenseTerm: licenseTermRules,
   Obligation: obligationRules,
   Pricing: pricingRules,
   Restriction: restrictionRules,
+  RegistrationFailure: registrationFailureRules,
+  WellKnownManifest: wellKnownManifestRules,
 };
 
 /**
@@ -197,3 +233,5 @@ export const LicenseTermCrossFieldSchema = attach(LicenseTermSchema, "LicenseTer
 export const ObligationCrossFieldSchema = attach(ObligationSchema, "Obligation");
 export const PricingCrossFieldSchema = attach(PricingSchema, "Pricing");
 export const RestrictionCrossFieldSchema = attach(RestrictionSchema, "Restriction");
+export const RegistrationFailureCrossFieldSchema = attach(RegistrationFailureSchema, "RegistrationFailure");
+export const WellKnownManifestCrossFieldSchema = attach(WellKnownManifestSchema, "WellKnownManifest");

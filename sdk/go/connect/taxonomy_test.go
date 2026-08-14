@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	connectrpc "connectrpc.com/connect"
-	"google.golang.org/protobuf/proto"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
@@ -71,7 +70,7 @@ func TestReportUsage_TransientResolveFailureIsUnreachable(t *testing.T) {
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String(domain),
+		Exchange:      domain,
 		TransactionId: "txn-1",
 	})
 	var cerr *rampconnect.CallError
@@ -98,7 +97,7 @@ func TestReportUsage_NoAdvertisedEndpointIsNotSent(t *testing.T) {
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String(strings.TrimPrefix(srv.URL, "http://")),
+		Exchange:      strings.TrimPrefix(srv.URL, "http://"),
 		TransactionId: "txn-1",
 	})
 	var cerr *rampconnect.CallError
@@ -128,7 +127,7 @@ func TestSendError_ResourceExhaustedIsTooLarge(t *testing.T) {
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String(domain),
+		Exchange:      domain,
 		TransactionId: "txn-1",
 	})
 	var cerr *rampconnect.CallError
@@ -172,7 +171,7 @@ func TestSendError_CallerCancellationIsNotARefusal(t *testing.T) {
 	client := rampconnect.NewClient("http://home.invalid",
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 	_, err := client.ReportUsage(ctx, &rampv1.UsageReport{
-		Exchange:      proto.String(domain),
+		Exchange:      domain,
 		TransactionId: "txn-1",
 	})
 

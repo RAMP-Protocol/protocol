@@ -258,7 +258,7 @@ A successful response means verification succeeded; a failure travels as a non-O
 
 ### RegisterRequest
 
-Agent asks the Exchange to create its account. The caller's identity is proven by the verified request signature, never asserted in the body; the operator-defined business payload rides in `registration_data`. Whether the Exchange inspects that payload follows its manifest: one publishing `WellKnownManifest.registration_schema` validates against that schema and refuses a non-conforming payload, one publishing none passes it through to its system of record uninspected.
+Agent asks the Exchange to create its account. The caller's identity is proven by the verified request signature, never asserted in the body; the business-registration payload rides in `registration_data`. Whether the Exchange inspects that payload follows its manifest: one publishing `AccountRegistration.data_schema` validates against that schema and refuses a non-conforming payload, one publishing none passes it through to its system of record uninspected. Submitting a registration also states which terms the operator accepted — `terms_digest` echoes the value the manifest publishes, the request signature covers that echo, and the Exchange records the accepted digest with the account, so a later terms revision does not erase what was agreed.
 
 ::proto-message{name=RegisterRequest}
 
@@ -287,6 +287,12 @@ The account's current state. `billing_ref` is empty when the calling agent has n
 Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Signing keys are **not** carried here — each participant publishes them in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`, modeled by [`WBAFile`](#wbafile)). Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
 
 ::proto-message{name=WellKnownManifest}
+
+### AccountRegistration
+
+How to open an account at an Exchange, published as the optional `account_registration` block on the manifest. Omitting the whole block keeps the pass-through behaviour: `registration_data` is accepted uninspected. `data_schema` is the API mode — publishing it commits the Exchange to enforcing it, and an Exchange that publishes it MUST accept registration through the API. A future web mode (a URL to a registration page where a human completes steps an API call cannot carry) is an additional option an agent MAY offer its user instead, never a replacement for the API path. Terms versioning deliberately lives outside this block, on `WellKnownManifest.terms_digest`, so an Exchange with pass-through registration can still pin which terms document it serves.
+
+::proto-message{name=AccountRegistration}
 
 ### WBAFile
 
@@ -467,7 +473,7 @@ A registration request could not be completed.
 
 ### RegistrationFieldError
 
-One `registration_data` member that failed the Exchange's published `registration_schema`, carried on `RegistrationFailure.field_errors`.
+One `registration_data` member that failed the Exchange's published `AccountRegistration.data_schema`, carried on `RegistrationFailure.field_errors`.
 
 ::proto-message{name=RegistrationFieldError}
 

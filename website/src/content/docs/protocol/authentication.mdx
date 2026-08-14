@@ -390,6 +390,7 @@ A research bot queries a public Exchange. No delegation token, no special scopes
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.example",
   "requester": {
     "id": "research-bot-42",
     "domain": "research.acme.com",
@@ -416,6 +417,7 @@ A financial analysis agent carries a MarketData-issued delegation JWT that grant
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.example",
   "requester": {
     "id": "finbot-alpha",
     "domain": "fintech.example.com",
@@ -460,6 +462,7 @@ An internal agent at a law firm carries a delegation JWT issued by the firm's IA
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.example",
   "requester": {
     "id": "legal-research-agent",
     "domain": "agents.kirkland.com",
@@ -499,6 +502,7 @@ The Kirkland legal agent from the previous example delegates to a sub-agent that
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.example",
   "requester": {
     "id": "credit-checker-sub",
     "domain": "agents.kirkland.com",

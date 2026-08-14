@@ -104,6 +104,7 @@ The Broker sends a batch `ResourceQuery` with all 50 DOIs in `ResourceQuery.uris
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.scholarsgate.com",
   "requester": {
     "id": "litrev-agent",
     "domain": "cs.stanford.edu",
@@ -213,6 +214,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
       "offers": [
         {
           "offer_id": "offer-arxiv-2406-11838",
+          "exchange": "exchange.scholarsgate.com",
           "title": "MedViT: A Robust Vision Transformer for Medical Image Classification",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
@@ -287,6 +289,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
       "offers": [
         {
           "offer_id": "offer-elsevier-sub-103250",
+          "exchange": "exchange.scholarsgate.com",
           "title": "TransUNet++: Rethinking Multi-Scale Feature Fusion for Medical Image Segmentation",
           "pricing": {
             "model": "PRICING_MODEL_FREE",
@@ -372,6 +375,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
       "offers": [
         {
           "offer_id": "offer-springer-paid-02401",
+          "exchange": "exchange.scholarsgate.com",
           "title": "CellViT: Vision Transformers for Precise Cell Segmentation and Classification",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -445,6 +449,7 @@ The Exchange resolves all 50 DOIs against its catalog, checks the delegation JWT
       "offers": [
         {
           "offer_id": "offer-springer-retracted-02467",
+          "exchange": "exchange.scholarsgate.com",
           "title": "RETRACTED: Attention-Guided Pathology Detection via Self-Supervised Transformers",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -637,6 +642,7 @@ The Broker commits to all 49 selected offers in a single batch `TransactionReque
     {
       "offer": {
         "offer_id": "offer-arxiv-2406-11838",
+        "exchange": "exchange.scholarsgate.com",
         "title": "MedViT: A Robust Vision Transformer for Medical Image Classification",
         "pricing": {
           "model": "PRICING_MODEL_FREE",
@@ -662,6 +668,7 @@ The Broker commits to all 49 selected offers in a single batch `TransactionReque
     {
       "offer": {
         "offer_id": "offer-elsevier-sub-103250",
+        "exchange": "exchange.scholarsgate.com",
         "title": "TransUNet++: Rethinking Multi-Scale Feature Fusion for Medical Image Segmentation",
         "pricing": {
           "model": "PRICING_MODEL_FREE",
@@ -803,6 +810,7 @@ Usage reporting is mandatory for all 49 transactions. The agent submits an aggre
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.scholarsgate.com",
   "idempotency_key": "ur-litrev-001",
   "transaction_id": "txn-litrev-batch-001",
   "billing_id": "bill-litrev-batch-001",

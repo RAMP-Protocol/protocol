@@ -21,6 +21,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -148,7 +149,20 @@ type stubExchange struct {
 	// can assert what the CLIENT put on the wire rather than only that the call
 	// succeeded. The SSOT guard bans a bare Ver literal but cannot see an OMITTED
 	// one, so this is what stops ver silently going missing again.
+	//
+	// Guarded, like every other recording double in this SDK: the handler runs on
+	// the httptest server's goroutine and the assertion reads from the test's, so
+	// the write and the read are only ordered by luck today — one test issuing two
+	// calls, or a run under -race, is enough to lose that.
+	mu         sync.Mutex
 	gotExecute *rampv1.TransactionRequest
+}
+
+// lastExecute returns the last request the origin observed.
+func (s *stubExchange) lastExecute() *rampv1.TransactionRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.gotExecute
 }
 
 // requireVerified mirrors the platform handlers' auth guard: no verified
@@ -172,7 +186,9 @@ func (s *stubExchange) DiscoverResources(
 func (s *stubExchange) ExecuteTransaction(
 	ctx context.Context, req *connectrpc.Request[rampv1.TransactionRequest],
 ) (*connectrpc.Response[rampv1.TransactionResponse], error) {
+	s.mu.Lock()
 	s.gotExecute = req.Msg
+	s.mu.Unlock()
 	if err := requireVerified(ctx); err != nil {
 		return nil, err
 	}
@@ -366,10 +382,11 @@ func TestExecute_StampsProtocolVersion(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if origin.gotExecute == nil {
+	sent := origin.lastExecute()
+	if sent == nil {
 		t.Fatal("origin observed no TransactionRequest — the capture is wired wrong, so this test would pass vacuously")
 	}
-	if got := origin.gotExecute.GetVer(); got != helpers.ProtocolVersion {
+	if got := sent.GetVer(); got != helpers.ProtocolVersion {
 		t.Errorf("TransactionRequest.ver = %q, want %q — Execute must stamp the version from helpers.ProtocolVersion",
 			got, helpers.ProtocolVersion)
 	}

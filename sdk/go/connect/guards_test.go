@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"google.golang.org/protobuf/proto"
-
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	rampconnect "github.com/RAMP-Protocol/protocol/sdk/go/connect"
 )
@@ -52,7 +50,7 @@ func TestReportUsage_GuardRefusesAPrivateEndpoint(t *testing.T) {
 	)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String("localhost:1"),
+		Exchange:      "localhost:1",
 		TransactionId: "txn-1",
 	})
 	if err == nil {
@@ -101,7 +99,7 @@ func TestReportUsage_GuardSurvivesACallerSuppliedTransport(t *testing.T) {
 			// Port named on both sides so the routing check passes and the dial is
 			// actually attempted; see the sibling test above.
 			_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-				Exchange:      proto.String("localhost:1"),
+				Exchange:      "localhost:1",
 				TransactionId: "txn-1",
 			})
 			if err == nil || !strings.Contains(err.Error(), "SSRF guard") {
@@ -165,7 +163,7 @@ func TestReportUsage_RefusesAnInjectedEndpointCarryingUserinfo(t *testing.T) {
 		)...)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String("exchange.test"),
+		Exchange:      "exchange.test",
 		TransactionId: "txn-1",
 	})
 	if err == nil {
@@ -208,7 +206,7 @@ func TestReportUsage_RefusesRedirectAndNeverContactsTheTarget(t *testing.T) {
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String(domain),
+		Exchange:      domain,
 		TransactionId: "txn-1",
 	})
 	if err == nil {
@@ -238,7 +236,7 @@ func TestReportUsage_PeerRefusalIsATypedCallError(t *testing.T) {
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
 	_, err := client.ReportUsage(context.Background(), &rampv1.UsageReport{
-		Exchange:      proto.String(domain),
+		Exchange:      domain,
 		TransactionId: "txn-1",
 	})
 	var cerr *rampconnect.CallError

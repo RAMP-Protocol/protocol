@@ -211,6 +211,14 @@ func clientInterceptors(cfg clientConfig) []connectrpc.Interceptor {
 // the caller built stays untouched — it crossed a package boundary as an
 // argument, not as a buffer. Both fields are filled only when EMPTY: a value the
 // caller set is theirs.
+//
+// `exchange` is NOT among them: the caller MUST set it to the bare host of the
+// Exchange being queried, because the contract now requires every addressed
+// request to name its recipient and a query without one is rejected on arrival.
+// It is left to the caller rather than derived from the client's base URL on
+// purpose — the point of the field is to state whom the SENDER meant, and a
+// value the transport filled in from the address it was already dialling would
+// restate the dial target instead of checking it.
 func (c *Client) Discover(ctx context.Context, query *rampv1.ResourceQuery) (core.DiscoveryResult, error) {
 	const op = "discover"
 	if query == nil {
