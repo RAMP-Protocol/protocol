@@ -114,7 +114,10 @@ import "ramp/v1/vocab.proto";
 //
 // Every addressed request carries `exchange`: the bare host of the recipient the
 // request is meant for — "exchange.example" or "exchange.example:8081". A port
-// is allowed; a scheme, path, query, userinfo or trailing root dot is not, and
+// is allowed and must be a usable one, 1-65535: the rule spells the range out
+// rather than counting digits, so ":0" and ":99999" are refused like any other
+// value that cannot name a listening service. A scheme, path, query, userinfo
+// or trailing root dot is not allowed, and
 // the value is case-normalised (sender and recipient lowercase it before
 // comparing). The PORT is part of the identity and is compared, with one
 // folding: an absent port and the default port for the scheme in use are the
@@ -296,7 +299,7 @@ message ResourceQuery {
   string exchange = 10 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -326,7 +329,7 @@ message ResourceResponse {
   string exchange = 3 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -553,7 +556,7 @@ message Offer {
   string exchange = 8 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -1575,7 +1578,7 @@ message Requester {
   string domain = 2 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -2118,7 +2121,7 @@ message PushResourcesRequest {
   string exchange = 5 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -2236,7 +2239,7 @@ message RemoveResourcesRequest {
   string exchange = 4 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 }
@@ -2263,7 +2266,7 @@ message RefreshCatalogRequest {
   string exchange = 3 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 }
@@ -2345,7 +2348,7 @@ message UsageReport {
   string exchange = 8 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -2531,7 +2534,7 @@ message RequestConstraints {
   repeated string exchanges = 1 [
     (buf.validate.field).repeated.items.string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -2553,7 +2556,7 @@ message RequestConstraints {
   repeated string preferred_exchanges = 6 [
     (buf.validate.field).repeated.items.string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -2925,7 +2928,7 @@ message AuthorizedExchange {
   string domain = 1 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -3080,7 +3083,7 @@ message DisputeRequest {
   string exchange = 10 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -3241,7 +3244,7 @@ message DomainVerificationRequest {
   string exchange = 4 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -3308,7 +3311,7 @@ message DomainVerificationConfirmation {
   string exchange = 6 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -3393,7 +3396,7 @@ message RegisterRequest {
   string exchange = 3 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -3474,7 +3477,7 @@ message GetAccountStatusRequest {
   string exchange = 2 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 
@@ -3601,11 +3604,22 @@ message TransactionDenial {
   // on a relayed or fanned-out execute the request went to a Broker, so the
   // Exchange that refused may not be one the agent named. Carrying it here is
   // what lets ACCOUNT_NOT_REGISTERED be actionable — the agent learns where to
-  // call Register without fetching a manifest to work it out.
+  // call Register without fetching a manifest to work it out. NOTHING SIGNS THIS
+  // VALUE: it rides in a response, and on a relayed path the response passed
+  // through an intermediary, so this field is exactly the unsigned addressing
+  // the request-side `exchange` field exists to refuse. Treat it as a HINT, not
+  // an instruction. Before acting on it — and registering is a consequential act,
+  // handing an operator's business data and a signed acceptance of that
+  // Exchange's terms to whoever answers — a caller MUST check the value against
+  // a domain it already trusts for this transaction: the signed `offer.exchange`
+  // of the denied item, or its own RequestConstraints.exchanges set. A value
+  // matching neither is reported to the caller and never dialled, because a
+  // hostile intermediary that could choose it would be choosing where an
+  // unattended agent registers.
   optional string exchange = 4 [
     (buf.validate.field).string = {
       max_len: 260,
-      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+      pattern: "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
     }
   ];
 }

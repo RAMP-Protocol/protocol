@@ -311,7 +311,14 @@ makes its role unmistakable and removes the temptation to gate access on it.
 > may already query with `GetAccountStatus`. `TransactionDenial` gains an
 > `exchange` field alongside them, because the agent hits this wall at execute
 > rather than at register and otherwise would not know *where* to register
-> without fetching a manifest to work it out. `DELEGATION_EXPIRED` →
+> without fetching a manifest to work it out — as a HINT the caller checks
+> against a domain it already trusts, never as an instruction. The field rides in
+> a response, and a response on a relayed path passed through an intermediary, so
+> nothing signs it: that is the same unsigned addressing the request-side field
+> exists to refuse, pointed the other way. An intermediary free to choose the
+> value would be choosing where an unattended agent registers, and registering
+> hands over an operator's business data and a signed acceptance of that
+> Exchange's terms. `DELEGATION_EXPIRED` →
 > `DENIAL_REASON_DELEGATION_INVALID`, recorded below, is untouched: expiry
 > genuinely is one of several ways a single condition fails, and re-issuing for
 > time alone would still not fix it.

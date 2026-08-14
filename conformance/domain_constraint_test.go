@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -18,7 +19,7 @@ import (
 // Offer.exchange, TransactionDenial.exchange, ResourceResponse.exchange,
 // Requester.domain, AuthorizedExchange.domain and the RequestConstraints lists —
 // is expected to use THIS pattern, not a private variant.
-const sharedDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$`
+const sharedDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$`
 
 // malformedDomains are the shapes the constraint exists to refuse. A scheme or a
 // path is the load-bearing pair: the value is concatenated into a URL that a
@@ -128,13 +129,32 @@ func findFieldsWithPattern(t *testing.T, pattern string) []domainField {
 	return out
 }
 
+// fieldRules reads a field's protovalidate rules through the library's own
+// resolver rather than pulling the extension by hand — the same call the three
+// generators in this package already make, so a change in how rules are carried
+// (a predefined rule, say) reaches this guard without a second implementation to
+// remember.
 func fieldRules(fd protoreflect.FieldDescriptor) (*validate.FieldRules, bool) {
-	opts := fd.Options()
-	if opts == nil || !proto.HasExtension(opts, validate.E_Field) {
-		return nil, false
+	fr, err := protovalidate.ResolveFieldRules(fd)
+	return fr, err == nil && fr != nil
+}
+
+// messageWith returns a fresh instance of the field's message carrying v in that
+// field and nothing else. Both guards need exactly this, and a second copy is a
+// second place for the repeated/singular distinction to be got wrong.
+func messageWith(t *testing.T, df domainField, v string) proto.Message {
+	t.Helper()
+	mt, err := protoregistry.GlobalTypes.FindMessageByName(df.msg.FullName())
+	if err != nil {
+		t.Fatalf("FindMessageByName %s: %v", df.msg.FullName(), err)
 	}
-	fr, _ := proto.GetExtension(opts, validate.E_Field).(*validate.FieldRules)
-	return fr, fr != nil
+	m := mt.New()
+	if df.repeated {
+		m.Mutable(df.fd).List().Append(protoreflect.ValueOfString(v))
+	} else {
+		m.Set(df.fd, protoreflect.ValueOfString(v))
+	}
+	return m.Interface()
 }
 
 // validateDomainValue sets v on the field and reports whether the pattern rule
@@ -222,20 +242,16 @@ func TestSharedDomainConstraintRejectsMalformedValues(t *testing.T) {
 		name := fmt.Sprintf("%s.%s", df.msg.Name(), df.fd.Name())
 		for _, bad := range malformedDomains {
 			t.Run(name+"/"+bad.name, func(t *testing.T) {
-				mt, err := protoregistry.GlobalTypes.FindMessageByName(df.msg.FullName())
-				if err != nil {
-					t.Fatalf("FindMessageByName %s: %v", df.msg.FullName(), err)
-				}
-				m := mt.New()
-				if df.repeated {
-					l := m.Mutable(df.fd).List()
-					l.Append(protoreflect.ValueOfString(bad.value))
-				} else {
-					m.Set(df.fd, protoreflect.ValueOfString(bad.value))
-				}
-				err = v.Validate(m.Interface())
-				verr, ok := err.(*protovalidate.ValidationError)
-				if !ok {
+				err := v.Validate(messageWith(t, df, bad.value))
+				var verr *protovalidate.ValidationError
+				if !errors.As(err, &verr) {
+					// Three-way, like the validation cases: a nil error means the
+					// value was accepted, and a NON-validation error means the
+					// validator itself failed — swallowing that would let a CEL
+					// compile error read as a passing subtest.
+					if err != nil {
+						t.Fatalf("%s = %q: validator error: %v", name, bad.value, err)
+					}
 					t.Fatalf("%s = %q must be rejected, but validation passed", name, bad.value)
 				}
 				// Scoped to THIS field: a sibling's rule firing on the same
@@ -273,20 +289,13 @@ func TestSharedDomainConstraintAcceptsRealHosts(t *testing.T) {
 		name := fmt.Sprintf("%s.%s", df.msg.Name(), df.fd.Name())
 		for _, ok := range good {
 			t.Run(name+"/"+strings.ReplaceAll(ok, ".", "_"), func(t *testing.T) {
-				mt, err := protoregistry.GlobalTypes.FindMessageByName(df.msg.FullName())
-				if err != nil {
-					t.Fatalf("FindMessageByName: %v", err)
+				err := v.Validate(messageWith(t, df, ok))
+				var verr *protovalidate.ValidationError
+				if err != nil && !errors.As(err, &verr) {
+					t.Fatalf("%s = %q: validator error: %v", name, ok, err)
 				}
-				m := mt.New()
-				if df.repeated {
-					m.Mutable(df.fd).List().Append(protoreflect.ValueOfString(ok))
-				} else {
-					m.Set(df.fd, protoreflect.ValueOfString(ok))
-				}
-				if verr, isVE := v.Validate(m.Interface()).(*protovalidate.ValidationError); isVE {
-					if fieldViolatedShape(verr, df.fd) {
-						t.Errorf("%s = %q must be accepted by the domain pattern, but its own shape rule fired", name, ok)
-					}
+				if verr != nil && fieldViolatedShape(verr, df.fd) {
+					t.Errorf("%s = %q must be accepted by the domain pattern, but its own shape rule fired", name, ok)
 				}
 			})
 		}

@@ -1,6 +1,6 @@
 """Cross-field (message-CEL) validation — the one genuinely net-new L1 surface.
 
-Mirrors the sdk/ts sibling (sdk/ts/src/crossfield.ts). The 7 cross-field rules
+Mirrors the sdk/ts sibling (sdk/ts/src/crossfield.ts). The 9 cross-field rules
 live ONLY in proto/ramp/v1/ramp.proto as protovalidate message-CEL options; the
 Go oracle executes them via protovalidate. Field-level Pydantic (gen/python) and
 Zod cannot express them. This layer closes that gap on the Python side: it
@@ -132,7 +132,6 @@ def _restriction_rules(o: dict[str, Any]) -> list[str]:
     return []
 
 
-
 def _well_known_manifest_rules(o: dict[str, Any]) -> list[str]:
     """WellKnownManifest.terms_digest_requires_terms_uri.
 
@@ -145,7 +144,6 @@ def _well_known_manifest_rules(o: dict[str, Any]) -> list[str]:
     if terms_digest != "" and terms_uri == "":
         return ["well_known_manifest.terms_digest_requires_terms_uri"]
     return []
-
 
 
 def _registration_failure_rules(o: dict[str, Any]) -> list[str]:

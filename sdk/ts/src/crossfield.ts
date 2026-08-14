@@ -11,7 +11,7 @@ import {
 
 // Cross-field (message-CEL) refinements — the one genuinely net-new L1 surface.
 //
-// The 7 cross-field rules live ONLY in proto/ramp/v1/ramp.proto as protovalidate
+// The 9 cross-field rules live ONLY in proto/ramp/v1/ramp.proto as protovalidate
 // message-CEL options; the Go oracle executes them via protovalidate. Field-level
 // Zod (gen/ts/wire/schemas.ts) and Pydantic cannot express them. This layer
 // closes that gap on the TS side: it transcribes each CEL predicate VERBATIM

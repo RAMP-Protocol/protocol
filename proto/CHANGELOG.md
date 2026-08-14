@@ -46,7 +46,15 @@ accepted any string at all: `ResourceResponse.exchange`, `RequestConstraints.exc
 now because one value space with two contracts is the state that produces the bugs.
 `Requester.domain` earns it most: a verifier concatenates that value into
 `{domain}/.well-known/ramp.json` and fetches the result, so a smuggled path or query would
-choose WHAT gets fetched, not merely from where. A conformance guard walks the descriptor
+choose WHAT gets fetched, not merely from where.
+The port group spells the range out rather than counting digits: `:0` and `:99999` are
+refused like any other value that cannot name a listening service, where a `[0-9]{1,5}`
+group would have admitted both. And `TransactionDenial.exchange` is documented as a HINT,
+not an instruction — it rides in a response, a relayed response passed through an
+intermediary, so nothing signs it. A caller MUST check it against a domain it already
+trusts for the transaction (the denied item's signed `offer.exchange`, or its own
+`RequestConstraints.exchanges`) before acting, because registering hands an operator's
+business data and a signed acceptance of that Exchange's terms to whoever answers. A conformance guard walks the descriptor
 for every field carrying the shared pattern and asserts each refuses a scheme prefix, a
 path or query suffix, userinfo, a malformed port, a trailing root dot and an empty label —
 shapes the corpus generator cannot produce, because its bad-string table is shared with the
@@ -87,7 +95,7 @@ it from being published without the address it pins, mirroring the existing
 `license.digest_required_with_uri`. Operators should treat first publication as a
 coordinated change: it refuses every client that does not yet echo the value.
 
-**`REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE` (field 7) (additive, no wire break).** All
+**`REGISTRATION_FAILURE_REASON_TERMS_DIGEST_STALE` (additive, no wire break).** All
 four digest cases are now defined rather than only the stale one. Matching echo: the
 registration proceeds. Differing echo: refused with the new reason. Absent echo while the
 Exchange publishes a digest: refused with the SAME reason, because the caller's remedy is
@@ -101,7 +109,7 @@ so a warm cache would otherwise make it retry a refused value until the cache ex
 Registration happens once per Exchange, so the extra fetch is cheap.
 
 **`DENIAL_REASON_BILLING_REF_INACTIVE` splits into `DENIAL_REASON_ACCOUNT_INACTIVE` (keeping
-field 1) and `DENIAL_REASON_ACCOUNT_NOT_REGISTERED` (field 18), and `TransactionDenial` gains
+its wire number) and `DENIAL_REASON_ACCOUNT_NOT_REGISTERED`, and `TransactionDenial` gains
 `exchange` (field 4) (breaking, pre-1.0).** The agent hits this wall at execute, not at
 register, and the old single reason conflated two states of the caller with two different
 remedies: wait for an operator to activate an account that exists, versus call `Register`

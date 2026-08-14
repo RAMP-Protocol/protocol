@@ -4,8 +4,9 @@
 //
 // Mirrors the sdk/go oracle test TestValidate_enforcesCrossFieldCEL
 // (sdk/go/helpers/validate_corpus_test.go) against the SHARED corpus
-// conformance/corpus/crossfield.json (7 cases / 5 messages: License,
-// LicenseTerm, Obligation, Pricing, Restriction).
+// conformance/corpus/crossfield.json (9 cases / 7 messages: License,
+// LicenseTerm, Obligation, Pricing, RegistrationFailure, Restriction,
+// WellKnownManifest).
 //
 // The Go oracle asserts TWO things per mutant, not pass/fail only:
 //   (1) the invalid instance is REJECTED, and
@@ -20,10 +21,11 @@
 // fires on a legitimately-valid instance), this test also drives >=1 VALID
 // instance per message and asserts it passes with NO cross-field rule-ids.
 //
-// RED now purely because sdk/ts/src/crossfield.ts does not exist yet. The
-// implement step authors the cross-field refinements (each emitting a stable
-// rule-id) composed onto the generated <Message>Schema, at which point this goes
-// green with no change to the assertions.
+// The corpus is negatives-only, so the valid instances below are the only guard
+// against a refinement that fires on a legitimately-valid message. A rule
+// registered without one can have its predicate inverted while every test here
+// stays green, which is why the instance list is pinned to the registered rule
+// set rather than merely being long enough.
 import { describe, it, expect } from "vitest";
 import { crossFieldRuleIds } from "../src/crossfield.ts";
 import crossfield from "../../../conformance/corpus/crossfield.json";

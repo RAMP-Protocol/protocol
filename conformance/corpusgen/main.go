@@ -167,13 +167,15 @@ var patternKillers = map[string][]string{
 		"exchange..example",         // empty label
 		"-exchange.example",         // leading hyphen
 		"[::1]:443",                 // bracketed IPv6 literal
+		"exchange.example:0",        // port 0 names no listening service
+		"exchange.example:99999",    // port above 65535
 	},
 }
 
 // bareDomainPattern is the recipient-host shape, quoted from the proto so the
 // killer table above can be keyed by it. A drift between this copy and the
 // fields is caught by conformance's own descriptor guard, not here.
-const bareDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$`
+const bareDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$`
 
 func main() {
 	v, err := protovalidate.New()

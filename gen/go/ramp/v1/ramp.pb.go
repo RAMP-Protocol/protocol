@@ -8834,7 +8834,18 @@ type TransactionDenial struct {
 	// on a relayed or fanned-out execute the request went to a Broker, so the
 	// Exchange that refused may not be one the agent named. Carrying it here is
 	// what lets ACCOUNT_NOT_REGISTERED be actionable — the agent learns where to
-	// call Register without fetching a manifest to work it out.
+	// call Register without fetching a manifest to work it out. NOTHING SIGNS THIS
+	// VALUE: it rides in a response, and on a relayed path the response passed
+	// through an intermediary, so this field is exactly the unsigned addressing
+	// the request-side `exchange` field exists to refuse. Treat it as a HINT, not
+	// an instruction. Before acting on it — and registering is a consequential act,
+	// handing an operator's business data and a signed acceptance of that
+	// Exchange's terms to whoever answers — a caller MUST check the value against
+	// a domain it already trusts for this transaction: the signed `offer.exchange`
+	// of the denied item, or its own RequestConstraints.exchanges set. A value
+	// matching neither is reported to the caller and never dialled, because a
+	// hostile intermediary that could choose it would be choosing where an
+	// unattended agent registers.
 	Exchange      *string `protobuf:"bytes,4,opt,name=exchange,proto3,oneof" json:"exchange,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -9264,22 +9275,22 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x12ramp/v1/ramp.proto\x12\aramp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bbuf/validate/validate.proto\x1a\x13ramp/v1/vocab.proto\"\x84\x01\n" +
 	"\x15AcceptableRestriction\x12,\n" +
 	"\x04axis\x18\x01 \x01(\x0e2\x18.ramp.v1.RestrictionKindR\x04axis\x12=\n" +
-	"\x06values\x18\x02 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\x06values\"\x9b\x04\n" +
+	"\x06values\x18\x02 \x03(\tB%\xbaH\"\x92\x01\x1f\x10@\"\x1br\x19\x10\x01\x18@2\x13^[A-Za-z0-9._:*-]+$R\x06values\"\xeb\x04\n" +
 	"\rResourceQuery\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x120\n" +
 	"\trequester\x18\x03 \x01(\v2\x12.ramp.v1.RequesterR\trequester\x12\x1d\n" +
 	"\x04uris\x18\b \x03(\tB\t\xbaH\x06\x92\x01\x03\x10\x80\x02R\x04uris\x12W\n" +
 	"\x17acceptable_restrictions\x18\t \x03(\v2\x1e.ramp.v1.AcceptableRestrictionR\x16acceptableRestrictions\x12:\n" +
 	"\bdeadline\x18\x06 \x01(\v2\x19.google.protobuf.DurationH\x00R\bdeadline\x88\x01\x01\x12-\n" +
-	"\x12supported_profiles\x18\a \x03(\tR\x11supportedProfiles\x12\x87\x01\n" +
+	"\x12supported_profiles\x18\a \x03(\tR\x11supportedProfiles\x12\xd7\x01\n" +
 	"\bexchange\x18\n" +
-	" \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12)\n" +
+	" \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\v\n" +
-	"\t_deadline\"\xa7\x03\n" +
+	"\t_deadline\"\xf7\x03\n" +
 	"\x10ResourceResponse\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x87\x01\n" +
-	"\bexchange\x18\x03 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12&\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\xd7\x01\n" +
+	"\bexchange\x18\x03 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12&\n" +
 	"\x06offers\x18\x04 \x03(\v2\x0e.ramp.v1.OfferR\x06offers\x126\n" +
 	"\foffer_groups\x18\x05 \x03(\v2\x13.ramp.v1.OfferGroupR\vofferGroups\x12:\n" +
 	"\n" +
@@ -9313,7 +9324,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x04unit\x18\x06 \x01(\tH\x01R\x04unit\x88\x01\x01B\f\n" +
 	"\n" +
 	"_resets_atB\a\n" +
-	"\x05_unit\"\xe5\b\n" +
+	"\x05_unit\"\xb5\t\n" +
 	"\x05Offer\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12\x19\n" +
 	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12*\n" +
@@ -9322,8 +9333,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\treporting\x18\x05 \x01(\v2\x1c.ramp.v1.ReportingObligationH\x01R\treporting\x88\x01\x01\x12>\n" +
 	"\n" +
 	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampH\x02R\texpiresAt\x88\x01\x01\x12:\n" +
-	"\bidentity\x18\a \x01(\v2\x19.ramp.v1.ResourceIdentityH\x03R\bidentity\x88\x01\x01\x12\x87\x01\n" +
-	"\bexchange\x18\b \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12\x1c\n" +
+	"\bidentity\x18\a \x01(\v2\x19.ramp.v1.ResourceIdentityH\x03R\bidentity\x88\x01\x01\x12\xd7\x01\n" +
+	"\bexchange\x18\b \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12\x1c\n" +
 	"\tsignature\x18\t \x01(\tR\tsignature\x12/\n" +
 	"\x13signature_algorithm\x18\n" +
 	" \x01(\tR\x12signatureAlgorithm\x12,\n" +
@@ -9461,10 +9472,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x13_estimated_quantityB\x1a\n" +
 	"\x18_license_duration_monthsB\a\n" +
 	"\x05_unitB\v\n" +
-	"\t_metering\"\xb2\x03\n" +
+	"\t_metering\"\x82\x04\n" +
 	"\tRequester\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x83\x01\n" +
-	"\x06domain\x18\x02 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\x06domain\x124\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\xd3\x01\n" +
+	"\x06domain\x18\x02 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\x06domain\x124\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x16.ramp.v1.RequesterTypeB\b\xbaH\x05\x82\x01\x02 \x00R\x04type\x12\x17\n" +
 	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12 \n" +
 	"\x06scopes\x18\x06 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10@R\x06scopes\x128\n" +
@@ -9557,13 +9568,13 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12B\n" +
 	"\tunit_cost\x18\x03 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x00R\bunitCost\x88\x01\x01B\f\n" +
 	"\n" +
-	"_unit_cost\"\xec\x02\n" +
+	"_unit_cost\"\xbc\x03\n" +
 	"\x14PushResourcesRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x120\n" +
 	"\aentries\x18\x03 \x03(\v2\x16.ramp.v1.ResourceEntryR\aentries\x12\x1b\n" +
-	"\tcaller_id\x18\x04 \x01(\tR\bcallerId\x12\x87\x01\n" +
-	"\bexchange\x18\x05 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12)\n" +
+	"\tcaller_id\x18\x04 \x01(\tR\bcallerId\x12\xd7\x01\n" +
+	"\bexchange\x18\x05 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xa8\a\n" +
 	"\rResourceEntry\x12\x16\n" +
@@ -9603,19 +9614,19 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\brejected\x18\x03 \x01(\x05R\brejected\x12\x1a\n" +
 	"\bwarnings\x18\x04 \x03(\tR\bwarnings\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xe7\x01\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xb7\x02\n" +
 	"\x16RemoveResourcesRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x14\n" +
-	"\x05paths\x18\x03 \x03(\tR\x05paths\x12\x87\x01\n" +
-	"\bexchange\x18\x04 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\"E\n" +
+	"\x05paths\x18\x03 \x03(\tR\x05paths\x12\xd7\x01\n" +
+	"\bexchange\x18\x04 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\"E\n" +
 	"\x17RemoveResourcesResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x18\n" +
-	"\aremoved\x18\x02 \x01(\x05R\aremoved\"\xd0\x01\n" +
+	"\aremoved\x18\x02 \x01(\x05R\aremoved\"\xa0\x02\n" +
 	"\x15RefreshCatalogRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x87\x01\n" +
-	"\bexchange\x18\x03 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\"D\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\xd7\x01\n" +
+	"\bexchange\x18\x03 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\"D\n" +
 	"\x16RefreshCatalogResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x18\n" +
 	"\astarted\x18\x02 \x01(\bR\astarted\"\x99\x02\n" +
@@ -9627,7 +9638,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\t\n" +
 	"\a_windowB\v\n" +
-	"\t_endpoint\"\xff\x03\n" +
+	"\t_endpoint\"\xcf\x04\n" +
 	"\vUsageReport\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
@@ -9636,8 +9647,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\n" +
 	"billing_id\x18\x04 \x01(\tR\tbillingId\x12$\n" +
 	"\x05usage\x18\x05 \x01(\v2\x0e.ramp.v1.UsageR\x05usage\x128\n" +
-	"\ttimestamp\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x87\x01\n" +
-	"\bexchange\x18\b \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12+\n" +
+	"\ttimestamp\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\xd7\x01\n" +
+	"\bexchange\x18\b \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12+\n" +
 	"\x06assets\x18\t \x03(\v2\x13.ramp.v1.UsageAssetR\x06assets\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xd1\x01\n" +
@@ -9685,14 +9696,14 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0e\n" +
 	"\f_constraintsB\b\n" +
 	"\x06_queryB\x11\n" +
-	"\x0f_search_filters\"\xd2\a\n" +
-	"\x12RequestConstraints\x12\x8e\x01\n" +
-	"\texchanges\x18\x01 \x03(\tBp\xbaHm\x92\x01j\"hrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\texchanges\x12/\n" +
+	"\x0f_search_filters\"\xf6\b\n" +
+	"\x12RequestConstraints\x12\xe0\x01\n" +
+	"\texchanges\x18\x01 \x03(\tB\xc1\x01\xbaH\xbd\x01\x92\x01\xb9\x01\"\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\texchanges\x12/\n" +
 	"\tmax_price\x18\x02 \x01(\v2\r.ramp.v1.CostH\x00R\bmaxPrice\x88\x01\x01\x12I\n" +
 	"\rmax_unit_cost\x18\x03 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x01R\vmaxUnitCost\x88\x01\x01\x12H\n" +
 	"\x13delivery_preference\x18\x04 \x03(\x0e2\x17.ramp.v1.DeliveryMethodR\x12deliveryPreference\x120\n" +
-	"\x11reporting_capable\x18\x05 \x01(\bH\x02R\x10reportingCapable\x88\x01\x01\x12\xa1\x01\n" +
-	"\x13preferred_exchanges\x18\x06 \x03(\tBp\xbaHm\x92\x01j\"hrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\x12preferredExchanges\x12&\n" +
+	"\x11reporting_capable\x18\x05 \x01(\bH\x02R\x10reportingCapable\x88\x01\x01\x12\xf3\x01\n" +
+	"\x13preferred_exchanges\x18\x06 \x03(\tB\xc1\x01\xbaH\xbd\x01\x92\x01\xb9\x01\"\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\x12preferredExchanges\x12&\n" +
 	"\fbudget_scope\x18\a \x01(\tH\x03R\vbudgetScope\x88\x01\x01\x127\n" +
 	"\rperiod_budget\x18\b \x01(\v2\r.ramp.v1.CostH\x04R\fperiodBudget\x88\x01\x01\x12C\n" +
 	"\rbudget_period\x18\t \x01(\v2\x19.google.protobuf.DurationH\x05R\fbudgetPeriod\x88\x01\x01\x12@\n" +
@@ -9783,9 +9794,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\arevoked\x18\x02 \x03(\tR\arevoked\"P\n" +
 	"\x12CatalogContributor\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\"\n" +
-	"\frelationship\x18\x02 \x01(\tR\frelationship\"\xd1\x02\n" +
-	"\x12AuthorizedExchange\x12\x83\x01\n" +
-	"\x06domain\x18\x01 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\x06domain\x12\x1a\n" +
+	"\frelationship\x18\x02 \x01(\tR\frelationship\"\xa1\x03\n" +
+	"\x12AuthorizedExchange\x12\xd3\x01\n" +
+	"\x06domain\x18\x01 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\x06domain\x12\x1a\n" +
 	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12K\n" +
 	"\frelationship\x18\x03 \x01(\x0e2\x1d.ramp.v1.ProviderRelationshipB\b\xbaH\x05\x82\x01\x02 \x00R\frelationship\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
@@ -9796,7 +9807,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0eabsence_reason\x18\x10 \x01(\x0e2\x1b.ramp.v1.OfferAbsenceReasonH\x00R\rabsenceReason\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x11\n" +
-	"\x0f_absence_reason\"\xa6\x05\n" +
+	"\x0f_absence_reason\"\xf6\x05\n" +
 	"\x0eDisputeRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
@@ -9808,9 +9819,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\vdescription\x18\x06 \x01(\tH\x00R\vdescription\x88\x01\x01\x127\n" +
 	"\x15received_content_hash\x18\a \x01(\tH\x01R\x13receivedContentHash\x88\x01\x01\x125\n" +
 	"\x14received_hash_method\x18\b \x01(\tH\x02R\x12receivedHashMethod\x88\x01\x01\x12\x1b\n" +
-	"\treport_id\x18\t \x01(\tR\breportId\x12\x87\x01\n" +
+	"\treport_id\x18\t \x01(\tR\breportId\x12\xd7\x01\n" +
 	"\bexchange\x18\n" +
-	" \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12)\n" +
+	" \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0e\n" +
 	"\f_descriptionB\x18\n" +
@@ -9829,12 +9840,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\r\n" +
 	"\v_dispute_idB\x17\n" +
 	"\x15_estimated_resolutionB\r\n" +
-	"\v_resolution\"\xcd\x02\n" +
+	"\v_resolution\"\x9d\x03\n" +
 	"\x19DomainVerificationRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12 \n" +
-	"\tcaller_id\x18\x03 \x01(\tH\x00R\bcallerId\x88\x01\x01\x12\x87\x01\n" +
-	"\bexchange\x18\x04 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12)\n" +
+	"\tcaller_id\x18\x03 \x01(\tH\x00R\bcallerId\x88\x01\x01\x12\xd7\x01\n" +
+	"\bexchange\x18\x04 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\f\n" +
 	"\n" +
@@ -9846,15 +9857,15 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12)\n" +
 	"\x10verification_url\x18\x04 \x01(\tR\x0fverificationUrl\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\x9b\x03\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xeb\x03\n" +
 	"\x1eDomainVerificationConfirmation\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12\x14\n" +
 	"\x05token\x18\x03 \x01(\tR\x05token\x12$\n" +
 	"\vsigning_key\x18\x04 \x01(\tH\x00R\n" +
 	"signingKey\x88\x01\x01\x12\x1e\n" +
-	"\bcdn_type\x18\x05 \x01(\tH\x01R\acdnType\x88\x01\x01\x12\x87\x01\n" +
-	"\bexchange\x18\x06 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12)\n" +
+	"\bcdn_type\x18\x05 \x01(\tH\x01R\acdnType\x88\x01\x01\x12\xd7\x01\n" +
+	"\bexchange\x18\x06 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0e\n" +
 	"\f_signing_keyB\v\n" +
@@ -9867,11 +9878,11 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\t\n" +
 	"\a_key_idB\x0e\n" +
-	"\f_valid_until\"\xc4\x03\n" +
+	"\f_valid_until\"\x94\x04\n" +
 	"\x0fRegisterRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12D\n" +
-	"\x11registration_data\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x10registrationData\x12\x87\x01\n" +
-	"\bexchange\x18\x03 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12p\n" +
+	"\x11registration_data\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x10registrationData\x12\xd7\x01\n" +
+	"\bexchange\x18\x03 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12p\n" +
 	"\fterms_digest\x18\x04 \x01(\tBH\xbaHErC2A^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})?$H\x00R\vtermsDigest\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x0f\n" +
@@ -9882,10 +9893,10 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"billingRef\x12\x16\n" +
 	"\x06active\x18\x03 \x01(\bR\x06active\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
-	"\fext_critical\x18Z \x03(\tR\vextCritical\"\x83\x02\n" +
+	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xd3\x02\n" +
 	"\x17GetAccountStatusRequest\x12\x10\n" +
-	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\x87\x01\n" +
-	"\bexchange\x18\x02 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$R\bexchange\x12)\n" +
+	"\x03ver\x18\x01 \x01(\tR\x03ver\x12\xd7\x01\n" +
+	"\bexchange\x18\x02 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCritical\"\xb3\x01\n" +
 	"\x18GetAccountStatusResponse\x12\x10\n" +
@@ -9910,13 +9921,13 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06reason\"\xe8\x02\n" +
+	"\x06reason\"\xb8\x03\n" +
 	"\x11TransactionDenial\x129\n" +
 	"\x06reason\x18\x01 \x01(\x0e2\x15.ramp.v1.DenialReasonB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x06reason\x12O\n" +
 	"\x16restriction_mismatches\x18\x02 \x03(\x0e2\x18.ramp.v1.RestrictionKindR\x15restrictionMismatches\x12\x1e\n" +
-	"\boffer_id\x18\x03 \x01(\tH\x00R\aofferId\x88\x01\x01\x12\x8c\x01\n" +
-	"\bexchange\x18\x04 \x01(\tBk\xbaHhrf\x18\x84\x022a^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$H\x01R\bexchange\x88\x01\x01B\v\n" +
+	"\boffer_id\x18\x03 \x01(\tH\x00R\aofferId\x88\x01\x01\x12\xdc\x01\n" +
+	"\bexchange\x18\x04 \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$H\x01R\bexchange\x88\x01\x01B\v\n" +
 	"\t_offer_idB\v\n" +
 	"\t_exchange\"~\n" +
 	"\x10CatalogRejection\x12C\n" +

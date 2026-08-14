@@ -556,9 +556,10 @@ func TestDispute_RoutesLikeAReportAndStampsTheEnvelope(t *testing.T) {
 	req := &rampv1.DisputeRequest{
 		TransactionId: "txn-1",
 		ReportId:      "report-1",
+		Exchange:      domain,
 		Reason:        rampv1.DisputeReason_DISPUTE_REASON_DELIVERY_FAILED,
 	}
-	resp, err := client.Dispute(context.Background(), domain, req,
+	resp, err := client.Dispute(context.Background(), req,
 		rampconnect.WithIdempotencyKey("pinned"))
 	if err != nil {
 		t.Fatalf("Dispute: %v", err)
@@ -584,11 +585,27 @@ func TestDispute_SharesTheRoutingRefusals(t *testing.T) {
 	client := rampconnect.NewClient("http://home.invalid",
 		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
 
-	_, err := client.Dispute(context.Background(), "https://exchange.test",
-		&rampv1.DisputeRequest{TransactionId: "txn-1"})
+	_, err := client.Dispute(context.Background(),
+		&rampv1.DisputeRequest{TransactionId: "txn-1", Exchange: "https://exchange.test"})
 	var cerr *rampconnect.CallError
 	if !errors.As(err, &cerr) || cerr.Kind != rampconnect.CallNotSent {
 		t.Fatalf("error = %v, want a CallNotSent CallError", err)
+	}
+}
+
+// A dispute that names no recipient cannot be routed at all. The field is
+// required on the wire, so this refusal happens before anything is signed or
+// sent — the same shape ReportUsage already had, now reachable for disputes too.
+func TestDispute_RefusesAnUnaddressedRequest(t *testing.T) {
+	sig := newSigningFixture(t)
+	client := rampconnect.NewClient("http://home.invalid",
+		append(allowLoopback(t), rampconnect.WithSigner(sig.signer))...)
+
+	_, err := client.Dispute(context.Background(),
+		&rampv1.DisputeRequest{TransactionId: "txn-1", ReportId: "report-1"})
+	var cerr *rampconnect.CallError
+	if !errors.As(err, &cerr) || cerr.Kind != rampconnect.CallNotSent {
+		t.Fatalf("error = %v, want a CallNotSent CallError for a request with no exchange", err)
 	}
 }
 

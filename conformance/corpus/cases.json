@@ -176,6 +176,30 @@
     }
   },
   {
+    "id": "AuthorizedExchange/domain/killer#10",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:0",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#11",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:99999",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
     "id": "AuthorizedExchange/domain/killer#2",
     "message": "AuthorizedExchange",
     "valid": false,
@@ -1004,6 +1028,32 @@
     }
   },
   {
+    "id": "DisputeRequest/exchange/killer#10",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#11",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
     "id": "DisputeRequest/exchange/killer#2",
     "message": "DisputeRequest",
     "valid": false,
@@ -1267,6 +1317,28 @@
     }
   },
   {
+    "id": "DomainVerificationConfirmation/exchange/killer#10",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#11",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
     "id": "DomainVerificationConfirmation/exchange/killer#2",
     "message": "DomainVerificationConfirmation",
     "valid": false,
@@ -1488,6 +1560,28 @@
     }
   },
   {
+    "id": "DomainVerificationRequest/exchange/killer#10",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#11",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
     "id": "DomainVerificationRequest/exchange/killer#2",
     "message": "DomainVerificationRequest",
     "valid": false,
@@ -1678,6 +1772,28 @@
     ],
     "json": {
       "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#10",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#11",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
     }
   },
   {
@@ -2154,6 +2270,42 @@
     "json": {
       "data_as_of": "2026-01-02T03:04:05Z",
       "exchange": "exchange.example/register",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#10",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example:0",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#11",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example:99999",
       "expires_at": "2026-01-02T03:04:05Z",
       "offer_id": "offer-seed",
       "pricing": {
@@ -2896,6 +3048,28 @@
     }
   },
   {
+    "id": "PushResourcesRequest/exchange/killer#10",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#11",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
     "id": "PushResourcesRequest/exchange/killer#2",
     "message": "PushResourcesRequest",
     "valid": false,
@@ -3252,6 +3426,28 @@
     }
   },
   {
+    "id": "RefreshCatalogRequest/exchange/killer#10",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#11",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
     "id": "RefreshCatalogRequest/exchange/killer#2",
     "message": "RefreshCatalogRequest",
     "valid": false,
@@ -3443,6 +3639,30 @@
     ],
     "json": {
       "exchange": "exchange.example/register",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#10",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#11",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999",
       "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
     }
   },
@@ -4136,6 +4356,28 @@
     }
   },
   {
+    "id": "RemoveResourcesRequest/exchange/killer#10",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#11",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
     "id": "RemoveResourcesRequest/exchange/killer#2",
     "message": "RemoveResourcesRequest",
     "valid": false,
@@ -4544,6 +4786,46 @@
       "exchanges": [
         "x",
         "exchange.example/register"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#10",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example:0"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#11",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example:99999"
       ],
       "max_data_age": "90s",
       "max_unit_cost": "0",
@@ -5000,6 +5282,46 @@
     }
   },
   {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#10",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example:0"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#11",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example:99999"
+      ]
+    }
+  },
+  {
     "id": "RequestConstraints/preferred_exchanges/item_killer#2",
     "message": "RequestConstraints",
     "valid": false,
@@ -5239,6 +5561,36 @@
     ],
     "json": {
       "domain": "exchange.example/register",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#10",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:0",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#11",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:99999",
       "scopes": [
         "x"
       ],
@@ -5645,6 +5997,36 @@
     "json": {
       "deadline": "90s",
       "exchange": "exchange.example/register",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#10",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example:0",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#11",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example:99999",
       "uris": [
         "x"
       ]
@@ -6177,6 +6559,28 @@
     ],
     "json": {
       "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#10",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#11",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
     }
   },
   {
@@ -6830,6 +7234,30 @@
     }
   },
   {
+    "id": "TransactionDenial/exchange/killer#10",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#11",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
     "id": "TransactionDenial/exchange/killer#2",
     "message": "TransactionDenial",
     "valid": false,
@@ -7255,6 +7683,32 @@
     ],
     "json": {
       "exchange": "exchange.example/register",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#10",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#11",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999",
       "idempotency_key": "x",
       "timestamp": "2026-01-02T03:04:05Z"
     }
