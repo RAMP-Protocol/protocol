@@ -9,15 +9,21 @@ import (
 // The audience check: does a request that arrived here actually name this
 // Exchange as its recipient?
 //
-// Addressed requests carry the recipient's bare domain in a body field. That
-// field is the only agent-authenticated statement of intended recipient that
-// survives a relay: each hop signs its own @target-uri, so on a Broker path the
-// agent's signature covers the BROKER's URL and the Exchange never receives an
-// agent signature over its own. The body field rides inside the agent's
-// content-digest instead, which a relaying Broker cannot alter without breaking
-// the inner signature. It also protects a direct hop whose dial target came
-// from a fetched manifest: the request signature covers the URL that was
-// dialed, while this field states whom the sender MEANT.
+// Addressed requests carry the recipient's bare domain in a body field. The RFC
+// 9421 signature does not already establish the recipient: it proves the sender
+// signed THE URL IT DIALLED, not that the URL was the right one. That dial target
+// is resolved from a fetched, cached /.well-known/ramp.json, so a poisoned or
+// stale resolution redirects the request while every signature still verifies.
+// The field states whom the sender MEANT, independently of that resolution, and
+// the genuine recipient refuses a request that names someone else.
+//
+// The field is stamped by whoever authors each request — the agent on the
+// requests it signs, a Broker on the legs it authors as sender. It is a statement
+// BY that sender, not tamper-evidence against it, and it is not what stops
+// cross-recipient replay either: a recipient that rebuilds @target-uri from its
+// own identity refuses a replayed capture at signature verification, before this
+// check runs. For transactions the binding audience statement is per item —
+// Offer.exchange inside the Exchange-signed offer.
 //
 // Pure string work over a value the caller already holds — no IO, no state, and
 // no lookup — which is why it sits in the IO-free tier and can run before any

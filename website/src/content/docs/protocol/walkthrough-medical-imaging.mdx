@@ -72,6 +72,7 @@ The agent sends a `ResourceQuery` using a DICOM-style URI that encodes the Study
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.medimg-exchange.com",
   "requester": {
     "id": "neuro-bot",
     "domain": "brainlab.edu",
@@ -110,6 +111,7 @@ The Exchange looks up the study in TCIA's catalog, verifies the agent's identity
       "offers": [
         {
           "offer_id": "offer-tcia-gbm-0152-001",
+          "exchange": "exchange.medimg-exchange.com",
           "title": "Brain MRI — TCGA-GBM Subject TCGA-06-0152",
           "pricing": {
             "model": "PRICING_MODEL_PER_UNIT",
@@ -220,6 +222,7 @@ The agent commits to the offer. Because `medimg.dua_required` was flagged as cri
     {
       "offer": {
         "offer_id": "offer-tcia-gbm-0152-001",
+        "exchange": "exchange.medimg-exchange.com",
         "title": "Brain MRI — TCGA-GBM Subject TCGA-06-0152",
         "pricing": {
           "model": "PRICING_MODEL_PER_UNIT",
@@ -459,6 +462,7 @@ The agent reports consumption after completing its analysis. Medical imaging use
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.medimg-exchange.com",
   "idempotency_key": "ur-mri-001",
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",
@@ -515,6 +519,7 @@ Six weeks after the transaction, the research team discovers that one DICOM inst
 ```json
 {
   "ver": "1.0",
+  "exchange": "exchange.medimg-exchange.com",
   "idempotency_key": "disp-mri-001",
   "transaction_id": "txn-mri-gbm-0152-001",
   "billing_id": "bill-mri-001",

@@ -97,22 +97,23 @@ func IsBareHost(ref string) (bool, error) {
 // with an optional ":port", never a URL. "sub.example.com:443" passes; a value
 // carrying a scheme, a path, userinfo, or a query never does.
 //
-// It is meant to be the SINGLE definition of that shape: the protovalidate rule
-// on every domain-valued field in ramp.proto MUST carry these same bytes, so the
-// check a client makes before sending and the check the wire makes on arrival
-// cannot answer differently. The shared conformance vectors record the pattern
-// beside the cases precisely so a guard can hold the two together.
+// It is the SINGLE definition of that shape: these bytes are the protovalidate
+// pattern carried by every domain-valued field in ramp.proto, so the check a
+// client makes before sending and the check the wire makes on arrival cannot
+// answer differently. The shared conformance vectors record the pattern beside
+// the cases so a guard can hold the two together.
 //
-// That rule is NOT on the wire yet — the proto revision adding it is separate
-// work, so today this SDK is stricter than the wire rather than equal to it.
-const BareDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$`
+// The port is a real 1-65535 range rather than "one to five digits", which is
+// why it is spelled out at this length. That distinction is load-bearing on
+// exactly the values a digit count waves through: :0, :65536 and :99999 name no
+// port at all, and :0443 is not a spelling of 443 but a different string that
+// would compare unequal to it.
+const BareDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$`
 
-// MaxBareDomainLen is the length bound belonging to the same rule: the
-// protovalidate `string.max_len` on those fields MUST carry this number. Without
-// it a client would accept a pattern-valid but over-length value the server then
-// rejects — the client/server split the shared rule is meant to close.
-//
-// Like the pattern, it is not yet enforced on the wire.
+// MaxBareDomainLen is the length bound belonging to the same rule — the
+// protovalidate `string.max_len` those fields carry. Without it a client would
+// accept a pattern-valid but over-length value the server then rejects, which is
+// the client/server split the shared rule exists to close.
 const MaxBareDomainLen = 260
 
 var bareDomain = regexp.MustCompile(BareDomainPattern)

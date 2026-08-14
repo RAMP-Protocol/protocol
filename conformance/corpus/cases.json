@@ -152,19 +152,249 @@
     }
   },
   {
+    "id": "AuthorizedExchange/domain/killer#0",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "https://exchange.example",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#1",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example/register",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#10",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:0",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#11",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:99999",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#2",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example?x=1",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#3",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "user@exchange.example",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#4",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:123456",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#5",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#6",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example.",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#7",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange..example",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#8",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "-exchange.example",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/killer#9",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "[::1]:443",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/missing_empty",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#0",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "two words",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#2",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "!!bad!!",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#3",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "\u0000ctl\u0000",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#4",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": " ",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/pattern#5",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "-5",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "AuthorizedExchange/domain/too_long",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "domain": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
     "id": "AuthorizedExchange/relationship/not_in",
     "message": "AuthorizedExchange",
     "valid": false,
     "rules": [
       "enum.not_in"
     ],
-    "json": {}
+    "json": {
+      "domain": "x"
+    }
   },
   {
     "id": "AuthorizedExchange/valid",
     "message": "AuthorizedExchange",
     "valid": true,
     "json": {
+      "domain": "x",
       "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
     }
   },
@@ -772,6 +1002,252 @@
     }
   },
   {
+    "id": "DisputeRequest/exchange/killer#0",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#1",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#10",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#11",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#2",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#3",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#4",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#5",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#6",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example.",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#7",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#8",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/killer#9",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/missing_empty",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/pattern#0",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/pattern#2",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/pattern#3",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/pattern#4",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " ",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/pattern#5",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DisputeRequest/exchange/too_long",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
     "id": "DisputeRequest/idempotency_key/too_long",
     "message": "DisputeRequest",
     "valid": false,
@@ -779,6 +1255,7 @@
       "string.max_len"
     ],
     "json": {
+      "exchange": "exchange.example",
       "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
     }
@@ -791,6 +1268,7 @@
       "string.min_len"
     ],
     "json": {
+      "exchange": "exchange.example",
       "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
     }
   },
@@ -802,6 +1280,7 @@
       "enum.not_in"
     ],
     "json": {
+      "exchange": "exchange.example",
       "idempotency_key": "idem-dr"
     }
   },
@@ -810,8 +1289,224 @@
     "message": "DisputeRequest",
     "valid": true,
     "json": {
+      "exchange": "exchange.example",
       "idempotency_key": "idem-dr",
       "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#0",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#1",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#10",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#11",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#2",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#3",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#4",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#5",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#6",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example."
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#7",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#8",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/killer#9",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/missing_empty",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/pattern#0",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/pattern#2",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/pattern#3",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/pattern#4",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " "
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/pattern#5",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/exchange/too_long",
+    "message": "DomainVerificationConfirmation",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "DomainVerificationConfirmation/valid",
+    "message": "DomainVerificationConfirmation",
+    "valid": true,
+    "json": {
+      "exchange": "x"
     }
   },
   {
@@ -840,6 +1535,436 @@
     "valid": true,
     "json": {
       "reason": "DOMAIN_VERIFICATION_FAILURE_REASON_CHALLENGE_NOT_FOUND"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#0",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#1",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#10",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#11",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#2",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#3",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#4",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#5",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#6",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example."
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#7",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#8",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/killer#9",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/missing_empty",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/pattern#0",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/pattern#2",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/pattern#3",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/pattern#4",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " "
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/pattern#5",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/exchange/too_long",
+    "message": "DomainVerificationRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "DomainVerificationRequest/valid",
+    "message": "DomainVerificationRequest",
+    "valid": true,
+    "json": {
+      "exchange": "x"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#0",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#1",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#10",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#11",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#2",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#3",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#4",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#5",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#6",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example."
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#7",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#8",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/killer#9",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/missing_empty",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/pattern#0",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/pattern#2",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/pattern#3",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/pattern#4",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " "
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/pattern#5",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/exchange/too_long",
+    "message": "GetAccountStatusRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "GetAccountStatusRequest/valid",
+    "message": "GetAccountStatusRequest",
+    "valid": true,
+    "json": {
+      "exchange": "x"
     }
   },
   {
@@ -1115,6 +2240,362 @@
     "json": {
       "kind": "OBLIGATION_KIND_ATTRIBUTION",
       "trigger": "OBLIGATION_TRIGGER_ON_USE"
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#0",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "https://exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#1",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example/register",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#10",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example:0",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#11",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example:99999",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#2",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example?x=1",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#3",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "user@exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#4",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example:123456",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#5",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example:",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#6",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example.",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#7",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange..example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#8",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "-exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/killer#9",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "[::1]:443",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/missing_empty",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/pattern#0",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "two words",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/pattern#2",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "!!bad!!",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/pattern#3",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "\u0000ctl\u0000",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/pattern#4",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": " ",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/pattern#5",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "-5",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/exchange/too_long",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
+    }
+  },
+  {
+    "id": "Offer/valid",
+    "message": "Offer",
+    "valid": true,
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      }
     }
   },
   {
@@ -1545,6 +3026,221 @@
     }
   },
   {
+    "id": "PushResourcesRequest/exchange/killer#0",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#1",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#10",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#11",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#2",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#3",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#4",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#5",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#6",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example."
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#7",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#8",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/killer#9",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/missing_empty",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "PushResourcesRequest/exchange/pattern#0",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/pattern#2",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/pattern#3",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/pattern#4",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " "
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/pattern#5",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/exchange/too_long",
+    "message": "PushResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "PushResourcesRequest/valid",
+    "message": "PushResourcesRequest",
+    "valid": true,
+    "json": {
+      "exchange": "x"
+    }
+  },
+  {
     "id": "Quota/limit/below_min",
     "message": "Quota",
     "valid": false,
@@ -1705,6 +3401,574 @@
     "json": {
       "limit": "1",
       "metric": "accesses"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#0",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#1",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#10",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#11",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#2",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#3",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#4",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#5",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#6",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example."
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#7",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#8",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/killer#9",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/missing_empty",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/pattern#0",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/pattern#2",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/pattern#3",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/pattern#4",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " "
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/pattern#5",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/exchange/too_long",
+    "message": "RefreshCatalogRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "RefreshCatalogRequest/valid",
+    "message": "RefreshCatalogRequest",
+    "valid": true,
+    "json": {
+      "exchange": "x"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#0",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#1",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#10",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#11",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#2",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#3",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#4",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#5",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#6",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example.",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#7",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#8",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/killer#9",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/missing_empty",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/pattern#0",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/pattern#2",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/pattern#3",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/pattern#4",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " ",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/pattern#5",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/exchange/too_long",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/empty_ok",
+    "message": "RegisterRequest",
+    "valid": true,
+    "json": {
+      "exchange": "x",
+      "terms_digest": ""
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#0",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": "two words"
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#1",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": "1.2.3"
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#2",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": "!!bad!!"
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#3",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#4",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": " "
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#5",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": "-5"
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#6",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": "NaN"
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#7",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": "Infinity"
+    }
+  },
+  {
+    "id": "RegisterRequest/terms_digest/pattern#8",
+    "message": "RegisterRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "x",
+      "terms_digest": "1E3"
+    }
+  },
+  {
+    "id": "RegisterRequest/valid",
+    "message": "RegisterRequest",
+    "valid": true,
+    "json": {
+      "exchange": "x",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -1984,7 +4248,8 @@
     "message": "RegistrationFailure",
     "valid": false,
     "rules": [
-      "enum.not_in"
+      "enum.not_in",
+      "registration_failure.field_errors_scoped_to_invalid_data"
     ],
     "json": {
       "field_errors": [
@@ -1999,7 +4264,8 @@
     "message": "RegistrationFailure",
     "valid": false,
     "rules": [
-      "enum.defined_only"
+      "enum.defined_only",
+      "registration_failure.field_errors_scoped_to_invalid_data"
     ],
     "json": {
       "field_errors": [
@@ -2007,7 +4273,7 @@
           "error": "matched 2 branches of oneOf, exactly 1 required"
         }
       ],
-      "reason": 7
+      "reason": 8
     }
   },
   {
@@ -2065,6 +4331,221 @@
     "json": {
       "error": "x",
       "path": "x"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#0",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#1",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#10",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#11",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#2",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#3",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#4",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#5",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#6",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example."
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#7",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#8",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/killer#9",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/missing_empty",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/pattern#0",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/pattern#2",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/pattern#3",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/pattern#4",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " "
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/pattern#5",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/exchange/too_long",
+    "message": "RemoveResourcesRequest",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "RemoveResourcesRequest/valid",
+    "message": "RemoveResourcesRequest",
+    "valid": true,
+    "json": {
+      "exchange": "x"
     }
   },
   {
@@ -2274,13 +4755,299 @@
     }
   },
   {
+    "id": "RequestConstraints/exchanges/item_killer#0",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "https://exchange.example"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#1",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example/register"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#10",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example:0"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#11",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example:99999"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#2",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example?x=1"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#3",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "user@exchange.example"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#4",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example:123456"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#5",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example:"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#6",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange.example."
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#7",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "exchange..example"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#8",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "-exchange.example"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_killer#9",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "[::1]:443"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_pattern",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "two words"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/exchanges/item_too_long",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
     "id": "RequestConstraints/max_unit_cost/empty_ok",
     "message": "RequestConstraints",
     "valid": true,
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": ""
+      "max_unit_cost": "",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2292,8 +5059,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "two words"
+      "max_unit_cost": "two words",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2305,8 +5078,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "1.2.3"
+      "max_unit_cost": "1.2.3",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2318,8 +5097,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "!!bad!!"
+      "max_unit_cost": "!!bad!!",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2331,8 +5116,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "\u0000ctl\u0000"
+      "max_unit_cost": "\u0000ctl\u0000",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2344,8 +5135,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": " "
+      "max_unit_cost": " ",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2357,8 +5154,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "-5"
+      "max_unit_cost": "-5",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2370,8 +5173,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "NaN"
+      "max_unit_cost": "NaN",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2383,8 +5192,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "Infinity"
+      "max_unit_cost": "Infinity",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2396,8 +5211,14 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "1E3"
+      "max_unit_cost": "1E3",
+      "preferred_exchanges": [
+        "x"
+      ]
     }
   },
   {
@@ -2410,8 +5231,294 @@
     ],
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "max_unit_cost": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#0",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "https://exchange.example"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#1",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example/register"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#10",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example:0"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#11",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example:99999"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#2",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example?x=1"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#3",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "user@exchange.example"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#4",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example:123456"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#5",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example:"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#6",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange.example."
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#7",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "exchange..example"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#8",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "-exchange.example"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_killer#9",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "[::1]:443"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_pattern",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "two words"
+      ]
+    }
+  },
+  {
+    "id": "RequestConstraints/preferred_exchanges/item_too_long",
+    "message": "RequestConstraints",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
+      "max_data_age": "90s",
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
     }
   },
   {
@@ -2420,8 +5527,298 @@
     "valid": true,
     "json": {
       "budget_period": "90s",
+      "exchanges": [
+        "x"
+      ],
       "max_data_age": "90s",
-      "max_unit_cost": "0"
+      "max_unit_cost": "0",
+      "preferred_exchanges": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "Requester/domain/killer#0",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "https://exchange.example",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#1",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example/register",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#10",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:0",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#11",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:99999",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#2",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example?x=1",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#3",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "user@exchange.example",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#4",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:123456",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#5",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example:",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#6",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example.",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#7",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange..example",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#8",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "-exchange.example",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/killer#9",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "[::1]:443",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/missing_empty",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#0",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "two words",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#2",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "!!bad!!",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#3",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "\u0000ctl\u0000",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#4",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": " ",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/pattern#5",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "-5",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
+    }
+  },
+  {
+    "id": "Requester/domain/too_long",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "domain": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_AGENT"
     }
   },
   {
@@ -2432,6 +5829,7 @@
       "repeated.max_items"
     ],
     "json": {
+      "domain": "x",
       "scopes": [
         "x",
         "x",
@@ -2510,6 +5908,7 @@
       "enum.not_in"
     ],
     "json": {
+      "domain": "x",
       "scopes": [
         "x"
       ]
@@ -2520,6 +5919,7 @@
     "message": "Requester",
     "valid": true,
     "json": {
+      "domain": "x",
       "scopes": [
         "x"
       ],
@@ -2573,6 +5973,290 @@
     }
   },
   {
+    "id": "ResourceQuery/exchange/killer#0",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "https://exchange.example",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#1",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example/register",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#10",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example:0",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#11",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example:99999",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#2",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example?x=1",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#3",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "user@exchange.example",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#4",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example:123456",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#5",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example:",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#6",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange.example.",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#7",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "exchange..example",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#8",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "-exchange.example",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/killer#9",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "[::1]:443",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/missing_empty",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/pattern#0",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "two words",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/pattern#2",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "!!bad!!",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/pattern#3",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "\u0000ctl\u0000",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/pattern#4",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": " ",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/pattern#5",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "-5",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
+    "id": "ResourceQuery/exchange/too_long",
+    "message": "ResourceQuery",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "deadline": "90s",
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "uris": [
+        "x"
+      ]
+    }
+  },
+  {
     "id": "ResourceQuery/uris/too_many",
     "message": "ResourceQuery",
     "valid": false,
@@ -2581,6 +6265,7 @@
     ],
     "json": {
       "deadline": "90s",
+      "exchange": "x",
       "uris": [
         "x",
         "x",
@@ -2848,9 +6533,225 @@
     "valid": true,
     "json": {
       "deadline": "90s",
+      "exchange": "x",
       "uris": [
         "x"
       ]
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#0",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#1",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#10",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#11",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#2",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#3",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#4",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#5",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#6",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example."
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#7",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#8",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/killer#9",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/missing_empty",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#0",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#2",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#3",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#4",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " "
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/pattern#5",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5"
+    }
+  },
+  {
+    "id": "ResourceResponse/exchange/too_long",
+    "message": "ResourceResponse",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "ResourceResponse/valid",
+    "message": "ResourceResponse",
+    "valid": true,
+    "json": {
+      "exchange": "x"
     }
   },
   {
@@ -3309,13 +7210,231 @@
     }
   },
   {
+    "id": "TransactionDenial/exchange/killer#0",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#1",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#10",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#11",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#2",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#3",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#4",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#5",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#6",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example.",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#7",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#8",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/killer#9",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/pattern#0",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/pattern#2",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/pattern#3",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/pattern#4",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " ",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/pattern#5",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/exchange/too_long",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
     "id": "TransactionDenial/reason/not_in",
     "message": "TransactionDenial",
     "valid": false,
     "rules": [
       "enum.not_in"
     ],
-    "json": {}
+    "json": {
+      "exchange": "x"
+    }
   },
   {
     "id": "TransactionDenial/reason/undefined",
@@ -3325,7 +7444,8 @@
       "enum.defined_only"
     ],
     "json": {
-      "reason": 18
+      "exchange": "x",
+      "reason": 19
     }
   },
   {
@@ -3333,7 +7453,8 @@
     "message": "TransactionDenial",
     "valid": true,
     "json": {
-      "reason": "DENIAL_REASON_BILLING_REF_INACTIVE"
+      "exchange": "x",
+      "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
     }
   },
   {
@@ -3351,6 +7472,7 @@
     "valid": true,
     "json": {
       "offer": {
+        "exchange": "exchange.example",
         "offer_id": "offer-seed",
         "pricing": {
           "model": "PRICING_MODEL_FREE",
@@ -3371,6 +7493,7 @@
       "items": [
         {
           "offer": {
+            "exchange": "exchange.example",
             "offer_id": "offer-seed",
             "pricing": {
               "model": "PRICING_MODEL_FREE",
@@ -3392,6 +7515,7 @@
       "items": [
         {
           "offer": {
+            "exchange": "exchange.example",
             "offer_id": "offer-seed",
             "pricing": {
               "model": "PRICING_MODEL_FREE",
@@ -3411,6 +7535,7 @@
       "items": [
         {
           "offer": {
+            "exchange": "exchange.example",
             "offer_id": "offer-seed",
             "pricing": {
               "model": "PRICING_MODEL_FREE",
@@ -3537,6 +7662,252 @@
     }
   },
   {
+    "id": "UsageReport/exchange/killer#0",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "https://exchange.example",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#1",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example/register",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#10",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:0",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#11",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:99999",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#2",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example?x=1",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#3",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "user@exchange.example",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#4",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:123456",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#5",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example:",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#6",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange.example.",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#7",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "exchange..example",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#8",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-exchange.example",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/killer#9",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "[::1]:443",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/missing_empty",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/pattern#0",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "two words",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/pattern#2",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "!!bad!!",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/pattern#3",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "\u0000ctl\u0000",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/pattern#4",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": " ",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/pattern#5",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "exchange": "-5",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "UsageReport/exchange/too_long",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
     "id": "UsageReport/idempotency_key/too_long",
     "message": "UsageReport",
     "valid": false,
@@ -3544,6 +7915,7 @@
       "string.max_len"
     ],
     "json": {
+      "exchange": "x",
       "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "timestamp": "2026-01-02T03:04:05Z"
     }
@@ -3556,6 +7928,7 @@
       "string.min_len"
     ],
     "json": {
+      "exchange": "x",
       "timestamp": "2026-01-02T03:04:05Z"
     }
   },
@@ -3564,6 +7937,7 @@
     "message": "UsageReport",
     "valid": true,
     "json": {
+      "exchange": "x",
       "idempotency_key": "x",
       "timestamp": "2026-01-02T03:04:05Z"
     }
@@ -3603,14 +7977,170 @@
     "rules": [
       "enum.not_in"
     ],
-    "json": {}
+    "json": {
+      "domain": "exchange.example",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/empty_ok",
+    "message": "WellKnownManifest",
+    "valid": true,
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#0",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "two words",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#1",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "1.2.3",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#2",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "!!bad!!",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#3",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "\u0000ctl\u0000",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#4",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": " ",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#5",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "-5",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#6",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "NaN",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#7",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "Infinity",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
+  },
+  {
+    "id": "WellKnownManifest/terms_digest/pattern#8",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "1E3",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
+    }
   },
   {
     "id": "WellKnownManifest/valid",
     "message": "WellKnownManifest",
     "valid": true,
     "json": {
-      "role": "ROLE_AGENT"
+      "domain": "exchange.example",
+      "role": "ROLE_EXCHANGE",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
     }
   }
 ]

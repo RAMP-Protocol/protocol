@@ -1,13 +1,17 @@
 // Audience check and bare-domain shape — TS port of the sdk/go oracle
 // (helpers/hosts.go, helpers/audience.go).
 //
-// Addressed requests carry the recipient's bare domain in a body field. That
-// field is the only agent-authenticated statement of intended recipient that
-// survives a relay: each hop signs its own @target-uri, so on a Broker path the
-// agent's signature covers the BROKER's URL and the Exchange never receives an
-// agent signature over its own. The body field rides inside the agent's
-// content-digest instead, which a relaying Broker cannot alter without breaking
-// the inner signature.
+// Addressed requests carry the recipient's bare domain in a body field. The RFC
+// 9421 signature does not already establish the recipient: it proves the sender
+// signed THE URL IT DIALLED, not that the URL was the right one. That dial target
+// is resolved from a fetched, cached /.well-known/ramp.json, so a poisoned or
+// stale resolution redirects the request while every signature still verifies.
+// The field states whom the sender MEANT, independently of that resolution.
+//
+// The field is stamped by whoever authors each request — the agent on the requests
+// it signs, a Broker on the legs it authors as sender. It is a statement BY that
+// sender, not tamper-evidence against it. For transactions the binding audience
+// statement is per item: Offer.exchange inside the Exchange-signed offer.
 //
 // Pure string work, no IO. Byte-parity-guarded against the Go oracle by the
 // shared vectors at sdk/go/helpers/testdata/audience-vectors.json.
@@ -15,22 +19,22 @@
 /**
  * bareDomainPattern is the wire shape of a domain-valued field: a bare domain
  * with an optional ":port", never a URL. It carries the same bytes as the Go
- * `helpers.BareDomainPattern`, and the protovalidate rule on every domain-valued
- * field in ramp.proto MUST carry them too — one definition, so the check a client
- * makes before sending and the check the wire makes on arrival cannot answer
+ * `helpers.BareDomainPattern` and as the protovalidate pattern on every
+ * domain-valued field in ramp.proto — one definition, so the check a client makes
+ * before sending and the check the wire makes on arrival cannot answer
  * differently. The parity suite asserts these bytes against the shared vectors.
  *
- * That rule is NOT on the wire yet — the proto revision adding it is separate
- * work, so today this SDK is stricter than the wire rather than equal to it.
+ * The port is a real 1-65535 range rather than "one to five digits", which is why
+ * it is spelled out at this length: `:0`, `:65536` and `:99999` name no port at
+ * all, and `:0443` is not a spelling of 443 but a different string.
  */
 export const bareDomainPattern =
-	String.raw`^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$`;
+	String.raw`^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$`;
 
 /**
- * maxBareDomainLen is the length bound belonging to the same rule: the
- * protovalidate `string.max_len` on those fields MUST carry this number, so this
- * SDK cannot accept a pattern-valid but over-length value the server then
- * rejects. Like the pattern, it is not yet enforced on the wire.
+ * maxBareDomainLen is the length bound belonging to the same rule — the
+ * protovalidate `string.max_len` those fields carry, so this SDK cannot accept a
+ * pattern-valid but over-length value the server then rejects.
  */
 export const maxBareDomainLen = 260;
 

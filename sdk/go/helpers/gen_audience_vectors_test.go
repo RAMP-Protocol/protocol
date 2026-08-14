@@ -85,7 +85,7 @@ func buildBareDomainVectors(t *testing.T) []bareDomainVector {
 		{"uppercase", "Exchange.Example", true},
 		{"max_length", maxLenDomain(), true},
 		{"port_one_digit", "exchange.example:8", true},
-		{"port_five_digits", "exchange.example:65535", true},
+		{"port_max", "exchange.example:65535", true},
 
 		// Refused — not a domain at all.
 		{"empty", "", false},
@@ -106,11 +106,20 @@ func buildBareDomainVectors(t *testing.T) []bareDomainVector {
 		{"userinfo", "agent@exchange.example", false},
 		{"scheme_and_path", "https://exchange.example/v1", false},
 
-		// Refused — a bad port.
+		// Refused — a bad port. The rule is a real 1-65535 range, not a digit
+		// count, so the cases that separate the two belong here: a port outside
+		// the range names nothing, and a leading zero makes a different string
+		// rather than another spelling of the same port.
 		{"trailing_colon", "exchange.example:", false},
 		{"non_numeric_port", "exchange.example:https", false},
 		{"port_too_long", "exchange.example:123456", false},
 		{"two_ports", "exchange.example:80:443", false},
+		{"port_zero", "exchange.example:0", false},
+		{"port_above_max", "exchange.example:65536", false},
+		{"port_five_digits_out_of_range", "exchange.example:99999", false},
+		{"port_leading_zero", "exchange.example:0443", false},
+		{"port_leading_zeros", "exchange.example:00443", false},
+		{"port_leading_zero_short", "exchange.example:012", false},
 
 		// Refused — a bad label.
 		{"leading_hyphen", "-exchange.example", false},
@@ -175,7 +184,6 @@ func buildAudienceVectors(t *testing.T) []audienceVector {
 		{"port_is_part_of_the_identity", "exchange:8081", []string{"exchange"}, "mismatch", false},
 		{"different_non_default_port", "exchange:8081", []string{"exchange:9000"}, "mismatch", false},
 		{"port_80_is_not_folded", self, []string{"exchange.example:80"}, "mismatch", false},
-		{"padded_default_port_is_a_different_string", self, []string{"exchange.example:0443"}, "mismatch", false},
 		{"many_one_mismatch", self, []string{self, "other.example"}, "mismatch", false},
 		{"many_last_mismatch", self, []string{self, self, "other.example"}, "mismatch", false},
 
@@ -202,6 +210,11 @@ func buildAudienceVectors(t *testing.T) []audienceVector {
 		{"claim_carries_userinfo", self, []string{"agent@exchange.example"}, "malformed", false},
 		{"claim_has_a_root_dot", self, []string{"exchange.example."}, "malformed", false},
 		{"claim_has_a_bad_port", self, []string{"exchange.example:123456"}, "malformed", false},
+		// A padded 443 is refused for its SHAPE, before folding is even reached.
+		// Folding turns ":443" into no port at all, so were the shape rule looser
+		// this would have had to be caught as a mismatch instead — the two rules
+		// have to be read together to see that neither lets it through.
+		{"claim_has_a_padded_port", self, []string{"exchange.example:0443"}, "malformed", false},
 		{"many_one_malformed", self, []string{self, "https://other.example"}, "malformed", false},
 		// A malformed claim is refused for its shape, before it is compared — so
 		// a value that would have matched had it been spelled properly is still

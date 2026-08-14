@@ -147,15 +147,6 @@
       "identity_error": false
     },
     {
-      "name": "padded_default_port_is_a_different_string",
-      "self": "exchange.example",
-      "claimed": [
-        "exchange.example:0443"
-      ],
-      "expected_verdict": "mismatch",
-      "identity_error": false
-    },
-    {
       "name": "many_one_mismatch",
       "self": "exchange.example",
       "claimed": [
@@ -308,6 +299,15 @@
       "identity_error": false
     },
     {
+      "name": "claim_has_a_padded_port",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example:0443"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
       "name": "many_one_malformed",
       "self": "exchange.example",
       "claimed": [
@@ -439,7 +439,7 @@
       "valid": true
     },
     {
-      "name": "port_five_digits",
+      "name": "port_max",
       "value": "exchange.example:65535",
       "valid": true
     },
@@ -539,6 +539,36 @@
       "valid": false
     },
     {
+      "name": "port_zero",
+      "value": "exchange.example:0",
+      "valid": false
+    },
+    {
+      "name": "port_above_max",
+      "value": "exchange.example:65536",
+      "valid": false
+    },
+    {
+      "name": "port_five_digits_out_of_range",
+      "value": "exchange.example:99999",
+      "valid": false
+    },
+    {
+      "name": "port_leading_zero",
+      "value": "exchange.example:0443",
+      "valid": false
+    },
+    {
+      "name": "port_leading_zeros",
+      "value": "exchange.example:00443",
+      "valid": false
+    },
+    {
+      "name": "port_leading_zero_short",
+      "value": "exchange.example:012",
+      "valid": false
+    },
+    {
       "name": "leading_hyphen",
       "value": "-exchange.example",
       "valid": false
@@ -600,5 +630,5 @@
     }
   ],
   "bare_domain_max_len": 260,
-  "bare_domain_pattern": "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+  "bare_domain_pattern": "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
 }

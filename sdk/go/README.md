@@ -97,10 +97,11 @@ ok, _ := helpers.HostAnchored(exchangeDomain, endpoint) // label-boundary match
 ```
 
 **Audience check** — the other direction: a request arrived, does it name THIS
-Exchange? The recipient's domain travels in a body field because that is the only
-agent-authenticated statement of intended recipient that survives a relay — each
-hop signs its own `@target-uri`, so the Exchange never sees an agent signature
-over its own URL. The check is pure, so it runs before any lookup:
+Exchange? The signature does not already answer that: it proves the sender signed
+*the URL it dialled*, and that URL came out of a fetched, cached `ramp.json`, so a
+poisoned resolution redirects the request while every signature still verifies.
+The body field says whom the sender meant. The check is pure, so it runs before
+any lookup:
 
 ```go
 verdict, err := helpers.CheckAudience(cfg.ExchangeDomain, report.GetExchange())
@@ -133,11 +134,9 @@ you.
 
 The match is EXACT — a subdomain is a different party — which is narrower than
 the endpoint rule above, where a manifest MAY advertise a subdomain of itself. The
-shape both sides admit is `helpers.IsBareDomain`; the protovalidate rule on the
-wire's domain-valued fields MUST carry the same `BareDomainPattern` bytes, so that
-a value this SDK accepts before sending is one the wire accepts on arrival. That
-rule is **not on the wire yet** — the proto revision adding it is separate work,
-so today this SDK is stricter than the wire rather than equal to it.
+shape both sides admit is `helpers.IsBareDomain`, whose `BareDomainPattern` is the
+same protovalidate pattern the wire's domain-valued fields carry — so a value this
+SDK accepts before sending is one the wire accepts on arrival.
 
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,

@@ -146,6 +146,77 @@ let a verifier reason about key validity entirely from the one document it
 already fetched, while the separate, short-TTL invalidation list keeps emergency
 revocation fast without making the manifest itself uncacheable.
 
+## Registration is a manifest block, and terms versioning sits outside it
+
+An earlier revision published the registration contract as one flat manifest
+field, `registration_schema`: a JSON Schema for the `registration_data` an agent
+sends to `Register`, where publishing the field *was* the switch that turned
+enforcement on. That much survives unchanged. What changed is the shape around
+it. Registration turned out to have more than one publishable facet — the schema
+describes the API mode, and a later web mode needs to publish a URL to a page
+where a human completes the steps an API call cannot carry (explicit terms
+confirmation, identity checks, manual review). Two flat siblings on a manifest
+that already carries thirty fields give a reader no signal that they are one
+subject, so the schema moved inside an `account_registration` block whose second
+field number is reserved for that future mode. The precedence rule was fixed at
+the same time, while only one mode existed and the answer was still cheap: an
+Exchange publishing `data_schema` MUST accept registration through the API, and a
+registration URL is an additional option an agent may offer its user, never a
+replacement. Deciding that later would have meant breaking whichever
+interpretation agents had already settled on.
+
+Terms versioning deliberately did NOT go into that block. `terms_uri` names a
+document whose content changes, so after the first revision every earlier
+registration points at text that no longer says what was agreed — a dispute can
+then be answered only with a timestamp. `terms_digest` pins the document, the
+registration echoes it, and the request signature covers the echo, which makes
+the acceptance a durable record rather than a pointer. Putting it inside
+`account_registration` would have coupled "I enforce a schema" to "I version my
+terms": an Exchange with pass-through registration publishes no block at all, and
+it still needs to pin which terms it is serving. The two decisions are
+independent, so the fields are too.
+
+## Recipient addressing: a body field, not the signed request URL
+
+Every addressed request carries `exchange`, the bare host of its intended
+recipient, and a recipient rejects a request naming someone else. The obvious
+objection is that the RFC 9421 request signature already covers `@target-uri`, so
+the recipient is established without a body field. It is not. The signature proves the sender signed *the URL it dialled*, not that
+the URL was the right one: the dial target is resolved from a fetched, cached
+manifest, so a poisoned or stale resolution redirects the request while the
+signature still verifies. The body field states whom the sender meant,
+independently of that resolution, and the recipient rejects a request naming
+someone else. On a verbatim-forwarded path the agent signs its `@target-uri`
+against the final recipient's endpoint, not the Broker's, so the field is a
+redundant cross-check there, same as on a direct hop. On the legs a Broker
+authors itself (the discovery fan-out, a re-packaged transaction) the Broker
+stamps the field as sender — the field is a statement by whoever signed the
+request it rides in, never tamper-evidence against that party. For transactions
+the binding audience statement is `Offer.exchange` inside the Exchange-signed
+offer.
+
+Cross-recipient replay is not this field's job. A recipient that reconstructs
+`@target-uri` from its own configured identity rejects a replayed capture at
+signature verification already. The body field backstops only a recipient that
+rebuilds `@target-uri` from the arriving request, where a forged Host can make
+a signature over another party's URL verify.
+
+The value is a bare host and never an endpoint URL. An endpoint in the payload
+would hand the caller the choice of where the next hop dials, which is the lever
+the resolver exists to remove: the endpoint always comes from the recipient's own
+`/.well-known/ramp.json`. Two messages are deliberately exempt. `DiscoveryRequest`
+travels one direct hop and terminates at the Broker, which authors fresh
+per-Exchange `ResourceQuery` messages rather than forwarding it — and the agent
+could not name the recipients anyway, since choosing the fan-out set is the
+Broker's job. `TransactionRequest` needs no top-level field because its audience
+statement already exists per item: `Offer.exchange` is the execute-routing
+target, signed by the issuing Exchange, and the receive rule is that every item's
+offer names this Exchange. A redundant top-level copy would only add a
+top-level-versus-items mismatch to police. That last exemption is why
+`Offer.exchange` became presence-enforced rather than staying a plain unvalidated
+string: an empty value is unroutable, and the swap-protection its signature is
+supposed to provide is vacuous when the signed bytes carry no recipient at all.
+
 ## CoMP as an extension; attestations instead of quality scores
 
 Two earlier couplings were undone. The core protocol no longer imports IAB CoMP;
@@ -234,6 +305,33 @@ path that a leaked or guessed string could ride. Calling the field `billing_ref`
 makes its role unmistakable and removes the temptation to gate access on it.
 
 ## DenialReason consolidation
+
+> **Superseded — the billing-reference reason later split in two:**
+> `DENIAL_REASON_BILLING_REF_INACTIVE` became `DENIAL_REASON_ACCOUNT_INACTIVE`
+> (same wire number), joined by `DENIAL_REASON_ACCOUNT_NOT_REGISTERED`. The
+> collapse below was right about *why* and wrong about *what* it was collapsing.
+> Its test — does splitting give the caller a different action to take? — still
+> stands; for this pair the honest answer turned out to be yes. The two halves
+> the old reason carried are not two causes of one condition, they are two states
+> of the caller with two different remedies: "your account exists and is awaiting
+> activation" means wait or contact the operator, while "you have no account
+> here" means call `Register`, which an agent can do unattended and which the SDK
+> is meant to automate. Neither value discloses anything about the Exchange's
+> billing system; both describe the caller's own account state, which the caller
+> may already query with `GetAccountStatus`. `TransactionDenial` gains an
+> `exchange` field alongside them, because the agent hits this wall at execute
+> rather than at register and otherwise would not know *where* to register
+> without fetching a manifest to work it out — as a HINT the caller checks
+> against a domain it already trusts, never as an instruction. The field rides in
+> a response, and a response on a relayed path passed through an intermediary, so
+> nothing signs it: that is the same unsigned addressing the request-side field
+> exists to refuse, pointed the other way. An intermediary free to choose the
+> value would be choosing where an unattended agent registers, and registering
+> hands over an operator's business data and a signed acceptance of that
+> Exchange's terms. `DELEGATION_EXPIRED` →
+> `DENIAL_REASON_DELEGATION_INVALID`, recorded below, is untouched: expiry
+> genuinely is one of several ways a single condition fails, and re-issuing for
+> time alone would still not fix it.
 
 The denial enum carried separate `INVALID_LICENSE` and `EXPIRED_LICENSE`
 reasons, and a `DELEGATION_EXPIRED` reason. Once `license_id` became
