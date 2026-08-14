@@ -83,7 +83,14 @@ func (v AudienceVerdict) String() string {
 
 // CheckAudience reports whether every claimed recipient names this Exchange.
 //
-// self is this Exchange's own bare domain. claimed holds the recipient values
+// self is this Exchange's own bare domain — the domain it publishes as its
+// IDENTITY, which is the value it stamps into the offers it issues. It is not
+// the host the process happens to listen on, and the two are allowed to differ:
+// an Exchange at exchange.example may serve its API from api.exchange.example,
+// so an operator who configures this from the listening host would refuse every
+// request that named them correctly.
+//
+// claimed holds the recipient values
 // the request carries — ONE for a message with a single `exchange` field, MANY
 // for a message whose audience lives per item (a TransactionRequest states it
 // once per item, in each item's signed offer). Every value must name this
@@ -132,6 +139,16 @@ func CheckAudience(self string, claimed ...string) (AudienceVerdict, error) {
 // and holds at most one colon followed by digits — which is what lets it split
 // on that colon rather than parse a URL, and is why the ports can reproduce it
 // exactly.
+//
+// This is the second place in the package that folds a default port; canonicalPort
+// is the other, and the two MUST keep agreeing that 443 written out and 443 left
+// off are one port. They are not merged deliberately: canonicalPort answers the
+// question scheme-relatively for values that may be full URLs, which is why it
+// takes a scheme at all, while both operands here are already regex-gated bare
+// domains that name no scheme. Reusing it would mean parsing a URL to learn what
+// the pattern has already established. The repo has been bitten by a duplicated
+// host predicate before, so the cost of the split is this comment and the vectors
+// that pin both — see the port-folding entry in docs/design-history.md.
 func normalizeDomain(v string) string {
 	host, port := v, ""
 	if i := strings.LastIndex(v, ":"); i >= 0 {

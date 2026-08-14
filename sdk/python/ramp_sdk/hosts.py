@@ -20,36 +20,49 @@ from typing import Literal
 
 # BARE_DOMAIN_PATTERN is the wire shape of a domain-valued field: a bare domain
 # with an optional ":port", never a URL. It carries the same bytes as the Go
-# ``helpers.BareDomainPattern`` and as the protovalidate rule on every
-# domain-valued field in ramp.proto — one definition, so the check a client makes
-# before sending and the check the wire makes on arrival cannot answer
-# differently. The parity suite asserts these bytes against the shared vectors.
+# ``helpers.BareDomainPattern``, and the protovalidate rule on every
+# domain-valued field in ramp.proto MUST carry them too — one definition, so the
+# check a client makes before sending and the check the wire makes on arrival
+# cannot answer differently. The parity suite asserts these bytes against the
+# shared vectors.
+#
+# That rule is NOT on the wire yet — the proto revision adding it is separate
+# work, so today this SDK is stricter than the wire rather than equal to it.
+#
+# APPLY IT WITH ``fullmatch``, never ``match``. Python's ``$`` also matches just
+# before a trailing newline, so ``re.match(BARE_DOMAIN_PATTERN, v)`` accepts
+# "exchange.example\n" — a value Go's RE2 refuses, which is a cross-language
+# divergence rather than a style preference. ``is_bare_domain`` below is the
+# supported way to ask; reach for the raw pattern only when you cannot, and
+# anchor it yourself.
 BARE_DOMAIN_PATTERN = (
     r"^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?"
     r"(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*"
     r"(:[0-9]{1,5})?$"
 )
 
-# MAX_BARE_DOMAIN_LEN mirrors the protovalidate ``string.max_len`` on the same
-# fields, so this SDK cannot accept a pattern-valid but over-length value the
-# server then rejects.
+# MAX_BARE_DOMAIN_LEN is the length bound belonging to the same rule: the
+# protovalidate ``string.max_len`` on those fields MUST carry this number, so this
+# SDK cannot accept a pattern-valid but over-length value the server then rejects.
+# Like the pattern, it is not yet enforced on the wire.
 MAX_BARE_DOMAIN_LEN = 260
 
-# Matched with fullmatch, NOT match. Python's ``$`` also matches just before a
-# trailing newline, so ``match`` would accept "exchange.example\n" — a value Go's
-# RE2 refuses. fullmatch requires the whole string, which restores the oracle's
-# anchoring. The shared vectors carry that exact case.
+# Applied with fullmatch, for the reason spelled out on the pattern above. The
+# shared vectors carry a trailing-newline case that fails any port using ``match``.
 _BARE_DOMAIN_RE = re.compile(BARE_DOMAIN_PATTERN)
 
 
 def is_bare_domain(v: str) -> bool:
     """Report whether ``v`` is a bare domain of the shape the wire admits.
 
-    The length is checked FIRST so no unbounded input reaches the pattern: this
-    engine backtracks, and Go's RE2 does not, so the Go oracle would be safe
-    either way and this port would not be. The order costs nothing in agreement —
-    a value whose length differs between code points, UTF-16 units and bytes
-    contains something outside ASCII, and the pattern refuses it regardless.
+    The length is checked FIRST so the work stays bounded on hostile input. This
+    is insurance rather than a fix for a known blowup: the pattern is unambiguous —
+    every repetition is anchored by a literal dot no label class can consume — so
+    it cannot backtrack catastrophically, and matching it costs time linear in the
+    input. Bounding that is still worth one comparison on an engine that
+    backtracks. The order costs nothing in agreement — a value whose length differs
+    between code points, UTF-16 units and bytes contains something outside ASCII,
+    and the pattern refuses it regardless.
     """
     return len(v) <= MAX_BARE_DOMAIN_LEN and _BARE_DOMAIN_RE.fullmatch(v) is not None
 
@@ -69,7 +82,14 @@ AudienceVerdict = Literal["no_verdict", "accepted", "empty", "malformed", "misma
 def check_audience(self_domain: str, *claimed: str) -> AudienceVerdict:
     """Report whether every claimed recipient names this Exchange.
 
-    ``self_domain`` is this Exchange's own bare domain. ``claimed`` holds the
+    ``self_domain`` is this Exchange's own bare domain — the domain it publishes
+    as its IDENTITY, which is the value it stamps into the offers it issues. It is
+    not the host the process happens to listen on, and the two are allowed to
+    differ: an Exchange at ``exchange.example`` may serve its API from
+    ``api.exchange.example``, so an operator who configures this from the listening
+    host would refuse every request that named them correctly.
+
+    ``claimed`` holds the
     recipient values the request carries — ONE for a message with a single
     ``exchange`` field, MANY for a message whose audience lives per item (a
     TransactionRequest states it once per item, in each item's signed offer).

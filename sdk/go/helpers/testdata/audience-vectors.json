@@ -177,6 +177,66 @@
       "identity_error": false
     },
     {
+      "name": "first_fault_mismatch_before_empty",
+      "self": "exchange.example",
+      "claimed": [
+        "other.example",
+        ""
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_empty_before_mismatch",
+      "self": "exchange.example",
+      "claimed": [
+        "",
+        "other.example"
+      ],
+      "expected_verdict": "empty",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_malformed_before_mismatch",
+      "self": "exchange.example",
+      "claimed": [
+        "https://other.example",
+        "other.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_mismatch_before_malformed",
+      "self": "exchange.example",
+      "claimed": [
+        "other.example",
+        "https://other.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_empty_before_malformed",
+      "self": "exchange.example",
+      "claimed": [
+        "",
+        "https://other.example"
+      ],
+      "expected_verdict": "empty",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_malformed_before_empty",
+      "self": "exchange.example",
+      "claimed": [
+        "https://other.example",
+        ""
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
       "name": "no_values",
       "self": "exchange.example",
       "claimed": [],

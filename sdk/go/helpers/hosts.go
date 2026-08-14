@@ -97,18 +97,22 @@ func IsBareHost(ref string) (bool, error) {
 // with an optional ":port", never a URL. "sub.example.com:443" passes; a value
 // carrying a scheme, a path, userinfo, or a query never does.
 //
-// It is the SINGLE definition of that shape. The protovalidate rule on every
-// domain-valued field in ramp.proto carries these same bytes, and the shared
-// conformance vectors run one case list through both, so the check a client
-// makes before sending and the check the wire makes on arrival cannot answer
-// differently. Changing it here without changing the proto rule is the drift
-// the arrangement exists to prevent.
+// It is meant to be the SINGLE definition of that shape: the protovalidate rule
+// on every domain-valued field in ramp.proto MUST carry these same bytes, so the
+// check a client makes before sending and the check the wire makes on arrival
+// cannot answer differently. The shared conformance vectors record the pattern
+// beside the cases precisely so a guard can hold the two together.
+//
+// That rule is NOT on the wire yet — the proto revision adding it is separate
+// work, so today this SDK is stricter than the wire rather than equal to it.
 const BareDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$`
 
-// MaxBareDomainLen mirrors the protovalidate `string.max_len` on the same
-// fields. Without it a client would accept a pattern-valid but over-length
-// value the server then rejects — the client/server split the shared rule is
-// meant to close.
+// MaxBareDomainLen is the length bound belonging to the same rule: the
+// protovalidate `string.max_len` on those fields MUST carry this number. Without
+// it a client would accept a pattern-valid but over-length value the server then
+// rejects — the client/server split the shared rule is meant to close.
+//
+// Like the pattern, it is not yet enforced on the wire.
 const MaxBareDomainLen = 260
 
 var bareDomain = regexp.MustCompile(BareDomainPattern)
@@ -125,13 +129,17 @@ var bareDomain = regexp.MustCompile(BareDomainPattern)
 // the wire rule accepts. A caller vetting a value it is about to dial wants the
 // first; a caller vetting a value that arrived in a message wants this one.
 //
-// The length is checked FIRST, so no unbounded input reaches the pattern: Go
-// matches with RE2 and is safe either way, but the Python and TypeScript ports
-// run the same pattern on backtracking engines and must not be handed a
-// megabyte to chew on. Doing it in this order costs nothing in agreement, even
-// though the three languages count length in different units — a value whose
-// byte, code-point and UTF-16 counts disagree contains something outside ASCII,
-// and the pattern refuses it whichever check runs first.
+// The length is checked FIRST, so the work stays bounded on hostile input. This
+// is insurance rather than a fix for a known blowup: the pattern is unambiguous —
+// every repetition is anchored by a literal dot no label class can consume — so
+// it cannot backtrack catastrophically, and the cost of matching it is linear in
+// all three languages. Bounding that cost is still worth the one comparison it
+// takes, since the Python and TypeScript ports run it on backtracking engines
+// where linear work on an unbounded string is a caller's choice to make, not
+// ours. Doing it in this order costs nothing in agreement, even though the three
+// languages count length in different units — a value whose byte, code-point and
+// UTF-16 counts disagree contains something outside ASCII, and the pattern
+// refuses it whichever check runs first.
 func IsBareDomain(v string) bool {
 	return len(v) <= MaxBareDomainLen && bareDomain.MatchString(v)
 }

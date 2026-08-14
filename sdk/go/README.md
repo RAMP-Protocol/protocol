@@ -123,11 +123,21 @@ for _, it := range req.GetItems() {
 verdict, err := helpers.CheckAudience(cfg.ExchangeDomain, claimed...)
 ```
 
+`cfg.ExchangeDomain` is the domain this Exchange publishes as its **identity** —
+the value it stamps into the offers it issues — never the host the process listens
+on. The two may differ: an Exchange at `exchange.example` may serve its API from
+`api.exchange.example`. Configure it from the listening host and every correctly
+addressed request is refused, so a *global* mismatch storm means check your own
+identity before suspecting callers; the check is pure and cannot detect this for
+you.
+
 The match is EXACT — a subdomain is a different party — which is narrower than
 the endpoint rule above, where a manifest MAY advertise a subdomain of itself. The
-shape both sides admit is `helpers.IsBareDomain`, carrying the same
-`BareDomainPattern` bytes as the protovalidate rule on the wire fields, so a value
-this SDK accepts before sending is one the wire accepts on arrival.
+shape both sides admit is `helpers.IsBareDomain`; the protovalidate rule on the
+wire's domain-valued fields MUST carry the same `BareDomainPattern` bytes, so that
+a value this SDK accepts before sending is one the wire accepts on arrival. That
+rule is **not on the wire yet** — the proto revision adding it is separate work,
+so today this SDK is stricter than the wire rather than equal to it.
 
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,

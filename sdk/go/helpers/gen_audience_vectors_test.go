@@ -179,6 +179,18 @@ func buildAudienceVectors(t *testing.T) []audienceVector {
 		{"many_one_mismatch", self, []string{self, "other.example"}, "mismatch", false},
 		{"many_last_mismatch", self, []string{self, self, "other.example"}, "mismatch", false},
 
+		// Two values that fail DIFFERENTLY, in both orders, for every pair of
+		// fault kinds. Each case is decided by its FIRST element, which is the
+		// property under test: without these, an implementation that scanned for
+		// empties across the whole list before comparing any of them would agree
+		// with the oracle on every other case in this corpus and disagree here.
+		{"first_fault_mismatch_before_empty", self, []string{"other.example", ""}, "mismatch", false},
+		{"first_fault_empty_before_mismatch", self, []string{"", "other.example"}, "empty", false},
+		{"first_fault_malformed_before_mismatch", self, []string{"https://other.example", "other.example"}, "malformed", false},
+		{"first_fault_mismatch_before_malformed", self, []string{"other.example", "https://other.example"}, "mismatch", false},
+		{"first_fault_empty_before_malformed", self, []string{"", "https://other.example"}, "empty", false},
+		{"first_fault_malformed_before_empty", self, []string{"https://other.example", ""}, "malformed", false},
+
 		// Refused — claimed nobody.
 		{"no_values", self, nil, "empty", false},
 		{"empty_value", self, []string{""}, "empty", false},

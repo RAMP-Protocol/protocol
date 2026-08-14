@@ -87,20 +87,39 @@ func TestAudienceVerdict_Tokens(t *testing.T) {
 // asks whether a value is safe to build a URL from, the second whether it is the
 // shape the wire admits.
 func TestIsBareDomain_DivergesFromIsBareHostOnPurpose(t *testing.T) {
+	// Both halves are asserted. Checking only that IsBareDomain refuses these
+	// would leave the test green if IsBareHost were narrowed to refuse them too —
+	// which is the very collapse this test exists to prevent.
 	for _, ref := range []string{
 		"exchange.example.", // a usable host; the wire rule has no trailing root dot
 		"-exchange.example", // a usable host; a label may not start with a hyphen
 		"exchange-.example", // a usable host; a label may not end with one either
 		"_acme.example",     // a usable host; underscores are not in the wire alphabet
 		"[::1]:443",         // a usable host; the wire rule takes no bracketed literal
-		"exchange.example:", // refused by both, for different reasons
 	} {
 		bareHost, err := helpers.IsBareHost(ref)
 		if err != nil {
 			t.Fatalf("IsBareHost(%q): %v", ref, err)
 		}
+		if !bareHost {
+			t.Errorf("IsBareHost(%q) = false, want true — the predicates no longer diverge here", ref)
+		}
 		if helpers.IsBareDomain(ref) {
-			t.Errorf("IsBareDomain(%q) = true, want false (IsBareHost says %v)", ref, bareHost)
+			t.Errorf("IsBareDomain(%q) = true, want false", ref)
+		}
+	}
+	// A trailing colon is refused by both, for unrelated reasons: it is not a host
+	// anyone meant to write, and it is not the shape the wire admits. It cannot
+	// join the divergence table above, and saying so is why that table is not
+	// simply "everything either predicate refuses".
+	for _, ref := range []string{"exchange.example:"} {
+		bareHost, err := helpers.IsBareHost(ref)
+		if err != nil {
+			t.Fatalf("IsBareHost(%q): %v", ref, err)
+		}
+		if bareHost || helpers.IsBareDomain(ref) {
+			t.Errorf("IsBareHost(%q) = %v, IsBareDomain = %v; want both false",
+				ref, bareHost, helpers.IsBareDomain(ref))
 		}
 	}
 	// The far side of the same claim: what both accept, so the divergence above
