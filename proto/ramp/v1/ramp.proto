@@ -143,8 +143,10 @@ import "ramp/v1/vocab.proto";
 // it; for transactions the binding audience statement is per item,
 // Offer.exchange inside the Exchange-signed offer (see below).
 //
-// A recipient MUST reject a request whose `exchange` is not one of its own
-// domains. That rejection is INVALID_ARGUMENT with NO typed reason: a
+// A recipient MUST reject a request whose `exchange` is not its own domain — an
+// Exchange has exactly one identity, the domain it stamps into the offers it
+// issues, which may differ from the host it listens on. That rejection is
+// INVALID_ARGUMENT with NO typed reason: a
 // mis-addressed request is malformed rather than a domain-level failure, and no
 // ErrorDetail reason family covers it.
 //
@@ -554,8 +556,8 @@ message Offer {
   // offer, and it is what retires the X-RAMP-Exchange-Endpoint transport header.
   // It is also the audience statement of an ExecuteTransaction, which is why
   // TransactionRequest carries no top-level `exchange`: on receipt, an Exchange
-  // MUST reject the request unless EVERY item's offer.exchange names one of its
-  // own domains. Presence is enforced because an empty value is unroutable — a
+  // MUST reject the request unless EVERY item's offer.exchange names its own
+  // domain. Presence is enforced because an empty value is unroutable — a
   // relaying Broker has nothing to group or dial on, and the swap-protection
   // above is vacuous when the signed bytes carry no recipient at all.
   string exchange = 8 [
