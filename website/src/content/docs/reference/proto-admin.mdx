@@ -90,12 +90,12 @@ The server-side lifecycle record of the transaction's reporting obligation: the 
 
 ### GetTransactionEvidenceRequest
 
-A thin `{ver, transaction_id}` envelope naming the transaction whose evidence row to fetch.
+A thin `{ver, transaction_id, tenant_id}` envelope. Selection is by the `(tenant_id, transaction_id)` pair: transaction ids legitimately circulate outside the deployment (every counterparty agent holds the ids of its own transactions), so the id alone must not act as a bearer capability for the forensic row, and naming the tenant in the request is what lets a deployment enforce a per-tenant ACL in front of this RPC.
 
 ::proto-message{name=GetTransactionEvidenceRequest}
 
 ### GetTransactionEvidenceResponse
 
-The evidence row plus the transaction-log and reporting-obligation state needed to render it. `evidence` and `transaction_state` are required -- they exist 1:1 for every found transaction, and an unknown `transaction_id` is `NOT_FOUND`, never an empty response. `obligation_state` carries the **latest** obligation by creation time (the store does not make obligations unique per transaction) and is absent when the transaction minted none.
+The evidence row plus the transaction-log and reporting-obligation state needed to render it. `evidence` and `transaction_state` are required -- they exist 1:1 for every found transaction, and an unknown `transaction_id` or a `tenant_id` mismatch is `NOT_FOUND` (byte-identical in both cases, so existence under another tenant is not revealed), never an empty response. `obligation_state` carries the **latest** obligation by creation time (the store does not make obligations unique per transaction) and is absent when the transaction minted none.
 
 ::proto-message{name=GetTransactionEvidenceResponse}

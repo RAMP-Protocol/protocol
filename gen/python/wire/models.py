@@ -390,6 +390,10 @@ class GetAccountStatusResponse(WireModel):
 
 
 class GetTransactionEvidenceRequest(WireModel):
+    tenant_id: constr(min_length=1, max_length=255) = Field(
+        ...,
+        description='The tenant the transaction must belong to — the second half of the\n selector, matched against TransactionEvidence.tenant_id. Required:\n counterparty agents legitimately hold transaction ids, so the id alone\n must not be enough to read the row, and naming the tenant here is what\n makes a per-tenant ACL possible on this plane. A mismatch is NOT_FOUND,\n byte-identical to an unknown transaction_id, so existence under another\n tenant is not revealed. Same rule as\n ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).',
+    )
     transaction_id: constr(min_length=1, max_length=255) = Field(
         ...,
         description='The transaction whose evidence row to fetch. Same rule as\n ramp.admin.v1.TransactionEvidence.transaction_id (drift-gated) — the row\n identity this request selects by.',
@@ -750,7 +754,8 @@ class ReportingPolicy(WireModel):
         max_length=32,
     )
     tenant_id: constr(min_length=1, max_length=255) = Field(
-        ..., description='The tenant whose reporting policy is being replaced.'
+        ...,
+        description='The tenant whose reporting policy is being replaced. Same rule as\n ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).',
     )
     window_seconds: conint(le=31536000, gt=0) | None = Field(
         None,
@@ -1057,7 +1062,7 @@ class TransactionEvidence(WireModel):
     )
     tenant_id: constr(min_length=1, max_length=255) = Field(
         ...,
-        description='The tenant the transaction executed under. The admin plane is\n deployment-scoped (cross-tenant), so the row states its tenant.',
+        description='The tenant the transaction executed under. The admin plane is\n deployment-scoped (cross-tenant), so the row states its tenant. Same rule\n as ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).',
     )
     transaction_id: constr(min_length=1, max_length=255) = Field(
         ...,
@@ -1107,7 +1112,7 @@ class TransactionResultItem(WireModel):
     )
     transaction_id: str | None = Field(
         '',
-        description="Exchange-assigned transaction identifier. MUST be minted with UUIDv4-class\n entropy (unguessable): it later becomes the sole selector for the admin\n plane's evidence read (ramp.admin.v1.GetTransactionEvidence), which has no\n per-operator identity in v1 — a sequential or predictable id would let\n anyone with network reachability enumerate evidence rows. The reference\n implementation mints a UUIDv4.",
+        description="Exchange-assigned transaction identifier. MUST be minted with UUIDv4-class\n entropy (unguessable): it later becomes half of the selector for the admin\n plane's evidence read (ramp.admin.v1.GetTransactionEvidence — keyed by the\n (tenant_id, transaction_id) pair), which has no per-operator identity in\n v1 — a sequential or predictable id would let anyone with network\n reachability and a tenant name enumerate evidence rows. The reference\n implementation mints a UUIDv4.",
     )
 
 

@@ -16,12 +16,16 @@
 // overwrites and the evidence read is side-effect-free, so every RPC is
 // naturally idempotent and carries no idempotency_key.
 //
-// The evidence read is keyed by transaction_id ALONE, so its enumeration
-// resistance rests on transaction ids being unguessable: ids MUST carry
-// UUIDv4-class entropy (normative statement on
-// ramp.v1.TransactionResultItem.transaction_id). With unguessable ids,
-// enumeration is impractical and the network boundary above is the only
-// remaining load-bearing control.
+// The evidence read is keyed by the (tenant_id, transaction_id) PAIR. The
+// tenant selector exists because transaction ids leave the deployment:
+// every counterparty agent legitimately holds the ids of its own
+// transactions, so an id alone must not act as a bearer capability for the
+// forensic row, and a request that names the tenant is what lets a
+// deployment enforce a per-tenant ACL in front of this RPC. A tenant
+// mismatch is NOT_FOUND, byte-identical to an unknown id, so existence
+// under another tenant is not revealed. Enumeration resistance still rests
+// on ids being unguessable: ids MUST carry UUIDv4-class entropy (normative
+// statement on ramp.v1.TransactionResultItem.transaction_id).
 //
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
@@ -29,9 +33,9 @@
 // stated ONCE; the read-back response cannot drift from the write. Responses
 // echo the payload as persisted, giving operator tooling a read-back
 // confirmation of the applied values. The evidence read does not share this
-// shape — its request carries only a transaction id, and its response wraps
-// read-only payloads that exist on no write path (TransactionEvidence,
-// TransactionState, ReportingObligationState).
+// shape — its request carries only the (tenant_id, transaction_id) selector,
+// and its response wraps read-only payloads that exist on no write path
+// (TransactionEvidence, TransactionState, ReportingObligationState).
 //
 // Validation: every constraint here is a FIELD-level protovalidate rule so it
 // flows into the generated Pydantic/Zod types. Cross-field (message-level CEL)
@@ -104,7 +108,12 @@ type AdminServiceClient interface {
 	// full signed offer, both Ed25519 proofs and the verbatim bytes each was
 	// computed over — plus the transaction-log and reporting-obligation state
 	// needed to render it. Read-only: it exposes what the execute path already
-	// persisted and writes nothing. An unknown transaction_id is NOT_FOUND.
+	// persisted and writes nothing. Selection is by (tenant_id, transaction_id)
+	// pair: an unknown transaction_id AND a transaction that exists under a
+	// different tenant are both NOT_FOUND, indistinguishably — a transaction id
+	// alone must not act as a bearer capability for another tenant's forensic
+	// row, and the pair selector is what lets a deployment put a per-tenant ACL
+	// in front of this RPC.
 	GetTransactionEvidence(context.Context, *connect.Request[v1.GetTransactionEvidenceRequest]) (*connect.Response[v1.GetTransactionEvidenceResponse], error)
 }
 
@@ -175,7 +184,12 @@ type AdminServiceHandler interface {
 	// full signed offer, both Ed25519 proofs and the verbatim bytes each was
 	// computed over — plus the transaction-log and reporting-obligation state
 	// needed to render it. Read-only: it exposes what the execute path already
-	// persisted and writes nothing. An unknown transaction_id is NOT_FOUND.
+	// persisted and writes nothing. Selection is by (tenant_id, transaction_id)
+	// pair: an unknown transaction_id AND a transaction that exists under a
+	// different tenant are both NOT_FOUND, indistinguishably — a transaction id
+	// alone must not act as a bearer capability for another tenant's forensic
+	// row, and the pair selector is what lets a deployment put a per-tenant ACL
+	// in front of this RPC.
 	GetTransactionEvidence(context.Context, *connect.Request[v1.GetTransactionEvidenceRequest]) (*connect.Response[v1.GetTransactionEvidenceResponse], error)
 }
 

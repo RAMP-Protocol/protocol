@@ -34,6 +34,7 @@ func main() {
 	if err := conformance.AssertUniqueBareNames(); err != nil {
 		panic(err)
 	}
+	assertNoStringByteLengthRules()
 	out := "required_fields.json"
 	if len(os.Args) > 1 {
 		out = os.Args[1]
@@ -61,6 +62,32 @@ func main() {
 	}
 }
 
+// assertNoStringByteLengthRules panics on any string byte-length rule
+// (min_bytes/max_bytes), on any field, regardless of presence or `required`:
+// protoschema renders them as JSON Schema minLength/maxLength, which count
+// CHARACTERS, so a multibyte value the Go server rejects would pass the
+// generated clients. This runs as its own sweep — not inside zeroRejected —
+// so the required/HasPresence early returns there cannot skip it. No contract
+// field carries these rules today; implement a byte-count refine in the
+// sdk-types pipeline before adding one.
+func assertNoStringByteLengthRules() {
+	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
+		for i := 0; i < md.Fields().Len(); i++ {
+			fd := md.Fields().Get(i)
+			fr, err := protovalidate.ResolveFieldRules(fd)
+			if err != nil {
+				panic(fmt.Sprintf("requiredgen: resolving rules for field %s: %v", fd.FullName(), err))
+			}
+			if fr == nil {
+				continue
+			}
+			if s := fr.GetString(); s != nil && (s.GetMinBytes() > 0 || s.GetMaxBytes() > 0) {
+				panic(fmt.Sprintf("requiredgen: string byte-length rule on field %s — protoschema translates it to a CHARACTER count; implement a byte-count refine in the sdk-types pipeline first", fd.FullName()))
+			}
+		}
+	})
+}
+
 // zeroRejected reports whether fd's zero/absent value is rejected by its own
 // field rule. Fields with explicit presence (optional, message, oneof member)
 // are exempt unless they carry an explicit `required` — protovalidate skips an
@@ -84,14 +111,6 @@ func zeroRejected(fd protoreflect.FieldDescriptor) bool {
 		}
 	}
 	if s := fr.GetString(); s != nil {
-		// Loud guard: string byte-length rules (min_bytes/max_bytes) do NOT
-		// translate — protoschema renders them as JSON Schema minLength/maxLength,
-		// which count CHARACTERS, so a multibyte value the Go server rejects
-		// passes the generated clients. No contract field carries them today;
-		// implement a byte-count refine in the pipeline before adding one.
-		if s.GetMinBytes() > 0 || s.GetMaxBytes() > 0 {
-			panic(fmt.Sprintf("requiredgen: string byte-length rule on field %s — protoschema translates it to a CHARACTER count; implement a byte-count refine in the sdk-types pipeline first", fd.FullName()))
-		}
 		if s.GetMinLen() >= 1 {
 			return true
 		}

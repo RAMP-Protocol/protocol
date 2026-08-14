@@ -170,8 +170,15 @@ func main() {
 		var constrained []protoreflect.FieldDescriptor
 		for i := 0; i < md.Fields().Len(); i++ {
 			fd := md.Fields().Get(i)
-			if fr := rules(fd); fr != nil && hasConstraint(fr) {
-				constrained = append(constrained, fd)
+			if fr := rules(fd); fr != nil {
+				// Fail loud on any rule member this generator cannot classify —
+				// an allowlist alone fails OPEN: a field carrying only an
+				// unrecognized shape (how the first bytes rules shipped
+				// uncovered) would get zero corpus cases with every gate green.
+				assertRulesClassified(string(md.Name()), fd, fr)
+				if hasConstraint(fr) {
+					constrained = append(constrained, fd)
+				}
 			}
 		}
 		if len(constrained) == 0 {
@@ -216,7 +223,7 @@ func main() {
 				if !contains(ids, e.want) {
 					die("mutant %s.%s/%s expected rule %q, got %v", short, fd.Name(), e.label, e.want, ids)
 				}
-				cases = append(cases, mkCase(id, short, m.Interface(), false, ids, v))
+				cases = append(cases, mkCasePatched(id, short, m.Interface(), false, ids, e.postJSON))
 			}
 		}
 	})
@@ -458,6 +465,11 @@ type edge struct {
 	want  string // the protovalidate rule id this edge must trip (integrity check)
 	apply func(m protoreflect.Message)
 	valid bool // a POSITIVE edge: Go must ACCEPT it (e.g. "" on a money field). want is unused.
+	// postJSON patches the marshaled JSON object AFTER protojson. Needed for
+	// wire shapes protojson cannot produce from a proto value: an explicit-empty
+	// implicit-presence field ("field": "", "items": []) is dropped by protojson,
+	// yet is a distinct client parse path from omission.
+	postJSON func(obj map[string]any)
 }
 
 func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[string]proto.Message) []edge {
@@ -630,8 +642,19 @@ func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edg
 	}
 	if n := r.GetMinLen(); n > 0 {
 		s := strings.Repeat("a", int(n)-1)
-		es = append(es, edge{label: "too_short", want: "string.min_len",
-			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(s)) }})
+		set := func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(s)) }
+		if n == 1 && !fd.HasPresence() {
+			// Honest labels: same omission collapse as bytesEdges — one below a
+			// min_len=1 floor is "" and protojson drops it, so the case pins
+			// omission; the explicit "" wire shape is its own case.
+			name := string(fd.Name())
+			es = append(es,
+				edge{label: "too_short_omitted", want: "string.min_len", apply: set},
+				edge{label: "too_short_explicit_empty", want: "string.min_len", apply: set,
+					postJSON: func(obj map[string]any) { obj[name] = "" }})
+		} else {
+			es = append(es, edge{label: "too_short", want: "string.min_len", apply: set})
+		}
 	}
 	if n := r.GetMaxLen(); n > 0 {
 		s := strings.Repeat("a", int(n)+1)
@@ -674,8 +697,23 @@ func bytesEdges(fd protoreflect.FieldDescriptor, r *validate.BytesRules) []edge 
 	}
 	if n := r.GetMinLen(); r.Len == nil && n > 0 {
 		short := bytesOf(int(n) - 1)
-		es = append(es, edge{label: "too_short", want: "bytes.min_len",
-			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfBytes(short)) }})
+		set := func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfBytes(short)) }
+		if n == 1 && !fd.HasPresence() {
+			// Honest labels: one below a min_len=1 floor is EMPTY bytes, and
+			// protojson DROPS an empty implicit-presence field — the emitted
+			// JSON omits the field entirely, so the case pins "omission is
+			// rejected" (same collapse as enum not_in_zero_omitted). The
+			// explicit-empty wire shape ("field": "") is a different client
+			// parse path, so it is emitted as its own case via a JSON-layer
+			// patch; Go's verdict is identical for both.
+			name := string(fd.Name())
+			es = append(es,
+				edge{label: "too_short_omitted", want: "bytes.min_len", apply: set},
+				edge{label: "too_short_explicit_empty", want: "bytes.min_len", apply: set,
+					postJSON: func(obj map[string]any) { obj[name] = "" }})
+		} else {
+			es = append(es, edge{label: "too_short", want: "bytes.min_len", apply: set})
+		}
 	}
 	return es
 }
@@ -710,9 +748,22 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[
 		// The baseline is valid, so it holds at least min_items valid items;
 		// truncating to one below the floor trips ONLY repeated.min_items.
 		n := int(r.GetMinItems()) - 1
-		es = append(es, edge{label: "too_few", want: "repeated.min_items", apply: func(m protoreflect.Message) {
-			m.Mutable(fd).List().Truncate(n)
-		}})
+		truncate := func(m protoreflect.Message) { m.Mutable(fd).List().Truncate(n) }
+		if n == 0 {
+			// Honest labels: one below a min_items=1 floor is the EMPTY list,
+			// and protojson DROPS an empty repeated field — the emitted JSON
+			// omits the field entirely, so the case pins "omission is
+			// rejected". The explicit-empty wire shape ("items": []) is a
+			// different client parse path, emitted as its own case via a
+			// JSON-layer patch; Go's verdict is identical for both.
+			name := string(fd.Name())
+			es = append(es,
+				edge{label: "too_few_omitted", want: "repeated.min_items", apply: truncate},
+				edge{label: "too_few_explicit_empty", want: "repeated.min_items", apply: truncate,
+					postJSON: func(obj map[string]any) { obj[name] = []any{} }})
+		} else {
+			es = append(es, edge{label: "too_few", want: "repeated.min_items", apply: truncate})
+		}
 	}
 	if r != nil && r.GetMaxItems() > 0 {
 		n := int(r.GetMaxItems()) + 1
@@ -759,13 +810,73 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[
 func rules(fd protoreflect.FieldDescriptor) *validate.FieldRules {
 	fr, err := protovalidate.ResolveFieldRules(fd)
 	if err != nil {
-		return nil
+		// A resolution failure is not "no rules" — treating it as nil would
+		// silently drop every corpus case the field should have.
+		die("resolving rules for field %s: %v", fd.FullName(), err)
 	}
 	return fr
 }
 
 // itemRules is the per-item FieldRules of a repeated field (repeated.items).
 func itemRules(fr *validate.FieldRules) *validate.FieldRules { return fr.GetRepeated().GetItems() }
+
+// classifiedRuleMembers is the closed set of (rule kind, member) pairs
+// hasConstraint/edges() know how to turn into corpus cases. Field-level `cel`
+// and `required` are handled outside this table (cel is server-only by scope;
+// required gets the `missing` edge). assertRulesClassified dies on anything
+// set outside this table, so a new rule shape MUST be taught to edges() (and
+// added here) before it can ship — the allowlist fails CLOSED.
+var classifiedRuleMembers = map[string]map[string]bool{
+	"string":   {"pattern": true, "min_len": true, "max_len": true, "max_bytes": true},
+	"enum":     {"defined_only": true, "not_in": true},
+	"bytes":    {"len": true, "min_len": true},
+	"int64":    {"gte": true},
+	"int32":    {"gte": true, "gt": true, "lt": true, "lte": true},
+	"double":   {"gte": true, "gt": true, "lt": true, "lte": true},
+	"repeated": {"min_items": true, "max_items": true, "unique": true, "items": true},
+}
+
+// classifiedItemMembers is the same closed set for repeated.items sub-rules —
+// listEdges only mutates string item rules today.
+var classifiedItemMembers = map[string]map[string]bool{
+	"string": {"pattern": true, "min_len": true, "max_len": true},
+}
+
+// assertRulesClassified dies if fr carries any set rule member outside the
+// classified tables. This is the fail-closed complement to hasConstraint:
+// hasConstraint answers "does this field get cases", this answers "is every
+// rule on this field one the generator understands".
+func assertRulesClassified(short string, fd protoreflect.FieldDescriptor, fr *validate.FieldRules) {
+	checkMembers(short, fd, fr, classifiedRuleMembers, "")
+	if it := fr.GetRepeated().GetItems(); it != nil {
+		checkMembers(short, fd, it, classifiedItemMembers, "repeated.items.")
+	}
+}
+
+func checkMembers(short string, fd protoreflect.FieldDescriptor, fr *validate.FieldRules, known map[string]map[string]bool, prefix string) {
+	fr.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		name := string(f.Name())
+		if name == "cel" || name == "required" {
+			return true
+		}
+		// A non-message member (e.g. `ignore`) changes rule semantics in ways
+		// this generator does not model — unclassified, so fail closed.
+		if f.Kind() != protoreflect.MessageKind || f.IsList() {
+			die("field %s.%s carries rule %s%s — teach edges()/hasConstraint its shape (and classifiedRuleMembers) before shipping it", short, fd.Name(), prefix, name)
+		}
+		members, ok := known[name]
+		if !ok {
+			die("field %s.%s carries rule %s%s — teach edges()/hasConstraint its shape (and classifiedRuleMembers) before shipping it", short, fd.Name(), prefix, name)
+		}
+		v.Message().Range(func(mf protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
+			if !members[string(mf.Name())] {
+				die("field %s.%s carries rule %s%s.%s — teach edges()/hasConstraint its shape (and classifiedRuleMembers) before shipping it", short, fd.Name(), prefix, name, mf.Name())
+			}
+			return true
+		})
+		return true
+	})
+}
 
 // hasConstraint reports whether fr carries a FIELD-level rule we generate edges
 // for. CEL-only (cross-field) field rules are excluded — they are not client-
@@ -878,12 +989,21 @@ func gte(r *validate.Int64Rules) int64 {
 // ── output / misc ────────────────────────────────────────────────────────────
 
 func mkCase(id, short string, m proto.Message, valid bool, ids []string, _ protovalidate.Validator) Case {
+	return mkCasePatched(id, short, m, valid, ids, nil)
+}
+
+// mkCasePatched is mkCase with an optional JSON-layer patch (edge.postJSON)
+// applied between protojson marshal and canonical re-marshal.
+func mkCasePatched(id, short string, m proto.Message, valid bool, ids []string, patch func(obj map[string]any)) Case {
 	b, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(m)
 	must(err)
 	// re-indent to canonical form so the committed corpus is stable
-	var v any
-	must(json.Unmarshal(b, &v))
-	canon, err := json.Marshal(v)
+	obj := map[string]any{}
+	must(json.Unmarshal(b, &obj))
+	if patch != nil {
+		patch(obj)
+	}
+	canon, err := json.Marshal(obj)
 	must(err)
 	sort.Strings(ids)
 	return Case{ID: id, Message: short, Valid: valid, Rules: dedupe(ids), JSON: canon}

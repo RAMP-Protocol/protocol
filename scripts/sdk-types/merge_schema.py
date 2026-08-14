@@ -289,14 +289,22 @@ def tighten_bytes_len(defs, bytes_len):
     protovalidate view) names the exact-length fields; rewrite each to the EXACT
     encoded forms of N bytes — the unpadded encoding, optionally completed to the
     base64 block with its exact padding — so byte length is enforced at the
-    schema layer without decoding."""
+    schema layer without decoding.
+
+    Loud guard: every manifest entry MUST match a string property in the
+    rendered schema. A silent skip would mean a protoschema rendering change
+    reopened the loose length window with no build failure — the parity corpus
+    would catch it only later and less legibly."""
+    missing = []
     for msg, fields in bytes_len.items():
         d = defs.get(msg)
         if not isinstance(d, dict) or "properties" not in d:
+            missing.extend(f"{msg}.{jname} (message not in schema)" for jname in fields)
             continue
         for jname, n in fields.items():
             prop = d["properties"].get(jname)
             if not isinstance(prop, dict) or prop.get("type") != "string":
+                missing.append(f"{msg}.{jname} (no string property in schema)")
                 continue
             full, rem = divmod(int(n), 3)
             if rem == 0:
@@ -308,6 +316,9 @@ def tighten_bytes_len(defs, bytes_len):
             prop["pattern"] = "^[A-Za-z0-9+/]{%d}%s$" % (chars, pad)
             prop["minLength"] = chars
             prop["maxLength"] = chars + (2 if rem == 1 else (1 if rem == 2 else 0))
+    if missing:
+        sys.exit("bytes_len manifest entries with no matching schema property — the "
+                 f"exact-length tightening would silently not apply: {missing}")
     return defs
 
 

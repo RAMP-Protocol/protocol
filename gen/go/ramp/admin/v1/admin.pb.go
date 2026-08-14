@@ -16,12 +16,16 @@
 // overwrites and the evidence read is side-effect-free, so every RPC is
 // naturally idempotent and carries no idempotency_key.
 //
-// The evidence read is keyed by transaction_id ALONE, so its enumeration
-// resistance rests on transaction ids being unguessable: ids MUST carry
-// UUIDv4-class entropy (normative statement on
-// ramp.v1.TransactionResultItem.transaction_id). With unguessable ids,
-// enumeration is impractical and the network boundary above is the only
-// remaining load-bearing control.
+// The evidence read is keyed by the (tenant_id, transaction_id) PAIR. The
+// tenant selector exists because transaction ids leave the deployment:
+// every counterparty agent legitimately holds the ids of its own
+// transactions, so an id alone must not act as a bearer capability for the
+// forensic row, and a request that names the tenant is what lets a
+// deployment enforce a per-tenant ACL in front of this RPC. A tenant
+// mismatch is NOT_FOUND, byte-identical to an unknown id, so existence
+// under another tenant is not revealed. Enumeration resistance still rests
+// on ids being unguessable: ids MUST carry UUIDv4-class entropy (normative
+// statement on ramp.v1.TransactionResultItem.transaction_id).
 //
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
@@ -29,9 +33,9 @@
 // stated ONCE; the read-back response cannot drift from the write. Responses
 // echo the payload as persisted, giving operator tooling a read-back
 // confirmation of the applied values. The evidence read does not share this
-// shape — its request carries only a transaction id, and its response wraps
-// read-only payloads that exist on no write path (TransactionEvidence,
-// TransactionState, ReportingObligationState).
+// shape — its request carries only the (tenant_id, transaction_id) selector,
+// and its response wraps read-only payloads that exist on no write path
+// (TransactionEvidence, TransactionState, ReportingObligationState).
 //
 // Validation: every constraint here is a FIELD-level protovalidate rule so it
 // flows into the generated Pydantic/Zod types. Cross-field (message-level CEL)
@@ -208,7 +212,8 @@ func (x *TenantFeeRate) GetNotes() string {
 // the write and the echoed read-back stay in lockstep.
 type ReportingPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The tenant whose reporting policy is being replaced.
+	// The tenant whose reporting policy is being replaced. Same rule as
+	// ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).
 	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// Report field names the usage-report validator requires. The wire constrains
 	// only the token shape; which names are meaningful is defined by the receiving
@@ -537,7 +542,8 @@ type TransactionEvidence struct {
 	// The evidenced transaction (Exchange-minted transaction identity).
 	TransactionId string `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// The tenant the transaction executed under. The admin plane is
-	// deployment-scoped (cross-tenant), so the row states its tenant.
+	// deployment-scoped (cross-tenant), so the row states its tenant. Same rule
+	// as ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).
 	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// The signed Offer.offer_id (which IS the catalog resource_id). Duplicated
 	// from the offer JSON so the row reads standalone, without parsing it.
@@ -952,6 +958,15 @@ type GetTransactionEvidenceRequest struct {
 	// ramp.admin.v1.TransactionEvidence.transaction_id (drift-gated) — the row
 	// identity this request selects by.
 	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	// The tenant the transaction must belong to — the second half of the
+	// selector, matched against TransactionEvidence.tenant_id. Required:
+	// counterparty agents legitimately hold transaction ids, so the id alone
+	// must not be enough to read the row, and naming the tenant here is what
+	// makes a per-tenant ACL possible on this plane. A mismatch is NOT_FOUND,
+	// byte-identical to an unknown transaction_id, so existence under another
+	// tenant is not revealed. Same rule as
+	// ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).
+	TenantId      string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -996,6 +1011,13 @@ func (x *GetTransactionEvidenceRequest) GetVer() string {
 func (x *GetTransactionEvidenceRequest) GetTransactionId() string {
 	if x != nil {
 		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *GetTransactionEvidenceRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
 	}
 	return ""
 }
@@ -1153,11 +1175,13 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\vreceived_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\n" +
 	"receivedAt\x88\x01\x01B\x14\n" +
 	"\x12_consumed_quantityB\x0e\n" +
-	"\f_received_at\"d\n" +
+	"\f_received_at\"\x8d\x01\n" +
 	"\x1dGetTransactionEvidenceRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x121\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\rtransactionId\"\xa4\x02\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\rtransactionId\x12'\n" +
+	"\ttenant_id\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\btenantId\"\xa4\x02\n" +
 	"\x1eGetTransactionEvidenceResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12F\n" +
 	"\bevidence\x18\x02 \x01(\v2\".ramp.admin.v1.TransactionEvidenceB\x06\xbaH\x03\xc8\x01\x01R\bevidence\x12T\n" +

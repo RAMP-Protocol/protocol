@@ -19,6 +19,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 
 	protovalidate "buf.build/go/protovalidate"
@@ -28,6 +29,14 @@ import (
 )
 
 func main() {
+	// Fail fast on a cross-package bare-name collision: this manifest (and
+	// merge_schema.py, which consumes it) key by bare message name, so a
+	// duplicate would silently clobber one message's exact-length enforcement.
+	// Same guard as requiredgen; without it, only the run order in
+	// gen-sdk-types.sh protects a standalone bytesgen run.
+	if err := conformance.AssertUniqueBareNames(); err != nil {
+		panic(err)
+	}
 	out := "bytes_len.json"
 	if len(os.Args) > 1 {
 		out = os.Args[1]
@@ -57,7 +66,12 @@ func main() {
 // exactLen reports fd's bytes.len rule value, if it carries one.
 func exactLen(fd protoreflect.FieldDescriptor) (uint64, bool) {
 	fr, err := protovalidate.ResolveFieldRules(fd)
-	if err != nil || fr == nil {
+	if err != nil {
+		// A resolution failure is not "no rule" — swallowing it would silently
+		// drop the field from the manifest and lose its length enforcement.
+		panic(fmt.Sprintf("bytesgen: resolving rules for field %s: %v", fd.FullName(), err))
+	}
+	if fr == nil {
 		return 0, false
 	}
 	b := fr.GetBytes()

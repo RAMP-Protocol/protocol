@@ -43,8 +43,11 @@ var sameRuleDirective = regexp.MustCompile(`[Ss]ame\s+rule\s+as\s+([A-Za-z0-9_]+
 var knownCopies = []string{
 	"ramp.admin.v1.TransactionEvidence.agent_acceptance_signature",
 	"ramp.admin.v1.TransactionEvidence.request_idempotency_key",
+	"ramp.admin.v1.TransactionEvidence.tenant_id",
 	"ramp.admin.v1.ReportingObligationState.consumed_quantity",
+	"ramp.admin.v1.ReportingPolicy.tenant_id",
 	"ramp.admin.v1.GetTransactionEvidenceRequest.transaction_id",
+	"ramp.admin.v1.GetTransactionEvidenceRequest.tenant_id",
 }
 
 func TestSameRuleDirectivesHoldByteForByte(t *testing.T) {
@@ -70,8 +73,20 @@ func TestSameRuleDirectivesHoldByteForByte(t *testing.T) {
 			t.Errorf("%s says 'Same rule as %s', which does not resolve to a field: %v", src, dst, err)
 			continue
 		}
-		srcRules, _ := protovalidate.ResolveFieldRules(srcFD)
-		dstRules, _ := protovalidate.ResolveFieldRules(dstFD)
+		srcRules, err := protovalidate.ResolveFieldRules(srcFD)
+		if err != nil {
+			t.Errorf("resolving rules for %s: %v", src, err)
+			continue
+		}
+		dstRules, err := protovalidate.ResolveFieldRules(dstFD)
+		if err != nil {
+			t.Errorf("resolving rules for %s (target of %s's directive): %v", dst, src, err)
+			continue
+		}
+		if srcRules == nil {
+			t.Errorf("%s declares 'Same rule as %s' but itself carries no field rules", src, dst)
+			continue
+		}
 		if dstRules == nil {
 			t.Errorf("%s says 'Same rule as %s', but the target carries no field rules", src, dst)
 			continue
