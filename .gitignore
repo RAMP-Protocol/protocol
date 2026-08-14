@@ -12,3 +12,8 @@ research-*.md
 __pycache__/
 .sdk-types-work/
 *.egg-info/
+
+# IDE-generated resolver lock for the gen/python package manifest; the pipeline pins
+# its real dependencies in scripts/sdk-types/requirements-*.txt (hash-locked), and an
+# untracked file under gen/ fails the generated-drift gate.
+gen/python/uv.lock

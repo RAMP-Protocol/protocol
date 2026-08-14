@@ -544,7 +544,10 @@ func (h *ExchangeHandler) ExecuteTransaction(
             OfferSnapshotJSON: marshalOfferSnapshot(offer),
             DeliveryMethod:    offer.DeliveryMethod,
             ReportingRequired: tenantCfg.ReportingPolicy.GetRequired(),
-            IdempotencyKey:    req.Msg.IdempotencyKey,
+            // Derived PER-ITEM key: distinct items of a multi-item batch get
+            // distinct keys, so neither the UNIQUE backstop nor billing dedup
+            // collapses a batch. Applied unconditionally (single-item too).
+            IdempotencyKey:    req.Msg.IdempotencyKey + ":" + offer.OfferId,
             CreatedAt:         time.Now().UTC(),
         }
         if err := h.txLog.Write(ctx, record); err != nil {

@@ -7,23 +7,42 @@
 // the source changes. Before this gate, a drifted copy would surface only as
 // unexplained parity-corpus differences.
 //
-// The mechanism: a field whose leading comment carries the directive
+// The gate has two halves:
 //
-//	Same rule as <fully.qualified.package.Message.field>
+//  1. EQUALITY. A field whose leading comment carries the directive
 //
-// declares itself a copy. This test resolves the directive and fails unless the
-// two fields' resolved protovalidate FieldRules are EQUAL (proto.Equal — the
-// byte-for-byte view after option merging). Adding a new restated rule is one
-// comment line; a directive that no longer resolves, or a copy that drifted,
-// fails here by name. Comments come from gen/descriptor.binpb (built with
-// source info); rules come from the linked-in generated descriptors — the same
-// authoritative protovalidate view every other gate uses.
+//     Same rule as <fully.qualified.package.Message.field>
+//
+//     declares itself a copy, and this test fails unless the two fields'
+//     resolved protovalidate FieldRules are EQUAL (proto.Equal — the
+//     byte-for-byte view after option merging).
+//
+//  2. COMPLETENESS. The set of fields that must declare is derived from the
+//     descriptor itself, never from a hand-maintained list (the
+//     descriptor_invariants_test.go rule): every scalar/enum/bytes field in a
+//     non-root contract package whose resolved rules are byte-identical to
+//     another contract field's must be a directive source, a directive target,
+//     or carry an entry in sameRuleCoincidences — an explicit "identical by
+//     coincidence, not by copy" exemption. The exemption list is itself
+//     fail-closed: an entry that no longer names a field, or whose field no
+//     longer has a rule twin, fails as stale.
+//
+// The root contract package (the first in Contract — ramp.v1) is the upstream
+// vocabulary restatements are copied FROM; its internal duplicates predate this
+// gate and are not enforced. Message-typed fields are skipped: the only rule
+// they carry is the required-envelope convention, which is a shape, not a
+// restatable value rule.
+//
+// Comments come from gen/descriptor.binpb (built with source info); rules come
+// from the linked-in generated descriptors — the same authoritative
+// protovalidate view every other gate uses.
 package conformance
 
 import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	protovalidate "buf.build/go/protovalidate"
@@ -37,27 +56,23 @@ import (
 // (including the newline+space form descriptor comments carry) is tolerated.
 var sameRuleDirective = regexp.MustCompile(`[Ss]ame\s+rule\s+as\s+([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)`)
 
-// knownCopies are the restated rules this branch introduced; each MUST carry
-// the directive so the gate is provably armed for them. New copies only add
-// their directive comment — extending this list is optional pinning.
-var knownCopies = []string{
-	"ramp.admin.v1.TransactionEvidence.agent_acceptance_signature",
-	"ramp.admin.v1.TransactionEvidence.request_idempotency_key",
-	"ramp.admin.v1.TransactionEvidence.tenant_id",
-	"ramp.admin.v1.ReportingObligationState.consumed_quantity",
-	"ramp.admin.v1.ReportingPolicy.tenant_id",
-	"ramp.admin.v1.GetTransactionEvidenceRequest.transaction_id",
-	"ramp.admin.v1.GetTransactionEvidenceRequest.tenant_id",
+// sameRuleCoincidences names non-root contract fields whose rules are
+// byte-identical to another contract field's by COINCIDENCE, not by copy —
+// tying them with a directive would force unrelated fields to move together.
+// Every entry must still resolve to a field AND still have a rule twin, or the
+// completeness sweep fails it as stale.
+var sameRuleCoincidences = map[string]string{
+	"ramp.admin.v1.TransactionEvidence.offer_id":       "bare min_len:1 — any-non-empty-string, shared shape with unrelated fields",
+	"ramp.admin.v1.TransactionEvidence.offer_json":     "bare min_len:1 — any-non-empty-string, shared shape with unrelated fields",
+	"ramp.admin.v1.TransactionState.idempotency_key":   "bare min_len:1 — deliberately unbounded (derived key), not a copy of any bounded rule",
+	"ramp.admin.v1.TransactionState.signed_url_hash":   "bytes.len:32 — a sha256 digest; matches the Ed25519 key length by arithmetic accident",
+	"ramp.admin.v1.TenantFeeRate.tenant_id":            "the ANCHOR the tenant_id directives point at; itself identical to unrelated {min_len:1,max_len:255} fields",
+	"ramp.admin.v1.TransactionEvidence.transaction_id": "the ANCHOR the request's transaction_id directive points at; {min_len:1,max_len:255} matches tenant ids by convention, not by copy",
 }
 
 func TestSameRuleDirectivesHoldByteForByte(t *testing.T) {
 	directives := collectSameRuleDirectives(t) // field full name -> target full name
 
-	for _, name := range knownCopies {
-		if _, ok := directives[name]; !ok {
-			t.Errorf("known restated rule %s carries no 'Same rule as <field>' directive — the drift gate is not armed for it", name)
-		}
-	}
 	if len(directives) == 0 {
 		t.Fatal("no 'Same rule as' directives found in the contract — the gate is wired to nothing (descriptor missing source info?)")
 	}
@@ -72,6 +87,15 @@ func TestSameRuleDirectivesHoldByteForByte(t *testing.T) {
 		if err != nil {
 			t.Errorf("%s says 'Same rule as %s', which does not resolve to a field: %v", src, dst, err)
 			continue
+		}
+		// Rules equality alone is blind to presence: protovalidate SKIPS an unset
+		// presence-tracked field, so `optional string x` and plain `string x`
+		// with byte-identical rules still behave differently at runtime (the
+		// optional copy accepts omission its source rejects). A directive
+		// declares same BEHAVIOR, so the presence mode must match too.
+		if srcFD.HasPresence() != dstFD.HasPresence() {
+			t.Errorf("restated rule PRESENCE mismatch: %s declares 'Same rule as %s' but HasPresence differs (source %v, target %v) — protovalidate skips an unset presence-tracked field, so the copies diverge at runtime on omission",
+				src, dst, srcFD.HasPresence(), dstFD.HasPresence())
 		}
 		srcRules, err := protovalidate.ResolveFieldRules(srcFD)
 		if err != nil {
@@ -96,6 +120,88 @@ func TestSameRuleDirectivesHoldByteForByte(t *testing.T) {
 				src, dst, srcRules, dstRules)
 		}
 	}
+}
+
+// TestRuleIdenticalGroupsAreDeclared is the completeness half: it derives the
+// set of fields that must declare from the descriptor (rule-identical groups)
+// instead of trusting authors to opt in. See the file header.
+func TestRuleIdenticalGroupsAreDeclared(t *testing.T) {
+	directives := collectSameRuleDirectives(t)
+	targets := map[string]bool{}
+	for _, dst := range directives {
+		targets[dst] = true
+	}
+	rootPkg := ContractPackages()[0]
+
+	// Group every ruled non-message field by its deterministically serialized
+	// resolved rules.
+	groups := map[string][]string{}
+	EachMessage(func(md protoreflect.MessageDescriptor) {
+		for i := 0; i < md.Fields().Len(); i++ {
+			fd := md.Fields().Get(i)
+			if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+				continue
+			}
+			fr, err := protovalidate.ResolveFieldRules(fd)
+			if err != nil {
+				t.Fatalf("resolving rules for %s: %v", fd.FullName(), err)
+			}
+			if fr == nil {
+				continue
+			}
+			key, err := proto.MarshalOptions{Deterministic: true}.Marshal(fr)
+			if err != nil {
+				t.Fatalf("serializing rules for %s: %v", fd.FullName(), err)
+			}
+			groups[string(key)] = append(groups[string(key)], string(fd.FullName()))
+		}
+	})
+
+	inTwinGroup := map[string]bool{}
+	for _, fields := range groups {
+		if len(fields) < 2 {
+			continue
+		}
+		for _, name := range fields {
+			inTwinGroup[name] = true
+			if strings.HasPrefix(name, rootPkg+".") {
+				continue // the root package is the upstream vocabulary, not a restater
+			}
+			if _, ok := directives[name]; ok {
+				continue
+			}
+			if targets[name] {
+				continue
+			}
+			if _, ok := sameRuleCoincidences[name]; ok {
+				continue
+			}
+			t.Errorf("%s has rules byte-identical to %v but declares nothing — add a 'Same rule as <field>' directive if it is a copy, or a sameRuleCoincidences entry if the match is accidental",
+				name, others(fields, name))
+		}
+	}
+
+	// Exemption hygiene: a coincidence entry must still name a real field that
+	// still has a rule twin, or it is stale and hides nothing.
+	for name, why := range sameRuleCoincidences {
+		if _, err := findField(name); err != nil {
+			t.Errorf("stale sameRuleCoincidences entry %s (%s): %v", name, why, err)
+			continue
+		}
+		if !inTwinGroup[name] {
+			t.Errorf("stale sameRuleCoincidences entry %s (%s): the field no longer has a rule-identical twin — remove the entry", name, why)
+		}
+	}
+}
+
+func others(fields []string, self string) []string {
+	out := make([]string, 0, len(fields)-1)
+	for _, f := range fields {
+		if f != self {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func findField(fullName string) (protoreflect.FieldDescriptor, error) {

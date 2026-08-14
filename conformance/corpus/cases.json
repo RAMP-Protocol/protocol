@@ -2255,152 +2255,13 @@
     }
   },
   {
-    "id": "ReportingObligationState/consumed_quantity/empty_ok",
-    "message": "ReportingObligationState",
-    "valid": true,
-    "json": {
-      "consumed_quantity": "",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#0",
+    "id": "ReportingObligationState/created_at/missing",
     "message": "ReportingObligationState",
     "valid": false,
     "rules": [
-      "string.pattern"
+      "required"
     ],
     "json": {
-      "consumed_quantity": "two words",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#1",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": "1.2.3",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#2",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": "!!bad!!",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#3",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": "\u0000ctl\u0000",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#4",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": " ",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#5",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": "-5",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#6",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": "NaN",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#7",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": "Infinity",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/pattern#8",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": "1E3",
-      "deadline": "2026-01-02T03:04:05Z",
-      "received_at": "2026-01-02T03:04:05Z",
-      "state": "OBLIGATION_STATE_PENDING"
-    }
-  },
-  {
-    "id": "ReportingObligationState/consumed_quantity/too_long",
-    "message": "ReportingObligationState",
-    "valid": false,
-    "rules": [
-      "string.max_len",
-      "string.pattern"
-    ],
-    "json": {
-      "consumed_quantity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "deadline": "2026-01-02T03:04:05Z",
       "received_at": "2026-01-02T03:04:05Z",
       "state": "OBLIGATION_STATE_PENDING"
@@ -2414,6 +2275,7 @@
       "required"
     ],
     "json": {
+      "created_at": "2026-01-02T03:04:05Z",
       "received_at": "2026-01-02T03:04:05Z",
       "state": "OBLIGATION_STATE_PENDING"
     }
@@ -2426,6 +2288,7 @@
       "enum.not_in"
     ],
     "json": {
+      "created_at": "2026-01-02T03:04:05Z",
       "deadline": "2026-01-02T03:04:05Z",
       "received_at": "2026-01-02T03:04:05Z"
     }
@@ -2438,6 +2301,7 @@
       "enum.defined_only"
     ],
     "json": {
+      "created_at": "2026-01-02T03:04:05Z",
       "deadline": "2026-01-02T03:04:05Z",
       "received_at": "2026-01-02T03:04:05Z",
       "state": 6
@@ -2448,6 +2312,7 @@
     "message": "ReportingObligationState",
     "valid": true,
     "json": {
+      "created_at": "2026-01-02T03:04:05Z",
       "deadline": "2026-01-02T03:04:05Z",
       "received_at": "2026-01-02T03:04:05Z",
       "state": "OBLIGATION_STATE_PENDING"
@@ -2822,6 +2687,90 @@
       "budget_period": "90s",
       "max_data_age": "90s",
       "max_unit_cost": "0"
+    }
+  },
+  {
+    "id": "RequestCorrelation/request_id/missing_empty",
+    "message": "RequestCorrelation",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "RequestCorrelation/request_id/pattern#0",
+    "message": "RequestCorrelation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "request_id": "two words"
+    }
+  },
+  {
+    "id": "RequestCorrelation/request_id/pattern#3",
+    "message": "RequestCorrelation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "request_id": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "RequestCorrelation/request_id/pattern#4",
+    "message": "RequestCorrelation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "request_id": " "
+    }
+  },
+  {
+    "id": "RequestCorrelation/request_id/too_long",
+    "message": "RequestCorrelation",
+    "valid": false,
+    "rules": [
+      "string.max_len"
+    ],
+    "json": {
+      "request_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "id": "RequestCorrelation/request_id/too_short_explicit_empty",
+    "message": "RequestCorrelation",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {
+      "request_id": ""
+    }
+  },
+  {
+    "id": "RequestCorrelation/request_id/too_short_omitted",
+    "message": "RequestCorrelation",
+    "valid": false,
+    "rules": [
+      "string.min_len",
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "RequestCorrelation/valid",
+    "message": "RequestCorrelation",
+    "valid": true,
+    "json": {
+      "request_id": "x"
     }
   },
   {
@@ -4058,16 +4007,16 @@
     }
   },
   {
-    "id": "TransactionEvidence/agent_acceptance_signature_algorithm/too_short_explicit_empty",
+    "id": "TransactionEvidence/agent_acceptance_signature_algorithm/const_case",
     "message": "TransactionEvidence",
     "valid": false,
     "rules": [
-      "string.min_len"
+      "string.const"
     ],
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "",
+      "agent_acceptance_signature_algorithm": "eddsa",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4084,15 +4033,41 @@
     }
   },
   {
-    "id": "TransactionEvidence/agent_acceptance_signature_algorithm/too_short_omitted",
+    "id": "TransactionEvidence/agent_acceptance_signature_algorithm/const_omitted",
     "message": "TransactionEvidence",
     "valid": false,
     "rules": [
-      "string.min_len"
+      "string.const"
     ],
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "EdDSA",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_acceptance_signature_algorithm/const_other",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.const"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "none",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4650,11 +4625,11 @@
     }
   },
   {
-    "id": "TransactionEvidence/offer_sig_algorithm/too_short_explicit_empty",
+    "id": "TransactionEvidence/offer_sig_algorithm/const_case",
     "message": "TransactionEvidence",
     "valid": false,
     "rules": [
-      "string.min_len"
+      "string.const"
     ],
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
@@ -4667,7 +4642,7 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "",
+      "offer_sig_algorithm": "eddsa",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
@@ -4676,11 +4651,11 @@
     }
   },
   {
-    "id": "TransactionEvidence/offer_sig_algorithm/too_short_omitted",
+    "id": "TransactionEvidence/offer_sig_algorithm/const_omitted",
     "message": "TransactionEvidence",
     "valid": false,
     "rules": [
-      "string.min_len"
+      "string.const"
     ],
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
@@ -4693,6 +4668,32 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_sig_algorithm/const_other",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "string.const"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "EdDSA",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "none",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",

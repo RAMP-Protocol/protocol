@@ -109,11 +109,11 @@ func seeds() map[string]proto.Message {
 		// shapes auto-fill does not handle — bytes rules (len=32 keys,
 		// non-empty canonical bytes) and required Timestamp fields.
 		"TransactionEvidence": &rampadminv1.TransactionEvidence{
-			TransactionId:                     "tx-seed",
-			TenantId:                          "tenant-seed",
-			OfferId:                           "offer-seed",
-			OfferJson:                         `{"offer_id":"offer-seed"}`,
-			OfferCanonicalBytes:               []byte(`{"offer_id":"offer-seed"}`),
+			TransactionId:       "tx-seed",
+			TenantId:            "tenant-seed",
+			OfferId:             "offer-seed",
+			OfferJson:           `{"offer_id":"offer-seed"}`,
+			OfferCanonicalBytes: []byte(`{"offer_id":"offer-seed"}`),
 			// "EdDSA" is the content-signature label the contract pins (see
 			// offer_sig_algorithm's comment); "ed25519" is the RFC 9421
 			// HTTP-request-signature label and must not appear here.
@@ -618,6 +618,28 @@ func enumEdges(fd protoreflect.FieldDescriptor, r *validate.EnumRules) []edge {
 
 func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edge {
 	var es []edge
+	if r.Const != nil {
+		c := r.GetConst()
+		// Two invalid mutants: an unrelated label (the algorithm-confusion
+		// probe — a client must reject a claimed "none") and a case variant,
+		// so a client comparing case-insensitively diverges from Go. The case
+		// variant is skipped when flipping case cannot change the value.
+		es = append(es, edge{label: "const_other", want: "string.const",
+			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString("none")) }})
+		if variant := strings.ToLower(c); variant != c {
+			es = append(es, edge{label: "const_case", want: "string.const",
+				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(variant)) }})
+		} else if variant := strings.ToUpper(c); variant != c {
+			es = append(es, edge{label: "const_case", want: "string.const",
+				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(variant)) }})
+		}
+		if c != "" && !fd.HasPresence() {
+			// The cleared value "" also violates the const, so omission must be
+			// rejected — same presence collapse as min_len's too_short_omitted.
+			es = append(es, edge{label: "const_omitted", want: "string.const",
+				apply: func(m protoreflect.Message) { m.Clear(fd) }})
+		}
+	}
 	if p := r.GetPattern(); p != "" {
 		// One INVALID mutant per badStrings entry the pattern rejects (option A), each
 		// keyed by the stable badStrings index so IDs don't shift when the list grows.
@@ -661,6 +683,13 @@ func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edg
 		es = append(es, edge{label: "too_long", want: "string.max_len",
 			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(s)) }})
 	}
+	// FORWARD-PROVISIONED, currently unreachable: no contract field may carry
+	// string.max_bytes while requiredgen's assertNoStringByteLengthRules panics
+	// on it (protoschema renders it as a CHARACTER count, so the generated
+	// clients would diverge from Go). The mutants below — and the max_bytes
+	// entry in classifiedRuleMembers — exist so the corpus and its class-6
+	// coverage guard arm themselves the day the sdk-types pipeline gets a
+	// byte-count refine and that panic is lifted.
 	if n := r.GetMaxBytes(); n > 0 {
 		ascii := strings.Repeat("a", int(n)+1)
 		es = append(es, edge{label: "too_many_bytes", want: "string.max_bytes",
@@ -827,7 +856,10 @@ func itemRules(fr *validate.FieldRules) *validate.FieldRules { return fr.GetRepe
 // set outside this table, so a new rule shape MUST be taught to edges() (and
 // added here) before it can ship — the allowlist fails CLOSED.
 var classifiedRuleMembers = map[string]map[string]bool{
-	"string":   {"pattern": true, "min_len": true, "max_len": true, "max_bytes": true},
+	// string.max_bytes is classified but FORWARD-PROVISIONED: requiredgen's
+	// assertNoStringByteLengthRules currently forbids it contract-wide (see the
+	// max_bytes edge in stringEdges for the full position).
+	"string":   {"const": true, "pattern": true, "min_len": true, "max_len": true, "max_bytes": true},
 	"enum":     {"defined_only": true, "not_in": true},
 	"bytes":    {"len": true, "min_len": true},
 	"int64":    {"gte": true},
@@ -888,7 +920,7 @@ func hasConstraint(fr *validate.FieldRules) bool {
 	if e := fr.GetEnum(); e != nil && (e.GetDefinedOnly() || len(e.GetNotIn()) > 0) {
 		return true
 	}
-	if s := fr.GetString(); s != nil && (s.GetPattern() != "" || s.GetMinLen() > 0 || s.GetMaxLen() > 0 || s.GetMaxBytes() > 0) {
+	if s := fr.GetString(); s != nil && (s.Const != nil || s.GetPattern() != "" || s.GetMinLen() > 0 || s.GetMaxLen() > 0 || s.GetMaxBytes() > 0) {
 		return true
 	}
 	if b := fr.GetBytes(); b != nil && (b.Len != nil || b.GetMinLen() > 0) {
@@ -943,6 +975,11 @@ func undefinedEnum(ed protoreflect.EnumDescriptor) protoreflect.EnumNumber {
 }
 
 func validString(r *validate.StringRules) (string, bool) {
+	if r != nil && r.Const != nil {
+		// A const admits exactly one value; the sample search below cannot
+		// discover it.
+		return r.GetConst(), true
+	}
 	var re *regexp.Regexp
 	if r != nil && r.GetPattern() != "" {
 		re = regexp.MustCompile(r.GetPattern())

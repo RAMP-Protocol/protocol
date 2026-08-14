@@ -129,7 +129,7 @@ The Exchange MUST NOT return the `TransactionResponse` until this event is durab
 | `timestamp` | `time.Time` | yes | URL generation time |
 | `transaction_id` | `string` | yes | `TransactionResultItem.transaction_id` |
 | `billing_id` | `string` | yes | `TransactionResultItem.billing_id` |
-| `idempotency_key` | `string` | yes | `TransactionRequest.idempotency_key` (the request's idempotency key) |
+| `idempotency_key` | `string` | yes | The derived per-item key: `TransactionRequest.idempotency_key + ":" + offer_id` (never the bare request key) |
 | `offer_id` | `string` | yes | Selected offer |
 | `buyer_lid` | `string` | yes | The requester's account handle (`RegisterResponse.billing_ref`) |
 | `buyer_name` | `string` | yes | AI system name |

@@ -4838,13 +4838,13 @@ type TransactionResultItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The offer_id this result is for.
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
-	// Exchange-assigned transaction identifier. MUST be minted with UUIDv4-class
-	// entropy (unguessable): it later becomes half of the selector for the admin
-	// plane's evidence read (ramp.admin.v1.GetTransactionEvidence — keyed by the
-	// (tenant_id, transaction_id) pair), which has no per-operator identity in
-	// v1 — a sequential or predictable id would let anyone with network
-	// reachability and a tenant name enumerate evidence rows. The reference
-	// implementation mints a UUIDv4.
+	// Exchange-assigned transaction identifier. Opaque to agents; the format
+	// is implementation-defined (the documented storage model mints a
+	// time-ordered ULID as the record's primary key). No entropy requirement:
+	// the admin plane's evidence read (ramp.admin.v1.GetTransactionEvidence)
+	// selects by the (tenant_id, transaction_id) PAIR, so a transaction id
+	// alone is not a bearer capability there and nothing rests on this
+	// field's format being unguessable.
 	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// Billing record identifier minted by the Exchange's billing adapter for
 	// this transaction (not the account handle — see RegisterResponse.billing_ref).

@@ -1,9 +1,9 @@
 // Package conformance — reachability_test.go holds INV-4, the orphan-type guard.
 //
 // The contract reaches the wire through exactly three delivery channels:
-//   1. RPC bodies        — every service method's input and output message
-//   2. served documents  — the manifest a participant publishes at .well-known
-//   3. the error envelope — ErrorDetail and the typed failure reasons it carries
+//  1. RPC bodies        — every service method's input and output message
+//  2. served documents  — the manifest a participant publishes at .well-known
+//  3. the error envelope — ErrorDetail and the typed failure reasons it carries
 //
 // A message or enum that NO channel can carry is an orphan: schema that is
 // defined but undeliverable — dead weight, or (worse) a wiring mistake where a
@@ -28,10 +28,10 @@ import (
 // already reachable from an RPC body — so an entry that becomes RPC-reachable is
 // flagged as stale instead of silently masking an orphan beneath it.
 var outOfBandRoots = map[string]string{
-	"WellKnownManifest": "served at /.well-known/ramp.json by every participant (capabilities, role; identity keys moved to WBAFile)",
-	"WBAFile":           "served at /.well-known/http-message-signatures-directory — the pure WBA JWK Set (identity keys + revocation_url)",
-	"ErrorDetail":       "the transport-error envelope; carries the seven typed failure reasons",
-	"KeyRevocationList": "served key-revocation document (thumbprint list), fetched out of band from WBAFile.revocation_url",
+	"WellKnownManifest":      "served at /.well-known/ramp.json by every participant (capabilities, role; identity keys moved to WBAFile)",
+	"WBAFile":                "served at /.well-known/http-message-signatures-directory — the pure WBA JWK Set (identity keys + revocation_url)",
+	"ErrorDetail":            "the transport-error envelope; carries the seven typed failure reasons",
+	"KeyRevocationList":      "served key-revocation document (thumbprint list), fetched out of band from WBAFile.revocation_url",
 	"AgentAcceptancePayload": "canonical signing structure for AgentAcceptance; never sent on the wire — it fixes the field set the signer and verifier canonicalize (RFC 8785 JCS over canonical proto-JSON) to derive byte-identical signed bytes",
 }
 

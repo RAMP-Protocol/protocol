@@ -27,6 +27,13 @@ import (
 )
 
 func main() {
+	// Fail fast on a cross-package bare-name collision: this manifest (and
+	// merge_schema.py + gen_unique_py.py, which consume it) key by bare message
+	// name, so a duplicate would silently clobber one message's set-semantics
+	// enforcement. Same guard as requiredgen and bytesgen.
+	if err := conformance.AssertUniqueBareNames(); err != nil {
+		panic(err)
+	}
 	out := "unique_items.json"
 	if len(os.Args) > 1 {
 		out = os.Args[1]

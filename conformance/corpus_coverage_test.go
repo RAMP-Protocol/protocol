@@ -111,11 +111,15 @@ func ruleMatches(rules []string, substr string) bool {
 	return false
 }
 
-// TestCorpusCoverage guards that the generated corpus exercises the five
-// field-level rule classes that were identified as missing. Each subtest is an
-// independent coverage assertion whose failure names exactly which mutant class
-// the corpus lacks. It fails NOW (corpus has 86 cases, none of these classes) and
-// passes once corpusgen emits them.
+// TestCorpusCoverage guards that the generated corpus exercises the six
+// field-level rule classes that shipped bugs (or would have) while every other
+// gate stayed green: (1) money-specific killer values, (2) the accepted-empty
+// money edge, (3) repeated-item length bounds, (4) pattern-derived required
+// presence, (5) presence-tracked-enum omitted-is-valid, and (6) the
+// bytes.len / bytes.min_len / string.max_bytes rule shapes. Each subtest is an
+// independent coverage assertion whose failure names exactly which mutant
+// class the corpus lacks; a class fails RED until corpusgen emits its mutants
+// and turns red again if a regeneration drops them.
 func TestCorpusCoverage(t *testing.T) {
 	cases := loadCorpus(t)
 
@@ -262,9 +266,13 @@ func TestCorpusCoverage(t *testing.T) {
 			if c.Valid || !ruleMatches(c.Rules, "string.max_bytes") {
 				continue
 			}
-			for _, s := range stringValues(decodeCaseJSON(t, c.JSON)) {
+			// Anchored to the MUTATED field (the case id's second segment):
+			// an unanchored whole-JSON scan would be satisfied by a multibyte
+			// value in an unrelated auto-filled field, proving nothing about
+			// the byte-vs-character counting of the field under test.
+			for _, s := range fieldStringValues(decodeCaseJSON(t, c.JSON), mutatedField(c.ID)) {
 				if len(s) > len([]rune(s)) {
-					return // found a multibyte max_bytes mutant
+					return // found a multibyte max_bytes mutant on the mutated field
 				}
 			}
 		}
@@ -301,25 +309,43 @@ func schemaRuleShapes() (bytesLen, bytesMinLen, stringMaxBytes bool) {
 	return
 }
 
-// stringValues walks a decoded proto-JSON value and returns every string value
-// at any nesting depth.
-func stringValues(v any) []string {
+// mutatedField extracts the mutated field's JSON name from a corpus case id,
+// which corpusgen shapes as "Message/field/edge".
+func mutatedField(id string) string {
+	parts := strings.Split(id, "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[1]
+}
+
+// fieldStringValues walks a decoded proto-JSON value and returns every string
+// found under the given key — directly, or as elements of an array under that
+// key — at any nesting depth (the mutated field may sit inside an auto-filled
+// sub-message).
+func fieldStringValues(v any, field string) []string {
 	var out []string
 	var walk func(any)
 	walk = func(x any) {
 		switch t := x.(type) {
 		case map[string]any:
-			for _, val := range t {
-				if s, ok := val.(string); ok {
-					out = append(out, s)
+			for k, val := range t {
+				if k == field {
+					switch fv := val.(type) {
+					case string:
+						out = append(out, fv)
+					case []any:
+						for _, e := range fv {
+							if s, ok := e.(string); ok {
+								out = append(out, s)
+							}
+						}
+					}
 				}
 				walk(val)
 			}
 		case []any:
 			for _, e := range t {
-				if s, ok := e.(string); ok {
-					out = append(out, s)
-				}
 				walk(e)
 			}
 		}

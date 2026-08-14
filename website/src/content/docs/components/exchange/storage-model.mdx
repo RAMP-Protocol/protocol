@@ -111,10 +111,13 @@ type TransactionRecord struct {
     Currency string  `json:"currency"`
     UnitCost float64 `json:"unit_cost,omitempty"`
 
-    // Idempotency. Stores the request's idempotency key
-    // (TransactionRequest.idempotency_key) so a replay returns the original
-    // record. This is the durable dedupe key, NOT the wire correlation id —
-    // request/response correlation rides the X-Request-ID HTTP header.
+    // Idempotency. Stores the DERIVED per-item key —
+    // TransactionRequest.idempotency_key + ":" + offer_id — so each item of a
+    // multi-item batch dedupes independently and a replay returns the original
+    // record. Derived unconditionally, single-item requests included; the
+    // request-level key alone is never stored here. This is the durable dedupe
+    // key, NOT the wire correlation id — request/response correlation rides
+    // the X-Request-ID HTTP header.
     IdempotencyKey string `json:"idempotency_key"`
     Broker string `json:"broker,omitempty"`
 

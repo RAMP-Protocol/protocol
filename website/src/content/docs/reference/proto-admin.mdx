@@ -7,9 +7,9 @@ description: "ramp.admin.v1 protobuf reference -- the operator-plane AdminServic
 Source: [`proto/ramp/admin/v1/admin.proto`](https://github.com/RAMP-Protocol/protocol/blob/main/proto/ramp/admin/v1/admin.proto)
 
 :::note[Operator plane, not agent wire]
-`ramp.admin.v1` is the Exchange **operator/config plane** — deliberately a separate package and service from `ExchangeService`, so the agent-facing contract is untouched. Deployments MUST NOT expose `AdminService` on the public agent-facing listener: reachability is restricted at the network layer (an internal listener plus a source allowlist), and there is no per-operator identity inside the service in v1.
+`ramp.admin.v1` is the Exchange **operator plane — configuration and forensics** — deliberately a separate package and service from `ExchangeService`, so the agent-facing contract is untouched. Deployments MUST NOT expose `AdminService` on the public agent-facing listener: reachability is restricted at the network layer (an internal listener plus a source allowlist), and there is no per-operator identity inside the service in v1.
 
-No RPC here carries an `idempotency_key` (the `ramp.v1` idempotency convention dedupes per verified RFC 9421 signer, and the admin plane has no request signing in v1) or `ext`/`ext_critical` extension maps — the two setters are **full-replace overwrites** and the evidence read is side-effect-free, so every RPC is naturally idempotent. Each request and response is a thin `{ver, payload}` envelope (`ver` is field 1, the RAMP protocol version — value `"1.0"`, stamped by the sender from the SDK's `ProtocolVersion` constant and advisory on receive, as on the agent-facing plane; the *reason* differs, since this plane rests on network-layer reachability rather than on a request signature). Each setter wraps a required payload message — `TenantFeeRate` or `ReportingPolicy` — that is **shared by the request and its response**, so every field rule is stated once and the echoed read-back cannot drift from the write; responses echo the payload **as persisted**, giving operator tooling a read-back confirmation. The evidence read does not share this shape: its request carries only a transaction id, and its response wraps read-only payloads that exist on no write path.
+No RPC here carries an `idempotency_key` (the `ramp.v1` idempotency convention dedupes per verified RFC 9421 signer, and the admin plane has no request signing in v1) or `ext`/`ext_critical` extension maps — the two setters are **full-replace overwrites** and the evidence read is side-effect-free, so every RPC is naturally idempotent. Each request and response is a thin `{ver, payload}` envelope (`ver` is field 1, the RAMP protocol version — value `"1.0"`, stamped by the sender from the SDK's `ProtocolVersion` constant and advisory on receive, as on the agent-facing plane; the *reason* differs, since this plane rests on network-layer reachability rather than on a request signature). Each setter wraps a required payload message — `TenantFeeRate` or `ReportingPolicy` — that is **shared by the request and its response**, so every field rule is stated once and the echoed read-back cannot drift from the write; responses echo the payload **as persisted**, giving operator tooling a read-back confirmation. The evidence read does not share this shape: its request carries only the `(tenant_id, transaction_id)` selector, and its response wraps read-only payloads that exist on no write path.
 
 Every constraint is a **field-level** protovalidate rule, so it flows into the generated Pydantic/Zod types; this package defines no cross-field (message-level CEL) rules.
 :::
@@ -66,25 +66,29 @@ Echoes the `ReportingPolicy` as persisted.
 
 ### TransactionEvidence
 
-One append-once evidence row, exactly as the Exchange persisted it for a successfully executed transaction. The row is written only after both Ed25519 signatures verified -- a denied execute writes nothing -- so the row's existence is itself the success statement. It re-verifies **offline**, from this message alone: `ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)` proves the Exchange signed this exact offer, and `ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)` proves the agent accepted it. Both verifying public keys ride along (not key ids) so re-verification survives key rotation; the `*_canonical_bytes` are the verbatim JCS bytes each signature was computed over, stored as-signed and never re-derived. The signatures cover what was **agreed**, not what was **delivered** -- `transaction_id`, `request_id` and `created_at` are the Exchange's own assertions about the delivery. The row deliberately carries no signed retrieval URL: the full URL is a live bearer capability until expiry, so the delivery join is hash-only via `TransactionState.signed_url_hash`.
+One append-once evidence row, exactly as the Exchange persisted it for a successfully executed transaction. The row is written only after both Ed25519 signatures verified -- a denied execute writes nothing -- so the row's existence is itself the success statement. It re-verifies **offline**: `ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)` proves the Exchange signed this exact offer, and `ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)` proves the agent accepted it. Both verifying public keys ride along (not key ids) so re-verification survives key rotation; the `*_canonical_bytes` are the verbatim JCS bytes each signature was computed over, stored as-signed and never re-derived.
+
+**Trust boundary.** Offline re-verification proves the row is *internally consistent* -- each signature verifies against the key stored in the same row, so anyone able to write a row could mint one that passes. To prove *authenticity*, a verifier must compare the embedded keys against copies obtained independently: the Exchange's published JWKS (see [Authentication](/protocol/authentication/)) and the agent's directory (`agent_discovery_url`). The in-row keys are convenience copies that keep old rows verifiable after rotation; they are not the root of trust. After matching a key against its authority, a verifier should also check the key's RFC 7638 thumbprint against the Exchange's published revocation list (`KeyRevocationList`, served at `WBAFile.revocation_url`): a key can be rotated out because it was revoked, and a revoked key must not count as authentic.
+
+The signatures cover what was **agreed**, not what was **delivered** -- `transaction_id`, `request_correlation` and `created_at` are the Exchange's own assertions about the delivery. The row deliberately carries no signed retrieval URL: the full URL is a live bearer capability until expiry, so the delivery join is hash-only via `TransactionState.signed_url_hash` -- which also means a ledger rendered from this contract can never show a signed-URL *signature* match assertion; hash equality against the edge delivery log is the delivery assertion this plane supports.
 
 ::proto-message{name=TransactionEvidence}
 
+### RequestCorrelation
+
+The recorded `X-Request-ID` correlation for one evidence row, with its provenance (`minted`: server-minted vs propagated from the caller -- the two are byte-indistinguishable in the id alone). One message rather than two sibling fields so presence expresses the id-and-provenance pairing structurally, without message-level CEL. Absent from `TransactionEvidence` when the Exchange recorded no conforming correlation id.
+
+::proto-message{name=RequestCorrelation}
+
 ### TransactionState
 
-The thin transaction-log facts a ledger renderer needs next to the evidence row: the logged per-item idempotency key (derived from the request-level key and the item's offer, so not byte-equal to `TransactionEvidence.request_idempotency_key`), the signed-URL expiry, and the sha256 of the signed retrieval URL. There is deliberately no status field -- evidence only ever describes a successful execute, so existence is the status.
+The thin transaction-log facts a ledger renderer needs next to the evidence row: the logged per-item idempotency key (derived as `request_idempotency_key + ":" + offer_id`, so never byte-equal to the bare request key -- join log exports on the derived form), the signed-URL expiry, the sha256 of the signed retrieval URL, and the broker that routed the acceptance (`''` when the acceptance arrived direct). There is deliberately no status field -- evidence only ever describes a successful execute, so existence is the status.
 
 ::proto-message{name=TransactionState}
 
-### ObligationState
-
-Lifecycle of a reporting obligation, exactly the vocabulary the Exchange persists. Defined in this package rather than imported from `ramp.v1`, which states reporting *requirements*, never their server-side lifecycle.
-
-::proto-enum{name=ObligationState numbers}
-
 ### ReportingObligationState
 
-The server-side lifecycle record of the transaction's reporting obligation: the `ObligationState`, the reported consumed quantity (an exact decimal string, absent until a report arrives), the report deadline, and when a report arrived. Named apart from `ramp.v1.ReportingObligation`, the agent-facing requirements contract this state was minted from.
+The server-side lifecycle record of the transaction's reporting obligation: the `ObligationState`, the reported consumed quantity (mirroring the wire's `Usage.consumed_quantity` `int32`, absent until a report has been accepted), the report deadline, when a report arrived, and when the obligation was minted. Named apart from `ramp.v1.ReportingObligation`, the agent-facing requirements contract this state was minted from.
 
 ::proto-message{name=ReportingObligationState}
 
@@ -96,6 +100,14 @@ A thin `{ver, transaction_id, tenant_id}` envelope. Selection is by the `(tenant
 
 ### GetTransactionEvidenceResponse
 
-The evidence row plus the transaction-log and reporting-obligation state needed to render it. `evidence` and `transaction_state` are required -- they exist 1:1 for every found transaction, and an unknown `transaction_id` or a `tenant_id` mismatch is `NOT_FOUND` (byte-identical in both cases, so existence under another tenant is not revealed), never an empty response. `obligation_state` carries the **latest** obligation by creation time (the store does not make obligations unique per transaction) and is absent when the transaction minted none.
+The evidence row plus the transaction-log and reporting-obligation state needed to render it. `evidence` and `transaction_state` are required -- they exist 1:1 for every found transaction, and an unknown `transaction_id` or a `tenant_id` mismatch is `NOT_FOUND` (byte-identical in both cases, so existence under another tenant is not revealed), never an empty response. `obligation_state` is the transaction's reporting obligation record as persisted -- the store keeps one obligation per transaction, transitioning in place -- and is absent when the transaction minted none.
 
 ::proto-message{name=GetTransactionEvidenceResponse}
+
+## Enums
+
+### ObligationState
+
+Lifecycle of a reporting obligation, exactly the vocabulary the Exchange persists (the storage model's `Pending`/`Fulfilled`/`Expired`/`Waived`/`Blocked` -- see the [Exchange storage model](/components/exchange/storage-model/)). Defined in this package rather than imported from `ramp.v1`, which states reporting *requirements*, never their server-side lifecycle. A *rejected* usage report does not transition the obligation: it stays `PENDING` until an accepted report, a waiver, or expiry.
+
+::proto-enum{name=ObligationState numbers}

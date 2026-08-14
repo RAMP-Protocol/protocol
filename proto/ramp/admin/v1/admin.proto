@@ -23,9 +23,10 @@
 // forensic row, and a request that names the tenant is what lets a
 // deployment enforce a per-tenant ACL in front of this RPC. A tenant
 // mismatch is NOT_FOUND, byte-identical to an unknown id, so existence
-// under another tenant is not revealed. Enumeration resistance still rests
-// on ids being unguessable: ids MUST carry UUIDv4-class entropy (normative
-// statement on ramp.v1.TransactionResultItem.transaction_id).
+// under another tenant is not revealed. The id format itself is
+// implementation-defined (ramp.v1 places no entropy requirement on
+// transaction ids); what bounds this read is the pair selector plus the
+// network-layer reachability restriction above.
 //
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
@@ -178,17 +179,22 @@ message SetReportingPolicyResponse {
 }
 
 // ObligationState — lifecycle of a reporting obligation, exactly the
-// vocabulary the Exchange persists. Defined here rather than imported from
-// ramp.v1 (which carries no such enum — the agent plane states reporting
-// REQUIREMENTS, never their server-side lifecycle) so the admin package
-// stays self-contained.
+// vocabulary the Exchange persists (the storage model's ObligationPending/
+// Fulfilled/Expired/Waived/Blocked, see components/exchange/storage-model).
+// Defined here rather than imported from ramp.v1 (which carries no such
+// enum — the agent plane states reporting REQUIREMENTS, never their
+// server-side lifecycle) so the admin package stays self-contained.
+//
+// A REJECTED usage report (a non-OK UsageReportResponse carrying
+// ErrorDetail.usage_report_rejection) does not transition the obligation:
+// it stays PENDING until an accepted report, a waiver, or expiry.
 enum ObligationState {
   OBLIGATION_STATE_UNSPECIFIED = 0; // never sent — the server always maps a persisted state; rejected (not_in:[0]) on ReportingObligationState.state
-  OBLIGATION_STATE_PENDING = 1; // minted; no usage report received yet
-  OBLIGATION_STATE_RECEIVED = 2; // a usage report arrived and validated
-  OBLIGATION_STATE_ACCEPTED = 3; // the report was accepted as settled
-  OBLIGATION_STATE_CHALLENGED = 4; // the report was challenged and awaits resolution
-  OBLIGATION_STATE_EXPIRED = 5; // the reporting deadline passed with no report
+  OBLIGATION_STATE_PENDING = 1; // minted; awaiting an accepted usage report
+  OBLIGATION_STATE_FULFILLED = 2; // a usage report was received and accepted (including a late report accepted out of BLOCKED)
+  OBLIGATION_STATE_EXPIRED = 3; // the reporting window elapsed with no accepted report
+  OBLIGATION_STATE_WAIVED = 4; // the Exchange waived the requirement
+  OBLIGATION_STATE_BLOCKED = 5; // enforcement gate: an expired obligation met a new transaction attempt; new transactions are rejected until the Exchange lifts the block or accepts a late report
 }
 
 // TransactionEvidence — one append-once evidence row, exactly as the Exchange
@@ -209,6 +215,21 @@ enum ObligationState {
 // is non-canonical by protocol rule, and a stored-inputs-only row would stop
 // re-verifying the day the canonicalization recipe moved.
 //
+// TRUST BOUNDARY. Offline re-verification proves the row is INTERNALLY
+// CONSISTENT: each signature verifies against the key and bytes stored in
+// the same row, so anyone able to write a row could mint one that passes.
+// To prove AUTHENTICITY — that these parties actually operated these keys —
+// a verifier must compare the embedded keys against copies obtained
+// independently: the Exchange's published JWKS (the authority per
+// protocol/authentication) and the agent's directory (agent_discovery_url
+// names where this Exchange pinned agent_public_key from). The in-row keys
+// are convenience copies that keep old rows verifiable after rotation; they
+// are not the root of trust. After matching a key against its authority, a
+// verifier should also check the key's RFC 7638 thumbprint against the
+// Exchange's published revocation list (ramp.v1.KeyRevocationList, served at
+// WBAFile.revocation_url): a key can be rotated out because it was revoked,
+// and a revoked key must not count as authentic.
+//
 // SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
 // DELIVERED. transaction_id, request_id and created_at are this Exchange's
 // own assertions about the delivery, outside both signatures; the delivery
@@ -216,7 +237,11 @@ enum ObligationState {
 // sha256 of the signed retrieval URL, lives on TransactionState
 // .signed_url_hash).
 message TransactionEvidence {
-  // The evidenced transaction (Exchange-minted transaction identity).
+  // The evidenced transaction (Exchange-minted transaction identity). The
+  // 255 bound is NEW to this plane — ramp.v1 leaves transaction ids
+  // unconstrained — and is safe here because the Exchange mints the id
+  // itself and both documented schemes (26-char ULID, 36-char UUID) sit far
+  // below it; it exists so the selector stays storable and indexable.
   string transaction_id = 1 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 
   // The tenant the transaction executed under. The admin plane is
@@ -232,11 +257,17 @@ message TransactionEvidence {
 
   // The signed offer as a raw JSON string, for query and human audit.
   // Deliberately NOT a Struct: a Struct re-normalizes, and the canonical
-  // bytes below remain the arbiter of what was signed.
+  // bytes below remain the arbiter of what was signed. No upper bound, unlike
+  // this file's 255-capped ids: upstream ramp.v1 places no size bound on an
+  // offer, and the row must state whatever the parties actually signed — a
+  // cap here could make the row fail its own validation for a transaction
+  // that legitimately executed (the requester_id rationale).
   string offer_json = 4 [(buf.validate.field).string.min_len = 1];
 
   // Verbatim JCS bytes the Exchange's signature was computed over (the offer
-  // with its signature fields cleared).
+  // with its signature fields cleared). min_len only, no ceiling: same
+  // rationale as offer_json — the bytes under the signature are whatever size
+  // the signed offer was, and a bound could invalidate a legitimate row.
   bytes offer_canonical_bytes = 5 [(buf.validate.field).bytes.min_len = 1];
 
   // The Exchange's Ed25519 signature over offer_canonical_bytes, hex-encoded
@@ -250,10 +281,12 @@ message TransactionEvidence {
   // path — never echoed from the wire. The canonical payload clears the wire
   // labels before signing, so an echoed label would sit outside signature
   // coverage and could claim anything under an otherwise valid signature.
-  // Always "EdDSA" — the content-signature label ramp.v1.Offer
-  // .signature_algorithm pins; "ed25519" is the separate label reserved for
-  // RFC 9421 HTTP request signatures and never appears here.
-  string offer_sig_algorithm = 7 [(buf.validate.field).string.min_len = 1];
+  // Pinned to "EdDSA" — the content-signature label
+  // ramp.v1.Offer.signature_algorithm pins; "ed25519" is the separate label
+  // reserved for RFC 9421 HTTP request signatures and never appears here.
+  // const (not min_len) so a generated client also rejects a claimed "none"
+  // or "HS256".
+  string offer_sig_algorithm = 7 [(buf.validate.field).string.const = "EdDSA"];
 
   // The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.
   bytes exchange_signing_public_key = 8 [(buf.validate.field).bytes.len = 32];
@@ -262,15 +295,24 @@ message TransactionEvidence {
 
   // The agent's Ed25519 signature over agent_acceptance_canonical_bytes,
   // hex-encoded verbatim as it arrived on the wire (either case). Same rule
-  // as ramp.admin.v1.TransactionEvidence.offer_sig (drift-gated).
+  // as ramp.admin.v1.TransactionEvidence.offer_sig (drift-gated). The
+  // directive anchors INSIDE this package by decision: ramp.v1 deliberately
+  // carries no signature-format rule (adding one now would be a wire-visible
+  // tightening of the agent plane), and the Exchange hex-decodes and
+  // verifies this signature before executing, so no executed transaction can
+  // put a malformed signature in its row — the read plane can pin the format
+  // without an upstream source to point at.
   string agent_acceptance_signature = 9 [(buf.validate.field).string.pattern = "^[0-9A-Fa-f]{128}$"];
 
   // Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.
+  // Unbounded for the same reason as offer_canonical_bytes. Same rule as
+  // ramp.admin.v1.TransactionEvidence.offer_canonical_bytes (drift-gated).
   bytes agent_acceptance_canonical_bytes = 10 [(buf.validate.field).bytes.min_len = 1];
 
   // Signing-algorithm label, server-derived (see offer_sig_algorithm).
-  // Always "EdDSA", same as offer_sig_algorithm.
-  string agent_acceptance_signature_algorithm = 11 [(buf.validate.field).string.min_len = 1];
+  // Pinned to "EdDSA". Same rule as
+  // ramp.admin.v1.TransactionEvidence.offer_sig_algorithm (drift-gated).
+  string agent_acceptance_signature_algorithm = 11 [(buf.validate.field).string.const = "EdDSA"];
 
   // The acceptance payload's remaining inputs (offer_sig above is the
   // fourth), stored so the signed bytes can be independently rebuilt and
@@ -298,7 +340,9 @@ message TransactionEvidence {
   string request_idempotency_key = 14 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 
   // The registry-pinned agent verifying key (raw 32-byte Ed25519) the
-  // acceptance verified against.
+  // acceptance verified against. Same rule as
+  // ramp.admin.v1.TransactionEvidence.exchange_signing_public_key
+  // (drift-gated).
   bytes agent_public_key = 15 [(buf.validate.field).bytes.len = 32];
 
   // The anchored well-known directory agent_public_key was pinned from. The
@@ -314,25 +358,48 @@ message TransactionEvidence {
   // capability until expiry, and this plane has no request signing and no
   // per-operator identity — serving it back would turn any read into a
   // content-access oracle. The delivery join is hash-only, via
-  // TransactionState.signed_url_hash.
+  // TransactionState.signed_url_hash. Stated consequence: a ledger rendered
+  // from this contract can NEVER show a signed-URL *signature* match
+  // assertion — the delivery assertion this plane supports is hash equality,
+  // TransactionState.signed_url_hash against the edge delivery log's
+  // url_hash column.
 
   // Correlation id joining this row outward (edge delivery log,
-  // reconciliation sweep). Caller-asserted: the middleware accepts a
-  // conforming caller-supplied X-Request-ID verbatim and mints a UUID
-  // otherwise. Absent when no correlation id was recorded. Travels with
-  // request_id_minted — both absent or both present is a store-level
-  // constraint the server guarantees; field-level rules cannot express the
-  // pairing and this file carries no message-level CEL.
-  optional string request_id = 17;
-
-  // Provenance of request_id: true = server-minted UUID, false = taken from
-  // the caller. The two are byte-indistinguishable in request_id alone, so a
-  // forensic read needs this flag to tell a server-derived correlation key
-  // from an attacker-influenceable one.
-  optional bool request_id_minted = 18;
+  // reconciliation sweep), with its provenance. One message, not two
+  // sibling fields: presence of the message is the pairing — id and
+  // provenance flag arrive together or not at all, a constraint two
+  // optional siblings could not express without message-level CEL (which
+  // this file forbids). Absent when the Exchange recorded no correlation id.
+  RequestCorrelation request_correlation = 17;
 
   // When the Exchange wrote this row (server clock).
-  google.protobuf.Timestamp created_at = 19 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp created_at = 18 [(buf.validate.field).required = true];
+}
+
+// RequestCorrelation — the recorded X-Request-ID correlation for one
+// evidence row, with its provenance. See TransactionEvidence
+// .request_correlation for why this is a message rather than two sibling
+// fields.
+message RequestCorrelation {
+  // The correlation id as persisted. Caller-influenceable: the SDK's
+  // request-id middleware propagates any non-empty caller-supplied
+  // X-Request-ID verbatim (no conformance check) and mints a random 128-bit
+  // hex token when the header is absent. The rules below therefore bound
+  // what this PLANE will replay into a rendered ledger — printable ASCII,
+  // capped — and the Exchange records a correlation only when the persisted
+  // id conforms; a nonconforming header value is recorded as no correlation
+  // (the wrapping message stays absent), never echoed here.
+  string request_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+    pattern: "^[!-~]+$"
+  }];
+
+  // Provenance: true = server-minted, false = propagated from the caller.
+  // The two are byte-indistinguishable in request_id alone, so a forensic
+  // read needs this flag to tell a server-derived correlation key from an
+  // attacker-influenceable one.
+  bool minted = 2;
 }
 
 // TransactionState — the thin transaction-log facts a ledger renderer needs
@@ -342,10 +409,13 @@ message TransactionEvidence {
 // row is written, so evidence only ever describes a successful execute —
 // existence is the status, and a renderer derives its status cell from it.
 message TransactionState {
-  // The transaction's per-item idempotency key as logged — derived from the
-  // request-level key and the item's offer, so it is NOT byte-equal to
-  // TransactionEvidence.request_idempotency_key. No upper bound: the
-  // derivation appends an id whose length nothing constrains.
+  // The transaction's per-item idempotency key as logged. The Exchange
+  // derives it as TransactionEvidence.request_idempotency_key + ":" +
+  // offer_id — unconditionally, single-item requests included — so distinct
+  // items of a batch dedupe independently, and this value is NEVER byte-equal
+  // to the request-level key. A ledger joining this row against a log export
+  // matches on this derived form, not on the bare request key. No upper
+  // bound: the derivation appends an id whose length nothing constrains.
   string idempotency_key = 1 [(buf.validate.field).string.min_len = 1];
 
   // When the signed retrieval URL expires.
@@ -356,6 +426,14 @@ message TransactionState {
   // bearer capability until expiry and is deliberately absent from this
   // plane (see TransactionEvidence's delivery section).
   bytes signed_url_hash = 3 [(buf.validate.field).bytes.len = 32];
+
+  // The broker that routed the acceptance, as the transaction log recorded
+  // it. '' when the acceptance arrived direct — the log's broker column is
+  // optional-empty, and an append-once view states a value for every
+  // column, so '' is a stated fact, not a gap. A ledger renders its
+  // "broker routed" row from this. No wire rule: this states whatever the
+  // log holds, and nothing upstream constrains the broker label.
+  string broker = 4;
 }
 
 // ReportingObligationState — the server-side lifecycle record of the
@@ -364,24 +442,28 @@ message TransactionState {
 // contract; this is the state those requirements minted.
 message ReportingObligationState {
   // Lifecycle state. Always a real persisted state, never UNSPECIFIED.
-  // Server-output enum: {defined_only, not_in: [0]} like every response-payload
-  // enum in ramp.v1 — a reader must never see a number its schema cannot name.
+  // Server-output enum: {defined_only, not_in: [0]} — a reader must never
+  // see a number its schema cannot name. Same rule as
+  // ramp.v1.TransactionDenial.reason (drift-gated) — the discipline the
+  // ErrorDetail reason discriminators establish for server-output enums.
   ObligationState state = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
 
-  // Reported consumed quantity as an exact decimal string, never a float —
-  // the same convention as every money-like value on the wire. Same rule as
-  // ramp.v1.Cost.amount (drift-gated). Absent until a usage report has been
-  // received.
-  optional string consumed_quantity = 2 [
-    (buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$",
-    (buf.validate.field).string.max_len = 32
-  ];
+  // Reported consumed quantity, in the metering unit from the Offer's
+  // Pricing — the value the accepted usage report carried. Mirrors
+  // ramp.v1.Usage.consumed_quantity's wire type (int32, unconstrained)
+  // exactly: this view must be able to state whatever the report stated,
+  // and a decimal-string shape here could express values (e.g. "3.5") no
+  // report can produce. Absent until a usage report has been accepted.
+  optional int32 consumed_quantity = 2;
 
   // When the usage report is due.
   google.protobuf.Timestamp deadline = 3 [(buf.validate.field).required = true];
 
   // When a usage report arrived. Absent while none has.
   optional google.protobuf.Timestamp received_at = 4;
+
+  // When the obligation was minted (the store's CreatedAt).
+  google.protobuf.Timestamp created_at = 5 [(buf.validate.field).required = true];
 }
 
 message GetTransactionEvidenceRequest {
@@ -418,10 +500,10 @@ message GetTransactionEvidenceResponse {
   // The transaction-log facts next to it. Required for the same 1:1 reason.
   TransactionState transaction_state = 3 [(buf.validate.field).required = true];
 
-  // The LATEST reporting obligation for the transaction (by creation time).
-  // The store does not make obligations unique per transaction — a
-  // transaction can mint several over its life — and this read carries the
-  // one the Exchange's own reporting path would act on. Absent when the
-  // transaction minted none.
+  // The transaction's reporting obligation record, as persisted. The store
+  // keeps ONE obligation per transaction (keyed on the transaction id,
+  // transitioning in place — see the storage model), so this is the record
+  // the Exchange's own reporting path acts on, not a "latest of several".
+  // Absent when the transaction minted none.
   ReportingObligationState obligation_state = 4;
 }

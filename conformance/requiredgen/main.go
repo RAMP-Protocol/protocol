@@ -114,6 +114,11 @@ func zeroRejected(fd protoreflect.FieldDescriptor) bool {
 		if s.GetMinLen() >= 1 {
 			return true
 		}
+		// A non-empty const rejects the zero value "", so omission must be
+		// rejected too (the pinned "EdDSA" algorithm labels).
+		if s.Const != nil && s.GetConst() != "" {
+			return true
+		}
 		if p := s.GetPattern(); p != "" {
 			if re, err := regexp.Compile(p); err == nil && !re.MatchString("") {
 				return true

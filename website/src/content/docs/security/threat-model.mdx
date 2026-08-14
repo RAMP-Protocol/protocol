@@ -160,11 +160,31 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 **Attack**: An unauthorized caller probes for a resource and reads the `absence_reason`. Authorization-flavored values (`SCOPE_INSUFFICIENT`, `NOT_AUTHORIZED`, `NOT_IN_CATALOG`, `CONTENT_BLOCKED`) distinguish "no such resource" from "it exists but you may not have it" — confirming existence and the reason for refusal. Broker `Resolve` (`DiscoveryResponse.absence_reason`) exposes the same oracle at the broker that `DiscoverResources` (`OfferGroup.absence_reason`) does at the Exchange, so hiding it on one surface but not the other still leaks.
 **Countermeasure (protocol)**: The reason is a hint, not a guarantee. Where existence itself must stay hidden, the Exchange/Broker **MAY omit** `absence_reason` (leave it unset) rather than reveal an authorization-flavored value — the same permissive hedge documented on `OFFER_ABSENCE_REASON_SCOPE_INSUFFICIENT`, and it applies equally to `OfferGroup.absence_reason` and `DiscoveryResponse.absence_reason`. `ErrorDetail.message`/`metadata` are held to the same rule (T-LIC-adjacent leakage): servers SHOULD NOT restore the withheld detail there as free text.
 
+## 7. Admin-Plane Threats (Forensic Evidence Read)
+
+The admin plane (`ramp.admin.v1`) adds one high-value asset: the append-once evidence row — the full signed offer (pricing, licensing terms, quota), both Ed25519 proofs with their verbatim canonical bytes, and both verifying keys. The plane has no request signing and no per-operator identity in v1; reachability is restricted at the network layer.
+
+### T-ADM-1: Evidence-row enumeration / cross-tenant read
+**Attack**: A caller with network reachability walks transaction ids (which legitimately circulate to counterparty agents) and reads other tenants' evidence rows — offer pricing, licensing terms, quota.
+**Countermeasure**: `GetTransactionEvidence` selects by the `(tenant_id, transaction_id)` **pair** — an id alone is not a bearer capability, and naming the tenant in the request is what lets a deployment put a per-tenant ACL in front of the RPC. The network boundary (internal listener + source allowlist) remains the outer control.
+
+### T-ADM-2: NOT_FOUND existence oracle
+**Attack**: A caller probes a transaction id under the wrong tenant and uses the error shape to confirm the transaction exists somewhere.
+**Countermeasure**: A tenant mismatch is `NOT_FOUND`, byte-identical to an unknown id — existence under another tenant is not revealed.
+
+### T-ADM-3: Cross-plane correlation-id injection
+**Attack**: An agent supplies a hostile `X-Request-ID` (control characters, oversized, log-format metacharacters) on the hot path; the Exchange persists it and the admin plane later replays it into a rendered ledger or log pipeline.
+**Countermeasure**: `RequestCorrelation.request_id` is bounded printable ASCII (`^[!-~]+$`, max 255); a nonconforming persisted value is served as *no correlation* rather than echoed. The `minted` flag separates server-derived ids from caller-influenceable ones so a renderer can treat the latter as untrusted.
+
+### T-ADM-4: Fabricated evidence row
+**Attack**: Anyone able to write to the store (or to man-in-the-middle the read) mints a row whose signatures verify against the keys embedded in the same row — internally consistent, but proving nothing.
+**Countermeasure**: The contract states the trust boundary explicitly: authenticity requires comparing the embedded keys against independently obtained copies — the Exchange's published JWKS and the agent's directory (`agent_discovery_url`). The in-row keys are convenience copies for rotation-survival, not the root of trust.
+
 ## Prevention Taxonomy
 
 | Level | Threat IDs | What It Means |
 |---|---|---|
-| **Preventable at protocol level** | T3, T4, T5, T6, T7, T8, T9, T12, T16, T19, T22, T23, T24, T25, T26, T-ATT-1, T-ATT-2, T-ATT-3, T-ATT-5, T-DEL-1, T-DEL-2, T-DEL-3, T-DEL-4, T-DEL-5, T-DEL-6 | Protocol changes make the attack structurally impossible |
+| **Preventable at protocol level** | T3, T4, T5, T6, T7, T8, T9, T12, T16, T19, T22, T23, T24, T25, T26, T-ATT-1, T-ATT-2, T-ATT-3, T-ATT-5, T-DEL-1, T-DEL-2, T-DEL-3, T-DEL-4, T-DEL-5, T-DEL-6, T-ADM-1, T-ADM-2, T-ADM-3, T-ADM-4 | Protocol changes make the attack structurally impossible |
 | **Detectable via reconciliation** | T1, T2, T4, T5, T13, T14, T15, T17, T27, T-ATT-4 | Three-sided reconciliation catches it |
 | **Legal/contractual only** | T10, T11, T13, T17, T18, T20, T21, T28, T29, T30 | Can't enforce technically |
 

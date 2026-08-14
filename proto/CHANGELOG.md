@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+**Operator plane: forensic evidence read — `GetTransactionEvidence` (additive).**
+`AdminService` gains its first read:
+`GetTransactionEvidence(GetTransactionEvidenceRequest) → GetTransactionEvidenceResponse`
+returns the append-once evidence row the Exchange persists for every successfully executed
+transaction — the full signed offer (`offer_json` plus the verbatim RFC 8785 JCS
+`offer_canonical_bytes`), both Ed25519 proofs (`offer_sig`, `agent_acceptance_signature`) with
+the acceptance's four signed inputs, both verifying public keys — plus the transaction-log and
+reporting-obligation state a ledger renderer needs. New messages: `TransactionEvidence`,
+`TransactionState`, `ReportingObligationState`, `RequestCorrelation`, the request/response
+envelopes; new enum `ObligationState`, which is exactly the storage model's persisted vocabulary
+(`PENDING`/`FULFILLED`/`EXPIRED`/`WAIVED`/`BLOCKED`). Selection is by the
+`(tenant_id, transaction_id)` PAIR — transaction ids legitimately circulate to counterparty
+agents, so an id alone must not act as a bearer capability for the forensic row; a tenant
+mismatch is `NOT_FOUND`, byte-identical to an unknown id, so existence under another tenant is
+not revealed. The row re-verifies OFFLINE, and the contract states the trust boundary
+explicitly: offline verification proves the row is internally consistent, while authenticity
+requires comparing the embedded keys against independently obtained copies (the published JWKS;
+the agent directory named by `agent_discovery_url`). The delivery join is hash-only
+(`TransactionState.signed_url_hash` against the edge log) — the full signed URL, a live bearer
+capability, never appears on this plane, so a signed-URL *signature* match assertion is
+deliberately unproducible from this contract. The correlation id the Exchange persisted rides in
+`RequestCorrelation` (bounded printable ASCII, with a `minted` provenance flag); the agent plane
+still carries no correlation field in any message body.
+
+**Generated clients: `TransactionRequest.items` is now required in the Pydantic/Zod export
+(breaking for the generated clients; no wire change).** The Go server has always rejected an
+omitted `items` (`repeated.min_items = 1`); the generated clients accepted the omission and
+diverged. The required-fields inference now covers `repeated.min_items ⇒ required`, closing that
+gap for a pre-existing agent-plane type.
+
+**Generated clients: exact-length bytes fields are enforced, and both base64 alphabets are
+accepted (no wire change).** A `bytes.len = N` rule (the evidence row's Ed25519 keys and
+sha256 hash) now renders in the Pydantic/Zod export as the exact encoded forms of N bytes — the
+loose character window protoschema emits would also admit an N+1-byte value — and the pattern
+accepts standard and url-safe base64 alike, because Go `protojson` accepts either on decode; a
+client rejecting base64url (e.g. a JWK `x` value pasted verbatim) would refuse input the server
+accepts. The signing-algorithm labels are pinned `string.const = "EdDSA"` rather than
+`min_len: 1`, so a generated client also rejects a claimed `"none"`. `bytes.min_len = 1` (the
+canonical-bytes fields) is translated the same way: the generated pattern now requires the
+encoded payload characters of at least one real byte before the padding tail, so the
+two-character string `"=="` — pure padding, zero bytes, which Go `protojson` refuses to
+decode — no longer passes the clients, and the pipeline fails closed on any bytes rule shape
+it cannot translate.
+
+The conformance tooling grew with the surface: the corpus generator understands `string.const`
+and fails closed on any rule shape it cannot classify, and the restated-rule drift gate now
+derives its scope from the descriptor itself — every rule-identical field group must carry a
+`Same rule as` directive or an explicit coincidence exemption — instead of an opt-in comment
+marker plus a hand-maintained list.
+
 **`WellKnownManifest.endpoint` states its host binding (no wire change; conformance-affecting).**
 The field said only "Exchange-only. ExchangeService endpoint URL", so nothing told an Exchange
 operator that the address it advertises must stay on its own domain. It now does: the endpoint
@@ -172,7 +222,8 @@ contract's first repeated message field carrying its own `repeated.max_items`, a
 generator previously produced only scalar list items.
 
 **The `ver` envelope field states its contract, and the version string gets one owner
-(no wire change).** All 29 `ver` fields — 25 in `ramp.proto`, 4 in `admin.proto` — now name
+(no wire change).** All `ver` fields — 29 at the time of this change (25 in `ramp.proto`, 4 in
+`admin.proto`); the evidence-read envelopes later added 2 more with the same wording — now name
 the expected value `"1.0"` and the receive-side rule. Before this, 27 of them said only
 "Protocol version" or "RAMP protocol version", and `DiscoveryResponse.ver` carried no comment
 at all — 28 fields from which an integrator could not learn what to stamp. Only
@@ -376,7 +427,8 @@ pre-existing `ErrorDetail.registration_failure` / `RegistrationFailureReason`
 path, which until now had no RPC front door. Pre-v1 additive change.
 
 **Operator plane: new `ramp.admin.v1` package with `AdminService` (additive).**
-Two full-replace, idempotent setters for Exchange operators —
+At introduction, two full-replace, idempotent setters for Exchange operators (the forensic
+evidence read joined later in this cycle — see the entry above) —
 `SetTenantFeeRate(SetTenantFeeRateRequest) → SetTenantFeeRateResponse` and
 `SetReportingPolicy(SetReportingPolicyRequest) → SetReportingPolicyResponse`.
 Each request and response is a thin `{ver, <payload>}` envelope carrying a

@@ -280,45 +280,79 @@ def mark_unique(defs, unique_items):
     return defs
 
 
-def tighten_bytes_len(defs, bytes_len):
-    """A bytes field with an exact-length rule (bytes.len = N) arrives from
-    protoschema as base64 with a minLength/maxLength CHARACTER window (43..44 for
-    N=32) that also admits an N+1-byte value: 33 bytes encode to 44 unpadded
-    chars, inside the window, so the generated clients accept a key length the Go
-    server rejects. bytes_len (from the Go bytesgen manifest — the authoritative
-    protovalidate view) names the exact-length fields; rewrite each to the EXACT
-    encoded forms of N bytes — the unpadded encoding, optionally completed to the
-    base64 block with its exact padding — so byte length is enforced at the
-    schema layer without decoding.
+def base64_encoded_form(n):
+    """(payload_chars, pad_chars) of the base64 encoding of exactly n bytes.
+    The SINGLE derivation of the padding length: the exact-length pattern tail
+    and its maxLength are both built from pad_chars, so they cannot disagree."""
+    full, rem = divmod(int(n), 3)
+    return 4 * full + (0, 2, 3)[rem], (0, 2, 1)[rem]
 
-    Loud guard: every manifest entry MUST match a string property in the
-    rendered schema. A silent skip would mean a protoschema rendering change
-    reopened the loose length window with no build failure — the parity corpus
-    would catch it only later and less legibly."""
+
+def tighten_bytes_len(defs, bytes_len):
+    """A bytes field with a length rule arrives from protoschema too loose in
+    both rule kinds, so the generated clients accept values the Go server
+    rejects:
+
+      - bytes.len = N ({"len": N} in the manifest): rendered as base64 with a
+        minLength/maxLength CHARACTER window (43..44 for N=32) that also admits
+        an N+1-byte value — 33 bytes encode to 44 unpadded chars, inside the
+        window. Rewrite to the EXACT encoded forms of N bytes: the unpadded
+        encoding, optionally completed to the base64 block with its exact
+        padding.
+      - bytes.min_len = N ({"min_len": N} in the manifest): rendered as a
+        pattern with a free padding tail plus a CHARACTER minLength, so for N=1
+        the two-character string "==" (pure padding, zero payload bytes) passes
+        while Go protojson refuses to decode it. Rewrite to require at least
+        the encoded payload characters of N bytes BEFORE the padding tail.
+
+    bytes_len (from the Go bytesgen manifest — the authoritative protovalidate
+    view) names the fields; bytesgen fails closed on any other bytes rule
+    shape, so every manifest entry is one of the two kinds above. Byte length
+    becomes enforceable at the schema layer without decoding.
+
+    The alphabet admits BOTH standard (+/) and url-safe (-_) base64: Go's
+    protojson accepts either on decode, so a client that rejected base64url
+    (e.g. a JWK "x" value pasted verbatim) would refuse input the server
+    accepts. Length arithmetic is alphabet-independent, so the length
+    guarantees are unchanged.
+
+    Loud guards: every manifest entry MUST match a string property in the
+    rendered schema, and MUST carry a rule kind this function translates. A
+    silent skip would mean a protoschema rendering change (or a manifest format
+    change) reopened the loose length window with no build failure — the parity
+    corpus would catch it only later and less legibly."""
     missing = []
     for msg, fields in bytes_len.items():
         d = defs.get(msg)
         if not isinstance(d, dict) or "properties" not in d:
             missing.extend(f"{msg}.{jname} (message not in schema)" for jname in fields)
             continue
-        for jname, n in fields.items():
+        for jname, rule in fields.items():
             prop = d["properties"].get(jname)
             if not isinstance(prop, dict) or prop.get("type") != "string":
                 missing.append(f"{msg}.{jname} (no string property in schema)")
                 continue
-            full, rem = divmod(int(n), 3)
-            if rem == 0:
-                chars, pad = 4 * full, ""
-            elif rem == 1:
-                chars, pad = 4 * full + 2, "(==)?"
+            if not isinstance(rule, dict) or set(rule) not in ({"len"}, {"min_len"}):
+                missing.append(f"{msg}.{jname} (untranslatable rule {rule!r})")
+                continue
+            if "len" in rule:
+                chars, pad = base64_encoded_form(rule["len"])
+                tail = {0: "", 1: "=?", 2: "(==)?"}[pad]
+                prop["pattern"] = "^[A-Za-z0-9+/_-]{%d}%s$" % (chars, tail)
+                # unpadded (chars) .. padded to the block (chars + pad)
+                prop["minLength"] = chars
+                prop["maxLength"] = chars + pad
             else:
-                chars, pad = 4 * full + 3, "=?"
-            prop["pattern"] = "^[A-Za-z0-9+/]{%d}%s$" % (chars, pad)
-            prop["minLength"] = chars
-            prop["maxLength"] = chars + (2 if rem == 1 else (1 if rem == 2 else 0))
+                chars, _ = base64_encoded_form(rule["min_len"])
+                # Open-ended payload run: at least the encoded chars of min_len
+                # bytes, then at most a full padding tail. No exact-length
+                # arithmetic applies, so no maxLength.
+                prop["pattern"] = "^[A-Za-z0-9+/_-]{%d,}={0,2}$" % chars
+                prop["minLength"] = chars
+                prop.pop("maxLength", None)
     if missing:
-        sys.exit("bytes_len manifest entries with no matching schema property — the "
-                 f"exact-length tightening would silently not apply: {missing}")
+        sys.exit("bytes_len manifest entries this pipeline cannot apply — the "
+                 f"length tightening would silently not happen: {missing}")
     return defs
 
 
@@ -432,4 +466,8 @@ def main(src_dir, desc_path, out_file, required_path=None, unique_path=None, byt
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:7])
+    # No slice bound: an argument-count mismatch with gen-sdk-types.sh must raise
+    # TypeError and fail the pipeline. A silent truncation (the old [1:7]) would
+    # instead run with a manifest parameter defaulted to None, disabling that
+    # tightening pass with exit code 0.
+    main(*sys.argv[1:])

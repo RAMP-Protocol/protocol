@@ -451,6 +451,17 @@ identifiers that are *acted on* or *persisted*: the settlement and evidence keys
 (`transaction_id`, `billing_id`, `report_id`, `dispute_id`) the Exchange assigns
 and the reconciliation chain joins on.
 
+One deliberate carve-out, by that same persisted-identifier rule: the admin
+plane's forensic evidence read (`ramp.admin.v1.TransactionEvidence
+.request_correlation`) carries the correlation id the Exchange PERSISTED for a
+transaction, with a provenance flag. This is not a return of the deleted
+fields — no live request or response carries a correlation id in its body, and
+the agent plane still has none. The evidence row is a read-only view of a
+store, and the store legitimately holds the `X-Request-ID` value it recorded;
+a forensic read that could not state it would be unable to join the row to the
+edge delivery log. Correlation still *flows* only in headers; the admin field
+states, after the fact, what was recorded.
+
 ## Idempotency is an explicit `idempotency_key`, not an overloaded `id`
 
 Idempotency is the mirror image of correlation, and the contrast is the point. A

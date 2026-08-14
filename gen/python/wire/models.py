@@ -484,10 +484,10 @@ class ObligationKind(Enum):
 
 class ObligationState(Enum):
     OBLIGATION_STATE_PENDING = 'OBLIGATION_STATE_PENDING'
-    OBLIGATION_STATE_RECEIVED = 'OBLIGATION_STATE_RECEIVED'
-    OBLIGATION_STATE_ACCEPTED = 'OBLIGATION_STATE_ACCEPTED'
-    OBLIGATION_STATE_CHALLENGED = 'OBLIGATION_STATE_CHALLENGED'
+    OBLIGATION_STATE_FULFILLED = 'OBLIGATION_STATE_FULFILLED'
     OBLIGATION_STATE_EXPIRED = 'OBLIGATION_STATE_EXPIRED'
+    OBLIGATION_STATE_WAIVED = 'OBLIGATION_STATE_WAIVED'
+    OBLIGATION_STATE_BLOCKED = 'OBLIGATION_STATE_BLOCKED'
 
 
 class ObligationTrigger(Enum):
@@ -725,11 +725,12 @@ class ReportingObligation(WireModel):
 
 
 class ReportingObligationState(WireModel):
-    consumed_quantity: (
-        constr(pattern=r'^([0-9]+([.][0-9]+)?)?$', max_length=32) | None
-    ) = Field(
+    consumed_quantity: conint(ge=-2147483648, le=2147483647) | None = Field(
         None,
-        description='Reported consumed quantity as an exact decimal string, never a float —\n the same convention as every money-like value on the wire. Same rule as\n ramp.v1.Cost.amount (drift-gated). Absent until a usage report has been\n received.',
+        description='Reported consumed quantity, in the metering unit from the Offer\'s\n Pricing — the value the accepted usage report carried. Mirrors\n ramp.v1.Usage.consumed_quantity\'s wire type (int32, unconstrained)\n exactly: this view must be able to state whatever the report stated,\n and a decimal-string shape here could express values (e.g. "3.5") no\n report can produce. Absent until a usage report has been accepted.',
+    )
+    created_at: AwareDatetime = Field(
+        ..., description="When the obligation was minted (the store's CreatedAt)."
     )
     deadline: AwareDatetime = Field(..., description='When the usage report is due.')
     received_at: AwareDatetime | None = Field(
@@ -737,7 +738,7 @@ class ReportingObligationState(WireModel):
     )
     state: ObligationState = Field(
         ...,
-        description='Lifecycle state. Always a real persisted state, never UNSPECIFIED.\n Server-output enum: {defined_only, not_in: [0]} like every response-payload\n enum in ramp.v1 — a reader must never see a number its schema cannot name.',
+        description='Lifecycle state. Always a real persisted state, never UNSPECIFIED.\n Server-output enum: {defined_only, not_in: [0]} — a reader must never\n see a number its schema cannot name. Same rule as\n ramp.v1.TransactionDenial.reason (drift-gated) — the discipline the\n ErrorDetail reason discriminators establish for server-output enums.',
     )
 
 
@@ -805,6 +806,17 @@ class RequestConstraints(WireModel):
     )
     reporting_capable: bool | None = Field(
         None, description='Whether the agent supports post-usage reporting.'
+    )
+
+
+class RequestCorrelation(WireModel):
+    minted: bool | None = Field(
+        False,
+        description='Provenance: true = server-minted, false = propagated from the caller.\n The two are byte-indistinguishable in request_id alone, so a forensic\n read needs this flag to tell a server-derived correlation key from an\n attacker-influenceable one.',
+    )
+    request_id: constr(pattern=r'^[!-~]+$', min_length=1, max_length=255) = Field(
+        ...,
+        description="The correlation id as persisted. Caller-influenceable: the SDK's\n request-id middleware propagates any non-empty caller-supplied\n X-Request-ID verbatim (no conformance check) and mints a random 128-bit\n hex token when the header is absent. The rules below therefore bound\n what this PLANE will replay into a rendered ledger — printable ASCII,\n capped — and the Exchange records a correlation only when the persisted\n id conforms; a nonconforming header value is recorded as no correlation\n (the wrapping message stays absent), never echoed here.",
     )
 
 
@@ -984,45 +996,53 @@ class TransactionDenial(WireModel):
     )
 
 
+class AgentAcceptanceSignatureAlgorithm(Enum):
+    EdDSA = 'EdDSA'
+
+
+class OfferSigAlgorithm(Enum):
+    EdDSA = 'EdDSA'
+
+
 class TransactionEvidence(WireModel):
     agent_acceptance_canonical_bytes: constr(
-        pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=2
+        pattern=r'^[A-Za-z0-9+/_-]{2,}={0,2}$', min_length=2
     ) = Field(
         ...,
-        description='Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.',
+        description='Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.\n Unbounded for the same reason as offer_canonical_bytes. Same rule as\n ramp.admin.v1.TransactionEvidence.offer_canonical_bytes (drift-gated).',
     )
     agent_acceptance_signature: constr(pattern=r'^[0-9A-Fa-f]{128}$') = Field(
         ...,
-        description="The agent's Ed25519 signature over agent_acceptance_canonical_bytes,\n hex-encoded verbatim as it arrived on the wire (either case). Same rule\n as ramp.admin.v1.TransactionEvidence.offer_sig (drift-gated).",
+        description="The agent's Ed25519 signature over agent_acceptance_canonical_bytes,\n hex-encoded verbatim as it arrived on the wire (either case). Same rule\n as ramp.admin.v1.TransactionEvidence.offer_sig (drift-gated). The\n directive anchors INSIDE this package by decision: ramp.v1 deliberately\n carries no signature-format rule (adding one now would be a wire-visible\n tightening of the agent plane), and the Exchange hex-decodes and\n verifies this signature before executing, so no executed transaction can\n put a malformed signature in its row — the read plane can pin the format\n without an upstream source to point at.",
     )
-    agent_acceptance_signature_algorithm: constr(min_length=1) = Field(
+    agent_acceptance_signature_algorithm: AgentAcceptanceSignatureAlgorithm = Field(
         ...,
-        description='Signing-algorithm label, server-derived (see offer_sig_algorithm).\n Always "EdDSA", same as offer_sig_algorithm.',
+        description='Signing-algorithm label, server-derived (see offer_sig_algorithm).\n Pinned to "EdDSA". Same rule as\n ramp.admin.v1.TransactionEvidence.offer_sig_algorithm (drift-gated).',
     )
     agent_discovery_url: str | None = Field(
         '',
         description="The anchored well-known directory agent_public_key was pinned from. The\n registry overwrites keys in place on rotation and keeps no history, so\n this — plus created_at — attests where and when this Exchange obtained\n the key. Empty when the agent carries no directory anchor: an append-once\n row states a value for every column, so '' is a stated fact, not a gap.",
     )
     agent_public_key: constr(
-        pattern=r'^[A-Za-z0-9+/]{43}=?$', min_length=43, max_length=44
+        pattern=r'^[A-Za-z0-9+/_-]{43}=?$', min_length=43, max_length=44
     ) = Field(
         ...,
-        description='The registry-pinned agent verifying key (raw 32-byte Ed25519) the\n acceptance verified against.',
+        description='The registry-pinned agent verifying key (raw 32-byte Ed25519) the\n acceptance verified against. Same rule as\n ramp.admin.v1.TransactionEvidence.exchange_signing_public_key\n (drift-gated).',
     )
     created_at: AwareDatetime = Field(
         ..., description='When the Exchange wrote this row (server clock).'
     )
     exchange_signing_public_key: constr(
-        pattern=r'^[A-Za-z0-9+/]{43}=?$', min_length=43, max_length=44
+        pattern=r'^[A-Za-z0-9+/_-]{43}=?$', min_length=43, max_length=44
     ) = Field(
         ...,
         description='The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.',
     )
-    offer_canonical_bytes: constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=2) = (
-        Field(
-            ...,
-            description="Verbatim JCS bytes the Exchange's signature was computed over (the offer\n with its signature fields cleared).",
-        )
+    offer_canonical_bytes: constr(
+        pattern=r'^[A-Za-z0-9+/_-]{2,}={0,2}$', min_length=2
+    ) = Field(
+        ...,
+        description="Verbatim JCS bytes the Exchange's signature was computed over (the offer\n with its signature fields cleared). min_len only, no ceiling: same\n rationale as offer_json — the bytes under the signature are whatever size\n the signed offer was, and a bound could invalidate a legitimate row.",
     )
     offer_id: constr(min_length=1) = Field(
         ...,
@@ -1030,23 +1050,19 @@ class TransactionEvidence(WireModel):
     )
     offer_json: constr(min_length=1) = Field(
         ...,
-        description='The signed offer as a raw JSON string, for query and human audit.\n Deliberately NOT a Struct: a Struct re-normalizes, and the canonical\n bytes below remain the arbiter of what was signed.',
+        description="The signed offer as a raw JSON string, for query and human audit.\n Deliberately NOT a Struct: a Struct re-normalizes, and the canonical\n bytes below remain the arbiter of what was signed. No upper bound, unlike\n this file's 255-capped ids: upstream ramp.v1 places no size bound on an\n offer, and the row must state whatever the parties actually signed — a\n cap here could make the row fail its own validation for a transaction\n that legitimately executed (the requester_id rationale).",
     )
     offer_sig: constr(pattern=r'^[0-9A-Fa-f]{128}$') = Field(
         ...,
         description="The Exchange's Ed25519 signature over offer_canonical_bytes, hex-encoded\n in the verbatim wire form (either case — hex decoding accepts both, and a\n dispute should read the same characters a request log holds). Named after\n ramp.v1.AgentAcceptancePayload.offer_sig: it is the same value, the one\n the agent's acceptance binds to.",
     )
-    offer_sig_algorithm: constr(min_length=1) = Field(
+    offer_sig_algorithm: OfferSigAlgorithm = Field(
         ...,
-        description='Signing-algorithm label, server-derived from the Exchange\'s own verify\n path — never echoed from the wire. The canonical payload clears the wire\n labels before signing, so an echoed label would sit outside signature\n coverage and could claim anything under an otherwise valid signature.\n Always "EdDSA" — the content-signature label ramp.v1.Offer\n .signature_algorithm pins; "ed25519" is the separate label reserved for\n RFC 9421 HTTP request signatures and never appears here.',
+        description='Signing-algorithm label, server-derived from the Exchange\'s own verify\n path — never echoed from the wire. The canonical payload clears the wire\n labels before signing, so an echoed label would sit outside signature\n coverage and could claim anything under an otherwise valid signature.\n Pinned to "EdDSA" — the content-signature label\n ramp.v1.Offer.signature_algorithm pins; "ed25519" is the separate label\n reserved for RFC 9421 HTTP request signatures and never appears here.\n const (not min_len) so a generated client also rejects a claimed "none"\n or "HS256".',
     )
-    request_id: str | None = Field(
+    request_correlation: RequestCorrelation | None = Field(
         None,
-        description='Correlation id joining this row outward (edge delivery log,\n reconciliation sweep). Caller-asserted: the middleware accepts a\n conforming caller-supplied X-Request-ID verbatim and mints a UUID\n otherwise. Absent when no correlation id was recorded. Travels with\n request_id_minted — both absent or both present is a store-level\n constraint the server guarantees; field-level rules cannot express the\n pairing and this file carries no message-level CEL.',
-    )
-    request_id_minted: bool | None = Field(
-        None,
-        description='Provenance of request_id: true = server-minted UUID, false = taken from\n the caller. The two are byte-indistinguishable in request_id alone, so a\n forensic read needs this flag to tell a server-derived correlation key\n from an attacker-influenceable one.',
+        description='Correlation id joining this row outward (edge delivery log,\n reconciliation sweep), with its provenance. One message, not two\n sibling fields: presence of the message is the pairing — id and\n provenance flag arrive together or not at all, a constraint two\n optional siblings could not express without message-level CEL (which\n this file forbids). Absent when the Exchange recorded no correlation id.',
     )
     request_idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
@@ -1066,7 +1082,7 @@ class TransactionEvidence(WireModel):
     )
     transaction_id: constr(min_length=1, max_length=255) = Field(
         ...,
-        description='The evidenced transaction (Exchange-minted transaction identity).',
+        description='The evidenced transaction (Exchange-minted transaction identity). The\n 255 bound is NEW to this plane — ramp.v1 leaves transaction ids\n unconstrained — and is safe here because the Exchange mints the id\n itself and both documented schemes (26-char ULID, 36-char UUID) sit far\n below it; it exists so the selector stays storable and indexable.',
     )
 
 
@@ -1112,20 +1128,24 @@ class TransactionResultItem(WireModel):
     )
     transaction_id: str | None = Field(
         '',
-        description="Exchange-assigned transaction identifier. MUST be minted with UUIDv4-class\n entropy (unguessable): it later becomes half of the selector for the admin\n plane's evidence read (ramp.admin.v1.GetTransactionEvidence — keyed by the\n (tenant_id, transaction_id) pair), which has no per-operator identity in\n v1 — a sequential or predictable id would let anyone with network\n reachability and a tenant name enumerate evidence rows. The reference\n implementation mints a UUIDv4.",
+        description="Exchange-assigned transaction identifier. Opaque to agents; the format\n is implementation-defined (the documented storage model mints a\n time-ordered ULID as the record's primary key). No entropy requirement:\n the admin plane's evidence read (ramp.admin.v1.GetTransactionEvidence)\n selects by the (tenant_id, transaction_id) PAIR, so a transaction id\n alone is not a bearer capability there and nothing rests on this\n field's format being unguessable.",
     )
 
 
 class TransactionState(WireModel):
+    broker: str | None = Field(
+        '',
+        description='The broker that routed the acceptance, as the transaction log recorded\n it. \'\' when the acceptance arrived direct — the log\'s broker column is\n optional-empty, and an append-once view states a value for every\n column, so \'\' is a stated fact, not a gap. A ledger renders its\n "broker routed" row from this. No wire rule: this states whatever the\n log holds, and nothing upstream constrains the broker label.',
+    )
     expiry: AwareDatetime = Field(
         ..., description='When the signed retrieval URL expires.'
     )
     idempotency_key: constr(min_length=1) = Field(
         ...,
-        description="The transaction's per-item idempotency key as logged — derived from the\n request-level key and the item's offer, so it is NOT byte-equal to\n TransactionEvidence.request_idempotency_key. No upper bound: the\n derivation appends an id whose length nothing constrains.",
+        description='The transaction\'s per-item idempotency key as logged. The Exchange\n derives it as TransactionEvidence.request_idempotency_key + ":" +\n offer_id — unconditionally, single-item requests included — so distinct\n items of a batch dedupe independently, and this value is NEVER byte-equal\n to the request-level key. A ledger joining this row against a log export\n matches on this derived form, not on the bare request key. No upper\n bound: the derivation appends an id whose length nothing constrains.',
     )
     signed_url_hash: constr(
-        pattern=r'^[A-Za-z0-9+/]{43}=?$', min_length=43, max_length=44
+        pattern=r'^[A-Za-z0-9+/_-]{43}=?$', min_length=43, max_length=44
     ) = Field(
         ...,
         description="sha256 of the signed retrieval URL — the join key against the edge\n delivery log's url_hash. Hash-only by design: the full URL is a live\n bearer capability until expiry and is deliberately absent from this\n plane (see TransactionEvidence's delivery section).",
@@ -1282,7 +1302,7 @@ class GetTransactionEvidenceResponse(WireModel):
     )
     obligation_state: ReportingObligationState | None = Field(
         None,
-        description="The LATEST reporting obligation for the transaction (by creation time).\n The store does not make obligations unique per transaction — a\n transaction can mint several over its life — and this read carries the\n one the Exchange's own reporting path would act on. Absent when the\n transaction minted none.",
+        description='The transaction\'s reporting obligation record, as persisted. The store\n keeps ONE obligation per transaction (keyed on the transaction id,\n transitioning in place — see the storage model), so this is the record\n the Exchange\'s own reporting path acts on, not a "latest of several".\n Absent when the transaction minted none.',
     )
     transaction_state: TransactionState = Field(
         ...,

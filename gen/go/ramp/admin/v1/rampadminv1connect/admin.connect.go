@@ -23,9 +23,10 @@
 // forensic row, and a request that names the tenant is what lets a
 // deployment enforce a per-tenant ACL in front of this RPC. A tenant
 // mismatch is NOT_FOUND, byte-identical to an unknown id, so existence
-// under another tenant is not revealed. Enumeration resistance still rests
-// on ids being unguessable: ids MUST carry UUIDv4-class entropy (normative
-// statement on ramp.v1.TransactionResultItem.transaction_id).
+// under another tenant is not revealed. The id format itself is
+// implementation-defined (ramp.v1 places no entropy requirement on
+// transaction ids); what bounds this read is the pair selector plus the
+// network-layer reachability restriction above.
 //
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
