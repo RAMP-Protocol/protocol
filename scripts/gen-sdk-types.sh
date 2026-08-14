@@ -47,8 +47,12 @@ go run ./conformance/requiredgen "$WORK/required_fields.json"
 # .refine()) and gen_unique_py.py emits wire/unique.py for the wire/base.py seam, because
 # datamodel-codegen drops `uniqueItems` for pydantic v2.
 go run ./conformance/uniquegen "$WORK/unique_items.json"
+# bytes_len.json: the protovalidate bytes.len view. protoschema renders an exact-length
+# bytes field as a base64 minLength/maxLength window loose enough to admit an off-by-one
+# byte length, so merge_schema tightens those fields to the exact encoded forms.
+go run ./conformance/bytesgen "$WORK/bytes_len.json"
 "$PY" scripts/sdk-types/merge_schema.py "$JS" gen/descriptor.binpb "$COMBINED" \
-  "$WORK/required_fields.json" "$WORK/unique_items.json"
+  "$WORK/required_fields.json" "$WORK/unique_items.json" "$WORK/bytes_len.json"
 
 echo "==> 3/4 Pydantic v2 (datamodel-code-generator, --base-class + --collapse-root-models)"
 "$WORK/venv/bin/datamodel-codegen" \

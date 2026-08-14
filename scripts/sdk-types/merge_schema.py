@@ -280,7 +280,72 @@ def mark_unique(defs, unique_items):
     return defs
 
 
-def main(src_dir, desc_path, out_file, required_path=None, unique_path=None):
+def tighten_bytes_len(defs, bytes_len):
+    """A bytes field with an exact-length rule (bytes.len = N) arrives from
+    protoschema as base64 with a minLength/maxLength CHARACTER window (43..44 for
+    N=32) that also admits an N+1-byte value: 33 bytes encode to 44 unpadded
+    chars, inside the window, so the generated clients accept a key length the Go
+    server rejects. bytes_len (from the Go bytesgen manifest — the authoritative
+    protovalidate view) names the exact-length fields; rewrite each to the EXACT
+    encoded forms of N bytes — the unpadded encoding, optionally completed to the
+    base64 block with its exact padding — so byte length is enforced at the
+    schema layer without decoding."""
+    for msg, fields in bytes_len.items():
+        d = defs.get(msg)
+        if not isinstance(d, dict) or "properties" not in d:
+            continue
+        for jname, n in fields.items():
+            prop = d["properties"].get(jname)
+            if not isinstance(prop, dict) or prop.get("type") != "string":
+                continue
+            full, rem = divmod(int(n), 3)
+            if rem == 0:
+                chars, pad = 4 * full, ""
+            elif rem == 1:
+                chars, pad = 4 * full + 2, "(==)?"
+            else:
+                chars, pad = 4 * full + 3, "=?"
+            prop["pattern"] = "^[A-Za-z0-9+/]{%d}%s$" % (chars, pad)
+            prop["minLength"] = chars
+            prop["maxLength"] = chars + (2 if rem == 1 else (1 if rem == 2 else 0))
+    return defs
+
+
+def assert_defaults_valid(combined):
+    """Loud guard: no string node may keep a default its OWN constraints reject.
+    Such a pairing means a wire-required field slipped through as optional-with-
+    invalid-default — the clients then either reject omission inconsistently
+    (Zod 3 re-validates a ZodDefault, Zod 4 does not) or materialize a value the
+    server refuses. The fix is never to relax the constraint but to mark the
+    field required (requiredgen) so the default is dropped; this guard fails the
+    build until that happens."""
+    bad = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            d = node.get("default")
+            if isinstance(d, str) and node.get("type") == "string":
+                if len(d) < node.get("minLength", 0):
+                    bad.append(f"{path} (default {d!r} under minLength)")
+                elif "maxLength" in node and len(d) > node["maxLength"]:
+                    bad.append(f"{path} (default {d!r} over maxLength)")
+                else:
+                    p = node.get("pattern")
+                    if p and not re.search(p, d):
+                        bad.append(f"{path} (default {d!r} fails pattern)")
+            for k, v in node.items():
+                walk(v, f"{path}/{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+
+    walk(combined, "")
+    if bad:
+        sys.exit("string default(s) rejected by the field's own constraints — the field "
+                 f"is wire-required; extend requiredgen instead of shipping them: {bad}")
+
+
+def main(src_dir, desc_path, out_file, required_path=None, unique_path=None, bytes_len_path=None):
     enum_name = enum_names_from_descriptor(desc_path)
     enum_defs = {}   # name -> {"type":"string","enum":[...]}
     unnamed = []
@@ -331,6 +396,8 @@ def main(src_dir, desc_path, out_file, required_path=None, unique_path=None):
         mark_required(defs, json.load(open(required_path)))
     if unique_path:
         mark_unique(defs, json.load(open(unique_path)))
+    if bytes_len_path:
+        tighten_bytes_len(defs, json.load(open(bytes_len_path)))
     defs.update(enum_defs)
 
     combined = {
@@ -346,6 +413,7 @@ def main(src_dir, desc_path, out_file, required_path=None, unique_path=None):
     if unnamed:
         sys.exit(f"inline enums with no descriptor match (value sets): {unnamed[:5]}")
     assert_no_numeric_string_arms(combined)
+    assert_defaults_valid(combined)
 
     json.dump(combined, open(out_file, "w"), indent=2)
     print(f"merged {len([k for k in defs if k not in enum_defs])} messages + "
@@ -353,4 +421,4 @@ def main(src_dir, desc_path, out_file, required_path=None, unique_path=None):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:6])
+    main(*sys.argv[1:7])

@@ -16,6 +16,13 @@
 // overwrites and the evidence read is side-effect-free, so every RPC is
 // naturally idempotent and carries no idempotency_key.
 //
+// The evidence read is keyed by transaction_id ALONE, so its enumeration
+// resistance rests on transaction ids being unguessable: ids MUST carry
+// UUIDv4-class entropy (normative statement on
+// ramp.v1.TransactionResultItem.transaction_id). With unguessable ids,
+// enumeration is impractical and the network boundary above is the only
+// remaining load-bearing control.
+//
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is
@@ -520,9 +527,11 @@ func (x *SetReportingPolicyResponse) GetPolicy() *ReportingPolicy {
 // re-verifying the day the canonicalization recipe moved.
 //
 // SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
-// DELIVERED. transaction_id, signed_url_full, request_id and created_at are
-// this Exchange's own assertions about the delivery, outside both signatures;
-// the delivery witness is the edge delivery log, reconciled separately.
+// DELIVERED. transaction_id, request_id and created_at are this Exchange's
+// own assertions about the delivery, outside both signatures; the delivery
+// witness is the edge delivery log, reconciled separately (the join key,
+// sha256 of the signed retrieval URL, lives on TransactionState
+// .signed_url_hash).
 type TransactionEvidence struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The evidenced transaction (Exchange-minted transaction identity).
@@ -550,15 +559,20 @@ type TransactionEvidence struct {
 	// path — never echoed from the wire. The canonical payload clears the wire
 	// labels before signing, so an echoed label would sit outside signature
 	// coverage and could claim anything under an otherwise valid signature.
+	// Always "EdDSA" — the content-signature label ramp.v1.Offer
+	// .signature_algorithm pins; "ed25519" is the separate label reserved for
+	// RFC 9421 HTTP request signatures and never appears here.
 	OfferSigAlgorithm string `protobuf:"bytes,7,opt,name=offer_sig_algorithm,json=offerSigAlgorithm,proto3" json:"offer_sig_algorithm,omitempty"`
 	// The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.
 	ExchangeSigningPublicKey []byte `protobuf:"bytes,8,opt,name=exchange_signing_public_key,json=exchangeSigningPublicKey,proto3" json:"exchange_signing_public_key,omitempty"`
 	// The agent's Ed25519 signature over agent_acceptance_canonical_bytes,
-	// hex-encoded verbatim as it arrived on the wire (either case).
+	// hex-encoded verbatim as it arrived on the wire (either case). Same rule
+	// as ramp.admin.v1.TransactionEvidence.offer_sig (drift-gated).
 	AgentAcceptanceSignature string `protobuf:"bytes,9,opt,name=agent_acceptance_signature,json=agentAcceptanceSignature,proto3" json:"agent_acceptance_signature,omitempty"`
 	// Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.
 	AgentAcceptanceCanonicalBytes []byte `protobuf:"bytes,10,opt,name=agent_acceptance_canonical_bytes,json=agentAcceptanceCanonicalBytes,proto3" json:"agent_acceptance_canonical_bytes,omitempty"`
 	// Signing-algorithm label, server-derived (see offer_sig_algorithm).
+	// Always "EdDSA", same as offer_sig_algorithm.
 	AgentAcceptanceSignatureAlgorithm string `protobuf:"bytes,11,opt,name=agent_acceptance_signature_algorithm,json=agentAcceptanceSignatureAlgorithm,proto3" json:"agent_acceptance_signature_algorithm,omitempty"`
 	// The acceptance payload's remaining inputs (offer_sig above is the
 	// fourth), stored so the signed bytes can be independently rebuilt and
@@ -572,13 +586,15 @@ type TransactionEvidence struct {
 	// normalization, not plain equality. No wire rule: the agent plane does not
 	// constrain Requester.id, and this row states what was signed.
 	RequesterId string `protobuf:"bytes,12,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
-	// The signed Requester.domain, verbatim. Bounded at the RFC 1035 maximum
-	// DNS name length in BYTES — the one caller-influenced value here that
-	// nothing upstream constrains.
+	// The signed Requester.domain, verbatim. Unbounded for the same reason as
+	// requester_id: upstream ramp.v1.Requester places no wire constraint on
+	// either value, and the evidence row must be able to state whatever bytes
+	// the acceptance actually signed — a bound here could make the row fail its
+	// own validation for a transaction that legitimately executed.
 	RequesterDomain string `protobuf:"bytes,13,opt,name=requester_domain,json=requesterDomain,proto3" json:"requester_domain,omitempty"`
-	// The REQUEST-level idempotency key the acceptance signs
-	// (TransactionRequest.idempotency_key, same rule) — NOT the derived
-	// per-item key that TransactionState.idempotency_key carries.
+	// The REQUEST-level idempotency key the acceptance signs — NOT the derived
+	// per-item key that TransactionState.idempotency_key carries. Same rule as
+	// ramp.v1.TransactionRequest.idempotency_key (drift-gated).
 	RequestIdempotencyKey string `protobuf:"bytes,14,opt,name=request_idempotency_key,json=requestIdempotencyKey,proto3" json:"request_idempotency_key,omitempty"`
 	// The registry-pinned agent verifying key (raw 32-byte Ed25519) the
 	// acceptance verified against.
@@ -589,9 +605,6 @@ type TransactionEvidence struct {
 	// the key. Empty when the agent carries no directory anchor: an append-once
 	// row states a value for every column, so ” is a stated fact, not a gap.
 	AgentDiscoveryUrl string `protobuf:"bytes,16,opt,name=agent_discovery_url,json=agentDiscoveryUrl,proto3" json:"agent_discovery_url,omitempty"`
-	// The full signed retrieval URL as delivered. sha256(signed_url_full) is
-	// the join key against the edge delivery log's url_hash.
-	SignedUrlFull string `protobuf:"bytes,17,opt,name=signed_url_full,json=signedUrlFull,proto3" json:"signed_url_full,omitempty"`
 	// Correlation id joining this row outward (edge delivery log,
 	// reconciliation sweep). Caller-asserted: the middleware accepts a
 	// conforming caller-supplied X-Request-ID verbatim and mints a UUID
@@ -599,14 +612,14 @@ type TransactionEvidence struct {
 	// request_id_minted — both absent or both present is a store-level
 	// constraint the server guarantees; field-level rules cannot express the
 	// pairing and this file carries no message-level CEL.
-	RequestId *string `protobuf:"bytes,18,opt,name=request_id,json=requestId,proto3,oneof" json:"request_id,omitempty"`
+	RequestId *string `protobuf:"bytes,17,opt,name=request_id,json=requestId,proto3,oneof" json:"request_id,omitempty"`
 	// Provenance of request_id: true = server-minted UUID, false = taken from
 	// the caller. The two are byte-indistinguishable in request_id alone, so a
 	// forensic read needs this flag to tell a server-derived correlation key
 	// from an attacker-influenceable one.
-	RequestIdMinted *bool `protobuf:"varint,19,opt,name=request_id_minted,json=requestIdMinted,proto3,oneof" json:"request_id_minted,omitempty"`
+	RequestIdMinted *bool `protobuf:"varint,18,opt,name=request_id_minted,json=requestIdMinted,proto3,oneof" json:"request_id_minted,omitempty"`
 	// When the Exchange wrote this row (server clock).
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -753,13 +766,6 @@ func (x *TransactionEvidence) GetAgentDiscoveryUrl() string {
 	return ""
 }
 
-func (x *TransactionEvidence) GetSignedUrlFull() string {
-	if x != nil {
-		return x.SignedUrlFull
-	}
-	return ""
-}
-
 func (x *TransactionEvidence) GetRequestId() string {
 	if x != nil && x.RequestId != nil {
 		return *x.RequestId
@@ -796,8 +802,10 @@ type TransactionState struct {
 	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// When the signed retrieval URL expires.
 	Expiry *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expiry,proto3" json:"expiry,omitempty"`
-	// sha256 of the signed retrieval URL — the thin reference the log keeps
-	// (the full URL lives on the evidence row).
+	// sha256 of the signed retrieval URL — the join key against the edge
+	// delivery log's url_hash. Hash-only by design: the full URL is a live
+	// bearer capability until expiry and is deliberately absent from this
+	// plane (see TransactionEvidence's delivery section).
 	SignedUrlHash []byte `protobuf:"bytes,3,opt,name=signed_url_hash,json=signedUrlHash,proto3" json:"signed_url_hash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -861,10 +869,13 @@ func (x *TransactionState) GetSignedUrlHash() []byte {
 type ReportingObligationState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Lifecycle state. Always a real persisted state, never UNSPECIFIED.
+	// Server-output enum: {defined_only, not_in: [0]} like every response-payload
+	// enum in ramp.v1 — a reader must never see a number its schema cannot name.
 	State ObligationState `protobuf:"varint,1,opt,name=state,proto3,enum=ramp.admin.v1.ObligationState" json:"state,omitempty"`
 	// Reported consumed quantity as an exact decimal string, never a float —
-	// the same convention as every money-like value on the wire (see
-	// ramp.v1.Cost). Absent until a usage report has been received.
+	// the same convention as every money-like value on the wire. Same rule as
+	// ramp.v1.Cost.amount (drift-gated). Absent until a usage report has been
+	// received.
 	ConsumedQuantity *string `protobuf:"bytes,2,opt,name=consumed_quantity,json=consumedQuantity,proto3,oneof" json:"consumed_quantity,omitempty"`
 	// When the usage report is due.
 	Deadline *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=deadline,proto3" json:"deadline,omitempty"`
@@ -937,8 +948,9 @@ type GetTransactionEvidenceRequest struct {
 	// RAMP protocol version — "1.0". Stamped by the sender from a single
 	// constant; advisory on receive. See "Protocol version" in ramp.proto.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
-	// The transaction whose evidence row to fetch. Same shape rule as the
-	// execute plane's transaction-scoped identifiers.
+	// The transaction whose evidence row to fetch. Same rule as
+	// ramp.admin.v1.TransactionEvidence.transaction_id (drift-gated) — the row
+	// identity this request selects by.
 	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1099,7 +1111,7 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"n\n" +
 	"\x1aSetReportingPolicyResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12>\n" +
-	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\xa5\t\n" +
+	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\xea\b\n" +
 	"\x13TransactionEvidence\x121\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\rtransactionId\x12'\n" +
@@ -1116,26 +1128,26 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	" agent_acceptance_canonical_bytes\x18\n" +
 	" \x01(\fB\a\xbaH\x04z\x02\x10\x01R\x1dagentAcceptanceCanonicalBytes\x12X\n" +
 	"$agent_acceptance_signature_algorithm\x18\v \x01(\tB\a\xbaH\x04r\x02\x10\x01R!agentAcceptanceSignatureAlgorithm\x12!\n" +
-	"\frequester_id\x18\f \x01(\tR\vrequesterId\x123\n" +
-	"\x10requester_domain\x18\r \x01(\tB\b\xbaH\x05r\x03(\xfd\x01R\x0frequesterDomain\x12B\n" +
+	"\frequester_id\x18\f \x01(\tR\vrequesterId\x12)\n" +
+	"\x10requester_domain\x18\r \x01(\tR\x0frequesterDomain\x12B\n" +
 	"\x17request_idempotency_key\x18\x0e \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x15requestIdempotencyKey\x121\n" +
 	"\x10agent_public_key\x18\x0f \x01(\fB\a\xbaH\x04z\x02h R\x0eagentPublicKey\x12.\n" +
-	"\x13agent_discovery_url\x18\x10 \x01(\tR\x11agentDiscoveryUrl\x12/\n" +
-	"\x0fsigned_url_full\x18\x11 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rsignedUrlFull\x12\"\n" +
+	"\x13agent_discovery_url\x18\x10 \x01(\tR\x11agentDiscoveryUrl\x12\"\n" +
 	"\n" +
-	"request_id\x18\x12 \x01(\tH\x00R\trequestId\x88\x01\x01\x12/\n" +
-	"\x11request_id_minted\x18\x13 \x01(\bH\x01R\x0frequestIdMinted\x88\x01\x01\x12A\n" +
+	"request_id\x18\x11 \x01(\tH\x00R\trequestId\x88\x01\x01\x12/\n" +
+	"\x11request_id_minted\x18\x12 \x01(\bH\x01R\x0frequestIdMinted\x88\x01\x01\x12A\n" +
 	"\n" +
-	"created_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAtB\r\n" +
+	"created_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAtB\r\n" +
 	"\v_request_idB\x14\n" +
 	"\x12_request_id_minted\"\xb1\x01\n" +
 	"\x10TransactionState\x120\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12:\n" +
 	"\x06expiry\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\x06expiry\x12/\n" +
-	"\x0fsigned_url_hash\x18\x03 \x01(\fB\a\xbaH\x04z\x02h R\rsignedUrlHash\"\xd6\x02\n" +
-	"\x18ReportingObligationState\x12>\n" +
-	"\x05state\x18\x01 \x01(\x0e2\x1e.ramp.admin.v1.ObligationStateB\b\xbaH\x05\x82\x01\x02 \x00R\x05state\x12R\n" +
+	"\x0fsigned_url_hash\x18\x03 \x01(\fB\a\xbaH\x04z\x02h R\rsignedUrlHash\"\xd8\x02\n" +
+	"\x18ReportingObligationState\x12@\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1e.ramp.admin.v1.ObligationStateB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x05state\x12R\n" +
 	"\x11consumed_quantity\x18\x02 \x01(\tB \xbaH\x1dr\x1b\x18 2\x17^([0-9]+([.][0-9]+)?)?$H\x00R\x10consumedQuantity\x88\x01\x01\x12>\n" +
 	"\bdeadline\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\bdeadline\x12@\n" +
 	"\vreceived_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\n" +

@@ -84,6 +84,14 @@ func zeroRejected(fd protoreflect.FieldDescriptor) bool {
 		}
 	}
 	if s := fr.GetString(); s != nil {
+		// Loud guard: string byte-length rules (min_bytes/max_bytes) do NOT
+		// translate — protoschema renders them as JSON Schema minLength/maxLength,
+		// which count CHARACTERS, so a multibyte value the Go server rejects
+		// passes the generated clients. No contract field carries them today;
+		// implement a byte-count refine in the pipeline before adding one.
+		if s.GetMinBytes() > 0 || s.GetMaxBytes() > 0 {
+			panic(fmt.Sprintf("requiredgen: string byte-length rule on field %s — protoschema translates it to a CHARACTER count; implement a byte-count refine in the sdk-types pipeline first", fd.FullName()))
+		}
 		if s.GetMinLen() >= 1 {
 			return true
 		}
@@ -91,6 +99,21 @@ func zeroRejected(fd protoreflect.FieldDescriptor) bool {
 			if re, err := regexp.Compile(p); err == nil && !re.MatchString("") {
 				return true
 			}
+		}
+	}
+	if r := fr.GetRepeated(); r != nil && r.GetMinItems() >= 1 {
+		// An empty list is the repeated zero value; min_items≥1 rejects it, and
+		// proto-JSON omits an empty list entirely, so omission must be rejected
+		// too (TransactionRequest.items — the corpus too_few mutant).
+		return true
+	}
+	if b := fr.GetBytes(); b != nil {
+		// A non-empty floor (min_len≥1) or an exact non-zero length (len>0)
+		// rejects the zero value (empty bytes), so omission must be rejected
+		// by the clients too — these are the evidence rows' Ed25519 keys and
+		// canonical-bytes fields.
+		if b.GetMinLen() >= 1 || (b.Len != nil && b.GetLen() > 0) {
+			return true
 		}
 	}
 	if i := fr.GetInt64(); i != nil {

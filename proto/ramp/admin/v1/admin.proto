@@ -16,6 +16,13 @@
 // overwrites and the evidence read is side-effect-free, so every RPC is
 // naturally idempotent and carries no idempotency_key.
 //
+// The evidence read is keyed by transaction_id ALONE, so its enumeration
+// resistance rests on transaction ids being unguessable: ids MUST carry
+// UUIDv4-class entropy (normative statement on
+// ramp.v1.TransactionResultItem.transaction_id). With unguessable ids,
+// enumeration is impractical and the network boundary above is the only
+// remaining load-bearing control.
+//
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is
@@ -193,9 +200,11 @@ enum ObligationState {
 // re-verifying the day the canonicalization recipe moved.
 //
 // SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
-// DELIVERED. transaction_id, signed_url_full, request_id and created_at are
-// this Exchange's own assertions about the delivery, outside both signatures;
-// the delivery witness is the edge delivery log, reconciled separately.
+// DELIVERED. transaction_id, request_id and created_at are this Exchange's
+// own assertions about the delivery, outside both signatures; the delivery
+// witness is the edge delivery log, reconciled separately (the join key,
+// sha256 of the signed retrieval URL, lives on TransactionState
+// .signed_url_hash).
 message TransactionEvidence {
   // The evidenced transaction (Exchange-minted transaction identity).
   string transaction_id = 1 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
@@ -230,6 +239,9 @@ message TransactionEvidence {
   // path — never echoed from the wire. The canonical payload clears the wire
   // labels before signing, so an echoed label would sit outside signature
   // coverage and could claim anything under an otherwise valid signature.
+  // Always "EdDSA" — the content-signature label ramp.v1.Offer
+  // .signature_algorithm pins; "ed25519" is the separate label reserved for
+  // RFC 9421 HTTP request signatures and never appears here.
   string offer_sig_algorithm = 7 [(buf.validate.field).string.min_len = 1];
 
   // The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.
@@ -238,13 +250,15 @@ message TransactionEvidence {
   // Agent side: the acceptance.
 
   // The agent's Ed25519 signature over agent_acceptance_canonical_bytes,
-  // hex-encoded verbatim as it arrived on the wire (either case).
+  // hex-encoded verbatim as it arrived on the wire (either case). Same rule
+  // as ramp.admin.v1.TransactionEvidence.offer_sig (drift-gated).
   string agent_acceptance_signature = 9 [(buf.validate.field).string.pattern = "^[0-9A-Fa-f]{128}$"];
 
   // Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.
   bytes agent_acceptance_canonical_bytes = 10 [(buf.validate.field).bytes.min_len = 1];
 
   // Signing-algorithm label, server-derived (see offer_sig_algorithm).
+  // Always "EdDSA", same as offer_sig_algorithm.
   string agent_acceptance_signature_algorithm = 11 [(buf.validate.field).string.min_len = 1];
 
   // The acceptance payload's remaining inputs (offer_sig above is the
@@ -260,14 +274,16 @@ message TransactionEvidence {
   // constrain Requester.id, and this row states what was signed.
   string requester_id = 12;
 
-  // The signed Requester.domain, verbatim. Bounded at the RFC 1035 maximum
-  // DNS name length in BYTES — the one caller-influenced value here that
-  // nothing upstream constrains.
-  string requester_domain = 13 [(buf.validate.field).string.max_bytes = 253];
+  // The signed Requester.domain, verbatim. Unbounded for the same reason as
+  // requester_id: upstream ramp.v1.Requester places no wire constraint on
+  // either value, and the evidence row must be able to state whatever bytes
+  // the acceptance actually signed — a bound here could make the row fail its
+  // own validation for a transaction that legitimately executed.
+  string requester_domain = 13;
 
-  // The REQUEST-level idempotency key the acceptance signs
-  // (TransactionRequest.idempotency_key, same rule) — NOT the derived
-  // per-item key that TransactionState.idempotency_key carries.
+  // The REQUEST-level idempotency key the acceptance signs — NOT the derived
+  // per-item key that TransactionState.idempotency_key carries. Same rule as
+  // ramp.v1.TransactionRequest.idempotency_key (drift-gated).
   string request_idempotency_key = 14 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 
   // The registry-pinned agent verifying key (raw 32-byte Ed25519) the
@@ -282,10 +298,12 @@ message TransactionEvidence {
   string agent_discovery_url = 16;
 
   // Delivery + correlation. Covered by neither signature.
-
-  // The full signed retrieval URL as delivered. sha256(signed_url_full) is
-  // the join key against the edge delivery log's url_hash.
-  string signed_url_full = 17 [(buf.validate.field).string.min_len = 1];
+  //
+  // Deliberately NO signed retrieval URL here: the full URL is a live bearer
+  // capability until expiry, and this plane has no request signing and no
+  // per-operator identity — serving it back would turn any read into a
+  // content-access oracle. The delivery join is hash-only, via
+  // TransactionState.signed_url_hash.
 
   // Correlation id joining this row outward (edge delivery log,
   // reconciliation sweep). Caller-asserted: the middleware accepts a
@@ -294,16 +312,16 @@ message TransactionEvidence {
   // request_id_minted — both absent or both present is a store-level
   // constraint the server guarantees; field-level rules cannot express the
   // pairing and this file carries no message-level CEL.
-  optional string request_id = 18;
+  optional string request_id = 17;
 
   // Provenance of request_id: true = server-minted UUID, false = taken from
   // the caller. The two are byte-indistinguishable in request_id alone, so a
   // forensic read needs this flag to tell a server-derived correlation key
   // from an attacker-influenceable one.
-  optional bool request_id_minted = 19;
+  optional bool request_id_minted = 18;
 
   // When the Exchange wrote this row (server clock).
-  google.protobuf.Timestamp created_at = 20 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp created_at = 19 [(buf.validate.field).required = true];
 }
 
 // TransactionState — the thin transaction-log facts a ledger renderer needs
@@ -322,8 +340,10 @@ message TransactionState {
   // When the signed retrieval URL expires.
   google.protobuf.Timestamp expiry = 2 [(buf.validate.field).required = true];
 
-  // sha256 of the signed retrieval URL — the thin reference the log keeps
-  // (the full URL lives on the evidence row).
+  // sha256 of the signed retrieval URL — the join key against the edge
+  // delivery log's url_hash. Hash-only by design: the full URL is a live
+  // bearer capability until expiry and is deliberately absent from this
+  // plane (see TransactionEvidence's delivery section).
   bytes signed_url_hash = 3 [(buf.validate.field).bytes.len = 32];
 }
 
@@ -333,11 +353,14 @@ message TransactionState {
 // contract; this is the state those requirements minted.
 message ReportingObligationState {
   // Lifecycle state. Always a real persisted state, never UNSPECIFIED.
-  ObligationState state = 1 [(buf.validate.field).enum = {not_in: [0]}];
+  // Server-output enum: {defined_only, not_in: [0]} like every response-payload
+  // enum in ramp.v1 — a reader must never see a number its schema cannot name.
+  ObligationState state = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
 
   // Reported consumed quantity as an exact decimal string, never a float —
-  // the same convention as every money-like value on the wire (see
-  // ramp.v1.Cost). Absent until a usage report has been received.
+  // the same convention as every money-like value on the wire. Same rule as
+  // ramp.v1.Cost.amount (drift-gated). Absent until a usage report has been
+  // received.
   optional string consumed_quantity = 2 [
     (buf.validate.field).string.pattern = "^([0-9]+([.][0-9]+)?)?$",
     (buf.validate.field).string.max_len = 32
@@ -355,8 +378,9 @@ message GetTransactionEvidenceRequest {
   // constant; advisory on receive. See "Protocol version" in ramp.proto.
   string ver = 1;
 
-  // The transaction whose evidence row to fetch. Same shape rule as the
-  // execute plane's transaction-scoped identifiers.
+  // The transaction whose evidence row to fetch. Same rule as
+  // ramp.admin.v1.TransactionEvidence.transaction_id (drift-gated) — the row
+  // identity this request selects by.
   string transaction_id = 2 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 }
 

@@ -3,10 +3,11 @@
 // re-validate cases (that is corpus_test.go's job); it asserts the corpus
 // EXERCISES specific field-level rule classes that the parity harness must cover.
 //
-// These five classes were the blind spots that let money/validation bugs ship
+// These classes were the blind spots that let money/validation bugs ship
 // green: money's divergent value space, the empty-money
 // positive ” accept, repeated-item length bounds, pattern-derived
-// required-presence, and presence-tracked-enum omitted-is-valid. Each is
+// required-presence, presence-tracked-enum omitted-is-valid, and the bytes /
+// max_bytes rule shapes corpusgen once skipped silently. Each is
 // asserted over the corpus JSON — the behavioral
 // artifact the clients consume — not over corpusgen source. When corpusgen is
 // updated to emit these mutants, each assertion flips to green.
@@ -16,6 +17,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	protovalidate "buf.build/go/protovalidate"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // moneyJSONKeys are the proto-JSON (snake_case) field names of every money-typed
@@ -217,4 +221,109 @@ func TestCorpusCoverage(t *testing.T) {
 			"omission (the common ingest case) is unguarded, so dropping the 'optional' keyword would "+
 			"reject every omitting feed with all gates green (%d cases scanned)", len(cases))
 	})
+
+	// Class 6 — bytes.len / bytes.min_len / string.max_bytes. These rule shapes
+	// (the evidence rows' Ed25519 keys, canonical-bytes fields, signed_url_hash)
+	// once reached ZERO corpus cases because corpusgen skipped unknown rule
+	// shapes silently. Each shape is required only while the SCHEMA carries it
+	// (derived from the contract descriptors, not hardcoded), so dropping a rule
+	// from the contract does not strand the guard, and reintroducing one arms it
+	// again. For string.max_bytes, additionally require a multibyte mutant —
+	// over the limit in BYTES while under it in characters — so a client that
+	// counts characters cannot pass.
+	t.Run("invalid_bytes_and_max_bytes_rules", func(t *testing.T) {
+		bytesLen, bytesMinLen, stringMaxBytes := schemaRuleShapes()
+		needRules := map[string]bool{
+			"bytes.len":        bytesLen,
+			"bytes.min_len":    bytesMinLen,
+			"string.max_bytes": stringMaxBytes,
+		}
+		for rule, need := range needRules {
+			if !need {
+				continue
+			}
+			found := false
+			for _, c := range cases {
+				if !c.Valid && ruleMatches(c.Rules, rule) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("MISSING CLASS 6 (%s): the schema carries a %s rule but no INVALID "+
+					"case trips it; corpusgen is silently skipping this rule shape again (%d cases scanned)",
+					rule, rule, len(cases))
+			}
+		}
+		if !stringMaxBytes {
+			return // no max_bytes rule in the schema — nothing to pin
+		}
+		for _, c := range cases {
+			if c.Valid || !ruleMatches(c.Rules, "string.max_bytes") {
+				continue
+			}
+			for _, s := range stringValues(decodeCaseJSON(t, c.JSON)) {
+				if len(s) > len([]rune(s)) {
+					return // found a multibyte max_bytes mutant
+				}
+			}
+		}
+		t.Errorf("MISSING CLASS 6 (multibyte max_bytes): every string.max_bytes mutant is "+
+			"ASCII, where byte count == character count; a client that counts characters "+
+			"instead of bytes stays green (%d cases scanned)", len(cases))
+	})
+}
+
+// schemaRuleShapes reports which of the once-skipped rule shapes the contract
+// schema currently carries (top-level field rules, matching corpusgen's edge
+// scope). The class 6 guard requires corpus coverage only for shapes that are
+// actually in the schema.
+func schemaRuleShapes() (bytesLen, bytesMinLen, stringMaxBytes bool) {
+	EachMessage(func(md protoreflect.MessageDescriptor) {
+		for i := 0; i < md.Fields().Len(); i++ {
+			fr, err := protovalidate.ResolveFieldRules(md.Fields().Get(i))
+			if err != nil || fr == nil {
+				continue
+			}
+			if b := fr.GetBytes(); b != nil {
+				if b.Len != nil {
+					bytesLen = true
+				}
+				if b.GetMinLen() > 0 {
+					bytesMinLen = true
+				}
+			}
+			if s := fr.GetString(); s != nil && s.GetMaxBytes() > 0 {
+				stringMaxBytes = true
+			}
+		}
+	})
+	return
+}
+
+// stringValues walks a decoded proto-JSON value and returns every string value
+// at any nesting depth.
+func stringValues(v any) []string {
+	var out []string
+	var walk func(any)
+	walk = func(x any) {
+		switch t := x.(type) {
+		case map[string]any:
+			for _, val := range t {
+				if s, ok := val.(string); ok {
+					out = append(out, s)
+				}
+				walk(val)
+			}
+		case []any:
+			for _, e := range t {
+				if s, ok := e.(string); ok {
+					out = append(out, s)
+				}
+				walk(e)
+			}
+		}
+	}
+	walk(v)
+	return out
 }

@@ -114,17 +114,19 @@ func seeds() map[string]proto.Message {
 			OfferId:                           "offer-seed",
 			OfferJson:                         `{"offer_id":"offer-seed"}`,
 			OfferCanonicalBytes:               []byte(`{"offer_id":"offer-seed"}`),
+			// "EdDSA" is the content-signature label the contract pins (see
+			// offer_sig_algorithm's comment); "ed25519" is the RFC 9421
+			// HTTP-request-signature label and must not appear here.
 			OfferSig:                          strings.Repeat("ab", 64),
-			OfferSigAlgorithm:                 "ed25519",
+			OfferSigAlgorithm:                 "EdDSA",
 			ExchangeSigningPublicKey:          []byte(strings.Repeat("k", 32)),
 			AgentAcceptanceSignature:          strings.Repeat("ab", 64),
 			AgentAcceptanceCanonicalBytes:     []byte(`{"requester_id":"agent-seed"}`),
-			AgentAcceptanceSignatureAlgorithm: "ed25519",
+			AgentAcceptanceSignatureAlgorithm: "EdDSA",
 			RequesterId:                       "agent-seed",
 			RequesterDomain:                   "agent.example",
 			RequestIdempotencyKey:             "idem-tx",
 			AgentPublicKey:                    []byte(strings.Repeat("k", 32)),
-			SignedUrlFull:                     "https://content.example/article?sig=ab",
 			CreatedAt:                         timestamppb.New(fixedTime),
 		},
 		"TransactionState": &rampadminv1.TransactionState{
@@ -186,7 +188,14 @@ func main() {
 		cases = append(cases, mkCase(short+"/valid", short, base.Interface(), true, nil, v))
 
 		for _, fd := range constrained {
-			for _, e := range edges(fd, rules(fd), sd) {
+			es := edges(fd, rules(fd), sd)
+			// A constrained field with zero edges means edges() does not know the
+			// field's rule shape — the corpus would silently carry no case for it
+			// (how the first bytes rules shipped uncovered). Fail the run instead.
+			if len(es) == 0 {
+				die("field %s.%s has rules but produced no edges — teach edges() its rule shape", short, fd.Name())
+			}
+			for _, e := range es {
 				m := proto.Clone(base.Interface()).ProtoReflect()
 				e.apply(m)
 				verr := v.Validate(m.Interface())
@@ -464,6 +473,8 @@ func edges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[stri
 		es = append(es, enumEdges(fd, fr.GetEnum())...)
 	case protoreflect.StringKind:
 		es = append(es, stringEdges(fd, fr.GetString())...)
+	case protoreflect.BytesKind:
+		es = append(es, bytesEdges(fd, fr.GetBytes())...)
 	case protoreflect.Int64Kind:
 		if r := fr.GetInt64(); r != nil {
 			if _, ok := r.GetGreaterThan().(*validate.Int64Rules_Gte); ok {
@@ -556,7 +567,17 @@ func enumEdges(fd protoreflect.FieldDescriptor, r *validate.EnumRules) []edge {
 	var es []edge
 	for _, n := range r.GetNotIn() {
 		nn := protoreflect.EnumNumber(n)
-		es = append(es, edge{label: "not_in", want: "enum.not_in", apply: func(m protoreflect.Message) {
+		// Honest labels: protojson DROPS a zero-valued implicit-presence enum,
+		// so for not_in:[0] on a non-optional field the emitted JSON OMITS the
+		// field entirely — the case pins "omitted is rejected", not "an explicit
+		// UNSPECIFIED string is rejected", and its id says so. A presence-tracked
+		// field (or a nonzero not_in value) serializes the value explicitly and
+		// keeps the plain label.
+		label := "not_in"
+		if n == 0 && !fd.HasPresence() {
+			label = "not_in_zero_omitted"
+		}
+		es = append(es, edge{label: label, want: "enum.not_in", apply: func(m protoreflect.Message) {
 			m.Set(fd, protoreflect.ValueOfEnum(nn))
 		}})
 	}
@@ -617,7 +638,52 @@ func stringEdges(fd protoreflect.FieldDescriptor, r *validate.StringRules) []edg
 		es = append(es, edge{label: "too_long", want: "string.max_len",
 			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(s)) }})
 	}
+	if n := r.GetMaxBytes(); n > 0 {
+		ascii := strings.Repeat("a", int(n)+1)
+		es = append(es, edge{label: "too_many_bytes", want: "string.max_bytes",
+			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(ascii)) }})
+		// max_bytes counts BYTES, not characters. This mutant is over the limit in
+		// bytes but well under it in characters ("é" is 2 UTF-8 bytes), so a client
+		// that counts characters accepts it and diverges from Go's verdict.
+		multibyte := strings.Repeat("é", int(n)/2+1)
+		es = append(es, edge{label: "too_many_bytes_multibyte", want: "string.max_bytes",
+			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfString(multibyte)) }})
+	}
 	return es
+}
+
+// bytesEdges emits boundary mutants for bytes rules. An exact-length rule
+// (bytes.len) gets both a shorter and a longer mutant — one alone would let a
+// client enforce only min or only max and stay green. min_len's mutant at
+// len-1 is the empty value when min_len==1; protovalidate still reports
+// bytes.min_len for it (no presence on proto3 singular bytes), which the
+// generator's oracle check confirms at emit time.
+func bytesEdges(fd protoreflect.FieldDescriptor, r *validate.BytesRules) []edge {
+	var es []edge
+	if r == nil {
+		return es
+	}
+	if r.Len != nil {
+		short := bytesOf(int(r.GetLen()) - 1)
+		long := bytesOf(int(r.GetLen()) + 1)
+		es = append(es,
+			edge{label: "wrong_len_short", want: "bytes.len",
+				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfBytes(short)) }},
+			edge{label: "wrong_len_long", want: "bytes.len",
+				apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfBytes(long)) }})
+	}
+	if n := r.GetMinLen(); r.Len == nil && n > 0 {
+		short := bytesOf(int(n) - 1)
+		es = append(es, edge{label: "too_short", want: "bytes.min_len",
+			apply: func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfBytes(short)) }})
+	}
+	return es
+}
+
+// bytesOf is n copies of a fixed non-zero byte — deterministic filler for
+// length-rule mutants.
+func bytesOf(n int) []byte {
+	return []byte(strings.Repeat("b", n))
 }
 
 // failingBadStringIdxs returns the indices of badStrings the pattern rejects, in order.
@@ -640,6 +706,14 @@ func listEdges(fd protoreflect.FieldDescriptor, fr *validate.FieldRules, sd map[
 	item := itemRules(fr)
 	good, err := validItem(fd, item, sd) // a valid item value
 	must(err)
+	if r != nil && r.GetMinItems() > 0 {
+		// The baseline is valid, so it holds at least min_items valid items;
+		// truncating to one below the floor trips ONLY repeated.min_items.
+		n := int(r.GetMinItems()) - 1
+		es = append(es, edge{label: "too_few", want: "repeated.min_items", apply: func(m protoreflect.Message) {
+			m.Mutable(fd).List().Truncate(n)
+		}})
+	}
 	if r != nil && r.GetMaxItems() > 0 {
 		n := int(r.GetMaxItems()) + 1
 		es = append(es, edge{label: "too_many", want: "repeated.max_items", apply: func(m protoreflect.Message) {
@@ -703,7 +777,10 @@ func hasConstraint(fr *validate.FieldRules) bool {
 	if e := fr.GetEnum(); e != nil && (e.GetDefinedOnly() || len(e.GetNotIn()) > 0) {
 		return true
 	}
-	if s := fr.GetString(); s != nil && (s.GetPattern() != "" || s.GetMinLen() > 0 || s.GetMaxLen() > 0) {
+	if s := fr.GetString(); s != nil && (s.GetPattern() != "" || s.GetMinLen() > 0 || s.GetMaxLen() > 0 || s.GetMaxBytes() > 0) {
+		return true
+	}
+	if b := fr.GetBytes(); b != nil && (b.Len != nil || b.GetMinLen() > 0) {
 		return true
 	}
 	if i := fr.GetInt64(); i != nil && i.GetGreaterThan() != nil {

@@ -392,7 +392,7 @@ class GetAccountStatusResponse(WireModel):
 class GetTransactionEvidenceRequest(WireModel):
     transaction_id: constr(min_length=1, max_length=255) = Field(
         ...,
-        description="The transaction whose evidence row to fetch. Same shape rule as the\n execute plane's transaction-scoped identifiers.",
+        description='The transaction whose evidence row to fetch. Same rule as\n ramp.admin.v1.TransactionEvidence.transaction_id (drift-gated) — the row\n identity this request selects by.',
     )
     ver: str | None = Field(
         '',
@@ -725,7 +725,7 @@ class ReportingObligationState(WireModel):
         constr(pattern=r'^([0-9]+([.][0-9]+)?)?$', max_length=32) | None
     ) = Field(
         None,
-        description='Reported consumed quantity as an exact decimal string, never a float —\n the same convention as every money-like value on the wire (see\n ramp.v1.Cost). Absent until a usage report has been received.',
+        description='Reported consumed quantity as an exact decimal string, never a float —\n the same convention as every money-like value on the wire. Same rule as\n ramp.v1.Cost.amount (drift-gated). Absent until a usage report has been\n received.',
     )
     deadline: AwareDatetime = Field(..., description='When the usage report is due.')
     received_at: AwareDatetime | None = Field(
@@ -733,7 +733,7 @@ class ReportingObligationState(WireModel):
     )
     state: ObligationState = Field(
         ...,
-        description='Lifecycle state. Always a real persisted state, never UNSPECIFIED.',
+        description='Lifecycle state. Always a real persisted state, never UNSPECIFIED.\n Server-output enum: {defined_only, not_in: [0]} like every response-payload\n enum in ramp.v1 — a reader must never see a number its schema cannot name.',
     )
 
 
@@ -980,44 +980,44 @@ class TransactionDenial(WireModel):
 
 
 class TransactionEvidence(WireModel):
-    agent_acceptance_canonical_bytes: (
-        constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=2) | None
+    agent_acceptance_canonical_bytes: constr(
+        pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=2
     ) = Field(
-        '',
+        ...,
         description='Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.',
     )
     agent_acceptance_signature: constr(pattern=r'^[0-9A-Fa-f]{128}$') = Field(
         ...,
-        description="The agent's Ed25519 signature over agent_acceptance_canonical_bytes,\n hex-encoded verbatim as it arrived on the wire (either case).",
+        description="The agent's Ed25519 signature over agent_acceptance_canonical_bytes,\n hex-encoded verbatim as it arrived on the wire (either case). Same rule\n as ramp.admin.v1.TransactionEvidence.offer_sig (drift-gated).",
     )
     agent_acceptance_signature_algorithm: constr(min_length=1) = Field(
         ...,
-        description='Signing-algorithm label, server-derived (see offer_sig_algorithm).',
+        description='Signing-algorithm label, server-derived (see offer_sig_algorithm).\n Always "EdDSA", same as offer_sig_algorithm.',
     )
     agent_discovery_url: str | None = Field(
         '',
         description="The anchored well-known directory agent_public_key was pinned from. The\n registry overwrites keys in place on rotation and keeps no history, so\n this — plus created_at — attests where and when this Exchange obtained\n the key. Empty when the agent carries no directory anchor: an append-once\n row states a value for every column, so '' is a stated fact, not a gap.",
     )
-    agent_public_key: (
-        constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=43, max_length=44) | None
+    agent_public_key: constr(
+        pattern=r'^[A-Za-z0-9+/]{43}=?$', min_length=43, max_length=44
     ) = Field(
-        '',
+        ...,
         description='The registry-pinned agent verifying key (raw 32-byte Ed25519) the\n acceptance verified against.',
     )
     created_at: AwareDatetime = Field(
         ..., description='When the Exchange wrote this row (server clock).'
     )
-    exchange_signing_public_key: (
-        constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=43, max_length=44) | None
+    exchange_signing_public_key: constr(
+        pattern=r'^[A-Za-z0-9+/]{43}=?$', min_length=43, max_length=44
     ) = Field(
-        '',
+        ...,
         description='The Exchange verifying key itself (raw 32-byte Ed25519), not a key id.',
     )
-    offer_canonical_bytes: (
-        constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=2) | None
-    ) = Field(
-        '',
-        description="Verbatim JCS bytes the Exchange's signature was computed over (the offer\n with its signature fields cleared).",
+    offer_canonical_bytes: constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=2) = (
+        Field(
+            ...,
+            description="Verbatim JCS bytes the Exchange's signature was computed over (the offer\n with its signature fields cleared).",
+        )
     )
     offer_id: constr(min_length=1) = Field(
         ...,
@@ -1033,7 +1033,7 @@ class TransactionEvidence(WireModel):
     )
     offer_sig_algorithm: constr(min_length=1) = Field(
         ...,
-        description="Signing-algorithm label, server-derived from the Exchange's own verify\n path — never echoed from the wire. The canonical payload clears the wire\n labels before signing, so an echoed label would sit outside signature\n coverage and could claim anything under an otherwise valid signature.",
+        description='Signing-algorithm label, server-derived from the Exchange\'s own verify\n path — never echoed from the wire. The canonical payload clears the wire\n labels before signing, so an echoed label would sit outside signature\n coverage and could claim anything under an otherwise valid signature.\n Always "EdDSA" — the content-signature label ramp.v1.Offer\n .signature_algorithm pins; "ed25519" is the separate label reserved for\n RFC 9421 HTTP request signatures and never appears here.',
     )
     request_id: str | None = Field(
         None,
@@ -1045,19 +1045,15 @@ class TransactionEvidence(WireModel):
     )
     request_idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
-        description='The REQUEST-level idempotency key the acceptance signs\n (TransactionRequest.idempotency_key, same rule) — NOT the derived\n per-item key that TransactionState.idempotency_key carries.',
+        description='The REQUEST-level idempotency key the acceptance signs — NOT the derived\n per-item key that TransactionState.idempotency_key carries. Same rule as\n ramp.v1.TransactionRequest.idempotency_key (drift-gated).',
     )
-    requester_domain: constr(max_length=253) | None = Field(
+    requester_domain: str | None = Field(
         '',
-        description='The signed Requester.domain, verbatim. Bounded at the RFC 1035 maximum\n DNS name length in BYTES — the one caller-influenced value here that\n nothing upstream constrains.',
+        description='The signed Requester.domain, verbatim. Unbounded for the same reason as\n requester_id: upstream ramp.v1.Requester places no wire constraint on\n either value, and the evidence row must be able to state whatever bytes\n the acceptance actually signed — a bound here could make the row fail its\n own validation for a transaction that legitimately executed.',
     )
     requester_id: str | None = Field(
         '',
         description='requester_id is the signed Requester.id VERBATIM — the bytes under the\n agent\'s signature, never rewritten. It NAMES the same agent as the\n Exchange\'s canonical agent identity but is not byte-equal to it: a signer\n may spell its directory any way it likes (the deployed identity service\n signs "scheme://host"), so the forensic join goes through directory-host\n normalization, not plain equality. No wire rule: the agent plane does not\n constrain Requester.id, and this row states what was signed.',
-    )
-    signed_url_full: constr(min_length=1) = Field(
-        ...,
-        description="The full signed retrieval URL as delivered. sha256(signed_url_full) is\n the join key against the edge delivery log's url_hash.",
     )
     tenant_id: constr(min_length=1, max_length=255) = Field(
         ...,
@@ -1110,7 +1106,8 @@ class TransactionResultItem(WireModel):
         description='Computed per-unit cost for financial attribution on subscription transactions.\n Even when cost.amount="0" (subscription), this field carries the value\n of the access for accounting purposes (e.g., ASC 606 prepaid drawdown).',
     )
     transaction_id: str | None = Field(
-        '', description='Exchange-assigned transaction identifier.'
+        '',
+        description="Exchange-assigned transaction identifier. MUST be minted with UUIDv4-class\n entropy (unguessable): it later becomes the sole selector for the admin\n plane's evidence read (ramp.admin.v1.GetTransactionEvidence), which has no\n per-operator identity in v1 — a sequential or predictable id would let\n anyone with network reachability enumerate evidence rows. The reference\n implementation mints a UUIDv4.",
     )
 
 
@@ -1122,11 +1119,11 @@ class TransactionState(WireModel):
         ...,
         description="The transaction's per-item idempotency key as logged — derived from the\n request-level key and the item's offer, so it is NOT byte-equal to\n TransactionEvidence.request_idempotency_key. No upper bound: the\n derivation appends an id whose length nothing constrains.",
     )
-    signed_url_hash: (
-        constr(pattern=r'^[A-Za-z0-9+/]*={0,2}$', min_length=43, max_length=44) | None
+    signed_url_hash: constr(
+        pattern=r'^[A-Za-z0-9+/]{43}=?$', min_length=43, max_length=44
     ) = Field(
-        '',
-        description='sha256 of the signed retrieval URL — the thin reference the log keeps\n (the full URL lives on the evidence row).',
+        ...,
+        description="sha256 of the signed retrieval URL — the join key against the edge\n delivery log's url_hash. Hash-only by design: the full URL is a live\n bearer capability until expiry and is deliberately absent from this\n plane (see TransactionEvidence's delivery section).",
     )
 
 
@@ -2018,8 +2015,8 @@ class TransactionRequest(WireModel):
         ...,
         description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
     )
-    items: list[TransactionItem] | None = Field(
-        None,
+    items: list[TransactionItem] = Field(
+        ...,
         description="The offers committed in this request (REQUIRED, min 1), each carrying its\n own reflected signed Offer + detached acceptance. A single offer is the\n degenerate 1-element list. The Exchange verifies each item's\n `offer.signature` (which covers pricing, terms, and expires_at) over the\n presented bytes against its own key — stateless, self-contained bearer\n tokens, with no reconstruct-from-catalog.",
         min_length=1,
     )

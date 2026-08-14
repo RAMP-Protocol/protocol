@@ -152,7 +152,7 @@
     }
   },
   {
-    "id": "AuthorizedExchange/relationship/not_in",
+    "id": "AuthorizedExchange/relationship/not_in_zero_omitted",
     "message": "AuthorizedExchange",
     "valid": false,
     "rules": [
@@ -169,7 +169,7 @@
     }
   },
   {
-    "id": "CatalogRejection/reason/not_in",
+    "id": "CatalogRejection/reason/not_in_zero_omitted",
     "message": "CatalogRejection",
     "valid": false,
     "rules": [
@@ -744,7 +744,7 @@
     }
   },
   {
-    "id": "DisputeFailure/reason/not_in",
+    "id": "DisputeFailure/reason/not_in_zero_omitted",
     "message": "DisputeFailure",
     "valid": false,
     "rules": [
@@ -795,7 +795,7 @@
     }
   },
   {
-    "id": "DisputeRequest/reason/not_in",
+    "id": "DisputeRequest/reason/not_in_zero_omitted",
     "message": "DisputeRequest",
     "valid": false,
     "rules": [
@@ -815,7 +815,7 @@
     }
   },
   {
-    "id": "DomainVerificationFailure/reason/not_in",
+    "id": "DomainVerificationFailure/reason/not_in_zero_omitted",
     "message": "DomainVerificationFailure",
     "valid": false,
     "rules": [
@@ -896,7 +896,7 @@
       "evidence": {
         "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
         "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-        "agent_acceptance_signature_algorithm": "ed25519",
+        "agent_acceptance_signature_algorithm": "EdDSA",
         "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
         "created_at": "2026-01-02T03:04:05Z",
         "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -904,11 +904,10 @@
         "offer_id": "offer-seed",
         "offer_json": "{\"offer_id\":\"offer-seed\"}",
         "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-        "offer_sig_algorithm": "ed25519",
+        "offer_sig_algorithm": "EdDSA",
         "request_idempotency_key": "idem-tx",
         "requester_domain": "agent.example",
         "requester_id": "agent-seed",
-        "signed_url_full": "https://content.example/article?sig=ab",
         "tenant_id": "tenant-seed",
         "transaction_id": "tx-seed"
       }
@@ -922,7 +921,7 @@
       "evidence": {
         "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
         "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-        "agent_acceptance_signature_algorithm": "ed25519",
+        "agent_acceptance_signature_algorithm": "EdDSA",
         "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
         "created_at": "2026-01-02T03:04:05Z",
         "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -930,11 +929,10 @@
         "offer_id": "offer-seed",
         "offer_json": "{\"offer_id\":\"offer-seed\"}",
         "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-        "offer_sig_algorithm": "ed25519",
+        "offer_sig_algorithm": "EdDSA",
         "request_idempotency_key": "idem-tx",
         "requester_domain": "agent.example",
         "requester_id": "agent-seed",
-        "signed_url_full": "https://content.example/article?sig=ab",
         "tenant_id": "tenant-seed",
         "transaction_id": "tx-seed"
       },
@@ -1164,7 +1162,7 @@
     }
   },
   {
-    "id": "LicenseTerm/semantics/not_in",
+    "id": "LicenseTerm/semantics/not_in_zero_omitted",
     "message": "LicenseTerm",
     "valid": false,
     "rules": [
@@ -1190,7 +1188,7 @@
     }
   },
   {
-    "id": "Obligation/kind/not_in",
+    "id": "Obligation/kind/not_in_zero_omitted",
     "message": "Obligation",
     "valid": false,
     "rules": [
@@ -1201,7 +1199,7 @@
     }
   },
   {
-    "id": "Obligation/trigger/not_in",
+    "id": "Obligation/trigger/not_in_zero_omitted",
     "message": "Obligation",
     "valid": false,
     "rules": [
@@ -1221,7 +1219,7 @@
     }
   },
   {
-    "id": "Pricing/model/not_in",
+    "id": "Pricing/model/not_in_zero_omitted",
     "message": "Pricing",
     "valid": false,
     "rules": [
@@ -1799,7 +1797,7 @@
     }
   },
   {
-    "id": "Quota/window/not_in",
+    "id": "Quota/window/not_in_zero_omitted",
     "message": "Quota",
     "valid": false,
     "rules": [
@@ -2083,7 +2081,7 @@
     }
   },
   {
-    "id": "RegistrationFailure/reason/not_in",
+    "id": "RegistrationFailure/reason/not_in_zero_omitted",
     "message": "RegistrationFailure",
     "valid": false,
     "rules": [
@@ -2335,7 +2333,7 @@
     }
   },
   {
-    "id": "ReportingObligationState/state/not_in",
+    "id": "ReportingObligationState/state/not_in_zero_omitted",
     "message": "ReportingObligationState",
     "valid": false,
     "rules": [
@@ -2344,6 +2342,19 @@
     "json": {
       "deadline": "2026-01-02T03:04:05Z",
       "received_at": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "ReportingObligationState/state/undefined",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "enum.defined_only"
+    ],
+    "json": {
+      "deadline": "2026-01-02T03:04:05Z",
+      "received_at": "2026-01-02T03:04:05Z",
+      "state": 6
     }
   },
   {
@@ -2792,7 +2803,7 @@
     }
   },
   {
-    "id": "Requester/type/not_in",
+    "id": "Requester/type/not_in_zero_omitted",
     "message": "Requester",
     "valid": false,
     "rules": [
@@ -2845,7 +2856,7 @@
     }
   },
   {
-    "id": "ResourceIdentity/resource_mutability/not_in",
+    "id": "ResourceIdentity/resource_mutability/not_in_zero_omitted",
     "message": "ResourceIdentity",
     "valid": false,
     "rules": [
@@ -3143,7 +3154,7 @@
     }
   },
   {
-    "id": "Restriction/kind/not_in",
+    "id": "Restriction/kind/not_in_zero_omitted",
     "message": "Restriction",
     "valid": false,
     "rules": [
@@ -3424,7 +3435,7 @@
     }
   },
   {
-    "id": "RetrievalAuthFailure/reason/not_in",
+    "id": "RetrievalAuthFailure/reason/not_in_zero_omitted",
     "message": "RetrievalAuthFailure",
     "valid": false,
     "rules": [
@@ -3598,7 +3609,7 @@
     }
   },
   {
-    "id": "TransactionDenial/reason/not_in",
+    "id": "TransactionDenial/reason/not_in_zero_omitted",
     "message": "TransactionDenial",
     "valid": false,
     "rules": [
@@ -3626,6 +3637,31 @@
     }
   },
   {
+    "id": "TransactionEvidence/agent_acceptance_canonical_bytes/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "bytes.min_len"
+    ],
+    "json": {
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "EdDSA",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "EdDSA",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
     "id": "TransactionEvidence/agent_acceptance_signature/missing_empty",
     "message": "TransactionEvidence",
     "valid": false,
@@ -3634,7 +3670,7 @@
     ],
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3642,11 +3678,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3661,7 +3696,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "two words",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3669,11 +3704,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3688,7 +3722,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "1.2.3",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3696,11 +3730,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3715,7 +3748,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "!!bad!!",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3723,11 +3756,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3742,7 +3774,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "\u0000ctl\u0000",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3750,11 +3782,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3769,7 +3800,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": " ",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3777,11 +3808,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3796,7 +3826,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "-5",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3804,11 +3834,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3823,7 +3852,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "NaN",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3831,11 +3860,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3850,7 +3878,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "Infinity",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3858,11 +3886,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3877,7 +3904,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "1E3",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -3885,11 +3912,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3911,11 +3937,62 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_public_key/wrong_len_long",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "bytes.len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "EdDSA",
+      "agent_public_key": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJi",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "EdDSA",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/agent_public_key/wrong_len_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "bytes.len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "EdDSA",
+      "agent_public_key": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYg==",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "EdDSA",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3930,18 +4007,94 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/exchange_signing_public_key/wrong_len_long",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "bytes.len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "EdDSA",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJi",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "EdDSA",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/exchange_signing_public_key/wrong_len_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "bytes.len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "EdDSA",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYg==",
+      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "EdDSA",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
+      "tenant_id": "tenant-seed",
+      "transaction_id": "tx-seed"
+    }
+  },
+  {
+    "id": "TransactionEvidence/offer_canonical_bytes/too_short",
+    "message": "TransactionEvidence",
+    "valid": false,
+    "rules": [
+      "bytes.min_len"
+    ],
+    "json": {
+      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
+      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "agent_acceptance_signature_algorithm": "EdDSA",
+      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "created_at": "2026-01-02T03:04:05Z",
+      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
+      "offer_id": "offer-seed",
+      "offer_json": "{\"offer_id\":\"offer-seed\"}",
+      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+      "offer_sig_algorithm": "EdDSA",
+      "request_idempotency_key": "idem-tx",
+      "requester_domain": "agent.example",
+      "requester_id": "agent-seed",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3956,18 +4109,17 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -3982,18 +4134,17 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
       "offer_id": "offer-seed",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4008,18 +4159,17 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4034,7 +4184,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4042,11 +4192,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "two words",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4061,7 +4210,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4069,11 +4218,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "1.2.3",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4088,7 +4236,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4096,11 +4244,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "!!bad!!",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4115,7 +4262,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4123,11 +4270,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "\u0000ctl\u0000",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4142,7 +4288,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4150,11 +4296,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": " ",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4169,7 +4314,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4177,11 +4322,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "-5",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4196,7 +4340,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4204,11 +4348,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "NaN",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4223,7 +4366,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4231,11 +4374,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "Infinity",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4250,7 +4392,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4258,11 +4400,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "1E3",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4277,7 +4418,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4288,7 +4429,6 @@
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4303,7 +4443,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4311,11 +4451,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4330,7 +4469,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4338,34 +4477,7 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
-      "requester_domain": "agent.example",
-      "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
-      "tenant_id": "tenant-seed",
-      "transaction_id": "tx-seed"
-    }
-  },
-  {
-    "id": "TransactionEvidence/signed_url_full/too_short",
-    "message": "TransactionEvidence",
-    "valid": false,
-    "rules": [
-      "string.min_len"
-    ],
-    "json": {
-      "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
-      "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
-      "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
-      "created_at": "2026-01-02T03:04:05Z",
-      "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
-      "offer_canonical_bytes": "eyJvZmZlcl9pZCI6Im9mZmVyLXNlZWQifQ==",
-      "offer_id": "offer-seed",
-      "offer_json": "{\"offer_id\":\"offer-seed\"}",
-      "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
-      "request_idempotency_key": "idem-tx",
+      "offer_sig_algorithm": "EdDSA",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
       "tenant_id": "tenant-seed",
@@ -4382,7 +4494,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4390,11 +4502,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "transaction_id": "tx-seed"
     }
@@ -4409,7 +4520,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4417,11 +4528,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "transaction_id": "tx-seed"
     }
   },
@@ -4435,7 +4545,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4443,11 +4553,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
@@ -4462,7 +4571,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4470,11 +4579,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed"
     }
   },
@@ -4485,7 +4593,7 @@
     "json": {
       "agent_acceptance_canonical_bytes": "eyJyZXF1ZXN0ZXJfaWQiOiJhZ2VudC1zZWVkIn0=",
       "agent_acceptance_signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "agent_acceptance_signature_algorithm": "ed25519",
+      "agent_acceptance_signature_algorithm": "EdDSA",
       "agent_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
       "created_at": "2026-01-02T03:04:05Z",
       "exchange_signing_public_key": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s=",
@@ -4493,11 +4601,10 @@
       "offer_id": "offer-seed",
       "offer_json": "{\"offer_id\":\"offer-seed\"}",
       "offer_sig": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
-      "offer_sig_algorithm": "ed25519",
+      "offer_sig_algorithm": "EdDSA",
       "request_idempotency_key": "idem-tx",
       "requester_domain": "agent.example",
       "requester_id": "agent-seed",
-      "signed_url_full": "https://content.example/article?sig=ab",
       "tenant_id": "tenant-seed",
       "transaction_id": "tx-seed"
     }
@@ -4569,6 +4676,17 @@
     }
   },
   {
+    "id": "TransactionRequest/items/too_few",
+    "message": "TransactionRequest",
+    "valid": false,
+    "rules": [
+      "repeated.min_items"
+    ],
+    "json": {
+      "idempotency_key": "idem-tx"
+    }
+  },
+  {
     "id": "TransactionRequest/valid",
     "message": "TransactionRequest",
     "valid": true,
@@ -4609,6 +4727,32 @@
     "json": {
       "expiry": "2026-01-02T03:04:05Z",
       "signed_url_hash": "aGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGg="
+    }
+  },
+  {
+    "id": "TransactionState/signed_url_hash/wrong_len_long",
+    "message": "TransactionState",
+    "valid": false,
+    "rules": [
+      "bytes.len"
+    ],
+    "json": {
+      "expiry": "2026-01-02T03:04:05Z",
+      "idempotency_key": "idem-tx:offer-seed",
+      "signed_url_hash": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJi"
+    }
+  },
+  {
+    "id": "TransactionState/signed_url_hash/wrong_len_short",
+    "message": "TransactionState",
+    "valid": false,
+    "rules": [
+      "bytes.len"
+    ],
+    "json": {
+      "expiry": "2026-01-02T03:04:05Z",
+      "idempotency_key": "idem-tx:offer-seed",
+      "signed_url_hash": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYg=="
     }
   },
   {
@@ -4769,7 +4913,7 @@
     }
   },
   {
-    "id": "UsageReportRejection/reason/not_in",
+    "id": "UsageReportRejection/reason/not_in_zero_omitted",
     "message": "UsageReportRejection",
     "valid": false,
     "rules": [
@@ -4797,7 +4941,7 @@
     }
   },
   {
-    "id": "WellKnownManifest/role/not_in",
+    "id": "WellKnownManifest/role/not_in_zero_omitted",
     "message": "WellKnownManifest",
     "valid": false,
     "rules": [

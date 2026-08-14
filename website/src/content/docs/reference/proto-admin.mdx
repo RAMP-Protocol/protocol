@@ -66,13 +66,13 @@ Echoes the `ReportingPolicy` as persisted.
 
 ### TransactionEvidence
 
-One append-once evidence row, exactly as the Exchange persisted it for a successfully executed transaction. The row is written only after both Ed25519 signatures verified — a denied execute writes nothing — so the row's existence is itself the success statement. It re-verifies **offline**, from this message alone: `ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)` proves the Exchange signed this exact offer, and `ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)` proves the agent accepted it. Both verifying public keys ride along (not key ids) so re-verification survives key rotation; the `*_canonical_bytes` are the verbatim JCS bytes each signature was computed over, stored as-signed and never re-derived. The signatures cover what was **agreed**, not what was **delivered** — `transaction_id`, `signed_url_full`, `request_id` and `created_at` are the Exchange's own assertions about the delivery.
+One append-once evidence row, exactly as the Exchange persisted it for a successfully executed transaction. The row is written only after both Ed25519 signatures verified -- a denied execute writes nothing -- so the row's existence is itself the success statement. It re-verifies **offline**, from this message alone: `ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)` proves the Exchange signed this exact offer, and `ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)` proves the agent accepted it. Both verifying public keys ride along (not key ids) so re-verification survives key rotation; the `*_canonical_bytes` are the verbatim JCS bytes each signature was computed over, stored as-signed and never re-derived. The signatures cover what was **agreed**, not what was **delivered** -- `transaction_id`, `request_id` and `created_at` are the Exchange's own assertions about the delivery. The row deliberately carries no signed retrieval URL: the full URL is a live bearer capability until expiry, so the delivery join is hash-only via `TransactionState.signed_url_hash`.
 
 ::proto-message{name=TransactionEvidence}
 
 ### TransactionState
 
-The thin transaction-log facts a ledger renderer needs next to the evidence row: the logged per-item idempotency key (derived from the request-level key and the item's offer, so not byte-equal to `TransactionEvidence.request_idempotency_key`), the signed-URL expiry, and the sha256 of the signed retrieval URL. There is deliberately no status field — evidence only ever describes a successful execute, so existence is the status.
+The thin transaction-log facts a ledger renderer needs next to the evidence row: the logged per-item idempotency key (derived from the request-level key and the item's offer, so not byte-equal to `TransactionEvidence.request_idempotency_key`), the signed-URL expiry, and the sha256 of the signed retrieval URL. There is deliberately no status field -- evidence only ever describes a successful execute, so existence is the status.
 
 ::proto-message{name=TransactionState}
 
@@ -96,6 +96,6 @@ A thin `{ver, transaction_id}` envelope naming the transaction whose evidence ro
 
 ### GetTransactionEvidenceResponse
 
-The evidence row plus the transaction-log and reporting-obligation state needed to render it. `evidence` and `transaction_state` are required — they exist 1:1 for every found transaction, and an unknown `transaction_id` is `NOT_FOUND`, never an empty response. `obligation_state` carries the **latest** obligation by creation time (the store does not make obligations unique per transaction) and is absent when the transaction minted none.
+The evidence row plus the transaction-log and reporting-obligation state needed to render it. `evidence` and `transaction_state` are required -- they exist 1:1 for every found transaction, and an unknown `transaction_id` is `NOT_FOUND`, never an empty response. `obligation_state` carries the **latest** obligation by creation time (the store does not make obligations unique per transaction) and is absent when the transaction minted none.
 
 ::proto-message{name=GetTransactionEvidenceResponse}

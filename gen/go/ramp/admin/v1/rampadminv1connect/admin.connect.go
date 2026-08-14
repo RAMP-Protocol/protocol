@@ -16,6 +16,13 @@
 // overwrites and the evidence read is side-effect-free, so every RPC is
 // naturally idempotent and carries no idempotency_key.
 //
+// The evidence read is keyed by transaction_id ALONE, so its enumeration
+// resistance rests on transaction ids being unguessable: ids MUST carry
+// UUIDv4-class entropy (normative statement on
+// ramp.v1.TransactionResultItem.transaction_id). With unguessable ids,
+// enumeration is impractical and the network boundary above is the only
+// remaining load-bearing control.
+//
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is
