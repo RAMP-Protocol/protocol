@@ -120,12 +120,14 @@ import "ramp/v1/vocab.proto";
 // or trailing root dot is not allowed, and
 // the value is case-normalised (sender and recipient lowercase it before
 // comparing). The PORT is part of the identity and is compared, with one
-// folding: an absent port and the default port for the scheme in use are the
-// same port, so "exchange.example" and "exchange.example:443" name the same
-// recipient over HTTPS while "exchange.example:8443" names a different one.
-// Stated because it is otherwise the obvious place for two implementations to
-// disagree — another port is another service, which the party answering for the
-// first need not control. It is NOT an endpoint URL. The endpoint is resolved from the
+// folding: an absent port and an explicit ":443" are the same port, so
+// "exchange.example" and "exchange.example:443" name the same recipient while
+// "exchange.example:8443" names a different one. 443 and no other, because the
+// value carries no scheme to take a default from — the field forbids one — and a
+// bare domain is read as https. ":80" is therefore a distinct port here even on a
+// deployment serving plaintext. Stated because it is otherwise the obvious place
+// for two implementations to disagree — another port is another service, which
+// the party answering for the first need not control. It is NOT an endpoint URL. The endpoint is resolved from the
 // recipient's own /.well-known/ramp.json, never from a value the caller
 // supplies — an endpoint in the payload would hand the caller the choice of
 // where the next hop dials, which is exactly what this field is not for.
