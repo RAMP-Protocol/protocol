@@ -1,0 +1,680 @@
+{
+  "audience": [
+    {
+      "name": "exact_match",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "case_folded_claim",
+      "self": "exchange.example",
+      "claimed": [
+        "Exchange.Example"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "case_folded_identity",
+      "self": "Exchange.Example",
+      "claimed": [
+        "exchange.example"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "default_port_on_claim",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example:443"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "default_port_on_identity",
+      "self": "exchange.example:443",
+      "claimed": [
+        "exchange.example"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "default_port_on_both",
+      "self": "exchange.example:443",
+      "claimed": [
+        "exchange.example:443"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "same_non_default_port",
+      "self": "exchange:8081",
+      "claimed": [
+        "exchange:8081"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "many_all_match",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example",
+        "Exchange.Example",
+        "exchange.example:443"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "case_folded_on_a_non_default_port",
+      "self": "exchange:8081",
+      "claimed": [
+        "Exchange:8081"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "case_folded_identity_on_a_non_default_port",
+      "self": "Exchange.Example:8443",
+      "claimed": [
+        "exchange.example:8443"
+      ],
+      "expected_verdict": "accepted",
+      "identity_error": false
+    },
+    {
+      "name": "unrelated_host",
+      "self": "exchange.example",
+      "claimed": [
+        "other.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "subdomain_is_not_this_exchange",
+      "self": "exchange.example",
+      "claimed": [
+        "eu.exchange.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "parent_is_not_this_exchange",
+      "self": "eu.exchange.example",
+      "claimed": [
+        "exchange.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "label_boundary_not_a_prefix",
+      "self": "exchange.example",
+      "claimed": [
+        "evil-exchange.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "suffix_without_boundary",
+      "self": "a.example",
+      "claimed": [
+        "xa.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "port_is_part_of_the_identity",
+      "self": "exchange:8081",
+      "claimed": [
+        "exchange"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "different_non_default_port",
+      "self": "exchange:8081",
+      "claimed": [
+        "exchange:9000"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "port_80_is_not_folded",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example:80"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "many_one_mismatch",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example",
+        "other.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "many_last_mismatch",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example",
+        "exchange.example",
+        "other.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_mismatch_before_empty",
+      "self": "exchange.example",
+      "claimed": [
+        "other.example",
+        ""
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_empty_before_mismatch",
+      "self": "exchange.example",
+      "claimed": [
+        "",
+        "other.example"
+      ],
+      "expected_verdict": "empty",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_malformed_before_mismatch",
+      "self": "exchange.example",
+      "claimed": [
+        "https://other.example",
+        "other.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_mismatch_before_malformed",
+      "self": "exchange.example",
+      "claimed": [
+        "other.example",
+        "https://other.example"
+      ],
+      "expected_verdict": "mismatch",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_empty_before_malformed",
+      "self": "exchange.example",
+      "claimed": [
+        "",
+        "https://other.example"
+      ],
+      "expected_verdict": "empty",
+      "identity_error": false
+    },
+    {
+      "name": "first_fault_malformed_before_empty",
+      "self": "exchange.example",
+      "claimed": [
+        "https://other.example",
+        ""
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "no_values",
+      "self": "exchange.example",
+      "claimed": [],
+      "expected_verdict": "empty",
+      "identity_error": false
+    },
+    {
+      "name": "empty_value",
+      "self": "exchange.example",
+      "claimed": [
+        ""
+      ],
+      "expected_verdict": "empty",
+      "identity_error": false
+    },
+    {
+      "name": "many_one_empty",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example",
+        ""
+      ],
+      "expected_verdict": "empty",
+      "identity_error": false
+    },
+    {
+      "name": "claim_carries_a_scheme",
+      "self": "exchange.example",
+      "claimed": [
+        "https://exchange.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_carries_a_path",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example/v1"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_carries_userinfo",
+      "self": "exchange.example",
+      "claimed": [
+        "agent@exchange.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_has_a_root_dot",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example."
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_has_a_bad_port",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example:123456"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_has_a_padded_port",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example:0443"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_is_a_kelvin_homograph",
+      "self": "market.example",
+      "claimed": [
+        "marKet.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "claim_is_a_fullwidth_homograph",
+      "self": "exchange.example",
+      "claimed": [
+        "Ｅxchange.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "many_one_malformed",
+      "self": "exchange.example",
+      "claimed": [
+        "exchange.example",
+        "https://other.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "malformed_claim_outranks_a_mismatch",
+      "self": "exchange.example",
+      "claimed": [
+        "https://other.example"
+      ],
+      "expected_verdict": "malformed",
+      "identity_error": false
+    },
+    {
+      "name": "identity_empty",
+      "self": "",
+      "claimed": [
+        "exchange.example"
+      ],
+      "expected_verdict": "no_verdict",
+      "identity_error": true
+    },
+    {
+      "name": "identity_carries_a_scheme",
+      "self": "https://exchange.example",
+      "claimed": [
+        "exchange.example"
+      ],
+      "expected_verdict": "no_verdict",
+      "identity_error": true
+    },
+    {
+      "name": "identity_carries_a_path",
+      "self": "exchange.example/v1",
+      "claimed": [
+        "exchange.example"
+      ],
+      "expected_verdict": "no_verdict",
+      "identity_error": true
+    },
+    {
+      "name": "identity_has_a_root_dot",
+      "self": "exchange.example.",
+      "claimed": [
+        "exchange.example"
+      ],
+      "expected_verdict": "no_verdict",
+      "identity_error": true
+    },
+    {
+      "name": "identity_unusable_and_claim_empty",
+      "self": "",
+      "claimed": [
+        ""
+      ],
+      "expected_verdict": "no_verdict",
+      "identity_error": true
+    }
+  ],
+  "bare_domain": [
+    {
+      "name": "plain_domain",
+      "value": "exchange.example",
+      "valid": true
+    },
+    {
+      "name": "subdomain",
+      "value": "eu.exchange.example",
+      "valid": true
+    },
+    {
+      "name": "deep_subdomain",
+      "value": "a.b.c.exchange.example",
+      "valid": true
+    },
+    {
+      "name": "single_label",
+      "value": "exchange",
+      "valid": true
+    },
+    {
+      "name": "single_label_with_port",
+      "value": "exchange:8081",
+      "valid": true
+    },
+    {
+      "name": "host_with_port",
+      "value": "exchange.example:8443",
+      "valid": true
+    },
+    {
+      "name": "host_with_default_port",
+      "value": "exchange.example:443",
+      "valid": true
+    },
+    {
+      "name": "hyphen_inside_label",
+      "value": "ex-change.example",
+      "valid": true
+    },
+    {
+      "name": "digits_in_label",
+      "value": "ex1.exchange2.example",
+      "valid": true
+    },
+    {
+      "name": "all_digit_label",
+      "value": "1.2.3.4",
+      "valid": true
+    },
+    {
+      "name": "uppercase",
+      "value": "Exchange.Example",
+      "valid": true
+    },
+    {
+      "name": "max_length",
+      "value": "a.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "valid": true
+    },
+    {
+      "name": "port_one_digit",
+      "value": "exchange.example:8",
+      "valid": true
+    },
+    {
+      "name": "port_max",
+      "value": "exchange.example:65535",
+      "valid": true
+    },
+    {
+      "name": "empty",
+      "value": "",
+      "valid": false
+    },
+    {
+      "name": "whitespace_only",
+      "value": "   ",
+      "valid": false
+    },
+    {
+      "name": "leading_space",
+      "value": " exchange.example",
+      "valid": false
+    },
+    {
+      "name": "trailing_space",
+      "value": "exchange.example ",
+      "valid": false
+    },
+    {
+      "name": "trailing_newline",
+      "value": "exchange.example\n",
+      "valid": false
+    },
+    {
+      "name": "embedded_newline",
+      "value": "exchange\n.example",
+      "valid": false
+    },
+    {
+      "name": "https_scheme",
+      "value": "https://exchange.example",
+      "valid": false
+    },
+    {
+      "name": "http_scheme",
+      "value": "http://exchange.example",
+      "valid": false
+    },
+    {
+      "name": "scheme_relative",
+      "value": "//exchange.example",
+      "valid": false
+    },
+    {
+      "name": "path_suffix",
+      "value": "exchange.example/v1",
+      "valid": false
+    },
+    {
+      "name": "root_path",
+      "value": "exchange.example/",
+      "valid": false
+    },
+    {
+      "name": "query",
+      "value": "exchange.example?x=1",
+      "valid": false
+    },
+    {
+      "name": "fragment",
+      "value": "exchange.example#frag",
+      "valid": false
+    },
+    {
+      "name": "userinfo",
+      "value": "agent@exchange.example",
+      "valid": false
+    },
+    {
+      "name": "scheme_and_path",
+      "value": "https://exchange.example/v1",
+      "valid": false
+    },
+    {
+      "name": "trailing_colon",
+      "value": "exchange.example:",
+      "valid": false
+    },
+    {
+      "name": "non_numeric_port",
+      "value": "exchange.example:https",
+      "valid": false
+    },
+    {
+      "name": "port_too_long",
+      "value": "exchange.example:123456",
+      "valid": false
+    },
+    {
+      "name": "two_ports",
+      "value": "exchange.example:80:443",
+      "valid": false
+    },
+    {
+      "name": "port_zero",
+      "value": "exchange.example:0",
+      "valid": false
+    },
+    {
+      "name": "port_above_max",
+      "value": "exchange.example:65536",
+      "valid": false
+    },
+    {
+      "name": "port_five_digits_out_of_range",
+      "value": "exchange.example:99999",
+      "valid": false
+    },
+    {
+      "name": "port_leading_zero",
+      "value": "exchange.example:0443",
+      "valid": false
+    },
+    {
+      "name": "port_leading_zeros",
+      "value": "exchange.example:00443",
+      "valid": false
+    },
+    {
+      "name": "port_leading_zero_short",
+      "value": "exchange.example:012",
+      "valid": false
+    },
+    {
+      "name": "leading_hyphen",
+      "value": "-exchange.example",
+      "valid": false
+    },
+    {
+      "name": "trailing_hyphen",
+      "value": "exchange-.example",
+      "valid": false
+    },
+    {
+      "name": "underscore",
+      "value": "_acme.example",
+      "valid": false
+    },
+    {
+      "name": "empty_label",
+      "value": "exchange..example",
+      "valid": false
+    },
+    {
+      "name": "leading_dot",
+      "value": ".exchange.example",
+      "valid": false
+    },
+    {
+      "name": "trailing_root_dot",
+      "value": "exchange.example.",
+      "valid": false
+    },
+    {
+      "name": "ipv6_literal",
+      "value": "[::1]",
+      "valid": false
+    },
+    {
+      "name": "ipv6_literal_with_port",
+      "value": "[::1]:443",
+      "valid": false
+    },
+    {
+      "name": "wildcard",
+      "value": "*.exchange.example",
+      "valid": false
+    },
+    {
+      "name": "non_ascii",
+      "value": "exchänge.example",
+      "valid": false
+    },
+    {
+      "name": "punycode_of_the_same_name",
+      "value": "xn--exchnge-8wa.example",
+      "valid": true
+    },
+    {
+      "name": "kelvin_sign_label",
+      "value": "marKet.example",
+      "valid": false
+    },
+    {
+      "name": "fullwidth_letter",
+      "value": "Ｅxchange.example",
+      "valid": false
+    },
+    {
+      "name": "over_max_length",
+      "value": "a.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "valid": false
+    }
+  ],
+  "bare_domain_max_len": 260,
+  "bare_domain_pattern": "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$"
+}

@@ -76,7 +76,7 @@ opt-in for the caller, and it is now a rejection. The value is the bare host of 
 recipient ("exchange.example", "exchange.example:8081"), never an endpoint URL: an endpoint
 in the payload would hand the caller the choice of where the next hop dials, which is the
 lever the well-known resolver exists to remove. A recipient MUST reject a request whose
-`exchange` is not one of its own domains, with `INVALID_ARGUMENT` and no typed reason — a
+`exchange` is not its own domain, with `INVALID_ARGUMENT` and no typed reason — a
 mis-addressed request is malformed rather than a domain-level failure.
 
 The signature does not already establish this. It proves the sender signed *the URL it
@@ -129,7 +129,7 @@ field in the contract.
 rule, so an empty value passed. It is the execute-routing target, the value a relaying
 Broker groups a mixed batch by, and — because `TransactionRequest` has no top-level
 `exchange` — the audience statement of an execute: on receipt an Exchange MUST reject the
-request unless EVERY item's `offer.exchange` names one of its own domains. An empty value is
+request unless EVERY item's `offer.exchange` names its own domain. An empty value is
 unroutable, and the swap-protection the offer signature is supposed to provide is vacuous
 when the signed bytes carry no recipient at all. Adding the rule does not change any signed
 bytes: a protovalidate rule is a field option, not a field.

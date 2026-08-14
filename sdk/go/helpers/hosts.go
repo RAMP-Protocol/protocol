@@ -4,17 +4,24 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
-// Host predicates for the routing checks that precede a signed call to an
-// address a network party named.
+// Host and domain predicates: what a network party's value is allowed to be
+// before anything is done with it.
 //
-// Both exist for the same reason: a value that arrives inside an offer, or
-// inside a manifest that offer pointed at, is about to be concatenated into a URL
-// or dialed directly. Neither check is about the network — they are pure string
-// work, which is why they sit in the IO-free tier and can run before anything is
-// fetched.
+// Two kinds live here, and keeping them apart is the point. The ROUTING
+// predicates — IsBareHost and HostAnchored — precede a signed call to an address
+// a network party named: a value that arrives inside an offer, or inside a
+// manifest that offer pointed at, is about to be concatenated into a URL or
+// dialed directly. The SHAPE predicate — IsBareDomain — answers a different
+// question: whether a value is the form the wire contract admits at all, the
+// same rule protovalidate stamps on the domain-valued fields.
+//
+// None of them is about the network. They are pure string work, which is why
+// they sit in the IO-free tier and can run before anything is fetched — and, for
+// the audience check that builds on IsBareDomain, before anything is looked up.
 
 // ErrInvalidHost signals a reference that cannot be read as a host at all.
 var ErrInvalidHost = errors.New("helpers: reference is not a usable host")
@@ -84,6 +91,61 @@ func IsBareHost(ref string) (bool, error) {
 		return false, nil
 	}
 	return host == ref, nil
+}
+
+// BareDomainPattern is the wire shape of a domain-valued field: a bare domain
+// with an optional ":port", never a URL. "sub.example.com:443" passes; a value
+// carrying a scheme, a path, userinfo, or a query never does.
+//
+// One rule, three copies, all gated. These bytes are the protovalidate pattern
+// carried by the contract's recipient-addressing fields — the `exchange` field on
+// each addressed request, Offer.exchange and their neighbours, NOT every field in
+// ramp.proto that happens to hold a domain — so the check a client makes before
+// sending and the check the wire makes on arrival cannot answer differently. The
+// shared conformance vectors record the pattern beside the cases, and a guard in
+// the conformance tier holds it against the descriptor; which fields belong to
+// the family is pinned there too.
+//
+// The port is a real 1-65535 range rather than "one to five digits", which is
+// why it is spelled out at this length. That distinction is load-bearing on
+// exactly the values a digit count waves through: :0, :65536 and :99999 name no
+// port at all, and :0443 is not a spelling of 443 but a different string that
+// would compare unequal to it.
+const BareDomainPattern = `^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$`
+
+// MaxBareDomainLen is the length bound belonging to the same rule — the
+// protovalidate `string.max_len` those fields carry. Without it a client would
+// accept a pattern-valid but over-length value the server then rejects, which is
+// the client/server split the shared rule exists to close.
+const MaxBareDomainLen = 260
+
+var bareDomain = regexp.MustCompile(BareDomainPattern)
+
+// IsBareDomain reports whether v is a bare domain of the shape the wire admits.
+//
+// This is NOT IsBareHost, and the two are deliberately kept apart because they
+// answer different questions. IsBareHost asks whether a value is safe to
+// concatenate into a URL — a structural question, answered by round-tripping
+// the value through a URL parse, which accepts anything a host may hold.
+// IsBareDomain asks whether a value is the SHAPE THE CONTRACT ADMITS, which is
+// narrower: a trailing root dot, a leading or trailing hyphen, an underscore
+// and a bracketed IPv6 literal are all usable hosts and none of them is a value
+// the wire rule accepts. A caller vetting a value it is about to dial wants the
+// first; a caller vetting a value that arrived in a message wants this one.
+//
+// The length is checked FIRST, so the work stays bounded on hostile input. This
+// is insurance rather than a fix for a known blowup: the pattern is unambiguous —
+// every repetition is anchored by a literal dot no label class can consume — so
+// it cannot backtrack catastrophically, and the cost of matching it is linear in
+// all three languages. Bounding that cost is still worth the one comparison it
+// takes, since the Python and TypeScript ports run it on backtracking engines
+// where linear work on an unbounded string is a caller's choice to make, not
+// ours. Doing it in this order costs nothing in agreement, even though the three
+// languages count length in different units — a value whose byte, code-point and
+// UTF-16 counts disagree contains something outside ASCII, and the pattern
+// refuses it whichever check runs first.
+func IsBareDomain(v string) bool {
+	return len(v) <= MaxBareDomainLen && bareDomain.MatchString(v)
 }
 
 // HostAnchored reports whether candidate is anchored to anchor — the same host
