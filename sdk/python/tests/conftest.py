@@ -27,6 +27,10 @@ GO_TESTDATA = _REPO_ROOT / "sdk" / "go" / "helpers" / "testdata"
 # helpers). GO_TESTDATA stays the L1 crypto-vector home; this is its L2 sibling.
 GO_RESOLVERS_TESTDATA = _REPO_ROOT / "sdk" / "go" / "resolvers" / "testdata"
 CONFORMANCE_CORPUS = _REPO_ROOT / "conformance" / "corpus"
+# The Go->Python/TS symbol mapping the API-surface parity gate already
+# maintains. Suites that need the local name of a Go symbol read it from here
+# instead of keeping a private copy, so the two cannot disagree.
+SYMBOL_MAP = _REPO_ROOT / "sdk" / "parity" / "symbol-map.json"
 
 
 def load_json(path: pathlib.Path) -> Any:
