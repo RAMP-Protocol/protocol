@@ -53,12 +53,80 @@ def enum_names_from_descriptor(desc_path):
     return out
 
 
-def strip_titles(o):
+PROTO_ENUM_VALUE = re.compile(r"^[A-Z][A-Z0-9_]*$")  # proto enum value style
+
+
+def is_enum_node(node):
+    """True when this schema node is the emission of an enum-typed proto field.
+
+    protoc-gen-jsonschema renders one as a name-OR-number union: an anyOf whose
+    string arm carries the SCREAMING_SNAKE value list. A repeated enum puts the
+    same shape under `items`. Read the shape rather than the text, so the answer
+    does not depend on how a value happens to be spelled.
+    """
+    candidates = [node] + list(node.get("anyOf") or [])
+    for c in candidates:
+        vals = c.get("enum") if isinstance(c, dict) else None
+        if isinstance(vals, list) and vals and all(
+                isinstance(v, str) and PROTO_ENUM_VALUE.match(v) for v in vals):
+            return True
+    return False
+
+
+def is_generated_title(title, node, message):
+    """True when the generator produced this title from a NAME, not from a comment.
+
+    Two shapes, and both are noise in a description:
+      - a message-level title whose words rejoin to the message name
+        ("Acceptable Restriction" -> AcceptableRestriction);
+      - the type label on an enum-typed property ("Obligation State").
+    """
+    if message is not None and title.replace(" ", "") == message:
+        return True
+    return is_enum_node(node)
+
+
+def fold_titles(o, message=None, root=True):
+    """Fold a comment-derived title into its description; drop generated ones.
+
+    protoc-gen-jsonschema SPLITS a leading proto comment: when the comment has a
+    blank-line-separated first paragraph, that paragraph becomes `title` and only
+    the remainder becomes `description`.
+
+    This used to drop every title. The first paragraph of 28 field comments and
+    of every message comment written that way therefore reached Go but never
+    reached gen/python/wire/models.py or gen/ts/wire/schemas.ts — silently, since
+    nothing failed and the proto and the Go bindings still read complete.
+
+    Keeping every title is the other wrong answer: datamodel-code-generator names
+    classes from titles, so a sentence-long title would become a class name.
+
+    So the two kinds are separated by HOW the title was produced, which
+    is_generated_title reads off the node's shape. Comment text moves to the
+    front of the description, keeping the paragraph break the author wrote.
+    """
     if isinstance(o, dict):
-        return {k: strip_titles(v) for k, v in o.items() if k != "title"}
+        out = {k: fold_titles(v, message, False) for k, v in o.items() if k != "title"}
+        title = o.get("title")
+        if title is not None and not is_generated_title(title, o, message if root else None):
+            desc = out.get("description")
+            out["description"] = title if not desc else title + "\n\n" + desc
+        return out
     if isinstance(o, list):
-        return [strip_titles(x) for x in o]
+        return [fold_titles(x, message, False) for x in o]
     return o
+
+
+def assert_no_titles(doc):
+    """Every title is either folded into a description or dropped as generated.
+
+    A `title` that survives into the merged document means fold_titles met a node
+    shape it does not classify. Fail here rather than let datamodel-code-generator
+    name a class from it.
+    """
+    leftover = re.findall(r'"title":\s*("(?:[^"\\]|\\.)*")', json.dumps(doc))
+    if leftover:
+        sys.exit(f"unfolded titles reached the merged schema: {leftover[:5]}")
 
 
 def fix_string_null_default(o):
@@ -452,14 +520,12 @@ def main(src_dir, desc_path, out_file, required_path, unique_path, bytes_len_pat
     enum_defs = {}   # name -> {"type":"string","enum":[...]}
     unnamed = []
 
-    proto_enum = re.compile(r"^[A-Z][A-Z0-9_]*$")  # proto enum value style
-
     def hoist_enums(o):
         if isinstance(o, dict):
             vals = o.get("enum")
             # Only hoist SCREAMING_SNAKE proto-enum value sets; leave non-proto string
             # enums inline (e.g. the Infinity/-Infinity/NaN double-as-string set).
-            if isinstance(vals, list) and vals and all(isinstance(x, str) and proto_enum.match(x) for x in vals):
+            if isinstance(vals, list) and vals and all(isinstance(x, str) and PROTO_ENUM_VALUE.match(x) for x in vals):
                 clean = [v for v in vals if not v.endswith("_UNSPECIFIED")]
                 name = enum_name.get(frozenset(clean))
                 if name:
@@ -487,7 +553,7 @@ def main(src_dir, desc_path, out_file, required_path, unique_path, bytes_len_pat
         if "jsonschema" in base or ".strict." in base or ".bundle." in base:
             continue
         name = re.sub(r"^ramp\.(?:admin\.)?v1\.", "", base.split(".schema")[0])
-        d = strip_titles(json.load(open(f)))
+        d = fold_titles(json.load(open(f)), message=name)
         d.pop("$id", None); d.pop("$schema", None)
         defs[name] = d
     defs = fix_string_null_default(open_messages(collapse_numeric_strings(hoist_enums(fix_refs(defs)))))
@@ -514,6 +580,7 @@ def main(src_dir, desc_path, out_file, required_path, unique_path, bytes_len_pat
         sys.exit(f"unresolved external $refs (add to WKT map): {leftover}")
     if unnamed:
         sys.exit(f"inline enums with no descriptor match (value sets): {unnamed[:5]}")
+    assert_no_titles(combined)
     assert_no_numeric_string_arms(combined)
     assert_defaults_valid(combined)
 
