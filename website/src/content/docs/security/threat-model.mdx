@@ -166,8 +166,8 @@ The admin plane (`ramp.admin.v1`) adds one high-value asset: the append-once evi
 
 ### T-ADM-1: Evidence-row enumeration / cross-tenant read
 **Attack**: A caller with network reachability walks transaction ids (which legitimately circulate to counterparty agents) and reads other tenants' evidence rows — offer pricing, licensing terms, quota.
-**Countermeasure**: `GetTransactionEvidence` selects by the `(tenant_id, transaction_id)` **pair** — an id alone is not a bearer capability, and naming the tenant in the request is what lets a deployment put a per-tenant ACL in front of the RPC. The network boundary (internal listener + source allowlist) remains the outer control.
-**Residual**: The pair selector does not by itself defeat enumeration, and it should not be read as if it did. The tenant half is not a secret — tenant ids are human brand slugs (`hearst-media`), and a tenant's slug is visible to every agent holding one of its offers, because it prefixes the `offer_id` inside the signed offer. A caller who reaches this plane and has done business with a tenant therefore already holds one valid tenant value and can walk ids against it. RAMP also places no entropy requirement on `transaction_id`, so those ids may legitimately be sequential. What actually bounds enumeration is the network boundary; the pair selector narrows a stolen id, and a per-tenant ACL narrows the caller.
+**Countermeasure**: `GetTransactionEvidence` selects by the `(tenant_id, transaction_id)` **pair**, so an id alone is not a bearer capability. That is the whole of the protocol-level control. The gate that actually bounds this threat is the network boundary — an internal listener plus a source allowlist, failing closed when the list is empty — and it is configured per deployment, not by the contract.
+**Residual**: The pair selector does not by itself defeat enumeration, and it should not be read as if it did. The tenant half is not a secret — tenant ids are human brand slugs (`hearst-media`), and a tenant's slug is visible to every agent holding one of its offers, because it prefixes the `offer_id` inside the signed offer. A caller who reaches this plane and has done business with a tenant therefore already holds one valid tenant value and can walk ids against it. RAMP also places no entropy requirement on `transaction_id`, so those ids may legitimately be sequential. What actually bounds enumeration is the network boundary, and nothing else does. A per-tenant ACL is sometimes assumed to be the answer here and is not available: this plane carries no request signing and no per-operator identity, so there is no caller to attach an ACL to. That is a property of the plane's design, not a gap someone forgot to fill — until the plane gains a verified caller identity, the allowlist is the only control, and the pair selector merely narrows what a stolen id is worth.
 
 ### T-ADM-2: NOT_FOUND existence oracle
 **Attack**: A caller probes a transaction id under the wrong tenant and uses the error shape to confirm the transaction exists somewhere.
@@ -191,9 +191,16 @@ Two properties follow that read like defects and are not. An Exchange may pin th
 
 | Level | Threat IDs | What It Means |
 |---|---|---|
-| **Preventable at protocol level** | T3, T4, T5, T6, T7, T8, T9, T12, T16, T19, T22, T23, T24, T25, T26, T-ATT-1, T-ATT-2, T-ATT-3, T-ATT-5, T-DEL-1, T-DEL-2, T-DEL-3, T-DEL-4, T-DEL-5, T-DEL-6, T-ADM-1, T-ADM-2, T-ADM-3, T-ADM-4 | Protocol changes make the attack structurally impossible |
-| **Detectable via reconciliation** | T1, T2, T4, T5, T13, T14, T15, T17, T27, T-ATT-4 | Three-sided reconciliation catches it |
+| **Preventable at protocol level** | T3, T4, T5, T6, T7, T8, T9, T12, T16, T19, T22, T23, T24, T25, T26, T-ATT-1, T-ATT-2, T-ATT-3, T-ATT-5, T-DEL-1, T-DEL-2, T-DEL-3, T-DEL-4, T-DEL-5, T-DEL-6, T-ADM-2, T-ADM-3 | Protocol changes make the attack structurally impossible |
+| **Bounded only by a deployment control** | T-ADM-1 | The protocol narrows the attack but cannot stop it. A control outside the contract is what actually bounds it, and it has to be configured per deployment |
+| **Detectable via reconciliation** | T1, T2, T4, T5, T13, T14, T15, T17, T27, T-ATT-4, T-ADM-4 | Three-sided reconciliation catches it |
 | **Legal/contractual only** | T10, T11, T13, T17, T18, T20, T21, T28, T29, T30 | Can't enforce technically |
+
+**Why the admin-plane rows moved.** T-ADM-1 and T-ADM-4 were filed as structurally prevented, and neither is. T-ADM-1's own countermeasure text names the network boundary as the outer control, which is a deployment control by definition; the pair selector narrows a stolen id but does not stop a caller who reaches the plane. T-ADM-4's countermeasure is documenting a trust boundary and comparing keys out of band — that is detection, not prevention, and it depends on a verifier actually performing the comparison.
+
+**The row that needs configuring is not the one an operator expects.** `ramp.admin.v1` has no request signing and no per-operator identity, so there is nothing to attach a per-tenant ACL to — a per-tenant ACL is structurally unavailable under this plane's design, not merely unimplemented. The only gate is the network allowlist, which must fail closed on an empty list.
+
+That gate now covers a materially larger blast radius than it used to. The pre-existing admin RPCs are config writes scoped to one named tenant (`SetTenantFeeRate`, `SetReportingPolicy`). `GetTransactionEvidence` is a **cross-tenant read of the whole evidence plane**: anyone inside the allowlist can read every tenant's signed offers, pricing, licensing terms and quota. Same gate, different consequence — sizing the allowlist as if it still guarded fee-rate writes under-protects the read.
 
 ### The Three Lines of Defense
 
@@ -213,7 +220,7 @@ Line 3: Legal/contractual enforcement
   Handles the black-box problem (what agent did internally)
 ```
 
-## 7. Attestation-Specific Threats
+## 8. Attestation-Specific Threats
 
 ### T-ATT-1: Forged attestation injection
 
@@ -243,7 +250,7 @@ Line 3: Legal/contractual enforcement
 **Attack**: Unauthorized party registers a domain similar to a legitimate verifier (e.g., `doub1everify.com`) and pushes attestations claiming to be a trusted vendor.
 **Countermeasure (protocol)**: `catalog_contributors` in `ramp.json` uses exact domain matching. The provider must explicitly list the contributor's domain. The Exchange fetches the WBA directory from the exact `verifier` domain in the attestation and verifies the signature against that domain's `keys` (the JWK Set at `/.well-known/http-message-signatures-directory`).
 
-## 8. Delegation and Authorization Threats
+## 9. Delegation and Authorization Threats
 
 ### T-DEL-1: Delegation token theft
 
@@ -275,7 +282,7 @@ Line 3: Legal/contractual enforcement
 **Attack**: Agent obtains multiple delegation tokens for the same subscription (e.g., by requesting new delegations from different intermediaries) to exceed per-subscription quotas.
 **Countermeasure (protocol)**: **Exchange tracks quotas by `subscription_id`, not by delegation token.** All tokens referencing the same subscription share one counter. Multiple tokens for the same subscription do not multiply the quota. Rate limiting is applied at the subscription level regardless of how many delegation tokens reference it.
 
-## 9. Licensing-Layer Threats
+## 10. Licensing-Layer Threats
 
 ### T-LIC-1: SSRF / phishing via `License.uri`
 
