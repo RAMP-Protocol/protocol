@@ -164,7 +164,9 @@ Cost on a capable edge: one Ed25519 verify for the URL, one SHA-256 thumbprint, 
 
 ## Single-Use URL Enforcement
 
-For providers wanting additional replay protection, the edge function can enforce single-use URLs via edge KV:
+For providers wanting additional replay protection, the edge function can enforce single-use URLs via edge KV.
+
+This needs a per-URL key. The signer itself adds only `exp`, `kid`, `agent_id` and `sig`, so a transaction identifier is present only when the Exchange already put it on the resource URL before signing — it is covered by the signature either way, because the canonical form takes the query verbatim. A deployment without one can key on `sig` instead, which is unique per URL by construction.
 
 ```mermaid
 sequenceDiagram
@@ -234,7 +236,7 @@ graph LR
         DIR["WBA directory or<br/>CloudFront key group"]
     end
 
-    PRIV_KEY -->|"Signs: canonical URL incl. exp, agent_id, txn_id"| SIGNED_URL[Signed URL]
+    PRIV_KEY -->|"Signs the canonical URL; adds exp, kid, agent_id"| SIGNED_URL[Signed URL]
     SIGNED_URL -->|"Agent fetches"| PUB_KEY
     PUB_KEY -->|"Verifies signature"| DECISION{Valid?}
     PRIV_KEY -.->|"Public key published at"| DIR
