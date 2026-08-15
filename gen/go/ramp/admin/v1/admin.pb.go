@@ -597,7 +597,7 @@ func (x *SetReportingPolicyResponse) GetPolicy() *ReportingPolicy {
 // provenance and not authority.
 //
 // SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
-// DELIVERED. transaction_id, request_correlation, created_at and
+// DELIVERED. transaction_id, request_correlation, broker, created_at and
 // agent_directory_url are this Exchange's own assertions, outside both
 // signatures; the delivery witness is the edge delivery log, reconciled
 // separately (the join key, sha256 of the signed retrieval URL, lives on
@@ -823,9 +823,22 @@ type TransactionEvidence struct {
 	// identity the Exchange vouched for. Only the outermost hop is classified;
 	// per-hop identity for a longer chain is out of scope here.
 	//
-	// No wire rule: nothing upstream constrains what a server may record, and a
-	// rule here could invalidate a row for a transaction that legitimately
-	// executed — the same reasoning as requester_id.
+	// The rule bounds the SHAPE without pinning the format. A ledger renders
+	// this value, so an unbounded string here would re-open on a new field
+	// exactly the surface request_id's printable-ASCII bound closes — control
+	// characters, terminal escapes and newlines reaching a rendered forensic
+	// row. Printable ASCII and 255 characters admit every provenance form a
+	// server might reasonably record (a thumbprint, a host, an opaque id) while
+	// refusing the shapes that only matter to a renderer. It is deliberately
+	// NOT a thumbprint pattern: the value is implementation-defined, and a
+	// format rule here could invalidate a row for a transaction that
+	// legitimately executed under a server that spells it some other way — the
+	// requester_id reasoning. The pattern admits the EMPTY string explicitly,
+	// because ” is one of the three states — recorded, and the acceptance
+	// arrived direct. A bare ^[!-~]+$ would need at least one character and
+	// would delete that state, leaving absence to mean both "not recorded" and
+	// "arrived direct". Same alternation shape agent_directory_url uses above,
+	// for the same reason.
 	Broker        *string `protobuf:"bytes,19,opt,name=broker,proto3,oneof" json:"broker,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1472,7 +1485,7 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"n\n" +
 	"\x1aSetReportingPolicyResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12>\n" +
-	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\xc6\n" +
+	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\xdd\n" +
 	"\n" +
 	"\x13TransactionEvidence\x121\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\n" +
@@ -1500,8 +1513,8 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x13agent_directory_url\x18\x10 \x01(\tB\xcc\x01\xbaH\xc8\x01r\xc5\x01\x18\x80\x042\xbf\x01^$|^https://[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?/[!-~]*$R\x11agentDirectoryUrl\x12R\n" +
 	"\x13request_correlation\x18\x11 \x01(\v2!.ramp.admin.v1.RequestCorrelationR\x12requestCorrelation\x12A\n" +
 	"\n" +
-	"created_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt\x12\x1b\n" +
-	"\x06broker\x18\x13 \x01(\tH\x00R\x06broker\x88\x01\x01B\t\n" +
+	"created_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt\x122\n" +
+	"\x06broker\x18\x13 \x01(\tB\x15\xbaH\x12r\x10\x18\xff\x012\v^$|^[!-~]+$H\x00R\x06broker\x88\x01\x01B\t\n" +
 	"\a_broker\"a\n" +
 	"\x12RequestCorrelation\x123\n" +
 	"\n" +

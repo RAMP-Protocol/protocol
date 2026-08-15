@@ -275,7 +275,7 @@ enum ObligationState {
 // provenance and not authority.
 //
 // SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
-// DELIVERED. transaction_id, request_correlation, created_at and
+// DELIVERED. transaction_id, request_correlation, broker, created_at and
 // agent_directory_url are this Exchange's own assertions, outside both
 // signatures; the delivery witness is the edge delivery log, reconciled
 // separately (the join key, sha256 of the signed retrieval URL, lives on
@@ -546,10 +546,26 @@ message TransactionEvidence {
   // identity the Exchange vouched for. Only the outermost hop is classified;
   // per-hop identity for a longer chain is out of scope here.
   //
-  // No wire rule: nothing upstream constrains what a server may record, and a
-  // rule here could invalidate a row for a transaction that legitimately
-  // executed — the same reasoning as requester_id.
-  optional string broker = 19;
+  // The rule bounds the SHAPE without pinning the format. A ledger renders
+  // this value, so an unbounded string here would re-open on a new field
+  // exactly the surface request_id's printable-ASCII bound closes — control
+  // characters, terminal escapes and newlines reaching a rendered forensic
+  // row. Printable ASCII and 255 characters admit every provenance form a
+  // server might reasonably record (a thumbprint, a host, an opaque id) while
+  // refusing the shapes that only matter to a renderer. It is deliberately
+  // NOT a thumbprint pattern: the value is implementation-defined, and a
+  // format rule here could invalidate a row for a transaction that
+  // legitimately executed under a server that spells it some other way — the
+  // requester_id reasoning. The pattern admits the EMPTY string explicitly,
+  // because '' is one of the three states — recorded, and the acceptance
+  // arrived direct. A bare ^[!-~]+$ would need at least one character and
+  // would delete that state, leaving absence to mean both "not recorded" and
+  // "arrived direct". Same alternation shape agent_directory_url uses above,
+  // for the same reason.
+  optional string broker = 19 [(buf.validate.field).string = {
+    max_len: 255
+    pattern: "^$|^[!-~]+$"
+  }];
 }
 
 // RequestCorrelation — the recorded X-Request-ID correlation for one

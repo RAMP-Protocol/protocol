@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+**`broker` is bounded printable ASCII (rule addition on a field added in this revision).** The
+field is a server-written value that a ledger renders, so an unbounded string would have re-opened on
+a new field exactly the surface `RequestCorrelation.request_id`'s printable-ASCII bound closes:
+control characters, terminal escapes and newlines reaching a rendered forensic row. It now carries
+`max_len: 255` and `^$|^[!-~]+$`.
+
+The rule bounds the SHAPE and deliberately does not pin the FORMAT. A thumbprint pattern would
+invalidate a row for a transaction that legitimately executed under a server that records provenance
+some other way -- the `requester_id` reasoning. The alternation admits the empty string on purpose,
+because `''` is one of the field's three states; a bare `^[!-~]+$` would delete it and leave absence
+meaning both "not recorded" and "arrived direct".
+
 **`broker` moves from `TransactionState` to `TransactionEvidence`, and gains explicit presence
 (field move on a message that has not shipped).** `TransactionState.broker` was a plain `string`
 describing a transaction-log column that no implementation has. Two things were wrong with that.
