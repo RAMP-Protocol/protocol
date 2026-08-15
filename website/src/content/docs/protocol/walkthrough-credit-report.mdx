@@ -396,7 +396,7 @@ The `rate_limit` on the response signals that D&B enforces per-caller rate limit
 
 ## Step 4 — ExecuteTransaction
 
-The agent selects the **standard tier** ($61.99) — sufficient depth for due diligence without the premium cost of the comprehensive report. The agent sends the offer's `exchange_signature` back to the Exchange for stateless verification:
+The agent selects the **standard tier** ($61.99) — sufficient depth for due diligence without the premium cost of the comprehensive report. The agent sends the offer's `signature` back to the Exchange for stateless verification:
 
 `POST https://exchange.dnb.com/ramp/v1/ramp.v1.ExchangeService/ExecuteTransaction`
 

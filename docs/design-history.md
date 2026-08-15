@@ -21,9 +21,15 @@ expected common case, not an exception. RFC 9421 lets each hop add its own
 `Signature` / `Signature-Input` entry independently, so a verifier checks each
 hop against the key it fetches from that hop's `/.well-known/ramp.json` — there is
 no nested in-message co-signing scheme to define or version. Content that must
-outlive a single HTTP exchange — offers, attestations — keeps its signature as
-JWS (RFC 7515, `alg=EdDSA`), because those objects are stored, forwarded, and
-re-verified out of band.
+outlive a single HTTP exchange — offers, attestations — keeps a content
+signature of its own, because those objects are stored, forwarded, and
+re-verified out of band. That signature is detached: the raw Ed25519 bytes in
+hex over an RFC 8785 JCS canonical form, with the algorithm named by the JOSE
+identifier `EdDSA`. Parts of the schema described this value as a JWS for
+several revisions while other parts described it as hex; the hex reading is the
+one every verifier implements, and the schema now says so in one voice. A
+detached signature over a canonical form needs no JOSE library in any language,
+and the value stays a plain field the admin plane can re-verify offline.
 
 Multi-hop forwarding rides on the same primitive rather than an in-message hop
 list. A forwarded request carries a stack of RFC 9421 signatures — one per party
@@ -593,15 +599,25 @@ identifiers that are *acted on* or *persisted*: the settlement and evidence keys
 and the reconciliation chain joins on.
 
 One deliberate carve-out, by that same persisted-identifier rule: the admin
-plane's forensic evidence read (`ramp.admin.v1.TransactionEvidence
-.request_correlation`) carries the correlation id the Exchange PERSISTED for a
-transaction, with a provenance flag. This is not a return of the deleted
-fields — no live request or response carries a correlation id in its body, and
-the agent plane still has none. The evidence row is a read-only view of a
-store, and the store legitimately holds the `X-Request-ID` value it recorded;
-a forensic read that could not state it would be unable to join the row to the
+plane's forensic evidence read
+(`ramp.admin.v1.TransactionEvidence.request_correlation`) carries the
+correlation id the Exchange PERSISTED for a transaction, with a provenance
+flag. This is not a return of the deleted fields — no live request or response
+carries a correlation id in its body, and the agent plane still has none. The
+evidence row is a read-only view of a store, and that store legitimately holds
+the `X-Request-ID` value it recorded: the append-once transaction-evidence row
+carries `request_id` plus `request_id_minted`, written once at the service
+boundary and constrained to be present or absent together — the Exchange
+storage model documents that store and those two columns.
+A forensic read that could not state it would be unable to join the row to the
 edge delivery log. Correlation still *flows* only in headers; the admin field
 states, after the fact, what was recorded.
+
+The premise names the EVIDENCE store specifically, not the event store. The
+transaction log has no correlation column — its idempotency key is a dedupe
+key — and the discovery-plane `query_id` on `ResourceQueryReceived` is the
+correlation of a different request on a different leg, not this value under
+another name.
 
 ## Idempotency is an explicit `idempotency_key`, not an overloaded `id`
 
@@ -936,14 +952,22 @@ revisiting as a three-language change.
 ## One agent identity, one key
 
 The protocol carries a single agent identity and the SDK does not offer a second.
-`agent_identity_hash` is defined as the RFC 7638 thumbprint of the agent's
-request-signing key; an Exchange verifies the detached offer acceptance against the
-key registered for whichever caller the request signature identified; and the
-delivery URL is bound to that same thumbprint, which a later fetch must prove
-possession of. A separately-custodied acceptance key would be refused at execute,
-and any URL it did produce could never be fetched — the presented key would not
-match the binding. So the client takes one Signer, and the public half of that
-same key for the fetch header, which a Signer cannot yield.
+`agent_identity_hash` is the RFC 7638 thumbprint of the ACCEPTANCE key — the key
+whose signature over `AgentAcceptancePayload` the Exchange verified — and the
+delivery URL is bound to that thumbprint, which a later fetch must prove
+possession of. So a separately-custodied acceptance key produces a URL its
+custodian cannot fetch with, and the fetching key it does hold does not match the
+binding. The client therefore takes one Signer, and the public half of that same
+key for the fetch header, which a Signer cannot yield.
+
+The anchor is the acceptance rather than the request signature because the two
+part company under brokering. A Broker may author a re-packaged transaction as
+sender, so the RFC 9421 signer on that leg is the broker and the in-body
+acceptance is the only agent-authored signature in the request. Deriving the
+identity from the transport signer would name the broker on exactly the topology
+the acceptance exists to survive. On a direct hop the agent signs both with one
+key and the distinction does not show, which is why earlier text here described
+the value as the thumbprint of the request-signing key.
 
 One consequence for the cross-language surface: Go's `SignAgentBinding` takes a
 `Signer` plus the public half, while Python's counterpart takes raw seed bytes.

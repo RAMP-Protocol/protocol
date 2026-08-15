@@ -167,8 +167,10 @@ The idempotency cache uses a concurrent LRU with sharded locks to avoid contenti
 
 ```go
 // IdempotencyCache stores recent TransactionResponse values keyed by the
-// request's idempotency key (TransactionRequest.idempotency_key).
-// Sharded by hash of key to reduce lock contention.
+// BARE request-level key (TransactionRequest.idempotency_key) — correct here,
+// and deliberately not the derived per-item key the transaction log stores:
+// the cached value is the whole response, so the whole request is what it
+// dedupes. Sharded by hash of key to reduce lock contention.
 type IdempotencyCache struct {
     shards    [256]*idempotencyShard
     ttl       time.Duration
@@ -218,9 +220,10 @@ Result: Two signed URLs issued for one billing event. CDN redeems one. No financ
 **Scale Tier**: At 10K+ RPS, use Redis for distributed idempotency:
 
 ```go
-// Distributed idempotency check via Redis. The key is the request's
-// idempotency key (TransactionRequest.idempotency_key), not the wire
-// correlation id (which rides the X-Request-ID HTTP header).
+// Distributed idempotency check via Redis. The key is the BARE request-level
+// key (TransactionRequest.idempotency_key) — this caches whole responses, so
+// it is not the derived per-item key the transaction log stores — and not the
+// wire correlation id either (which rides the X-Request-ID HTTP header).
 func (h *ExchangeHandler) checkIdempotency(ctx context.Context, idempotencyKey string) (*rampv1.TransactionResponse, error) {
     // 1. Local LRU (fast path, no network)
     if cached, ok := h.localCache.Get(idempotencyKey); ok {

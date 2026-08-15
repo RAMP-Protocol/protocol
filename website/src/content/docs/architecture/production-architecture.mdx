@@ -54,7 +54,7 @@ Every party in the protocol authenticates via Ed25519 key pairs. Each party anno
 |---|---|---|---|
 | **Requester** (Agent or other client) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`) | RFC 9421 HTTP Message Signature (Ed25519) over the HTTP request (`@method`, `@target-uri`, `content-digest` — request body bound via `content-digest`) | Exchange |
 | **Intermediary** (e.g. Broker) | `{domain}/.well-known/ramp.json` (`role=ROLE_AGENT`, same format) | each intermediary adds its own RFC 9421 HTTP Message Signature (Ed25519) to the request — the forwarding chain is the stack of signatures, each covering the request plus the prior hop's signature | Exchange |
-| **Exchange** | `{domain}/.well-known/ramp.json` (`role=ROLE_EXCHANGE`); offer-signing keys in the WBA directory at `{domain}/.well-known/http-message-signatures-directory` | `exchange_signature` on every Offer | Agent, Broker |
+| **Exchange** | `{domain}/.well-known/ramp.json` (`role=ROLE_EXCHANGE`); offer-signing keys in the WBA directory at `{domain}/.well-known/http-message-signatures-directory` | `signature` on every Offer | Agent, Broker |
 | **Provider** | `{domain}/.well-known/ramp.json` (`role=ROLE_PUBLISHER`) | Authorization declaration (not signatures) | Agent, Exchange |
 | **Verification Vendor** | WBA directory at `{domain}/.well-known/http-message-signatures-directory` | `ResourceAttestation.signature` on catalog content (v1.0) | Exchange, Agent |
 

@@ -146,9 +146,9 @@ func seeds() map[string]proto.Message {
 			CreatedAt:                         timestamppb.New(fixedTime),
 		},
 		"TransactionState": &rampadminv1.TransactionState{
-			IdempotencyKey: "idem-tx:offer-seed",
-			Expiry:         timestamppb.New(fixedTime),
-			SignedUrlHash:  []byte(strings.Repeat("h", 32)),
+			IdempotencyKey:  "idem-tx:offer-seed",
+			SignedUrlExpiry: timestamppb.New(fixedTime),
+			SignedUrlHash:   []byte(strings.Repeat("h", 32)),
 		},
 		"ReportingObligationState": &rampadminv1.ReportingObligationState{
 			State:     rampadminv1.ObligationState_OBLIGATION_STATE_PENDING,

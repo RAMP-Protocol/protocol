@@ -237,7 +237,7 @@ class DisputeRequest(WireModel):
     )
     idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n filing does not open a duplicate case. The dispute's durable identity is the\n Exchange-assigned dispute_id in DisputeResponse.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
+        description="DEDUPE SCOPE. The invariant is the one stated on\n TransactionRequest.idempotency_key, and the namespace is the same as\n UsageReport's and for the same reason: this message carries no acceptance\n payload, so the namespace is the TRANSACTION being disputed and the server\n dedupes per (transaction_id, key).",
     )
     reason: DisputeReason = Field(..., description='Reason for the dispute.')
     received_content_hash: str | None = Field(
@@ -251,7 +251,10 @@ class DisputeRequest(WireModel):
         '',
         description='Must reference a filed UsageReport. The agent MUST file a UsageReport\n (via ReportUsage RPC) and receive a report_id BEFORE filing a dispute.\n This prevents fire-and-forget disputes and ensures the Exchange has\n the complete evidence chain: what was offered, what was transacted,\n what the agent reported using, and what the agent disputes.\n The dispute chain: Transaction → UsageReport → Dispute.',
     )
-    transaction_id: str | None = Field('', description='Transaction being disputed.')
+    transaction_id: str | None = Field(
+        '',
+        description='Transaction being disputed. MUST be non-empty. It is also the dedupe\n namespace for `idempotency_key` above, so a filing that names no\n transaction has no namespace to dedupe within.',
+    )
     ver: str | None = Field(
         '',
         description='RAMP protocol version — "1.0". Stamped by the sender from a single\n constant; advisory on receive. See "Protocol version" in the file header.',
@@ -906,7 +909,7 @@ class RequestCorrelation(WireModel):
     )
     request_id: constr(pattern=r'^[!-~]+$', min_length=1, max_length=255) = Field(
         ...,
-        description="The correlation id as persisted. Caller-influenceable: the SDK's\n request-id middleware propagates any non-empty caller-supplied\n X-Request-ID verbatim (no conformance check) and mints a random 128-bit\n hex token when the header is absent. The rules below therefore bound\n what this PLANE will replay into a rendered ledger — printable ASCII,\n capped — and the Exchange records a correlation only when the persisted\n id conforms; a nonconforming header value is recorded as no correlation\n (the wrapping message stays absent), never echoed here.",
+        description="The correlation id as persisted. GOVERNING RULE, applied on the WRITE\n path: the Exchange records a correlation only when the received\n X-Request-ID conforms to the rules below — printable ASCII, 1..255. A\n nonconforming header value is recorded as NO correlation: the wrapping\n message stays absent, the id is not stored, and nothing is echoed here.\n A present request_id has therefore already passed this check on the way\n in; the rules are not a read-side filter over a laxer stored value.\n Background, for a reader tracing where the value comes from: it is\n caller-influenceable. The SDK's request-id middleware propagates any\n non-empty caller-supplied X-Request-ID verbatim and mints a random\n 128-bit hex token when the header is absent. That middleware performs no\n conformance check of its own — the check above is the Exchange's, at the\n service boundary where it decides whether to persist the pair.",
     )
 
 
@@ -1120,9 +1123,15 @@ class TransactionEvidence(WireModel):
         ...,
         description='Signing-algorithm label, server-derived (see offer_sig_algorithm).\n Pinned to "EdDSA". Same rule as\n ramp.admin.v1.TransactionEvidence.offer_sig_algorithm (drift-gated).',
     )
-    agent_directory_url: str | None = Field(
+    agent_directory_url: (
+        constr(
+            pattern=r'^$|^https://[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?/[!-~]*$',
+            max_length=512,
+        )
+        | None
+    ) = Field(
         '',
-        description='Named directory, not discovery: ramp.v1 uses "discovery" for RESOURCE\n discovery (DiscoveryRequest, OfferGroup.discovery_method), a different\n thing entirely. This is the agent\'s well-known directory document, which\n is what every sentence describing the field already calls it.',
+        description='PROVENANCE, NOT AUTHORITY. This field is covered by neither signature and\n is written by the same party as the rest of the row, so it can never\n establish that agent_public_key is authentic — see TRUST BOUNDARY above,\n which says where the agent anchor must come from instead. Verification\n tooling MUST NOT treat this value as a fetch target it can trust: the row\n author chose it, so following it hands them the choice of what the\n "independent" copy says.\n\n The rules below bound the damage from tooling that follows the field\n anyway; they do not make following it safe. The value must be \'\' or an\n https URL whose host uses the same recipient-host grammar as\n ramp.v1.Offer.exchange, with an optional port and an ASCII-printable path,\n within 512 bytes. Stated precisely, because a rule that sounds stronger\n than it is would be worse than none: this refuses a plaintext or non-http\n scheme, embedded userinfo or whitespace, and anything that is not a\n host-plus-path shape. It does NOT refuse an IPv4-literal host — the\n recipient-host grammar admits all-numeric labels, so https://169.254.169.254/\n matches. Blocking link-local and private address space is the fetching\n tool\'s job, and it is one more reason this field is not a fetch target.\n\n Named directory, not discovery: ramp.v1 uses "discovery" for RESOURCE\n discovery (DiscoveryRequest, OfferGroup.discovery_method), a different\n thing entirely. This is the agent\'s well-known directory document, which\n is what every sentence describing the field already calls it.',
     )
     agent_public_key: constr(
         pattern=r'^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?)$',
@@ -1130,7 +1139,7 @@ class TransactionEvidence(WireModel):
         max_length=44,
     ) = Field(
         ...,
-        description='The registry-pinned agent verifying key (raw 32-byte Ed25519) the\n acceptance verified against. Same rule as\n ramp.admin.v1.TransactionEvidence.exchange_signing_public_key\n (drift-gated).',
+        description='The registry-pinned agent verifying key (raw 32-byte Ed25519) the\n acceptance verified against. This is the ACCEPTANCE key, which is the\n agent identity for the transaction — ramp.v1.AgentAcceptance defines that\n normatively under "Agent identity", and this row stores the key that\n definition names. It is deliberately NOT the transport signer: a Broker\n may author a re-packaged execute as sender, so the RFC 9421 signer on that\n leg is the broker, and a row anchored on it would name the wrong party.\n Same rule as\n ramp.admin.v1.TransactionEvidence.exchange_signing_public_key\n (drift-gated).',
     )
     created_at: AwareDatetime = Field(
         ..., description='When the Exchange wrote this row (server clock).'
@@ -1164,7 +1173,7 @@ class TransactionEvidence(WireModel):
     )
     offer_sig_algorithm: OfferSigAlgorithm = Field(
         ...,
-        description='Spelled sig_algorithm, not signature_algorithm, which is how ramp.v1 and\n the sibling agent_acceptance_signature_algorithm spell it. The short form\n is INHERITED, not chosen: this label names the neighbouring offer_sig, and\n that field copies an upstream field name verbatim\n (ramp.v1.AgentAcceptancePayload.offer_sig). A label that renamed the field\n it describes would be the worse inconsistency.\n\n The long spelling is also not available: ramp.v1 retired a scalar\n offer-signature field in RAMP-103 (the execute request now reflects the\n full signed Offer instead), and scripts/check-doc-conformance.sh bans that\n identifier across the protos and the docs so the removed name cannot be\n read as live anywhere. A field named after it here would either fail that\n gate or force it open.',
+        description='Spelled sig_algorithm, not signature_algorithm, which is how ramp.v1 and\n the sibling agent_acceptance_signature_algorithm spell it. The short form\n is INHERITED, not chosen: this label names the neighbouring offer_sig, and\n that field copies an upstream field name verbatim\n (ramp.v1.AgentAcceptancePayload.offer_sig). A label that renamed the field\n it describes would be the worse inconsistency.\n\n The long spelling is also not available: ramp.v1 retired a scalar\n offer-signature field (the execute request now reflects the\n full signed Offer instead), and scripts/check-doc-conformance.sh bans that\n identifier across the protos and the docs so the removed name cannot be\n read as live anywhere. A field named after it here would either fail that\n gate or force it open.',
     )
     request_correlation: RequestCorrelation | None = Field(
         None,
@@ -1176,7 +1185,7 @@ class TransactionEvidence(WireModel):
     )
     requester_domain: str | None = Field(
         '',
-        description='The signed Requester.domain, verbatim. Unbounded for the same reason as\n requester_id: upstream ramp.v1.Requester places no wire constraint on\n either value, and the evidence row must be able to state whatever bytes\n the acceptance actually signed — a bound here could make the row fail its\n own validation for a transaction that legitimately executed.',
+        description="The signed Requester.domain, verbatim. Unbounded HERE even though the\n agent plane bounds it — ramp.v1.Requester.domain carries max_len 260 and\n the bare-host pattern. Those rules govern what an Exchange may ACCEPT on\n the way in; they do not govern what this row may STATE after the fact. The\n row's job is to reproduce the bytes the acceptance actually signed, so a\n rule here could make the row fail its own validation for a transaction\n that legitimately executed — one accepted under an earlier rule set, or\n signed by a party that spelled the value some other way. Same conclusion\n as requester_id, reached differently: Requester.id genuinely carries no\n wire rule at all.",
     )
     requester_id: str | None = Field(
         '',
@@ -1234,7 +1243,7 @@ class TransactionResultItem(WireModel):
     )
     transaction_id: str | None = Field(
         '',
-        description="Exchange-assigned transaction identifier. Opaque to agents; the format\n is implementation-defined (the documented storage model mints a\n time-ordered ULID as the record's primary key). No entropy requirement:\n the admin plane's evidence read (ramp.admin.v1.GetTransactionEvidence)\n selects by the (tenant_id, transaction_id) PAIR, so a transaction id\n alone is not a bearer capability there and nothing rests on this\n field's format being unguessable.",
+        description='ENTROPY. RAMP places no entropy requirement on this value. An implementer\n choosing a sequential id should know precisely what that does and does not\n cost, because the protection here is narrower than "unguessable ids are\n unnecessary".\n\n WHAT IS GUARANTEED. The admin plane\'s evidence read\n (ramp.admin.v1.GetTransactionEvidence) selects by the\n (tenant_id, transaction_id) PAIR, so a transaction id ALONE is never a\n bearer capability for the forensic row. Counterparty agents legitimately\n hold the ids of their own transactions, and that pairing is what stops one\n of those ids from reading the row on its own. That is the whole guarantee,\n and a conformance guard fails if the selector stops being a pair.\n\n WHAT IS NOT GUARANTEED: resistance to ENUMERATION. The tenant half of the\n pair is not a secret. Deployments use human brand slugs, and the slug is\n handed to every agent that holds an offer from that tenant — it prefixes\n the offer id inside the signed offer. So a caller who can reach the admin\n plane at all, and who has done business with a tenant, already knows one\n valid tenant value and can walk sequential transaction ids against it.\n What bounds that is the network-layer reachability restriction on the\n admin plane (see the ramp.admin.v1 file header): that plane must not be\n exposed on the public agent-facing listener, and it is the outer control\n an operator must not relax. An Exchange that wants enumeration resistance\n in depth should mint unguessable ids; RAMP does not require it, and no\n agent-plane behavior depends on this format either way.',
     )
 
 
@@ -1243,20 +1252,24 @@ class TransactionState(WireModel):
         '',
         description='The broker that routed the acceptance, as the transaction log recorded\n it. \'\' when the acceptance arrived direct — the log\'s broker column is\n optional-empty, and an append-once view states a value for every\n column, so \'\' is a stated fact, not a gap. A ledger renders its\n "broker routed" row from this. No wire rule: this states whatever the\n log holds, and nothing upstream constrains the broker label.',
     )
-    expiry: AwareDatetime = Field(
-        ..., description='When the signed retrieval URL expires.'
-    )
     idempotency_key: constr(min_length=1) = Field(
         ...,
-        description='The transaction\'s per-item idempotency key as logged. The Exchange\n derives it as TransactionEvidence.request_idempotency_key + ":" +\n offer_id — unconditionally, single-item requests included — so distinct\n items of a batch dedupe independently, and this value is NEVER byte-equal\n to the request-level key. A ledger joining this row against a log export\n matches on this derived form, not on the bare request key. No upper\n bound: the derivation appends an id whose length nothing constrains.',
+        description='The transaction\'s per-item idempotency key as logged. The Exchange\n derives it as TransactionEvidence.request_idempotency_key + ":" +\n offer_id — unconditionally, single-item requests included — so distinct\n items of a batch dedupe independently, and this value is NEVER byte-equal\n to the request-level key. A ledger joining this row against a log export\n matches on this derived form, not on the bare request key, and it reaches\n the TRANSACTION-side events only: a usage-report event stores the report\'s\n own idempotency key, because a report addresses a whole transaction and\n has no offer id to derive with. Join a usage report on transaction_id\n instead. No upper\n bound: the derivation appends an id whose length nothing constrains.',
     )
-    signed_url_hash: constr(
-        pattern=r'^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?)$',
-        min_length=43,
-        max_length=44,
+    signed_url_expiry: AwareDatetime | None = Field(
+        None,
+        description="Absent when the transaction minted no signed URL: DELIVERY_METHOD_DIRECT\n returns the resource inline or from the Exchange's own endpoint, so there\n is nothing to expire. DELIVERY_METHOD_INSTRUCTIONS and\n DELIVERY_METHOD_STREAMING both mint one and always carry this field.\n Absence is a stated fact about the delivery method, not missing data —\n unlike broker below, whose log column is optional-empty and whose '' is\n itself the value, a direct delivery has no value to state here.",
+    )
+    signed_url_hash: (
+        constr(
+            pattern=r'^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?)$',
+            min_length=43,
+            max_length=44,
+        )
+        | None
     ) = Field(
-        ...,
-        description="sha256 of the signed retrieval URL — the join key against the edge\n delivery log's url_hash. Hash-only by design: the full URL is a live\n bearer capability until expiry and is deliberately absent from this\n plane (see TransactionEvidence's delivery section).",
+        None,
+        description="sha256 of the signed retrieval URL — the join key against the edge\n delivery log's signed_url_hash column. Same digest on both sides, in\n different forms: 32 raw bytes here (base64 in protojson) against a text\n string there, so a join must normalize both to the raw digest rather than\n compare the two encodings directly. Hash-only by design: the full URL is a live\n bearer capability until expiry and is deliberately absent from this\n plane (see TransactionEvidence's delivery section). Absent exactly when\n signed_url_expiry is, and for the same reason: no signed URL, nothing to\n hash. The\n `optional` keyword is load-bearing — it gives this scalar explicit\n presence, so protovalidate skips the length rule on an unset value, while\n a PRESENT hash must still be exactly 32 bytes.",
     )
 
 
@@ -1679,7 +1692,7 @@ class SetTenantFeeRateResponse(WireModel):
 class TransactionResponse(WireModel):
     agent_identity_hash: str | None = Field(
         '',
-        description='Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK\n Thumbprint of the agent\'s Ed25519 request-signing key (see "Retrieval-URL\n identity binding" above). Shared across the request; set once.',
+        description='Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK\n Thumbprint of the agent\'s Ed25519 key, as "Agent identity" on\n AgentAcceptance defines it — the acceptance key, not the transport signer,\n which may be a Broker. See "Retrieval-URL identity binding" in the file\n header for how a delivery endpoint checks the binding. Shared across the\n request; set once, which is why every acceptance in one request must be\n signed by the same key.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(
@@ -1759,13 +1772,14 @@ class UsageReport(WireModel):
     )
     idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n report does not double-count usage. The report's durable identity is the\n Exchange-assigned report_id in UsageReportResponse.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
+        description='DEDUPE SCOPE. The invariant is the one stated on\n TransactionRequest.idempotency_key. This message carries no acceptance\n payload, so there is no in-body agent signature to anchor on; the namespace\n is instead the TRANSACTION the report addresses, and the server dedupes per\n (transaction_id, key). That satisfies the invariant without depending on\n the transport signer: the transaction was bound to exactly one agent by its\n acceptance at execute time, so two agents relayed by the same Broker report\n against different transactions and never share a namespace.',
     )
     timestamp: AwareDatetime | None = Field(
         None, description='When the resource was used (ISO 8601).'
     )
     transaction_id: str | None = Field(
-        '', description='Transaction ID from the delivery.'
+        '',
+        description='Transaction ID from the delivery. MUST be non-empty. It is also the dedupe\n namespace for `idempotency_key` above, so a report that names no\n transaction has no namespace to dedupe within.',
     )
     usage: Usage | None = Field(None, description='How the resource was actually used.')
     ver: str | None = Field(
@@ -2051,11 +2065,11 @@ class Offer(WireModel):
     )
     signature: str | None = Field(
         '',
-        description="CANONICAL SIGNING (RFC 8785 JCS over canonical proto-JSON). The signed bytes\n are:\n\n     signed_payload = JCS( protojson(msg with signature +\n                                      signature_algorithm cleared) )\n\n i.e. render the message to canonical proto-JSON with the PINNED option set\n below, then apply RFC 8785 (JSON Canonicalization Scheme). Deterministic\n protobuf BINARY marshaling is explicitly NOT canonical across languages and\n versions (protobuf's own caveat), so it cannot be a cross-language signing\n primitive; JCS over proto-JSON can be reproduced by ANY language (Go, TS,\n Python) without a protobuf binary codec, so a broker/exchange/client in any\n language signs and verifies byte-identically. This same definition applies to\n the agent offer-acceptance signature (AgentAcceptance.signature).\n\n PINNED proto-JSON option set (the arbiter is the Go-emitted golden vector —\n whatever these options render MUST be byte-identical across all languages):\n   - enum values as NAME strings (not numbers);\n   - int64 / uint64 / fixed64 as decimal STRINGS;\n   - bytes as standard (padded) base64;\n   - google.protobuf.Timestamp / Duration per the proto-JSON WKT rules\n     (RFC 3339 string for Timestamp);\n   - unpopulated fields are OMITTED (never emitted as defaults);\n   - field naming is snake_case (the proto field name, UseProtoNames=true),\n     the naming every SDK target shares — wire, corpus, and signed form are all\n     snake_case;\n   - google.protobuf.Struct (`ext`) → a plain JSON object; JCS then sorts its\n     keys recursively, so the Struct case needs no special handling.\n\n UNKNOWN FIELDS. A canonicalizer either OMITS content it has no schema for or\n PRESERVES it, and the rule follows from which:\n\n   - OMITTING (e.g. proto-JSON, which emits only schema-defined fields): such a\n     canonicalizer CANNOT reproduce the signed bytes of a message carrying\n     unknown fields — what it renders silently drops part of what the signer\n     covered. It MUST refuse the message rather than emit the reduced bytes,\n     and a verifier built on it MUST reject rather than verify over them. The\n     refusal binds at EVERY depth: a nested message and each element of a\n     repeated or map field carries its own unknown-field set.\n   - PRESERVING (a canonicalizer that carries unrecognized members through):\n     it reproduces the signed bytes faithfully, so there is nothing to refuse.\n\n Either way an APPENDED field cannot pass: an omitting canonicalizer refuses\n the message, and a preserving one renders the appended member into bytes the\n signer never covered, so the signature fails. Without the refusal the omitting\n case would fail OPEN — an intermediary could add unknown fields to an\n already-signed message and leave its signature verifying, smuggling\n unauthenticated content through a message the recipient treats as verified.\n\n Extensions therefore ride in `ext` / `ext_critical`, which are defined fields\n and inside the signed bytes — never as undeclared field numbers.\n\n Because the signature covers `terms`, `pricing`, `expires_at`, and\n `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,\n quotas, obligations, the expiry, the execute-routing target, or any\n licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.",
+        description="The signature covers every field, including `pricing`, `terms` (the full\n licensing payload), `expires_at`, and `exchange`. Only `signature` and\n `signature_algorithm` are excluded from the signed bytes. `expires_at` is\n signed so the offer's validity window is integrity-protected: a relaying\n Broker cannot extend (or shorten) the TTL of a signed offer to replay it\n outside the window the Exchange intended.\n\n CANONICAL SIGNING (RFC 8785 JCS over canonical proto-JSON). The signed bytes\n are:\n\n     signed_payload = JCS( protojson(msg with signature +\n                                      signature_algorithm cleared) )\n\n i.e. render the message to canonical proto-JSON with the PINNED option set\n below, then apply RFC 8785 (JSON Canonicalization Scheme). Deterministic\n protobuf BINARY marshaling is explicitly NOT canonical across languages and\n versions (protobuf's own caveat), so it cannot be a cross-language signing\n primitive; JCS over proto-JSON can be reproduced by ANY language (Go, TS,\n Python) without a protobuf binary codec, so a broker/exchange/client in any\n language signs and verifies byte-identically. This same definition applies to\n the agent offer-acceptance signature (AgentAcceptance.signature).\n\n PINNED proto-JSON option set (the arbiter is the Go-emitted golden vector —\n whatever these options render MUST be byte-identical across all languages):\n   - enum values as NAME strings (not numbers);\n   - int64 / uint64 / fixed64 as decimal STRINGS;\n   - bytes as standard (padded) base64;\n   - google.protobuf.Timestamp / Duration per the proto-JSON WKT rules\n     (RFC 3339 string for Timestamp);\n   - unpopulated fields are OMITTED (never emitted as defaults);\n   - field naming is snake_case (the proto field name, UseProtoNames=true),\n     the naming every SDK target shares — wire, corpus, and signed form are all\n     snake_case;\n   - google.protobuf.Struct (`ext`) → a plain JSON object; JCS then sorts its\n     keys recursively, so the Struct case needs no special handling.\n\n UNKNOWN FIELDS. A canonicalizer either OMITS content it has no schema for or\n PRESERVES it, and the rule follows from which:\n\n   - OMITTING (e.g. proto-JSON, which emits only schema-defined fields): such a\n     canonicalizer CANNOT reproduce the signed bytes of a message carrying\n     unknown fields — what it renders silently drops part of what the signer\n     covered. It MUST refuse the message rather than emit the reduced bytes,\n     and a verifier built on it MUST reject rather than verify over them. The\n     refusal binds at EVERY depth: a nested message and each element of a\n     repeated or map field carries its own unknown-field set.\n   - PRESERVING (a canonicalizer that carries unrecognized members through):\n     it reproduces the signed bytes faithfully, so there is nothing to refuse.\n\n Either way an APPENDED field cannot pass: an omitting canonicalizer refuses\n the message, and a preserving one renders the appended member into bytes the\n signer never covered, so the signature fails. Without the refusal the omitting\n case would fail OPEN — an intermediary could add unknown fields to an\n already-signed message and leave its signature verifying, smuggling\n unauthenticated content through a message the recipient treats as verified.\n\n Extensions therefore ride in `ext` / `ext_critical`, which are defined fields\n and inside the signed bytes — never as undeclared field numbers.\n\n Because the signature covers `terms`, `pricing`, `expires_at`, and\n `exchange`, an intermediary (Broker) cannot tamper with price, restrictions,\n quotas, obligations, the expiry, the execute-routing target, or any\n licensing term without invalidating it.\n Agent SHOULD verify the signature (RFC 2119) against the Exchange's public\n key, and MUST reject an offer whose `expires_at` is in the past.",
     )
     signature_algorithm: str | None = Field(
         '',
-        description="JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.",
+        description="Signature algorithm. Always 'EdDSA' — the JOSE algorithm identifier for\n Ed25519 (RFC 8032). Only the identifier is borrowed from JOSE: `signature`\n is a detached hex signature, not a JWS.",
     )
     subscription_id: str | None = Field(
         None,
@@ -2184,7 +2198,7 @@ class TransactionRequest(WireModel):
     )
     idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns\n the original result rather than re-executing. The transaction's durable\n identity is the Exchange-assigned transaction_id in the response.\n Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per\n (authenticated caller, key), never globally, so a key chosen by one caller\n cannot collide with another's cached result.",
+        description='DEDUPE SCOPE — the invariant, stated here once and cited by every other RPC\n that carries an idempotency_key: a key chosen by one caller MUST NEVER\n collide with another caller\'s cached result. The server dedupes within a\n namespace, never globally. What that namespace IS differs per RPC, because\n the RPCs do not authenticate the same way; each states its own, and each\n namespace has to make the invariant true on its own terms.\n\n For this RPC the namespace is the ACCEPTANCE IDENTITY — the agent key\n defined under "Agent identity" on AgentAcceptance — never the transport\n sender, which may be a Broker relaying many agents behind one key. The\n server dedupes per (acceptance identity, key).',
     )
     items: list[TransactionItem] = Field(
         ...,

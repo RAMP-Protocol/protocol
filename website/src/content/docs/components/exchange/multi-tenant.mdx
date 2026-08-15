@@ -181,7 +181,7 @@ Both endpoints return `404 Not Found` if the domain is not associated with any t
 
 ### Public Key Exchange
 
-Brokers and agents fetch the Exchange's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`) and read its `keys` to verify `exchange_signature` on Offers without manual key exchange. The Exchange's offer-signing Ed25519 public keys are inline in that directory as RFC 7517 JWKs, each identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
+Brokers and agents fetch the Exchange's WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`) and read its `keys` to verify the `signature` on Offers without manual key exchange. The Exchange's offer-signing Ed25519 public keys are inline in that directory as RFC 7517 JWKs, each identified by its RFC 7638 thumbprint (the RFC 9421 `keyid`).
 
 **Note:** The Exchange's WBA directory keys serve the Exchange's offer-signing keys. Agent keys are separate — they are fetched from the agent's own WBA directory (self-signup) or stored from enterprise registration (out-of-band key exchange).
 

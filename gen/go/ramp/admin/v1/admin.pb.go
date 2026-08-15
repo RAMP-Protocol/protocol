@@ -28,6 +28,16 @@
 // transaction ids); what bounds this read is the pair selector plus the
 // network-layer reachability restriction above.
 //
+// Those two controls are not interchangeable, and the weaker one must not be
+// mistaken for the stronger. The pair selector stops a transaction id ALONE
+// from reading a row. It does NOT make enumeration infeasible: tenant ids are
+// human brand slugs, and a tenant's slug is visible to every agent holding one
+// of its offers, so a caller who reaches this plane can pair a known tenant
+// with guessed ids. Enumeration is bounded by reachability — this service MUST
+// NOT be exposed on the public agent-facing listener — which is why that
+// restriction is the load-bearing control on this plane rather than a
+// deployment convenience.
+//
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is
@@ -82,9 +92,13 @@ const (
 // enum — the agent plane states reporting REQUIREMENTS, never their
 // server-side lifecycle) so the admin package stays self-contained.
 //
-// A REJECTED usage report (a non-OK UsageReportResponse carrying
-// ErrorDetail.usage_report_rejection) does not transition the obligation:
-// it stays PENDING until an accepted report, a waiver, or expiry.
+// A REJECTED usage report does not transition the obligation: it stays
+// PENDING until an accepted report, a waiver, or expiry. A rejection carries
+// no response message at all — ramp.v1.UsageReportResponse is sent only when
+// the report was ACCEPTED, and a rejection travels as a non-OK transport
+// error carrying ramp.v1.ErrorDetail.usage_report_rejection. So a ledger
+// renderer reading a PENDING obligation cannot assume a response was ever
+// produced for the attempt that left it PENDING.
 type ObligationState int32
 
 const (
@@ -542,22 +556,85 @@ func (x *SetReportingPolicyResponse) GetPolicy() *ReportingPolicy {
 // the same row, so anyone able to write a row could mint one that passes.
 // To prove AUTHENTICITY — that these parties actually operated these keys —
 // a verifier must compare the embedded keys against copies obtained
-// independently: the Exchange's published JWKS (the authority per
-// protocol/authentication) and the agent's directory (agent_directory_url
-// names where this Exchange pinned agent_public_key from). The in-row keys
-// are convenience copies that keep old rows verifiable after rotation; they
-// are not the root of trust. After matching a key against its authority, a
-// verifier should also check the key's RFC 7638 thumbprint against the
-// Exchange's published revocation list (ramp.v1.KeyRevocationList, served at
-// WBAFile.revocation_url): a key can be rotated out because it was revoked,
-// and a revoked key must not count as authentic.
+// independently. WHERE to obtain them is the whole question, and only one of
+// the two sides has an anchor inside a signature.
+//
+//	EXCHANGE SIDE — anchored in the signed bytes. offer_canonical_bytes
+//	carries the offer's `exchange` field (ramp.v1.Offer.exchange, the bare
+//	host of the issuing Exchange), and offer_sig covers it. A verifier reads
+//	that host OUT of the canonical bytes, fetches THAT Exchange's published
+//	JWKS (the authority per protocol/authentication), and checks
+//	exchange_signing_public_key against it. A fabricated row cannot redirect
+//	this step: changing `exchange` invalidates the very signature the check
+//	exists to confirm.
+//
+//	AGENT SIDE — no signed anchor exists, and the row does not supply one.
+//	agent_directory_url is covered by NEITHER signature and is written by the
+//	same party as the rest of the row, so a fabricated row satisfies any
+//	procedure built on it using a host its author controls. It is a record of
+//	where this Exchange states it pinned the key — provenance, never the
+//	authority. The agent anchor must be obtained INDEPENDENTLY: from the
+//	counterparty the audit is being run for, or from the agent's own directory
+//	located through an identity the verifier already trusts. This is unchanged
+//	when agent_directory_url is '' (the agent carried no directory anchor):
+//	there is no fallback to reconstruct, because the field was never the
+//	authority to fall back from.
+//
+// The in-row keys are convenience copies that keep old rows verifiable after
+// rotation; they are not the root of trust. After matching a key against its
+// authority, a verifier should also check that key's RFC 7638 thumbprint
+// against a revocation list, because a key can be rotated out BECAUSE it was
+// revoked, and a revoked key must not count as authentic.
+//
+// There is no single list covering both keys. WBAFile.revocation_url is one
+// URL per DIRECTORY, so the ramp.v1.KeyRevocationList served there can only
+// enumerate that directory's own revoked keys. Each key is therefore checked
+// against ITS OWN side's list, reached the same way its anchor was:
+// exchange_signing_public_key against the issuing Exchange's list, reached
+// from the `exchange` host inside offer_canonical_bytes; agent_public_key
+// against the agent's list, reached from the independent directory that
+// supplied the agent anchor above — never from agent_directory_url, which is
+// provenance and not authority.
 //
 // SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
-// DELIVERED. transaction_id, request_id and created_at are this Exchange's
-// own assertions about the delivery, outside both signatures; the delivery
-// witness is the edge delivery log, reconciled separately (the join key,
-// sha256 of the signed retrieval URL, lives on TransactionState
-// .signed_url_hash).
+// DELIVERED. transaction_id, request_correlation, created_at and
+// agent_directory_url are this Exchange's own assertions, outside both
+// signatures; the delivery witness is the edge delivery log, reconciled
+// separately (the join key, sha256 of the signed retrieval URL, lives on
+// TransactionState.signed_url_hash). agent_directory_url is listed here as well as under the
+// trust boundary above because it is the one unsigned field a reader is most
+// likely to mistake for an anchor.
+//
+// WHAT A ROW HOLDER CAN REPLAY. The delivery section below withholds the
+// signed retrieval URL because it is a live bearer capability. Applying the
+// same test to what the row DOES carry gives two different answers.
+//
+//	THE OFFER IS REPLAYABLE, AND THAT IS A STATED RESIDUAL RISK. offer_json
+//	plus offer_sig are a complete, valid, Exchange-signed offer.
+//	ramp.v1.Offer binds NO requester and NO tenant — it has no audience field
+//	naming who the offer was issued to — and its expires_at is optional. So a
+//	row holder can present this same offer to its issuing Exchange and accept
+//	it under their OWN identity, and nothing inside the signed bytes
+//	contradicts them. Three things bound that, and none of them closes it:
+//	  - expires_at ends the window, when the Exchange set one;
+//	  - Offer.exchange names exactly one Exchange that will accept the offer,
+//	    so a replay is confined to that Exchange's own terms and billing;
+//	  - the network-layer reachability restriction on this plane (see the file
+//	    header) decides who can read a row at all.
+//	Closing it needs a requester audience INSIDE the signed offer, which
+//	belongs upstream in ramp.v1 and is not something this plane can add.
+//
+//	THE ACCEPTANCE IS NOT USEFULLY REPLAYABLE. offer_sig, requester_id,
+//	requester_domain and request_idempotency_key are exactly the four fields of
+//	ramp.v1.AgentAcceptancePayload, and agent_acceptance_signature is the
+//	signature over them, so the row does hold a complete, resubmittable
+//	acceptance. Resubmitting it achieves nothing: it carries the same
+//	request-level idempotency key under the same acceptance identity, so it
+//	lands in the same dedupe namespace and the Exchange returns the original
+//	result instead of executing again. What the row does NOT hold is the
+//	agent's private key, so a holder cannot mint an acceptance for a different
+//	offer, identity, or key. The replay exposure here is the offer's, not the
+//	acceptance's.
 type TransactionEvidence struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The evidenced transaction (Exchange-minted transaction identity). The
@@ -611,7 +688,7 @@ type TransactionEvidence struct {
 	// it describes would be the worse inconsistency.
 	//
 	// The long spelling is also not available: ramp.v1 retired a scalar
-	// offer-signature field in RAMP-103 (the execute request now reflects the
+	// offer-signature field (the execute request now reflects the
 	// full signed Offer instead), and scripts/check-doc-conformance.sh bans that
 	// identifier across the protos and the docs so the removed name cannot be
 	// read as live anywhere. A field named after it here would either fail that
@@ -649,18 +726,29 @@ type TransactionEvidence struct {
 	// normalization, not plain equality. No wire rule: the agent plane does not
 	// constrain Requester.id, and this row states what was signed.
 	RequesterId string `protobuf:"bytes,12,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
-	// The signed Requester.domain, verbatim. Unbounded for the same reason as
-	// requester_id: upstream ramp.v1.Requester places no wire constraint on
-	// either value, and the evidence row must be able to state whatever bytes
-	// the acceptance actually signed — a bound here could make the row fail its
-	// own validation for a transaction that legitimately executed.
+	// The signed Requester.domain, verbatim. Unbounded HERE even though the
+	// agent plane bounds it — ramp.v1.Requester.domain carries max_len 260 and
+	// the bare-host pattern. Those rules govern what an Exchange may ACCEPT on
+	// the way in; they do not govern what this row may STATE after the fact. The
+	// row's job is to reproduce the bytes the acceptance actually signed, so a
+	// rule here could make the row fail its own validation for a transaction
+	// that legitimately executed — one accepted under an earlier rule set, or
+	// signed by a party that spelled the value some other way. Same conclusion
+	// as requester_id, reached differently: Requester.id genuinely carries no
+	// wire rule at all.
 	RequesterDomain string `protobuf:"bytes,13,opt,name=requester_domain,json=requesterDomain,proto3" json:"requester_domain,omitempty"`
 	// The REQUEST-level idempotency key the acceptance signs — NOT the derived
 	// per-item key that TransactionState.idempotency_key carries. Same rule as
 	// ramp.v1.TransactionRequest.idempotency_key (drift-gated).
 	RequestIdempotencyKey string `protobuf:"bytes,14,opt,name=request_idempotency_key,json=requestIdempotencyKey,proto3" json:"request_idempotency_key,omitempty"`
 	// The registry-pinned agent verifying key (raw 32-byte Ed25519) the
-	// acceptance verified against. Same rule as
+	// acceptance verified against. This is the ACCEPTANCE key, which is the
+	// agent identity for the transaction — ramp.v1.AgentAcceptance defines that
+	// normatively under "Agent identity", and this row stores the key that
+	// definition names. It is deliberately NOT the transport signer: a Broker
+	// may author a re-packaged execute as sender, so the RFC 9421 signer on that
+	// leg is the broker, and a row anchored on it would name the wrong party.
+	// Same rule as
 	// ramp.admin.v1.TransactionEvidence.exchange_signing_public_key
 	// (drift-gated).
 	AgentPublicKey []byte `protobuf:"bytes,15,opt,name=agent_public_key,json=agentPublicKey,proto3" json:"agent_public_key,omitempty"`
@@ -669,6 +757,26 @@ type TransactionEvidence struct {
 	// this — plus created_at — attests where and when this Exchange obtained
 	// the key. Empty when the agent carries no directory anchor: an append-once
 	// row states a value for every column, so ” is a stated fact, not a gap.
+	//
+	// PROVENANCE, NOT AUTHORITY. This field is covered by neither signature and
+	// is written by the same party as the rest of the row, so it can never
+	// establish that agent_public_key is authentic — see TRUST BOUNDARY above,
+	// which says where the agent anchor must come from instead. Verification
+	// tooling MUST NOT treat this value as a fetch target it can trust: the row
+	// author chose it, so following it hands them the choice of what the
+	// "independent" copy says.
+	//
+	// The rules below bound the damage from tooling that follows the field
+	// anyway; they do not make following it safe. The value must be ” or an
+	// https URL whose host uses the same recipient-host grammar as
+	// ramp.v1.Offer.exchange, with an optional port and an ASCII-printable path,
+	// within 512 bytes. Stated precisely, because a rule that sounds stronger
+	// than it is would be worse than none: this refuses a plaintext or non-http
+	// scheme, embedded userinfo or whitespace, and anything that is not a
+	// host-plus-path shape. It does NOT refuse an IPv4-literal host — the
+	// recipient-host grammar admits all-numeric labels, so https://169.254.169.254/
+	// matches. Blocking link-local and private address space is the fetching
+	// tool's job, and it is one more reason this field is not a fetch target.
 	//
 	// Named directory, not discovery: ramp.v1 uses "discovery" for RESOURCE
 	// discovery (DiscoveryRequest, OfferGroup.discovery_method), a different
@@ -850,14 +958,19 @@ func (x *TransactionEvidence) GetCreatedAt() *timestamppb.Timestamp {
 // fields.
 type RequestCorrelation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The correlation id as persisted. Caller-influenceable: the SDK's
-	// request-id middleware propagates any non-empty caller-supplied
-	// X-Request-ID verbatim (no conformance check) and mints a random 128-bit
-	// hex token when the header is absent. The rules below therefore bound
-	// what this PLANE will replay into a rendered ledger — printable ASCII,
-	// capped — and the Exchange records a correlation only when the persisted
-	// id conforms; a nonconforming header value is recorded as no correlation
-	// (the wrapping message stays absent), never echoed here.
+	// The correlation id as persisted. GOVERNING RULE, applied on the WRITE
+	// path: the Exchange records a correlation only when the received
+	// X-Request-ID conforms to the rules below — printable ASCII, 1..255. A
+	// nonconforming header value is recorded as NO correlation: the wrapping
+	// message stays absent, the id is not stored, and nothing is echoed here.
+	// A present request_id has therefore already passed this check on the way
+	// in; the rules are not a read-side filter over a laxer stored value.
+	// Background, for a reader tracing where the value comes from: it is
+	// caller-influenceable. The SDK's request-id middleware propagates any
+	// non-empty caller-supplied X-Request-ID verbatim and mints a random
+	// 128-bit hex token when the header is absent. That middleware performs no
+	// conformance check of its own — the check above is the Exchange's, at the
+	// service boundary where it decides whether to persist the pair.
 	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Provenance: true = server-minted, false = propagated from the caller.
 	// The two are byte-indistinguishable in request_id alone, so a forensic
@@ -925,16 +1038,42 @@ type TransactionState struct {
 	// offer_id — unconditionally, single-item requests included — so distinct
 	// items of a batch dedupe independently, and this value is NEVER byte-equal
 	// to the request-level key. A ledger joining this row against a log export
-	// matches on this derived form, not on the bare request key. No upper
+	// matches on this derived form, not on the bare request key, and it reaches
+	// the TRANSACTION-side events only: a usage-report event stores the report's
+	// own idempotency key, because a report addresses a whole transaction and
+	// has no offer id to derive with. Join a usage report on transaction_id
+	// instead. No upper
 	// bound: the derivation appends an id whose length nothing constrains.
 	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// When the signed retrieval URL expires.
-	Expiry *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expiry,proto3" json:"expiry,omitempty"`
+	// When the signed retrieval URL expires. Named for the transaction-log
+	// column it states, exactly as signed_url_hash below is: this message
+	// carries log facts, so it joins the log by name with no translation step.
+	// The same instant has other names on other planes — the wire calls it
+	// TransactionResultItem.expires_at and the Exchange's own store calls it
+	// url_expires_at — so a bare `expiry` here would have been a fourth
+	// spelling of one value.
+	//
+	// Absent when the transaction minted no signed URL: DELIVERY_METHOD_DIRECT
+	// returns the resource inline or from the Exchange's own endpoint, so there
+	// is nothing to expire. DELIVERY_METHOD_INSTRUCTIONS and
+	// DELIVERY_METHOD_STREAMING both mint one and always carry this field.
+	// Absence is a stated fact about the delivery method, not missing data —
+	// unlike broker below, whose log column is optional-empty and whose ” is
+	// itself the value, a direct delivery has no value to state here.
+	SignedUrlExpiry *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=signed_url_expiry,json=signedUrlExpiry,proto3" json:"signed_url_expiry,omitempty"`
 	// sha256 of the signed retrieval URL — the join key against the edge
-	// delivery log's url_hash. Hash-only by design: the full URL is a live
+	// delivery log's signed_url_hash column. Same digest on both sides, in
+	// different forms: 32 raw bytes here (base64 in protojson) against a text
+	// string there, so a join must normalize both to the raw digest rather than
+	// compare the two encodings directly. Hash-only by design: the full URL is a live
 	// bearer capability until expiry and is deliberately absent from this
-	// plane (see TransactionEvidence's delivery section).
-	SignedUrlHash []byte `protobuf:"bytes,3,opt,name=signed_url_hash,json=signedUrlHash,proto3" json:"signed_url_hash,omitempty"`
+	// plane (see TransactionEvidence's delivery section). Absent exactly when
+	// signed_url_expiry is, and for the same reason: no signed URL, nothing to
+	// hash. The
+	// `optional` keyword is load-bearing — it gives this scalar explicit
+	// presence, so protovalidate skips the length rule on an unset value, while
+	// a PRESENT hash must still be exactly 32 bytes.
+	SignedUrlHash []byte `protobuf:"bytes,3,opt,name=signed_url_hash,json=signedUrlHash,proto3,oneof" json:"signed_url_hash,omitempty"`
 	// The broker that routed the acceptance, as the transaction log recorded
 	// it. ” when the acceptance arrived direct — the log's broker column is
 	// optional-empty, and an append-once view states a value for every
@@ -983,9 +1122,9 @@ func (x *TransactionState) GetIdempotencyKey() string {
 	return ""
 }
 
-func (x *TransactionState) GetExpiry() *timestamppb.Timestamp {
+func (x *TransactionState) GetSignedUrlExpiry() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Expiry
+		return x.SignedUrlExpiry
 	}
 	return nil
 }
@@ -1294,7 +1433,8 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"n\n" +
 	"\x1aSetReportingPolicyResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12>\n" +
-	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\xce\b\n" +
+	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\x9e\n" +
+	"\n" +
 	"\x13TransactionEvidence\x121\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\rtransactionId\x12'\n" +
@@ -1317,20 +1457,21 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x10requester_domain\x18\r \x01(\tR\x0frequesterDomain\x12B\n" +
 	"\x17request_idempotency_key\x18\x0e \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x15requestIdempotencyKey\x121\n" +
-	"\x10agent_public_key\x18\x0f \x01(\fB\a\xbaH\x04z\x02h R\x0eagentPublicKey\x12.\n" +
-	"\x13agent_directory_url\x18\x10 \x01(\tR\x11agentDirectoryUrl\x12R\n" +
+	"\x10agent_public_key\x18\x0f \x01(\fB\a\xbaH\x04z\x02h R\x0eagentPublicKey\x12\xfd\x01\n" +
+	"\x13agent_directory_url\x18\x10 \x01(\tB\xcc\x01\xbaH\xc8\x01r\xc5\x01\x18\x80\x042\xbf\x01^$|^https://[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?/[!-~]*$R\x11agentDirectoryUrl\x12R\n" +
 	"\x13request_correlation\x18\x11 \x01(\v2!.ramp.admin.v1.RequestCorrelationR\x12requestCorrelation\x12A\n" +
 	"\n" +
 	"created_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt\"a\n" +
 	"\x12RequestCorrelation\x123\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tB\x14\xbaH\x11r\x0f\x10\x01\x18\xff\x012\b^[!-~]+$R\trequestId\x12\x16\n" +
-	"\x06minted\x18\x02 \x01(\bR\x06minted\"\xc9\x01\n" +
+	"\x06minted\x18\x02 \x01(\bR\x06minted\"\xee\x01\n" +
 	"\x10TransactionState\x120\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12:\n" +
-	"\x06expiry\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\x06expiry\x12/\n" +
-	"\x0fsigned_url_hash\x18\x03 \x01(\fB\a\xbaH\x04z\x02h R\rsignedUrlHash\x12\x16\n" +
-	"\x06broker\x18\x04 \x01(\tR\x06broker\"\xff\x02\n" +
+	"\x0fidempotency_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12F\n" +
+	"\x11signed_url_expiry\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fsignedUrlExpiry\x124\n" +
+	"\x0fsigned_url_hash\x18\x03 \x01(\fB\a\xbaH\x04z\x02h H\x00R\rsignedUrlHash\x88\x01\x01\x12\x16\n" +
+	"\x06broker\x18\x04 \x01(\tR\x06brokerB\x12\n" +
+	"\x10_signed_url_hash\"\xff\x02\n" +
 	"\x18ReportingObligationState\x12@\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1e.ramp.admin.v1.ObligationStateB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x05state\x120\n" +
@@ -1404,7 +1545,7 @@ var file_ramp_admin_v1_admin_proto_depIdxs = []int32{
 	2,  // 3: ramp.admin.v1.SetReportingPolicyResponse.policy:type_name -> ramp.admin.v1.ReportingPolicy
 	8,  // 4: ramp.admin.v1.TransactionEvidence.request_correlation:type_name -> ramp.admin.v1.RequestCorrelation
 	13, // 5: ramp.admin.v1.TransactionEvidence.created_at:type_name -> google.protobuf.Timestamp
-	13, // 6: ramp.admin.v1.TransactionState.expiry:type_name -> google.protobuf.Timestamp
+	13, // 6: ramp.admin.v1.TransactionState.signed_url_expiry:type_name -> google.protobuf.Timestamp
 	0,  // 7: ramp.admin.v1.ReportingObligationState.state:type_name -> ramp.admin.v1.ObligationState
 	13, // 8: ramp.admin.v1.ReportingObligationState.window_end:type_name -> google.protobuf.Timestamp
 	13, // 9: ramp.admin.v1.ReportingObligationState.fulfilled_at:type_name -> google.protobuf.Timestamp
@@ -1432,6 +1573,7 @@ func file_ramp_admin_v1_admin_proto_init() {
 	}
 	file_ramp_admin_v1_admin_proto_msgTypes[0].OneofWrappers = []any{}
 	file_ramp_admin_v1_admin_proto_msgTypes[1].OneofWrappers = []any{}
+	file_ramp_admin_v1_admin_proto_msgTypes[8].OneofWrappers = []any{}
 	file_ramp_admin_v1_admin_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

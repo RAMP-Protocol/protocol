@@ -865,7 +865,7 @@ RAMP replaces the **data acquisition** layer of due diligence, not the analysis.
 **Authentication at every step:**
 - **Agent to Broker**: RFC 9421 HTTP Message Signature (alg=ed25519) in HTTP headers
 - **Broker to Exchange**: the Broker adds its own labeled RFC 9421 HTTP Message Signature (alg=ed25519) in the HTTP headers, covering the forwarded request plus the agent's prior signature; the ordered set of labeled header signatures is the forwarding chain
-- **Exchange to Agent**: `exchange_signature` on every Offer (Ed25519, stateless verification)
+- **Exchange to Agent**: `signature` on every Offer (Ed25519, stateless verification)
 - **Signed URLs**: HMAC-SHA256 (Exchange-CDN shared secret, agent identity bound)
 
 ## Next Steps

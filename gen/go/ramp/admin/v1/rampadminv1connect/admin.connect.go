@@ -28,6 +28,16 @@
 // transaction ids); what bounds this read is the pair selector plus the
 // network-layer reachability restriction above.
 //
+// Those two controls are not interchangeable, and the weaker one must not be
+// mistaken for the stronger. The pair selector stops a transaction id ALONE
+// from reading a row. It does NOT make enumeration infeasible: tenant ids are
+// human brand slugs, and a tenant's slug is visible to every agent holding one
+// of its offers, so a caller who reaches this plane can pair a known tenant
+// with guessed ids. Enumeration is bounded by reachability — this service MUST
+// NOT be exposed on the public agent-facing listener — which is why that
+// restriction is the load-bearing control on this plane rather than a
+// deployment convenience.
+//
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is

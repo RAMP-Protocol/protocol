@@ -29,7 +29,7 @@ Loss is acceptable -- this is telemetry, not financial data.
 | `event_id` | `string` | yes | UUIDv7, monotonically ordered |
 | `event_type` | `EventType` | yes | `EVENT_SUPPLY_QUERY_RECEIVED` |
 | `timestamp` | `time.Time` | yes | Server receipt time (UTC, nanosecond precision) |
-| `query_id` | `string` | yes | The supply query's `X-Request-ID` header (correlation left the proto body) |
+| `query_id` | `string` | yes | The supply query's `X-Request-ID` header (correlation left the proto body). A different key from the execute request's correlation id, which the [evidence store](/components/exchange/storage-model/) persists -- different leg, different request, do not join them |
 | `buyer_lid` | `string` | yes | CoMP's `aisystem.aisysuse.lid`; for RAMP requests, the caller's account handle (`RegisterResponse.billing_ref`) resolved from the verified request signature |
 | `buyer_name` | `string` | yes | `aisystem.name` (e.g. "claude.ai") |
 | `requested_uris` | `[]string` | yes | `aisystem.aisysuse.uri` |
@@ -78,7 +78,7 @@ Logged when an `ExecuteTransaction` RPC is received, before billing authorizatio
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_TRANSACTION_REQUESTED` |
 | `timestamp` | `time.Time` | yes | Server receipt time |
-| `idempotency_key` | `string` | yes | `TransactionRequest.idempotency_key` (the request's idempotency key) |
+| `idempotency_key` | `string` | yes | The derived per-item key: `TransactionRequest.idempotency_key + ":" + offer_id` (never the bare request key) |
 | `offer_id` | `string` | yes | `Offer.offer_id` of the committed `TransactionItem` |
 | `buyer_lid` | `string` | yes | `aisystem.aisysuse.lid` |
 | `buyer_name` | `string` | yes | `aisystem.name` |
@@ -97,7 +97,7 @@ Logged after the Billing Adapter returns its authorization decision. Captures bo
 | `event_id` | `string` | yes | UUIDv7 |
 | `event_type` | `EventType` | yes | `EVENT_BILLING_AUTHORIZATION` |
 | `timestamp` | `time.Time` | yes | Authorization decision time |
-| `idempotency_key` | `string` | yes | Corresponding `TransactionRequest.idempotency_key` |
+| `idempotency_key` | `string` | yes | The derived per-item key for the authorized item: `TransactionRequest.idempotency_key + ":" + offer_id` (never the bare request key) |
 | `offer_id` | `string` | yes | The offer being authorized |
 | `buyer_lid` | `string` | yes | The requester's account handle (`RegisterResponse.billing_ref`) |
 | `authorized` | `bool` | yes | Whether billing was approved |
@@ -179,7 +179,7 @@ Logged when a `ReportUsage` RPC is received. Completes the transaction lifecycle
 | `event_type` | `EventType` | yes | `EVENT_USAGE_REPORT_RECEIVED` |
 | `timestamp` | `time.Time` | yes | Server receipt time |
 | `report_id` | `string` | yes | Exchange-assigned report id (`UsageReportResponse.report_id`) |
-| `idempotency_key` | `string` | yes | `UsageReport.idempotency_key` (the report's idempotency key) |
+| `idempotency_key` | `string` | yes | `UsageReport.idempotency_key` verbatim — the report's own key, NOT a derived per-item key. A report addresses one whole transaction and has no `offer_id` to derive with. Join this row on `transaction_id`. |
 | `transaction_id` | `string` | yes | `UsageReport.transaction_id` |
 | `billing_id` | `string` | yes | `UsageReport.billing_id` |
 | `buyer_lid` | `string` | yes | Extracted from transaction record |

@@ -2559,9 +2559,20 @@ type Offer struct {
 	// relaying Broker has nothing to group or dial on, and the swap-protection
 	// above is vacuous when the signed bytes carry no recipient at all.
 	Exchange string `protobuf:"bytes,8,opt,name=exchange,proto3" json:"exchange,omitempty"`
-	// REQUIRED. JWS (alg=EdDSA) over the canonical serialization of the ENTIRE
-	// Offer — every field, including `pricing`, `terms` (the full licensing
-	// payload), `expires_at`, and `exchange`. Only `signature` and
+	// REQUIRED. A DETACHED Ed25519 signature over the canonical serialization of
+	// the ENTIRE Offer, carried as the raw 64 signature bytes in lowercase or
+	// uppercase hex — 128 hex characters, NOT a JWS. There is no JOSE header and
+	// no compact serialization here: the signed bytes are defined by the
+	// canonical-signing recipe below, and this field carries only the signature
+	// itself. `signature_algorithm` names the algorithm separately.
+	// Same convention as `AgentAcceptance.signature`, and it is what the admin
+	// plane's offline verification recipe replays. The hex shape is STATED here
+	// and ENFORCED there: this field carries no schema rule, while
+	// ramp.admin.v1.TransactionEvidence.offer_sig — the same value, copied into
+	// the evidence row — is pattern-bound to 128 hex characters.
+	//
+	// The signature covers every field, including `pricing`, `terms` (the full
+	// licensing payload), `expires_at`, and `exchange`. Only `signature` and
 	// `signature_algorithm` are excluded from the signed bytes. `expires_at` is
 	// signed so the offer's validity window is integrity-protected: a relaying
 	// Broker cannot extend (or shorten) the TTL of a signed offer to replay it
@@ -2626,7 +2637,9 @@ type Offer struct {
 	// Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
 	// key, and MUST reject an offer whose `expires_at` is in the past.
 	Signature string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
-	// JWS algorithm. Always 'EdDSA' for Ed25519 via JWS Compact Serialization.
+	// Signature algorithm. Always 'EdDSA' — the JOSE algorithm identifier for
+	// Ed25519 (RFC 8032). Only the identifier is borrowed from JOSE: `signature`
+	// is a detached hex signature, not a JWS.
 	SignatureAlgorithm string `protobuf:"bytes,10,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
 	// If set, this offer is available under an existing subscription/deal.
 	// No per-request billing — usage tracked against subscription quota.
@@ -4428,7 +4441,49 @@ func (x *Delegation) GetExtCritical() []string {
 // many brokers relay the request, and binds the agent to THIS specific offer +
 // requester + transaction. It travels in the execute body alongside the
 // reflected Offer; the Exchange verifies it and binds the delivery URL to the
-// agent's key (RFC 7638 thumbprint of the acceptance key).
+// agent's key.
+//
+// AGENT IDENTITY (normative; every other site cites this one). The agent
+// identity for a transaction is the key that proved AGENT authorship of the
+// request:
+//
+//   - when an acceptance is present, the ACCEPTANCE key — the key whose
+//     signature over AgentAcceptancePayload the Exchange verified;
+//   - otherwise the verified RFC 9421 request signer, which is the agent only
+//     because an acceptance-less request cannot have been relayed.
+//
+// `agent_identity_hash` (TransactionResponse, and the value embedded in a bound
+// retrieval URL) is the RFC 7638 JWK Thumbprint (SHA-256) of that key.
+//
+// The transport signer alone is not a usable identity here. A Broker may author
+// a re-packaged transaction AS SENDER (see `exchange` in the file header), and
+// on that leg the RFC 9421 signer is the broker while the in-body acceptance is
+// the only agent-authored signature in the request. Anchoring on the acceptance
+// makes the identity the same value whether the request arrived direct or
+// through a broker. Where both exist and agree — the ordinary direct hop — the
+// two readings coincide, which is why older text called this the
+// "request-signing key".
+//
+// One acceptance key per request: `TransactionResponse.agent_identity_hash` is
+// a single per-request value, so a batch whose items were accepted by DIFFERENT
+// keys has no one identity to bind its delivery URLs to. Every acceptance in
+// one TransactionRequest MUST be signed by the same key.
+//
+// ONE-KEY RULE. An agent MUST accept an offer and fetch the delivered resource
+// with the SAME key. The Exchange derives `agent_identity_hash` from the
+// acceptance key, and an enforcing delivery endpoint requires the fetcher to
+// present exactly that key, so accepting with one key and fetching with another
+// yields a transaction that succeeds and a retrieval that is refused. Two
+// qualifiers bound the rule:
+//
+//   - It binds only where proof-of-possession is enforced. A bearer-only
+//     signed-URL CDN that cannot run code keeps the bearer posture — see
+//     "Retrieval-URL identity binding" in the file header, which states that
+//     enforcement is not mandatory. The rule is what an agent must do to be
+//     servable by an enforcing endpoint, not a universal precondition for
+//     retrieval.
+//   - A custodial registry that holds the agent's single key and performs the
+//     bound fetch itself satisfies the rule with nothing extra to do.
 //
 // `signature` is a hex-encoded detached Ed25519 signature (NOT a JWS) over the
 // CANONICAL SIGNING form of `AgentAcceptancePayload` — RFC 8785 JCS over canonical
@@ -4600,9 +4655,18 @@ type TransactionRequest struct {
 	// Idempotency key (REQUIRED). The server MUST dedupe on this: a replay returns
 	// the original result rather than re-executing. The transaction's durable
 	// identity is the Exchange-assigned transaction_id in the response.
-	// Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
-	// (authenticated caller, key), never globally, so a key chosen by one caller
-	// cannot collide with another's cached result.
+	//
+	// DEDUPE SCOPE — the invariant, stated here once and cited by every other RPC
+	// that carries an idempotency_key: a key chosen by one caller MUST NEVER
+	// collide with another caller's cached result. The server dedupes within a
+	// namespace, never globally. What that namespace IS differs per RPC, because
+	// the RPCs do not authenticate the same way; each states its own, and each
+	// namespace has to make the invariant true on its own terms.
+	//
+	// For this RPC the namespace is the ACCEPTANCE IDENTITY — the agent key
+	// defined under "Agent identity" on AgentAcceptance — never the transport
+	// sender, which may be a Broker relaying many agents behind one key. The
+	// server dedupes per (acceptance identity, key).
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Requester identity — forwarded for authorization and audit.
 	Requester *Requester `protobuf:"bytes,4,opt,name=requester,proto3" json:"requester,omitempty"`
@@ -4771,8 +4835,12 @@ type TransactionResponse struct {
 	// constant; advisory on receive. See "Protocol version" in the file header.
 	Ver string `protobuf:"bytes,1,opt,name=ver,proto3" json:"ver,omitempty"`
 	// Identity that a delivered retrieval_endpoint is bound to: the RFC 7638 JWK
-	// Thumbprint of the agent's Ed25519 request-signing key (see "Retrieval-URL
-	// identity binding" above). Shared across the request; set once.
+	// Thumbprint of the agent's Ed25519 key, as "Agent identity" on
+	// AgentAcceptance defines it — the acceptance key, not the transport signer,
+	// which may be a Broker. See "Retrieval-URL identity binding" in the file
+	// header for how a delivery endpoint checks the binding. Shared across the
+	// request; set once, which is why every acceptance in one request must be
+	// signed by the same key.
 	AgentIdentityHash string `protobuf:"bytes,10,opt,name=agent_identity_hash,json=agentIdentityHash,proto3" json:"agent_identity_hash,omitempty"`
 	// Per-offer results (one entry per committed item, in original order).
 	Items []*TransactionResultItem `protobuf:"bytes,13,rep,name=items,proto3" json:"items,omitempty"`
@@ -4879,11 +4947,33 @@ type TransactionResultItem struct {
 	OfferId string `protobuf:"bytes,1,opt,name=offer_id,json=offerId,proto3" json:"offer_id,omitempty"`
 	// Exchange-assigned transaction identifier. Opaque to agents; the format
 	// is implementation-defined (the documented storage model mints a
-	// time-ordered ULID as the record's primary key). No entropy requirement:
-	// the admin plane's evidence read (ramp.admin.v1.GetTransactionEvidence)
-	// selects by the (tenant_id, transaction_id) PAIR, so a transaction id
-	// alone is not a bearer capability there and nothing rests on this
-	// field's format being unguessable.
+	// time-ordered ULID as the record's primary key).
+	//
+	// ENTROPY. RAMP places no entropy requirement on this value. An implementer
+	// choosing a sequential id should know precisely what that does and does not
+	// cost, because the protection here is narrower than "unguessable ids are
+	// unnecessary".
+	//
+	// WHAT IS GUARANTEED. The admin plane's evidence read
+	// (ramp.admin.v1.GetTransactionEvidence) selects by the
+	// (tenant_id, transaction_id) PAIR, so a transaction id ALONE is never a
+	// bearer capability for the forensic row. Counterparty agents legitimately
+	// hold the ids of their own transactions, and that pairing is what stops one
+	// of those ids from reading the row on its own. That is the whole guarantee,
+	// and a conformance guard fails if the selector stops being a pair.
+	//
+	// WHAT IS NOT GUARANTEED: resistance to ENUMERATION. The tenant half of the
+	// pair is not a secret. Deployments use human brand slugs, and the slug is
+	// handed to every agent that holds an offer from that tenant — it prefixes
+	// the offer id inside the signed offer. So a caller who can reach the admin
+	// plane at all, and who has done business with a tenant, already knows one
+	// valid tenant value and can walk sequential transaction ids against it.
+	// What bounds that is the network-layer reachability restriction on the
+	// admin plane (see the ramp.admin.v1 file header): that plane must not be
+	// exposed on the public agent-facing listener, and it is the outer control
+	// an operator must not relax. An Exchange that wants enumeration resistance
+	// in depth should mint unguessable ids; RAMP does not require it, and no
+	// agent-plane behavior depends on this format either way.
 	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// Billing record identifier minted by the Exchange's billing adapter for
 	// this transaction (not the account handle — see RegisterResponse.billing_ref).
@@ -5868,11 +5958,19 @@ type UsageReport struct {
 	// Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
 	// report does not double-count usage. The report's durable identity is the
 	// Exchange-assigned report_id in UsageReportResponse.
-	// Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
-	// (authenticated caller, key), never globally, so a key chosen by one caller
-	// cannot collide with another's cached result.
+	//
+	// DEDUPE SCOPE. The invariant is the one stated on
+	// TransactionRequest.idempotency_key. This message carries no acceptance
+	// payload, so there is no in-body agent signature to anchor on; the namespace
+	// is instead the TRANSACTION the report addresses, and the server dedupes per
+	// (transaction_id, key). That satisfies the invariant without depending on
+	// the transport signer: the transaction was bound to exactly one agent by its
+	// acceptance at execute time, so two agents relayed by the same Broker report
+	// against different transactions and never share a namespace.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// Transaction ID from the delivery.
+	// Transaction ID from the delivery. MUST be non-empty. It is also the dedupe
+	// namespace for `idempotency_key` above, so a report that names no
+	// transaction has no namespace to dedupe within.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// Billing record identifier from the delivery (TransactionResultItem.billing_id).
 	BillingId string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
@@ -7565,11 +7663,16 @@ type DisputeRequest struct {
 	// Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed
 	// filing does not open a duplicate case. The dispute's durable identity is the
 	// Exchange-assigned dispute_id in DisputeResponse.
-	// Uniqueness is scoped to the verified RFC 9421 signer: the server dedupes per
-	// (authenticated caller, key), never globally, so a key chosen by one caller
-	// cannot collide with another's cached result.
+	//
+	// DEDUPE SCOPE. The invariant is the one stated on
+	// TransactionRequest.idempotency_key, and the namespace is the same as
+	// UsageReport's and for the same reason: this message carries no acceptance
+	// payload, so the namespace is the TRANSACTION being disputed and the server
+	// dedupes per (transaction_id, key).
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// Transaction being disputed.
+	// Transaction being disputed. MUST be non-empty. It is also the dedupe
+	// namespace for `idempotency_key` above, so a filing that names no
+	// transaction has no namespace to dedupe within.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// Billing record identifier from the disputed transaction
 	// (TransactionResultItem.billing_id).

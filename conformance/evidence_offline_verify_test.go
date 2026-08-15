@@ -5,13 +5,27 @@
 //	ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)
 //
 // Every corpus vector is a field-rule mutant carrying filler key material, so
-// nothing else in the repo proves the recipe actually verifies a row built
-// from real Ed25519 signatures — or that it REJECTS a tampered one. This test
-// builds such a row (which also passes protovalidate, so the recipe is shown
-// to work on a contract-valid row), asserts both verifications pass, then
-// flips one byte of each *_canonical_bytes field and asserts the matching
-// verification fails: the negative half pins the tamper claim the comment
-// makes.
+// nothing else in the repo runs the recipe against a row whose signatures are
+// real. This test builds one and runs it.
+//
+// WHAT CAN TURN THIS RED, and what cannot — worth stating, because the two
+// halves below look equally load-bearing and are not.
+//
+// The protovalidate call IS the gate. It asserts that a row built exactly as
+// the recipe requires is CONTRACT-VALID, so a field rule that tightens past
+// what a legitimate evidence row can satisfy fails here rather than in
+// production. It also pins the mixed-case hex claim the field comments make:
+// offer_sig is stored lowercase and agent_acceptance_signature uppercase, so
+// a pattern narrowed to one case would fail this row.
+//
+// The ed25519.Verify assertions are NOT a gate. That a genuine signature
+// verifies, and that flipping a byte of the signed bytes breaks it, is
+// crypto/ed25519's contract rather than this repo's — no change here can turn
+// those lines red. They stay because they execute the documented recipe
+// literally instead of paraphrasing it: a reader sees the exact call sequence
+// the comment promises, performed on a row the contract accepts, with the
+// tamper cases showing which side each signature covers. Read them as
+// executable documentation, not as proof that the row detects tampering.
 package conformance
 
 import (
@@ -94,8 +108,10 @@ func TestEvidenceOfflineVerificationRecipe(t *testing.T) {
 		t.Error("acceptance signature must verify: ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)")
 	}
 
-	// Tamper half: one flipped bit in the canonical bytes must break the
-	// matching verification while leaving the other side intact.
+	// Tamper half: one flipped bit in the canonical bytes breaks the matching
+	// verification and leaves the other side intact. This demonstrates which
+	// side each signature covers; it cannot fail on a repo change (see the
+	// file header).
 	t.Run("tampered offer_canonical_bytes fails", func(t *testing.T) {
 		tampered := evidenceRow()
 		tampered.OfferCanonicalBytes[0] ^= 0x01

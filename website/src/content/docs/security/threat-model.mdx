@@ -120,7 +120,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T22: Exchange impersonation
 **Attack**: Attacker sets up fake Exchange, poisons ramp.json via DNS hijack.
-**Countermeasure (protocol)**: ramp.json served over HTTPS from provider's domain (TLS proves endorsement). Every Offer carries `exchange_signature` (Ed25519). Agent verifies against Exchange's public key.
+**Countermeasure (protocol)**: ramp.json served over HTTPS from provider's domain (TLS proves endorsement). Every Offer carries a `signature` (detached hex Ed25519). Agent verifies against Exchange's public key.
 
 ### T23: Signed URL interception (MITM)
 **Attack**: Attacker intercepts TransactionResponse, steals signed URL.
@@ -128,7 +128,7 @@ This single pattern accounts for most ad-tech fraud: domain spoofing (self-repor
 
 ### T24: Transaction replay
 **Attack**: Attacker captures valid TransactionRequest and replays it.
-**Countermeasure (protocol)**: **Idempotency keys.** Every state-mutating call carries a required `idempotency_key` — `TransactionRequest`, `UsageReport`, and `DisputeRequest`. Servers dedupe per (verified RFC 9421 signer, key), so a replay returns the original result instead of re-charging or re-filing. Broker `Resolve` (`DiscoveryRequest`) is pure discovery — it executes no transaction, has no replay exposure, and carries no key.
+**Countermeasure (protocol)**: **Idempotency keys.** Every state-mutating call carries a required `idempotency_key` — `TransactionRequest`, `UsageReport`, and `DisputeRequest` — and a replay returns the original result instead of re-charging or re-filing. The invariant is that a key chosen by one caller can never collide with another caller's cached result, so dedupe always happens inside a namespace, never globally. The namespace differs per RPC because the three do not authenticate the same way: `ExecuteTransaction` scopes to the acceptance identity (the agent key that signed `AgentAcceptancePayload`, never the transport sender, which may be a Broker relaying many agents); `ReportUsage` and `FileDispute` carry no acceptance payload and scope to the transaction they name, which its acceptance bound to exactly one agent at execute time. Broker `Resolve` (`DiscoveryRequest`) is pure discovery — it executes no transaction, has no replay exposure, and carries no key.
 
 ### T25: Billing_id forgery in usage reports
 **Attack**: Attacker fabricates billing_ids in usage reports.
@@ -167,6 +167,7 @@ The admin plane (`ramp.admin.v1`) adds one high-value asset: the append-once evi
 ### T-ADM-1: Evidence-row enumeration / cross-tenant read
 **Attack**: A caller with network reachability walks transaction ids (which legitimately circulate to counterparty agents) and reads other tenants' evidence rows — offer pricing, licensing terms, quota.
 **Countermeasure**: `GetTransactionEvidence` selects by the `(tenant_id, transaction_id)` **pair** — an id alone is not a bearer capability, and naming the tenant in the request is what lets a deployment put a per-tenant ACL in front of the RPC. The network boundary (internal listener + source allowlist) remains the outer control.
+**Residual**: The pair selector does not by itself defeat enumeration, and it should not be read as if it did. The tenant half is not a secret — tenant ids are human brand slugs (`hearst-media`), and a tenant's slug is visible to every agent holding one of its offers, because it prefixes the `offer_id` inside the signed offer. A caller who reaches this plane and has done business with a tenant therefore already holds one valid tenant value and can walk ids against it. RAMP also places no entropy requirement on `transaction_id`, so those ids may legitimately be sequential. What actually bounds enumeration is the network boundary; the pair selector narrows a stolen id, and a per-tenant ACL narrows the caller.
 
 ### T-ADM-2: NOT_FOUND existence oracle
 **Attack**: A caller probes a transaction id under the wrong tenant and uses the error shape to confirm the transaction exists somewhere.
@@ -174,11 +175,13 @@ The admin plane (`ramp.admin.v1`) adds one high-value asset: the append-once evi
 
 ### T-ADM-3: Cross-plane correlation-id injection
 **Attack**: An agent supplies a hostile `X-Request-ID` (control characters, oversized, log-format metacharacters) on the hot path; the Exchange persists it and the admin plane later replays it into a rendered ledger or log pipeline.
-**Countermeasure**: `RequestCorrelation.request_id` is bounded printable ASCII (`^[!-~]+$`, max 255); a nonconforming persisted value is served as *no correlation* rather than echoed. The `minted` flag separates server-derived ids from caller-influenceable ones so a renderer can treat the latter as untrusted.
+**Countermeasure**: `RequestCorrelation.request_id` is bounded printable ASCII (`^[!-~]+$`, max 255), and the check runs on the **write** path: the Exchange records a correlation only when the received header conforms, so a hostile value is recorded as *no correlation* and never enters the store. A server must also never populate the field from a nonconforming stored value — rows written before the write check existed may hold one — but that is a migration guard, not the primary defence. The `minted` flag separates server-derived ids from caller-influenceable ones so a renderer can treat the latter as untrusted.
+**Residual**: The contract enforces neither side. Both are server behaviour, and a field rule on a response message cannot reach back to the write path. If neither check is implemented the failure is not a leaked value but a denied read: `request_id` is required inside a required message, so one nonconforming stored value invalidates the entire `GetTransactionEvidenceResponse` rather than degrading it, and the SDK propagates any non-empty `X-Request-ID` verbatim.
 
 ### T-ADM-4: Fabricated evidence row
 **Attack**: Anyone able to write to the store (or to man-in-the-middle the read) mints a row whose signatures verify against the keys embedded in the same row — internally consistent, but proving nothing.
-**Countermeasure**: The contract states the trust boundary explicitly: authenticity requires comparing the embedded keys against independently obtained copies — the Exchange's published JWKS and the agent's directory (`agent_directory_url`). The in-row keys are convenience copies for rotation-survival, not the root of trust.
+**Countermeasure**: The contract states the trust boundary explicitly: authenticity requires comparing the embedded keys against independently obtained copies. The Exchange anchor is signed — `Offer.exchange` sits inside `offer_canonical_bytes`, under `offer_sig`, so a fabricated row cannot redirect the verifier to a host it controls without invalidating the signature being checked. The agent side has no signed anchor: `agent_directory_url` is covered by neither signature and is written by the row's author, so it is provenance only and the agent key must be anchored from the counterparty's own directory. The in-row keys are convenience copies for rotation-survival, not the root of trust.
+**Residual**: This bounds who a *verifier* can be redirected to; it does not stop a store writer from minting a row that is internally consistent. Detection depends on the independent anchors above actually being used.
 
 ## Prevention Taxonomy
 
@@ -300,7 +303,7 @@ Line 3: Legal/contractual enforcement
 |---|---|---|---|
 | ads.txt | 2017 | ramp.json (authorized providers) | In proto |
 | sellers.json | 2019 | Exchange identity in ResourceResponse | In proto |
-| SupplyChain Object | 2019 | exchange_signature on Offer | In proto |
-| ads.cert | 2020 | exchange_signature + content_integrity_hash | In proto |
+| SupplyChain Object | 2019 | `Offer.signature` | In proto |
+| ads.cert | 2020 | `Offer.signature` + content_integrity_hash | In proto |
 | MRC Viewability Standard | 2014 | Minimum billable token count | Design principle |
 | Open Measurement SDK | 2018 | Three-sided reconciliation | In protocol flow |

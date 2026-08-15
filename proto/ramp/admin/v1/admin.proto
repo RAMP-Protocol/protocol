@@ -28,6 +28,16 @@
 // transaction ids); what bounds this read is the pair selector plus the
 // network-layer reachability restriction above.
 //
+// Those two controls are not interchangeable, and the weaker one must not be
+// mistaken for the stronger. The pair selector stops a transaction id ALONE
+// from reading a row. It does NOT make enumeration infeasible: tenant ids are
+// human brand slugs, and a tenant's slug is visible to every agent holding one
+// of its offers, so a caller who reaches this plane can pair a known tenant
+// with guessed ids. Enumeration is bounded by reachability — this service MUST
+// NOT be exposed on the public agent-facing listener — which is why that
+// restriction is the load-bearing control on this plane rather than a
+// deployment convenience.
+//
 // Message shape: each setter takes a thin {ver, <payload>} envelope wrapping a
 // required payload message — TenantFeeRate or ReportingPolicy. The payload
 // type is shared by the request and its response, so every field rule is
@@ -185,9 +195,13 @@ message SetReportingPolicyResponse {
 // enum — the agent plane states reporting REQUIREMENTS, never their
 // server-side lifecycle) so the admin package stays self-contained.
 //
-// A REJECTED usage report (a non-OK UsageReportResponse carrying
-// ErrorDetail.usage_report_rejection) does not transition the obligation:
-// it stays PENDING until an accepted report, a waiver, or expiry.
+// A REJECTED usage report does not transition the obligation: it stays
+// PENDING until an accepted report, a waiver, or expiry. A rejection carries
+// no response message at all — ramp.v1.UsageReportResponse is sent only when
+// the report was ACCEPTED, and a rejection travels as a non-OK transport
+// error carrying ramp.v1.ErrorDetail.usage_report_rejection. So a ledger
+// renderer reading a PENDING obligation cannot assume a response was ever
+// produced for the attempt that left it PENDING.
 enum ObligationState {
   OBLIGATION_STATE_UNSPECIFIED = 0; // never sent — the server always maps a persisted state; rejected (not_in:[0]) on ReportingObligationState.state
   OBLIGATION_STATE_PENDING = 1; // minted; awaiting an accepted usage report
@@ -220,22 +234,85 @@ enum ObligationState {
 // the same row, so anyone able to write a row could mint one that passes.
 // To prove AUTHENTICITY — that these parties actually operated these keys —
 // a verifier must compare the embedded keys against copies obtained
-// independently: the Exchange's published JWKS (the authority per
-// protocol/authentication) and the agent's directory (agent_directory_url
-// names where this Exchange pinned agent_public_key from). The in-row keys
-// are convenience copies that keep old rows verifiable after rotation; they
-// are not the root of trust. After matching a key against its authority, a
-// verifier should also check the key's RFC 7638 thumbprint against the
-// Exchange's published revocation list (ramp.v1.KeyRevocationList, served at
-// WBAFile.revocation_url): a key can be rotated out because it was revoked,
-// and a revoked key must not count as authentic.
+// independently. WHERE to obtain them is the whole question, and only one of
+// the two sides has an anchor inside a signature.
+//
+//   EXCHANGE SIDE — anchored in the signed bytes. offer_canonical_bytes
+//   carries the offer's `exchange` field (ramp.v1.Offer.exchange, the bare
+//   host of the issuing Exchange), and offer_sig covers it. A verifier reads
+//   that host OUT of the canonical bytes, fetches THAT Exchange's published
+//   JWKS (the authority per protocol/authentication), and checks
+//   exchange_signing_public_key against it. A fabricated row cannot redirect
+//   this step: changing `exchange` invalidates the very signature the check
+//   exists to confirm.
+//
+//   AGENT SIDE — no signed anchor exists, and the row does not supply one.
+//   agent_directory_url is covered by NEITHER signature and is written by the
+//   same party as the rest of the row, so a fabricated row satisfies any
+//   procedure built on it using a host its author controls. It is a record of
+//   where this Exchange states it pinned the key — provenance, never the
+//   authority. The agent anchor must be obtained INDEPENDENTLY: from the
+//   counterparty the audit is being run for, or from the agent's own directory
+//   located through an identity the verifier already trusts. This is unchanged
+//   when agent_directory_url is '' (the agent carried no directory anchor):
+//   there is no fallback to reconstruct, because the field was never the
+//   authority to fall back from.
+//
+// The in-row keys are convenience copies that keep old rows verifiable after
+// rotation; they are not the root of trust. After matching a key against its
+// authority, a verifier should also check that key's RFC 7638 thumbprint
+// against a revocation list, because a key can be rotated out BECAUSE it was
+// revoked, and a revoked key must not count as authentic.
+//
+// There is no single list covering both keys. WBAFile.revocation_url is one
+// URL per DIRECTORY, so the ramp.v1.KeyRevocationList served there can only
+// enumerate that directory's own revoked keys. Each key is therefore checked
+// against ITS OWN side's list, reached the same way its anchor was:
+// exchange_signing_public_key against the issuing Exchange's list, reached
+// from the `exchange` host inside offer_canonical_bytes; agent_public_key
+// against the agent's list, reached from the independent directory that
+// supplied the agent anchor above — never from agent_directory_url, which is
+// provenance and not authority.
 //
 // SCOPE OF THE GUARANTEE. The signatures cover what was AGREED, not what was
-// DELIVERED. transaction_id, request_id and created_at are this Exchange's
-// own assertions about the delivery, outside both signatures; the delivery
-// witness is the edge delivery log, reconciled separately (the join key,
-// sha256 of the signed retrieval URL, lives on TransactionState
-// .signed_url_hash).
+// DELIVERED. transaction_id, request_correlation, created_at and
+// agent_directory_url are this Exchange's own assertions, outside both
+// signatures; the delivery witness is the edge delivery log, reconciled
+// separately (the join key, sha256 of the signed retrieval URL, lives on
+// TransactionState.signed_url_hash). agent_directory_url is listed here as well as under the
+// trust boundary above because it is the one unsigned field a reader is most
+// likely to mistake for an anchor.
+//
+// WHAT A ROW HOLDER CAN REPLAY. The delivery section below withholds the
+// signed retrieval URL because it is a live bearer capability. Applying the
+// same test to what the row DOES carry gives two different answers.
+//
+//   THE OFFER IS REPLAYABLE, AND THAT IS A STATED RESIDUAL RISK. offer_json
+//   plus offer_sig are a complete, valid, Exchange-signed offer.
+//   ramp.v1.Offer binds NO requester and NO tenant — it has no audience field
+//   naming who the offer was issued to — and its expires_at is optional. So a
+//   row holder can present this same offer to its issuing Exchange and accept
+//   it under their OWN identity, and nothing inside the signed bytes
+//   contradicts them. Three things bound that, and none of them closes it:
+//     - expires_at ends the window, when the Exchange set one;
+//     - Offer.exchange names exactly one Exchange that will accept the offer,
+//       so a replay is confined to that Exchange's own terms and billing;
+//     - the network-layer reachability restriction on this plane (see the file
+//       header) decides who can read a row at all.
+//   Closing it needs a requester audience INSIDE the signed offer, which
+//   belongs upstream in ramp.v1 and is not something this plane can add.
+//
+//   THE ACCEPTANCE IS NOT USEFULLY REPLAYABLE. offer_sig, requester_id,
+//   requester_domain and request_idempotency_key are exactly the four fields of
+//   ramp.v1.AgentAcceptancePayload, and agent_acceptance_signature is the
+//   signature over them, so the row does hold a complete, resubmittable
+//   acceptance. Resubmitting it achieves nothing: it carries the same
+//   request-level idempotency key under the same acceptance identity, so it
+//   lands in the same dedupe namespace and the Exchange returns the original
+//   result instead of executing again. What the row does NOT hold is the
+//   agent's private key, so a holder cannot mint an acceptance for a different
+//   offer, identity, or key. The replay exposure here is the offer's, not the
+//   acceptance's.
 message TransactionEvidence {
   // The evidenced transaction (Exchange-minted transaction identity). The
   // format is implementation-defined, exactly as in ramp.v1 (the documented
@@ -296,7 +373,7 @@ message TransactionEvidence {
   // it describes would be the worse inconsistency.
   //
   // The long spelling is also not available: ramp.v1 retired a scalar
-  // offer-signature field in RAMP-103 (the execute request now reflects the
+  // offer-signature field (the execute request now reflects the
   // full signed Offer instead), and scripts/check-doc-conformance.sh bans that
   // identifier across the protos and the docs so the removed name cannot be
   // read as live anywhere. A field named after it here would either fail that
@@ -342,11 +419,16 @@ message TransactionEvidence {
   // constrain Requester.id, and this row states what was signed.
   string requester_id = 12;
 
-  // The signed Requester.domain, verbatim. Unbounded for the same reason as
-  // requester_id: upstream ramp.v1.Requester places no wire constraint on
-  // either value, and the evidence row must be able to state whatever bytes
-  // the acceptance actually signed — a bound here could make the row fail its
-  // own validation for a transaction that legitimately executed.
+  // The signed Requester.domain, verbatim. Unbounded HERE even though the
+  // agent plane bounds it — ramp.v1.Requester.domain carries max_len 260 and
+  // the bare-host pattern. Those rules govern what an Exchange may ACCEPT on
+  // the way in; they do not govern what this row may STATE after the fact. The
+  // row's job is to reproduce the bytes the acceptance actually signed, so a
+  // rule here could make the row fail its own validation for a transaction
+  // that legitimately executed — one accepted under an earlier rule set, or
+  // signed by a party that spelled the value some other way. Same conclusion
+  // as requester_id, reached differently: Requester.id genuinely carries no
+  // wire rule at all.
   string requester_domain = 13;
 
   // The REQUEST-level idempotency key the acceptance signs — NOT the derived
@@ -355,7 +437,13 @@ message TransactionEvidence {
   string request_idempotency_key = 14 [(buf.validate.field).string = {min_len: 1, max_len: 255}];
 
   // The registry-pinned agent verifying key (raw 32-byte Ed25519) the
-  // acceptance verified against. Same rule as
+  // acceptance verified against. This is the ACCEPTANCE key, which is the
+  // agent identity for the transaction — ramp.v1.AgentAcceptance defines that
+  // normatively under "Agent identity", and this row stores the key that
+  // definition names. It is deliberately NOT the transport signer: a Broker
+  // may author a re-packaged execute as sender, so the RFC 9421 signer on that
+  // leg is the broker, and a row anchored on it would name the wrong party.
+  // Same rule as
   // ramp.admin.v1.TransactionEvidence.exchange_signing_public_key
   // (drift-gated).
   bytes agent_public_key = 15 [(buf.validate.field).bytes.len = 32];
@@ -366,11 +454,36 @@ message TransactionEvidence {
   // the key. Empty when the agent carries no directory anchor: an append-once
   // row states a value for every column, so '' is a stated fact, not a gap.
   //
+  // PROVENANCE, NOT AUTHORITY. This field is covered by neither signature and
+  // is written by the same party as the rest of the row, so it can never
+  // establish that agent_public_key is authentic — see TRUST BOUNDARY above,
+  // which says where the agent anchor must come from instead. Verification
+  // tooling MUST NOT treat this value as a fetch target it can trust: the row
+  // author chose it, so following it hands them the choice of what the
+  // "independent" copy says.
+  //
+  // The rules below bound the damage from tooling that follows the field
+  // anyway; they do not make following it safe. The value must be '' or an
+  // https URL whose host uses the same recipient-host grammar as
+  // ramp.v1.Offer.exchange, with an optional port and an ASCII-printable path,
+  // within 512 bytes. Stated precisely, because a rule that sounds stronger
+  // than it is would be worse than none: this refuses a plaintext or non-http
+  // scheme, embedded userinfo or whitespace, and anything that is not a
+  // host-plus-path shape. It does NOT refuse an IPv4-literal host — the
+  // recipient-host grammar admits all-numeric labels, so https://169.254.169.254/
+  // matches. Blocking link-local and private address space is the fetching
+  // tool's job, and it is one more reason this field is not a fetch target.
+  //
   // Named directory, not discovery: ramp.v1 uses "discovery" for RESOURCE
   // discovery (DiscoveryRequest, OfferGroup.discovery_method), a different
   // thing entirely. This is the agent's well-known directory document, which
   // is what every sentence describing the field already calls it.
-  string agent_directory_url = 16;
+  string agent_directory_url = 16 [
+    (buf.validate.field).string = {
+      max_len: 512
+      pattern: "^$|^https://[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?/[!-~]*$"
+    }
+  ];
 
   // Delivery + correlation. Covered by neither signature.
   //
@@ -382,7 +495,13 @@ message TransactionEvidence {
   // from this contract can NEVER show a signed-URL *signature* match
   // assertion — the delivery assertion this plane supports is hash equality,
   // TransactionState.signed_url_hash against the edge delivery log's
-  // url_hash column.
+  // signed_url_hash column. The two sides are the same SHA-256 digest in
+  // different forms: this field is 32 raw bytes (base64 in protojson), while
+  // the log column is a text string whose encoding the transaction-log
+  // contract owns and this contract does not pin. A reconciliation query must
+  // therefore normalize both sides to the raw 32-byte digest before comparing
+  // — a direct string equality between the two planes is only correct by
+  // coincidence of encoding.
 
   // Correlation id joining this row outward (edge delivery log,
   // reconciliation sweep), with its provenance. One message, not two
@@ -401,14 +520,19 @@ message TransactionEvidence {
 // .request_correlation for why this is a message rather than two sibling
 // fields.
 message RequestCorrelation {
-  // The correlation id as persisted. Caller-influenceable: the SDK's
-  // request-id middleware propagates any non-empty caller-supplied
-  // X-Request-ID verbatim (no conformance check) and mints a random 128-bit
-  // hex token when the header is absent. The rules below therefore bound
-  // what this PLANE will replay into a rendered ledger — printable ASCII,
-  // capped — and the Exchange records a correlation only when the persisted
-  // id conforms; a nonconforming header value is recorded as no correlation
-  // (the wrapping message stays absent), never echoed here.
+  // The correlation id as persisted. GOVERNING RULE, applied on the WRITE
+  // path: the Exchange records a correlation only when the received
+  // X-Request-ID conforms to the rules below — printable ASCII, 1..255. A
+  // nonconforming header value is recorded as NO correlation: the wrapping
+  // message stays absent, the id is not stored, and nothing is echoed here.
+  // A present request_id has therefore already passed this check on the way
+  // in; the rules are not a read-side filter over a laxer stored value.
+  // Background, for a reader tracing where the value comes from: it is
+  // caller-influenceable. The SDK's request-id middleware propagates any
+  // non-empty caller-supplied X-Request-ID verbatim and mints a random
+  // 128-bit hex token when the header is absent. That middleware performs no
+  // conformance check of its own — the check above is the Exchange's, at the
+  // service boundary where it decides whether to persist the pair.
   string request_id = 1 [(buf.validate.field).string = {
     min_len: 1
     max_len: 255
@@ -434,18 +558,44 @@ message TransactionState {
   // offer_id — unconditionally, single-item requests included — so distinct
   // items of a batch dedupe independently, and this value is NEVER byte-equal
   // to the request-level key. A ledger joining this row against a log export
-  // matches on this derived form, not on the bare request key. No upper
+  // matches on this derived form, not on the bare request key, and it reaches
+  // the TRANSACTION-side events only: a usage-report event stores the report's
+  // own idempotency key, because a report addresses a whole transaction and
+  // has no offer id to derive with. Join a usage report on transaction_id
+  // instead. No upper
   // bound: the derivation appends an id whose length nothing constrains.
   string idempotency_key = 1 [(buf.validate.field).string.min_len = 1];
 
-  // When the signed retrieval URL expires.
-  google.protobuf.Timestamp expiry = 2 [(buf.validate.field).required = true];
+  // When the signed retrieval URL expires. Named for the transaction-log
+  // column it states, exactly as signed_url_hash below is: this message
+  // carries log facts, so it joins the log by name with no translation step.
+  // The same instant has other names on other planes — the wire calls it
+  // TransactionResultItem.expires_at and the Exchange's own store calls it
+  // url_expires_at — so a bare `expiry` here would have been a fourth
+  // spelling of one value.
+  //
+  // Absent when the transaction minted no signed URL: DELIVERY_METHOD_DIRECT
+  // returns the resource inline or from the Exchange's own endpoint, so there
+  // is nothing to expire. DELIVERY_METHOD_INSTRUCTIONS and
+  // DELIVERY_METHOD_STREAMING both mint one and always carry this field.
+  // Absence is a stated fact about the delivery method, not missing data —
+  // unlike broker below, whose log column is optional-empty and whose '' is
+  // itself the value, a direct delivery has no value to state here.
+  google.protobuf.Timestamp signed_url_expiry = 2;
 
   // sha256 of the signed retrieval URL — the join key against the edge
-  // delivery log's url_hash. Hash-only by design: the full URL is a live
+  // delivery log's signed_url_hash column. Same digest on both sides, in
+  // different forms: 32 raw bytes here (base64 in protojson) against a text
+  // string there, so a join must normalize both to the raw digest rather than
+  // compare the two encodings directly. Hash-only by design: the full URL is a live
   // bearer capability until expiry and is deliberately absent from this
-  // plane (see TransactionEvidence's delivery section).
-  bytes signed_url_hash = 3 [(buf.validate.field).bytes.len = 32];
+  // plane (see TransactionEvidence's delivery section). Absent exactly when
+  // signed_url_expiry is, and for the same reason: no signed URL, nothing to
+  // hash. The
+  // `optional` keyword is load-bearing — it gives this scalar explicit
+  // presence, so protovalidate skips the length rule on an unset value, while
+  // a PRESENT hash must still be exactly 32 bytes.
+  optional bytes signed_url_hash = 3 [(buf.validate.field).bytes.len = 32];
 
   // The broker that routed the acceptance, as the transaction log recorded
   // it. '' when the acceptance arrived direct — the log's broker column is

@@ -155,7 +155,7 @@ graph LR
     B --> C[Filter by<br/>RequestConstraints]
     C --> D[Deduplicate by<br/>ResourceIdentity]
     D --> E[Rank by unit_cost<br/>lowest wins]
-    E --> F[Verify<br/>exchange_signature]
+    E --> F[Verify<br/>Offer.signature]
     F --> G[Winner]
 ```
 
@@ -421,9 +421,9 @@ func unitCostOf(o rankedOffer) float64 {
 }
 ```
 
-## Stage 5: Verify exchange_signature
+## Stage 5: Verify Offer.signature
 
-The Broker SHOULD verify `exchange_signature` on the winning Offer before proceeding. This prevents an Exchange from tampering with its own offer fields after signing.
+The Broker SHOULD verify the winning Offer's `signature` before proceeding. This prevents an Exchange from tampering with its own offer fields after signing.
 
 ```go
 func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[string]crypto.PublicKey) error {
@@ -433,7 +433,8 @@ func verifyOfferSignature(offer *rampv1.Offer, exchange string, pubKeys map[stri
 
     payload := canonicalizeOffer(offer)
 
-    alg := "EdDSA" // JWS/JOSE alg for offer signatures
+    alg := "EdDSA" // the JOSE algorithm identifier for Ed25519; the signature
+                   // itself is detached hex, not a JWS
     if offer.SignatureAlgorithm != "" {
         alg = offer.SignatureAlgorithm
     }
@@ -530,10 +531,10 @@ sequenceDiagram
     participant Orch as Broker
     participant Agent as AI Agent
 
-    MP->>Orch: ResourceResponse (Offer with exchange_signature)
+    MP->>Orch: ResourceResponse (Offer with signature)
     Note over Orch: Broker CANNOT modify<br/>offer fields without<br/>invalidating signature
     Orch->>Agent: DiscoveryResponse (includes original signed Offer)
-    Note over Agent: Agent verifies exchange_signature<br/>against MP's public key.<br/>Price tampering detected.
+    Note over Agent: Agent verifies signature<br/>against MP's public key.<br/>Price tampering detected.
 ```
 
 ### Fee Disclosure

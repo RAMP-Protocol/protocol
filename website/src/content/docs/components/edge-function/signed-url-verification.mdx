@@ -82,7 +82,7 @@ https://cdn.provider.com/premium/article.html
   &sig=HMAC-SHA256(baseURL\nexpires\nagent_id\ntxn_id, secret)
 ```
 
-- `agent_id` -- the agent's `agent_identity_hash` from `TransactionResponse`: the RFC 7638 JWK Thumbprint (SHA-256, base64url) of the agent's Ed25519 request-signing key. Because it is part of the HMAC input, a URL holder cannot swap the Exchange-issued value.
+- `agent_id` -- the agent's `agent_identity_hash` from `TransactionResponse`: the RFC 7638 JWK Thumbprint (SHA-256, base64url) of the agent's Ed25519 acceptance key. Because it is part of the HMAC input, a URL holder cannot swap the Exchange-issued value.
 - `txn_id` -- transaction ID for reconciliation and single-use enforcement.
 - `\n` delimiter between fields prevents canonicalization ambiguity (as noted in the threat model's HMAC implementation note).
 
@@ -126,7 +126,9 @@ HMAC comparisons use constant-time comparison (XOR loop), never `===`. This prev
 
 The signed URL is bound to the agent that purchased the resource, so a leaked URL is useless to anyone else. The binding follows the **DPoP pattern ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449))**: the Exchange embeds the agent's key thumbprint into the URL it HMAC-signs, and a capable edge function enforces proof-of-possession at fetch time — **with no outbound network call**.
 
-**Definition.** `agent_identity_hash` (URL parameter `agent_id`) is the **[RFC 7638](https://www.rfc-editor.org/rfc/rfc7638) JWK Thumbprint (SHA-256, base64url)** of the agent's Ed25519 request-signing key — the same key published in the agent's manifest at `{domain}/.well-known/ramp.json` and used for RFC 9421 request signatures. RFC 7638 defines one canonical JSON form and one hash, so signer and verifier compute the identical value. It is present whenever a signed `retrieval_endpoint` is returned, and it is covered by the URL HMAC.
+**Definition.** `agent_identity_hash` (URL parameter `agent_id`) is the **[RFC 7638](https://www.rfc-editor.org/rfc/rfc7638) JWK Thumbprint (SHA-256, base64url)** of the agent's Ed25519 **acceptance key** — the key whose signature over `AgentAcceptancePayload` the Exchange verified at execute time. RFC 7638 defines one canonical JSON form and one hash, so signer and verifier compute the identical value. It is present whenever a signed `retrieval_endpoint` is returned, and it is covered by the URL HMAC.
+
+The acceptance key, not the RFC 9421 request signer: a Broker may author a re-packaged transaction as sender, and on that leg the request signer is the broker while the in-body acceptance is the only agent-authored signature. An agent that runs the ordinary direct flow signs its requests and its acceptances with one key — the key published in its manifest at `{domain}/.well-known/ramp.json` — so the two are the same value there. Using two keys is what breaks: the URL binds to the acceptance key, and this endpoint refuses a fetcher presenting the other one.
 
 :::caution
 This is **not** a hash of an account identifier such as `billing_ref` — an identifier is not a secret, so hashing it binds nothing an attacker cannot reproduce. The thumbprint binds the URL to a key whose *private* half the fetcher must prove it holds.

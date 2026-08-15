@@ -44,6 +44,13 @@ patterns=(
   # the scalar offer_signature pair is gone: the execute-request now reflects the
   # FULL signed Offer back (offer.signature carries the JWS). offer_id stays live.
   'offer_signature' 'offer_signature_algorithm'
+  # the Offer's Exchange signature is `signature` (with `signature_algorithm`
+  # beside it). `exchange_signature` never existed in any .proto and had spread
+  # to two dozen doc sites, so an integrator who searched the schema for it
+  # found nothing. Denylisted rather than gated generically: see the note at the
+  # bottom of this file on why prose field names cannot be checked against the
+  # descriptor.
+  'exchange_signature'
   # token / vocabulary — both the hyphenated token form and the prose spelling;
   # the canonical optional delegation format is biscuit-v3 (NEVER v2), and
   # entitlement denials are format-neutral ("entitlement token", not "biscuit").
@@ -227,3 +234,30 @@ if [ "$status" -eq 0 ]; then
   echo "doc-conformance: clean"
 fi
 exit "$status"
+
+# --- Why there is no generic "prose field name resolves in the descriptor" gate
+#
+# The tempting generalization of the denylist above: take every backtick-quoted
+# snake_case token in the docs and fail if it names no field, message or enum
+# value in the contract. That would catch a stale field name the first time it
+# is written, instead of after it has spread.
+#
+# It was measured and rejected. Across website/src/content/docs, 189 distinct
+# backticked snake_case tokens (295 occurrences) resolve to nothing in any
+# .proto — and essentially all of them are correct prose about something that is
+# deliberately NOT a wire field:
+#
+#   - storage-layer column and event-field names (event_id, query_id, buyer_lid)
+#   - signed-URL HMAC input parameters (agent_id, txn_id)
+#   - RPC names written in snake_case (execute_transaction, report_usage)
+#   - external vocabularies the docs quote (oa_status, cited_by_count,
+#     is_retracted — OpenAlex/Crossref), CoMP fields, registered JWT claims
+#   - deployment config keys (trusted_key_groups)
+#
+# Making that gate usable would mean a hand-maintained allow-list of ~189
+# entries spanning five namespaces, growing with every doc that mentions a
+# neighbouring system. That is an opt-in list of exceptions, which is the shape
+# this repo's guards deliberately avoid: scope should be derived, and a guard
+# that needs a human to keep adding exemptions fails open the moment someone
+# forgets. The denylist above stays the right tool — it records actual rename
+# events, and each entry is added by the change that caused it.

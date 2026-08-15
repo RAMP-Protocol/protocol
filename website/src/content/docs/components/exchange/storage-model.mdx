@@ -190,6 +190,14 @@ CREATE TABLE transactions_2026_03_15 PARTITION OF transactions
 REVOKE UPDATE, DELETE ON transactions FROM exchange_app;
 ```
 
+**Dedupe scope of `idempotency_key`**: the protocol requires that a key chosen by one caller can never collide with another caller's cached result, so dedupe happens inside a namespace and never globally. For `ExecuteTransaction` that namespace is the acceptance identity, which means the uniqueness constraint must be **composite** — over `(agent_identity_hash, idempotency_key)`, never over `idempotency_key` alone. `agent_identity_hash` is derived from the key that signed the offer acceptance, not from the transport caller, so the scoping holds even when a Broker relays many agents over one transport key.
+
+The DDL above does not spell the constraint out, because a PostgreSQL UNIQUE on a partitioned table must include the partition key. Enforce it per partition, or in a separate non-partitioned dedupe table keyed on the pair; the requirement is the namespace, not the mechanism.
+
+:::caution[Known divergence]
+The reference Exchange currently deploys a **global** UNIQUE on `idempotency_key` alone. A second agent presenting a key the first agent already used is refused by the replay ownership gate rather than deduped in its own namespace, so the observable failure is denial of service across callers, not a leak of another caller's result. Keys are client-chosen UUIDs, so accidental collision is unlikely and squatting requires guessing a key. The composite form described above is the conforming one, and moving the reference Exchange to it is tracked separately.
+:::
+
 **Volume estimate at 1K RPS**: ~86M records/day, ~1 KB/record = ~86 GB/day uncompressed, ~30 GB/day with PostgreSQL TOAST compression. Daily partition drop after export keeps disk usage bounded.
 
 **Export to S3 Parquet**: A nightly job exports each day's partition to S3 as Parquet files for long-term analytics. Queryable via Athena or Trino.
@@ -201,6 +209,39 @@ REVOKE UPDATE, DELETE ON transactions FROM exchange_app;
 For Scale tier (10K+ RPS), ClickHouse replaces PostgreSQL as the transaction log store. ClickHouse's columnar storage and append-optimized MergeTree engine handle 100K+ inserts/second.
 
 The local WAL + Kafka architecture feeds ClickHouse as a Kafka consumer. ClickHouse is the analytical store; the local WAL remains the durability guarantee for the write-before-sign invariant.
+
+---
+
+## Transaction Evidence (Append-Once, Durable)
+
+The evidence store is a **separate store from the transaction log**, written on the same request path. The transaction log is the settlement and analytics stream; the evidence store holds the offline-verifiable proof of what the two parties agreed to. One row is written per successfully executed transaction, at the service boundary, after both Ed25519 signatures have verified. A denied execute writes no row, so the existence of a row is itself the success statement.
+
+The row is **append-once**: written once during `ExecuteTransaction`, then never updated and never deleted before its retention limit. Enforce that the same way the transaction log does — `REVOKE UPDATE, DELETE` on the table. Its only read path is the operator plane's `GetTransactionEvidence` RPC.
+
+**What the row holds.** Each of the two signatures is stored together with the verbatim canonical bytes it was computed over and the public key it verifies against, so a reader can re-verify the row offline without contacting the Exchange and without re-deriving anything. The row also holds the selector columns (`tenant_id`, `transaction_id`, `offer_id`), the request-level idempotency key the acceptance signed, the requester identity as signed, the directory URL the Exchange states it pinned the agent key from, the correlation pair described below, and the server-clock write time.
+
+The column-by-column listing is `ramp.admin.v1.TransactionEvidence` in [Proto: Admin v1](/reference/proto-admin/). The admin read returns the row **as persisted**, so that message is the column list, and this page deliberately does not restate it — a second hand-maintained copy would drift from the wire contract with nothing to catch it.
+
+One name to read carefully across the two stores: `request_idempotency_key` on the evidence row is the **request-level** key the acceptance signed, while the transaction log stores the **derived per-item** key (`request key + ":" + offer_id`). The two are never byte-equal, so joining the stores on an idempotency key means deriving the per-item form first.
+
+**Storage**: evidence rows share the durable store used for transaction records (PostgreSQL for Growth tier, ClickHouse for Scale tier). They must be indexed on `(tenant_id, transaction_id)` — the pair the admin read selects on. Retention must be at least the transaction log's 13 months, because this row is the proof behind any dispute filed against that transaction.
+
+### The correlation pair
+
+**The evidence store is where the request correlation id is persisted.** Two columns carry it:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `request_id` | nullable text | The `X-Request-ID` of the execute request, as recorded. |
+| `request_id_minted` | nullable boolean | `true` = server-minted, because the header was absent; `false` = propagated verbatim from the caller. |
+
+**The two are present together or absent together.** A row with one column set and the other null is invalid, and the store enforces this with a table constraint rather than leaving it to application code. The provenance flag is load-bearing: a propagated id is caller-influenceable and a minted one is not, and the id value alone cannot tell the two apart.
+
+The pair is written **once**, at the service boundary during `ExecuteTransaction`, from the header the request arrived with. The Exchange records a correlation only when the received value conforms to the shape the admin plane can replay into a rendered ledger (printable ASCII, 1 to 255 characters). A nonconforming header value is recorded as *no correlation* — both columns stay null — instead of being stored and echoed back later.
+
+**The transaction log holds no correlation column.** Its `IdempotencyKey` is a durable dedupe key and nothing else; correlation rides the `X-Request-ID` HTTP header and is persisted only here. That split is exactly what the admin plane encodes by placing `RequestCorrelation` on `TransactionEvidence` and not on `TransactionState`.
+
+**This is not the same key as `query_id`.** The `ResourceQueryReceived` event records a `query_id`, which is the `X-Request-ID` of a *discovery* request. The evidence row's `request_id` is the `X-Request-ID` of an *execute* request. Different legs of the exchange, different requests, different values — they must not be joined against each other or read as one correlation chain. The evidence-plane id joins outward to the edge delivery log and the reconciliation sweep.
 
 ---
 
@@ -275,13 +316,13 @@ Providers get read-only access to all signed Offers issued for their content. Th
 **Returns** (per transaction):
 - `transaction_id` — Exchange-assigned transaction identifier
 - `billing_id` — billing reference for settlement
-- `offer_snapshot` — full Offer at transaction time, including `exchange_signature`
+- `offer_snapshot` — full Offer at transaction time, including `signature`
 - `cost` — actual amount charged (or `0` for subscription transactions)
 - `agent_id` — hashed agent identity (`SHA256(agent_key)`)
 - `timestamp` — when the transaction was executed
 
 **Verification capabilities**:
-- Provider can independently verify every Offer's `exchange_signature` using the Exchange's published Ed25519 public key (fetch the Exchange's WBA directory, the JWK Set at `/.well-known/http-message-signatures-directory`, and read its `keys`)
+- Provider can independently verify every Offer's `signature` using the Exchange's published Ed25519 public key (fetch the Exchange's WBA directory, the JWK Set at `/.well-known/http-message-signatures-directory`, and read its `keys`)
 - RSL pricing, when present, serves as the **price ceiling** — Offers exceeding the RSL-declared rate are detectable by comparing `offer_snapshot.pricing.rate` against the RSL terms
 - Private floor pricing is contractual between provider and Exchange, not protocol-enforced — the protocol provides the audit data, the contract governs the terms
 

@@ -21,13 +21,115 @@ agents, so an id alone must not act as a bearer capability for the forensic row;
 mismatch is `NOT_FOUND`, byte-identical to an unknown id, so existence under another tenant is
 not revealed. The row re-verifies OFFLINE, and the contract states the trust boundary
 explicitly: offline verification proves the row is internally consistent, while authenticity
-requires comparing the embedded keys against independently obtained copies (the published JWKS;
-the agent directory named by `agent_directory_url`). The delivery join is hash-only
+requires comparing the embedded keys against independently obtained copies. The Exchange anchor
+is signed — `Offer.exchange` inside `offer_canonical_bytes`; the agent side has none, so
+`agent_directory_url` is provenance and the agent key must be anchored independently.
+The delivery join is hash-only
 (`TransactionState.signed_url_hash` against the edge log) — the full signed URL, a live bearer
 capability, never appears on this plane, so a signed-URL *signature* match assertion is
 deliberately unproducible from this contract. The correlation id the Exchange persisted rides in
 `RequestCorrelation` (bounded printable ASCII, with a `minted` provenance flag); the agent plane
-still carries no correlation field in any message body.
+still carries no correlation field in any message body. `TransactionState.signed_url_expiry` and
+`TransactionState.signed_url_hash` are both optional, because not every delivery method mints a
+signed URL: a `DELIVERY_METHOD_DIRECT` transaction returns the resource inline or from the
+Exchange's own endpoint, so it has no URL, no expiry and nothing to hash. Requiring them would
+leave a successfully executed direct transaction with no legal value to send for two mandatory
+fields. Absence is the stated fact that no signed URL existed; a value that IS present must still
+be a full 32-byte digest.
+
+**`transaction_id` entropy: the guarantee is narrowed to what it actually is (wording fix; no
+wire change).** `ramp.v1.TransactionResultItem.transaction_id` said RAMP places no entropy
+requirement on a transaction id because the evidence read selects by a pair, and concluded that
+"nothing rests on this field's format being unguessable". The first half is right and the
+conclusion was too strong. What the pair selector buys is that a transaction id ALONE is never a
+bearer capability for the forensic row — which matters, because counterparty agents legitimately
+hold the ids of their own transactions. It does not make enumeration infeasible: tenant ids are
+human brand slugs, and a tenant's slug is handed to every agent holding one of its offers,
+because it prefixes the `offer_id` inside the signed offer. A caller who can reach the admin
+plane and has done business with a tenant can pair a known tenant with guessed ids. Enumeration
+is bounded by the network-layer reachability restriction on `ramp.admin.v1`, which is therefore
+the load-bearing control rather than a deployment convenience. Both planes and the threat model's
+enumeration entry now say this the same way.
+
+The cross-package dependency is also gated. The agent-plane claim rested on the shape of
+`ramp.admin.v1.GetTransactionEvidenceRequest`, and nothing failed if that shape changed — the
+only other mention was inside the generated corpus, which would simply regenerate smaller. A
+conformance guard now fails when the selector stops being a pair, so weakening it can no longer
+leave a published agent-plane promise quietly false.
+
+**Evidence row: the offline trust boundary now names a SIGNED anchor, and `agent_directory_url`
+is bounded (rule addition on a message that has not shipped).** The trust-boundary recipe told a
+verifier to check the embedded keys against independently obtained copies, then pointed at
+`agent_directory_url` for the agent side — a field covered by neither signature and written by
+the same party as the rest of the row. A fabricated row satisfied the entire documented procedure
+using one host its author controlled. The recipe now separates the two sides. The Exchange anchor
+is read OUT of `offer_canonical_bytes`: `ramp.v1.Offer.exchange` names the issuing host and sits
+under `offer_sig`, so changing it invalidates the signature the check exists to confirm. The
+agent side has no signed anchor, and the contract now says so — `agent_directory_url` is
+provenance, never authority, and the agent key must be anchored independently, which is equally
+true when the field is `''`. It is also added to the list of unsigned self-assertions under
+SCOPE OF THE GUARANTEE.
+
+The field additionally gains `max_len: 512` and a pattern accepting `''` or an https URL whose
+host uses the same recipient-host grammar as `Offer.exchange`, with an optional port and an
+ASCII-printable path. The rule bounds the damage from tooling that follows the value anyway; it
+does not make following it safe, and the comment states what it does not catch — an IPv4-literal
+host still matches, because the recipient-host grammar admits all-numeric labels. A conformance
+test pins the accepted and refused set so the comment and the rule cannot drift apart.
+
+The row's replay exposure is now stated rather than left to inference. `offer_json` + `offer_sig`
+are a complete Exchange-signed offer, and `ramp.v1.Offer` binds no requester and no tenant, so a
+row holder can accept the same offer under their own identity until it expires; `expires_at`,
+`Offer.exchange` and this plane's reachability restriction bound that without closing it, and
+closing it needs a requester audience inside the signed offer, which belongs upstream in
+`ramp.v1`. The acceptance is the opposite case: the row carries a complete resubmittable
+acceptance, but resubmitting it lands in the same dedupe namespace and returns the original
+result, and the row holds no private key with which to mint a different one.
+
+**The agent identity for a transaction is the ACCEPTANCE key (wording fix; no wire change).**
+The schema named two different keys as the source of the same embedded value. `AgentAcceptance`
+said `agent_identity_hash` is the RFC 7638 thumbprint of the acceptance key; the file header and
+`TransactionResponse.agent_identity_hash` said the request-signing key. They are the same key
+only on a direct hop. A Broker may author a re-packaged transaction as sender, and on that leg
+the RFC 9421 signer is the broker while the in-body acceptance is the only agent-authored
+signature in the request — so the transport signer cannot be the anchor. `AgentAcceptance` now
+carries the normative definition and every other site cites it: the identity is the acceptance
+key where an acceptance is present, and the verified request signer otherwise, which is safe
+only because an acceptance-less request cannot have been relayed.
+
+Two rules that shipping code already enforces are now written down. The ONE-KEY RULE: an agent
+MUST accept an offer and fetch the delivered resource with the same key, because the URL is bound
+to the acceptance-key thumbprint and an enforcing delivery endpoint checks the fetching key
+against it — accepting with one key and fetching with another produces a transaction that
+succeeds and a retrieval that is refused. It binds only where proof-of-possession is enforced (a
+bearer-only CDN keeps the bearer posture), and a custodial registry holding the one key satisfies
+it with nothing extra to do. And because `TransactionResponse.agent_identity_hash` is a single
+per-request value, every acceptance in one `TransactionRequest` MUST be signed by the same key.
+
+**Idempotency dedupe scope: one invariant, three named mechanisms (wording fix; no wire
+change).** The same sentence — "uniqueness is scoped to the verified RFC 9421 signer" — was
+copy-pasted onto `TransactionRequest`, `UsageReport` and `DisputeRequest`, three RPCs that do not
+authenticate the same way. Under a broker-repackaged execute it namespaces every agent behind one
+broker together, which is the collision the sentence exists to forbid. The invariant is now
+stated once on `TransactionRequest.idempotency_key` — a key chosen by one caller MUST NEVER
+collide with another caller's cached result — and each RPC names the namespace that makes it
+true: `ExecuteTransaction` scopes to the acceptance identity; `ReportUsage` and `FileDispute`
+carry no acceptance payload and scope to the transaction the message names, which is bound to
+exactly one agent by its acceptance at execute time. Both of those RPCs therefore state that
+`transaction_id` MUST be non-empty. That is prose here; the schema rule enforcing it is filed
+separately.
+
+**`Offer.signature` is a detached hex Ed25519 signature, not a JWS (wording fix; no wire
+change).** The schema described one field two ways. `Offer.signature`,
+`Offer.signature_algorithm` and the file-header summaries called it a JWS with `alg=EdDSA`, while
+`AgentAcceptance` described the same convention as "a hex-encoded detached Ed25519 signature
+(NOT a JWS)". Hex is the reading every verifier implements, and the operator plane depends on
+it: `TransactionEvidence.offer_sig` is pattern-enforced as 128 hex characters and the offline
+verification recipe re-verifies those bytes directly, so under the JWS reading every evidence row
+would fail its own validation. The JWS wording is now gone from all four sites. The value of
+`signature_algorithm` stays `"EdDSA"` — the JOSE algorithm identifier is borrowed, the envelope
+is not. Nothing on the wire changes: a client emitting a JWS here was already producing a value
+no Exchange accepts.
 
 **Generated clients: `TransactionRequest.items` is now required in the Pydantic/Zod export
 (breaking for the generated clients; no wire change).** The Go server has always rejected an
@@ -62,8 +164,10 @@ marker plus a hand-maintained list. The base64 wire forms the two generated clie
 identically now live in one shared vector file (`conformance/testdata/bytes_wire_forms.json`)
 that a conformance test pins against Go `protojson` + protovalidate, so each row is written once,
 cannot drift between the Pydantic and Zod suites, and states the server's real verdict rather
-than a belief about it. The evidence-read messages add 87 corpus cases on top of the
-recipient-addressing revision below, taking the committed corpus to 636.
+than a belief about it. The evidence-read messages contribute 88 of the new corpus cases; the
+committed corpus goes from 549 at the branch point to 646, a net +97 made of 122 added and 25
+removed across 29 messages, because tightened rules elsewhere in this revision replace cases
+rather than only adding them.
 
 **Every addressed request names its recipient: `exchange` becomes required (breaking,
 pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`
@@ -190,7 +294,7 @@ address, jurisdiction, tax identifiers. The specific members stay operator-defin
 now explicit is that this is not an identity claim, since the caller's identity comes from
 the verified request signature and nothing in the payload is trusted as authentication.
 
-*Tooling:* the corpus grows from 208 to 549 cases and `Offer` enters it for the first time,
+*Tooling:* the corpus grows from 208 to 319 cases and `Offer` enters it for the first time,
 because a message with no field rules produces no cases at all and `Offer` previously had
 none. `WellKnownManifest` gains a seed: auto-fill populates `terms_digest` (it carries a
 pattern) but never `terms_uri` (no field rule to trigger on), so the generated baseline

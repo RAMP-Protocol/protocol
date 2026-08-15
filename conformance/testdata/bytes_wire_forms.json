@@ -44,7 +44,7 @@
       "transaction_id": "tx-seed"
     },
     "TransactionState": {
-      "expiry": "2026-01-02T03:04:05Z",
+      "signed_url_expiry": "2026-01-02T03:04:05Z",
       "idempotency_key": "idem-tx:offer-seed",
       "signed_url_hash": "aGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGg="
     }

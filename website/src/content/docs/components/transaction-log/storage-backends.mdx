@@ -187,9 +187,25 @@ type TransactionEvent struct {
 
     TransactionID  string `json:"transaction_id,omitempty"  db:"transaction_id"`
     BillingID      string `json:"billing_id,omitempty"      db:"billing_id"`
-    // The request's idempotency key (TransactionRequest.idempotency_key /
-    // UsageReport.idempotency_key). Durable dedupe key, NOT the wire
-    // correlation id — correlation rides the X-Request-ID HTTP header.
+    // The dedupe key of whatever the event records. Which key that is depends
+    // on the event type, and the two are never interchangeable:
+    //
+    //   - Transaction-side events (TransactionRequested,
+    //     BillingAuthorizationResult, SignedURLIssued) store the DERIVED
+    //     per-item key — TransactionRequest.idempotency_key + ":" + offer_id —
+    //     so each item of a multi-item batch dedupes independently. Derived
+    //     unconditionally, single-item requests included; the bare
+    //     request-level key is never stored on these events.
+    //   - UsageReportReceived stores UsageReport.idempotency_key verbatim. A
+    //     report addresses one whole transaction and has no offer_id to derive
+    //     with, so there is nothing to append.
+    //
+    // A ledger joining ramp.admin.v1.TransactionState.idempotency_key against
+    // this column therefore reaches the transaction-side events and does not
+    // reach UsageReportReceived — that row is joined on transaction_id instead.
+    //
+    // Durable dedupe key either way, NOT the wire correlation id — correlation
+    // rides the X-Request-ID HTTP header.
     IdempotencyKey string `json:"idempotency_key,omitempty" db:"idempotency_key"`
     OfferID        string `json:"offer_id,omitempty"        db:"offer_id"`
     SubscriptionID string `json:"subscription_id,omitempty" db:"subscription_id"`

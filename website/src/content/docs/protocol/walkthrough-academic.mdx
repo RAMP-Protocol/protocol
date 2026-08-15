@@ -878,7 +878,7 @@ Response:
 **Authentication at every step:**
 - **Agent to Exchange**: signed with an RFC 9421 HTTP Message Signature (alg=ed25519) in the HTTP headers
 - **Institutional delegation**: delegation JWT signed by `stanford.edu`'s Ed25519 key, holder-of-key bound via `cnf.jkt` (offline-verifiable)
-- **Exchange to Agent**: `exchange_signature` on each Offer (Ed25519, stateless verification)
+- **Exchange to Agent**: `signature` on each Offer (Ed25519, stateless verification)
 - **Signed URLs**: HMAC-SHA256 (Exchange-CDN shared secret, agent identity bound)
 - **Content integrity**: SHA-256 hash verification on all 49 delivered PDFs (`RESOURCE_MUTABILITY_STATIC`)
 
