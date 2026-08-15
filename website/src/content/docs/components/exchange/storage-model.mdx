@@ -201,7 +201,7 @@ CREATE TABLE transactions_2026_03_15 PARTITION OF transactions
 REVOKE DELETE ON transactions FROM exchange_app;
 ```
 
-**Whether `UPDATE` may be revoked on the transaction log depends on where you put report state.** The protocol does not decide it. If the consumed quantity lands on the transaction row when the usage report arrives, the log is mutable and revoking `UPDATE` blocks a write you need. If report state goes to separate tables — the reference Exchange writes it to a reporting-obligations table and a per-report table, leaving the log insert-only — then `UPDATE` can be revoked here too.
+**Whether `UPDATE` may be revoked on the transaction log depends on where you put report state.** The protocol does not decide it. If the consumed quantity lands on the transaction row when the usage report arrives, the log is mutable and revoking `UPDATE` blocks a write you need. If report state goes to a separate table — the reference Exchange writes the state transition, the consumed quantity and the validation outcome onto the obligation row, leaving the log insert-only — then `UPDATE` can be revoked here too.
 
 Append-once is a hard requirement for the **evidence** store described below, and only there. That is the distinction: the log may follow a transaction as it changes, the evidence row states what the two parties agreed to and can never legitimately change afterwards.
 

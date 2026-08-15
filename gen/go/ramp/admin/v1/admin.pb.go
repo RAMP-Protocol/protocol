@@ -1200,11 +1200,17 @@ func (x *TransactionState) GetSignedUrlHash() []byte {
 // ramp.v1.ReportingObligation, which is the agent-facing requirements
 // contract; this is the state those requirements minted.
 //
-// The timestamp fields carry the store's own column names (WindowEnd,
-// FulfilledAt, CreatedAt) in snake_case, so a reader can join this record
-// against the storage model by name and see there is no translation step in
-// between. consumed_quantity is the one field with no column behind it: it
-// comes from the accepted usage report, not from the obligation row.
+// EVERY field here is backed by a column on the obligation row, with no
+// exceptions and no translation step. The timestamp fields carry the store's
+// own column names (WindowEnd, FulfilledAt, CreatedAt) in snake_case, so a
+// reader can join this record against the storage model by name, and
+// consumed_quantity is a column too — written in the same statement as the
+// state transition when a report validates.
+//
+// That completeness is the property worth having, and it is what makes this
+// message a projection rather than an assembly. A single field sourced
+// elsewhere would mean a reader could not tell, from the message alone, which
+// values a server had to go looking for.
 type ReportingObligationState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Lifecycle state. Always a real persisted state, never UNSPECIFIED.
