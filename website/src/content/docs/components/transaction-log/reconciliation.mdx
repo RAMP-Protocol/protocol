@@ -101,7 +101,11 @@ WHERE mp.signed_url_hash IS NULL
   AND cdn.status_code = 200;
 ```
 
-For this to work, the `transaction_id` must be embedded in the signed URL parameters. The provider extracts it from their CDN logs and joins against the Exchange export.
+**Both sides must spell the hash the same way.** A CDN access log records the URL that was fetched, not a digest of it, so `cdn.signed_url_hash` is a column the provider derives before the join. Derive it exactly as the [transaction log defines the column](/components/transaction-log/event-types/#signed-url-logging): SHA-256 over the full requested URL including its query string, written as lowercase hex. Any other spelling — uppercase hex, base64, or a digest taken over the path alone — makes every row miss the join, and a miss here reads as revenue leakage rather than as a formatting mistake.
+
+This query only sees transactions that minted a signed URL. `DELIVERY_METHOD_DIRECT` transactions have no `signed_url_hash` on either side and never appear in a CDN access log at all, so they are outside this reconciliation rather than missing from it.
+
+The join also requires the `transaction_id` to be embedded in the signed URL parameters. The provider extracts it from their CDN logs to identify *which* transaction a matched row belongs to, once the hash join has established that a match exists.
 
 ## Dispute Detection
 

@@ -139,10 +139,10 @@ The Exchange MUST NOT return the `TransactionResponse` until this event is durab
 | `cost_amount` | `float64` | yes | Transaction cost |
 | `cost_currency` | `string` | yes | ISO 4217 currency code |
 | `cost_unit_cost` | `float64` | yes | Effective cost per unit |
-| `signed_url_hash` | `string` | yes | SHA-256 of the issued signed URL |
-| `signed_url_expiry` | `time.Time` | yes | When the signed URL expires |
-| `agent_identity_hash` | `string` | yes | Hash of agent identity bound to URL |
-| `delivery_method` | `string` | yes | DIRECT or INSTRUCTIONS |
+| `signed_url_hash` | `string` | cond | Lowercase hex SHA-256 of the issued signed URL (see [Signed URL Logging](#signed-url-logging)). Required when the transaction minted a signed URL; absent for `DIRECT` |
+| `signed_url_expiry` | `time.Time` | cond | When the signed URL expires. Present and absent under the same condition as `signed_url_hash` |
+| `agent_identity_hash` | `string` | yes | RFC 7638 JWK Thumbprint (SHA-256, base64url) of the agent's acceptance key. Bound into the signed URL when one is minted |
+| `delivery_method` | `string` | yes | `DIRECT`, `INSTRUCTIONS` or `STREAMING` (`Offer.delivery_method`) |
 | `offer_snapshot_json` | `string` | yes | JSON-serialized offer at transaction time |
 | `reporting_required` | `bool` | yes | Whether usage report is mandatory |
 | `reporting_deadline` | `time.Time` | no | Required when `reporting_required=true` |
@@ -154,9 +154,25 @@ The Exchange MUST NOT return the `TransactionResponse` until this event is durab
 
 The `offer_snapshot_json` field captures the complete offer as it existed at transaction time (~500 bytes per event). It enables audit queries like "what exactly was promised in transaction X?" without needing to reconstruct from the catalog, which may have changed since.
 
+### Direct Delivery Mints No Signed URL
+
+The event itself is always produced: it is the settlement record for every authorized transaction, whatever the delivery method. Two of its columns are not.
+
+`DELIVERY_METHOD_DIRECT` returns the resource inline or from the Exchange's own endpoint. No signed URL is minted, so there is no URL to hash and nothing to expire, and `signed_url_hash` and `signed_url_expiry` are both absent. `DELIVERY_METHOD_INSTRUCTIONS` and `DELIVERY_METHOD_STREAMING` both mint one and always carry both columns.
+
+The two columns are absent together or present together. A row carrying one without the other is malformed, because both describe the same minted URL.
+
+A store must therefore be able to hold *no value* in these two columns, not an empty string and not a zero timestamp. The absence is a stated fact about the delivery method, and a consumer must be able to tell it apart from a URL that was minted but logged wrong. The operator plane mirrors this: `ramp.admin.v1.TransactionState.signed_url_hash` and `.signed_url_expiry` are both optional, and a `DIRECT` transaction's state message simply omits them.
+
 ### Signed URL Logging
 
-By default, only the SHA-256 hash of the signed URL is logged (`signed_url_hash`). A configuration option `log_full_signed_url` (default: `false`) enables logging the full URL for debugging.
+By default, only the hash of the signed URL is logged (`signed_url_hash`). A configuration option `log_full_signed_url` (default: `false`) enables logging the full URL for debugging.
+
+**What is hashed.** The SHA-256 digest is taken over the **full** issued URL — scheme, host, path and query string, exactly the bytes handed to the agent, with the signature parameter included. This is what the Go SDK's `HashURL` already computes, and it is the only definition that lets a provider reproduce the value from a CDN access log line.
+
+**Encoding.** The digest is written as **lowercase hexadecimal**, 64 characters. The digest itself is 32 raw bytes — `HashURL` returns bytes, and the operator plane holds bytes — so the text form is purely how a log renders it, and the requirement is that every exporter render it the same way. Lowercase hex has exactly one spelling and compares and sorts predictably in SQL. Base64 is not used here: its padded, unpadded and URL-safe variants all look plausible in a log, so two exporters could pick different ones and silently fail to join.
+
+Every other page that mentions this column refers to this definition rather than restating it. The operator plane holds the same digest as 32 raw bytes and states so on its own side; a join between the two planes normalizes both to the raw digest instead of comparing the encodings.
 
 | Setting | `signed_url_hash` | `signed_url_full` | Use Case |
 |---|---|---|---|

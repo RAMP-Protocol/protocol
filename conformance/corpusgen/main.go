@@ -68,7 +68,12 @@ func seeds() map[string]proto.Message {
 	// and the audience statement of a TransactionRequest), so a seed without it
 	// is not a valid baseline — seeds bypass auto-fill entirely.
 	offer := func() *rampv1.Offer {
-		return &rampv1.Offer{OfferId: "offer-seed", Exchange: "exchange.example", Pricing: pricing()}
+		return &rampv1.Offer{
+			OfferId:   "offer-seed",
+			Exchange:  "exchange.example",
+			Pricing:   pricing(),
+			Signature: strings.Repeat("ab", 64),
+		}
 	}
 	return map[string]proto.Message{
 		"Pricing":     pricing(),
@@ -81,7 +86,7 @@ func seeds() map[string]proto.Message {
 		"Quota":                 &rampv1.Quota{Metric: "accesses", Limit: 1, Window: rampv1.QuotaWindow_QUOTA_WINDOW_DAILY},
 		"LicenseTerm":           &rampv1.LicenseTerm{Semantics: rampv1.TermSemantics_TERM_SEMANTICS_ENUMERATED, Pricing: pricing()},
 		"AcceptableRestriction": &rampv1.AcceptableRestriction{Axis: rampv1.RestrictionKind_RESTRICTION_KIND_FUNCTION, Values: []string{"ai-train"}},
-		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Exchange: "exchange.example", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
+		"DisputeRequest":        &rampv1.DisputeRequest{IdempotencyKey: "idem-dr", Exchange: "exchange.example", TransactionId: "tx-dr", Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH},
 		// Reflected-Offer execute contract (items-only): Offer is
 		// the required sub-message of TransactionItem (auto-fill needs its seed),
 		// and TransactionRequest needs a valid 1-item items[] baseline because its
@@ -166,7 +171,12 @@ func seeds() map[string]proto.Message {
 // FIRST entry that matches, so appending cannot change what any existing field
 // auto-fills to, and the corpus diff stays additive. Inserting anywhere else can
 // silently re-value every field a new earlier entry happens to satisfy.
-var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), ""}
+// The trailing entry is a 128-character lowercase hex string: one Ed25519
+// signature, the shape both planes' signature fields now require. Appended
+// rather than seeded per message, because the shape belongs to a rule and not
+// to any one message — the agent plane and the evidence row auto-fill from the
+// same sample, which is what makes their corpus baselines comparable.
+var stringSamples = []string{"x", "ai-train", "tokens", "accesses", "0", "sha256:" + strings.Repeat("ab", 32), "", strings.Repeat("ab", 64)}
 
 // APPEND-ONLY: a badStrings entry's INDEX is baked into the emitted case IDs (see
 // stringEdges' pattern#<idx> mutants), so appending keeps existing case IDs stable and

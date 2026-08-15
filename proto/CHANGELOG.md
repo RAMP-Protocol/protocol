@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+**Agent-plane signature fields now enforce the hex shape they describe (BREAKING: rule addition on
+live fields).** `ramp.v1.Offer.signature` carried no rule at all and
+`ramp.v1.AgentAcceptance.signature` carried only `min_len: 1`, while both comments described a
+detached Ed25519 signature in hex. The read plane already enforced exactly that on its stored
+copies (`TransactionEvidence.offer_sig`, `.agent_acceptance_signature`), so the forensic copy of a
+signature was validated and the live one was not: a malformed signature was accepted on the agent
+plane, failed verification later, and only failed VALIDATION once it reached an evidence row it
+could never legitimately reach. Both fields now carry
+`pattern = "^[0-9A-Fa-f]{128}$"` — 64 bytes of Ed25519 signature, hex-encoded, either case
+accepted because hex decoding accepts both. On `AgentAcceptance.signature` the pattern REPLACES
+`min_len: 1`, which it subsumes. Breaking in the descriptor, but no conformant caller is refused:
+a value outside this shape cannot hex-decode into 64 bytes, so it could never have verified — the
+rejection simply moves from the verify step to the validation step, where the error names the
+problem. All three SDKs already emit lowercase hex. The `Same rule as` drift directives on the two
+admin fields were re-anchored UPSTREAM to the ramp.v1 fields, which they could not point at while
+those fields had no rule; the gate now compares the two planes against each other.
+`Offer.signature` also becomes mandatory in practice, since the empty string does not match the
+pattern — which is what the message already meant, an offer whose terms, pricing and expiry are
+not signed being no offer.
+
+**`transaction_id` is enforced non-empty on `UsageReport` and `DisputeRequest` (BREAKING: rule
+addition on live fields).** Both comments said the field MUST be non-empty and both were bare
+`string transaction_id = 3;`, so an empty value passed. The rule is not a shape preference: for
+these two RPCs the named transaction IS the dedupe namespace for `idempotency_key`, so a message
+that names no transaction has no namespace to dedupe within, and the namespace invariant stated on
+`TransactionRequest.idempotency_key` — one caller's key never collides with another caller's
+cached result — has nothing to hold it up. Both fields now carry `min_len: 1`, with no upper
+bound, because the Exchange assigns the id and nothing upstream constrains its length. The prose
+MUST and the schema now say the same thing.
+
 **Operator plane: forensic evidence read — `GetTransactionEvidence` (additive).**
 `AdminService` gains its first read:
 `GetTransactionEvidence(GetTransactionEvidenceRequest) → GetTransactionEvidenceResponse`

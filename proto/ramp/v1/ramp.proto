@@ -669,7 +669,16 @@ message Offer {
   // licensing term without invalidating it.
   // Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
   // key, and MUST reject an offer whose `expires_at` is in the past.
-  string signature = 9;
+  //
+  // The rule is the hex shape this comment already describes: 128 characters,
+  // either case, which is one Ed25519 signature (64 bytes) hex-encoded. Either
+  // case is accepted because hex decoding accepts both and a dispute should
+  // read the same characters a request log holds; every SDK in this repo emits
+  // lowercase. The pattern also makes the field mandatory in practice — the
+  // empty string does not match it — which restates what this message already
+  // requires: an unsigned Offer is not an Offer, since the signature is what
+  // makes its terms, pricing and expiry non-repudiable.
+  string signature = 9 [(buf.validate.field).string.pattern = "^[0-9A-Fa-f]{128}$"];
 
   // Signature algorithm. Always 'EdDSA' — the JOSE algorithm identifier for
   // Ed25519 (RFC 8032). Only the identifier is borrowed from JOSE: `signature`
@@ -1901,8 +1910,17 @@ enum ResourceMutability {
 // `Offer.signature`; `signature_algorithm` is "EdDSA".
 message AgentAcceptance {
   // Hex-encoded detached Ed25519 signature over the canonical AgentAcceptancePayload
-  // bytes (see the canonical-signing definition on Offer.signature).
-  string signature = 1 [(buf.validate.field).string.min_len = 1];
+  // bytes (see the canonical-signing definition on Offer.signature). Same rule
+  // as ramp.v1.Offer.signature — the same 128-character hex shape, either
+  // case, because it is the same kind of value produced by the same
+  // convention.
+  //
+  // The pattern replaced a bare min_len: 1, which it subsumes: a 128-character
+  // string cannot be empty. Nothing conformant is refused that was accepted
+  // before — a signature outside this shape could never hex-decode into 64
+  // bytes and so could never verify, so it failed at the verify step instead,
+  // later and with a worse error.
+  string signature = 1 [(buf.validate.field).string.pattern = "^[0-9A-Fa-f]{128}$"];
 
   // Signature algorithm; "EdDSA" for Ed25519.
   string signature_algorithm = 2;
@@ -2463,8 +2481,10 @@ message UsageReport {
 
   // Transaction ID from the delivery. MUST be non-empty. It is also the dedupe
   // namespace for `idempotency_key` above, so a report that names no
-  // transaction has no namespace to dedupe within.
-  string transaction_id = 3;
+  // transaction has no namespace to dedupe within — the rule below is what
+  // makes that namespace exist, not a shape preference. No upper bound: the
+  // Exchange assigns this id and nothing upstream constrains its length.
+  string transaction_id = 3 [(buf.validate.field).string.min_len = 1];
 
   // Billing record identifier from the delivery (TransactionResultItem.billing_id).
   string billing_id = 4;
@@ -3188,8 +3208,10 @@ message DisputeRequest {
 
   // Transaction being disputed. MUST be non-empty. It is also the dedupe
   // namespace for `idempotency_key` above, so a filing that names no
-  // transaction has no namespace to dedupe within.
-  string transaction_id = 3;
+  // transaction has no namespace to dedupe within — the rule below is what
+  // makes that namespace exist, not a shape preference. Same rule as
+  // ramp.v1.UsageReport.transaction_id, for the same reason.
+  string transaction_id = 3 [(buf.validate.field).string.min_len = 1];
 
   // Billing record identifier from the disputed transaction
   // (TransactionResultItem.billing_id).

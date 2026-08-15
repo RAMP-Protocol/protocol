@@ -1,6 +1,7 @@
 package helpers_test
 
 import (
+	"strings"
 	"testing"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
@@ -25,15 +26,17 @@ import (
 // does not by itself pass the case — the rejection (err != nil) is load-bearing.
 const minItemsRuleID = "repeated.min_items"
 
-// validOffer returns a minimal Offer that passes protovalidate. While the Offer
-// message itself carries no field-level buf.validate rules, its nested Pricing
-// does (per_unit requires unit; free requires rate 0), so the embedded Pricing
-// must itself be valid. FREE/0 is the simplest valid pricing and matches the
-// corpusgen Offer seed. (sampleOffer() in offer_test.go is shaped for SIGNATURE
-// tests — PER_UNIT without a unit — which protovalidate rejects.)
-// Exchange is presence-enforced: it is the execute-routing target, and a
-// TransactionRequest's audience statement is per item, so an offer without it is
-// unroutable and does not validate.
+// validOffer returns a minimal Offer that passes protovalidate. Three things
+// have to hold at once, and each has a different source. The nested Pricing
+// carries its own rules (per_unit requires unit; free requires rate 0), so the
+// embedded Pricing must itself be valid — FREE/0 is the simplest valid pricing
+// and matches the corpusgen Offer seed. (sampleOffer() in offer_test.go is
+// shaped for SIGNATURE tests — PER_UNIT without a unit — which protovalidate
+// rejects.) Exchange is presence-enforced: it is the execute-routing target,
+// and a TransactionRequest's audience statement is per item, so an offer
+// without it is unroutable. Signature carries a 128-character hex pattern, so
+// an unsigned offer no longer validates at all; the value below is filler in
+// that shape, not a signature over anything.
 func validOffer() *rampv1.Offer {
 	return &rampv1.Offer{
 		OfferId:  "of_valid_1",
@@ -42,6 +45,7 @@ func validOffer() *rampv1.Offer {
 			Model: rampv1.PricingModel_PRICING_MODEL_FREE,
 			Rate:  "0",
 		},
+		Signature: strings.Repeat("ab", 64),
 	}
 }
 

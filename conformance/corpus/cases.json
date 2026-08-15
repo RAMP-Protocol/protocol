@@ -135,31 +135,119 @@
     }
   },
   {
-    "id": "AgentAcceptance/signature/too_short_explicit_empty",
+    "id": "AgentAcceptance/signature/missing_empty",
     "message": "AgentAcceptance",
     "valid": false,
     "rules": [
-      "string.min_len"
+      "string.pattern"
+    ],
+    "json": {}
+  },
+  {
+    "id": "AgentAcceptance/signature/pattern#0",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.pattern"
     ],
     "json": {
-      "signature": ""
+      "signature": "two words"
     }
   },
   {
-    "id": "AgentAcceptance/signature/too_short_omitted",
+    "id": "AgentAcceptance/signature/pattern#1",
     "message": "AgentAcceptance",
     "valid": false,
     "rules": [
-      "string.min_len"
+      "string.pattern"
     ],
-    "json": {}
+    "json": {
+      "signature": "1.2.3"
+    }
+  },
+  {
+    "id": "AgentAcceptance/signature/pattern#2",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "signature": "!!bad!!"
+    }
+  },
+  {
+    "id": "AgentAcceptance/signature/pattern#3",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "signature": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "AgentAcceptance/signature/pattern#4",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "signature": " "
+    }
+  },
+  {
+    "id": "AgentAcceptance/signature/pattern#5",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "signature": "-5"
+    }
+  },
+  {
+    "id": "AgentAcceptance/signature/pattern#6",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "signature": "NaN"
+    }
+  },
+  {
+    "id": "AgentAcceptance/signature/pattern#7",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "signature": "Infinity"
+    }
+  },
+  {
+    "id": "AgentAcceptance/signature/pattern#8",
+    "message": "AgentAcceptance",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "signature": "1E3"
+    }
   },
   {
     "id": "AgentAcceptance/valid",
     "message": "AgentAcceptance",
     "valid": true,
     "json": {
-      "signature": "x"
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -1022,7 +1110,8 @@
     "json": {
       "exchange": "https://exchange.example",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1035,7 +1124,8 @@
     "json": {
       "exchange": "exchange.example/register",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1048,7 +1138,8 @@
     "json": {
       "exchange": "exchange.example:0",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1061,7 +1152,8 @@
     "json": {
       "exchange": "exchange.example:99999",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1074,7 +1166,8 @@
     "json": {
       "exchange": "exchange.example?x=1",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1087,7 +1180,8 @@
     "json": {
       "exchange": "user@exchange.example",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1100,7 +1194,8 @@
     "json": {
       "exchange": "exchange.example:123456",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1113,7 +1208,8 @@
     "json": {
       "exchange": "exchange.example:",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1126,7 +1222,8 @@
     "json": {
       "exchange": "exchange.example.",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1139,7 +1236,8 @@
     "json": {
       "exchange": "exchange..example",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1152,7 +1250,8 @@
     "json": {
       "exchange": "-exchange.example",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1165,7 +1264,8 @@
     "json": {
       "exchange": "[::1]:443",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1177,7 +1277,8 @@
     ],
     "json": {
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1190,7 +1291,8 @@
     "json": {
       "exchange": "two words",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1203,7 +1305,8 @@
     "json": {
       "exchange": "!!bad!!",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1216,7 +1319,8 @@
     "json": {
       "exchange": "\u0000ctl\u0000",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1229,7 +1333,8 @@
     "json": {
       "exchange": " ",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1242,7 +1347,8 @@
     "json": {
       "exchange": "-5",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1255,7 +1361,8 @@
     "json": {
       "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1268,7 +1375,8 @@
     "json": {
       "exchange": "exchange.example",
       "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1281,7 +1389,8 @@
     "json": {
       "exchange": "exchange.example",
       "idempotency_key": "",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1293,7 +1402,8 @@
     ],
     "json": {
       "exchange": "exchange.example",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -1305,7 +1415,35 @@
     ],
     "json": {
       "exchange": "exchange.example",
-      "idempotency_key": "idem-dr"
+      "idempotency_key": "idem-dr",
+      "transaction_id": "tx-dr"
+    }
+  },
+  {
+    "id": "DisputeRequest/transaction_id/too_short_explicit_empty",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "exchange": "exchange.example",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": ""
+    }
+  },
+  {
+    "id": "DisputeRequest/transaction_id/too_short_omitted",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "exchange": "exchange.example",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
     }
   },
   {
@@ -1315,7 +1453,8 @@
     "json": {
       "exchange": "exchange.example",
       "idempotency_key": "idem-dr",
-      "reason": "DISPUTE_REASON_CONTENT_MISMATCH"
+      "reason": "DISPUTE_REASON_CONTENT_MISMATCH",
+      "transaction_id": "tx-dr"
     }
   },
   {
@@ -2433,7 +2572,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2451,7 +2591,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2469,7 +2610,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2487,7 +2629,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2505,7 +2648,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2523,7 +2667,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2541,7 +2686,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2559,7 +2705,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2577,7 +2724,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2595,7 +2743,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2613,7 +2762,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2631,7 +2781,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2648,7 +2799,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2666,7 +2818,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2684,7 +2837,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2702,7 +2856,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2720,7 +2875,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2738,7 +2894,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -2756,7 +2913,197 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "Offer/signature/missing_empty",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
       }
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#0",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": "two words"
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#1",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": "1.2.3"
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#2",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": "!!bad!!"
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#3",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#4",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": " "
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#5",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": "-5"
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#6",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": "NaN"
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#7",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": "Infinity"
+    }
+  },
+  {
+    "id": "Offer/signature/pattern#8",
+    "message": "Offer",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "data_as_of": "2026-01-02T03:04:05Z",
+      "exchange": "exchange.example",
+      "expires_at": "2026-01-02T03:04:05Z",
+      "offer_id": "offer-seed",
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "signature": "1E3"
     }
   },
   {
@@ -2771,7 +3118,8 @@
       "pricing": {
         "model": "PRICING_MODEL_FREE",
         "rate": "0"
-      }
+      },
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
     }
   },
   {
@@ -9391,7 +9739,8 @@
         "pricing": {
           "model": "PRICING_MODEL_FREE",
           "rate": "0"
-        }
+        },
+        "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
       }
     }
   },
@@ -9412,7 +9761,8 @@
             "pricing": {
               "model": "PRICING_MODEL_FREE",
               "rate": "0"
-            }
+            },
+            "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
           }
         }
       ]
@@ -9435,7 +9785,8 @@
             "pricing": {
               "model": "PRICING_MODEL_FREE",
               "rate": "0"
-            }
+            },
+            "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
           }
         }
       ]
@@ -9457,7 +9808,8 @@
             "pricing": {
               "model": "PRICING_MODEL_FREE",
               "rate": "0"
-            }
+            },
+            "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
           }
         }
       ]
@@ -9500,7 +9852,8 @@
             "pricing": {
               "model": "PRICING_MODEL_FREE",
               "rate": "0"
-            }
+            },
+            "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
           }
         }
       ]
@@ -9692,7 +10045,8 @@
     "json": {
       "exchange": "https://exchange.example",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9705,7 +10059,8 @@
     "json": {
       "exchange": "exchange.example/register",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9718,7 +10073,8 @@
     "json": {
       "exchange": "exchange.example:0",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9731,7 +10087,8 @@
     "json": {
       "exchange": "exchange.example:99999",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9744,7 +10101,8 @@
     "json": {
       "exchange": "exchange.example?x=1",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9757,7 +10115,8 @@
     "json": {
       "exchange": "user@exchange.example",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9770,7 +10129,8 @@
     "json": {
       "exchange": "exchange.example:123456",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9783,7 +10143,8 @@
     "json": {
       "exchange": "exchange.example:",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9796,7 +10157,8 @@
     "json": {
       "exchange": "exchange.example.",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9809,7 +10171,8 @@
     "json": {
       "exchange": "exchange..example",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9822,7 +10185,8 @@
     "json": {
       "exchange": "-exchange.example",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9835,7 +10199,8 @@
     "json": {
       "exchange": "[::1]:443",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9847,7 +10212,8 @@
     ],
     "json": {
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9860,7 +10226,8 @@
     "json": {
       "exchange": "two words",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9873,7 +10240,8 @@
     "json": {
       "exchange": "!!bad!!",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9886,7 +10254,8 @@
     "json": {
       "exchange": "\u0000ctl\u0000",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9899,7 +10268,8 @@
     "json": {
       "exchange": " ",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9912,7 +10282,8 @@
     "json": {
       "exchange": "-5",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9925,7 +10296,8 @@
     "json": {
       "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9938,7 +10310,8 @@
     "json": {
       "exchange": "x",
       "idempotency_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9951,7 +10324,8 @@
     "json": {
       "exchange": "x",
       "idempotency_key": "",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {
@@ -9963,6 +10337,34 @@
     ],
     "json": {
       "exchange": "x",
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
+    }
+  },
+  {
+    "id": "UsageReport/transaction_id/too_short_explicit_empty",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "exchange": "x",
+      "idempotency_key": "x",
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": ""
+    }
+  },
+  {
+    "id": "UsageReport/transaction_id/too_short_omitted",
+    "message": "UsageReport",
+    "valid": false,
+    "rules": [
+      "string.min_len"
+    ],
+    "json": {
+      "exchange": "x",
+      "idempotency_key": "x",
       "timestamp": "2026-01-02T03:04:05Z"
     }
   },
@@ -9973,7 +10375,8 @@
     "json": {
       "exchange": "x",
       "idempotency_key": "x",
-      "timestamp": "2026-01-02T03:04:05Z"
+      "timestamp": "2026-01-02T03:04:05Z",
+      "transaction_id": "x"
     }
   },
   {

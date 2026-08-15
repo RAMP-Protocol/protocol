@@ -201,8 +201,8 @@ func licensingCases() []validationCase {
 			Role:     rampv1.Role_ROLE_EXCHANGE,
 			TermsUri: proto.String("https://exchange.example/terms"),
 		}, true, ""},
-		{"dispute_request reason set ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x", Exchange: exampleExchange, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
-		{"dispute_request reason unspecified rejected", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x", Exchange: exampleExchange}, false, "enum.not_in"},
+		{"dispute_request reason set ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x", Exchange: exampleExchange, TransactionId: exampleTransactionID, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
+		{"dispute_request reason unspecified rejected", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-x", Exchange: exampleExchange, TransactionId: exampleTransactionID}, false, "enum.not_in"},
 		{"usage consumed_unit empty ok", &rampv1.Usage{}, true, ""},
 		{"usage consumed_unit bare ok", &rampv1.Usage{ConsumedUnit: proto.String("tokens")}, true, ""},
 		{"usage consumed_unit space rejected", &rampv1.Usage{ConsumedUnit: proto.String("two words")}, false, "string.pattern"},
@@ -219,13 +219,13 @@ func TestIdempotencyKeyRequired(t *testing.T) {
 
 func idempotencyCases() []validationCase {
 	return []validationCase{
-		{"transaction empty key rejected", &rampv1.TransactionRequest{IdempotencyKey: "", Items: []*rampv1.TransactionItem{{Offer: &rampv1.Offer{OfferId: "of_1", Exchange: exampleExchange, Pricing: freePricing()}}}}, false, "string.min_len"},
-		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1", Items: []*rampv1.TransactionItem{{Offer: &rampv1.Offer{OfferId: "of_1", Exchange: exampleExchange, Pricing: freePricing()}}}}, true, ""},
+		{"transaction empty key rejected", &rampv1.TransactionRequest{IdempotencyKey: "", Items: []*rampv1.TransactionItem{{Offer: signedOffer()}}}, false, "string.min_len"},
+		{"transaction key ok", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-1", Items: []*rampv1.TransactionItem{{Offer: signedOffer()}}}, true, ""},
 		{"transaction empty items rejected", &rampv1.TransactionRequest{IdempotencyKey: "idem-tx-empty"}, false, "repeated.min_items"},
-		{"usage report empty key rejected", &rampv1.UsageReport{IdempotencyKey: "", Exchange: exampleExchange}, false, "string.min_len"},
-		{"usage report key ok", &rampv1.UsageReport{IdempotencyKey: "idem-ur-1", Exchange: exampleExchange}, true, ""},
-		{"dispute empty key rejected", &rampv1.DisputeRequest{IdempotencyKey: "", Exchange: exampleExchange, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, false, "string.min_len"},
-		{"dispute key ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-1", Exchange: exampleExchange, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
+		{"usage report empty key rejected", &rampv1.UsageReport{IdempotencyKey: "", Exchange: exampleExchange, TransactionId: exampleTransactionID}, false, "string.min_len"},
+		{"usage report key ok", &rampv1.UsageReport{IdempotencyKey: "idem-ur-1", Exchange: exampleExchange, TransactionId: exampleTransactionID}, true, ""},
+		{"dispute empty key rejected", &rampv1.DisputeRequest{IdempotencyKey: "", Exchange: exampleExchange, TransactionId: exampleTransactionID, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, false, "string.min_len"},
+		{"dispute key ok", &rampv1.DisputeRequest{IdempotencyKey: "idem-dr-1", Exchange: exampleExchange, TransactionId: exampleTransactionID, Reason: rampv1.DisputeReason_DISPUTE_REASON_CONTENT_MISMATCH}, true, ""},
 	}
 }
 
@@ -235,8 +235,27 @@ func idempotencyCases() []validationCase {
 // to exercise.
 const exampleExchange = "exchange.example"
 
+// exampleTransactionID and exampleSignature exist for the same reason as
+// exampleExchange: both fields now carry rules, so a fixture that leaves them
+// empty fails on THEM instead of on the rule it was written to exercise.
+// exampleSignature is 128 lowercase hex characters — one Ed25519 signature in
+// the shape both planes require. It is filler, not a real signature: nothing
+// here verifies it, only its shape is checked.
+const (
+	exampleTransactionID = "txn-example-1"
+	exampleSignature     = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" +
+		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+)
+
 func freePricing() *rampv1.Pricing {
 	return &rampv1.Pricing{Model: rampv1.PricingModel_PRICING_MODEL_FREE, Rate: "0"}
+}
+
+// signedOffer is the minimum Offer that passes its own rules — every field the
+// contract requires and nothing more, so a case built on it fails only on what
+// the case itself sets.
+func signedOffer() *rampv1.Offer {
+	return &rampv1.Offer{OfferId: "of_1", Exchange: exampleExchange, Pricing: freePricing(), Signature: exampleSignature}
 }
 
 func gen65() []string {

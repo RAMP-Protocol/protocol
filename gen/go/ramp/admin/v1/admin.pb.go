@@ -668,7 +668,8 @@ type TransactionEvidence struct {
 	// in the verbatim wire form (either case — hex decoding accepts both, and a
 	// dispute should read the same characters a request log holds). Named after
 	// ramp.v1.AgentAcceptancePayload.offer_sig: it is the same value, the one
-	// the agent's acceptance binds to.
+	// the agent's acceptance binds to. Same rule as ramp.v1.Offer.signature
+	// (drift-gated) — the field this row stores a copy of.
 	OfferSig string `protobuf:"bytes,6,opt,name=offer_sig,json=offerSig,proto3" json:"offer_sig,omitempty"`
 	// Signing-algorithm label, server-derived from the Exchange's own verify
 	// path — never echoed from the wire. The canonical payload clears the wire
@@ -698,13 +699,16 @@ type TransactionEvidence struct {
 	ExchangeSigningPublicKey []byte `protobuf:"bytes,8,opt,name=exchange_signing_public_key,json=exchangeSigningPublicKey,proto3" json:"exchange_signing_public_key,omitempty"`
 	// The agent's Ed25519 signature over agent_acceptance_canonical_bytes,
 	// hex-encoded verbatim as it arrived on the wire (either case). Same rule
-	// as ramp.admin.v1.TransactionEvidence.offer_sig (drift-gated). The
-	// directive anchors INSIDE this package by decision: ramp.v1 deliberately
-	// carries no signature-format rule (adding one now would be a wire-visible
-	// tightening of the agent plane), and the Exchange hex-decodes and
-	// verifies this signature before executing, so no executed transaction can
-	// put a malformed signature in its row — the read plane can pin the format
-	// without an upstream source to point at.
+	// as ramp.v1.AgentAcceptance.signature (drift-gated) — the live field this
+	// row stores a copy of.
+	//
+	// Both directives here point UPSTREAM into ramp.v1, which they did not
+	// always do. This pattern was pinned on the read plane first, while the
+	// agent plane still described the hex shape in prose and enforced nothing;
+	// the anchors sat inside this package because there was no upstream rule to
+	// point at. ramp.v1 now carries the rule on both signature fields, so the
+	// gate compares the two planes against each other and a future tightening
+	// on one side can no longer leave the other silently behind.
 	AgentAcceptanceSignature string `protobuf:"bytes,9,opt,name=agent_acceptance_signature,json=agentAcceptanceSignature,proto3" json:"agent_acceptance_signature,omitempty"`
 	// Verbatim JCS bytes of the AgentAcceptancePayload the agent signed.
 	// Unbounded for the same reason as offer_canonical_bytes. Same rule as

@@ -2636,6 +2636,15 @@ type Offer struct {
 	// licensing term without invalidating it.
 	// Agent SHOULD verify the signature (RFC 2119) against the Exchange's public
 	// key, and MUST reject an offer whose `expires_at` is in the past.
+	//
+	// The rule is the hex shape this comment already describes: 128 characters,
+	// either case, which is one Ed25519 signature (64 bytes) hex-encoded. Either
+	// case is accepted because hex decoding accepts both and a dispute should
+	// read the same characters a request log holds; every SDK in this repo emits
+	// lowercase. The pattern also makes the field mandatory in practice — the
+	// empty string does not match it — which restates what this message already
+	// requires: an unsigned Offer is not an Offer, since the signature is what
+	// makes its terms, pricing and expiry non-repudiable.
 	Signature string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
 	// Signature algorithm. Always 'EdDSA' — the JOSE algorithm identifier for
 	// Ed25519 (RFC 8032). Only the identifier is borrowed from JOSE: `signature`
@@ -4496,7 +4505,16 @@ func (x *Delegation) GetExtCritical() []string {
 type AgentAcceptance struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Hex-encoded detached Ed25519 signature over the canonical AgentAcceptancePayload
-	// bytes (see the canonical-signing definition on Offer.signature).
+	// bytes (see the canonical-signing definition on Offer.signature). Same rule
+	// as ramp.v1.Offer.signature — the same 128-character hex shape, either
+	// case, because it is the same kind of value produced by the same
+	// convention.
+	//
+	// The pattern replaced a bare min_len: 1, which it subsumes: a 128-character
+	// string cannot be empty. Nothing conformant is refused that was accepted
+	// before — a signature outside this shape could never hex-decode into 64
+	// bytes and so could never verify, so it failed at the verify step instead,
+	// later and with a worse error.
 	Signature string `protobuf:"bytes,1,opt,name=signature,proto3" json:"signature,omitempty"`
 	// Signature algorithm; "EdDSA" for Ed25519.
 	SignatureAlgorithm string `protobuf:"bytes,2,opt,name=signature_algorithm,json=signatureAlgorithm,proto3" json:"signature_algorithm,omitempty"`
@@ -5970,7 +5988,9 @@ type UsageReport struct {
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction ID from the delivery. MUST be non-empty. It is also the dedupe
 	// namespace for `idempotency_key` above, so a report that names no
-	// transaction has no namespace to dedupe within.
+	// transaction has no namespace to dedupe within — the rule below is what
+	// makes that namespace exist, not a shape preference. No upper bound: the
+	// Exchange assigns this id and nothing upstream constrains its length.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// Billing record identifier from the delivery (TransactionResultItem.billing_id).
 	BillingId string `protobuf:"bytes,4,opt,name=billing_id,json=billingId,proto3" json:"billing_id,omitempty"`
@@ -7672,7 +7692,9 @@ type DisputeRequest struct {
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction being disputed. MUST be non-empty. It is also the dedupe
 	// namespace for `idempotency_key` above, so a filing that names no
-	// transaction has no namespace to dedupe within.
+	// transaction has no namespace to dedupe within — the rule below is what
+	// makes that namespace exist, not a shape preference. Same rule as
+	// ramp.v1.UsageReport.transaction_id, for the same reason.
 	TransactionId string `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// Billing record identifier from the disputed transaction
 	// (TransactionResultItem.billing_id).
@@ -9433,7 +9455,7 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x04unit\x18\x06 \x01(\tH\x01R\x04unit\x88\x01\x01B\f\n" +
 	"\n" +
 	"_resets_atB\a\n" +
-	"\x05_unit\"\xb5\t\n" +
+	"\x05_unit\"\xd0\t\n" +
 	"\x05Offer\x12\x19\n" +
 	"\boffer_id\x18\x01 \x01(\tR\aofferId\x12\x19\n" +
 	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12*\n" +
@@ -9443,8 +9465,8 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\n" +
 	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampH\x02R\texpiresAt\x88\x01\x01\x12:\n" +
 	"\bidentity\x18\a \x01(\v2\x19.ramp.v1.ResourceIdentityH\x03R\bidentity\x88\x01\x01\x12\xd7\x01\n" +
-	"\bexchange\x18\b \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x12\x1c\n" +
-	"\tsignature\x18\t \x01(\tR\tsignature\x12/\n" +
+	"\bexchange\x18\b \x01(\tB\xba\x01\xbaH\xb6\x01r\xb3\x01\x18\x84\x022\xad\x01^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$R\bexchange\x127\n" +
+	"\tsignature\x18\t \x01(\tB\x19\xbaH\x16r\x142\x12^[0-9A-Fa-f]{128}$R\tsignature\x12/\n" +
 	"\x13signature_algorithm\x18\n" +
 	" \x01(\tR\x12signatureAlgorithm\x12,\n" +
 	"\x0fsubscription_id\x18\v \x01(\tH\x04R\x0esubscriptionId\x88\x01\x01\x12%\n" +
@@ -9616,9 +9638,9 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\r_max_accessesB\x0f\n" +
 	"\r_quota_periodB\x11\n" +
 	"\x0f_revocation_uriB\t\n" +
-	"\a_issuer\"i\n" +
-	"\x0fAgentAcceptance\x12%\n" +
-	"\tsignature\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsignature\x12/\n" +
+	"\a_issuer\"{\n" +
+	"\x0fAgentAcceptance\x127\n" +
+	"\tsignature\x18\x01 \x01(\tB\x19\xbaH\x16r\x142\x12^[0-9A-Fa-f]{128}$R\tsignature\x12/\n" +
 	"\x13signature_algorithm\x18\x02 \x01(\tR\x12signatureAlgorithm\"\xac\x01\n" +
 	"\x16AgentAcceptancePayload\x12\x1b\n" +
 	"\toffer_sig\x18\x01 \x01(\tR\bofferSig\x12!\n" +
@@ -9747,12 +9769,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\t\n" +
 	"\a_windowB\v\n" +
-	"\t_endpoint\"\xcf\x04\n" +
+	"\t_endpoint\"\xd8\x04\n" +
 	"\vUsageReport\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x12%\n" +
-	"\x0etransaction_id\x18\x03 \x01(\tR\rtransactionId\x12\x1d\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x12.\n" +
+	"\x0etransaction_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rtransactionId\x12\x1d\n" +
 	"\n" +
 	"billing_id\x18\x04 \x01(\tR\tbillingId\x12$\n" +
 	"\x05usage\x18\x05 \x01(\v2\x0e.ramp.v1.UsageR\x05usage\x128\n" +
@@ -9916,12 +9938,12 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0eabsence_reason\x18\x10 \x01(\x0e2\x1b.ramp.v1.OfferAbsenceReasonH\x00R\rabsenceReason\x88\x01\x01\x12)\n" +
 	"\x03ext\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x03ext\x12!\n" +
 	"\fext_critical\x18Z \x03(\tR\vextCriticalB\x11\n" +
-	"\x0f_absence_reason\"\xf6\x05\n" +
+	"\x0f_absence_reason\"\xff\x05\n" +
 	"\x0eDisputeRequest\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x123\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x12%\n" +
-	"\x0etransaction_id\x18\x03 \x01(\tR\rtransactionId\x12\x1d\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xff\x01R\x0eidempotencyKey\x12.\n" +
+	"\x0etransaction_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rtransactionId\x12\x1d\n" +
 	"\n" +
 	"billing_id\x18\x04 \x01(\tR\tbillingId\x128\n" +
 	"\x06reason\x18\x05 \x01(\x0e2\x16.ramp.v1.DisputeReasonB\b\xbaH\x05\x82\x01\x02 \x00R\x06reason\x12%\n" +

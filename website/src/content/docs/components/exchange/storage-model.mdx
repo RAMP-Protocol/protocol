@@ -136,9 +136,19 @@ type TransactionRecord struct {
     // Chain hash for tamper-evident audit log.
     ChainHash string `json:"chain_hash"`
 
-    // Signed URL metadata (for reconciliation with CDN logs).
-    SignedURLHash string    `json:"signed_url_hash"` // SHA-256 of the issued signed URL
-    URLExpiresAt  time.Time `json:"url_expires_at"`
+    // Signed URL metadata (for reconciliation with CDN logs). Both are
+    // pointers, and the columns behind them are nullable, because a
+    // DELIVERY_METHOD_DIRECT transaction mints no signed URL: there is
+    // nothing to hash and nothing to expire. A value type cannot tell that
+    // apart from a minted URL recorded as "" or as the zero time, and the
+    // operator plane states the absence as a fact (both fields are optional
+    // on ramp.admin.v1.TransactionState). The two are written together or
+    // not at all.
+    //
+    // SignedURLHash is lowercase hex SHA-256 of the full issued URL, query
+    // string included — the encoding the transaction-log contract defines.
+    SignedURLHash *string    `json:"signed_url_hash,omitempty"`
+    URLExpiresAt  *time.Time `json:"url_expires_at,omitempty"`
 
     // Timestamps.
     CreatedAt time.Time `json:"created_at"`
