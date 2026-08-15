@@ -122,7 +122,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
 5. Third-party attestation (GumGum via CatalogService.PushResources):
    GumGum crawls the article, signs attestation claims with Ed25519:
    { verifier: "gumgum.com", claims: { estimated_quantity: 3300, word_count: 2500,
-     language: "en", iab_categories: ["IAB19-6"] }, signature: "..." }
+     language: "en", iab_categories: ["IAB19-6"] }, signature: "2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f" }
    Exchange validates: gumgum.com is in techcrunch.com's catalog_contributors,
    verifies signature against the key in gumgum.com's WBA directory
    (the JWK Set at gumgum.com/.well-known/http-message-signatures-directory),
@@ -147,7 +147,7 @@ SSP-Alpha's Resource Ingestion Pipeline runs in the background:
          attested_at: "2026-03-14T09:00:00Z",
          uri: "https://techcrunch.com/premium/ai-regulation-2026.html",
          claims: { estimated_quantity: 3300, word_count: 2500, language: "en" },
-         signature: "base64-ed25519-gumgum..." }
+         signature: "acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42" }
      ],
      terms: [
        { semantics: TERM_SEMANTICS_ENUMERATED,
@@ -290,7 +290,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
      attestations: [
        { verifier: "gumgum.com", keyid: "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
          claims: { estimated_quantity: 3300, word_count: 2500, language: "en" },
-         signature: "base64-ed25519-gumgum..." }
+         signature: "acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42" }
      ]
      terms: [
        { semantics: TERM_SEMANTICS_ENUMERATED,
@@ -302,7 +302,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
          ] }
      ]
      delivery_method: DELIVERY_METHOD_INSTRUCTIONS
-     signature: "<hex Ed25519 detached signature over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
+     signature: "5914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d6"
      signature_algorithm: "EdDSA"
 
    Offer B (subscription):
@@ -321,7 +321,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
      delivery_method: DELIVERY_METHOD_INSTRUCTIONS
      reporting: { required: true, window: "86400s",
                   required_fields: ["transaction_id", "function", "consumed_quantity"] }
-     signature: "<hex Ed25519 detached signature over the entire canonical Offer — every field, incl. terms, pricing, expires_at>"
+     signature: "5914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d65914f0d6"
      signature_algorithm: "EdDSA"
 ```
 
@@ -358,7 +358,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
           "attested_at": "2026-03-14T09:00:00Z",
           "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "claims": { "estimated_quantity": 3300, "word_count": 2500, "language": "en" },
-          "signature": "base64-ed25519-gumgum..."
+          "signature": "acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42"
         }
       ],
       "terms": [
@@ -373,7 +373,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
           ]
         }
       ],
-      "signature": "base64-ed25519-sig-A...",
+      "signature": "a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6",
       "signature_algorithm": "EdDSA"
     },
     {
@@ -407,7 +407,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
           "attested_at": "2026-03-14T09:00:00Z",
           "uri": "https://techcrunch.com/premium/ai-regulation-2026.html",
           "claims": { "estimated_quantity": 3300, "word_count": 2500, "language": "en" },
-          "signature": "base64-ed25519-gumgum..."
+          "signature": "acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42acb24b42"
         }
       ],
       "terms": [
@@ -423,7 +423,7 @@ The SDK sends `DiscoverResources` to SSP-Alpha — `POST https://exchange.ssp-al
           "scopes": ["subscription:SUB-ANTHROPIC-HEARST-2026"]
         }
       ],
-      "signature": "base64-ed25519-sig-B...",
+      "signature": "cd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811a",
       "signature_algorithm": "EdDSA"
     }
   ]
@@ -510,8 +510,8 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
           "exchange": "exchange.ssp-alpha.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit": "accesses", "unit_cost": "0.00001515", "estimated_quantity": 3300 },
           "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
-          "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
-          "signature": "base64-ed25519-sig-A...",
+          "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f" }],
+          "signature": "a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6a1a475b6",
           "signature_algorithm": "EdDSA"
         },
         {
@@ -520,9 +520,9 @@ SSP-Alpha returns `offer_groups` (batch mode -- multiple URIs in query):
           "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD", "unit_cost": "0", "estimated_quantity": 3300 },
           "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
           "identity": { "canonical_url": "https://techcrunch.com/premium/ai-regulation-2026.html", "iptc_guid": "urn:newsml:techcrunch:20260315:ai-reg-001", "content_hash": "a1b2c3d4e5f6...", "hash_method": "simhash-v1" },
-          "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "..." }],
+          "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3300, "word_count": 2500 }, "signature": "2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f" }],
           "reporting": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] },
-          "signature": "base64-ed25519-sig-B...",
+          "signature": "cd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811a",
           "signature_algorithm": "EdDSA"
         }
       ]
@@ -554,8 +554,8 @@ Note: SSP-Alpha returns an empty `offers` array for the `theverge.com` URI with 
         "content_hash": "a1b2c3d4e5f7...",
         "hash_method": "simhash-v1"
       },
-      "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3100, "word_count": 2350 }, "signature": "..." }],
-      "signature": "base64-ed25519-sig-C...",
+      "attestations": [{ "verifier": "gumgum.com", "claims": { "estimated_quantity": 3100, "word_count": 2350 }, "signature": "2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f2f43b42f" }],
+      "signature": "056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6056786f6",
       "signature_algorithm": "EdDSA"
     }
   ]
@@ -942,7 +942,7 @@ Response includes signed Offer snapshots for every transaction:
         "exchange": "exchange.ssp-alpha.com",
         "pricing": { "model": "PRICING_MODEL_FREE", "rate": "0", "currency": "USD" },
         "subscription_id": "SUB-ANTHROPIC-HEARST-2026",
-        "signature": "base64-ed25519-sig-B...",
+        "signature": "cd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811acd97811a",
         "signature_algorithm": "EdDSA"
       },
       "cost": { "amount": "0", "currency": "USD" },

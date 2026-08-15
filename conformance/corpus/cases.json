@@ -6625,6 +6625,134 @@
     }
   },
   {
+    "id": "ResourceAttestation/signature/missing_empty",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#0",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "two words"
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#1",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "1.2.3"
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#2",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "!!bad!!"
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#3",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "\u0000ctl\u0000"
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#4",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": " "
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#5",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "-5"
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#6",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "NaN"
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#7",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "Infinity"
+    }
+  },
+  {
+    "id": "ResourceAttestation/signature/pattern#8",
+    "message": "ResourceAttestation",
+    "valid": false,
+    "rules": [
+      "string.pattern"
+    ],
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "1E3"
+    }
+  },
+  {
+    "id": "ResourceAttestation/valid",
+    "message": "ResourceAttestation",
+    "valid": true,
+    "json": {
+      "attested_at": "2026-01-02T03:04:05Z",
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
     "id": "ResourceEntry/resource_mutability/not_in",
     "message": "ResourceEntry",
     "valid": false,

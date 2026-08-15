@@ -974,7 +974,24 @@ message ResourceAttestation {
   // ECMAScript number serialization, strict string escaping, no whitespace.
   // Each attestation is self-contained — new claim fields do not invalidate
   // old attestations because the signature covers the specific claims instance.
-  string signature = 6;
+  //
+  // HEX, like every other detached signature in this contract: 128 characters,
+  // either case, one Ed25519 signature (64 bytes) hex-encoded. Same convention
+  // as Offer.signature and AgentAcceptance.signature, and the same rule.
+  //
+  // The encoding was previously unstated, which was the real defect — the
+  // comment described the signed BYTES precisely and never said how the
+  // signature itself is written, so a vendor had to guess. Two vendors guessing
+  // differently is exactly the failure the hex settlement exists to prevent, and
+  // an attestation is the worst place for it: the verifying party is a third
+  // party who never negotiated with the reader.
+  //
+  // The rule also makes the field mandatory in practice, since the empty string
+  // does not match. That restates what this message already means. An
+  // attestation is a signed third-party claim; without the signature it is an
+  // unverifiable assertion by an unproven author, which is Level 0 — no
+  // attestation present — rather than an attestation with a field missing.
+  string signature = 6 [(buf.validate.field).string.pattern = "^[0-9A-Fa-f]{128}$"];
 }
 
 // ============================================================================

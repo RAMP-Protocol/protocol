@@ -941,9 +941,9 @@ class ResourceAttestation(WireModel):
         '',
         description="RFC 7638 JWK Thumbprint (the RFC 9421 keyid) of the verifier's\n attestation-signing key, resolved against the verifier's WBA directory\n (WBAFile.keys). Identifies which Ed25519 key signed this attestation.\n Enables key rotation: new keys are published with overlapping validity,\n new attestations use the new key's thumbprint, old attestations remain\n verifiable while the old key is still published.",
     )
-    signature: str | None = Field(
-        '',
-        description='Ed25519 signature over JCS-canonicalized (RFC 8785) representation of\n {verifier, keyid, attested_at, uri, claims}. JCS (JSON Canonicalization\n Scheme) produces deterministic UTF-8 bytes: lexicographic key sorting,\n ECMAScript number serialization, strict string escaping, no whitespace.\n Each attestation is self-contained — new claim fields do not invalidate\n old attestations because the signature covers the specific claims instance.',
+    signature: constr(pattern=r'^[0-9A-Fa-f]{128}$') = Field(
+        ...,
+        description='HEX, like every other detached signature in this contract: 128 characters,\n either case, one Ed25519 signature (64 bytes) hex-encoded. Same convention\n as Offer.signature and AgentAcceptance.signature, and the same rule.\n\n The encoding was previously unstated, which was the real defect — the\n comment described the signed BYTES precisely and never said how the\n signature itself is written, so a vendor had to guess. Two vendors guessing\n differently is exactly the failure the hex settlement exists to prevent, and\n an attestation is the worst place for it: the verifying party is a third\n party who never negotiated with the reader.\n\n The rule also makes the field mandatory in practice, since the empty string\n does not match. That restates what this message already means. An\n attestation is a signed third-party claim; without the signature it is an\n unverifiable assertion by an unproven author, which is Level 0 — no\n attestation present — rather than an attestation with a field missing.',
     )
     uri: str | None = Field(
         '',

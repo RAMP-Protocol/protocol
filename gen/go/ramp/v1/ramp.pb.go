@@ -3208,6 +3208,23 @@ type ResourceAttestation struct {
 	// ECMAScript number serialization, strict string escaping, no whitespace.
 	// Each attestation is self-contained — new claim fields do not invalidate
 	// old attestations because the signature covers the specific claims instance.
+	//
+	// HEX, like every other detached signature in this contract: 128 characters,
+	// either case, one Ed25519 signature (64 bytes) hex-encoded. Same convention
+	// as Offer.signature and AgentAcceptance.signature, and the same rule.
+	//
+	// The encoding was previously unstated, which was the real defect — the
+	// comment described the signed BYTES precisely and never said how the
+	// signature itself is written, so a vendor had to guess. Two vendors guessing
+	// differently is exactly the failure the hex settlement exists to prevent, and
+	// an attestation is the worst place for it: the verifying party is a third
+	// party who never negotiated with the reader.
+	//
+	// The rule also makes the field mandatory in practice, since the empty string
+	// does not match. That restates what this message already means. An
+	// attestation is a signed third-party claim; without the signature it is an
+	// unverifiable assertion by an unproven author, which is Level 0 — no
+	// attestation present — rather than an attestation with a field missing.
 	Signature     string `protobuf:"bytes,6,opt,name=signature,proto3" json:"signature,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -9513,15 +9530,15 @@ const file_ramp_v1_ramp_proto_rawDesc = "" +
 	"\x0e_c2pa_manifestB\x0e\n" +
 	"\f_c2pa_statusB\x0f\n" +
 	"\r_soft_bindingB\x16\n" +
-	"\x14_soft_binding_method\"\xe5\x01\n" +
+	"\x14_soft_binding_method\"\x80\x02\n" +
 	"\x13ResourceAttestation\x12\x1a\n" +
 	"\bverifier\x18\x01 \x01(\tR\bverifier\x12\x14\n" +
 	"\x05keyid\x18\x02 \x01(\tR\x05keyid\x12;\n" +
 	"\vattested_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"attestedAt\x12\x10\n" +
 	"\x03uri\x18\x04 \x01(\tR\x03uri\x12/\n" +
-	"\x06claims\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06claims\x12\x1c\n" +
-	"\tsignature\x18\x06 \x01(\tR\tsignature\"\x92\x03\n" +
+	"\x06claims\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06claims\x127\n" +
+	"\tsignature\x18\x06 \x01(\tB\x19\xbaH\x16r\x142\x12^[0-9A-Fa-f]{128}$R\tsignature\"\x92\x03\n" +
 	"\aLicense\x12\x15\n" +
 	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x13\n" +
 	"\x02id\x18\x02 \x01(\tH\x01R\x02id\x88\x01\x01\x12\x17\n" +

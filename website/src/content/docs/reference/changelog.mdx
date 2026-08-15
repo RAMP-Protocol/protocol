@@ -8,6 +8,35 @@ description: "RAMP protocol changelog"
 
 ## Unreleased
 
+**`ResourceAttestation.signature` states its encoding, and enforces it (BREAKING: rule addition on a
+live field).** The field carried no rule and its comment described the signed BYTES precisely -- an
+Ed25519 signature over the RFC 8785 JCS form of `{verifier, keyid, attested_at, uri, claims}` --
+while never saying how the signature ITSELF is written. A vendor had to guess, and the published
+examples guessed base64, which no part of the contract supports.
+
+It is now hex, 128 characters, either case, with `pattern = "^[0-9A-Fa-f]{128}$"` -- the same rule
+and the same convention as `Offer.signature` and `AgentAcceptance.signature`. Every detached
+signature in this contract is now written the same way.
+
+An attestation is the worst place to leave an encoding unstated, which is why this is settled rather
+than documented: the signing party is a third party who never negotiated with the reader, so two
+vendors guessing differently produce attestations neither side can verify and nothing on the wire
+explains why. No SDK produces or verifies an attestation signature today, so nothing conformant is
+refused.
+
+The rule also makes the field mandatory in practice, since the empty string does not match. That
+restates what the message already means -- an attestation without a signature is an unverifiable
+assertion by an unproven author, which the field comment already calls Level 0 (no attestation
+present) rather than an attestation with a field missing.
+
+**Every published signature example is hex (documentation fix, no wire change).** 71 example values
+across 14 pages showed signatures as base64 placeholders (`base64-ed25519-...`), truncated tokens
+(`a1b2c3...`), or bare ellipses. They were left behind by the JWS-to-hex settlement and were wrong
+for `Offer.signature` and `AgentAcceptance.signature` from that moment; the attestation ones were
+merely unpinned until the rule above. All are now full 128-character hex, with one value per
+distinct placeholder so a signature that appears in several places in one walkthrough stays the same
+value throughout.
+
 **`broker` is bounded printable ASCII (rule addition on a field added in this revision).** The
 field is a server-written value that a ledger renders, so an unbounded string would have re-opened on
 a new field exactly the surface `RequestCorrelation.request_id`'s printable-ASCII bound closes:

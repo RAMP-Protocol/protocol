@@ -120,7 +120,7 @@ Key fields:
           "size": "sample"
         }
       ],
-      "signature": "a1b2c3d4e5f6...",
+      "signature": "aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7aaf974b7",
       "signature_algorithm": "EdDSA"
     }
   ]
@@ -152,7 +152,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
           "offer_id": "offer-tc-4921",
           "exchange": "exchange.ssp-example.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
-          "signature": "a1b2c3...",
+          "signature": "2b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a4",
           "signature_algorithm": "EdDSA"
         }
       ]
@@ -164,7 +164,7 @@ When requesting multiple URIs, the response uses `offer_groups` instead of `offe
           "offer_id": "offer-tc-4922",
           "exchange": "exchange.ssp-example.com",
           "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001200", "unit": "accesses" },
-          "signature": "d4e5f6...",
+          "signature": "b56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0fb56fde0f",
           "signature_algorithm": "EdDSA"
         }
       ]
@@ -190,7 +190,7 @@ When the requester has a subscription, the Exchange includes both per-request an
       "offer_id": "offer-tc-4921",
       "exchange": "exchange.ssp-example.com",
       "pricing": { "model": "PRICING_MODEL_PER_UNIT", "rate": "0.05", "currency": "USD", "unit_cost": "0.00001515", "unit": "accesses" },
-      "signature": "a1b2c3...",
+      "signature": "2b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a42b7432a4",
       "signature_algorithm": "EdDSA"
     },
     {
@@ -200,7 +200,7 @@ When the requester has a subscription, the Exchange includes both per-request an
       "subscription_id": "SUB-12345",
       "terms": [ { "semantics": "TERM_SEMANTICS_ENUMERATED", "scopes": ["subscription:SUB-12345"] } ],
       "reporting": { "required": true, "window": "86400s", "required_fields": ["transaction_id", "function", "consumed_quantity"] },
-      "signature": "g7h8i9...",
+      "signature": "8a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a991342",
       "signature_algorithm": "EdDSA"
     }
   ]
@@ -256,7 +256,7 @@ When the requester holds a subscription, the Exchange attaches `SubscriptionQuot
           "unit": "spend_cents"
         }
       ],
-      "signature": "g7h8i9...",
+      "signature": "8a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a9913428a991342",
       "signature_algorithm": "EdDSA"
     }
   ]
