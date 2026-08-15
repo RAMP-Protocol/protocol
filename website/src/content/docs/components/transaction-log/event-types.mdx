@@ -139,7 +139,7 @@ The Exchange MUST NOT return the `TransactionResponse` until this event is durab
 | `cost_amount` | `float64` | yes | Transaction cost |
 | `cost_currency` | `string` | yes | ISO 4217 currency code |
 | `cost_unit_cost` | `float64` | yes | Effective cost per unit |
-| `signed_url_hash` | `string` | cond | Lowercase hex SHA-256 of the issued signed URL (see [Signed URL Logging](#signed-url-logging)). Required when the transaction minted a signed URL; absent for `DIRECT` |
+| `signed_url_hash` | `[]byte` | cond | SHA-256 of the issued signed URL, 32 raw bytes (see [Signed URL Logging](#signed-url-logging)). Required when the transaction minted a signed URL; absent for `DIRECT` |
 | `signed_url_expiry` | `time.Time` | cond | When the signed URL expires. Present and absent under the same condition as `signed_url_hash` |
 | `agent_identity_hash` | `string` | yes | RFC 7638 JWK Thumbprint (SHA-256, base64url) of the agent's acceptance key. Bound into the signed URL when one is minted |
 | `delivery_method` | `string` | yes | `DIRECT`, `INSTRUCTIONS` or `STREAMING` (`Offer.delivery_method`) |
@@ -162,7 +162,11 @@ The event itself is always produced: it is the settlement record for every autho
 
 The two columns are absent together or present together. A row carrying one without the other is malformed, because both describe the same minted URL.
 
-A store must therefore be able to hold *no value* in these two columns, not an empty string and not a zero timestamp. The absence is a stated fact about the delivery method, and a consumer must be able to tell it apart from a URL that was minted but logged wrong. The operator plane mirrors this: `ramp.admin.v1.TransactionState.signed_url_hash` and `.signed_url_expiry` are both optional, and a `DIRECT` transaction's state message simply omits them.
+**What this requires of a store depends on what that store emits.** An Exchange that can return `DELIVERY_METHOD_DIRECT` must be able to hold *no value* in these two columns — not an empty string and not a zero timestamp — because the absence is a stated fact about the delivery method, and a consumer must be able to tell it apart from a URL that was minted but logged wrong. An Exchange that only ever emits `INSTRUCTIONS` or `STREAMING` mints a URL for every transaction it logs, so it may declare both columns `NOT NULL` and still conform. The reference Exchange is in that second group today: it emits `INSTRUCTIONS` only, has no `DIRECT` code path, and its schema is built on "a row cannot exist without a fully formed signed URL".
+
+The operator plane accommodates both without a choice of its own: `ramp.admin.v1.TransactionState.signed_url_hash` and `.signed_url_expiry` are optional, so a `DIRECT` transaction's state message omits them and every other transaction's carries them.
+
+An Exchange adding `DIRECT` later cannot simply start writing `NULL` into `NOT NULL` columns. It needs a schema change, and — separately — a decision this contract has not made: whether a direct-delivery transaction produces a `SignedURLIssued` event at all, or a differently named one. Settle that before implementing `DIRECT`, not after.
 
 ### Signed URL Logging
 
@@ -170,14 +174,22 @@ By default, only the hash of the signed URL is logged (`signed_url_hash`). A con
 
 **What is hashed.** The SHA-256 digest is taken over the **full** issued URL — scheme, host, path and query string, exactly the bytes handed to the agent, with the signature parameter included. This is what the Go SDK's `HashURL` already computes, and it is the only definition that lets a provider reproduce the value from a CDN access log line.
 
-**Encoding.** The digest is written as **lowercase hexadecimal**, 64 characters. The digest itself is 32 raw bytes — `HashURL` returns bytes, and the operator plane holds bytes — so the text form is purely how a log renders it, and the requirement is that every exporter render it the same way. Lowercase hex has exactly one spelling and compares and sorts predictably in SQL. Base64 is not used here: its padded, unpadded and URL-safe variants all look plausible in a log, so two exporters could pick different ones and silently fail to join.
+**Stored form: 32 raw bytes.** Not text. `HashURL` returns bytes, the reference Exchange's column is `BYTEA` with an `octet_length = 32` check, and `ramp.admin.v1.TransactionState.signed_url_hash` is `bytes` with `len = 32`. So a query joining the log against the operator plane compares byte to byte, with nothing to normalize.
 
-Every other page that mentions this column refers to this definition rather than restating it. The operator plane holds the same digest as 32 raw bytes and states so on its own side; a join between the two planes normalizes both to the raw digest instead of comparing the encodings.
+**Text form: lowercase hexadecimal, 64 characters.** A text encoding is needed only where the column is *rendered* — a [CSV or JSON Lines export](/components/transaction-log/reconciliation/#export-formats), or protojson on the operator plane, which base64s the field because that is what protojson does with `bytes`. Every export this contract defines renders the digest as lowercase hex. Lowercase hex has exactly one spelling and compares and sorts predictably in SQL, while base64 has padded, unpadded and URL-safe variants that all look plausible in a log — two exporters could pick different ones and silently fail to join.
+
+The distinction matters because the two forms are not interchangeable. Two *stores* join directly. Two *exports* join only if they chose the same rendering, and an export never joins a raw-bytes column without converting one side first.
 
 | Setting | `signed_url_hash` | `signed_url_full` | Use Case |
 |---|---|---|---|
 | `log_full_signed_url=false` (default) | SHA-256 hash | omitted | Production: privacy, minimal attack surface |
 | `log_full_signed_url=true` | SHA-256 hash | full URL | Debug/security: CDN troubleshooting, leak forensics |
+
+**The default-off posture applies to every store that holds delivery facts, not only to this log.** A signed URL is a live bearer capability until it expires: anyone who can read it can fetch the paid content without paying. Expiry bounds that window to minutes, but a store's retention does not — the transaction log keeps rows for 13 months and the evidence store keeps them at least that long, so an unconditionally stored URL is minutes of capability sitting inside years of retained text.
+
+So a column holding the full URL must be **nullable and written only when the flag is on**, wherever it appears. A `NOT NULL` full-URL column turns an opt-in debug capability into a permanent one, and puts it in the store with the longest life and the widest read surface. The hash is what production needs: it is enough for the reconciliation join, which is the reason the value is recorded at all.
+
+This is separate from the rule that the operator plane's `TransactionEvidence` message carries no URL field. That one is structural and cannot be configured away. This one is a deployment posture.
 
 ### Batch and Subscription Transactions
 

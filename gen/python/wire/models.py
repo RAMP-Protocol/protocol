@@ -905,11 +905,11 @@ class RequestConstraints(WireModel):
 class RequestCorrelation(WireModel):
     minted: bool | None = Field(
         False,
-        description='Provenance: true = server-minted, false = propagated from the caller.\n The two are byte-indistinguishable in request_id alone, so a forensic\n read needs this flag to tell a server-derived correlation key from an\n attacker-influenceable one.',
+        description='Provenance: true = the id is SERVER-DERIVED, false = propagated verbatim\n from a caller-supplied header. True covers both ways a server derives\n one — the header was absent, or it was present but nonconforming and was\n replaced — because the property this flag exists for is INFLUENCE, not\n origin story: false means a caller chose these characters, true means no\n caller did. The two are byte-indistinguishable in request_id alone, so a\n forensic read needs this flag to tell a server-derived correlation key\n from an attacker-influenceable one.',
     )
     request_id: constr(pattern=r'^[!-~]+$', min_length=1, max_length=255) = Field(
         ...,
-        description="The correlation id as persisted. GOVERNING RULE, applied on the WRITE\n path: the Exchange records a correlation only when the received\n X-Request-ID conforms to the rules below — printable ASCII, 1..255. A\n nonconforming header value is recorded as NO correlation: the wrapping\n message stays absent, the id is not stored, and nothing is echoed here.\n A present request_id has therefore already passed this check on the way\n in; the rules are not a read-side filter over a laxer stored value.\n Background, for a reader tracing where the value comes from: it is\n caller-influenceable. The SDK's request-id middleware propagates any\n non-empty caller-supplied X-Request-ID verbatim and mints a random\n 128-bit hex token when the header is absent. That middleware performs no\n conformance check of its own — the check above is the Exchange's, at the\n service boundary where it decides whether to persist the pair.",
+        description="The correlation id as persisted. GOVERNING INVARIANT, established on the\n WRITE path: a persisted request_id always conforms to the rules below —\n printable ASCII, 1..255 — so a present value has already passed the check\n on the way in, and these rules are not a read-side filter over a laxer\n stored value. HOW a server reaches that invariant is its own choice, and\n two mechanisms both conform: reject the nonconforming header and record a\n server-derived id in its place (minted = true), or record no correlation\n at all (the wrapping message stays absent). The first keeps a correlation\n key for a request whose header was bad, the second states that nothing\n trustworthy arrived; neither can put a nonconforming value in the store,\n which is the only property this contract needs. A server that accepts a\n narrower charset than the rules below still satisfies the invariant.\n Background, for a reader tracing where the value comes from: a propagated\n id is caller-influenceable. The SDK's request-id middleware propagates\n any non-empty caller-supplied X-Request-ID verbatim and mints a random\n 128-bit hex token when the header is absent; it performs no conformance\n check of its own, so the check is the Exchange's, at the boundary where\n it decides what to persist.",
     )
 
 
@@ -1177,7 +1177,7 @@ class TransactionEvidence(WireModel):
     )
     request_correlation: RequestCorrelation | None = Field(
         None,
-        description='Correlation id joining this row outward (edge delivery log,\n reconciliation sweep), with its provenance. One message, not two\n sibling fields: presence of the message is the pairing — id and\n provenance flag arrive together or not at all, a constraint two\n optional siblings could not express without message-level CEL (which\n this file forbids). Absent when the Exchange recorded no correlation id.',
+        description='Correlation id joining this row outward to whatever else recorded the\n same X-Request-ID for this execute call, with its provenance. One\n message, not two\n sibling fields: presence of the message is the pairing — id and\n provenance flag arrive together or not at all, a constraint two\n optional siblings could not express without message-level CEL (which\n this file forbids). Absent when the Exchange recorded no correlation id.',
     )
     request_idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
@@ -1269,7 +1269,7 @@ class TransactionState(WireModel):
         | None
     ) = Field(
         None,
-        description="sha256 of the signed retrieval URL — the join key against the edge\n delivery log's signed_url_hash column. Same digest on both sides, in\n different forms: 32 raw bytes here (base64 in protojson) against a text\n string there, so a join must normalize both to the raw digest rather than\n compare the two encodings directly. Hash-only by design: the full URL is a live\n bearer capability until expiry and is deliberately absent from this\n plane (see TransactionEvidence's delivery section). Absent exactly when\n signed_url_expiry is, and for the same reason: no signed URL, nothing to\n hash. The\n `optional` keyword is load-bearing — it gives this scalar explicit\n presence, so protovalidate skips the length rule on an unset value, while\n a PRESENT hash must still be exactly 32 bytes.",
+        description="sha256 of the signed retrieval URL — the join key against the transaction\n log's signed_url_hash column, which holds the same digest as 32 raw bytes.\n The join is byte-to-byte; nothing needs normalizing. Text only appears\n when a store is rendered — protojson base64s this field, and a log export\n picks its own spelling — so it is exports, not stores, that a join has to\n reconcile. Hash-only by design: the full URL is a live\n bearer capability until expiry and is deliberately absent from this\n plane (see TransactionEvidence's delivery section). Absent exactly when\n signed_url_expiry is, and for the same reason: no signed URL, nothing to\n hash. The\n `optional` keyword is load-bearing — it gives this scalar explicit\n presence, so protovalidate skips the length rule on an unset value, while\n a PRESENT hash must still be exactly 32 bytes.",
     )
 
 

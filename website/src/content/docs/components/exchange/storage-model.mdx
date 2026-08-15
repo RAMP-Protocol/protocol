@@ -136,18 +136,19 @@ type TransactionRecord struct {
     // Chain hash for tamper-evident audit log.
     ChainHash string `json:"chain_hash"`
 
-    // Signed URL metadata (for reconciliation with CDN logs). Both are
-    // pointers, and the columns behind them are nullable, because a
-    // DELIVERY_METHOD_DIRECT transaction mints no signed URL: there is
-    // nothing to hash and nothing to expire. A value type cannot tell that
-    // apart from a minted URL recorded as "" or as the zero time, and the
-    // operator plane states the absence as a fact (both fields are optional
-    // on ramp.admin.v1.TransactionState). The two are written together or
-    // not at all.
+    // Signed URL metadata (for reconciliation with CDN logs). SHA-256 of the
+    // full issued URL, query string and signature parameter included, held as
+    // 32 RAW BYTES — not hex text. The operator plane holds the same digest
+    // as bytes, so the join between them is byte-to-byte. Hex appears only
+    // when this store is exported as text.
     //
-    // SignedURLHash is lowercase hex SHA-256 of the full issued URL, query
-    // string included — the encoding the transaction-log contract defines.
-    SignedURLHash *string    `json:"signed_url_hash,omitempty"`
+    // Both are pointers here because a DELIVERY_METHOD_DIRECT transaction
+    // mints no signed URL: nothing to hash, nothing to expire, and a value
+    // type cannot tell that apart from a minted URL recorded as empty or as
+    // the zero time. An Exchange that never emits DIRECT may declare both
+    // columns NOT NULL and still conform — the reference one does. The two
+    // are written together or not at all either way.
+    SignedURLHash []byte     `json:"signed_url_hash,omitempty"`
     URLExpiresAt  *time.Time `json:"url_expires_at,omitempty"`
 
     // Timestamps.
@@ -179,7 +180,7 @@ The transaction record includes a full offer snapshot (offer_id, package.id, pac
 For Growth tier (100-1K RPS), PostgreSQL with daily partitions provides sufficient write throughput with strong durability guarantees.
 
 ```sql
--- Daily partitioned transaction log (append-only)
+-- Daily partitioned transaction log (append-mostly — see the note below)
 CREATE TABLE transactions (
     transaction_id TEXT NOT NULL,
     billing_id     TEXT NOT NULL,
@@ -196,9 +197,15 @@ CREATE TABLE transactions (
 CREATE TABLE transactions_2026_03_15 PARTITION OF transactions
     FOR VALUES FROM ('2026-03-15') TO ('2026-03-16');
 
--- Append-only enforcement
-REVOKE UPDATE, DELETE ON transactions FROM exchange_app;
+-- No deletes. UPDATE is NOT revoked here — see below.
+REVOKE DELETE ON transactions FROM exchange_app;
 ```
+
+**The transaction log is not append-only, and `REVOKE UPDATE` on it would break the write path.** A transaction row is updated after it is written: when the usage report for that transaction lands, the consumed quantity is recorded on the row. The log is the *operational* record and it tracks a transaction through its lifecycle, so revoking `UPDATE` would block a legitimate write the protocol requires.
+
+Append-once belongs to the **evidence** store described below, and only there. That is the distinction: the log follows a transaction as it changes, the evidence row states what the two parties agreed to and can never legitimately change afterwards. Revoke `UPDATE` on that table, not on this one.
+
+`DELETE` is revoked on both. Retention is enforced by dropping whole partitions after export, which does not need row-level `DELETE`.
 
 **Dedupe scope of `idempotency_key`**: the protocol requires that a key chosen by one caller can never collide with another caller's cached result, so dedupe happens inside a namespace and never globally. For `ExecuteTransaction` that namespace is the acceptance identity, which means the uniqueness constraint must be **composite** — over `(agent_identity_hash, idempotency_key)`, never over `idempotency_key` alone. `agent_identity_hash` is derived from the key that signed the offer acceptance, not from the transport caller, so the scoping holds even when a Broker relays many agents over one transport key.
 
@@ -226,7 +233,7 @@ The local WAL + Kafka architecture feeds ClickHouse as a Kafka consumer. ClickHo
 
 The evidence store is a **separate store from the transaction log**, written on the same request path. The transaction log is the settlement and analytics stream; the evidence store holds the offline-verifiable proof of what the two parties agreed to. One row is written per successfully executed transaction, at the service boundary, after both Ed25519 signatures have verified. A denied execute writes no row, so the existence of a row is itself the success statement.
 
-The row is **append-once**: written once during `ExecuteTransaction`, then never updated and never deleted before its retention limit. Enforce that the same way the transaction log does — `REVOKE UPDATE, DELETE` on the table. Its only read path is the operator plane's `GetTransactionEvidence` RPC.
+The row is **append-once**: written once during `ExecuteTransaction`, then never updated and never deleted before its retention limit. Enforce it with `REVOKE UPDATE, DELETE` on this table. Note that this is *stricter* than the transaction log above, which is updated when a usage report lands — append-once is a property of the evidence store alone, and the difference is the point: the log follows a transaction as it changes, this row states what was agreed and can never legitimately change afterwards. Its only read path is the operator plane's `GetTransactionEvidence` RPC.
 
 **What the row holds.** Each of the two signatures is stored together with the verbatim canonical bytes it was computed over and the public key it verifies against, so a reader can re-verify the row offline without contacting the Exchange and without re-deriving anything. The row also holds the selector columns (`tenant_id`, `transaction_id`, `offer_id`), the request-level idempotency key the acceptance signed, the requester identity as signed, the directory URL the Exchange states it pinned the agent key from, the correlation pair described below, and the server-clock write time.
 
@@ -242,16 +249,31 @@ One name to read carefully across the two stores: `request_idempotency_key` on t
 
 | Column | Type | Meaning |
 |---|---|---|
-| `request_id` | nullable text | The `X-Request-ID` of the execute request, as recorded. |
-| `request_id_minted` | nullable boolean | `true` = server-minted, because the header was absent; `false` = propagated verbatim from the caller. |
+| `request_id` | nullable text | The correlation id for the execute request, as recorded. |
+| `request_id_minted` | nullable boolean | `true` = the value is **server-derived**; `false` = propagated verbatim from a caller-supplied `X-Request-ID`. |
 
-**The two are present together or absent together.** A row with one column set and the other null is invalid, and the store enforces this with a table constraint rather than leaving it to application code. The provenance flag is load-bearing: a propagated id is caller-influenceable and a minted one is not, and the id value alone cannot tell the two apart.
+**The two are present together or absent together.** A row with one column set and the other null is invalid, and the store enforces this with a table constraint rather than leaving it to application code. The provenance flag is load-bearing: a propagated id is caller-influenceable and a server-derived one is not, and the id value alone cannot tell the two apart.
 
-The pair is written **once**, at the service boundary during `ExecuteTransaction`, from the header the request arrived with. The Exchange records a correlation only when the received value conforms to the shape the admin plane can replay into a rendered ledger (printable ASCII, 1 to 255 characters). A nonconforming header value is recorded as *no correlation* — both columns stay null — instead of being stored and echoed back later.
+The pair is written **once**, at the service boundary during `ExecuteTransaction`.
+
+**The invariant: a stored `request_id` always conforms.** It must be printable ASCII, 1 to 255 characters — the shape the admin plane can replay into a rendered ledger. The check belongs on the **write** path. A read-side filter would leave the bad value in the row, so every other reader of the store inherits the problem and the row stops being a faithful record of what was recorded.
+
+**How a server reaches that invariant is its own choice.** Two mechanisms both conform, and they differ only in what a *nonconforming* header produces:
+
+| Mechanism | Nonconforming header produces | Trade-off |
+|---|---|---|
+| Reject and derive | A server-derived id, `request_id_minted = true` | Keeps a correlation key for the request; loses the fact that a bad header was sent |
+| Record nothing | Both columns null | States that nothing trustworthy arrived; the row has no correlation key at all |
+
+The reference Exchange does the first, and validates against a charset stricter than the contract requires (`^[A-Za-z0-9._-]{1,128}$`), so nothing it accepts can violate the wider rule. Either mechanism satisfies the contract, because neither can put a nonconforming value in the store — and that is the only property the read plane depends on.
+
+This is why `request_id_minted` means **server-derived** rather than "the header was absent". A server that rejects and derives sets it for two different reasons — no header, or a bad header — and the distinction the flag exists for is *influence*: `false` means a caller chose those characters, `true` means no caller did. Widening the meaning keeps that property exact under both mechanisms.
+
+**A read-side guard is still required, as defence in depth.** A server must never populate `request_correlation` from a nonconforming stored value, because rows written before the write check existed may hold one. That is a migration guard, not the primary defence.
 
 **The transaction log holds no correlation column.** Its `IdempotencyKey` is a durable dedupe key and nothing else; correlation rides the `X-Request-ID` HTTP header and is persisted only here. That split is exactly what the admin plane encodes by placing `RequestCorrelation` on `TransactionEvidence` and not on `TransactionState`.
 
-**This is not the same key as `query_id`.** The `ResourceQueryReceived` event records a `query_id`, which is the `X-Request-ID` of a *discovery* request. The evidence row's `request_id` is the `X-Request-ID` of an *execute* request. Different legs of the exchange, different requests, different values — they must not be joined against each other or read as one correlation chain. The evidence-plane id joins outward to the edge delivery log and the reconciliation sweep.
+**This is not the same key as `query_id`.** The `ResourceQueryReceived` event records a `query_id`, which is the `X-Request-ID` of a *discovery* request. The evidence row's `request_id` is the `X-Request-ID` of an *execute* request. Different legs of the exchange, different requests, different values — they must not be joined against each other or read as one correlation chain. The evidence-plane id joins outward to whatever else recorded the same correlation id for that execute call: the Exchange's own request logs, and any tracing or log pipeline that saw the header. It does **not** join to the edge delivery log — the delivery fetch is a separate HTTP request made later by the agent to the CDN, and it does not carry the execute request's `X-Request-ID`. The join to the delivery side is `signed_url_hash`.
 
 ---
 

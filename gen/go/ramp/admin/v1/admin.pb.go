@@ -787,8 +787,9 @@ type TransactionEvidence struct {
 	// thing entirely. This is the agent's well-known directory document, which
 	// is what every sentence describing the field already calls it.
 	AgentDirectoryUrl string `protobuf:"bytes,16,opt,name=agent_directory_url,json=agentDirectoryUrl,proto3" json:"agent_directory_url,omitempty"`
-	// Correlation id joining this row outward (edge delivery log,
-	// reconciliation sweep), with its provenance. One message, not two
+	// Correlation id joining this row outward to whatever else recorded the
+	// same X-Request-ID for this execute call, with its provenance. One
+	// message, not two
 	// sibling fields: presence of the message is the pairing — id and
 	// provenance flag arrive together or not at all, a constraint two
 	// optional siblings could not express without message-level CEL (which
@@ -962,24 +963,33 @@ func (x *TransactionEvidence) GetCreatedAt() *timestamppb.Timestamp {
 // fields.
 type RequestCorrelation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The correlation id as persisted. GOVERNING RULE, applied on the WRITE
-	// path: the Exchange records a correlation only when the received
-	// X-Request-ID conforms to the rules below — printable ASCII, 1..255. A
-	// nonconforming header value is recorded as NO correlation: the wrapping
-	// message stays absent, the id is not stored, and nothing is echoed here.
-	// A present request_id has therefore already passed this check on the way
-	// in; the rules are not a read-side filter over a laxer stored value.
-	// Background, for a reader tracing where the value comes from: it is
-	// caller-influenceable. The SDK's request-id middleware propagates any
-	// non-empty caller-supplied X-Request-ID verbatim and mints a random
-	// 128-bit hex token when the header is absent. That middleware performs no
-	// conformance check of its own — the check above is the Exchange's, at the
-	// service boundary where it decides whether to persist the pair.
+	// The correlation id as persisted. GOVERNING INVARIANT, established on the
+	// WRITE path: a persisted request_id always conforms to the rules below —
+	// printable ASCII, 1..255 — so a present value has already passed the check
+	// on the way in, and these rules are not a read-side filter over a laxer
+	// stored value. HOW a server reaches that invariant is its own choice, and
+	// two mechanisms both conform: reject the nonconforming header and record a
+	// server-derived id in its place (minted = true), or record no correlation
+	// at all (the wrapping message stays absent). The first keeps a correlation
+	// key for a request whose header was bad, the second states that nothing
+	// trustworthy arrived; neither can put a nonconforming value in the store,
+	// which is the only property this contract needs. A server that accepts a
+	// narrower charset than the rules below still satisfies the invariant.
+	// Background, for a reader tracing where the value comes from: a propagated
+	// id is caller-influenceable. The SDK's request-id middleware propagates
+	// any non-empty caller-supplied X-Request-ID verbatim and mints a random
+	// 128-bit hex token when the header is absent; it performs no conformance
+	// check of its own, so the check is the Exchange's, at the boundary where
+	// it decides what to persist.
 	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	// Provenance: true = server-minted, false = propagated from the caller.
-	// The two are byte-indistinguishable in request_id alone, so a forensic
-	// read needs this flag to tell a server-derived correlation key from an
-	// attacker-influenceable one.
+	// Provenance: true = the id is SERVER-DERIVED, false = propagated verbatim
+	// from a caller-supplied header. True covers both ways a server derives
+	// one — the header was absent, or it was present but nonconforming and was
+	// replaced — because the property this flag exists for is INFLUENCE, not
+	// origin story: false means a caller chose these characters, true means no
+	// caller did. The two are byte-indistinguishable in request_id alone, so a
+	// forensic read needs this flag to tell a server-derived correlation key
+	// from an attacker-influenceable one.
 	Minted        bool `protobuf:"varint,2,opt,name=minted,proto3" json:"minted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1049,13 +1059,14 @@ type TransactionState struct {
 	// instead. No upper
 	// bound: the derivation appends an id whose length nothing constrains.
 	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// When the signed retrieval URL expires. Named for the transaction-log
-	// column it states, exactly as signed_url_hash below is: this message
-	// carries log facts, so it joins the log by name with no translation step.
-	// The same instant has other names on other planes — the wire calls it
-	// TransactionResultItem.expires_at and the Exchange's own store calls it
-	// url_expires_at — so a bare `expiry` here would have been a fourth
-	// spelling of one value.
+	// When the signed retrieval URL expires. Named to pair with signed_url_hash
+	// below, so the two fields describing one minted URL read as a pair and
+	// neither can be mistaken for a property of the transaction itself. Do not
+	// read the name as a column name: stores spell this one differently
+	// (TransactionResultItem.expires_at on the wire, and the reference
+	// Exchange's transaction log calls the column plainly `expiry`), so a
+	// ledger joining to a log matches this field by MEANING, not by name.
+	// signed_url_hash is the one that happens to match a real column name.
 	//
 	// Absent when the transaction minted no signed URL: DELIVERY_METHOD_DIRECT
 	// returns the resource inline or from the Exchange's own endpoint, so there
@@ -1065,11 +1076,12 @@ type TransactionState struct {
 	// unlike broker below, whose log column is optional-empty and whose ” is
 	// itself the value, a direct delivery has no value to state here.
 	SignedUrlExpiry *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=signed_url_expiry,json=signedUrlExpiry,proto3" json:"signed_url_expiry,omitempty"`
-	// sha256 of the signed retrieval URL — the join key against the edge
-	// delivery log's signed_url_hash column. Same digest on both sides, in
-	// different forms: 32 raw bytes here (base64 in protojson) against a text
-	// string there, so a join must normalize both to the raw digest rather than
-	// compare the two encodings directly. Hash-only by design: the full URL is a live
+	// sha256 of the signed retrieval URL — the join key against the transaction
+	// log's signed_url_hash column, which holds the same digest as 32 raw bytes.
+	// The join is byte-to-byte; nothing needs normalizing. Text only appears
+	// when a store is rendered — protojson base64s this field, and a log export
+	// picks its own spelling — so it is exports, not stores, that a join has to
+	// reconcile. Hash-only by design: the full URL is a live
 	// bearer capability until expiry and is deliberately absent from this
 	// plane (see TransactionEvidence's delivery section). Absent exactly when
 	// signed_url_expiry is, and for the same reason: no signed URL, nothing to
