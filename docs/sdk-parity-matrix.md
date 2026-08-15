@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 82 symbols at cross-language parity · 14 documented divergences · 143 Go-idiomatic exclusions · 24 conformance corpora, each tri-replayed.
+**At a glance:** 82 symbols at cross-language parity · 14 documented divergences · 146 Go-idiomatic exclusions · 24 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -217,9 +217,12 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `core.DiscoveryResult` | Go per-URI discovery result carrying the fail-closed split plus the typed absence reasons; py/ts gain the same shape with their client verbs. |
 | `core.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
 | `core.OfferGroupResult` | Go per-URI group within a discovery result; py/ts gain the same shape with their client verbs. |
+| `core.RequestID` | Go-only, and tied to core.RequestIDMiddleware which is already excluded: the server-role request-id seam exists only in Go (TS/Py have no server face). ValidRequestID is the wire rule on RequestCorrelation.request_id; RequestID and RequestIDFromContext carry the settled value and its provenance to a handler. If a Python or TS server face ever lands, these move to 'symbols' with it. |
+| `core.RequestIDFromContext` | Go-only, and tied to core.RequestIDMiddleware which is already excluded: the server-role request-id seam exists only in Go (TS/Py have no server face). ValidRequestID is the wire rule on RequestCorrelation.request_id; RequestID and RequestIDFromContext carry the settled value and its provenance to a handler. If a Python or TS server face ever lands, these move to 'symbols' with it. |
 | `core.RequestIDFunc` | Go request-id function type; py/ts pass a callable inline. |
 | `core.RequestIDMiddleware` | Go-only request-id middleware (matrix SERVER-role request-id row: TS/Py absent). |
 | `core.SigningOption` | Go functional-option type for the signing transport; py/ts pass options objects. |
+| `core.ValidRequestID` | Go-only, and tied to core.RequestIDMiddleware which is already excluded: the server-role request-id seam exists only in Go (TS/Py have no server face). ValidRequestID is the wire rule on RequestCorrelation.request_id; RequestID and RequestIDFromContext carry the settled value and its provenance to a handler. If a Python or TS server face ever lands, these move to 'symbols' with it. |
 | `core.WithAppendSigner` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.WithSignPredicate` | Go functional-option builder; py/ts pass options via kwargs/options objects. |
 | `core.WithSignatureAgent` | Go functional-option builder; py/ts pass options via kwargs/options objects. |

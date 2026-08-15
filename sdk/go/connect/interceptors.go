@@ -40,8 +40,19 @@ func newRequestIDInterceptor(mint core.RequestIDFunc) connectrpc.Interceptor {
 
 func (i *requestIDInterceptor) WrapUnary(next connectrpc.UnaryFunc) connectrpc.UnaryFunc {
 	return func(ctx context.Context, req connectrpc.AnyRequest) (connectrpc.AnyResponse, error) {
+		// Stamp only when absent — a caller who set the header meant it, and the
+		// client is not the place to police a peer's correlation vocabulary. The
+		// MINTED value is checked, because an injected RequestIDFunc usually
+		// reuses a trace id and a trace id may carry characters the admin plane
+		// cannot persist. Sending one would make the receiving Exchange replace
+		// it, silently breaking the correlation this interceptor exists to
+		// create.
 		if req.Spec().IsClient && req.Header().Get(core.RequestIDHeader) == "" {
-			req.Header().Set(core.RequestIDHeader, i.mint())
+			if id := i.mint(); core.ValidRequestID(id) {
+				req.Header().Set(core.RequestIDHeader, id)
+			} else {
+				req.Header().Set(core.RequestIDHeader, core.DefaultRequestID())
+			}
 		}
 		return next(ctx, req)
 	}
