@@ -7,7 +7,8 @@
 #
 # Coverage: the proto gate (lint/generate/drift/build/test/docs) AND the SDK types
 # export gate (regenerate gen-sdk-types + drift + Pydantic/Zod parity + canonical
-# round-trip). The two run as SEPARATE CI workflows (proto-ci.yml + sdk-types-ci.yml,
+# round-trip + the hand-written sdk/python and sdk/ts suites, which carry the
+# API-surface parity gate). The two run as SEPARATE CI workflows (proto-ci.yml + sdk-types-ci.yml,
 # path-filtered); locally they are one command. proto-ci.yml sets
 # RAMP_CI_SKIP_SDK_TYPES=1 so it keeps mirroring proto-ci only (sdk-types-ci.yml owns
 # the sdk-types gate in CI); the block also self-skips if python3/npm are absent.
@@ -149,6 +150,23 @@ else
   ".sdk-types-work/venv/bin/pip" install -q --disable-pip-version-check --require-hashes -r scripts/sdk-types/requirements-test.txt || fail=1
   PYTHONPATH=gen/python ".sdk-types-work/venv/bin/python" -m pytest gen/python/tests -q || fail=1
   (cd gen/ts && npm ci --no-audit --no-fund && npm test --silent) || fail=1
+
+  # The hand-written SDKs, not the generated types above — a different suite in a
+  # different directory. sdk-types-ci.yml runs both and this script did not, so a
+  # change that broke them still reported a green local run. It happened: two new
+  # wire-constant vectors turned sdk/python/tests and sdk/ts red while ci-local
+  # passed. The same shape covers the API-surface gate, which fires when a new
+  # exported Go symbol is neither mapped nor excluded in sdk/parity/symbol-map.json.
+  step "sdk/python L1 + L2 parity"
+  # Version floors, not hashes, because sdk-types-ci.yml installs exactly this
+  # line. Pinning tighter here would gate on something CI does not check.
+  ".sdk-types-work/venv/bin/pip" install -q --disable-pip-version-check \
+    "cryptography>=44" "httpx>=0.27" "httpcore>=1.0" "pydantic>=2.9" "rfc8785>=0.1.2" pytest || fail=1
+  PYTHONPATH=gen/python:sdk/python ".sdk-types-work/venv/bin/python" -m pytest sdk/python/tests -q || fail=1
+
+  step "sdk/ts L1 + L2 parity"
+  # npm install, not npm ci: sdk/ts ships no lockfile, and this mirrors CI.
+  (cd sdk/ts && npm install --no-audit --no-fund --silent && npm test --silent) || fail=1
 
   step "canonical proto-JSON round-trip"
   ./scripts/check-canonical.sh || fail=1
