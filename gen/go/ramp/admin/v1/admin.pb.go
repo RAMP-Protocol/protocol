@@ -796,7 +796,37 @@ type TransactionEvidence struct {
 	// this file forbids). Absent when the Exchange recorded no correlation id.
 	RequestCorrelation *RequestCorrelation `protobuf:"bytes,17,opt,name=request_correlation,json=requestCorrelation,proto3" json:"request_correlation,omitempty"`
 	// When the Exchange wrote this row (server clock).
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// The relay hop that presented this request to the Exchange, if the
+	// Exchange records one. A transport fact the Exchange observed, covered by
+	// neither signature — which is why it sits in this section and not on
+	// TransactionState: TransactionState projects transaction-log columns, and
+	// broker routing is an execute-time observation about the connection, not
+	// a property of the transaction's operational state.
+	//
+	// Three states, and the `optional` keyword is what makes them distinct:
+	// ABSENT means this Exchange does not record routing at all; ” means it
+	// does record it AND the acceptance arrived direct; a value means it
+	// arrived through that hop. Without explicit presence the field would
+	// default to ”, so an Exchange with nothing to say would state "arrived
+	// direct" for every row — a forensic plane asserting a transport fact it
+	// never observed.
+	//
+	// WHAT THE VALUE IS: implementation-defined provenance for the outermost
+	// hop, not a resolvable identity. The reference Exchange serves the
+	// verified RFC 7638 key thumbprint of the hop that presented the request.
+	// It deliberately does not resolve that key to a directory host: the relay
+	// hop is not re-identified against any registry, and the recipient tenant's
+	// own relay-permission setting is the gate instead. So a reader may compare
+	// this value for equality and may check it against a thumbprint it already
+	// holds, but must not expect a hostname, and must not treat it as an
+	// identity the Exchange vouched for. Only the outermost hop is classified;
+	// per-hop identity for a longer chain is out of scope here.
+	//
+	// No wire rule: nothing upstream constrains what a server may record, and a
+	// rule here could invalidate a row for a transaction that legitimately
+	// executed — the same reasoning as requester_id.
+	Broker        *string `protobuf:"bytes,19,opt,name=broker,proto3,oneof" json:"broker,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -957,6 +987,13 @@ func (x *TransactionEvidence) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *TransactionEvidence) GetBroker() string {
+	if x != nil && x.Broker != nil {
+		return *x.Broker
+	}
+	return ""
+}
+
 // RequestCorrelation — the recorded X-Request-ID correlation for one
 // evidence row, with its provenance. See TransactionEvidence
 // .request_correlation for why this is a message rather than two sibling
@@ -1072,9 +1109,9 @@ type TransactionState struct {
 	// returns the resource inline or from the Exchange's own endpoint, so there
 	// is nothing to expire. DELIVERY_METHOD_INSTRUCTIONS and
 	// DELIVERY_METHOD_STREAMING both mint one and always carry this field.
-	// Absence is a stated fact about the delivery method, not missing data —
-	// unlike broker below, whose log column is optional-empty and whose ” is
-	// itself the value, a direct delivery has no value to state here.
+	// Absence is a stated fact about the delivery method, not missing data: a
+	// direct delivery has no value to state here, so there is nothing an empty
+	// value could honestly mean.
 	SignedUrlExpiry *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=signed_url_expiry,json=signedUrlExpiry,proto3" json:"signed_url_expiry,omitempty"`
 	// sha256 of the signed retrieval URL — the join key against the transaction
 	// log's signed_url_hash column, which holds the same digest as 32 raw bytes.
@@ -1090,13 +1127,6 @@ type TransactionState struct {
 	// presence, so protovalidate skips the length rule on an unset value, while
 	// a PRESENT hash must still be exactly 32 bytes.
 	SignedUrlHash []byte `protobuf:"bytes,3,opt,name=signed_url_hash,json=signedUrlHash,proto3,oneof" json:"signed_url_hash,omitempty"`
-	// The broker that routed the acceptance, as the transaction log recorded
-	// it. ” when the acceptance arrived direct — the log's broker column is
-	// optional-empty, and an append-once view states a value for every
-	// column, so ” is a stated fact, not a gap. A ledger renders its
-	// "broker routed" row from this. No wire rule: this states whatever the
-	// log holds, and nothing upstream constrains the broker label.
-	Broker        string `protobuf:"bytes,4,opt,name=broker,proto3" json:"broker,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1150,13 +1180,6 @@ func (x *TransactionState) GetSignedUrlHash() []byte {
 		return x.SignedUrlHash
 	}
 	return nil
-}
-
-func (x *TransactionState) GetBroker() string {
-	if x != nil {
-		return x.Broker
-	}
-	return ""
 }
 
 // ReportingObligationState — the server-side lifecycle record of the
@@ -1449,7 +1472,7 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"n\n" +
 	"\x1aSetReportingPolicyResponse\x12\x10\n" +
 	"\x03ver\x18\x01 \x01(\tR\x03ver\x12>\n" +
-	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\x9e\n" +
+	"\x06policy\x18\x02 \x01(\v2\x1e.ramp.admin.v1.ReportingPolicyB\x06\xbaH\x03\xc8\x01\x01R\x06policy\"\xc6\n" +
 	"\n" +
 	"\x13TransactionEvidence\x121\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\n" +
@@ -1477,16 +1500,17 @@ const file_ramp_admin_v1_admin_proto_rawDesc = "" +
 	"\x13agent_directory_url\x18\x10 \x01(\tB\xcc\x01\xbaH\xc8\x01r\xc5\x01\x18\x80\x042\xbf\x01^$|^https://[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?/[!-~]*$R\x11agentDirectoryUrl\x12R\n" +
 	"\x13request_correlation\x18\x11 \x01(\v2!.ramp.admin.v1.RequestCorrelationR\x12requestCorrelation\x12A\n" +
 	"\n" +
-	"created_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt\"a\n" +
+	"created_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tcreatedAt\x12\x1b\n" +
+	"\x06broker\x18\x13 \x01(\tH\x00R\x06broker\x88\x01\x01B\t\n" +
+	"\a_broker\"a\n" +
 	"\x12RequestCorrelation\x123\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tB\x14\xbaH\x11r\x0f\x10\x01\x18\xff\x012\b^[!-~]+$R\trequestId\x12\x16\n" +
-	"\x06minted\x18\x02 \x01(\bR\x06minted\"\xee\x01\n" +
+	"\x06minted\x18\x02 \x01(\bR\x06minted\"\xd6\x01\n" +
 	"\x10TransactionState\x120\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\x12F\n" +
 	"\x11signed_url_expiry\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0fsignedUrlExpiry\x124\n" +
-	"\x0fsigned_url_hash\x18\x03 \x01(\fB\a\xbaH\x04z\x02h H\x00R\rsignedUrlHash\x88\x01\x01\x12\x16\n" +
-	"\x06broker\x18\x04 \x01(\tR\x06brokerB\x12\n" +
+	"\x0fsigned_url_hash\x18\x03 \x01(\fB\a\xbaH\x04z\x02h H\x00R\rsignedUrlHash\x88\x01\x01B\x12\n" +
 	"\x10_signed_url_hash\"\xff\x02\n" +
 	"\x18ReportingObligationState\x12@\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1e.ramp.admin.v1.ObligationStateB\n" +
@@ -1589,6 +1613,7 @@ func file_ramp_admin_v1_admin_proto_init() {
 	}
 	file_ramp_admin_v1_admin_proto_msgTypes[0].OneofWrappers = []any{}
 	file_ramp_admin_v1_admin_proto_msgTypes[1].OneofWrappers = []any{}
+	file_ramp_admin_v1_admin_proto_msgTypes[6].OneofWrappers = []any{}
 	file_ramp_admin_v1_admin_proto_msgTypes[8].OneofWrappers = []any{}
 	file_ramp_admin_v1_admin_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}

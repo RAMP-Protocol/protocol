@@ -183,6 +183,10 @@ The admin plane (`ramp.admin.v1`) adds one high-value asset: the append-once evi
 **Countermeasure**: The contract states the trust boundary explicitly: authenticity requires comparing the embedded keys against independently obtained copies. The Exchange anchor is signed — `Offer.exchange` sits inside `offer_canonical_bytes`, under `offer_sig`, so a fabricated row cannot redirect the verifier to a host it controls without invalidating the signature being checked. The agent side has no signed anchor: `agent_directory_url` is covered by neither signature and is written by the row's author, so it is provenance only and the agent key must be anchored from the counterparty's own directory. The in-row keys are convenience copies for rotation-survival, not the root of trust.
 **Residual**: This bounds who a *verifier* can be redirected to; it does not stop a store writer from minting a row that is internally consistent. Detection depends on the independent anchors above actually being used.
 
+Stated plainly, because it is the honest boundary of what this plane attests: independent proof that the agent actually published this key at that directory would need archived directory snapshots or an append-only key history, and neither exists. An attacker who controls an Exchange can write a row whose signatures verify under a key the agent never published; the row's directory URL is an assertion, not a proof.
+
+Two properties follow that read like defects and are not. An Exchange may pin the agent key locally after fetching it from the agent's directory, and verify against the pin rather than re-fetching per request — the directory is still the anchor, consulted at registration and rotation. And an old row's `agent_public_key` will not match the current registry after the agent rotates. That mismatch is the reason the field exists: the row attests which key signed these terms, and where and when this Exchange obtained it. A registry-match expectation would be false on purpose.
+
 ## Prevention Taxonomy
 
 | Level | Threat IDs | What It Means |

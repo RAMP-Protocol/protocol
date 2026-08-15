@@ -174,11 +174,19 @@ By default, only the hash of the signed URL is logged (`signed_url_hash`). A con
 
 **What is hashed.** The SHA-256 digest is taken over the **full** issued URL — scheme, host, path and query string, exactly the bytes handed to the agent, with the signature parameter included. This is what the Go SDK's `HashURL` already computes, and it is the only definition that lets a provider reproduce the value from a CDN access log line.
 
-**Stored form: 32 raw bytes.** Not text. `HashURL` returns bytes, the reference Exchange's column is `BYTEA` with an `octet_length = 32` check, and `ramp.admin.v1.TransactionState.signed_url_hash` is `bytes` with `len = 32`. So a query joining the log against the operator plane compares byte to byte, with nothing to normalize.
+**The same digest is held in three different forms, and only some pairs join directly.**
 
-**Text form: lowercase hexadecimal, 64 characters.** A text encoding is needed only where the column is *rendered* — a [CSV or JSON Lines export](/components/transaction-log/reconciliation/#export-formats), or protojson on the operator plane, which base64s the field because that is what protojson does with `bytes`. Every export this contract defines renders the digest as lowercase hex. Lowercase hex has exactly one spelling and compares and sorts predictably in SQL, while base64 has padded, unpadded and URL-safe variants that all look plausible in a log — two exporters could pick different ones and silently fail to join.
+| Where | Form |
+|---|---|
+| The Exchange's transaction log | 32 raw bytes |
+| `ramp.admin.v1.TransactionState.signed_url_hash` | 32 raw bytes |
+| The edge delivery record | lowercase hex, 64 characters |
+| A log export (CSV, JSON Lines) | lowercase hex, 64 characters |
+| protojson on the operator plane | base64 — that is what protojson does with `bytes` |
 
-The distinction matters because the two forms are not interchangeable. Two *stores* join directly. Two *exports* join only if they chose the same rendering, and an export never joins a raw-bytes column without converting one side first.
+So a query joining the Exchange's log against the operator plane compares byte to byte with nothing to normalize, while a query joining either of them against a delivery record crosses an encoding boundary and must convert one side first.
+
+**Where a text form is needed, it is lowercase hexadecimal.** That is what the edge delivery record already uses, so an export matches the delivery side with no conversion — which is the join that actually runs in reconciliation. Lowercase hex also has exactly one spelling and compares and sorts predictably in SQL, while base64 has padded, unpadded and URL-safe variants that all look plausible in a log, so two exporters could pick different ones and silently fail to join.
 
 | Setting | `signed_url_hash` | `signed_url_full` | Use Case |
 |---|---|---|---|
@@ -187,7 +195,7 @@ The distinction matters because the two forms are not interchangeable. Two *stor
 
 **The default-off posture applies to every store that holds delivery facts, not only to this log.** A signed URL is a live bearer capability until it expires: anyone who can read it can fetch the paid content without paying. Expiry bounds that window to minutes, but a store's retention does not — the transaction log keeps rows for 13 months and the evidence store keeps them at least that long, so an unconditionally stored URL is minutes of capability sitting inside years of retained text.
 
-So a column holding the full URL must be **nullable and written only when the flag is on**, wherever it appears. A `NOT NULL` full-URL column turns an opt-in debug capability into a permanent one, and puts it in the store with the longest life and the widest read surface. The hash is what production needs: it is enough for the reconciliation join, which is the reason the value is recorded at all.
+**Whether the flag binds depends on the signing scheme.** An agent-bound URL whose edge enforces proof of possession is not a capability at rest — a reader of the store cannot fetch with it — and may be stored unconditionally. A natively-verified URL is a capability until it expires, and belongs behind the flag. The full rule, with the reasoning and the cost of choosing default-off, is stated once on the [Exchange storage model](/components/exchange/storage-model/#storing-the-full-signed-url); everything that stores a full signed URL follows it.
 
 This is separate from the rule that the operator plane's `TransactionEvidence` message carries no URL field. That one is structural and cannot be configured away. This one is a deployment posture.
 

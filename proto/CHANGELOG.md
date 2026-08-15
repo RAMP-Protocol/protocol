@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+**`broker` moves from `TransactionState` to `TransactionEvidence`, and gains explicit presence
+(field move on a message that has not shipped).** `TransactionState.broker` was a plain `string`
+describing a transaction-log column that no implementation has. Two things were wrong with that.
+
+The message is a projection of transaction-log columns, and a field with nothing behind it breaks
+the property that makes the projection meaningful. Broker routing is not operational state anyway:
+it is an execute-time observation about the connection the request arrived on, covered by neither
+signature — the same category as `request_correlation`, which already sits on `TransactionEvidence`.
+So it moves there, and `TransactionState` goes back to being every-field-backed-by-a-column.
+
+The field is now `optional`, which turns two states into three. Absent means the Exchange does not
+record routing; `''` means it does record it and the acceptance arrived direct; a value means it
+arrived through that hop. Without explicit presence the field defaults to `''`, so an Exchange with
+nothing to say would have stated "arrived direct" for every row — a forensic plane asserting a
+transport fact it never observed.
+
+The value is defined as implementation-defined provenance for the outermost hop, not a resolvable
+identity. A reference Exchange serves the verified RFC 7638 key thumbprint of the hop that presented
+the request, and deliberately does not resolve it to a directory host: the relay hop is not
+re-identified against a registry, and the recipient's own relay-permission setting is the gate. A
+reader may compare the value for equality against a thumbprint it already holds, but must not expect
+a hostname and must not read it as an identity the Exchange vouched for.
+
 **Agent-plane signature fields now enforce the hex shape they describe (BREAKING: rule addition on
 live fields).** `ramp.v1.Offer.signature` carried no rule at all and
 `ramp.v1.AgentAcceptance.signature` carried only `min_len: 1`, while both comments described a

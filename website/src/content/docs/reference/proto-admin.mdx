@@ -93,7 +93,7 @@ The pair is read back from the evidence store's `request_id` and `request_id_min
 
 ### TransactionState
 
-The thin transaction-log facts a ledger renderer needs next to the evidence row: the logged per-item idempotency key (derived as `request_idempotency_key + ":" + offer_id`, so never byte-equal to the bare request key -- join log exports on the derived form), the signed-URL expiry, the sha256 of the signed retrieval URL, and the broker that routed the acceptance (`''` when the acceptance arrived direct). There is deliberately no status field -- evidence only ever describes a successful execute, so existence is the status.
+The thin transaction-log facts a ledger renderer needs next to the evidence row: the logged per-item idempotency key (derived as `request_idempotency_key + ":" + offer_id`, so never byte-equal to the bare request key -- join log exports on the derived form), the signed-URL expiry, and the sha256 of the signed retrieval URL. Every field here projects a transaction-log column, which is the property that makes the message meaningful -- a field with no column behind it would state something the log never recorded. Broker routing used to sit here and does not: it is an execute-time transport observation, not operational state, so it moved to `TransactionEvidence` beside the other facts covered by neither signature. There is deliberately no status field -- evidence only ever describes a successful execute, so existence is the status.
 
 ::proto-message{name=TransactionState}
 

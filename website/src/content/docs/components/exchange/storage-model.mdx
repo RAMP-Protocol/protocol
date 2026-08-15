@@ -201,11 +201,17 @@ CREATE TABLE transactions_2026_03_15 PARTITION OF transactions
 REVOKE DELETE ON transactions FROM exchange_app;
 ```
 
-**The transaction log is not append-only, and `REVOKE UPDATE` on it would break the write path.** A transaction row is updated after it is written: when the usage report for that transaction lands, the consumed quantity is recorded on the row. The log is the *operational* record and it tracks a transaction through its lifecycle, so revoking `UPDATE` would block a legitimate write the protocol requires.
+**Whether `UPDATE` may be revoked on the transaction log depends on where you put report state.** The protocol does not decide it. If the consumed quantity lands on the transaction row when the usage report arrives, the log is mutable and revoking `UPDATE` blocks a write you need. If report state goes to separate tables — the reference Exchange writes it to a reporting-obligations table and a per-report table, leaving the log insert-only — then `UPDATE` can be revoked here too.
 
-Append-once belongs to the **evidence** store described below, and only there. That is the distinction: the log follows a transaction as it changes, the evidence row states what the two parties agreed to and can never legitimately change afterwards. Revoke `UPDATE` on that table, not on this one.
+Append-once is a hard requirement for the **evidence** store described below, and only there. That is the distinction: the log may follow a transaction as it changes, the evidence row states what the two parties agreed to and can never legitimately change afterwards.
 
-`DELETE` is revoked on both. Retention is enforced by dropping whole partitions after export, which does not need row-level `DELETE`.
+`DELETE` is revoked either way. Retention drops whole partitions after export, which does not need row-level `DELETE`.
+
+:::caution[`REVOKE` may be a no-op in your topology]
+Table grants do nothing when the application connects as the **database owner**, which many deployments do. `REVOKE UPDATE, DELETE` then reads like enforcement and enforces nothing.
+
+Where append-once has to hold regardless of role, use `BEFORE UPDATE OR DELETE OR TRUNCATE` triggers that raise. The reference Exchange guards its evidence table that way, for exactly this reason. Grants are a useful second layer; they are not the mechanism.
+:::
 
 **Dedupe scope of `idempotency_key`**: the protocol requires that a key chosen by one caller can never collide with another caller's cached result, so dedupe happens inside a namespace and never globally. For `ExecuteTransaction` that namespace is the acceptance identity, which means the uniqueness constraint must be **composite** — over `(agent_identity_hash, idempotency_key)`, never over `idempotency_key` alone. `agent_identity_hash` is derived from the key that signed the offer acceptance, not from the transport caller, so the scoping holds even when a Broker relays many agents over one transport key.
 
@@ -233,13 +239,38 @@ The local WAL + Kafka architecture feeds ClickHouse as a Kafka consumer. ClickHo
 
 The evidence store is a **separate store from the transaction log**, written on the same request path. The transaction log is the settlement and analytics stream; the evidence store holds the offline-verifiable proof of what the two parties agreed to. One row is written per successfully executed transaction, at the service boundary, after both Ed25519 signatures have verified. A denied execute writes no row, so the existence of a row is itself the success statement.
 
-The row is **append-once**: written once during `ExecuteTransaction`, then never updated and never deleted before its retention limit. Enforce it with `REVOKE UPDATE, DELETE` on this table. Note that this is *stricter* than the transaction log above, which is updated when a usage report lands — append-once is a property of the evidence store alone, and the difference is the point: the log follows a transaction as it changes, this row states what was agreed and can never legitimately change afterwards. Its only read path is the operator plane's `GetTransactionEvidence` RPC.
+The row is **append-once**: written once during `ExecuteTransaction`, then never updated and never deleted before its retention limit. Enforce it with `BEFORE UPDATE OR DELETE OR TRUNCATE` triggers rather than with grants alone — see the caution above on why `REVOKE` may enforce nothing. This is the one table where append-once is a protocol requirement rather than a design choice: the log follows a transaction as it changes, this row states what was agreed and can never legitimately change afterwards. Its only read path is the operator plane's `GetTransactionEvidence` RPC.
 
 **What the row holds.** Each of the two signatures is stored together with the verbatim canonical bytes it was computed over and the public key it verifies against, so a reader can re-verify the row offline without contacting the Exchange and without re-deriving anything. The row also holds the selector columns (`tenant_id`, `transaction_id`, `offer_id`), the request-level idempotency key the acceptance signed, the requester identity as signed, the directory URL the Exchange states it pinned the agent key from, the correlation pair described below, and the server-clock write time.
 
 The column-by-column listing is `ramp.admin.v1.TransactionEvidence` in [Proto: Admin v1](/reference/proto-admin/). The admin read returns the row **as persisted**, so that message is the column list, and this page deliberately does not restate it — a second hand-maintained copy would drift from the wire contract with nothing to catch it.
 
 One name to read carefully across the two stores: `request_idempotency_key` on the evidence row is the **request-level** key the acceptance signed, while the transaction log stores the **derived per-item** key (`request key + ":" + offer_id`). The two are never byte-equal, so joining the stores on an idempotency key means deriving the per-item form first.
+
+### One request's rows can hold different agent keys
+
+An Exchange that verifies each item's acceptance against the agent key current *at that item's verification* can persist rows for one `TransactionRequest` whose `agent_public_key` values differ, if a key rotation lands between two items. Every such row is individually valid — both keys were genuinely the agent's — and the response's single `agent_identity_hash` names the first item's key.
+
+A registry that keeps no key history cannot explain the mismatch afterwards. What ties the rows together is their shared `request_idempotency_key` and near-identical `created_at`, not anything in the registry.
+
+Resolving the key once per request and reusing it for every item removes the window, and an Exchange should. But rows already written keep the property forever, because the store is append-once — so this stays a true description of what a reader can find, even in a deployment that has since fixed it.
+
+### Storing the full signed URL
+
+The evidence row carries no signed URL on the **wire** — `TransactionEvidence` has no such field, and that is structural. Whether the *store* behind it may keep one is a separate question, and the answer depends on the signing scheme, because the schemes differ in what a stored URL actually is.
+
+| Signing scheme | Is a stored URL a capability? | Rule |
+|---|---|---|
+| Ed25519, agent-bound | **No.** The edge enforces proof of possession: a fetch must be signed by the agent key whose thumbprint the URL carries. A reader of the store cannot fetch with it. | MAY be stored unconditionally |
+| CloudFront RSA (or any scheme the edge verifies natively) | **Yes**, until expiry. Native verification cannot check proof of possession, so whoever holds the URL can fetch. | Store only under `log_full_signed_url`, default off |
+
+The flag SHOULD be settable **per tenant or coarser**. The signing scheme is a per-tenant property, so the trade-off the flag encodes is per-tenant too, and one global answer forces the same posture onto publishers with different schemes and different dispute exposure.
+
+**Why store the preimage at all, when the hash is enough for reconciliation.** The hash proves *that* a delivery record matches what was minted. It cannot show *what* was minted — which agent binding, which expiry, which path the capability named. That preimage is not recoverable later: rebuilding the URL would need the tenant's signing key still in custody, the exact signer code path, and the exact parameter encoding of the version that minted it, all preserved across the retention window. A row that stores only inputs re-verifies only as long as the verifier's recipe still matches the signer's, which is the dependency an evidence store exists to remove.
+
+**Operators choosing the default-off posture should choose it knowing the cost.** The flag is not retroactive. A preimage exists only for transactions executed while it was on, and a dispute always concerns a past transaction — so turning it on after a dispute arrives recovers nothing. The decision is made permanently, per transaction, at execute time. And it bites hardest exactly where the delivery-side evidence is thinnest: on natively-verified schemes there is no proof-of-possession check and the component that writes the delivery record is not in the verification path, so the preimage is the strongest thing the Exchange could have kept.
+
+Storing the URL with its signature parameter stripped does not work as a middle option. `signed_url_hash` covers the full URL, so a stripped value cannot be hashed to match the stored digest — it is not a weaker preimage, it is no preimage plus text that looks anchored.
 
 **Storage**: evidence rows share the durable store used for transaction records (PostgreSQL for Growth tier, ClickHouse for Scale tier). They must be indexed on `(tenant_id, transaction_id)` — the pair the admin read selects on. Retention must be at least the transaction log's 13 months, because this row is the proof behind any dispute filed against that transaction.
 
@@ -273,7 +304,9 @@ This is why `request_id_minted` means **server-derived** rather than "the header
 
 **The transaction log holds no correlation column.** Its `IdempotencyKey` is a durable dedupe key and nothing else; correlation rides the `X-Request-ID` HTTP header and is persisted only here. That split is exactly what the admin plane encodes by placing `RequestCorrelation` on `TransactionEvidence` and not on `TransactionState`.
 
-**This is not the same key as `query_id`.** The `ResourceQueryReceived` event records a `query_id`, which is the `X-Request-ID` of a *discovery* request. The evidence row's `request_id` is the `X-Request-ID` of an *execute* request. Different legs of the exchange, different requests, different values — they must not be joined against each other or read as one correlation chain. The evidence-plane id joins outward to whatever else recorded the same correlation id for that execute call: the Exchange's own request logs, and any tracing or log pipeline that saw the header. It does **not** join to the edge delivery log — the delivery fetch is a separate HTTP request made later by the agent to the CDN, and it does not carry the execute request's `X-Request-ID`. The join to the delivery side is `signed_url_hash`.
+**This is not the same key as `query_id`.** The `ResourceQueryReceived` event records a `query_id`, which is the `X-Request-ID` of a *discovery* request. The evidence row's `request_id` is the `X-Request-ID` of an *execute* request. Different legs of the exchange, different requests, different values — they must not be joined against each other or read as one correlation chain. The evidence-plane id joins outward to whatever else recorded the same correlation id for that execute call: the Exchange's own request logs, its admin audit log, and any tracing pipeline that saw the header.
+
+**It is not the join to the delivery side — `signed_url_hash` is.** The delivery fetch is a separate HTTP request, made later by the agent to the CDN. Nothing in the contract requires a fetcher to carry the execute request's `X-Request-ID` onto it, and the delivery record's field list has no place to keep it. A client MAY propagate the id across all three legs — the reference RAMP SDK does, deliberately — and a delivery-side record MAY log the header it received, in which case the correlation works. Neither is guaranteed, so build the join on the hash and treat any correlation-id match on the delivery side as a convenience.
 
 ---
 

@@ -519,6 +519,37 @@ message TransactionEvidence {
 
   // When the Exchange wrote this row (server clock).
   google.protobuf.Timestamp created_at = 18 [(buf.validate.field).required = true];
+
+  // The relay hop that presented this request to the Exchange, if the
+  // Exchange records one. A transport fact the Exchange observed, covered by
+  // neither signature — which is why it sits in this section and not on
+  // TransactionState: TransactionState projects transaction-log columns, and
+  // broker routing is an execute-time observation about the connection, not
+  // a property of the transaction's operational state.
+  //
+  // Three states, and the `optional` keyword is what makes them distinct:
+  // ABSENT means this Exchange does not record routing at all; '' means it
+  // does record it AND the acceptance arrived direct; a value means it
+  // arrived through that hop. Without explicit presence the field would
+  // default to '', so an Exchange with nothing to say would state "arrived
+  // direct" for every row — a forensic plane asserting a transport fact it
+  // never observed.
+  //
+  // WHAT THE VALUE IS: implementation-defined provenance for the outermost
+  // hop, not a resolvable identity. The reference Exchange serves the
+  // verified RFC 7638 key thumbprint of the hop that presented the request.
+  // It deliberately does not resolve that key to a directory host: the relay
+  // hop is not re-identified against any registry, and the recipient tenant's
+  // own relay-permission setting is the gate instead. So a reader may compare
+  // this value for equality and may check it against a thumbprint it already
+  // holds, but must not expect a hostname, and must not treat it as an
+  // identity the Exchange vouched for. Only the outermost hop is classified;
+  // per-hop identity for a longer chain is out of scope here.
+  //
+  // No wire rule: nothing upstream constrains what a server may record, and a
+  // rule here could invalidate a row for a transaction that legitimately
+  // executed — the same reasoning as requester_id.
+  optional string broker = 19;
 }
 
 // RequestCorrelation — the recorded X-Request-ID correlation for one
@@ -594,9 +625,9 @@ message TransactionState {
   // returns the resource inline or from the Exchange's own endpoint, so there
   // is nothing to expire. DELIVERY_METHOD_INSTRUCTIONS and
   // DELIVERY_METHOD_STREAMING both mint one and always carry this field.
-  // Absence is a stated fact about the delivery method, not missing data —
-  // unlike broker below, whose log column is optional-empty and whose '' is
-  // itself the value, a direct delivery has no value to state here.
+  // Absence is a stated fact about the delivery method, not missing data: a
+  // direct delivery has no value to state here, so there is nothing an empty
+  // value could honestly mean.
   google.protobuf.Timestamp signed_url_expiry = 2;
 
   // sha256 of the signed retrieval URL — the join key against the transaction
@@ -614,13 +645,6 @@ message TransactionState {
   // a PRESENT hash must still be exactly 32 bytes.
   optional bytes signed_url_hash = 3 [(buf.validate.field).bytes.len = 32];
 
-  // The broker that routed the acceptance, as the transaction log recorded
-  // it. '' when the acceptance arrived direct — the log's broker column is
-  // optional-empty, and an append-once view states a value for every
-  // column, so '' is a stated fact, not a gap. A ledger renders its
-  // "broker routed" row from this. No wire rule: this states whatever the
-  // log holds, and nothing upstream constrains the broker label.
-  string broker = 4;
 }
 
 // ReportingObligationState — the server-side lifecycle record of the

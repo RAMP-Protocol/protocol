@@ -1141,6 +1141,10 @@ class TransactionEvidence(WireModel):
         ...,
         description='The registry-pinned agent verifying key (raw 32-byte Ed25519) the\n acceptance verified against. This is the ACCEPTANCE key, which is the\n agent identity for the transaction — ramp.v1.AgentAcceptance defines that\n normatively under "Agent identity", and this row stores the key that\n definition names. It is deliberately NOT the transport signer: a Broker\n may author a re-packaged execute as sender, so the RFC 9421 signer on that\n leg is the broker, and a row anchored on it would name the wrong party.\n Same rule as\n ramp.admin.v1.TransactionEvidence.exchange_signing_public_key\n (drift-gated).',
     )
+    broker: str | None = Field(
+        None,
+        description='Three states, and the `optional` keyword is what makes them distinct:\n ABSENT means this Exchange does not record routing at all; \'\' means it\n does record it AND the acceptance arrived direct; a value means it\n arrived through that hop. Without explicit presence the field would\n default to \'\', so an Exchange with nothing to say would state "arrived\n direct" for every row — a forensic plane asserting a transport fact it\n never observed.\n\n WHAT THE VALUE IS: implementation-defined provenance for the outermost\n hop, not a resolvable identity. The reference Exchange serves the\n verified RFC 7638 key thumbprint of the hop that presented the request.\n It deliberately does not resolve that key to a directory host: the relay\n hop is not re-identified against any registry, and the recipient tenant\'s\n own relay-permission setting is the gate instead. So a reader may compare\n this value for equality and may check it against a thumbprint it already\n holds, but must not expect a hostname, and must not treat it as an\n identity the Exchange vouched for. Only the outermost hop is classified;\n per-hop identity for a longer chain is out of scope here.\n\n No wire rule: nothing upstream constrains what a server may record, and a\n rule here could invalidate a row for a transaction that legitimately\n executed — the same reasoning as requester_id.',
+    )
     created_at: AwareDatetime = Field(
         ..., description='When the Exchange wrote this row (server clock).'
     )
@@ -1248,17 +1252,13 @@ class TransactionResultItem(WireModel):
 
 
 class TransactionState(WireModel):
-    broker: str | None = Field(
-        '',
-        description='The broker that routed the acceptance, as the transaction log recorded\n it. \'\' when the acceptance arrived direct — the log\'s broker column is\n optional-empty, and an append-once view states a value for every\n column, so \'\' is a stated fact, not a gap. A ledger renders its\n "broker routed" row from this. No wire rule: this states whatever the\n log holds, and nothing upstream constrains the broker label.',
-    )
     idempotency_key: constr(min_length=1) = Field(
         ...,
         description='The transaction\'s per-item idempotency key as logged. The Exchange\n derives it as TransactionEvidence.request_idempotency_key + ":" +\n offer_id — unconditionally, single-item requests included — so distinct\n items of a batch dedupe independently, and this value is NEVER byte-equal\n to the request-level key. A ledger joining this row against a log export\n matches on this derived form, not on the bare request key, and it reaches\n the TRANSACTION-side events only: a usage-report event stores the report\'s\n own idempotency key, because a report addresses a whole transaction and\n has no offer id to derive with. Join a usage report on transaction_id\n instead. No upper\n bound: the derivation appends an id whose length nothing constrains.',
     )
     signed_url_expiry: AwareDatetime | None = Field(
         None,
-        description="Absent when the transaction minted no signed URL: DELIVERY_METHOD_DIRECT\n returns the resource inline or from the Exchange's own endpoint, so there\n is nothing to expire. DELIVERY_METHOD_INSTRUCTIONS and\n DELIVERY_METHOD_STREAMING both mint one and always carry this field.\n Absence is a stated fact about the delivery method, not missing data —\n unlike broker below, whose log column is optional-empty and whose '' is\n itself the value, a direct delivery has no value to state here.",
+        description="Absent when the transaction minted no signed URL: DELIVERY_METHOD_DIRECT\n returns the resource inline or from the Exchange's own endpoint, so there\n is nothing to expire. DELIVERY_METHOD_INSTRUCTIONS and\n DELIVERY_METHOD_STREAMING both mint one and always carry this field.\n Absence is a stated fact about the delivery method, not missing data: a\n direct delivery has no value to state here, so there is nothing an empty\n value could honestly mean.",
     )
     signed_url_hash: (
         constr(

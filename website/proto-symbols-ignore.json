@@ -16,6 +16,7 @@
     "Image.alt",
     "Text.authority",
     "Retrieval.ratelmt",
-    "Package.license"
+    "Package.license",
+    "TransactionState.broker"
   ]
 }
