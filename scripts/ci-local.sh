@@ -72,6 +72,20 @@ else
   note "no drift"
 fi
 
+step "regenerate the changelog page"
+# The published changelog page is proto/CHANGELOG.md plus Starlight frontmatter.
+# It used to be a hand-copied second body, which drifted 436 lines and lost a whole
+# entry before anyone noticed. Same gate shape as gen/ and the corpus: regenerate,
+# then fail on drift.
+python3 scripts/gen-changelog-page.py || fail=1
+if ! git diff --quiet HEAD -- website/src/content/docs/reference/changelog.mdx; then
+  echo "::error:: the changelog page is out of sync with proto/CHANGELOG.md. Edit proto/CHANGELOG.md (never the page), run 'python3 scripts/gen-changelog-page.py', and commit the page."
+  git status --short -- website/src/content/docs/reference/changelog.mdx
+  fail=1
+else
+  note "no drift"
+fi
+
 step "go build / vet / test"
 go build ./... || fail=1
 go vet ./... || fail=1

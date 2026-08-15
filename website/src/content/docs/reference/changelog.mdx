@@ -3,6 +3,9 @@ title: "Changelog"
 description: "RAMP protocol changelog"
 ---
 
+{/* GENERATED FILE — do not edit. Source: proto/CHANGELOG.md.
+    Edit that, then run scripts/gen-changelog-page.py. ci-local.sh gates the drift. */}
+
 ## Unreleased
 
 **`broker` is bounded printable ASCII (rule addition on a field added in this revision).** The
@@ -576,25 +579,45 @@ when omitted the Exchange defaults to `STATIC` at Offer build; an explicit
 `RESOURCE_MUTABILITY_UNSPECIFIED` is rejected (`not_in:[0]`, matching the Offer-side twin).
 Offer-side `ResourceIdentity.resource_mutability` is unchanged.
 
-**Go SDK: network-fetching resolvers move `sdk/go/helpers` → `sdk/go/resolvers`
-(source move, no wire change).** The IO-bearing key/endpoint resolvers — well-known
-JWKS (`NewWellKnownKeyResolver`), revocation-aware WBA directory (`NewWBAKeyResolver`),
-the `ramp.json` endpoint resolver (`WellKnownEndpointResolver` /
-`NewWellKnownEndpointResolver` / `WellKnownOptions` / `ErrNoEndpoint`), and the
-SSRF-guarded fetch client — now live in a new L2 I/O package, one tier above the pure,
-IO-free `sdk/go/helpers`, so no network dial enters the trust core. Import them from
-`github.com/RAMP-Protocol/protocol/sdk/go/resolvers`. No alias shim is shipped — it is
-a hard rename; consumers import the resolvers from `sdk/go/resolvers`. The pure
-`KeyResolver` interface and `NewStaticKeyResolver` stay in `helpers`.
+**SDK parity matrix is now generated, not hand-maintained (no wire change).** The
+three overlapping, drift-prone parity docs (`docs/sdk-parity-matrix.md`,
+`sdk-api-parity-map.md`, `sdk-parity-audit.md`) collapse to a single generated
+artifact, `docs/sdk-parity-matrix.md`, rendered by `scripts/gen-parity-matrix.py` from
+the two ground-truth sources CI already enforces against the code: the API surface from
+`sdk/parity/symbol-map.json` (gated by `test_api_surface_parity.py`) and the
+conformance-vector replay table from the committed corpora (gated by
+`test_corpus_replay_completeness.py`). A regenerate-and-diff drift gate runs both in
+`scripts/ci-local.sh` and as `sdk/python/tests/test_parity_matrix_generated.py`
+(`sdk-types-ci.yml`), so the matrix can no longer drift from the real surface. The two
+superseded audit docs are deleted.
 
-**SDK (all 3 languages): new public faces (additive, no wire change).** Document-order
-active-key selection (`ActiveEd25519Key` / `…WithExpiry` and revocation-aware
-`…Screened` variants; `active_ed25519_key*` in Python, `activeEd25519Key*` in TS), a
-`CachedOfferKeyResolver`, an injectable Ed25519 verify primitive on the
-TS signed-URL verify (`Ed25519Verifier`), and cross-language `ErrorDetail` readers
-(Go `AttachErrorDetail` / `AttachDetail`; `parse_error_detail` / `error_detail_from`
-in Python; `parseErrorDetail` / `errorDetailFrom` in TS). The SSRF-guarded transport
-is a single env-driven client governed by two flags (`SKIP_SSRF`, `ALLOW_INSECURE`).
+**Go SDK: the network-fetching resolvers move `sdk/go/helpers` → `sdk/go/resolvers`
+(source move, no wire change).** The IO-bearing key/endpoint resolvers — the
+well-known JWKS resolver (`NewWellKnownKeyResolver`), the revocation-aware WBA
+directory resolver (`NewWBAKeyResolver`), the `ramp.json` endpoint resolver
+(`WellKnownEndpointResolver` / `NewWellKnownEndpointResolver` / `WellKnownOptions` /
+`ErrNoEndpoint`), and the SSRF-guarded fetch client — now live in the new L2 I/O
+package `sdk/go/resolvers`, one tier above the pure, IO-free `sdk/go/helpers`. This
+keeps every network dial out of the trust core (enforced by an io-leaf guard).
+Migration: import these from `github.com/RAMP-Protocol/protocol/sdk/go/resolvers`
+instead of `.../sdk/go/helpers`. **No alias shim is provided** — the move is a hard
+rename and the downstream app already compiles against the moved layout; consumers
+import the resolvers from `sdk/go/resolvers`. The pure `KeyResolver` interface and
+the static `NewStaticKeyResolver` stay in `helpers`.
+
+**SDK (all 3 languages): new public faces this cycle (additive, no wire change).**
+Document-order active-key selection — `ActiveEd25519Key` /
+`ActiveEd25519KeyWithExpiry` and their revocation-aware `…Screened` variants
+(`active_ed25519_key*` in Python, `activeEd25519Key*` in TS) — plus a
+`CachedOfferKeyResolver`, an injectable Ed25519 verify primitive on
+the TS signed-URL verify (`Ed25519Verifier`), and cross-language `ErrorDetail`
+readers: Go `AttachErrorDetail` / `AttachDetail` on the server binding, and
+`parse_error_detail` / `error_detail_from` (Python) and `parseErrorDetail` /
+`errorDetailFrom` (TS) decoders, all pinned to the shared `error-detail-vectors.json`
+oracle. The SSRF-guarded transport is now a single env-driven client
+(`NewGuardedClientFromEnv` / `guarded_client` / `guardedFetchFromEnv`) governed by
+two flags (`SKIP_SSRF`, `ALLOW_INSECURE`). See `docs/sdk-parity-matrix.md` for the
+per-language surface.
 
 **Go SDK: `helpers.CanonicalOfferBytes` exported (additive, no wire change).**
 The offer-canonical-bytes accessor — RFC 8785 JCS over canonical proto-JSON with
@@ -705,36 +728,55 @@ Exchange). Direct-to-Exchange callers who need to attach one use
 handle, and the Exchange will not read it as one.
 
 **Agent account registration + status RPCs (additive).** `ExchangeService`
-gains `Register` and `GetAccountStatus` — the agent-account front door.
-Registration creates the agent's account with the Exchange and mints
-`billing_ref`, the opaque, long-lived, per-Exchange account handle; the
-caller's identity is derived from the verified request signature, never from
-the body, and the operator-defined business payload rides in a flexible
+gains `Register(RegisterRequest) → RegisterResponse` and
+`GetAccountStatus(GetAccountStatusRequest) → GetAccountStatusResponse` — the
+agent-account front door the Web Bot Auth Registry epic needs. Registration
+creates the agent's account with the Exchange and mints `billing_ref`, the
+opaque, long-lived, per-Exchange account handle; the caller's identity is
+derived from the verified request signature, never from the body, and the
+operator-defined business payload rides in a flexible
 `RegisterRequest.registration_data` (`google.protobuf.Struct`) that the
 Exchange passes through uninspected. A repeat `Register` for the same agent
 returns the same `billing_ref` (idempotent by design — no `idempotency_key`).
 `GetAccountStatus` is the read-only "is my account active" check; its request
 deliberately carries no identifying field. Refused registrations use the
-pre-existing `ErrorDetail.registration_failure` /
-`RegistrationFailureReason` path. Pre-v1 additive change.
+pre-existing `ErrorDetail.registration_failure` / `RegistrationFailureReason`
+path, which until now had no RPC front door. Pre-v1 additive change.
 
 **Operator plane: new `ramp.admin.v1` package with `AdminService` (additive).**
-At introduction, two full-replace, idempotent setters for Exchange operators (the
-forensic evidence read joined later in this cycle — see the entry above):
-`SetTenantFeeRate`
-and `SetReportingPolicy`. Each request and response is a thin `{ver, <payload>}`
-envelope wrapping a required nested payload — `TenantFeeRate` (fee rate in basis
-points, `0 <= fee_rate_bps < 10000`, plus an optional operator note) and
+At introduction, two full-replace, idempotent setters for Exchange operators (the forensic
+evidence read joined later in this cycle — see the entry above) —
+`SetTenantFeeRate(SetTenantFeeRateRequest) → SetTenantFeeRateResponse` and
+`SetReportingPolicy(SetReportingPolicyRequest) → SetReportingPolicyResponse`.
+Each request and response is a thin `{ver, <payload>}` envelope carrying a
+required nested payload message: `TenantFeeRate` (fee rate in basis points,
+`0 <= fee_rate_bps < 10000`, plus an optional operator note) and
 `ReportingPolicy` (required report fields, quantity tolerance `0`–`1`, reporting
-window ≤ 1 year). Field-level protovalidate constraints live on the payload
-messages — shared by request and response, so each rule is stated once and the
-echoed read-back cannot drift from the write — and flow into the generated
-Pydantic/Zod types; responses echo the state as persisted. Deliberately a
-separate service/package from `ExchangeService` — the operator plane is not part
-of the agent contract, carries no `idempotency_key` and no `ext`/`ext_critical`
-maps, and is expected to be network-isolated by deployments. See
-[Proto: Admin v1](/reference/proto-admin/) for the full reference. `SetOfferPrice`
-and `SetDeliveryWitnessMode` are deferred to follow-up work.
+window ≤ 1 year). The field-level protovalidate constraints live on the two
+payload messages — shared by request and response, so each rule is stated once
+and the echoed read-back cannot drift from the write — and flow into the
+generated Pydantic/Zod types export and the validation corpus; responses echo
+the state as persisted. Deliberately a separate service/package from
+`ExchangeService` — the operator plane is not part of the agent contract,
+carries no `idempotency_key` (full-replace setters on an unsigned internal
+plane have nothing to dedupe) and no `ext`/`ext_critical` maps, and is expected
+to be network-isolated by deployments. `SetOfferPrice` and
+`SetDeliveryWitnessMode` are deferred to follow-up work. The conformance
+tooling (corpus generator, required-fields export, reachability and
+doc-coverage guards, Zod/Pydantic types pipeline) now walks both contract
+packages, and the corpus generator gained int32/double boundary mutants for the
+payload messages' numeric rules.
+
+**Biscuits removed; entitlement mechanism kept for JWT (breaking).** The Biscuit
+token format leaves the protocol — JWT is the sole entitlement/capability token
+format. The entitlement MECHANISM is unchanged and format-neutral: a capability
+token rides a covered header (renamed `X-RAMP-Entitlement-Biscuit` →
+`X-Entitlement-Token`) whose signature-coverage the verifier enforces without
+ever parsing the token, so it holds identically for JWT. Removed only the
+biscuit-specific bits: the `token_format` value `"biscuit-v3"` (JWT stays the
+default), and `DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION` (18) — attenuation is
+a biscuit concept. The generic entitlement `DenialReason` family (12–17) stays.
+Pre-v1 breaking change; `buf breaking` reports the deltas as expected.
 
 **Protocol standardization — unified error/response contract + a Connect RPC for
 every role (breaking).** Three threads land together:
@@ -762,13 +804,13 @@ extended `DenialReason` with
 values 12–18 and added `OFFER_ABSENCE_REASON_BUDGET_EXCEEDED`. Accepted pre-v1
 breaking change; `buf breaking` reports the deltas as expected.
 
-Also removed the vestigial single-offer `offer_id` correlation scalar from
-`TransactionRequest` (field 3). It was left stranded by the items-only migration:
-never authoritative — the Exchange keys binding, billing, and audit off each
-item's signature-verified offer identity inside the signed `Offer`, never this
-scalar — and read by nothing. A single-offer transaction is the degenerate
-one-element `items` list. Deleted outright with no reserved (pre-v1); `buf
-breaking` reports the delta as expected.
+Also: removed the vestigial `TransactionRequest.offer_id` (field 3). It was a
+single-offer-era correlation scalar left stranded by the items-only migration —
+never authoritative (the Exchange keys binding, billing, and audit off each
+item's signature-verified `offer.offer_id`, never this scalar) and read by
+nothing. A single-offer transaction is the degenerate one-element `items` list;
+offer identity lives inside the signed Offer. Deleted outright with no reserved
+(pre-v1); `buf breaking` reports the delta as expected.
 
 **Money as an exact decimal string + field validation as standard constraints (breaking).**
 
@@ -794,140 +836,168 @@ and — because JCS-canonicalized signing is over the JSON field names — snake
 canonical form the signature bytes are computed over. Accepted pre-v1 breaking change.
 
 **Discovery/offer response model (breaking).** The Agent-to-Broker discovery
-messages are renamed and the response re-modeled to carry offers rather than a
-single transaction result:
+messages are renamed and the response is re-modeled to carry offers rather than
+a single transaction result:
 
-- **Renamed** `RAMPRequest` → `DiscoveryRequest` and `RAMPResponse` →
-  `DiscoveryResponse` — the Agent-to-Broker pair (Steps 1 and 6), the same pair
-  carried by `BrokerService.Resolve`.
-- **Re-modeled** `DiscoveryResponse` as discovery-only: removed the
-  per-transaction fields (now carried solely by `TransactionResponse`) and added
-  `repeated OfferGroup offer_groups`, one group per requested URI. A group with no
-  offers carries its `absence_reason`.
-- **Added** `Offer.exchange` (field 8): the issuing Exchange's canonical domain
-  and the execute target, inside the signed Offer bytes so a relaying Broker
-  cannot redirect execution without invalidating the signature.
+- **Renamed** `RAMPRequest` to `DiscoveryRequest` and `RAMPResponse` to
+  `DiscoveryResponse` — the Agent-to-Broker request/response pair (Steps 1 and 6),
+  the same pair carried by `BrokerService.Resolve`.
+- **Re-modeled** `DiscoveryResponse` as discovery-only. Removed the
+  per-transaction fields (`transaction_id`, `billing_id`, `exchange`,
+  `resource_title`, `cost`, `delivery_method`, `reporting_obligation`,
+  `expires_at`, `broker_fee`, `retrieval_endpoint`, `agent_identity_hash`) —
+  these are carried solely by `TransactionResponse` — and added
+  `repeated OfferGroup offer_groups`, one group per requested URI, as the sole
+  offer representation. A group with no offers carries its `absence_reason`.
+- **Added** `Offer.exchange` (field 8): the canonical domain of the issuing
+  Exchange and the target for the execute call. It sits inside the signed Offer
+  bytes, so a relaying Broker cannot redirect execution to a different Exchange
+  without invalidating the signature.
+
+This is an accepted breaking change pre-v1 freeze; `buf breaking` reports the
+deltas as expected.
 
 **WBA identity split — keys move to the WBA directory (breaking).** Identity keys
-are split out of `ramp.json` (`WellKnownManifest`) into a pure WBA key directory
-served at `{domain}/.well-known/http-message-signatures-directory`:
+are split out of `ramp.json` (`WellKnownManifest`) and into a pure WBA key
+directory served at `{domain}/.well-known/http-message-signatures-directory`:
 
-- **Added** `WBAFile` (the directory body) carrying the role's JWKs and an
-  optional `revocation_url`; removed the manifest's inline key fields.
+- **Added** `WBAFile` (the WBA directory body) carrying the role's
+  attestation/identity JWKs (with their `not_before`/`not_after` bounds per
+  RFC 7517 §5) and an optional `revocation_url`; removed `WellKnownManifest`'s
+  `public_keys` and `invalidation_url`.
 - **Keyed by thumbprint, no `kid`.** The RFC 9421 `keyid` is the key's RFC 7638
-  JWK Thumbprint, computed locally; the attestation `keyid` now holds the
-  verifier key's thumbprint, resolved against `WBAFile.keys`.
-- **Added** `KeyRevocationList` (served at `WBAFile.revocation_url`) — the
-  complete set of revoked thumbprints, polled on a 300s cadence.
+  JWK Thumbprint, computed locally; carrying a separate `kid` is gone. The
+  attestation `keyid` field now holds the verifier key's thumbprint, resolved
+  against the verifier's `WBAFile.keys`.
+- **Added** `KeyRevocationList`, the snapshot body served at
+  `WBAFile.revocation_url` — the complete set of revoked key thumbprints
+  (RFC 7638, base64url-no-pad), polled on a 300s cadence — and the
+  `RETRIEVAL_AUTH_FAILURE_REASON_KEYID_MISMATCH` / `_THUMBPRINT_MISMATCH`
+  failure reasons.
+
+This is an accepted breaking change pre-v1 freeze; `buf breaking` reports the
+deltas as expected.
 
 **CoMP re-baseline to canonical V1 (breaking).** `proto/comp/v1/comp.proto` is
 re-aligned to be a 1:1 mirror of IAB Tech Lab Content Monetization Protocols
 **CoMP V1** (finalized 2026-04-28,
-[`CoMP-1.0.md`](https://github.com/IABTechLab/CoMP/blob/880238e0100b3d0d67d5afd7357a18fc21a97be5/CoMP-1.0.md)).
-The prior snapshot mirrored a pre-final draft. This breaks the `comp.v1`
-generated types (accepted pre-v1 of the CoMP profile; `buf breaking` reports the
-deltas as expected). Changes:
+[`CoMP-1.0.md`](https://github.com/IABTechLab/CoMP/blob/880238e0100b3d0d67d5afd7357a18fc21a97be5/CoMP-1.0.md)). Our
+prior snapshot mirrored a pre-final draft. Changes:
 
 - **Removed** the `License` message, the `LicenseUse` enum, and `Package.license`
   — canonical V1 has no separate `License` object.
-- **Folded licensing into `Scope`**: added `ause` (`AllowedUse`), `pricetype`
-  (`PriceType`), `pricetier`, `unitprice`, `cur` (default `"USD"`), `country`
-  (ISO-3166 numeric), and `licensedur` (days).
+- **Folded licensing into `Scope`**: added `ause` (new `AllowedUse` enum),
+  `pricetype` (new `PriceType` enum), `pricetier`, `unitprice`, `cur`
+  (default `"USD"`), `country` (`repeated int32`, ISO-3166 numeric), and
+  `licensedur` (days).
 - **Added** `Package.reporturl` (usage-reporting URL).
-- **Added** per-media taxonomy `cattax` (default 9), `cat`, and `language` to
-  `Text`, `Video`, `Image`, and `Audio`.
-- **Removed** the RAMP-invented non-CoMP fields: `Text.authority`/`originality`,
-  `Image.alt`/`caption`, `Video`/`Image`/`Audio.c2pa`, and `Retrieval.ratelmt`.
-- **Added** `RETRIEVAL_AUTH_OTHER = 4`.
+- **Added** per-media taxonomy fields `cattax` (default 9), `cat`
+  (`repeated int32`), and `language` (`repeated int32`, ISO-639-1) to `Text`,
+  `Video`, `Image`, and `Audio`.
+- **Removed** the RAMP-invented fields that were not part of canonical CoMP:
+  `Text.authority`, `Text.originality`, `Image.alt`, `Image.caption`,
+  `Video/Image/Audio.c2pa`, and `Retrieval.ratelmt`.
+- **Added** `RETRIEVAL_AUTH_OTHER = 4` to the retrieval auth enum.
 
 The request-side model (`AISystem`/`AISystemUse`, `Function`, `SubFunction`,
-`AuthMethod`, `ScopeType`, `ContentType`) is unchanged.
+`AuthMethod`, `ScopeType`, `ContentType`) is unchanged. This is an accepted
+breaking change pre-v1 freeze of the CoMP profile; `buf breaking` reports the
+deltas as expected.
 
 ## v1.0.0 — Initial release
 
 First public release of the RAMP Protocol (Resource Access Metering Protocol):
-the wire format, the generated Go and TypeScript SDKs, and this specification
-site. One protocol for discovering, pricing, transacting, delivering, and
-verifying access to any digital resource by an AI agent. The reasoning behind the
-major design decisions is recorded in [`docs/design-history.md`](https://github.com/RAMP-Protocol/protocol/blob/main/docs/design-history.md).
+the wire format (protobuf under `proto/`), the generated Go and TypeScript SDKs
+(under `gen/`), and the specification site (under `website/`). RAMP extends IAB
+Tech Lab CoMP v1.0 and RSL 1.0 with resource discovery, transaction execution,
+post-usage reporting, dispute resolution, and provider domain verification —
+enough for an autonomous agent to negotiate licensed access to a publisher's
+resources through an Exchange and produce a cryptographically auditable record of
+the transaction.
 
-### Core protocol
+Highlights: a single `ExchangeService` (`DiscoverResources`,
+`ExecuteTransaction`, `ReportUsage`, `DisputeTransaction`, and domain
+verification) with Brokers and agents as interchangeable clients; unit-agnostic
+metering; Ed25519 at every trust boundary, with RFC 9421 HTTP Message Signatures
+for request and hop authentication and JWS (RFC 7515) for offer and attestation
+signatures; a unified `/.well-known/ramp.json` (`WellKnownManifest`) served by
+every role with inline RFC 7517 JWKs and explicit key-validity bounds;
+cryptographic content attestations with a structured dispute chain; multi-hop
+intermediary chains with agent- and exchange-published depth caps; and extension
+profiles for domain-specific behavior (news, academic, legal, C2PA, CoMP, pharma,
+medical imaging).
 
-- **ExchangeService** — `DiscoverResources`, `ExecuteTransaction`, `ReportUsage`, `DisputeTransaction`, and domain-verification RPCs. Agents and Brokers are interchangeable clients.
-- **ResourceQuery / ResourceResponse** — query an Exchange for available resource offers.
-- **DiscoveryRequest** — Agent → Broker entry point, with natural-language `query` and structured `search_filters` for Broker-side discovery.
-- **Requester** — universal actor identity (AGENT, HUMAN_TOOL, SERVICE, DELEGATED, RESEARCH).
-- **Delegation** — holder-bound JWT (RFC 7800 `cnf`/`jkt` + RFC 9421 proof-of-possession; chain of `cnf`-linked JWTs). `token_format` is `"jwt"`. Scoped, time-limited, spend-capped, narrowable offline.
-- **Scope-based access control** — the Exchange filters its catalog by the requester's scopes; subscriptions are scopes.
-- **SubscriptionQuotaInfo** — proactive, multi-dimensional quota signaling on `Offer` and `TransactionResponse`.
-- **ResourceMutability** — STATIC (hash stable), DYNAMIC (hash drifts), LIVE (streaming, no content at offer time).
-- **Data freshness** — `Offer.data_as_of` + `RequestConstraints.max_data_age` for staleness filtering.
-- **Unit-agnostic metering** — `unit_cost` + `estimated_quantity` + `unit`: tokens, pages, seconds, records, bytes, sq_km, and domain-specific units.
-- **ResourceAttestation** — Ed25519-signed claim envelope for resource integrity. Three levels: none, self-attested, third-party verified.
-- **Dispute resolution** — three-tier (automated `<1s`, rule-based `<24h`, human escalation). Evidence chain: Transaction → UsageReport → Dispute.
-- **Domain verification** — ACME HTTP-01-style provider onboarding.
-- **CatalogService** — `PushResources`, `RemoveResources`, `RefreshCatalog`.
-- **ext_critical** — critical-extension signaling (COSE `crit` pattern, RFC 9052): a consumer MUST understand listed keys or reject the message.
-- **Resource previews** — lightweight `Preview` assets on `Offer` for pre-transaction evaluation (URLs only, zero Exchange memory impact).
+**Universal Licensing Core.** A resource carries `repeated LicenseTerm terms`
+— the same shape at ingestion (`ResourceEntry.terms`) and emission
+(`Offer.terms`) — replacing the hard-coded default pricing and the removed
+`AccessRestrictions` / `Offer.restrictions`. A `LicenseTerm` bundles `License`
+(`uri`, `id`, `name`, `immutable`), `TermSemantics` (`ENUMERATED` vs
+`REFERENCE_ONLY`), `Restriction`s (function / geography / user-type axes),
+`Quota`s, `Obligation`s (`scope_license`, `detail`), `Pricing` (required on
+every term), Biscuit `scopes`, and `part_label`. `PricingModel` is the closed
+charging structure (`FREE`, `PER_UNIT`, `FLAT`); the metering basis moved to
+the open `Pricing.unit` vocabulary; `Pricing.metering` was added and
+`revshare` / `REVENUE_SHARE` removed (settlement is off-protocol). Every
+required enum carries `_UNSPECIFIED = 0` and is rejected if unset
+(`PricingMetering` is the deliberate exception — `ONLINE = 0` is its real
+default). The Offer JWS signs the entire canonical Offer, so `terms` and
+`pricing` are tamper-evident.
 
-### Multi-hop
+**Proto-native vocabulary.** Every open vocabulary axis is defined in the proto
+and tooled by buf — no side-car JSON registry. The `(ramp.v1.vocab)` field
+option (`FieldOptions` extension 50001) carries the registered bare tokens on
+`Pricing.unit` and `Quota.metric`; the `(ramp.v1.vocab_enum)` enum-value option
+(`EnumValueOptions` extension 50002, both in `ramp/v1/vocab.proto`) carries the
+function / geography / user-type tokens on the `RESTRICTION_KIND_FUNCTION` /
+`RESTRICTION_KIND_GEOGRAPHY` / `RESTRICTION_KIND_USER_TYPE` enum values. The
+`protoc-gen-rampvocab` buf plugin reads both options structurally and emits
+typed Go constants, `All`, and `IsRegistered` per axis under `gen/go/vocab/`
+(`pricingunits`, `quotametrics`, `functiontokens`, `geographytokens`,
+`usertypes`). Geography registers only the non-ISO specials (`*`, `EU`, `EEA`);
+ISO 3166-1 alpha-2 codes are structural. `protovalidate` carries the structural
+field CELs (`Pricing.unit`, `Quota.metric`) and message-level CEL on `Pricing`
+(`PER_UNIT ⇒ unit`, `FREE ⇒ rate 0`). Adding a token edits the option list only
+— no message-shape change.
 
-- **Signature-stack forwarding chain** — schain-inspired forwarding for the Agent → Broker → … → Exchange path carried as a stack of RFC 9421 HTTP Message Signatures in HTTP headers. Each forwarding party adds one labeled signature covering the request plus the prior hop's signature; the ordered set of signatures is the chain. (Replaces the in-message `IntermediaryHop` / `ResourceQuery.intermediaries` and the removed `broker_signature`.)
-- **Chain-depth caps** — `RequestConstraints.max_hops` (agent-side) and `WellKnownManifest.max_intermediary_hops` (Exchange-published).
-- **Direct response path** — the terminal Exchange returns directly to the originating agent; intermediaries are forward-path only.
+**Billing reference, not entitlement.** `Requester.license_id` was renamed
+`billing_ref` and recast as an opaque handle into the operator's billing system.
+It is not an authorization token: identity is the RFC 9421 request signature and
+entitlement is scopes plus `Delegation`, so access is never gated on
+`billing_ref`.
 
-### Discovery & keys
+**DenialReason consolidation.** `INVALID_LICENSE` and `EXPIRED_LICENSE` collapse
+into a single `DENIAL_REASON_BILLING_REF_INACTIVE`, and `DELEGATION_EXPIRED`
+broadens to `DENIAL_REASON_DELEGATION_INVALID` (expiry is one of several ways a
+token fails to authorize). The enum is contiguous, with no reused numbers.
 
-- **WellKnownManifest** — a single canonical document served at `/.well-known/ramp.json` by every participant, role-tagged via the `Role` enum (AGENT, EXCHANGE, BROKER, PUBLISHER). Carries inline keys, optional `invalidation_url`, publisher authorization (`exchanges[]`, `catalog_contributors[]`), and exchange capability fields (pricing, delivery, auth methods, OIDC issuer, GNAP endpoint, base currency, supported profiles).
-- **JsonWebKey** — inline RFC 7517 JWKs (Ed25519: `kty="OKP"`, `crv="Ed25519"`, `alg="EdDSA"`) with explicit `not_before` / `not_after` RFC3339 bounds. Key-validity window is half-open `[not_before, not_after)`.
-- **KeyInvalidationList** — snapshot-semantic kid revocation list served at `invalidation_url` for emergency revocation.
-- **Caching contract** — `/.well-known/ramp.json` MAY be cached (minutes–hours); the `invalidation_url` body SHOULD be short/`no-store`.
-- **Domainless requesters** — accommodated via a registry-hosted `WellKnownManifest` (the agent sets `Requester.domain` to the registry host).
+**Delegation-claims profile.** The delegation token stays opaque on the wire;
+`token_format` only selects the verifier. RAMP defines a small registered
+claim/fact vocabulary mapping the same named concepts across JWT registered
+claims and Biscuit facts, so scope / expiry / spend caps mean the same thing to
+every verifier regardless of format. All vocabulary entries are optional except
+the mandatory subject/holder binding: the key that signs the RFC 9421 request
+MUST equal the token's holder key, which is what makes a leaked token not
+bearer-usable. Issuer-specific facts use a `vendor:` namespace; `ramp_`-prefixed
+names are reserved. Binding constraints are fail-closed (binding by default)
+unless explicitly marked advisory.
 
-### Authentication
+**JWT-default delegation (holder-of-key).** `token_format` defaults to `"jwt"`:
+the delegation token is a holder-bound JWT, with the grant tied to a key via the
+RFC 7800 `cnf` claim (`cnf.jkt` = RFC 7638 thumbprint) and possession proven by
+the RFC 9421 request signature. Delegation is a chain of `cnf`-linked JWTs
+(each child signed by the key its parent named, scope ⊆ parent), verified offline
+under the issuer's key alone. `"biscuit-v3"` remains a permitted **optional**
+alternative for deployments wanting deep multi-hop in-place attenuation. This
+makes JWT — already ubiquitous — the one delegation technology implementers must
+support; Biscuit is opt-in.
 
-- **Auth-agnostic** — the Exchange advertises supported methods: GNAP (RFC 9635), OAuth + DPoP, OAuth Bearer, mTLS.
-- **JWS for content signatures** — `Offer` and attestation signatures use JWS Compact Serialization (`alg=EdDSA`).
-- **RFC 9421 for request signatures** — HTTP Message Signatures authenticate agents and each intermediary hop.
-- **Retrieval-URL identity binding** — the Exchange MAY bind a signed `retrieval_endpoint` to the agent via `agent_identity_hash` (RFC 7638 JWK Thumbprint, DPoP-style per RFC 9449), verifiable fully offline by a capable edge function.
+**Scope matching.** One normative algorithm applies protocol-wide: scopes are
+`":"`-separated segments; a grant covers a requirement only if each granted
+segment equals the required segment or is `"*"`, with a terminal `"*"` matching
+all remaining segments. There is no implicit prefix match and a grant narrower
+than the requirement does not cover it. The same rule applies to
+requester/`Delegation` scopes and to `LicenseTerm.scopes`; the Biscuit Datalog
+authorizer is a conformant implementation that MUST produce identical results.
 
-### Content provenance (C2PA)
-
-- `ResourceIdentity` C2PA fields (`c2pa_manifest`, `c2pa_status`, `soft_binding`, `soft_binding_method`) and the `C2PAStatus` enum (TRUSTED, VALID, INVALID, ABSENT).
-- The `ramp-c2pa-v1` extension profile bridges C2PA X.509/COSE trust into RAMP Ed25519 attestations.
-
-### Pricing models
-
-`PRICING_MODEL` is the charging structure only: FREE, PER_UNIT, FLAT (plus UNSPECIFIED=0, rejected at ingest). The metering basis ("per what") moved to the `Pricing.unit` vocabulary; revenue-share was removed (settlement is off-protocol); attribution/contribution are `Obligation`s.
-
-### Denial reasons
-
-BILLING_REF_INACTIVE, INSUFFICIENT_BALANCE, RATE_LIMITED, CONTENT_UNAVAILABLE, RESTRICTION_NOT_SATISFIED, REPORTING_OVERDUE, OFFER_EXPIRED, SIGNATURE_INVALID, QUOTA_EXCEEDED, DELEGATION_INVALID, SCOPE_INSUFFICIENT.
-
-### Extension profiles
-
-Domain-specific metadata carried in `ext` fields:
-
-- **ramp-news-v1** — articles, podcasts, broadcasting (IPTC NewsML-G2, Podcasting 2.0)
-- **ramp-academic-v1** — scholarly articles, preprints (CrossRef, OpenAlex, COUNTER 5.1)
-- **ramp-legal-v1** — legislation, case law, patents (ELI, ECLI, Akoma Ntoso)
-- **ramp-comp-v1** — IAB CoMP V1 metadata (Package, Scope with folded licensing, Retrieval, per-media taxonomy) as optional ext fields
-
-### Licensing terms
-
-- **`LicenseTerm`** — universal licensing unit. A resource carries zero or more terms; each term is a complete, self-contained access arrangement (restrictions + quotas + obligations + pricing). Same shape at ingestion (`ResourceEntry.terms`) and emission (`Offer.terms`).
-- **`License`** — identifies the governing license document (`uri`, `id`, `name`, `immutable`, `uri_digest`). `uri_digest` pins the document hash and is required whenever a `License` carries a `uri` (any semantics, mutable or not).
-- **`Restriction`** — constrains one axis: `FUNCTION` (what), `GEOGRAPHY` (where), `USER_TYPE` (who). Tokens are proto-native (`(ramp.v1.vocab_enum)` on the `RestrictionKind` values). restrictions are **binding by default** (`advisory=true` downgrades an unverifiable restriction to non-blocking).
-- **`Quota`** — usage cap that gates term validity, not billing. Metrics are proto-native (`(ramp.v1.vocab)` on `Quota.metric`): `accesses`, `tokens`, `display-words`, `impressions`, `units-manufactured`, and more.
-- **`Obligation`** — post-use behavioral requirement. Replaces the retired `PRICING_MODEL_ATTRIBUTION` / `PRICING_MODEL_CONTRIBUTION` (attribution and contribution are obligations, not payment models). Kinds: `ATTRIBUTION`, `CONTRIBUTION`, `SHARE_ALIKE`, `NETWORK_COPYLEFT`, `NOTICE`, `OTHER`. `Obligation.scope_license` is a `License` (not a bare string), so a `SHARE_ALIKE` target inherits the `uri ⇒ uri_digest` tamper-evidence rule.
-- **`TermSemantics`** — `ENUMERATED` (machine fields are the complete, authoritative term; enforced downstream at reconciliation; Pricing required) vs `REFERENCE_ONLY` (the document at `License.uri` is the authoritative, complete source; machine restrictions/quotas/obligations are optional but, when present, must be accurate and are enforced; Pricing still required).
-- **`PricingMetering`** — `ONLINE` (default), `NONE` (one-time sale, no ongoing tracking), `OFFLINE_SELF_REPORTED` (agent self-reports; Exchange audits). Added as `Pricing.metering` (field 9).
-- `Offer.terms` (field 19) — repeated LicenseTerm from the publisher catalog. `Offer.restrictions` (the flat `AccessRestrictions` field) removed.
-- `ResourceEntry.terms` (field 13) — publisher-declared terms pushed via `CatalogService.PushResources`.
-- `PushResourcesResponse.warnings` (field 3) — non-fatal ingestion warnings (e.g., unrecognized vocab token).
-- `PRICING_MODEL_ATTRIBUTION` (6) and `PRICING_MODEL_CONTRIBUTION` (7) **removed** from `PricingModel`. Migrate to `Obligation.kind = ATTRIBUTION / CONTRIBUTION` in a `LicenseTerm`.
-- **Wire-enforced validation** — licensing presence and coherence rules are now expressed as protovalidate CEL embedded in the descriptors (not prose-only): pricing required on every term, `REFERENCE_ONLY ⇒ license.uri`, `uri ⇒ uri_digest`, the required discriminator enums reject `UNSPECIFIED` (`LicenseTerm.semantics`, `Pricing.model`, `Restriction.kind`, `Obligation.kind`, `Obligation.trigger`, `Quota.window`), one restriction per kind, permitted/prohibited disjoint, and token-format rules. A `conformance/` test suite evaluates the CEL against valid/invalid instances and validates the doc examples, wired into CI; a guard derives the discriminator set from the proto (each such discriminator field rejects the enum's zero via its `not_in:[0]` rule) and fails if any field of one is left unenforced, so the set can't silently drift. Enforced and tested in the Go SDK today; the TypeScript SDK is generated (protovalidate-es not yet wired) and Python is a tracked follow-up.
-
-### Wire format
-
-Protocol Buffers. Package `ramp.v1`. Dual transport via Connect (HTTP/JSON + binary protobuf from the same handler).
+The reasoning behind the major design decisions is recorded in
+[`docs/design-history.md`](../docs/design-history.md).

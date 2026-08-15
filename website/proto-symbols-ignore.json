@@ -1,5 +1,6 @@
 {
   "_comment": "Proto-symbol-shaped tokens in prose that intentionally do NOT resolve against the current descriptor \u2014 references kept for historical contrast with a removed or renamed field, where the owning type still exists. The remark-proto plugin fails the build on any reference whose proto type exists but whose member is gone, UNLESS it is listed here. Entries are self-cleaning: the build fails if a listed token starts resolving again (stale). Keep this list as small as possible \u2014 a live symbol belongs in the proto, not here.",
+  "_comment_changelog": "The last five entries are cited by the CHANGELOG's older revisions, describing the removals themselves. They arrived here when the published changelog page became generated from proto/CHANGELOG.md: the hand-copied page had quietly dropped or reworded those sentences, so the full history had never been symbol-checked. Removing an entry here means going back and rewriting a shipped changelog entry, which is not something to do casually \u2014 a changelog records what a field WAS called.",
   "ignore": [
     "Requester.billing_ref",
     "WellKnownManifest.registration_schema",
@@ -17,6 +18,11 @@
     "Text.authority",
     "Retrieval.ratelmt",
     "Package.license",
-    "TransactionState.broker"
+    "TransactionState.broker",
+    "DENIAL_REASON_ENTITLEMENT_STALE_ATTENUATION",
+    "Image.caption",
+    "Requester.license_id",
+    "Text.originality",
+    "TransactionRequest.offer_id"
   ]
 }
