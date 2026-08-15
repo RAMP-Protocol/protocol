@@ -21,7 +21,7 @@ import (
 // request-id inner to verify would regress that. verify is an http.Handler wrapper
 // (body-bytes reason), NOT a connect.Interceptor; validate and error-detail ARE true
 // connect.Interceptors composed onto the generated handler. KeyResolver and
-// ReplayStore are injected by the application (ADR-020 §2/§3).
+// ReplayStore are injected by the application.
 func NewExchangeServiceHandler(svc rampv1connect.ExchangeServiceHandler, opts ...ServerOption) (string, http.Handler) {
 	cfg := resolveServerConfig(opts)
 	path, connectHandler := rampv1connect.NewExchangeServiceHandler(svc, cfg.connectHandlerOptions()...)

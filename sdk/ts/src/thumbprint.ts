@@ -4,7 +4,7 @@ const ED25519_PUBLIC_KEY_BYTES = 32;
 
 /**
  * Compute the RFC 7638 JWK Thumbprint of a raw 32-byte Ed25519 public key,
- * base64url-no-pad encoded (ADR-013 D4).
+ * base64url-no-pad encoded.
  *
  * The canonical JWK is fixed by RFC 7638 §3.2 for OKP keys —
  * `{"crv":"Ed25519","kty":"OKP","x":"<base64url-nopad(pubkey)>"}`, members in

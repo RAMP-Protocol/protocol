@@ -11,7 +11,7 @@ Covered set is EXACTLY ``@method @target-uri content-digest authorization
 signature-agent`` (no conditional biscuit component). Signature-Agent joined the
 required set with the WBA identity split: every signature commits to
 the signer's key-directory URL, empty included — this supersedes the earlier
-four-component pin. L1 purity (ADR-020 §1/§4): ``created``/``expires`` are
+four-component pin. L1 purity: ``created``/``expires`` are
 INJECTED — sign reads no wall clock. The ``Signature`` value is STANDARD base64
 (``sig1=:<b64>:``), NOT b64url-nopad — the two encodings are not unified.
 
@@ -35,7 +35,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 from .multisig_parse import max_sig_label_n, signature_bytes_by_label
 
-# RAMP coverage set (ADR-001 §2.1) for the originating sig1 — MUST match the
+# RAMP coverage set for the originating sig1 — MUST match the
 # Broker/Exchange verifiers' required base components and the Go oracle's
 # requiredCoveredComponents.
 _COVERED_COMPONENTS: tuple[str, ...] = (

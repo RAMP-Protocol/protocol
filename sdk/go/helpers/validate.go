@@ -7,7 +7,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Validation (ADR-014 / ADR-019, ramp-sdk-api.md "Wire-encoding reality"). The
+// Validation. The
 // SDK validates messages against the proto's protovalidate rules — including the
 // cross-field message-level CEL (FREE⇒rate 0, REFERENCE_ONLY⇒uri, PER_UNIT⇒unit,
 // one-restriction-per-kind, …) — so a client catches a violation before the

@@ -23,8 +23,8 @@ const signWindow = 5 * time.Minute
 // the proto message, not the serialized payload). So signing MUST happen at the
 // HTTP seam, after Connect has marshaled the request. This is the single correct
 // place to sign; realizing sign as a connect.Interceptor would produce a wrong or
-// absent Content-Digest and break interop with every verifier (ADR-020 §2, the
-// sign-as-RoundTripper decision).
+// absent Content-Digest and break interop with every verifier: the
+// signing seam is the RoundTripper, not an interceptor.
 type signingTransport struct {
 	base   http.RoundTripper
 	signer helpers.Signer

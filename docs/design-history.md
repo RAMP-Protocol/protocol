@@ -325,7 +325,7 @@ alternatives are conspicuously absent:
   baking each requester's self-declared attributes into a trust boundary.
 
 The full message-level specification and the membership/validation rules live in
-ADR-014 (Universal Licensing Core) in the deployment repository; this entry
+the deployment repository's licensing-core decision record; this entry
 records only the wire-shaping reasoning.
 
 ## `license_id` → `billing_ref`: identity is the signature, not a field

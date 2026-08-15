@@ -1,4 +1,4 @@
-"""Money (ADR-020) — Python port of the sdk/go oracle (helpers/money.go).
+"""Money — Python port of the sdk/go oracle (helpers/money.go).
 
 RAMP money fields (Pricing.rate, Cost.amount, *.unit_cost) are exact decimal
 strings — never floats — constrained by protovalidate to the wire pattern below:

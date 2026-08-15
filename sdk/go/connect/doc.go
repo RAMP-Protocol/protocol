@@ -10,7 +10,7 @@
 // manifest and vets it before anything signed is sent, the CallError taxonomy that
 // tells a refusal from a failure from a local decline, the shared bidirectional
 // protovalidate interceptor (NewValidateInterceptor, the single definition the
-// server binding also composes), and the READ direction of the ADR-019
+// server binding also composes), and the READ direction of the
 // ErrorDetail↔Connect bridge (ErrorDetailFrom — a client reads the typed error
 // detail an upstream emitted, whether a peer sent it or the content leg
 // synthesized it).
@@ -19,7 +19,7 @@
 // guard, signing transport, ReplayStore) and on resolvers for the one thing this
 // package must not do itself — dial. The content fetch and the offer-derived RPC
 // leg both run on the resolvers tier's guarded transport; core and helpers stay
-// Connect-free (ADR-020 §2/§3).
+// Connect-free.
 //
 // The SERVER binding is a SEPARATE package, sdk/go/connectserver
 // (NewExchangeServiceHandler + the verify http-seam + AsConnectError / reject→code).

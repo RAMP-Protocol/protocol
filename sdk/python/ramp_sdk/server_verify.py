@@ -1,4 +1,4 @@
-"""Framework-agnostic RFC 9421 single-signature SERVER-verify face (ADR-020 §4).
+"""Framework-agnostic RFC 9421 single-signature SERVER-verify face.
 
 The Python sibling of sdk/go/connectserver's single-sig verify path. Where
 ``httpsig.verify_request`` is the pure primitive (already-resolved key, explicit

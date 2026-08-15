@@ -11,7 +11,7 @@ import (
 
 // RFC 7638 JWK Thumbprint of an Ed25519 public key, base64url-no-pad encoded.
 //
-// The thumbprint is the RAMP agent-identity value (ADR-009 D5, ADR-013 D4): the
+// The thumbprint is the RAMP agent-identity value: the
 // Exchange embeds it in signed delivery URLs as the agent_id parameter, echoes
 // it on TransactionResponse.agent_identity_hash, and a capable delivery edge
 // recomputes it from the fetcher's presented key to enforce the binding.
@@ -25,7 +25,7 @@ import (
 //
 // This implementation MUST stay byte-identical to the TS edge and Python shim
 // implementations; a divergence rejects every bound fetch. All three are pinned
-// to the shared vectors in testdata/thumbprint-vectors.json (ADR-013 D4).
+// to the shared vectors in testdata/thumbprint-vectors.json.
 
 // ErrInvalidKeyLength is returned when the supplied public key is not exactly
 // ed25519.PublicKeySize (32) bytes.
@@ -44,7 +44,7 @@ func Thumbprint(pub ed25519.PublicKey) (string, error) {
 
 // ThumbprintBytes returns the raw 32-byte SHA-256 digest underlying the
 // thumbprint. The digest is what the transaction_log.agent_identity_hash BYTEA
-// column stores (ADR-013 17.6); base64url-no-pad of it is the wire form.
+// column stores; base64url-no-pad of it is the wire form.
 func ThumbprintBytes(pub ed25519.PublicKey) ([32]byte, error) {
 	if len(pub) != ed25519.PublicKeySize {
 		return [32]byte{}, fmt.Errorf("%w: got %d", ErrInvalidKeyLength, len(pub))

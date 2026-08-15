@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// Canonical signing payload (ADR-020 §4, ramp.proto "canonical signing" note).
+// Canonical signing payload (ramp.proto "canonical signing" note).
 //
 // Both signed RAMP payloads — the Offer signature and the agent's detached
 // offer-acceptance — cover a canonical serialization of a protobuf message. As of

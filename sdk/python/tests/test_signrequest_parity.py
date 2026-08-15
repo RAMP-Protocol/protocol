@@ -30,7 +30,7 @@ four-component signer would produce signatures the platform rejects):
     Signature, and that each vector round-trips (verify at a pinned now inside
     the window).
 
-L1 purity (ADR-020 §1/§4): created/expires are INJECTED — sign_request reads no
+L1 purity: created/expires are INJECTED — sign_request reads no
 wall clock. The Signature value is STANDARD base64 (`sig1=:<b64>:`), NOT
 b64url-nopad — do not unify with the thumbprint encoding.
 """

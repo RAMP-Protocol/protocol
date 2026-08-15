@@ -25,8 +25,7 @@ const BrokerKeyIDPrefix = "broker."
 // builds the signature base (covered components + parameters); the Signer signs
 // exactly those bytes. Splitting it this way means a KMS/HSM/remote signer
 // satisfies the same interface and the SDK never sees the private key — custody
-// stays with the application (ADR-020 §3, ramp-sdk-api.md "The core abstraction:
-// Signer").
+// stays with the application.
 type Signer interface {
 	// KeyID is the RFC 9421 keyid the verifier resolves a public key for.
 	KeyID() string

@@ -1,4 +1,4 @@
-"""Scopes / entitlements (ADR-020 §5) — Python port of the sdk/go oracle
+"""Scopes / entitlements — Python port of the sdk/go oracle
 (helpers/scopes.go). The subscriptions/entitlements a requester holds are a
 SUPPLIED credential: the application hands the SDK what it holds and the SDK
 plumbs it into the request. ``normalize_scopes``/``scopes_subset`` are pure,

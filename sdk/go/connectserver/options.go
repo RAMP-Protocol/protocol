@@ -20,7 +20,7 @@ const replayTTL = 5 * time.Minute
 // serverConfig is the resolved set of injected holders the server verify face runs
 // over: the request-signing KeyResolver, the ReplayStore, the hop budget, the
 // request-id source, and any application interceptors. All are injected — the SDK
-// owns no keys, no replay state, and no policy constants (ADR-020 §3).
+// owns no keys, no replay state, and no policy constants.
 type serverConfig struct {
 	resolver        helpers.KeyResolver
 	replay          core.ReplayStore

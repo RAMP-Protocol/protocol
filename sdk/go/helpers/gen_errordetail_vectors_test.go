@@ -1,8 +1,8 @@
 package helpers
 
-// ErrorDetail cross-language golden-vector emitter (ADR-019 error contract).
+// ErrorDetail cross-language golden-vector emitter for the RAMP error contract.
 //
-// The ADR-019 failure envelope — ErrorDetail{Domain, Message, Metadata, typed
+// The failure envelope — ErrorDetail{Domain, Message, Metadata, typed
 // reason oneof} — was, until this corpus, built AND read ONLY in sdk/go. The
 // Python (mcp shim) and TS (edge) SDKs are the READ side of that contract: they
 // consume Connect error envelopes that carry an ErrorDetail. With no shared

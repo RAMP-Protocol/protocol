@@ -490,7 +490,7 @@ offending `registration_data` members alongside the reason — variadic in Go, a
 trailing argument in Python and TS, so the six reasons that carry no per-member detail keep
 their three-argument call. Without this a service refusing a non-conforming registration had
 to build the `ErrorDetail` by hand or mutate the builder's result, defeating the rule these
-helpers exist for: one place per language where the ADR-019 envelope is constructed. This is
+helpers exist for: one place per language where the ErrorDetail envelope is constructed. This is
 the only `*Detail` builder that reaches past the reason enum — the schema refusal is useless
 without naming what failed, whereas the sibling detail lists
 (`TransactionDenial.restriction_mismatches`, `CatalogRejection.rejected_paths`) stay

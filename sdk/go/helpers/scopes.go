@@ -6,7 +6,7 @@ import (
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
-// Scopes / entitlements (ADR-020 §5, ramp-sdk-api.md "Scopes / entitlements").
+// Scopes / entitlements.
 // The subscriptions/entitlements a requester holds are a SUPPLIED credential:
 // the application hands the SDK what it holds and the SDK plumbs it into the
 // request (Requester.scopes / Delegation.scopes). The caller never constructs an

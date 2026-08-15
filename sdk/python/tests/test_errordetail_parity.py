@@ -3,7 +3,7 @@
 Mirrors the sdk/ts sibling sdk/ts/tests/errordetail.parity.test.ts and the Go leg
 sdk/go/helpers/errordetail_corpus_test.go.
 
-The ADR-019 failure envelope — ErrorDetail{domain, message, metadata, typed reason
+The failure envelope — ErrorDetail{domain, message, metadata, typed reason
 oneof} — was, until the shared corpus, built AND read only in sdk/go. The mcp shim
 is the READ side of that contract. ``error-detail-vectors.json`` carries, per
 vector, the canonical proto-JSON wire form (``wire_json``) plus the field

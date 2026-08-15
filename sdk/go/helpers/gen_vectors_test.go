@@ -1,6 +1,6 @@
 package helpers
 
-// Golden-vector emitter for the cross-language parity corpus (ADR-020 §8).
+// Golden-vector emitter for the cross-language parity corpus.
 //
 // The sdk/ts and sdk/python L1 helpers assert byte-parity against the sdk/go
 // oracle for the signed-URL and RFC 9421 GET-PoP schemes. Rather than

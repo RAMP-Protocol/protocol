@@ -1,4 +1,4 @@
-// Idempotency (ADR-019 §4) — TS port of the sdk/go oracle (helpers/idempotency.go).
+// Idempotency — TS port of the sdk/go oracle (helpers/idempotency.go).
 // idempotency_key is a required, persisted, settlement-bound field on the
 // mutating RPCs: the server dedupes on it so a replay returns the original
 // result and cannot double-charge. The SDK mints a fresh key per call by

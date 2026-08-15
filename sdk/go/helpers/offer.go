@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Offer authenticity (ADR-020 §4, ramp.proto Offer.signature). An Exchange signs
+// Offer authenticity (ramp.proto Offer.signature). An Exchange signs
 // the canonical serialization of an Offer; an agent SHOULD verify it before
 // selecting or executing. Until this SDK no client verified received offers — a
 // malicious Broker or MITM could steer selection with doctored terms that only

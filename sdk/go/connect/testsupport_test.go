@@ -5,7 +5,7 @@ package connect_test
 // injected core.ReplayStore interface — it is an APPLICATION-supplied dependency
 // the SDK orchestrates over (the KeyResolver-shaped middle), NOT a mock of the
 // code under test. The SDK owns the replay-check control-flow; the app owns the
-// store and its TTL policy (ADR-020 §3 / Core Invariant). Relocated verbatim from
+// store and its TTL policy (Core Invariant). Relocated verbatim from
 // sdk/go/ramp on the core/connect split (ramp.ReplayStore → core.ReplayStore).
 
 import (

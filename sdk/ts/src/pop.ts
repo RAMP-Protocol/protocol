@@ -2,7 +2,7 @@ import { thumbprint } from "./thumbprint.ts";
 import { decodeBase64Url, utf8Bytes } from "./base64url.ts";
 import { opaqueUrl } from "./opaque-url.ts";
 
-// Proof-of-possession verification for delivery-URL identity binding (ADR-013),
+// Proof-of-possession verification for delivery-URL identity binding,
 // relocated from the app edge (src/edge/src/pop.ts) as a pure L1 helper.
 //
 // When a signed URL carries an `agent_id` (the agent's RFC 7638 thumbprint), a

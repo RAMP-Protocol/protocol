@@ -2,9 +2,9 @@
 // transport-neutral sdk/go/core L2 substance: the verify http-seam handler
 // (NewExchangeServiceHandler — request-id outermost · verify · validate ·
 // error-detail), the reject→connect.Code mapping, and the EMIT direction of the
-// ADR-019 ErrorDetail↔Connect bridge (AsConnectError — a server emits a typed error
-// detail). KeyResolver and ReplayStore are injected by the application (ADR-020
-// §2/§3; the server interceptor order is deliberate — see NewExchangeServiceHandler).
+// ErrorDetail↔Connect bridge (AsConnectError — a server emits a typed error
+// detail). KeyResolver and ReplayStore are injected by the application
+// (the server interceptor order is deliberate — see NewExchangeServiceHandler).
 //
 // It is a SEPARATE package from the client binding sdk/go/connect so that each face
 // exposes BARE, symmetric option names — this package's WithKeyResolver,

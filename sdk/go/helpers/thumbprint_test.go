@@ -12,7 +12,7 @@ import (
 )
 
 // sharedVectors is the cross-language fixture the Go, TS, and Python thumbprint
-// implementations are all pinned to (ADR-013 D4). It is the same vector set used
+// implementations are all pinned to. It is the same vector set used
 // by the service-internal implementations this L1 helper relocates.
 const sharedVectors = "testdata/thumbprint-vectors.json"
 

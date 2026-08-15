@@ -1,6 +1,6 @@
 package helpers
 
-// Audience-face golden-vector emitter (ADR-020 §5).
+// Audience-face golden-vector emitter.
 //
 // The bare-domain shape and the audience check are the two halves of "is this
 // request addressed to me". Both are pure, both are about to exist in three

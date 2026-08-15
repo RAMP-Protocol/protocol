@@ -1,6 +1,6 @@
 """Wire constants shared across the SDK — Python port of the sdk/go oracle
 (helpers/constants.go + core/requestid.go). Encoding is negotiated per hop via
-Content-Type (ADR-020): application/proto for binary, application/json for
+Content-Type: application/proto for binary, application/json for
 canonical proto-JSON. The Go layer splits RequestIDHeader across
 helpers/constants.go and core/requestid.go; the single Python module exposes all
 seven values once. Pinned to wire-constants-vectors.json.

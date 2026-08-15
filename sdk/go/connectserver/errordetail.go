@@ -6,7 +6,7 @@ import (
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
-// AttachErrorDetail builds the ADR-019 ErrorDetail envelope (the
+// AttachErrorDetail builds the ErrorDetail envelope (the
 // non-authoritative developer message, the stable service domain, and any
 // structured field metadata) and attaches it to an ALREADY-CLASSIFIED
 // *connect.Error, returning that same error. It is the SDK-owned realisation of
@@ -33,7 +33,7 @@ func AttachErrorDetail(
 	return AttachDetail(cerr, NewErrorDetail(domain, message, metadata))
 }
 
-// NewErrorDetail builds the ADR-019 ErrorDetail envelope — the stable service
+// NewErrorDetail builds the ErrorDetail envelope — the stable service
 // domain, the non-authoritative developer message, and structured field
 // metadata stamped only when non-empty (a nil map and an empty map are both
 // absent on the wire; keeping the field nil avoids allocating an empty map the

@@ -4,14 +4,14 @@ import (
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 )
 
-// ADR-019 error contract. Failure is a typed ErrorDetail attached to the
+// The RAMP error contract. Failure is a typed ErrorDetail attached to the
 // transport error: the Connect/gRPC Code is the coarse class, the ErrorDetail
 // oneof carries the precise machine-readable reason. Clients branch on the typed
 // reason, never on a human string. These helpers are the single place the SDK
 // builds an ErrorDetail and reads its typed reason back — so every service and
 // client speaks the contract identically instead of re-expressing it. The transport
 // Code is the caller's to choose (it is service-specific policy which Code a given
-// reason maps to, ADR-019 §Consequences).
+// reason maps to).
 //
 // These builders and the Reason accessor are transport-neutral (they touch only
 // generated *rampv1 types), so this L1 package imposes no Connect dependency on a

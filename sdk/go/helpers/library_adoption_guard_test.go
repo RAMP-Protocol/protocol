@@ -1,7 +1,7 @@
 package helpers_test
 
 // Structural guard for the SDK-quality library-adoption refactor
-// (partial-adoption decision under ADR-020 L1). This is a behavior-PRESERVING
+// (the partial-adoption decision for L1). This is a behavior-PRESERVING
 // upgrade whose Core Invariant is BYTE-PARITY, so there is no new
 // runtime-observable behavior to pin — the shared-vector tests
 // (thumbprint-vectors.json, verify_test.go, keyresolver_test.go, the
@@ -26,7 +26,7 @@ package helpers_test
 //
 // DELIBERATELY OUT OF SCOPE — the retained hand-built signature BASE builder in
 // sigbase.go (buildSignatureBase/renderComponent/renderParamsTail/
-// reconstructTargetURI) and sign.go: per ADR-020 L1 the base is the cross-language
+// reconstructTargetURI) and sign.go: at L1 the base is the cross-language
 // BYTE CONTRACT (injectable clock, pluggable Signer), NOT a reinvented crypto
 // primitive. This guard MUST NOT flag those sites, and it does not read them.
 
@@ -85,7 +85,7 @@ func TestLibraryAdoptionGuard_ThumbprintUsesGoJose(t *testing.T) {
 // Signature-Input / Signature dictionaries via dunglas/httpsfv.
 //
 // It deliberately does NOT touch sigbase.go's retained signature-BASE builder:
-// buildSignatureBase and its helpers stay hand-built (ADR-020 L1 byte contract).
+// buildSignatureBase and its helpers stay hand-built (the L1 byte contract).
 func TestLibraryAdoptionGuard_VerifyUsesHTTPSFVParser(t *testing.T) {
 	assertSite(t, siteGuard{
 		file: "verify.go",

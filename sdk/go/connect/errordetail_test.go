@@ -1,6 +1,6 @@
 package connect_test
 
-// The ADR-019 ErrorDetail↔Connect round-trip, split by direction: AsConnectError
+// The ErrorDetail↔Connect round-trip, split by direction: AsConnectError
 // (emit) lives in the SERVER binding sdk/go/connectserver, ErrorDetailFrom (read)
 // lives in the CLIENT binding sdk/go/connect; the neutral *rampv1.ErrorDetail
 // builders and the Reason accessor stay in sdk/go/helpers. This suite exercises the

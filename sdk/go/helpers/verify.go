@@ -19,7 +19,7 @@ import (
 // performs NO IO — key resolution is the caller's (the injected KeyResolver,
 // keyresolver.go) and the body is supplied, not read off req.Body — so it is the
 // same logic the server interceptor, the edge, and a client verifying what it
-// received all share (ADR-020 §4).
+// received all share.
 
 // Verifier-side error sentinels.
 var (
@@ -328,7 +328,7 @@ func verifyContentDigest(h http.Header, body []byte, covered []CoveredComponent)
 // Signature-Input and Signature dictionaries, so quoting, inner-list, integer,
 // and byte-sequence edge cases are the library's contract, not this package's.
 // The signature BASE construction stays hand-built (sigbase.go) — it is the
-// cross-language byte contract (ADR-020 §8), a distinct concern from parsing.
+// cross-language byte contract, a distinct concern from parsing.
 
 // parseAllSignatures extracts ALL signature labels from the Signature-Input and
 // Signature headers, returning one sigParams per label (in header order) and a

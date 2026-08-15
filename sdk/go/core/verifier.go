@@ -27,7 +27,7 @@ const (
 
 // ErrOfferExpired signals an offer whose expires_at is in the past. Verification
 // is fail-closed on freshness as well as signature: an expired offer is rejected
-// even if its signature is genuine (ADR-020 §4 "verify everything").
+// even if its signature is genuine — verify everything.
 var ErrOfferExpired = errors.New("ramp: offer expires_at is in the past")
 
 // VerifiedOffer wraps an Offer that has passed the SDK's fail-closed verification
@@ -37,7 +37,7 @@ var ErrOfferExpired = errors.New("ramp: offer expires_at is in the past")
 // composite literal: the only way to obtain a VerifiedOffer is the SDK verify path
 // or the explicit .Unsafe() escape. That is what makes Client.Execute(ctx,
 // VerifiedOffer) a real COMPILE guard rather than a runtime check a caller can
-// forget (ADR-020 §4, ramp-sdk-api.md compile-time guard).
+// forget: the type system carries the check, not the caller's memory.
 type VerifiedOffer struct {
 	offer *rampv1.Offer
 }
@@ -65,7 +65,7 @@ func (r RejectedOffer) Unsafe() VerifiedOffer { return VerifiedOffer{offer: r.Of
 // Result is the fail-closed {verified, rejected} contract every discover/resolve
 // call returns. Neither list is silently dropped: a caller can act on Verified and
 // inspect Rejected (count + reason). It is the canonical cross-language shape
-// (ramp-sdk-api.md); Go/TS add the VerifiedOffer compile guard on top.
+// Go/TS add the VerifiedOffer compile guard on top.
 type Result struct {
 	Verified []VerifiedOffer
 	Rejected []RejectedOffer

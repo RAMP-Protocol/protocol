@@ -18,7 +18,7 @@ import (
 // clientConfig is the resolved set of injected holders a Client is built from.
 // Everything is INJECTED — signer, offer KeyResolver, HTTP client, request-id
 // source, verification mode, extra interceptors — and the SDK owns none of it as
-// state (ADR-020 §3).
+// state.
 type clientConfig struct {
 	signer        helpers.Signer
 	httpClient    *http.Client

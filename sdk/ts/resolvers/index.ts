@@ -1,4 +1,4 @@
-// Public surface of the RAMP SDK resolver faces (ADR-020 §4). These are the FIRST
+// Public surface of the RAMP SDK resolver faces. These are the FIRST
 // IO in the TS SDK, so they live OUTSIDE the IO-free core/src tree (exported via
 // package.json `exports`) to keep the transport-neutrality invariant on core
 // green. Four faces port the Go oracle: a static named map, a well-known JWKS

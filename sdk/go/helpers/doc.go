@@ -1,7 +1,7 @@
 // Package helpers is the RAMP SDK low-tier L1: stateless protocol helpers
 // built directly on the L0 generated wire types (github.com/RAMP-Protocol/protocol/gen/go).
 //
-// # Layering (ADR-020)
+// # Layering
 //
 //	L0  generated wire types          gen/go/ramp/v1, gen/go/vocab/*   (consumed, never rebuilt)
 //	L1  stateless protocol helpers    THIS PACKAGE                     (no IO, no state, no transport)
@@ -10,9 +10,9 @@
 //
 // L1 owns exactly the protocol mechanics that are defined by the spec, are
 // stateless / single-operation, and have two or more consumers (the inclusion
-// test, ADR-020 §3): RFC 9421 request signing and verification, RFC 7638 JWK
+// test): RFC 9421 request signing and verification, RFC 7638 JWK
 // thumbprints, signed-URL signing/verification and proof-of-possession, money
-// (canonical decimal string) parsing and formatting, the ADR-019 ErrorDetail
+// (canonical decimal string) parsing and formatting, the ErrorDetail
 // mapping, idempotency-key minting, scope/subscription plumbing, the cross-field
 // CEL validation rules, and the KeyResolver abstraction with a well-known
 // default.
@@ -28,5 +28,5 @@
 // on. This package is a relocation of the previously service-internal helpers
 // (internal/httpsig, internal/rampthumbprint, internal/rampwellknown,
 // src/exchange/internal/signing), made into one reusable surface — the crypto is
-// kept byte-identical across the move (ADR-020 §8).
+// kept byte-identical across the move.
 package helpers

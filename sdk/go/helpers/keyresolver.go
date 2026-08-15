@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-// KeyResolver is the injection point for verifying-key lookup (ADR-020 §4). The
+// KeyResolver is the injection point for verifying-key lookup. The
 // pure Verifier takes a key directly; the resolver is how an application supplies
 // keys — from a well-known endpoint, a private registry, a preloaded set, a
 // proxy, or mTLS. It is ONE interface for both faces: the client verifying offers

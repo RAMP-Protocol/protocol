@@ -1,7 +1,7 @@
 package helpers
 
 // Wire constants shared across the SDK. Encoding is negotiated per hop via
-// Content-Type (ADR-020): application/proto for binary, application/json for
+// Content-Type: application/proto for binary, application/json for
 // canonical proto-JSON. connect-go serves both, so each leg picks independently.
 const (
 	// ContentTypeProto is the Content-Type for binary protobuf bodies.

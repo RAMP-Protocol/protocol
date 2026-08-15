@@ -1,6 +1,6 @@
 package helpers
 
-// Utility-face golden-vector emitter (ADR-020 §5).
+// Utility-face golden-vector emitter.
 //
 // The sdk/ts and sdk/python DETERMINISTIC utility faces — NormalizeScopes /
 // ScopesSubset, CanonicalizeMoney (Parse+Format), ValidateIdempotencyKey,

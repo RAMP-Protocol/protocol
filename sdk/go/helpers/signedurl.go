@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Ed25519 signed delivery URLs (ADR-013). The Exchange issues a URL signed over
+// Ed25519 signed delivery URLs. The Exchange issues a URL signed over
 // the canonical message "GET\n<url>"; the edge worker (src/edge/src/verify.ts)
 // and this SDK verify it identically. The signature covers the URL as OPAQUE
 // BYTES: neither signer nor verifier re-normalizes

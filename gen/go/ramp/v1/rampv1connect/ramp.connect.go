@@ -538,7 +538,7 @@ type BrokerServiceClient interface {
 	// licensable (not in catalog, no offers, entitlement/budget absence, upstream
 	// temporarily unavailable) returns OK with DiscoveryResponse.absence_reason
 	// set and empty offer_groups — "no result" is a successful answer, mirroring
-	// DiscoverResources (ADR-019 §2). Here "authz" means resource entitlement
+	// DiscoverResources. Here "authz" means resource entitlement
 	// (→ OK + absence); transport authentication failures are a different axis and,
 	// like malformed requests and internal faults, are non-OK transport errors
 	// carrying an ErrorDetail.
@@ -589,7 +589,7 @@ type BrokerServiceHandler interface {
 	// licensable (not in catalog, no offers, entitlement/budget absence, upstream
 	// temporarily unavailable) returns OK with DiscoveryResponse.absence_reason
 	// set and empty offer_groups — "no result" is a successful answer, mirroring
-	// DiscoverResources (ADR-019 §2). Here "authz" means resource entitlement
+	// DiscoverResources. Here "authz" means resource entitlement
 	// (→ OK + absence); transport authentication failures are a different axis and,
 	// like malformed requests and internal faults, are non-OK transport errors
 	// carrying an ErrorDetail.

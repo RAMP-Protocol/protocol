@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 // A new face that forks the template adds a second renderer and trips this guard.
 //
 // The 2-component GET-PoP base (src/pop.ts signatureBase) is a DISTINCT byte
-// contract (ADR-013) and is intentionally NOT counted — the fingerprint below
+// contract and is intentionally NOT counted — the fingerprint below
 // requires the content-digest + authorization + signature-agent lines that only
 // the 5-component request base carries, so the GET-PoP base never matches.
 //

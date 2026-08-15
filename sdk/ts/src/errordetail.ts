@@ -10,7 +10,7 @@ import type {
 } from "../../../gen/ts/wire/schemas.ts";
 import { ErrorDetailSchema } from "../../../gen/ts/wire/schemas.ts";
 
-// ADR-019 ErrorDetail reader + typed detail builders (both halves of the contract).
+// ErrorDetail reader + typed detail builders (both halves of the contract).
 //
 // RAMP's failure envelope is a typed ErrorDetail attached to the transport error:
 // the Connect/gRPC Code is the coarse class, the ErrorDetail oneof carries the

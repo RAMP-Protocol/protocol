@@ -1,9 +1,9 @@
-"""Ed25519 signed delivery-URL verification (ADR-013) — pure, IO-free L1 helper.
+"""Ed25519 signed delivery-URL verification — pure, IO-free L1 helper.
 
 Mirrors the sdk/ts sibling (sdk/ts/src/verify.ts ``verifyEd25519SignedUrl``) and
 the sdk/go oracle (sdk/go/helpers/signedurl.go ``VerifyURLEd25519``). Key
 resolution is INJECTED (``resolve_key``) so no IO/state lives in the SDK — the
-ADR-020 §4 KeyResolver split; ``now`` is INJECTED so the verify reads no wall
+KeyResolver split; ``now`` is INJECTED so the verify reads no wall
 clock.
 
 Byte contract: the signature covers ``"GET\\n<url>"``

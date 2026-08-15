@@ -1,6 +1,6 @@
 package connectserver_test
 
-// AttachErrorDetail is the SDK-owned realisation of the ADR-019 ErrorDetail<->domain
+// AttachErrorDetail is the SDK-owned realisation of the ErrorDetail<->domain
 // envelope build: a service maps a domain error to a classified
 // connect.Error, then stamps the generic (Domain + Message + optional Metadata)
 // detail with this ONE body instead of copying it per service. These tests pin the

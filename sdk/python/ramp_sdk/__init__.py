@@ -1,10 +1,10 @@
-"""RAMP L1 protocol-mechanics helpers (ADR-020 tree sdk/{go,ts,python}/).
+"""RAMP L1 protocol-mechanics helpers (the sdk/{go,ts,python}/ tree).
 
 Stateless, IO-free protocol mechanics — RFC 7638 thumbprint, Ed25519 signed-URL
 verify, RFC 9421 request sign/verify + GET proof-of-possession (both faces),
 offer-acceptance sign/verify, base64url codec, and cross-field (message-CEL)
 validation — byte-parity-guarded against the sdk/go oracle. Clock and key
-resolution are injected (ADR-020 §1/§4); the helpers hold no state and touch no
+resolution are injected; the helpers hold no state and touch no
 IO.
 
 Acceptance canonicalization is JCS (RFC 8785): the canonical names are the

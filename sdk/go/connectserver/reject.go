@@ -46,7 +46,7 @@ func writeReject(w http.ResponseWriter, err error) {
 }
 
 // AsConnectError builds a *connect.Error of the given Code with detail attached
-// as a typed error detail (the ADR-019 transport mechanism). The detail's
+// as a typed error detail (the transport mechanism). The detail's
 // Message becomes the error string. It lives in the SERVER binding (the emit
 // direction: a server EMITS a typed error detail) — not the transport-neutral L1
 // helpers — so a non-Connect consumer of helpers/core compiles zero connectrpc; the

@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-// Idempotency (ADR-019 §4). idempotency_key is a required, persisted,
+// Idempotency. idempotency_key is a required, persisted,
 // settlement-bound field on the mutating RPCs (ExecuteTransaction, ReportUsage,
 // DisputeTransaction): the server dedupes on it so a replay returns the original
 // result and cannot double-charge. The SDK mints a fresh key per call by default;

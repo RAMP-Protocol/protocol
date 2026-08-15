@@ -13,7 +13,7 @@ import (
 // signer (sign.go) and the verifier (verify.go). The base is the exact byte
 // string both sides feed to the crypto: keeping it in one place is what makes
 // sign→verify round-trip and what keeps this SDK byte-identical with the
-// service-internal implementation it relocates (ADR-020 §8).
+// service-internal implementation it relocates.
 //
 // Coverage is the RAMP-required set: @method and @target-uri (bind the verb and
 // destination so a signature cannot be replayed against another path),

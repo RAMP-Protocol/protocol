@@ -37,7 +37,7 @@ import {
 export type RejectReason = "signature" | "replay";
 
 /**
- * The injected keyid-keyed verifying-key resolver (ADR-020 §4). Distinct from
+ * The injected keyid-keyed verifying-key resolver. Distinct from
  * core/verifier.ts::OfferKeyResolver which is EXCHANGE-keyed for offer verify: a
  * request-verify resolver is keyed by the Signature-Input keyid. Returns the raw
  * 32-byte Ed25519 public key, or undefined when the key is unknown.

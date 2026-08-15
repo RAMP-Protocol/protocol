@@ -4,7 +4,7 @@ import "context"
 
 // Context plumbing for carrying verified signature(s) through a request's
 // context. This is the PURE slot + accessors only — L1 has no Middleware (that
-// is transport, ADR-020 keeps L1 IO-free); the platform relay/interceptor is the
+// is transport, and L1 stays IO-free); the platform relay/interceptor is the
 // legitimate populator. Tests may populate the slots directly to drive
 // handler-level authz without standing up the full signing chain.
 

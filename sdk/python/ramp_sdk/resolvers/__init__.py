@@ -1,4 +1,4 @@
-"""RAMP SDK fetching resolver faces (ADR-020 §4).
+"""RAMP SDK fetching resolver faces.
 
 These are the FIRST IO in the Python SDK, so they live OUTSIDE ``ramp_sdk.core``
 (which keeps its httpx-ban / IO-free guard green) in this dedicated package. Three

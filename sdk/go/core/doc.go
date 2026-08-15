@@ -5,7 +5,7 @@
 // compile guard with the loud RejectedOffer.Unsafe escape, the client signing
 // http.RoundTripper (NewSigningTransport), the injected ReplayStore interface, and
 // the neutral request-id mint/middleware — all built on the sdk/go/helpers L1
-// primitives with net/http as the only transport dependency (ADR-020 §2/§3).
+// primitives with net/http as the only transport dependency.
 //
 // The discovery shape is grouped rather than flat because a discovery call is
 // per-URI: a URI that yielded nothing has no offer to carry its identity back, so

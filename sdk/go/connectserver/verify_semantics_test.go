@@ -5,7 +5,7 @@ package connectserver_test
 //
 //  1. GATE PREDICATE — a /ramp. request that carries NO Signature-Input is not
 //     seam-rejected: it reaches the origin handler, which owns the typed
-//     Unauthenticated fault (the ADR-019 ErrorDetail contract). Only a request
+//     Unauthenticated fault (the ErrorDetail contract). Only a request
 //     that presents a signature is verified at the seam.
 //
 //  2. REPLAY NONCE — the replay guard keys on the SIGNATURE (per verified

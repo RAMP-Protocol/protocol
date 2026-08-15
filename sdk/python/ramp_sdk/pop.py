@@ -1,4 +1,4 @@
-"""RFC 9421 GET proof-of-possession verification (ADR-013) — pure L1 helper.
+"""RFC 9421 GET proof-of-possession verification — pure L1 helper.
 
 Mirrors the sdk/ts sibling (sdk/ts/src/pop.ts ``verifyAgentBinding``). When a
 signed URL carries an ``agent_id`` (the agent's RFC 7638 thumbprint), a
@@ -168,7 +168,7 @@ def sign_agent_binding(
     Returns ``(presented_key_b64url, signature_input_value, signature_value)``:
     the ``X-RAMP-Agent-Key`` value, the ``Signature-Input`` header value, and the
     ``Signature`` header value the fetcher attaches to its GET. The covered set is
-    exactly ``@method @target-uri`` (ADR-013), keyid is the RFC 7638 thumbprint of
+    exactly ``@method @target-uri``, keyid is the RFC 7638 thumbprint of
     the signer's public key (the 3-way identity anchor), and the signed bytes are
     the same :func:`signature_base` the verify face reconstructs — byte-identical
     to the sdk/go signer (pinned by pop-vectors.json). ``created``/``expires`` are

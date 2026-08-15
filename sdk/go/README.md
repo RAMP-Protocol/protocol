@@ -1,6 +1,6 @@
 # RAMP SDK — Go
 
-Layered protocol libraries co-located with the contract (ADR-020). The SDK is
+Layered protocol libraries co-located with the contract. The SDK is
 consumed off-commit from this repo; it imports the generated L0 wire types
 directly with no `replace` directive.
 
@@ -52,7 +52,7 @@ the SDK closes); the signature covers `pricing`, `terms`, and `expires_at`:
 err := helpers.VerifyOffer(offer, offer.GetSignature(), exchangePub)
 ```
 
-**Signed delivery URLs + proof-of-possession** (ADR-013), byte-identical with the
+**Signed delivery URLs + proof-of-possession**, byte-identical with the
 edge worker:
 
 ```go
@@ -74,7 +74,7 @@ wire, _ := helpers.FormatMoney(rate.Mul(decimal.NewFromInt(qty)))
 if err := helpers.Validate(req); err != nil { /* helpers.ValidationRuleIDs(err) */ }
 ```
 
-**Agent-binding proof of possession** (ADR-013) — the SIGN face of the header pair
+**Agent-binding proof of possession** — the SIGN face of the header pair
 a bound delivery fetch presents. The covered set is exactly `@method` +
 `@target-uri`: a GET has no body to digest, and the signed URL is itself the
 credential. The key arrives as a `Signer` plus the public half, so custody never
@@ -140,7 +140,7 @@ held there by a conformance guard. Reach for it wherever you vet a domain that
 arrived in a message; note that the client's own send path still vets with the wider
 `IsBareHost`, so passing that one is not yet evidence the wire will accept a value.
 
-**Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
+**Also:** RFC 7638 `Thumbprint`, `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,
 `RedactURL` (a signed URL carries its credential in the query — never log it raw),
 and `RetrievalAuthFailureReasonFromToken` (the delivery edge's refusal vocabulary,
@@ -200,7 +200,7 @@ host is reserved. The address/scheme decisions are corpus-locked
 ## Guarantees
 
 - **Relocation, not rewrite.** The RFC 9421 / 7638 crypto is byte-identical with
-  the service-internal implementations it replaces (ADR-020 §8).
+  the service-internal implementations it replaces.
 - **Cross-field CEL is pinned** to `conformance/corpus/crossfield.json`, generated
   by the same protovalidate oracle the rest of the conformance suite uses.
 - Covered by the repo gate: `go build/vet/test ./...` via `scripts/ci-local.sh`.

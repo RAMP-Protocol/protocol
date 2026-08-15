@@ -23,7 +23,7 @@ import (
 // cross-cutting request-id / validate interceptors wired, plus the fail-closed
 // offer Verifier that sorts every discovered offer into {verified, rejected}. It
 // owns NO state — signer, keys, HTTP client, and verification policy are all
-// injected (ADR-020 §2/§3).
+// injected.
 type Client struct {
 	rpc      rampv1connect.ExchangeServiceClient
 	verifier core.Verifier
@@ -285,8 +285,7 @@ type callConfig struct {
 
 // WithIdempotencyKey pins the idempotency key for this call. Reusing a key makes
 // the call a deliberate replay: the server dedupes on it (a fresh key is minted
-// per call by default). The SDK never tracks keys — the server owns dedup
-// (ADR-019 §4, ADR-020 §3).
+// per call by default). The SDK never tracks keys — the server owns dedup.
 //
 // Hold the key and pass the same one back when retrying, on every verb that takes
 // this option. The key identifies the ACTION, not the attempt: a fresh key on a

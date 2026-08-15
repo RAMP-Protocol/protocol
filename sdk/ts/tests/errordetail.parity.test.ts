@@ -3,7 +3,7 @@
 // Mirrors the sdk/python sibling test_errordetail_parity.py and the Go leg
 // sdk/go/helpers/errordetail_corpus_test.go.
 //
-// The ADR-019 failure envelope — ErrorDetail{domain, message, metadata, typed
+// The failure envelope — ErrorDetail{domain, message, metadata, typed
 // reason oneof} — was, until the shared corpus, built AND read only in sdk/go. The
 // edge worker is the READ side of that contract. error-detail-vectors.json carries,
 // per vector, the canonical proto-JSON wire form (wire_json) plus the field

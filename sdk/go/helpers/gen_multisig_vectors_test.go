@@ -1,6 +1,6 @@
 package helpers
 
-// Multisig forwarding-chain golden-vector emitter (ADR-020 §8).
+// Multisig forwarding-chain golden-vector emitter.
 //
 // The sdk/ts and sdk/python multisig append/verify faces assert
 // byte-parity against this Go oracle: a chain signed by SignRequest(sig1) +

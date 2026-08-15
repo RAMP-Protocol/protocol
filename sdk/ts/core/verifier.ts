@@ -5,7 +5,7 @@
 // core, never the reverse.
 //
 // The Verifier splits received offers into {verified, rejected} by ed25519-
-// verifying the canonical offer signature. Per the JCS switch (ADR-020 §4), the
+// verifying the canonical offer signature. Per the JCS switch, the
 // signed payload is RFC 8785 JCS over the canonical proto-JSON of the offer with
 // signature/signature_algorithm cleared:
 //

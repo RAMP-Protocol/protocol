@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Agent-binding proof of possession for signed delivery URLs (ADR-013).
+// Agent-binding proof of possession for signed delivery URLs.
 //
 // When a signed URL carries an agent_id — the RFC 7638 thumbprint of the key
 // that signed the offer acceptance — a code-capable edge requires the fetcher to
@@ -29,8 +29,8 @@ import (
 // testdata/pop-vectors.json.
 
 // AgentKeyHeader carries the raw Ed25519 public key the fetcher presents, as
-// base64url with no padding. ADR-013 chose a dedicated header over an inline JWK
-// in keyid: the edge hashes this value and requires the digest to equal the
+// base64url with no padding. RAMP uses a dedicated header rather than an inline
+// JWK in keyid: the edge hashes this value and requires the digest to equal the
 // URL's agent_id, so a fetcher cannot present one key while naming another.
 const AgentKeyHeader = "X-RAMP-Agent-Key"
 

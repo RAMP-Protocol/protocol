@@ -1,4 +1,4 @@
-// sdk/ts Ed25519 signed delivery-URL SIGN face (ADR-013) — the Exchange-minting
+// sdk/ts Ed25519 signed delivery-URL SIGN face — the Exchange-minting
 // sibling of src/verify.ts. Mirror of the Go oracle helpers.SignURLEd25519.
 //
 // THE CONTRACT: the signature covers "GET\n<url>" as

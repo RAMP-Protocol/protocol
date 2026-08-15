@@ -1,4 +1,4 @@
-"""Verifying-key resolution seam (ADR-020 §4) — the injection point for key lookup.
+"""Verifying-key resolution seam — the injection point for key lookup.
 
 Mirrors the sdk/go split (sdk/go/helpers/keyresolver.go): the pure L1 verify takes
 a resolved key directly; the resolver is how an application supplies keys — from a

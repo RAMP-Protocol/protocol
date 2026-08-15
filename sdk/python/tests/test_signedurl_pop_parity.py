@@ -63,7 +63,7 @@ def test_signedurl_verify_matches_go_oracle(vector: dict[str, object]) -> None:
     pub = _b64url_nopad_decode(str(vector["pub_b64url"]))
     kid = str(vector["kid"])
 
-    # Key resolution is INJECTED (ADR-020 §4): the resolver returns the vector's
+    # Key resolution is INJECTED: the resolver returns the vector's
     # public key for the matching kid, None otherwise. `now` is injected so the
     # L1 verify reads no wall clock.
     def resolve_key(claimed_kid: str | None) -> bytes | None:

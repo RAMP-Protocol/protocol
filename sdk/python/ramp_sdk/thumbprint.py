@@ -1,4 +1,4 @@
-"""RFC 7638 JWK Thumbprint of an Ed25519 public key (ADR-013 D4).
+"""RFC 7638 JWK Thumbprint of an Ed25519 public key.
 
 Relocated verbatim from the app MCP shim (src/mcp/src/ramp_mcp_shim/thumbprint.py).
 The agent's RFC 9421 ``keyid`` on a bound retrieval GET is this thumbprint (Web

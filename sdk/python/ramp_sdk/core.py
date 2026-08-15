@@ -8,8 +8,7 @@ never the reverse. The core is stateless — the key resolver and clock are inje
 It carries three things:
 
   * the offer Verifier that splits received offers into {verified, rejected} by
-    ed25519-verifying the canonical offer signature. Per the JCS switch (ADR-020
-    §4) the signed payload is RFC 8785 JCS over the canonical proto-JSON of the
+    ed25519-verifying the canonical offer signature. Since the JCS switch the signed payload is RFC 8785 JCS over the canonical proto-JSON of the
     offer with signature/signature_algorithm cleared::
 
         signed_payload = JCS(protojson(offer with sig+alg cleared))
