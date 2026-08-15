@@ -27,6 +27,14 @@
     {
       "name": "SignatureAgentHeader",
       "value": "Signature-Agent"
+    },
+    {
+      "name": "OfferSignatureAlgorithm",
+      "value": "EdDSA"
+    },
+    {
+      "name": "AcceptanceSignatureAlgorithm",
+      "value": "EdDSA"
     }
   ]
 }

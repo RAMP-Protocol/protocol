@@ -54,6 +54,7 @@ func main() {
 	if err := conformance.AssertUniqueBareNames(); err != nil {
 		panic(err)
 	}
+	assertEveryBytesFieldRuledOrAllowed()
 	out := "bytes_len.json"
 	if len(os.Args) > 1 {
 		out = os.Args[1]
@@ -84,6 +85,67 @@ func main() {
 	}
 	if err := os.WriteFile(out, append(b, '\n'), 0o644); err != nil {
 		panic(err)
+	}
+}
+
+// bytesFieldsAllowedUnruled names the bytes fields that ship with NO length rule
+// and therefore keep protoschema's loose base64 rendering in the generated
+// clients. Each entry is a standing exception, not a decision to leave alone: the
+// value is the reason it is tolerable today.
+//
+// The rendering an entry accepts is `^[A-Za-z0-9+/]*={0,2}$` — no url-safe arm, and
+// padding characters allowed anywhere the regex's tail permits. A generated client
+// therefore accepts values Go protojson refuses to decode, and refuses url-safe
+// values Go protojson accepts. Wrong in both directions, quietly.
+var bytesFieldsAllowedUnruled = map[string]string{
+	"ramp.v1.Delegation.token": "A JWS compact serialization, not a fixed-size or " +
+		"minimum-size payload, so neither len nor min_len describes it — the shapes this " +
+		"manifest can express are the wrong tool. What it needs is a base64url-faithful " +
+		"PATTERN, which tighten_bytes_len cannot emit today. Tracked separately.",
+}
+
+// assertEveryBytesFieldRuledOrAllowed fails the generator on a bytes field that
+// carries no length rule and is not an explicit exception.
+//
+// WHY THIS EXISTS. The manifest walk uses EachRuleSet, which visits fields that
+// HAVE rules. A bytes field with none was never visited, so it fell through and
+// shipped with protoschema's loose rendering — in a generator whose header says it
+// fails closed on everything it cannot translate. The gap was invisible for the
+// usual reason: a guard that only inspects what it was given cannot report what it
+// was never given.
+//
+// The list is self-cleaning in both directions. A new unruled bytes field fails
+// until someone decides about it, and an entry that stops naming a live unruled
+// field also fails, so the exception cannot outlive the field it excuses.
+func assertEveryBytesFieldRuledOrAllowed() {
+	unruled := map[string]bool{}
+	conformance.EachMessage(func(md protoreflect.MessageDescriptor) {
+		for i := 0; i < md.Fields().Len(); i++ {
+			fd := md.Fields().Get(i)
+			if fd.Kind() != protoreflect.BytesKind {
+				continue
+			}
+			fr := conformance.FieldRules(fd)
+			if fr.GetBytes() != nil || fr.GetRepeated().GetItems().GetBytes() != nil {
+				continue
+			}
+			unruled[string(fd.FullName())] = true
+		}
+	})
+
+	for name := range unruled {
+		if _, ok := bytesFieldsAllowedUnruled[name]; !ok {
+			panic(fmt.Sprintf("bytesgen: bytes field %s carries no length rule, so the generated "+
+				"Pydantic/Zod keep protoschema's loose base64 pattern and disagree with Go protojson "+
+				"in both directions. Give it a bytes.len or bytes.min_len rule, or add it to "+
+				"bytesFieldsAllowedUnruled with the reason it cannot have one.", name))
+		}
+	}
+	for name := range bytesFieldsAllowedUnruled {
+		if !unruled[name] {
+			panic(fmt.Sprintf("bytesgen: bytesFieldsAllowedUnruled names %s, which is no longer an "+
+				"unruled bytes field — it gained a rule, was renamed, or was removed. Drop the entry.", name))
+		}
 	}
 }
 

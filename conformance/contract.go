@@ -273,22 +273,66 @@ func StringByteLength(fr *validate.FieldRules) (member string, value uint64, ok 
 	return "", 0, false
 }
 
+// EachEnum calls fn for every enum in the contract — file-level and nested inside
+// a message, in every contract package.
+//
+// It exists because the bare-name scheme treats enums exactly like messages, and
+// a walk that visited only messages left half the namespace unguarded. ramp.v1
+// was the only package defining enums until ramp.admin.v1 added ObligationState,
+// so the gap had no way to bite and no way to be noticed.
+func EachEnum(fn func(protoreflect.EnumDescriptor)) {
+	var walk func(protoreflect.MessageDescriptors)
+	walk = func(ms protoreflect.MessageDescriptors) {
+		for i := 0; i < ms.Len(); i++ {
+			md := ms.Get(i)
+			for j := 0; j < md.Enums().Len(); j++ {
+				fn(md.Enums().Get(j))
+			}
+			walk(md.Messages())
+		}
+	}
+	for _, f := range Contract {
+		for i := 0; i < f.File.Enums().Len(); i++ {
+			fn(f.File.Enums().Get(i))
+		}
+		walk(f.File.Messages())
+	}
+}
+
 // AssertUniqueBareNames reports an error when two contract packages define a message
-// with the same bare name. The corpus keys cases by bare short name (Case.Message ==
-// the generated class/schema name), the merged JSON-Schema $defs are keyed the same way,
-// and the {/* ramp-validate: X */} doc markers resolve the same way — a cross-package
-// duplicate would silently collide in all three. Returned as an error, not a fatal, so
-// both a `package main` generator (which exits) and a test (which fails) can use it.
+// or an ENUM with the same bare name. The corpus keys cases by bare short name
+// (Case.Message == the generated class/schema name), the merged JSON-Schema $defs are
+// keyed the same way, and the {/* ramp-validate: X */} doc markers resolve the same way
+// — a cross-package duplicate would silently collide in all three. Returned as an error,
+// not a fatal, so both a `package main` generator (which exits) and a test (which fails)
+// can use it.
+//
+// ENUMS ARE CHECKED IN THE SAME NAMESPACE AS MESSAGES, not in one of their own,
+// because merge_schema.py hoists both into a single $defs map. A message and an
+// enum sharing a bare name collide there just as two messages would.
+//
+// The enum half is the one that fails quietly. merge_schema.py keys enum $defs by
+// bare name with setdefault, so the SECOND enum of a colliding pair is dropped and
+// every field referring to it silently gets the FIRST enum's value list. Generated
+// Pydantic and Zod would then accept values the Go server rejects, with nothing
+// failing anywhere in between. A duplicate message name at least collides on a
+// structure a reader can see.
 func AssertUniqueBareNames() error {
 	seen := map[string]protoreflect.FullName{}
 	var err error
-	EachMessage(func(md protoreflect.MessageDescriptor) {
-		if prev, ok := seen[string(md.Name())]; ok && prev != md.FullName() && err == nil {
-			err = fmt.Errorf("duplicate bare message name %q (%s vs %s) — the corpus/parity bare-name scheme cannot represent it",
-				md.Name(), prev, md.FullName())
+	claim := func(kind, bare string, full protoreflect.FullName) {
+		if prev, ok := seen[bare]; ok && prev != full && err == nil {
+			err = fmt.Errorf("duplicate bare %s name %q (%s vs %s) — the corpus/parity bare-name scheme cannot represent it",
+				kind, bare, prev, full)
 			return
 		}
-		seen[string(md.Name())] = md.FullName()
+		seen[bare] = full
+	}
+	EachMessage(func(md protoreflect.MessageDescriptor) {
+		claim("message", string(md.Name()), md.FullName())
+	})
+	EachEnum(func(ed protoreflect.EnumDescriptor) {
+		claim("enum", string(ed.Name()), ed.FullName())
 	})
 	return err
 }

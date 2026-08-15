@@ -439,7 +439,15 @@ def assert_defaults_valid(combined):
                  f"is wire-required; extend requiredgen instead of shipping them: {bad}")
 
 
-def main(src_dir, desc_path, out_file, required_path=None, unique_path=None, bytes_len_path=None):
+def main(src_dir, desc_path, out_file, required_path, unique_path, bytes_len_path):
+    """Merge the per-message schemas into one file, tightened by three manifests.
+
+    The three manifest parameters are REQUIRED positionals on purpose. They used
+    to default to None, so calling this with too few arguments skipped the
+    matching tightening pass and exited 0 — a caller that dropped an argument got
+    a smaller, laxer schema and a green build, which is the failure the guard at
+    the bottom of this file says must raise.
+    """
     enum_name = enum_names_from_descriptor(desc_path)
     enum_defs = {}   # name -> {"type":"string","enum":[...]}
     unnamed = []
@@ -516,7 +524,8 @@ def main(src_dir, desc_path, out_file, required_path=None, unique_path=None, byt
 
 if __name__ == "__main__":
     # No slice bound: an argument-count mismatch with gen-sdk-types.sh must raise
-    # TypeError and fail the pipeline. A silent truncation (the old [1:7]) would
+    # TypeError and fail the pipeline. A silent truncation (the old [1:6]) would
     # instead run with a manifest parameter defaulted to None, disabling that
-    # tightening pass with exit code 0.
+    # tightening pass with exit code 0. The defaults are gone too, so too FEW
+    # arguments now raise for the same reason too many do.
     main(*sys.argv[1:])

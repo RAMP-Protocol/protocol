@@ -250,6 +250,15 @@ func buildWireConstantsVectors() []wireConstantVector {
 		{"ProtocolVersion", ProtocolVersion},
 		{"RequestIDHeader", RequestIDHeader},
 		{"SignatureAgentHeader", SignatureAgentHeader},
+		// The two signature-algorithm labels. They are here for a reason the
+		// others are not: ramp.admin.v1 pins each of them as a string.const on
+		// the evidence row's algorithm fields, so the value exists twice — once
+		// as the constant that WRITES it, once as the rule that ACCEPTS it — and
+		// nothing connected the copies. Exporting them through this file lets
+		// the conformance layer compare each constant against the descriptor's
+		// const without importing sdk/go, which it deliberately never does.
+		{"OfferSignatureAlgorithm", OfferSignatureAlgorithm},
+		{"AcceptanceSignatureAlgorithm", AcceptanceSignatureAlgorithm},
 	}
 }
 
