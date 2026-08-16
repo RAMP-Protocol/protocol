@@ -3,7 +3,9 @@
 //
 //	ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)
 //	ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)
-//	JCS-parse(agent_acceptance_canonical_bytes)["offer_sig"] == offer_sig
+//	JCS-parse(agent_acceptance_canonical_bytes) matches the row on all four
+//	  signed members (offer_sig, requester_id, requester_domain, and
+//	  idempotency_key against the row's request_idempotency_key)
 //
 // Every corpus vector is a field-rule mutant carrying filler key material, so
 // nothing else in the repo runs the recipe against a row whose signatures are
@@ -28,11 +30,14 @@
 // tamper cases showing which side each signature covers. Read them as
 // executable documentation, not as proof that the row detects tampering.
 //
-// The SPLICE case IS a gate, and it is the reason the third step exists. Both
-// signatures on a spliced row are genuine, so the two ed25519.Verify calls
-// above pass on a row that asserts an agreement nobody made. Only the binding
-// comparison separates the two. Remove that step from the recipe and this case
-// starts passing, which is exactly the regression it is here to refuse.
+// The two MEMBER-COMPARISON cases ARE gates, and they are the reason the third
+// step exists. Both build rows whose halves are individually genuine, so the
+// ed25519.Verify calls above pass on rows that assert something false. One
+// covers splicing an acceptance from another offer, caught by offer_sig. The
+// other covers reusing one acceptance for a second execute against the SAME
+// offer, where offer_sig is identical and only the idempotency key differs.
+// Narrow the check back to offer_sig alone and the second case starts passing,
+// which is exactly the regression it is here to refuse.
 package conformance
 
 import (
@@ -56,22 +61,27 @@ import (
 // and agent_acceptance_signature uppercase, pinning the field comments' claim
 // that the hex rides verbatim in either case.
 //
-// offerID varies the offer so a caller can build two rows that differ only in
-// which offer was accepted — which is what the splice case needs.
-func evidenceRow() *rampadminv1.TransactionEvidence { return evidenceRowFor("offer-verify") }
+// offerID and idemKey vary the two halves of the binding independently, so a
+// caller can build two rows that differ ONLY in which offer was accepted (the
+// splice case) or ONLY in which execute the acceptance covers (the reuse case).
+func evidenceRow() *rampadminv1.TransactionEvidence {
+	return evidenceRowFor("offer-verify", "idem-verify")
+}
 
-func evidenceRowFor(offerID string) *rampadminv1.TransactionEvidence {
+func evidenceRowFor(offerID, idemKey string) *rampadminv1.TransactionEvidence {
 	exchangeKey := ed25519.NewKeyFromSeed([]byte(strings.Repeat("exchange-seed-01", 2)))
 	agentKey := ed25519.NewKeyFromSeed([]byte(strings.Repeat("agent-seed-00001", 2)))
 
 	offerCanonical := []byte(fmt.Sprintf(`{"offer_id":%q,"price":{"amount":"1.00","currency":"USD"}}`, offerID))
 	offerSig := strings.ToLower(hex.EncodeToString(ed25519.Sign(exchangeKey, offerCanonical)))
 
-	// The acceptance embeds the REAL offer_sig, which is what binds it to this
-	// offer and nothing else. JCS orders members lexicographically, so
-	// idempotency_key < offer_sig < requester_id.
+	// The acceptance carries all four AgentAcceptancePayload members, which is
+	// what the row's four stored copies are compared against. JCS orders members
+	// lexicographically: idempotency_key < offer_sig < requester_domain <
+	// requester_id.
 	acceptanceCanonical := []byte(fmt.Sprintf(
-		`{"idempotency_key":"idem-verify","offer_sig":%q,"requester_id":"agent-verify"}`, offerSig))
+		`{"idempotency_key":%q,"offer_sig":%q,"requester_domain":"agent.example","requester_id":"agent-verify"}`,
+		idemKey, offerSig))
 
 	return &rampadminv1.TransactionEvidence{
 		TransactionId:            "tx-verify",
@@ -93,7 +103,7 @@ func evidenceRowFor(offerID string) *rampadminv1.TransactionEvidence {
 		AgentAcceptanceSignatureAlgorithm: "EdDSA",
 		RequesterId:                       "agent-verify",
 		RequesterDomain:                   "agent.example",
-		RequestIdempotencyKey:             "idem-verify",
+		RequestIdempotencyKey:             idemKey,
 		AgentPublicKey:                    agentKey.Public().(ed25519.PublicKey),
 		AgentDirectoryUrl:                 "https://agent.example/.well-known/ramp-agent.json",
 		CreatedAt:                         timestamppb.New(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)),
@@ -113,23 +123,58 @@ func verifyRecipe(t *testing.T, key, canonical []byte, hexSig string) bool {
 	return ed25519.Verify(key, canonical, sig)
 }
 
-// acceptanceBindsToOffer is the recipe's third step: read offer_sig back out of
-// the signed acceptance bytes and compare it to the row's own offer_sig. The
-// comparison is case-insensitive because the contract accepts either hex case
-// verbatim, so the two copies of one value can legitimately differ in case.
-func acceptanceBindsToOffer(t *testing.T, row *rampadminv1.TransactionEvidence) bool {
+// acceptanceMatchesRow is the recipe's third step: parse the signed acceptance
+// bytes and compare EVERY member of the payload to the row's stored copy.
+//
+// All four, not just offer_sig. Two acceptances by one agent against one offer
+// share offer_sig and differ only in the idempotency key, so an offer_sig-only
+// check lets a single genuine acceptance stand behind two rows for two
+// different executes. It returns the name of the first member that does not
+// match, or "" when the row and the acceptance agree.
+//
+// Note the fourth name: the payload member is idempotency_key, and the row
+// stores it as request_idempotency_key.
+func acceptanceMatchesRow(t *testing.T, row *rampadminv1.TransactionEvidence) string {
 	t.Helper()
 	var payload struct {
-		OfferSig string `json:"offer_sig"`
+		OfferSig        *string `json:"offer_sig"`
+		RequesterID     *string `json:"requester_id"`
+		RequesterDomain *string `json:"requester_domain"`
+		IdempotencyKey  *string `json:"idempotency_key"`
 	}
 	if err := json.Unmarshal(row.AgentAcceptanceCanonicalBytes, &payload); err != nil {
 		t.Fatalf("parsing agent_acceptance_canonical_bytes as JCS JSON: %v", err)
 	}
-	if payload.OfferSig == "" {
-		t.Fatal("the acceptance payload carries no offer_sig — the binding cannot be checked, " +
-			"which means the row cannot prove the acceptance is for this offer")
+	// A missing member is fatal, not a mismatch: the signed bytes cannot be
+	// audited against the row at all, which is a different and worse problem
+	// than the two disagreeing.
+	for name, got := range map[string]*string{
+		"offer_sig":        payload.OfferSig,
+		"requester_id":     payload.RequesterID,
+		"requester_domain": payload.RequesterDomain,
+		"idempotency_key":  payload.IdempotencyKey,
+	} {
+		if got == nil {
+			t.Fatalf("the acceptance payload carries no %s — the row cannot prove which "+
+				"agreement this acceptance covers", name)
+		}
 	}
-	return strings.EqualFold(payload.OfferSig, row.OfferSig)
+	// offer_sig alone is case-insensitive: the contract admits either hex case
+	// verbatim, so the row's copy and the signed copy can legitimately differ in
+	// case. The other three are exact.
+	if !strings.EqualFold(*payload.OfferSig, row.OfferSig) {
+		return "offer_sig"
+	}
+	for _, c := range []struct{ name, payload, row string }{
+		{"requester_id", *payload.RequesterID, row.RequesterId},
+		{"requester_domain", *payload.RequesterDomain, row.RequesterDomain},
+		{"idempotency_key vs request_idempotency_key", *payload.IdempotencyKey, row.RequestIdempotencyKey},
+	} {
+		if c.payload != c.row {
+			return c.name
+		}
+	}
+	return ""
 }
 
 func TestEvidenceOfflineVerificationRecipe(t *testing.T) {
@@ -152,18 +197,20 @@ func TestEvidenceOfflineVerificationRecipe(t *testing.T) {
 	if !verifyRecipe(t, row.AgentPublicKey, row.AgentAcceptanceCanonicalBytes, row.AgentAcceptanceSignature) {
 		t.Error("acceptance signature must verify: ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)")
 	}
-	if !acceptanceBindsToOffer(t, row) {
-		t.Error("the acceptance must bind to this offer: offer_sig inside agent_acceptance_canonical_bytes must equal the row's offer_sig")
+	if mismatch := acceptanceMatchesRow(t, row); mismatch != "" {
+		t.Errorf("an honest row must match its acceptance on every signed member; %s differs", mismatch)
 	}
 
-	// SPLICE. Two genuine halves of two different transactions, joined. Both
-	// signatures still verify against real keys, because both halves are real —
-	// only the binding check separates this row from an honest one. This is the
-	// assertion the file header's "nothing here can turn red" caveat does NOT
-	// cover: delete the third recipe step and this case starts passing.
-	t.Run("spliced acceptance from another offer is caught only by the binding check", func(t *testing.T) {
-		spliced := evidenceRowFor("offer-verify")
-		other := evidenceRowFor("offer-other")
+	// The two cases below are the gate. Both build a row whose halves are
+	// individually genuine, so both ed25519.Verify calls pass on a row that
+	// asserts something false — only the member comparison separates them from an
+	// honest row. They cover DIFFERENT attacks and neither subsumes the other.
+
+	// SPLICING, by an outsider: two genuine halves of two different
+	// transactions, joined. Caught by offer_sig.
+	t.Run("spliced acceptance from another offer", func(t *testing.T) {
+		spliced := evidenceRowFor("offer-verify", "idem-verify")
+		other := evidenceRowFor("offer-other", "idem-verify")
 		spliced.AgentAcceptanceCanonicalBytes = other.AgentAcceptanceCanonicalBytes
 		spliced.AgentAcceptanceSignature = other.AgentAcceptanceSignature
 
@@ -176,9 +223,39 @@ func TestEvidenceOfflineVerificationRecipe(t *testing.T) {
 		if !verifyRecipe(t, spliced.AgentPublicKey, spliced.AgentAcceptanceCanonicalBytes, spliced.AgentAcceptanceSignature) {
 			t.Error("the acceptance half of a spliced row is genuine and must still verify")
 		}
-		if acceptanceBindsToOffer(t, spliced) {
-			t.Error("a spliced row passed the binding check — the recipe cannot tell an agreement " +
-				"from two unrelated genuine signatures")
+		if got := acceptanceMatchesRow(t, spliced); got != "offer_sig" {
+			t.Errorf("a spliced row must be caught on offer_sig, got %q — the recipe cannot tell an "+
+				"agreement from two unrelated genuine signatures", got)
+		}
+	})
+
+	// FABRICATION, by whoever writes the row: ONE genuine acceptance reused
+	// across two executes against the SAME offer. offer_sig is identical in both
+	// rows, so an offer_sig-only check accepts this. Only the idempotency key
+	// separates them, which is exactly what that payload member exists to bind.
+	t.Run("one acceptance reused for a second execute against the same offer", func(t *testing.T) {
+		reused := evidenceRowFor("offer-verify", "idem-second-execute")
+		first := evidenceRowFor("offer-verify", "idem-verify")
+		reused.AgentAcceptanceCanonicalBytes = first.AgentAcceptanceCanonicalBytes
+		reused.AgentAcceptanceSignature = first.AgentAcceptanceSignature
+
+		if err := v.Validate(reused); err != nil {
+			t.Fatalf("the fabricated row is still contract-valid — that is the point: %v", err)
+		}
+		if !verifyRecipe(t, reused.ExchangeSigningPublicKey, reused.OfferCanonicalBytes, reused.OfferSig) {
+			t.Error("the offer half is genuine and must still verify")
+		}
+		if !verifyRecipe(t, reused.AgentPublicKey, reused.AgentAcceptanceCanonicalBytes, reused.AgentAcceptanceSignature) {
+			t.Error("the acceptance half is genuine and must still verify")
+		}
+		// The offer halves are identical, so offer_sig cannot catch this. Assert
+		// that directly, or a later reader will think the check below is redundant.
+		if !strings.EqualFold(reused.OfferSig, first.OfferSig) {
+			t.Fatal("the two rows must share an offer_sig, or this case is not testing reuse")
+		}
+		if got := acceptanceMatchesRow(t, reused); got != "idempotency_key vs request_idempotency_key" {
+			t.Errorf("a reused acceptance must be caught on the idempotency key, got %q — one genuine "+
+				"acceptance is standing behind two rows for two different executes", got)
 		}
 	})
 

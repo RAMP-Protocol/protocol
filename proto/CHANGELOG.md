@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+**The offline recipe compares every signed member, not just `offer_sig` (contract fix, no wire
+change).** Binding the acceptance to the offer stopped splicing: a genuine acceptance from a
+different offer no longer passes. It did not stop reuse. Two acceptances by one agent against ONE
+offer share `offer_sig` and differ only in the idempotency key, so an Exchange holding a single
+genuine acceptance could write two evidence rows for two different executes against one offer, and
+both passed. That is fabrication by the row's writer rather than splicing by an outsider, and it is
+the failure `AgentAcceptancePayload.idempotency_key` exists to prevent.
+
+The recipe now compares all four members of the signed payload against their stored copies. Three
+names coincide; the fourth does not -- the payload member is `idempotency_key` and the row stores it
+as `request_idempotency_key`. The row comment that listed the payload's four fields used the row's
+name for the fourth, which would send an implementer looking for a JSON member that does not exist;
+it now states the mapping. The conformance test carries both cases: a spliced acceptance caught on
+`offer_sig`, and a reused acceptance caught on the idempotency key.
+
+**The admin plane no longer claims a per-tenant ACL is possible (documentation fix, no wire
+change).** Four sites -- the service comment, the RPC comment, the `tenant_id` field comment and the
+hand-maintained admin proto reference page -- said the `(tenant_id, transaction_id)` pair selector
+is what lets a deployment put a per-tenant ACL in front of `GetTransactionEvidence`. The threat
+model says the opposite twice, and it is right: `ramp.admin.v1` carries no request signing and no
+per-operator identity, so there is no caller to attach an ACL to. All four now say what the pair
+selector actually buys -- it narrows what a leaked transaction id is worth -- and that the network
+allowlist is the only gate. This matters because the same threat model records that
+`GetTransactionEvidence` widened that allowlist's blast radius from per-tenant config writes to a
+cross-tenant read of every tenant's signed offers; an operator sizing it while believing a second
+control sits behind it would size it too loosely.
+
+**The no-shared-secret claim is scoped to delivery URLs (documentation fix, no wire change).** The
+file header said "No shared secret in either scheme", which is true of the two signed-URL schemes
+and contradicted by `cdn_type` on `DomainVerificationConfirmation`, where `"hmac"` is still an
+accepted value with no validation rule. The header now says neither *delivery-URL* scheme uses a
+shared secret and points at the registration plane that still admits an HMAC key format. Whether
+that plane should keep admitting it is a live question, tracked with the wider HMAC sweep.
+
+**Four parity exclusions stated reasons that were false (documentation fix, no wire change).** Three
+justified themselves with "TS/Py have no server face"; both `ramp_sdk.server_verify` and
+`core/verify-request.ts` exist and open by calling themselves exactly that. Those three also carried
+a retirement trigger -- "if a Python or TS server face ever lands" -- that had already fired and so
+could never fire again. The real reason is narrower and is now stated: the py/ts server faces carry
+no request-id seam. The fourth said py/ts "mint request-ids inline"; neither SDK mints anything --
+both export the `RequestIDHeader` constant and no non-test code sets that header, so every RPC from
+a py/ts client arrives with no correlation id. Two older entries repeating that claim are corrected
+with it. The underlying behavioural gap is now tracked as its own work rather than documented as an
+intentional difference in API shape.
+
 **The offline re-verification recipe binds the acceptance to the offer (contract fix, no wire
 change).** The recipe on `TransactionEvidence` stated two independent signature checks and
 introduced the second with "the agent accepted this exact offer". Nothing in the procedure

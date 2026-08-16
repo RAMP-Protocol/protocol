@@ -20,8 +20,10 @@
 // tenant selector exists because transaction ids leave the deployment:
 // every counterparty agent legitimately holds the ids of its own
 // transactions, so an id alone must not act as a bearer capability for the
-// forensic row, and a request that names the tenant is what lets a
-// deployment enforce a per-tenant ACL in front of this RPC. A tenant
+// forensic row. Naming the tenant narrows what a leaked id is worth; it is
+// NOT an access control, and this plane has none — it carries no request
+// signing and no per-operator identity, so there is no caller to attach a
+// per-tenant rule to. A tenant
 // mismatch is NOT_FOUND, byte-identical to an unknown id, so existence
 // under another tenant is not revealed. The id format itself is
 // implementation-defined (ramp.v1 places no entropy requirement on
@@ -87,8 +89,11 @@ service AdminService {
   // pair: an unknown transaction_id AND a transaction that exists under a
   // different tenant are both NOT_FOUND, indistinguishably — a transaction id
   // alone must not act as a bearer capability for another tenant's forensic
-  // row, and the pair selector is what lets a deployment put a per-tenant ACL
-  // in front of this RPC.
+  // row. What the pair selector buys is exactly that and no more: it narrows
+  // what a leaked id is worth. It is not an access control. This plane carries
+  // no request signing and no per-operator identity, so there is no caller to
+  // attach a per-tenant rule to; the network allowlist is the only gate in
+  // front of this RPC.
   rpc GetTransactionEvidence(GetTransactionEvidenceRequest) returns (GetTransactionEvidenceResponse);
 }
 
@@ -222,17 +227,30 @@ enum ObligationState {
 //       ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)
 //   * the agent signed an acceptance:
 //       ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)
-//   * and that acceptance is FOR THIS OFFER, not merely a valid acceptance:
-//       JCS-parse(agent_acceptance_canonical_bytes)["offer_sig"] equals offer_sig,
-//       compared case-insensitively, since the hex rides verbatim in either case
-// The third step is not optional bookkeeping. Without it a genuine offer from
-// one transaction and a genuine acceptance from another, by the same agent,
-// both verify against real keys and pass the authenticity step below — and the
-// spliced row asserts an agreement that never happened. The acceptance payload
-// carries offer_sig (field 1) precisely so this comparison is possible from the
-// row alone; a verifier that skips it has checked two signatures and no
-// agreement. The Exchange MUST perform the same comparison before persisting a
-// row, so a spliced row is never written in the first place.
+//   * and that acceptance is THIS agreement — not merely a valid acceptance:
+//       JCS-parse(agent_acceptance_canonical_bytes) matches the row, member for
+//       member. Three names coincide; the fourth does not:
+//         payload offer_sig        == offer_sig        (hex, case-insensitive)
+//         payload requester_id     == requester_id
+//         payload requester_domain == requester_domain
+//         payload idempotency_key  == request_idempotency_key
+//     Those four are every field of ramp.v1.AgentAcceptancePayload, and the row
+//     stores all four so this comparison is possible from the row alone.
+// The third step is not bookkeeping, and offer_sig alone is not enough for it.
+// Two failures it prevents, which are different:
+//   SPLICING, by an outsider. A genuine offer from one transaction and a
+//   genuine acceptance from another, by the same agent, both verify against
+//   real keys and pass the authenticity step below. offer_sig catches this one.
+//   FABRICATION, by whoever writes the row. Two acceptances by one agent
+//   against ONE offer share offer_sig and differ only in the idempotency key,
+//   which ramp.v1.AgentAcceptancePayload.idempotency_key exists to bind. So an
+//   Exchange holding a single genuine acceptance can write two rows for two
+//   different executes against one offer, and both pass an offer_sig-only
+//   check. Only the idempotency-key comparison separates them.
+// Comparing all four leaves no member of the signed payload unchecked, which is
+// the only version of this step that means what it says. A verifier that skips
+// it has checked two signatures and no agreement. The Exchange MUST perform the
+// same comparison before persisting a row, so a bad row is never written.
 // Both verifying public keys ride along (not key ids) so re-verification
 // survives key rotation, which removes retired ids from the published JWKS.
 // The *_canonical_bytes are the verbatim RFC 8785 JCS bytes each signature
@@ -313,10 +331,12 @@ enum ObligationState {
 //   Closing it needs a requester audience INSIDE the signed offer, which
 //   belongs upstream in ramp.v1 and is not something this plane can add.
 //
-//   THE ACCEPTANCE IS NOT USEFULLY REPLAYABLE. offer_sig, requester_id,
-//   requester_domain and request_idempotency_key are exactly the four fields of
-//   ramp.v1.AgentAcceptancePayload, and agent_acceptance_signature is the
-//   signature over them, so the row does hold a complete, resubmittable
+//   THE ACCEPTANCE IS NOT USEFULLY REPLAYABLE. The four fields of
+//   ramp.v1.AgentAcceptancePayload are offer_sig, requester_id,
+//   requester_domain and idempotency_key — the last of which this row stores
+//   under the name request_idempotency_key, to keep it distinct from the
+//   derived per-item key on TransactionState. agent_acceptance_signature is the
+//   signature over those four, so the row does hold a complete, resubmittable
 //   acceptance. Resubmitting it achieves nothing: it carries the same
 //   request-level idempotency key under the same acceptance identity, so it
 //   lands in the same dedupe namespace and the Exchange returns the original
@@ -735,8 +755,9 @@ message GetTransactionEvidenceRequest {
   // The tenant the transaction must belong to — the second half of the
   // selector, matched against TransactionEvidence.tenant_id. Required:
   // counterparty agents legitimately hold transaction ids, so the id alone
-  // must not be enough to read the row, and naming the tenant here is what
-  // makes a per-tenant ACL possible on this plane. A mismatch is NOT_FOUND,
+  // must not be enough to read the row. Naming the tenant narrows what a
+  // leaked id is worth; it does not authenticate the caller, and nothing on
+  // this plane does. A mismatch is NOT_FOUND,
   // byte-identical to an unknown transaction_id, so existence under another
   // tenant is not revealed. Same rule as
   // ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).

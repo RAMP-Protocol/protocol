@@ -431,7 +431,7 @@ class GetAccountStatusResponse(WireModel):
 class GetTransactionEvidenceRequest(WireModel):
     tenant_id: constr(min_length=1, max_length=255) = Field(
         ...,
-        description='The tenant the transaction must belong to — the second half of the\n selector, matched against TransactionEvidence.tenant_id. Required:\n counterparty agents legitimately hold transaction ids, so the id alone\n must not be enough to read the row, and naming the tenant here is what\n makes a per-tenant ACL possible on this plane. A mismatch is NOT_FOUND,\n byte-identical to an unknown transaction_id, so existence under another\n tenant is not revealed. Same rule as\n ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).',
+        description='The tenant the transaction must belong to — the second half of the\n selector, matched against TransactionEvidence.tenant_id. Required:\n counterparty agents legitimately hold transaction ids, so the id alone\n must not be enough to read the row. Naming the tenant narrows what a\n leaked id is worth; it does not authenticate the caller, and nothing on\n this plane does. A mismatch is NOT_FOUND,\n byte-identical to an unknown transaction_id, so existence under another\n tenant is not revealed. Same rule as\n ramp.admin.v1.TenantFeeRate.tenant_id (drift-gated).',
     )
     transaction_id: constr(min_length=1, max_length=255) = Field(
         ...,

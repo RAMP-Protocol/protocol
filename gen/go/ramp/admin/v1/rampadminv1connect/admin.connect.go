@@ -20,8 +20,10 @@
 // tenant selector exists because transaction ids leave the deployment:
 // every counterparty agent legitimately holds the ids of its own
 // transactions, so an id alone must not act as a bearer capability for the
-// forensic row, and a request that names the tenant is what lets a
-// deployment enforce a per-tenant ACL in front of this RPC. A tenant
+// forensic row. Naming the tenant narrows what a leaked id is worth; it is
+// NOT an access control, and this plane has none — it carries no request
+// signing and no per-operator identity, so there is no caller to attach a
+// per-tenant rule to. A tenant
 // mismatch is NOT_FOUND, byte-identical to an unknown id, so existence
 // under another tenant is not revealed. The id format itself is
 // implementation-defined (ramp.v1 places no entropy requirement on
@@ -123,8 +125,11 @@ type AdminServiceClient interface {
 	// pair: an unknown transaction_id AND a transaction that exists under a
 	// different tenant are both NOT_FOUND, indistinguishably — a transaction id
 	// alone must not act as a bearer capability for another tenant's forensic
-	// row, and the pair selector is what lets a deployment put a per-tenant ACL
-	// in front of this RPC.
+	// row. What the pair selector buys is exactly that and no more: it narrows
+	// what a leaked id is worth. It is not an access control. This plane carries
+	// no request signing and no per-operator identity, so there is no caller to
+	// attach a per-tenant rule to; the network allowlist is the only gate in
+	// front of this RPC.
 	GetTransactionEvidence(context.Context, *connect.Request[v1.GetTransactionEvidenceRequest]) (*connect.Response[v1.GetTransactionEvidenceResponse], error)
 }
 
@@ -199,8 +204,11 @@ type AdminServiceHandler interface {
 	// pair: an unknown transaction_id AND a transaction that exists under a
 	// different tenant are both NOT_FOUND, indistinguishably — a transaction id
 	// alone must not act as a bearer capability for another tenant's forensic
-	// row, and the pair selector is what lets a deployment put a per-tenant ACL
-	// in front of this RPC.
+	// row. What the pair selector buys is exactly that and no more: it narrows
+	// what a leaked id is worth. It is not an access control. This plane carries
+	// no request signing and no per-operator identity, so there is no caller to
+	// attach a per-tenant rule to; the network allowlist is the only gate in
+	// front of this RPC.
 	GetTransactionEvidence(context.Context, *connect.Request[v1.GetTransactionEvidenceRequest]) (*connect.Response[v1.GetTransactionEvidenceResponse], error)
 }
 

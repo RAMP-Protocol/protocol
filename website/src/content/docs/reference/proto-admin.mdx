@@ -105,7 +105,7 @@ The server-side lifecycle record of the transaction's reporting obligation: the 
 
 ### GetTransactionEvidenceRequest
 
-A thin `{ver, transaction_id, tenant_id}` envelope. Selection is by the `(tenant_id, transaction_id)` pair: transaction ids legitimately circulate outside the deployment (every counterparty agent holds the ids of its own transactions), so the id alone must not act as a bearer capability for the forensic row, and naming the tenant in the request is what lets a deployment enforce a per-tenant ACL in front of this RPC. The pair narrows a stolen id; it does not make enumeration infeasible, because tenant ids are human brand slugs that any agent holding one of that tenant's offers already knows. Enumeration is bounded by reachability — this service must not be exposed on the public agent-facing listener.
+A thin `{ver, transaction_id, tenant_id}` envelope. Selection is by the `(tenant_id, transaction_id)` pair: transaction ids legitimately circulate outside the deployment (every counterparty agent holds the ids of its own transactions), so the id alone must not act as a bearer capability for the forensic row. Naming the tenant narrows what a leaked id is worth — that is all it does. It is not an access control, and this plane has none: `ramp.admin.v1` carries no request signing and no per-operator identity, so there is no caller to attach a per-tenant rule to. The pair also does not make enumeration infeasible, because tenant ids are human brand slugs that any agent holding one of that tenant's offers already knows. Enumeration is bounded by reachability — this service must not be exposed on the public agent-facing listener.
 
 ::proto-message{name=GetTransactionEvidenceRequest}
 

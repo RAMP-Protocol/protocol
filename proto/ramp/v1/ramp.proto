@@ -62,7 +62,9 @@ import "ramp/v1/vocab.proto";
 //
 // Signed URLs are asymmetric: Ed25519 over a canonical message, or a CloudFront
 // RSA canned policy. The Exchange holds the private key; the verifier holds only
-// a public key or a CDN-managed key group. No shared secret in either scheme.
+// a public key or a CDN-managed key group. Neither delivery-URL scheme uses a
+// shared secret. (CDN key REGISTRATION is a separate plane — see cdn_type on
+// DomainVerificationConfirmation, which still admits an HMAC key format.)
 //
 // Retrieval-URL identity binding (OPTIONAL, DPoP-style — RFC 9449):
 //   The Exchange MAY bind a signed retrieval_endpoint to the requesting agent
