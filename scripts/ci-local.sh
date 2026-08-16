@@ -118,6 +118,20 @@ else
   note "skipped — run 'npm install' in website/ to enable"
 fi
 
+step "docs build (mirrors docs-ci.yml)"
+# `npm test` above does NOT cover this. Several guards run only inside `astro
+# build` — starlight-links-validator among them — so a dead link in a docs page
+# passed this script and failed in CI. The build is the gate CI actually runs;
+# run the same one here. About ten seconds.
+if [ -d website/node_modules ]; then
+  (cd website && npm run build --silent >/dev/null) || {
+    echo "::error:: website build failed — run 'cd website && npm run build' to see the report."
+    fail=1
+  }
+else
+  note "skipped — run 'npm install' in website/ to enable"
+fi
+
 # --- SDK types export gate (mirrors .github/workflows/sdk-types-ci.yml) ---
 # The generated Pydantic/Zod types export + its cross-language parity and canonical
 # round-trip. CI runs this as a SEPARATE, path-filtered workflow; locally it belongs in
