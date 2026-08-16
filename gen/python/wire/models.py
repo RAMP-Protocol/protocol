@@ -909,7 +909,7 @@ class RequestCorrelation(WireModel):
     )
     request_id: constr(pattern=r'^[!-~]+$', min_length=1, max_length=255) = Field(
         ...,
-        description="The correlation id as persisted. GOVERNING INVARIANT, established on the\n WRITE path: a persisted request_id always conforms to the rules below —\n printable ASCII, 1..255 — so a present value has already passed the check\n on the way in, and these rules are not a read-side filter over a laxer\n stored value. HOW a server reaches that invariant is its own choice, and\n two mechanisms both conform: reject the nonconforming header and record a\n server-derived id in its place (minted = true), or record no correlation\n at all (the wrapping message stays absent). The first keeps a correlation\n key for a request whose header was bad, the second states that nothing\n trustworthy arrived; neither can put a nonconforming value in the store,\n which is the only property this contract needs. A server that accepts a\n narrower charset than the rules below still satisfies the invariant.\n Background, for a reader tracing where the value comes from: a propagated\n id is caller-influenceable. The SDK's request-id middleware propagates\n any non-empty caller-supplied X-Request-ID verbatim and mints a random\n 128-bit hex token when the header is absent; it performs no conformance\n check of its own, so the check is the Exchange's, at the boundary where\n it decides what to persist.",
+        description="The correlation id as persisted. GOVERNING INVARIANT, established on the\n WRITE path: a persisted request_id always conforms to the rules below —\n printable ASCII, 1..255 — so a present value has already passed the check\n on the way in, and these rules are not a read-side filter over a laxer\n stored value. HOW a server reaches that invariant is its own choice, and\n two mechanisms both conform: reject the nonconforming header and record a\n server-derived id in its place (minted = true), or record no correlation\n at all (the wrapping message stays absent). The first keeps a correlation\n key for a request whose header was bad, the second states that nothing\n trustworthy arrived; neither can put a nonconforming value in the store,\n which is the only property this contract needs. A server that accepts a\n narrower charset than the rules below still satisfies the invariant.\n Background, for a reader tracing where the value comes from: a propagated\n id is caller-influenceable, which is what `minted` below exists to record.\n Which component performs the check is deliberately not stated here. It is\n server behaviour, this file cannot gate it, and an earlier revision of this\n comment described a particular SDK's middleware and was made wrong by a\n change to that SDK three commits later.",
     )
 
 
@@ -1275,8 +1275,8 @@ class TransactionState(WireModel):
 
 class UsageAsset(WireModel):
     package_id: str | None = Field(None, description='Package identifier')
+    title: str | None = Field(None, description='Asset title')
     uri: str | None = Field('', description='Asset URI')
-    description: str | None = Field(None, description='Asset title')
 
 
 class UsageReportRejectionReason(Enum):
@@ -1560,7 +1560,7 @@ class ResourceIdentity(WireModel):
     )
     c2pa_status: C2PAStatus | None = Field(
         None,
-        description='The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.',
+        description='Summary validation status of the C2PA manifest.\n Populated by the Exchange or a verification vendor after validating\n the C2PA manifest. Enables agents to filter for provenance-verified\n content without parsing JUMBF/COSE themselves.\n The full C2PA validation details (signer identity, trust list,\n action history, training/mining status) are carried in a\n ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.',
     )
     canonical_url: str | None = Field(
         None,
@@ -1591,7 +1591,7 @@ class ResourceIdentity(WireModel):
     )
     resource_mutability: ResourceMutability = Field(
         ...,
-        description='Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The "resource" is the stream endpoint.\n\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds).',
+        description='Signals whether this resource\'s content is stable, changes over time,\n or does not exist at offer time (live streaming).\n Drives hash verification behavior:\n   STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.\n   DYNAMIC: content changes between offer and fetch (credit reports, drug databases).\n            content_hash reflects state at offer generation time. Hash mismatch is\n            expected and MUST NOT trigger automatic dispute.\n   LIVE:    content does not exist at offer time (streaming feeds, live broadcasts).\n            content_hash is not applicable. The "resource" is the stream endpoint.\n Validated across 18 use cases: static content (articles, patents, legislation),\n dynamic data (credit reports, drug interactions, stock snapshots), and live\n streams (MarketData quotes, NPR broadcast, news monitoring feeds).',
     )
     soft_binding: str | None = Field(
         None,
@@ -1773,7 +1773,7 @@ class UsageReport(WireModel):
     )
     idempotency_key: constr(min_length=1, max_length=255) = Field(
         ...,
-        description="Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n report does not double-count usage. The report's durable identity is the\n Exchange-assigned report_id in UsageReportResponse.\n\nDEDUPE SCOPE. The invariant is the one stated on\n TransactionRequest.idempotency_key. This message carries no acceptance\n payload, so there is no in-body agent signature to anchor on; the namespace\n is instead the TRANSACTION the report addresses, and the server dedupes per\n (transaction_id, key). That satisfies the invariant without depending on\n the transport signer: the transaction was bound to exactly one agent by its\n acceptance at execute time, so two agents relayed by the same Broker report\n against different transactions and never share a namespace.",
+        description='Idempotency key (REQUIRED). The server MUST dedupe on this so a replayed\n report does not double-count usage. The report\'s durable identity is the\n Exchange-assigned report_id in UsageReportResponse.\n\nDEDUPE SCOPE. The invariant is the one stated on\n TransactionRequest.idempotency_key. This message carries no acceptance\n payload, so there is no in-body agent signature to anchor on; the namespace\n is instead the TRANSACTION the report addresses, and the server dedupes per\n (transaction_id, key). That satisfies the invariant without depending on\n the transport signer: the transaction was bound to exactly one agent by its\n acceptance at execute time, so two agents relayed by the same Broker report\n against different transactions and never share a namespace.\n Leaving the signer out is also what makes the relay work. "Filed by the\n agent or Broker" above means the Broker FORWARDS the agent\'s report, not\n that it authors one of its own: the body is unchanged and carries this same\n key, so a direct submission and a relayed copy are one report on two paths\n and MUST collapse. Adding the verified signer to the namespace would split\n them and count the usage twice.',
     )
     timestamp: AwareDatetime | None = Field(
         None, description='When the resource was used (ISO 8601).'
@@ -2084,7 +2084,7 @@ class Offer(WireModel):
         None,
         description="Licensing terms for this offer, sourced from the publisher's ResourceEntry.\n Multiple terms when the resource has different arrangements by use case.\n See: Universal Licensing Core section.",
     )
-    description: str | None = Field(
+    title: str | None = Field(
         None, description='Resource title (human-readable, for display/logging).'
     )
 
@@ -2148,10 +2148,10 @@ class ResourceEntry(WireModel):
         None,
         description='Publisher-declared licensing terms for this resource.\n See LicenseTerm for the full model. For ENUMERATED terms, Pricing MUST\n be present. For REFERENCE_ONLY terms, License.uri is authoritative.\n The Exchange validates ENUMERATED terms at push time and surfaces them\n in Offer.terms on discovery.',
     )
+    title: str | None = Field(None, description='Content title')
     word_count: conint(ge=-2147483648, le=2147483647) | None = Field(
         None, description='Word count'
     )
-    description: str | None = Field(None, description='Content title')
 
 
 class ResourceResponse(WireModel):
@@ -2222,7 +2222,7 @@ class TransactionRequest(WireModel):
 class DiscoveryResponse(WireModel):
     absence_reason: OfferAbsenceReason | None = Field(
         None,
-        description='Existence-oracle note: an authorization-flavored reason (SCOPE_INSUFFICIENT,\n NOT_AUTHORIZED, NOT_IN_CATALOG, CONTENT_BLOCKED) confirms a resource exists\n and why access was refused. Resolve surfaces the same oracle at the broker\n that OfferGroup.absence_reason does at the Exchange, so the same mitigation\n applies: where existence itself must stay hidden, the Broker MAY omit the\n reason (leave this unset) rather than reveal it. See the threat model.',
+        description='Why the resolve produced no offers at all. Set (and offer_groups empty) on a\n successful "no result" answer; unset when offer_groups is non-empty. Same\n vocabulary DiscoverResources uses for OfferGroup.absence_reason.\n RESTRICTION_FILTERED may appear here, but Resolve does not surface the\n per-axis detail: DiscoveryResponse has no restriction_filters companion\n (unlike OfferGroup). A consumer needing the filtered axes calls\n DiscoverResources.\n Existence-oracle note: an authorization-flavored reason (SCOPE_INSUFFICIENT,\n NOT_AUTHORIZED, NOT_IN_CATALOG, CONTENT_BLOCKED) confirms a resource exists\n and why access was refused. Resolve surfaces the same oracle at the broker\n that OfferGroup.absence_reason does at the Exchange, so the same mitigation\n applies: where existence itself must stay hidden, the Broker MAY omit the\n reason (leave this unset) rather than reveal it. See the threat model.',
     )
     ext: dict[str, Any] | None = Field(None, description='Extension point')
     ext_critical: list[str] | None = Field(

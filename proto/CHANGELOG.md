@@ -255,10 +255,18 @@ marker plus a hand-maintained list. The base64 wire forms the two generated clie
 identically now live in one shared vector file (`conformance/testdata/bytes_wire_forms.json`)
 that a conformance test pins against Go `protojson` + protovalidate, so each row is written once,
 cannot drift between the Pydantic and Zod suites, and states the server's real verdict rather
-than a belief about it. The evidence-read messages contribute 88 of the new corpus cases; the
-committed corpus goes from 549 at the branch point to 646, a net +97 made of 122 added and 25
-removed across 29 messages, because tightened rules elsewhere in this revision replace cases
+than a belief about it. The evidence-read messages contribute 94 of the new corpus cases; the
+committed corpus goes from 549 at the branch point to 703, a net +154 made of 179 added and 25
+removed across 31 messages, because tightened rules elsewhere in this revision replace cases
 rather than only adding them.
+
+Nineteen of those additions close a gap in the generator rather than in the contract. Where a
+field rejects its zero enum with `not_in: [0]` and has no explicit presence, protojson drops the
+value, so the emitted case pins "omission is rejected". The explicit `*_UNSPECIFIED` string is a
+different parse path in a generated client — the name is absent from the emitted enum, so the
+client must refuse it — and it had no case at all. The enum edge now emits the same
+omitted/explicit pair that the `string.min_len`, `bytes.min_len` and `repeated.min_items` edges
+already emitted, which is where the shape was copied from.
 
 **Every addressed request names its recipient: `exchange` becomes required (breaking,
 pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`

@@ -80,10 +80,37 @@ def is_generated_title(title, node, message):
       - a message-level title whose words rejoin to the message name
         ("Acceptable Restriction" -> AcceptableRestriction);
       - the type label on an enum-typed property ("Obligation State").
+
+    The enum arm reads the node shape and not the text, and it cannot do better.
+    For an enum-typed field protoc-gen-jsonschema puts the enum TYPE NAME in the
+    title slot, and the paragraph that would otherwise have gone there is simply
+    gone: it is absent from this script's input, so there is nothing here to
+    classify and nothing to recover.
+
+    THE RULE THAT FOLLOWS: an enum field's leading comment must be EXACTLY ONE
+    paragraph. A single-paragraph comment lands whole in `description`. Add one
+    blank `//` line and the text above it reaches Go and neither generated
+    client, with nothing failing. Merging two paragraphs of a three-paragraph
+    comment does not help — whatever ends up first is what disappears.
+
+    Three fields were losing text this way and were rewritten as one paragraph
+    each, rather than worked around here, because the loss happens upstream of
+    this script. Non-enum fields are unaffected: their first paragraph really
+    does arrive in `title`, which is what fold_titles puts back.
     """
     if message is not None and title.replace(" ", "") == message:
         return True
     return is_enum_node(node)
+
+
+# Maps whose keys are NAMES CHOSEN BY THE PROTO AUTHOR, not JSON Schema keywords.
+# Everywhere else in this document a dict key is a keyword, so `title` means the
+# keyword. Inside one of these it means a field called `title` — which ramp.v1 has
+# three of (Offer, ResourceEntry, UsageAsset). Treating the two alike deletes the
+# field and writes its schema node back under the key `description`, so the wire
+# field vanishes from both generated clients and is replaced by one no server
+# accepts. Walk the VALUES of these maps as schema nodes; never the map itself.
+NAME_KEYED = ("properties", "patternProperties", "$defs", "definitions", "dependentSchemas")
 
 
 def fold_titles(o, message=None, root=True):
@@ -104,9 +131,22 @@ def fold_titles(o, message=None, root=True):
     So the two kinds are separated by HOW the title was produced, which
     is_generated_title reads off the node's shape. Comment text moves to the
     front of the description, keeping the paragraph break the author wrote.
+
+    ONE SHAPE THIS CANNOT SEE. For an ENUM-typed field the plugin puts the enum
+    type name in the title slot and DISCARDS the comment's first paragraph before
+    this script runs — the text is absent from the input, not misclassified, so
+    no rule here can recover it. Write an enum field's comment as a single
+    paragraph, or its opening sentence reaches Go and neither generated client.
     """
     if isinstance(o, dict):
-        out = {k: fold_titles(v, message, False) for k, v in o.items() if k != "title"}
+        out = {}
+        for k, v in o.items():
+            if k == "title":
+                continue
+            if k in NAME_KEYED and isinstance(v, dict):
+                out[k] = {name: fold_titles(node, message, False) for name, node in v.items()}
+            else:
+                out[k] = fold_titles(v, message, False)
         title = o.get("title")
         if title is not None and not is_generated_title(title, o, message if root else None):
             desc = out.get("description")
@@ -120,11 +160,35 @@ def fold_titles(o, message=None, root=True):
 def assert_no_titles(doc):
     """Every title is either folded into a description or dropped as generated.
 
-    A `title` that survives into the merged document means fold_titles met a node
-    shape it does not classify. Fail here rather than let datamodel-code-generator
-    name a class from it.
+    A `title` that survives on a SCHEMA NODE means fold_titles met a node shape it
+    does not classify. Fail here rather than let datamodel-code-generator name a
+    class from it.
+
+    This walks the document the same way fold_titles does instead of scanning the
+    serialized text, for two reasons. A text scan cannot tell the keyword from a
+    field called `title`, so it would report the three legitimate ones. And it
+    could never fail: fold_titles removes the key from every node it visits, so
+    nothing survives for a scan to find, and the guard passed on everything.
     """
-    leftover = re.findall(r'"title":\s*("(?:[^"\\]|\\.)*")', json.dumps(doc))
+    leftover = []
+
+    def walk_node(o):
+        """o is a schema node: its dict keys are JSON Schema keywords."""
+        if isinstance(o, dict):
+            if isinstance(o.get("title"), str):
+                leftover.append(o["title"])
+            for k, v in o.items():
+                walk_map(v) if k in NAME_KEYED and isinstance(v, dict) else walk_node(v)
+        elif isinstance(o, list):
+            for x in o:
+                walk_node(x)
+
+    def walk_map(o):
+        """o is a name -> schema node map: its dict keys are author-chosen names."""
+        for node in o.values():
+            walk_node(node)
+
+    walk_node(doc)
     if leftover:
         sys.exit(f"unfolded titles reached the merged schema: {leftover[:5]}")
 

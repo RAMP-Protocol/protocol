@@ -668,19 +668,28 @@ func enumEdges(fd protoreflect.FieldDescriptor, r *validate.EnumRules) []edge {
 	var es []edge
 	for _, n := range r.GetNotIn() {
 		nn := protoreflect.EnumNumber(n)
-		// Honest labels: protojson DROPS a zero-valued implicit-presence enum,
-		// so for not_in:[0] on a non-optional field the emitted JSON OMITS the
-		// field entirely — the case pins "omitted is rejected", not "an explicit
-		// UNSPECIFIED string is rejected", and its id says so. A presence-tracked
-		// field (or a nonzero not_in value) serializes the value explicitly and
-		// keeps the plain label.
-		label := "not_in"
-		if n == 0 && !fd.HasPresence() {
-			label = "not_in_zero_omitted"
+		set := func(m protoreflect.Message) { m.Set(fd, protoreflect.ValueOfEnum(nn)) }
+		zero := fd.Enum().Values().ByNumber(nn)
+		// The zero-floor pair, same shape as stringEdges, bytesEdges and listEdges:
+		// protojson DROPS a zero-valued implicit-presence enum, so for not_in:[0] on
+		// a non-optional field the emitted JSON OMITS the field entirely. That case
+		// pins "omitted is rejected" and its id says so. The explicit UNSPECIFIED
+		// string is a SECOND client parse path — a generated client drops
+		// *_UNSPECIFIED from its enum, so it must refuse the name rather than the
+		// absence — and protojson cannot produce that shape from a proto value, so
+		// it needs a postJSON patch of its own. A presence-tracked field (or a
+		// nonzero not_in value) serializes explicitly already and keeps the plain
+		// label with no companion.
+		if n == 0 && !fd.HasPresence() && zero != nil {
+			name := string(fd.Name())
+			zeroName := string(zero.Name())
+			es = append(es,
+				edge{label: "not_in_zero_omitted", want: "enum.not_in", apply: set},
+				edge{label: "not_in_zero_explicit", want: "enum.not_in", apply: set,
+					postJSON: func(obj map[string]any) { obj[name] = zeroName }})
+			continue
 		}
-		es = append(es, edge{label: label, want: "enum.not_in", apply: func(m protoreflect.Message) {
-			m.Set(fd, protoreflect.ValueOfEnum(nn))
-		}})
+		es = append(es, edge{label: "not_in", want: "enum.not_in", apply: set})
 	}
 	// A presence-tracked (proto3 optional) enum that rejects its zero via not_in
 	// still ACCEPTS omission: protovalidate skips an unset optional field's rule,

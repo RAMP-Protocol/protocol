@@ -27,11 +27,12 @@ type requestIDInterceptor struct {
 // the delivery fetch is a plain GET that never reaches an interceptor and takes its
 // own hook. Two nil checks are two places for the default to drift, and the leg
 // that would drift silently is the one carrying no id at all.
+//
+// core.MintRequestID supplies both the nil default AND the conformance check, so
+// the two legs cannot disagree about what a usable id is. Doing the check per leg
+// is what let the delivery fetch ship without one.
 func requestIDMint(mint core.RequestIDFunc) core.RequestIDFunc {
-	if mint == nil {
-		return core.DefaultRequestID
-	}
-	return mint
+	return core.MintRequestID(mint)
 }
 
 func newRequestIDInterceptor(mint core.RequestIDFunc) connectrpc.Interceptor {
@@ -42,17 +43,14 @@ func (i *requestIDInterceptor) WrapUnary(next connectrpc.UnaryFunc) connectrpc.U
 	return func(ctx context.Context, req connectrpc.AnyRequest) (connectrpc.AnyResponse, error) {
 		// Stamp only when absent — a caller who set the header meant it, and the
 		// client is not the place to police a peer's correlation vocabulary. The
-		// MINTED value is checked, because an injected RequestIDFunc usually
-		// reuses a trace id and a trace id may carry characters the admin plane
-		// cannot persist. Sending one would make the receiving Exchange replace
-		// it, silently breaking the correlation this interceptor exists to
-		// create.
+		// MINTED value is already checked: i.mint came from core.MintRequestID,
+		// which never returns a value the admin plane would refuse. That matters
+		// because an injected RequestIDFunc usually reuses a trace id, and a trace
+		// id may carry characters the admin plane cannot persist. Sending one
+		// would make the receiving Exchange replace it, silently breaking the
+		// correlation this interceptor exists to create.
 		if req.Spec().IsClient && req.Header().Get(core.RequestIDHeader) == "" {
-			if id := i.mint(); core.ValidRequestID(id) {
-				req.Header().Set(core.RequestIDHeader, id)
-			} else {
-				req.Header().Set(core.RequestIDHeader, core.DefaultRequestID())
-			}
+			req.Header().Set(core.RequestIDHeader, i.mint())
 		}
 		return next(ctx, req)
 	}

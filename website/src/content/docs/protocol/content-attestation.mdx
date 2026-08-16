@@ -167,8 +167,11 @@ Only `estimated_quantity` and `content_hash` are auto-disputable -- they are obj
 ```
 canonical_bytes = utf8_encode(jcs_output)
 signature = ed25519_sign(canonical_bytes, private_key)
-attestation.signature = base64_encode(signature)
+attestation.signature = hex_encode(signature)   // 128 characters
 ```
+
+The signature is hex, like every other detached signature in this contract. The field rule is
+`^[0-9A-Fa-f]{128}$`, so either case is accepted on the wire and a base64 value is refused.
 
 ## Multiple Attestations
 

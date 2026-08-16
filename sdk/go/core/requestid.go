@@ -91,6 +91,32 @@ func RequestIDFromContext(ctx context.Context) (RequestID, bool) {
 	return v, ok
 }
 
+// MintRequestID wraps mint so that it always returns a value the admin plane can
+// persist, and returns DefaultRequestID when mint is nil.
+//
+// An application supplies its own mint through WithRequestIDFunc, typically to
+// reuse a trace id, and a trace id is exactly the kind of value that carries a
+// colon, a brace, or nothing at all. A mint that returns something unusable falls
+// back to DefaultRequestID rather than letting the trusted side put a value in
+// the store that the untrusted side could not.
+//
+// Every place that stamps X-Request-ID from a mint goes through here. That is the
+// point of exporting it: the check is a property of the mint, not of one caller,
+// and a stamping site that reimplements it is a site that can be added without
+// it. Both client legs — the RPC interceptor and the delivery fetch — take their
+// mint from this function, so one call cannot send two different ids.
+func MintRequestID(mint RequestIDFunc) RequestIDFunc {
+	if mint == nil {
+		return DefaultRequestID
+	}
+	return func() string {
+		if id := mint(); ValidRequestID(id) {
+			return id
+		}
+		return DefaultRequestID()
+	}
+}
+
 // resolveRequestID picks the id for one request and reports whether the server
 // derived it.
 //
@@ -100,21 +126,11 @@ func RequestIDFromContext(ctx context.Context) (RequestID, bool) {
 // flag preserves the forensic distinction the value itself cannot carry. The
 // contract permits dropping the correlation instead; a server that prefers that
 // can read the flag and decline to persist the pair.
-//
-// The minted value is checked too. An application supplies its own mint through
-// WithRequestIDFunc (typically to reuse a trace id), and a trace id is exactly
-// the kind of value that carries a colon, a brace, or nothing at all. A mint
-// that returns something unusable falls back to DefaultRequestID rather than
-// letting the trusted side put a value in the store that the untrusted side
-// could not.
 func resolveRequestID(received string, mint RequestIDFunc) RequestID {
 	if ValidRequestID(received) {
 		return RequestID{Value: received, Derived: false}
 	}
-	if minted := mint(); ValidRequestID(minted) {
-		return RequestID{Value: minted, Derived: true}
-	}
-	return RequestID{Value: DefaultRequestID(), Derived: true}
+	return RequestID{Value: MintRequestID(mint)(), Derived: true}
 }
 
 // RequestIDMiddleware stamps (or propagates) X-Request-ID on the response BEFORE the

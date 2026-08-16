@@ -2950,7 +2950,6 @@ type ResourceIdentity struct {
 	HashMethod *string `protobuf:"bytes,6,opt,name=hash_method,json=hashMethod,proto3,oneof" json:"hash_method,omitempty"`
 	// Signals whether this resource's content is stable, changes over time,
 	// or does not exist at offer time (live streaming).
-	//
 	// Drives hash verification behavior:
 	//
 	//	STATIC:  content_hash is stable. Agent SHOULD verify delivered content matches.
@@ -2981,7 +2980,6 @@ type ResourceIdentity struct {
 	// Populated by the Exchange or a verification vendor after validating
 	// the C2PA manifest. Enables agents to filter for provenance-verified
 	// content without parsing JUMBF/COSE themselves.
-	//
 	// The full C2PA validation details (signer identity, trust list,
 	// action history, training/mining status) are carried in a
 	// ResourceAttestation with c2pa.* claims — see ramp-c2pa-v1 profile.
@@ -6002,6 +6000,12 @@ type UsageReport struct {
 	// the transport signer: the transaction was bound to exactly one agent by its
 	// acceptance at execute time, so two agents relayed by the same Broker report
 	// against different transactions and never share a namespace.
+	// Leaving the signer out is also what makes the relay work. "Filed by the
+	// agent or Broker" above means the Broker FORWARDS the agent's report, not
+	// that it authors one of its own: the body is unchanged and carries this same
+	// key, so a direct submission and a relayed copy are one report on two paths
+	// and MUST collapse. Adding the verified signer to the namespace would split
+	// them and count the usage twice.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction ID from the delivery. MUST be non-empty. It is also the dedupe
 	// namespace for `idempotency_key` above, so a report that names no
@@ -7607,7 +7611,6 @@ type DiscoveryResponse struct {
 	// per-axis detail: DiscoveryResponse has no restriction_filters companion
 	// (unlike OfferGroup). A consumer needing the filtered axes calls
 	// DiscoverResources.
-	//
 	// Existence-oracle note: an authorization-flavored reason (SCOPE_INSUFFICIENT,
 	// NOT_AUTHORIZED, NOT_IN_CATALOG, CONTENT_BLOCKED) confirms a resource exists
 	// and why access was refused. Resolve surfaces the same oracle at the broker

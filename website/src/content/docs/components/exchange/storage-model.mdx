@@ -249,11 +249,15 @@ One name to read carefully across the two stores: `request_idempotency_key` on t
 
 ### One request's rows can hold different agent keys
 
-An Exchange that verifies each item's acceptance against the agent key current *at that item's verification* can persist rows for one `TransactionRequest` whose `agent_public_key` values differ, if a key rotation lands between two items. Every such row is individually valid — both keys were genuinely the agent's — and the response's single `agent_identity_hash` names the first item's key.
+`ramp.v1` requires every acceptance in one `TransactionRequest` to be signed by the same key. A mixed-key request is not conformant, and the rule exists because `TransactionResponse.agent_identity_hash` is a single per-request value: a batch accepted under two keys has no one identity to bind its delivery URLs to.
+
+Rows that break it still exist, so a reader of the store has to know what they mean. An Exchange that verifies each item's acceptance against the agent key current *at that item's verification* can persist rows for one request whose `agent_public_key` values differ, when a registry rotation lands between two verifications. The response's single `agent_identity_hash` then names the first item's key, and items 2..N carry URLs bound to a key that did not accept them.
+
+**Such a row is evidence of a requester in violation, not of legal traffic.** For two items to verify under two different keys, the agent must have signed one with the old key and the other with the new one — an agent that signs every item with a single key cannot produce the pair, because whichever key the registry holds, the other item fails verification. So the mixed pair is a non-conformant request slipping through a narrow enforcement race, not a shape the rule permits. Each row is individually valid in the narrow sense that both keys were genuinely the agent's; the *request* was not.
 
 A registry that keeps no key history cannot explain the mismatch afterwards. What ties the rows together is their shared `request_idempotency_key` and near-identical `created_at`, not anything in the registry.
 
-Resolving the key once per request and reusing it for every item removes the window, and an Exchange should. But rows already written keep the property forever, because the store is append-once — so this stays a true description of what a reader can find, even in a deployment that has since fixed it.
+Resolving the key once per request and reusing it for every item closes the race, and an Exchange should. Until it does, the window stays open — and because the store is append-once, rows written while it was open keep the property forever. Read them as the trace of a violating request that was not caught, and do not treat the pair as a licence to send one.
 
 ### Storing the full signed URL
 

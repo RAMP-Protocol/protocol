@@ -478,6 +478,18 @@
     }
   },
   {
+    "id": "AuthorizedExchange/relationship/not_in_zero_explicit",
+    "message": "AuthorizedExchange",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "domain": "x",
+      "relationship": "PROVIDER_RELATIONSHIP_UNSPECIFIED"
+    }
+  },
+  {
     "id": "AuthorizedExchange/relationship/not_in_zero_omitted",
     "message": "AuthorizedExchange",
     "valid": false,
@@ -495,6 +507,17 @@
     "json": {
       "domain": "x",
       "relationship": "PROVIDER_RELATIONSHIP_DIRECT"
+    }
+  },
+  {
+    "id": "CatalogRejection/reason/not_in_zero_explicit",
+    "message": "CatalogRejection",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "reason": "CATALOG_REJECTION_REASON_UNSPECIFIED"
     }
   },
   {
@@ -1073,6 +1096,17 @@
     }
   },
   {
+    "id": "DisputeFailure/reason/not_in_zero_explicit",
+    "message": "DisputeFailure",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "reason": "DISPUTE_FAILURE_REASON_UNSPECIFIED"
+    }
+  },
+  {
     "id": "DisputeFailure/reason/not_in_zero_omitted",
     "message": "DisputeFailure",
     "valid": false,
@@ -1407,6 +1441,20 @@
     }
   },
   {
+    "id": "DisputeRequest/reason/not_in_zero_explicit",
+    "message": "DisputeRequest",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "exchange": "exchange.example",
+      "idempotency_key": "idem-dr",
+      "reason": "DISPUTE_REASON_UNSPECIFIED",
+      "transaction_id": "tx-dr"
+    }
+  },
+  {
     "id": "DisputeRequest/reason/not_in_zero_omitted",
     "message": "DisputeRequest",
     "valid": false,
@@ -1670,6 +1718,17 @@
     "valid": true,
     "json": {
       "exchange": "x"
+    }
+  },
+  {
+    "id": "DomainVerificationFailure/reason/not_in_zero_explicit",
+    "message": "DomainVerificationFailure",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "reason": "DOMAIN_VERIFICATION_FAILURE_REASON_UNSPECIFIED"
     }
   },
   {
@@ -2501,6 +2560,21 @@
     }
   },
   {
+    "id": "LicenseTerm/semantics/not_in_zero_explicit",
+    "message": "LicenseTerm",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "pricing": {
+        "model": "PRICING_MODEL_FREE",
+        "rate": "0"
+      },
+      "semantics": "TERM_SEMANTICS_UNSPECIFIED"
+    }
+  },
+  {
     "id": "LicenseTerm/semantics/not_in_zero_omitted",
     "message": "LicenseTerm",
     "valid": false,
@@ -2527,6 +2601,18 @@
     }
   },
   {
+    "id": "Obligation/kind/not_in_zero_explicit",
+    "message": "Obligation",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "kind": "OBLIGATION_KIND_UNSPECIFIED",
+      "trigger": "OBLIGATION_TRIGGER_ON_USE"
+    }
+  },
+  {
     "id": "Obligation/kind/not_in_zero_omitted",
     "message": "Obligation",
     "valid": false,
@@ -2535,6 +2621,18 @@
     ],
     "json": {
       "trigger": "OBLIGATION_TRIGGER_ON_USE"
+    }
+  },
+  {
+    "id": "Obligation/trigger/not_in_zero_explicit",
+    "message": "Obligation",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "kind": "OBLIGATION_KIND_ATTRIBUTION",
+      "trigger": "OBLIGATION_TRIGGER_UNSPECIFIED"
     }
   },
   {
@@ -3120,6 +3218,18 @@
         "rate": "0"
       },
       "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "id": "Pricing/model/not_in_zero_explicit",
+    "message": "Pricing",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "model": "PRICING_MODEL_UNSPECIFIED",
+      "rate": "0"
     }
   },
   {
@@ -3913,6 +4023,19 @@
       "limit": "1",
       "metric": "accesses",
       "window": "QUOTA_WINDOW_DAILY"
+    }
+  },
+  {
+    "id": "Quota/window/not_in_zero_explicit",
+    "message": "Quota",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "limit": "1",
+      "metric": "accesses",
+      "window": "QUOTA_WINDOW_UNSPECIFIED"
     }
   },
   {
@@ -4768,6 +4891,23 @@
     }
   },
   {
+    "id": "RegistrationFailure/reason/not_in_zero_explicit",
+    "message": "RegistrationFailure",
+    "valid": false,
+    "rules": [
+      "enum.not_in",
+      "registration_failure.field_errors_scoped_to_invalid_data"
+    ],
+    "json": {
+      "field_errors": [
+        {
+          "error": "matched 2 branches of oneOf, exactly 1 required"
+        }
+      ],
+      "reason": "REGISTRATION_FAILURE_REASON_UNSPECIFIED"
+    }
+  },
+  {
     "id": "RegistrationFailure/reason/not_in_zero_omitted",
     "message": "RegistrationFailure",
     "valid": false,
@@ -5094,6 +5234,20 @@
     "json": {
       "fulfilled_at": "2026-01-02T03:04:05Z",
       "state": "OBLIGATION_STATE_PENDING",
+      "window_end": "2026-01-02T03:04:05Z"
+    }
+  },
+  {
+    "id": "ReportingObligationState/state/not_in_zero_explicit",
+    "message": "ReportingObligationState",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "created_at": "2026-01-02T03:04:05Z",
+      "fulfilled_at": "2026-01-02T03:04:05Z",
+      "state": "OBLIGATION_STATE_UNSPECIFIED",
       "window_end": "2026-01-02T03:04:05Z"
     }
   },
@@ -6599,6 +6753,21 @@
     }
   },
   {
+    "id": "Requester/type/not_in_zero_explicit",
+    "message": "Requester",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "domain": "x",
+      "scopes": [
+        "x"
+      ],
+      "type": "REQUESTER_TYPE_UNSPECIFIED"
+    }
+  },
+  {
     "id": "Requester/type/not_in_zero_omitted",
     "message": "Requester",
     "valid": false,
@@ -6779,6 +6948,17 @@
     "json": {
       "provenance_timestamp": "2026-01-02T03:04:05Z",
       "resource_mutability": "RESOURCE_MUTABILITY_STATIC"
+    }
+  },
+  {
+    "id": "ResourceIdentity/resource_mutability/not_in_zero_explicit",
+    "message": "ResourceIdentity",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "resource_mutability": "RESOURCE_MUTABILITY_UNSPECIFIED"
     }
   },
   {
@@ -7581,6 +7761,20 @@
     }
   },
   {
+    "id": "Restriction/kind/not_in_zero_explicit",
+    "message": "Restriction",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "kind": "RESTRICTION_KIND_UNSPECIFIED",
+      "permitted": [
+        "ai-input"
+      ]
+    }
+  },
+  {
     "id": "Restriction/kind/not_in_zero_omitted",
     "message": "Restriction",
     "valid": false,
@@ -7859,6 +8053,17 @@
       "permitted": [
         "ai-input"
       ]
+    }
+  },
+  {
+    "id": "RetrievalAuthFailure/reason/not_in_zero_explicit",
+    "message": "RetrievalAuthFailure",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "reason": "RETRIEVAL_AUTH_FAILURE_REASON_UNSPECIFIED"
     }
   },
   {
@@ -8260,6 +8465,18 @@
     "json": {
       "exchange": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "reason": "DENIAL_REASON_ACCOUNT_INACTIVE"
+    }
+  },
+  {
+    "id": "TransactionDenial/reason/not_in_zero_explicit",
+    "message": "TransactionDenial",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "exchange": "x",
+      "reason": "DENIAL_REASON_UNSPECIFIED"
     }
   },
   {
@@ -10640,6 +10857,17 @@
     }
   },
   {
+    "id": "UsageReportRejection/reason/not_in_zero_explicit",
+    "message": "UsageReportRejection",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "reason": "USAGE_REPORT_REJECTION_REASON_UNSPECIFIED"
+    }
+  },
+  {
     "id": "UsageReportRejection/reason/not_in_zero_omitted",
     "message": "UsageReportRejection",
     "valid": false,
@@ -10665,6 +10893,21 @@
     "valid": true,
     "json": {
       "reason": "USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND"
+    }
+  },
+  {
+    "id": "WellKnownManifest/role/not_in_zero_explicit",
+    "message": "WellKnownManifest",
+    "valid": false,
+    "rules": [
+      "enum.not_in"
+    ],
+    "json": {
+      "domain": "exchange.example",
+      "role": "ROLE_UNSPECIFIED",
+      "terms_digest": "sha256:abababababababababababababababababababababababababababababababab",
+      "terms_uri": "https://exchange.example/terms",
+      "ver": "1.0"
     }
   },
   {

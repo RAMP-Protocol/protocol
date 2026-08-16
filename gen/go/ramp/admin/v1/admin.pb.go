@@ -1026,11 +1026,11 @@ type RequestCorrelation struct {
 	// which is the only property this contract needs. A server that accepts a
 	// narrower charset than the rules below still satisfies the invariant.
 	// Background, for a reader tracing where the value comes from: a propagated
-	// id is caller-influenceable. The SDK's request-id middleware propagates
-	// any non-empty caller-supplied X-Request-ID verbatim and mints a random
-	// 128-bit hex token when the header is absent; it performs no conformance
-	// check of its own, so the check is the Exchange's, at the boundary where
-	// it decides what to persist.
+	// id is caller-influenceable, which is what `minted` below exists to record.
+	// Which component performs the check is deliberately not stated here. It is
+	// server behaviour, this file cannot gate it, and an earlier revision of this
+	// comment described a particular SDK's middleware and was made wrong by a
+	// change to that SDK three commits later.
 	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Provenance: true = the id is SERVER-DERIVED, false = propagated verbatim
 	// from a caller-supplied header. True covers both ways a server derives

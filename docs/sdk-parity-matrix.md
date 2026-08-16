@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 82 symbols at cross-language parity · 14 documented divergences · 146 Go-idiomatic exclusions · 24 conformance corpora, each tri-replayed.
+**At a glance:** 82 symbols at cross-language parity · 14 documented divergences · 147 Go-idiomatic exclusions · 24 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -216,6 +216,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `core.DefaultRequestID` | Go default request-id minter; py/ts mint request-ids inline. |
 | `core.DiscoveryResult` | Go per-URI discovery result carrying the fail-closed split plus the typed absence reasons; py/ts gain the same shape with their client verbs. |
 | `core.ErrOfferExpired` | Go errors.Is sentinel; py/ts express verification failures via typed failure unions / exception classes, not per-reason named sentinels. |
+| `core.MintRequestID` | Go wrapper that makes a caller-supplied RequestIDFunc always return a value the admin plane can persist, and supplies the default when it is nil. Go-only for the same reason as core.RequestIDFunc and core.DefaultRequestID: py/ts mint request-ids inline and hold no injectable mint to wrap. It exists as one exported function because Go has three stamping sites (the RPC interceptor, the delivery fetch, and the server middleware) and the check is a property of the mint, not of any one site. |
 | `core.OfferGroupResult` | Go per-URI group within a discovery result; py/ts gain the same shape with their client verbs. |
 | `core.RequestID` | Go-only, and tied to core.RequestIDMiddleware which is already excluded: the server-role request-id seam exists only in Go (TS/Py have no server face). ValidRequestID is the wire rule on RequestCorrelation.request_id; RequestID and RequestIDFromContext carry the settled value and its provenance to a handler. If a Python or TS server face ever lands, these move to 'symbols' with it. |
 | `core.RequestIDFromContext` | Go-only, and tied to core.RequestIDMiddleware which is already excluded: the server-role request-id seam exists only in Go (TS/Py have no server face). ValidRequestID is the wire rule on RequestCorrelation.request_id; RequestID and RequestIDFromContext carry the settled value and its provenance to a handler. If a Python or TS server face ever lands, these move to 'symbols' with it. |

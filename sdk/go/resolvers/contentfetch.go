@@ -92,6 +92,14 @@ type ContentFetchOptions struct {
 	// point of the header is that each carries its own id. It is `func() string`
 	// rather than the transport tier's named RequestIDFunc so this package needs no
 	// dependency on that tier for one alias; a named type is assignable here.
+	//
+	// IT MUST RETURN A VALUE THE ADMIN PLANE CAN PERSIST — 1 to 255 printable ASCII
+	// characters. This tier does not check, because the check lives one tier up
+	// with the wire rule it comes from. A trace id reused as a correlation id is
+	// exactly the value that fails it, and a receiving Exchange replaces what it
+	// cannot store, so a bad value here does not error: it silently decorrelates
+	// this leg from the RPC legs. Clients built by sdk/go/connect are already safe
+	// — their mint comes from core.MintRequestID. Wrap your own the same way.
 	RequestID func() string
 }
 
