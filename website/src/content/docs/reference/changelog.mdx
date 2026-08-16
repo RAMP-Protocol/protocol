@@ -8,6 +8,63 @@ description: "RAMP protocol changelog"
 
 ## Unreleased
 
+**The offline re-verification recipe binds the acceptance to the offer (contract fix, no wire
+change).** The recipe on `TransactionEvidence` stated two independent signature checks and
+introduced the second with "the agent accepted this exact offer". Nothing in the procedure
+established "this exact". A genuine offer from one transaction and a genuine acceptance from
+another, by the same agent, both verify against real keys and both pass the authenticity step the
+same comment describes -- and the spliced row asserts an agreement that never happened.
+
+The recipe now has a third step: read `offer_sig` back out of
+`agent_acceptance_canonical_bytes` and require it to equal the row's `offer_sig`, compared
+case-insensitively. The acceptance payload has always carried `offer_sig` as field 1 for exactly
+this purpose; the recipe simply never read it. The Exchange MUST perform the same comparison before
+persisting a row. `conformance/evidence_offline_verify_test.go` now executes all three steps and
+carries a splice case: two genuine halves joined, both signatures verifying, caught only by the
+binding check.
+
+**Who may file a usage report is now stated (contract fix, no wire change).** The dedupe namespace
+for `UsageReport` and `DisputeRequest` is `(transaction_id, key)`, which deliberately leaves the
+verified signer out so that a Broker relaying an agent's report unchanged collapses into one report
+rather than two. Dropping the signer also removed a protection that was never restated: when the
+namespace included the authenticated caller, an unauthorized filer could only pollute their own
+slot. The slot is now shared.
+
+The rule is therefore explicit: only the agent the transaction was bound to at execute time may file
+against it, or a Broker relaying that agent's report unchanged. Any other filing MUST be rejected
+rather than deduped, since an accepted filing from an unbound party would occupy the slot the bound
+agent's report needs. An unauthorized filing reports as
+`USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND` on purpose -- a distinct "not authorized"
+value would confirm to an unbound party that the transaction exists, turning the rejection into an
+oracle for probing transaction ids. No enum value was added.
+
+**The proto no longer describes signed URLs two ways (documentation fix, no wire change).** The
+retrieval-URL block said signed URLs use HMAC-SHA256 with an Exchange-to-CDN shared secret, and
+offered a fallback to "HMAC + short TTL + TLS", while the same block's identity-binding paragraph
+had been rewritten to say "confirm the URL signature". RAMP has two signing schemes and both are
+asymmetric: Ed25519 over a canonical message, and a CloudFront RSA canned policy. There is no shared
+secret in either. Both lines now say so, and the fallback names the scheme that actually exists --
+a CDN that verifies the URL itself before any function code runs, and therefore cannot check proof
+of possession.
+
+**The C2PA page no longer calls the attestation signature a JWS (documentation fix, no wire
+change).** Pinning `ResourceAttestation.signature` to hex left three lines on
+`protocol/ext-c2pa.mdx` naming the old format in the RAMP column of a C2PA-versus-RAMP comparison.
+The audience for that page is a verification vendor -- a third party who never negotiated with the
+publisher, which is the reader the hex settlement exists to protect -- and one building from the
+table would emit a value the schema now rejects. Four SDK comments calling `EdDSA` "the JWS alg"
+are corrected the same way: the name is the JOSE algorithm identifier, the signature is detached
+hex.
+
+**Two drift gates now cover the detached-signature rule.**
+`ramp.v1.ResourceAttestation.signature` carried the hex rule and a comment saying "the same rule",
+which is not the phrase `conformance/samerule_test.go` reads, so it was the one copy of five tied to
+nothing. It now declares `Same rule as ramp.v1.Offer.signature`. Separately, the equality gate can
+only prove the five copies stay EQUAL -- move them all in step and a changed shape passes. Measured:
+widening the class to `^[0-9A-Za-z]{128}$` passed every gate and regenerated the corpus
+byte-identical. `TestHexSignaturePatternAdmits` now pins what the rule admits: either case accepted,
+127 and 129 characters and non-hex characters and the empty string refused.
+
 **`ResourceAttestation.signature` states its encoding, and enforces it (BREAKING: rule addition on a
 live field).** The field carried no rule and its comment described the signed BYTES precisely -- an
 Ed25519 signature over the RFC 8785 JCS form of `{verifier, keyid, attested_at, uri, claims}` --

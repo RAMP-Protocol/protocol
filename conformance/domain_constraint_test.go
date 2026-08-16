@@ -53,6 +53,13 @@ const digestPattern = `^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]
 
 const wantDigestFields = 3
 
+// hexSignaturePattern is the detached-signature shape, quoted from the proto. It
+// is carried by Offer.signature, ResourceAttestation.signature,
+// AgentAcceptance.signature and the two TransactionEvidence copies of those.
+const hexSignaturePattern = `^[0-9A-Fa-f]{128}$`
+
+const wantHexSignatureFields = 5
+
 func fieldNames(fs []domainField) string {
 	names := make([]string, 0, len(fs))
 	for _, f := range fs {
@@ -83,6 +90,55 @@ func TestDigestPatternMembership(t *testing.T) {
 		}
 		if !validateDomainValue(t, df, "sha256:"+strings.Repeat("ab", 32)) {
 			t.Errorf("%s refused a well-formed sha256 digest", name)
+		}
+	}
+}
+
+// TestHexSignaturePatternAdmits pins WHAT the detached-signature rule accepts,
+// which the restated-rule drift gate cannot.
+//
+// That gate proves the five copies stay EQUAL. Move them all in step and they
+// are still equal, so a rule that changed shape passes it. Two such mutations
+// were measured against this repo. Narrowing every copy to lowercase-only is
+// caught, but only by accident: evidence_offline_verify_test.go stores
+// agent_acceptance_signature in uppercase, and a value that no longer validates
+// fails that test. Widening the character class to alphanumeric is caught by
+// nothing at all — both cases still match, and no badStrings entry is 128
+// characters long, so the corpus regenerates byte-identical.
+//
+// This test states the two properties directly, next to the rule they protect,
+// instead of leaving them resting on one fixture literal in another file.
+func TestHexSignaturePatternAdmits(t *testing.T) {
+	fields := findFieldsWithPattern(t, hexSignaturePattern)
+	if len(fields) != wantHexSignatureFields {
+		t.Fatalf("the hex signature pattern is on %d fields, expected %d — a copy drifted, "+
+			"a new signature field was added without it, or the pattern moved in the proto "+
+			"and this const was left behind.\nFields: %s",
+			len(fields), wantHexSignatureFields, fieldNames(fields))
+	}
+
+	sig := strings.Repeat("ab", 64) // 128 hex characters
+	for _, df := range fields {
+		name := string(df.msg.Name()) + "." + string(df.fd.Name())
+
+		// "Either case is accepted" is a promise the field comments make. Hex
+		// decoding accepts both, and a dispute should read the same characters a
+		// request log holds.
+		for _, good := range []string{sig, strings.ToUpper(sig), strings.Repeat("aB", 64)} {
+			if !validateDomainValue(t, df, good) {
+				t.Errorf("%s refused %q… — the rule promises either case, verbatim", name, good[:16])
+			}
+		}
+
+		for _, bad := range []struct{ v, why string }{
+			{strings.Repeat("ab", 63) + "a", "127 characters — one short of a 64-byte signature"},
+			{sig + "a", "129 characters — one over"},
+			{strings.Repeat("ab", 63) + "gg", "right length, but 'g' is not a hex digit"},
+			{"", "empty — the rule is what makes the field mandatory in practice"},
+		} {
+			if validateDomainValue(t, df, bad.v) {
+				t.Errorf("%s accepted a value it must refuse: %s", name, bad.why)
+			}
 		}
 	}
 }

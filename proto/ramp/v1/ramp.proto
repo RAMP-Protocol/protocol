@@ -60,7 +60,9 @@ import "ramp/v1/vocab.proto";
 //   Agent → Broker → Exchange:  multiple Signature headers (one per hop)
 //   Exchange → Agent:  detached hex Ed25519 signature on Offer (alg=EdDSA)
 //
-// Signed URLs use HMAC-SHA256 (Exchange↔CDN shared secret, separate concern).
+// Signed URLs are asymmetric: Ed25519 over a canonical message, or a CloudFront
+// RSA canned policy. The Exchange holds the private key; the verifier holds only
+// a public key or a CDN-managed key group. No shared secret in either scheme.
 //
 // Retrieval-URL identity binding (OPTIONAL, DPoP-style — RFC 9449):
 //   The Exchange MAY bind a signed retrieval_endpoint to the requesting agent
@@ -74,9 +76,10 @@ import "ramp/v1/vocab.proto";
 //   thumbprint(presented key) == agent_identity_hash. No JWKS fetch required.
 //   The key that fetches must therefore be the key the identity was derived
 //   from — see the one-key rule on AgentAcceptance.
-//   Enforcement is NOT mandatory: a bearer-only signed-URL CDN that cannot run
-//   code falls back to HMAC + short TTL + TLS. RAMP reference implementations
-//   run on edge functions and DO enforce it.
+//   Enforcement is NOT mandatory: a bearer-only CDN that verifies the URL itself
+//   before any function code runs (the CloudFront RSA scheme) falls back to short
+//   TTL + TLS. RAMP reference implementations run on edge functions and DO
+//   enforce it.
 // ============================================================================
 
 // ============================================================================
@@ -973,8 +976,8 @@ message ResourceAttestation {
   // old attestations because the signature covers the specific claims instance.
   //
   // HEX, like every other detached signature in this contract: 128 characters,
-  // either case, one Ed25519 signature (64 bytes) hex-encoded. Same convention
-  // as Offer.signature and AgentAcceptance.signature, and the same rule.
+  // either case, one Ed25519 signature (64 bytes) hex-encoded. Same rule as
+  // ramp.v1.Offer.signature — the same shape, for the same reason.
   //
   // The encoding was previously unstated, which was the real defect — the
   // comment described the signed BYTES precisely and never said how the
@@ -2495,6 +2498,23 @@ message UsageReport {
   // key, so a direct submission and a relayed copy are one report on two paths
   // and MUST collapse. Adding the verified signer to the namespace would split
   // them and count the usage twice.
+  //
+  // WHO MAY FILE. Dropping the signer from the namespace removes a protection
+  // that has to be restored explicitly, so the rule is stated rather than
+  // implied: only the agent the transaction was bound to at execute time may
+  // file against it, or a Broker relaying that agent's report unchanged. The
+  // argument above is about honest filers — it shows two legitimate parties
+  // never collide by accident, which is a different claim from who is allowed
+  // to write. A filing from any other party MUST be rejected, never deduped:
+  // the slot is now shared, so an accepted filing from an unbound party would
+  // occupy the one the bound agent's report needs, and the real usage would
+  // collapse into it and go uncounted.
+  //
+  // An unauthorized filing is reported as USAGE_REPORT_REJECTION_REASON_
+  // TRANSACTION_NOT_FOUND, deliberately. There is no distinct "not authorized"
+  // reason and there should not be one: it would confirm to a party not bound
+  // to the transaction that the transaction exists, which turns the rejection
+  // into an oracle for probing transaction ids.
   string idempotency_key = 2 [
     (buf.validate.field).string = {min_len: 1, max_len: 255}
   ];
@@ -3220,7 +3240,9 @@ message DisputeRequest {
   // TransactionRequest.idempotency_key, and the namespace is the same as
   // UsageReport's and for the same reason: this message carries no acceptance
   // payload, so the namespace is the TRANSACTION being disputed and the server
-  // dedupes per (transaction_id, key).
+  // dedupes per (transaction_id, key). The "who may file" rule stated there
+  // applies here unchanged, and for the same reason — a shared slot needs an
+  // explicit rule about who may write into it.
   string idempotency_key = 2 [
     (buf.validate.field).string = {min_len: 1, max_len: 255}
   ];
@@ -3966,10 +3988,13 @@ message RetrievalAuthFailure {
 }
 
 // UsageReportRejectionReason — why a ReportUsage filing was rejected. Replaces
-// the free-text UsageReportResponse.rejection_reason string.
+// the free-text UsageReportResponse.rejection_reason string. There is no
+// "not authorized" value on purpose; see the who-may-file rule on
+// UsageReport.idempotency_key for why an unauthorized filing reports as
+// TRANSACTION_NOT_FOUND instead.
 enum UsageReportRejectionReason {
   USAGE_REPORT_REJECTION_REASON_UNSPECIFIED = 0;  // unset — rejected at ingest
-  USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND = 1;     // transaction_id is unknown
+  USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND = 1;     // transaction_id is unknown, or the filer is not bound to it
   USAGE_REPORT_REJECTION_REASON_DUPLICATE = 2;                 // a report was already filed for this transaction
   USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED = 3;            // filed outside the reporting window
   USAGE_REPORT_REJECTION_REASON_MISSING_REQUIRED_FIELDS = 4;   // ReportingObligation.required_fields not satisfied

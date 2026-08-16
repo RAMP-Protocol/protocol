@@ -1852,12 +1852,15 @@ func (RetrievalAuthFailureReason) EnumDescriptor() ([]byte, []int) {
 }
 
 // UsageReportRejectionReason — why a ReportUsage filing was rejected. Replaces
-// the free-text UsageReportResponse.rejection_reason string.
+// the free-text UsageReportResponse.rejection_reason string. There is no
+// "not authorized" value on purpose; see the who-may-file rule on
+// UsageReport.idempotency_key for why an unauthorized filing reports as
+// TRANSACTION_NOT_FOUND instead.
 type UsageReportRejectionReason int32
 
 const (
 	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_UNSPECIFIED             UsageReportRejectionReason = 0 // unset — rejected at ingest
-	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND   UsageReportRejectionReason = 1 // transaction_id is unknown
+	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_TRANSACTION_NOT_FOUND   UsageReportRejectionReason = 1 // transaction_id is unknown, or the filer is not bound to it
 	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_DUPLICATE               UsageReportRejectionReason = 2 // a report was already filed for this transaction
 	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_WINDOW_EXPIRED          UsageReportRejectionReason = 3 // filed outside the reporting window
 	UsageReportRejectionReason_USAGE_REPORT_REJECTION_REASON_MISSING_REQUIRED_FIELDS UsageReportRejectionReason = 4 // ReportingObligation.required_fields not satisfied
@@ -3208,8 +3211,8 @@ type ResourceAttestation struct {
 	// old attestations because the signature covers the specific claims instance.
 	//
 	// HEX, like every other detached signature in this contract: 128 characters,
-	// either case, one Ed25519 signature (64 bytes) hex-encoded. Same convention
-	// as Offer.signature and AgentAcceptance.signature, and the same rule.
+	// either case, one Ed25519 signature (64 bytes) hex-encoded. Same rule as
+	// ramp.v1.Offer.signature — the same shape, for the same reason.
 	//
 	// The encoding was previously unstated, which was the real defect — the
 	// comment described the signed BYTES precisely and never said how the
@@ -6006,6 +6009,23 @@ type UsageReport struct {
 	// key, so a direct submission and a relayed copy are one report on two paths
 	// and MUST collapse. Adding the verified signer to the namespace would split
 	// them and count the usage twice.
+	//
+	// WHO MAY FILE. Dropping the signer from the namespace removes a protection
+	// that has to be restored explicitly, so the rule is stated rather than
+	// implied: only the agent the transaction was bound to at execute time may
+	// file against it, or a Broker relaying that agent's report unchanged. The
+	// argument above is about honest filers — it shows two legitimate parties
+	// never collide by accident, which is a different claim from who is allowed
+	// to write. A filing from any other party MUST be rejected, never deduped:
+	// the slot is now shared, so an accepted filing from an unbound party would
+	// occupy the one the bound agent's report needs, and the real usage would
+	// collapse into it and go uncounted.
+	//
+	// An unauthorized filing is reported as USAGE_REPORT_REJECTION_REASON_
+	// TRANSACTION_NOT_FOUND, deliberately. There is no distinct "not authorized"
+	// reason and there should not be one: it would confirm to a party not bound
+	// to the transaction that the transaction exists, which turns the rejection
+	// into an oracle for probing transaction ids.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction ID from the delivery. MUST be non-empty. It is also the dedupe
 	// namespace for `idempotency_key` above, so a report that names no
@@ -7708,7 +7728,9 @@ type DisputeRequest struct {
 	// TransactionRequest.idempotency_key, and the namespace is the same as
 	// UsageReport's and for the same reason: this message carries no acceptance
 	// payload, so the namespace is the TRANSACTION being disputed and the server
-	// dedupes per (transaction_id, key).
+	// dedupes per (transaction_id, key). The "who may file" rule stated there
+	// applies here unchanged, and for the same reason — a shared slot needs an
+	// explicit rule about who may write into it.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// Transaction being disputed. MUST be non-empty. It is also the dedupe
 	// namespace for `idempotency_key` above, so a filing that names no

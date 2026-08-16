@@ -220,8 +220,19 @@ enum ObligationState {
 // no Exchange key file, no live service:
 //   * the Exchange signed this exact offer:
 //       ed25519.Verify(exchange_signing_public_key, offer_canonical_bytes, hex-decoded offer_sig)
-//   * the agent accepted this exact offer:
+//   * the agent signed an acceptance:
 //       ed25519.Verify(agent_public_key, agent_acceptance_canonical_bytes, hex-decoded agent_acceptance_signature)
+//   * and that acceptance is FOR THIS OFFER, not merely a valid acceptance:
+//       JCS-parse(agent_acceptance_canonical_bytes)["offer_sig"] equals offer_sig,
+//       compared case-insensitively, since the hex rides verbatim in either case
+// The third step is not optional bookkeeping. Without it a genuine offer from
+// one transaction and a genuine acceptance from another, by the same agent,
+// both verify against real keys and pass the authenticity step below — and the
+// spliced row asserts an agreement that never happened. The acceptance payload
+// carries offer_sig (field 1) precisely so this comparison is possible from the
+// row alone; a verifier that skips it has checked two signatures and no
+// agreement. The Exchange MUST perform the same comparison before persisting a
+// row, so a spliced row is never written in the first place.
 // Both verifying public keys ride along (not key ids) so re-verification
 // survives key rotation, which removes retired ids from the published JWKS.
 // The *_canonical_bytes are the verbatim RFC 8785 JCS bytes each signature

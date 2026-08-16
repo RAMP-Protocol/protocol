@@ -23,8 +23,9 @@ import canonicalize from "canonicalize";
 
 import { utf8Bytes } from "../src/base64url.ts";
 
-// OFFER_SIGNATURE_ALGORITHM is the JWS alg advertised on signed offers. Always
-// EdDSA for Ed25519 (mirror helpers.OfferSignatureAlgorithm).
+// OFFER_SIGNATURE_ALGORITHM is the JOSE algorithm identifier advertised on signed
+// offers. Always EdDSA for Ed25519 (mirror helpers.OfferSignatureAlgorithm). The
+// name is borrowed from JOSE; the signature itself is detached hex, not a JWS.
 export const OFFER_SIGNATURE_ALGORITHM = "EdDSA";
 
 // Mode selects offer-verification strictness. "strict" (the default) is

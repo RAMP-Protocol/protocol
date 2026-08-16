@@ -21,8 +21,9 @@ import canonicalize from "canonicalize";
 
 import { utf8Bytes } from "./base64url.ts";
 
-/** The JWS alg advertised on AgentAcceptance.signature. Always EdDSA for Ed25519
- * (mirror helpers.AcceptanceSignatureAlgorithm). */
+/** The JOSE algorithm identifier advertised on AgentAcceptance.signature. Always
+ * EdDSA for Ed25519 (mirror helpers.AcceptanceSignatureAlgorithm). The name is
+ * borrowed from JOSE; the signature itself is detached hex, not a JWS. */
 export const ACCEPTANCE_SIGNATURE_ALGORITHM = "EdDSA";
 
 /** The acceptance binding fields. EVERY empty field is omitted from the canonical

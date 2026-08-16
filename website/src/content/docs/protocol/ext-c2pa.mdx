@@ -199,7 +199,7 @@ C2PA and RAMP use different PKI:
 |--------|------|------|
 | Key format | X.509 certificates | Ed25519 JWKS |
 | Trust model | Centrally curated Trust Lists (CA hierarchy) | Decentralized (provider ↔ exchange manifests) |
-| Signature format | COSE Sign1 (RFC 9052) | JWS Compact (RFC 7515) |
+| Signature format | COSE Sign1 (RFC 9052) | Detached Ed25519 over RFC 8785 JCS, hex-encoded |
 | Timestamping | RFC 3161 TSA (cryptographic proof) | Self-declared `attested_at` |
 
 The verification vendor bridges these worlds:
@@ -208,7 +208,7 @@ The verification vendor bridges these worlds:
 C2PA World                          RAMP World
 ─────────────────                   ──────────────────
 X.509 cert chain                    Ed25519 JWKS
-COSE Sign1 signature    ──►        JWS EdDSA signature
+COSE Sign1 signature    ──►        Detached Ed25519 (hex)
 C2PA Trust List          Vendor     RAMP accepted_verifiers
 JUMBF manifest          bridges     ResourceAttestation.claims
 RFC 3161 TSA                        attested_at timestamp
@@ -251,7 +251,7 @@ Both C2PA and RAMP support Ed25519/EdDSA. A verification vendor that holds both 
 
 | Algorithm | C2PA Support | RAMP Support |
 |-----------|-------------|-------------|
-| Ed25519 | Yes (EdDSA via COSE) | Yes (EdDSA via JWS) |
+| Ed25519 | Yes (EdDSA via COSE) | Yes (detached EdDSA, hex) |
 | ECDSA P-256 | Yes | No |
 | RSA | Yes | No |
 | SHA-256 | Yes (hard binding) | Yes (content_hash) |

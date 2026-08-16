@@ -28,10 +28,13 @@
 //     longer has a rule twin, fails as stale.
 //
 // The root contract package (the first in Contract — ramp.v1) is the upstream
-// vocabulary restatements are copied FROM; its internal duplicates predate this
-// gate and are not enforced. Message-typed fields are skipped: the only rule
-// they carry is the required-envelope convention, which is a shape, not a
-// restatable value rule.
+// vocabulary restatements are copied FROM, so the COMPLETENESS half does not
+// demand a declaration from it. That is a scoping choice, not a statement that
+// its duplicates are safe: a root field can still opt in, and one that names a
+// shape another root field also carries SHOULD, because the equality half below
+// enforces every directive it finds regardless of package. Message-typed fields
+// are skipped: the only rule they carry is the required-envelope convention,
+// which is a shape, not a restatable value rule.
 //
 // Comments come from gen/descriptor.binpb (built with source info); rules come
 // from the linked-in generated descriptors — the same authoritative
