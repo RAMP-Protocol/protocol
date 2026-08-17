@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 82 symbols at cross-language parity · 14 documented divergences · 143 Go-idiomatic exclusions · 24 conformance corpora, each tri-replayed.
+**At a glance:** 92 symbols at cross-language parity · 14 documented divergences · 143 Go-idiomatic exclusions · 25 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -35,6 +35,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `CanonicalizeMoney` | `canonicalize_money` | `canonicalizeMoney` |
 | `CatalogRejectionDetail` | `catalog_rejection_detail` | `catalogRejectionDetail` |
 | `CheckAudience` | `check_audience` | `checkAudience` |
+| `CompileRegistrationSchema` | `compile_registration_schema` | `compileRegistrationSchema` |
 | `ConnectProtocolVersion` | `ConnectProtocolVersion` | `ConnectProtocolVersion` |
 | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` | `ConnectProtocolVersionHeader` |
 | `ContentDigest` | `content_digest` | `contentDigest` |
@@ -46,8 +47,14 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `FormatMoney` | `format_money` | `formatMoney` |
 | `HashURL` | `hash_url` | `hashUrl` |
 | `IsBareDomain` | `is_bare_domain` | `isBareDomain` |
+| `IsSafeSchemaPattern` | `is_safe_schema_pattern` | `isSafeSchemaPattern` |
 | `KeyResolver` | `KeyResolver` | `RequestKeyResolver` |
 | `MaxBareDomainLen` | `MAX_BARE_DOMAIN_LEN` | `maxBareDomainLen` |
+| `MaxRegistrationFieldErrorPathLen` | `MAX_REGISTRATION_FIELD_ERROR_PATH_LEN` | `maxRegistrationFieldErrorPathLen` |
+| `MaxRegistrationFieldErrorTextLen` | `MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN` | `maxRegistrationFieldErrorTextLen` |
+| `MaxRegistrationFieldErrors` | `MAX_REGISTRATION_FIELD_ERRORS` | `maxRegistrationFieldErrors` |
+| `MaxRegistrationSchemaBytes` | `MAX_REGISTRATION_SCHEMA_BYTES` | `maxRegistrationSchemaBytes` |
+| `MaxRegistrationSchemaDepth` | `MAX_REGISTRATION_SCHEMA_DEPTH` | `maxRegistrationSchemaDepth` |
 | `NewIdempotencyKey` | `generate_idempotency_key` | `generateIdempotencyKey` |
 | `NormalizeScopes` | `normalize_scopes` | `normalizeScopes` |
 | `OfferSignatureAlgorithm` | `OFFER_SIGNATURE_ALGORITHM` | `OFFER_SIGNATURE_ALGORITHM` |
@@ -55,8 +62,11 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `ProtocolVersion` | `ProtocolVersion` | `ProtocolVersion` |
 | `Reason` | `reason` | `reason` |
 | `RegistrationFailureDetail` | `registration_failure_detail` | `registrationFailureDetail` |
+| `RegistrationSchema` | `RegistrationSchema` | `RegistrationSchema` |
+| `RegistrationSchemaDialect` | `REGISTRATION_SCHEMA_DIALECT` | `registrationSchemaDialect` |
 | `RequestIDHeader` | `RequestIDHeader` | `RequestIDHeader` |
 | `RetrievalAuthFailureDetail` | `retrieval_auth_failure_detail` | `retrievalAuthFailureDetail` |
+| `SchemaVerdict` | `SchemaVerdict` | `SchemaVerdict` |
 | `ScopesSubset` | `scopes_subset` | `scopesSubset` |
 | `SignAgentBinding` | `sign_agent_binding` | `signInbound` |
 | `SignOffer` | `sign_offer_jcs` | `signOffer` |
@@ -320,6 +330,7 @@ Go emits each `*-vectors.json` oracle; Python and TS replay it. The completeness
 | `helpers/testdata/multisig-chain-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/offer-verify-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/pop-vectors.json` | ✅ | ✅ | ✅ |
+| `helpers/testdata/registration-schema-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/scopes-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/sign-request-vectors.json` | ✅ | ✅ | ✅ |
 | `helpers/testdata/signedurl-vectors.json` | ✅ | ✅ | ✅ |

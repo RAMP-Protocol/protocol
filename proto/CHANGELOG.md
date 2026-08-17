@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+**The published registration schema states its safety rules as numbers (comment-only,
+no wire change).** `AccountRegistration.data_schema` already required a self-contained
+schema, forbade resolving a remote `$ref`, and capped the document at 16KB. What it did
+not say was how deep a schema may nest, which regex constructs a `pattern` may use, or
+whether `format` is asserted — it said only that a consumer SHOULD bound validation time
+and recursion depth, and left every implementation to pick. Those are numbers chosen
+privately at BOTH ends of one registration: the Exchange enforces the schema and a client
+pre-checks against it before signing, so a bound one side invents refuses payloads the
+other accepts, which is the disagreement the field exists to prevent. The rules are now
+stated. Every `$ref`, `$dynamicRef` and `$recursiveRef` begins with `#`; every `$schema`
+in the document names 2020-12, and a document declaring none is read as 2020-12; 16KB as
+served; 32 nested JSON containers; and a `pattern` alphabet in which a group opens `(`
+or `(?:` and nothing else, the escapes `\1`-`\9`, `\k`, `\p`, `\P`, `\A`, `\z`, `\Z`,
+`\Q`, `\E`, `\C`, `\G` and `\K` do not appear, and `[[:` does not appear.
+
+The pattern rule is the one that is not obvious, and it is a MUST rather than a SHOULD
+because half of what it excludes fails SILENTLY. Draft 2020-12 `pattern` is ECMA-262 and
+the engines implementations run do not agree on it. The loud half is RE2 refusing the
+lookaround, atomic groups and backreferences ECMA allows: a schema using them compiles
+for one implementation and fails for the next, which is visible and merely annoying. The
+quiet half is the reason for the rule — inline flags, Unicode property classes, text
+anchors and POSIX bracket names are accepted by one engine and either refused or read
+DIFFERENTLY by another, so two conformant validators both compile the pattern and then
+disagree about which payloads match it, with nothing to log and no error to catch.
+Excluding catastrophic backtracking, the hazard the field comment already named, falls
+out of the same rule instead of needing its own. `format`, `contentEncoding` and
+`contentMediaType` are pinned as annotations for the same reason at a smaller scale: the
+libraries default differently on each, so a schema whose verdict depended on which
+library read it had no single answer.
+
+*Tooling:* the rules ship as an executable SDK face rather than as prose alone —
+`CompileRegistrationSchema` returns a verdict naming WHICH rule a schema broke, because
+the two callers act on it differently: a client that cannot check locally sends anyway
+and lets the Exchange decide, while an Exchange that cannot compile its own configured
+schema is looking at a misconfigured deployment. A refusal names the offending members as
+`RegistrationFieldError` values, built from the failed keyword rather than from the
+validating library's own message, which quotes the value that failed — the field forbids
+carrying an operator's business data back out, and the obvious implementation leaks. The
+reported set is deduplicated by pointer and keyword and sorted before the 64-item cap,
+because the three libraries surface duplicates and orderings that differ, and a list
+whose length depends on the library is one no shared corpus could pin. A conformance
+guard reads the SDK's numbers back out of the shared corpus and fails if the field
+comment stops stating them, which is the only drift gate available for a bound that lives
+in a comment: `data_schema` is a `Struct`, and no field-level rule can reach inside one.
+
 **Every addressed request names its recipient: `exchange` becomes required (breaking,
 pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`
 (field 3), `GetAccountStatusRequest` (field 2), `DomainVerificationRequest` (field 4),

@@ -33,7 +33,17 @@ patterns=(
   # the manifest's registration field became a block: registration_schema (a flat
   # Struct) is now account_registration.data_schema, so the old name must not
   # linger in prose, tables or example payloads.
-  'registration_schema' 'registrationSchema'
+  #
+  # Anchored on word boundaries, unlike most patterns here, because the SDK face
+  # that implements the SUCCESSOR field's rules is legitimately named for it:
+  # CompileRegistrationSchema / compile_registration_schema /
+  # registrationSchemaDialect all contain the banned string as a substring while
+  # naming the live contract, and they appear in the GENERATED parity matrix, which
+  # cannot be edited to appease a grep. A boundary keeps the ban on the identifier
+  # (`registration_schema`, `WellKnownManifest.registration_schema`) and off the
+  # longer names that merely contain it — `_` and a following capital are both word
+  # characters, so neither side of the successor names ever matches.
+  '\bregistration_schema\b' '\bregistrationSchema\b'
   # the single billing-reference denial split into ACCOUNT_NOT_REGISTERED ("no
   # account — call Register") and ACCOUNT_INACTIVE ("account exists, awaiting
   # operator activation"); the two are different agent actions, so the old

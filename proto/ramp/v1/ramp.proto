@@ -2730,17 +2730,58 @@ message AccountRegistration {
   // REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, naming the offending
   // members in RegistrationFailure.field_errors. Absent: registration_data is
   // passed through to the system of record uninspected, so an Exchange that
-  // publishes no schema needs no change to stay conformant. Safety rules,
-  // because a consumer reads this schema out of a third party's manifest: it
-  // MUST be self-contained, and a consumer MUST NOT resolve a remote $ref out of
-  // it — doing so turns every reader into an SSRF vector aimed at a URL the
-  // schema's author chose. A consumer SHOULD bound validation time and recursion
-  // depth; draft 2020-12 `pattern` admits regexes with catastrophic
-  // backtracking. Size is capped at 16KB, measured as the UTF-8 bytes of this
-  // member as served in ramp.json; a consumer SHOULD reject an oversized schema
-  // and skip its local pre-check rather than truncate it, which leaves the
-  // Exchange's own enforcement the deciding check exactly as when no schema is
-  // published.
+  // publishes no schema needs no change to stay conformant.
+  //
+  // Safety rules, because a consumer reads this schema out of a THIRD PARTY's
+  // manifest and validates against it before any signature has been checked. A
+  // publisher MUST satisfy every rule below and a consumer MUST refuse a schema
+  // that does not. The bounds are stated here as numbers rather than left to each
+  // implementation on purpose: a schema is validated at both ends of the same
+  // registration, and a limit chosen privately by one side refuses payloads the
+  // other accepts.
+  //
+  //   Self-contained. Every $ref, $dynamicRef and $recursiveRef MUST be a
+  //   same-document reference — it begins with "#". A consumer MUST NOT resolve a
+  //   reference that leaves the document: doing so turns every reader into an
+  //   SSRF vector aimed at a URL the schema's author chose.
+  //
+  //   One dialect. $schema, wherever it appears in the document, MUST name
+  //   https://json-schema.org/draft/2020-12/schema (an empty fragment on the end
+  //   is the same value). A document declaring none is read as that dialect. An
+  //   older draft is refused rather than validated under semantics its author did
+  //   not intend.
+  //
+  //   Bounded size: 16KB, measured as the UTF-8 bytes of this member AS SERVED in
+  //   ramp.json.
+  //
+  //   Bounded depth: 32 nested JSON containers, counting the schema itself as the
+  //   first. Deep allOf and $ref chains are the cheapest way to make compiling a
+  //   schema expensive.
+  //
+  //   A portable `pattern` alphabet. A group MUST open with "(" or "(?:" and
+  //   nothing else; the escapes \1-\9, \k, \p, \P, \A, \z, \Z, \Q, \E, \C, \G and
+  //   \K MUST NOT appear; and "[[:" MUST NOT appear. Draft 2020-12 patterns are
+  //   ECMA-262, but the engines implementations run do not agree on it. Some of
+  //   the disagreement is loud — RE2 refuses the lookaround, atomic groups and
+  //   backreferences ECMA allows, so a schema using them compiles for one
+  //   implementation and fails for another. The rest is silent, and is why this is
+  //   a MUST: inline flags, Unicode property classes, text anchors and POSIX
+  //   bracket names are accepted by one engine and either refused or read
+  //   DIFFERENTLY by the next, so two conformant validators both compile the
+  //   pattern and then disagree about which payloads match it. Excluding the
+  //   backtracking constructs — the ones that make a `pattern` a denial-of-service
+  //   vector in the engines that backtrack — falls out of the same rule.
+  //
+  //   Annotations stay annotations. format, contentEncoding and contentMediaType
+  //   MUST NOT be asserted. Libraries default differently on each, and a schema
+  //   whose verdict depends on which library read it has no single answer.
+  //
+  // A consumer SHOULD reject a schema that breaks any of these and SKIP its local
+  // pre-check rather than repair or truncate it, which leaves the Exchange's own
+  // enforcement the deciding check exactly as when no schema is published. That is
+  // a rule for the CLIENT side: an Exchange that cannot compile its own configured
+  // schema is looking at a misconfiguration of its deployment, and MUST NOT
+  // advertise a schema it is not itself enforcing.
   google.protobuf.Struct data_schema = 1;
 }
 

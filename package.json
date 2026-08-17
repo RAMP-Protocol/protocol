@@ -17,6 +17,7 @@
     "./pop": "./sdk/ts/src/pop.ts",
     "./crossfield": "./sdk/ts/src/crossfield.ts",
     "./hosts": "./sdk/ts/src/hosts.ts",
+    "./regschema": "./sdk/ts/src/regschema.ts",
     "./wire": "./sdk/ts/src/wire.ts",
     "./core": "./sdk/ts/core/verifier.ts",
     "./core/sign": "./sdk/ts/core/sign.ts",
@@ -27,6 +28,7 @@
     "./resolvers": "./sdk/ts/resolvers/index.ts"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
     "canonicalize": "^3.0.0"
   },
   "peerDependencies": {

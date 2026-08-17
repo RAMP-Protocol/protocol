@@ -295,6 +295,11 @@
       "python": "check_audience",
       "ts": "checkAudience"
     },
+    "helpers.CompileRegistrationSchema": {
+      "allowlist_reason": null,
+      "python": "compile_registration_schema",
+      "ts": "compileRegistrationSchema"
+    },
     "helpers.ConnectProtocolVersion": {
       "allowlist_reason": null,
       "python": "ConnectProtocolVersion",
@@ -350,6 +355,11 @@
       "python": "is_bare_domain",
       "ts": "isBareDomain"
     },
+    "helpers.IsSafeSchemaPattern": {
+      "allowlist_reason": null,
+      "python": "is_safe_schema_pattern",
+      "ts": "isSafeSchemaPattern"
+    },
     "helpers.KeyResolver": {
       "allowlist_reason": null,
       "python": "KeyResolver",
@@ -359,6 +369,31 @@
       "allowlist_reason": null,
       "python": "MAX_BARE_DOMAIN_LEN",
       "ts": "maxBareDomainLen"
+    },
+    "helpers.MaxRegistrationFieldErrorPathLen": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_FIELD_ERROR_PATH_LEN",
+      "ts": "maxRegistrationFieldErrorPathLen"
+    },
+    "helpers.MaxRegistrationFieldErrorTextLen": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN",
+      "ts": "maxRegistrationFieldErrorTextLen"
+    },
+    "helpers.MaxRegistrationFieldErrors": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_FIELD_ERRORS",
+      "ts": "maxRegistrationFieldErrors"
+    },
+    "helpers.MaxRegistrationSchemaBytes": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_SCHEMA_BYTES",
+      "ts": "maxRegistrationSchemaBytes"
+    },
+    "helpers.MaxRegistrationSchemaDepth": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_SCHEMA_DEPTH",
+      "ts": "maxRegistrationSchemaDepth"
     },
     "helpers.NewIdempotencyKey": {
       "allowlist_reason": null,
@@ -400,6 +435,16 @@
       "python": "registration_failure_detail",
       "ts": "registrationFailureDetail"
     },
+    "helpers.RegistrationSchema": {
+      "allowlist_reason": null,
+      "python": "RegistrationSchema",
+      "ts": "RegistrationSchema"
+    },
+    "helpers.RegistrationSchemaDialect": {
+      "allowlist_reason": null,
+      "python": "REGISTRATION_SCHEMA_DIALECT",
+      "ts": "registrationSchemaDialect"
+    },
     "helpers.RequestIDHeader": {
       "allowlist_reason": null,
       "python": "RequestIDHeader",
@@ -409,6 +454,11 @@
       "allowlist_reason": null,
       "python": "retrieval_auth_failure_detail",
       "ts": "retrievalAuthFailureDetail"
+    },
+    "helpers.SchemaVerdict": {
+      "allowlist_reason": null,
+      "python": "SchemaVerdict",
+      "ts": "SchemaVerdict"
     },
     "helpers.ScopesSubset": {
       "allowlist_reason": null,

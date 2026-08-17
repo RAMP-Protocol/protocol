@@ -176,6 +176,77 @@ terms": an Exchange with pass-through registration publishes no block at all, an
 it still needs to pin which terms it is serving. The two decisions are
 independent, so the fields are too.
 
+## The registration schema is a narrowed dialect, and the caps are on the wire
+
+A published `data_schema` is the only part of the manifest a consumer both reads
+out of a third party's document and then EXECUTES. A JSON Schema is a small
+program: it resolves references, it compiles regexes, and it recurses. Reading one
+from a party you have not authenticated — which is exactly what a client doing a
+registration pre-check does, since the fetch precedes any signature — puts an
+attacker-authored program on the critical path of a service. The rules that
+followed all come from that one observation.
+
+The reference rule and the size cap were there from the start. Two things were
+not, and both were discovered the same way: by asking what a SECOND implementation
+would do with the same document.
+
+The first is that "a consumer SHOULD bound validation time and recursion depth"
+does not bound anything. It reads like a rule and behaves like a suggestion,
+because the number is left to whoever implements it — and this schema is validated
+at BOTH ends of one registration. The Exchange enforces it; the client pre-checks
+against it before signing. Two privately chosen depth limits mean a schema one
+side compiles and the other refuses, so a payload passes the pre-check and is
+rejected at the Exchange, or worse passes the Exchange having never been checked.
+The limit had to become a number in the contract for the same reason the domain
+pattern did: one value space with two contracts is the state that produces the
+bugs. It is 32 containers and 16KB, and a conformance guard now reads the SDK's
+copies back out of the shared vectors and fails if the field comment stops stating
+them — which is the only mechanism available here, because `data_schema` is a
+`Struct` and no field-level protovalidate rule can reach inside one. The
+neighbouring domain guard exists because two copies of a rule drifted silently;
+this one exists because the rule has no machine-readable copy to compare against
+at all.
+
+The second is `pattern`, and it is the more interesting failure. Draft 2020-12
+says patterns are ECMA-262. The engines real implementations run are not ECMA-262:
+Go's RE2, JavaScript's RegExp and Python's `re` intersect on considerably less than
+any one of them accepts, and the gap runs in both directions. The direction
+everyone thinks of is RE2 refusing lookaround, atomic groups and backreferences —
+loud, visible, and merely annoying, since one implementation errors while the
+others work. The direction that matters is the quiet one: inline flags, Unicode
+property classes, text anchors and POSIX bracket names are accepted by one engine
+and either refused or read DIFFERENTLY by another. `[[:alpha:]]` is a character
+class to RE2 and the literal characters `:alph` to JavaScript. Both compile. Both
+report success. They then disagree about which registrations are valid, with
+nothing logged and no error to catch — a conformance divergence that no test suite
+finds because neither side ever fails.
+
+So the admitted alphabet is the intersection, stated as three syntactic rules a
+lexical scan can apply identically in three languages. Catastrophic backtracking,
+which the field comment had already named as the hazard, stops being a separate
+concern: the constructs that cause it are the same ones portability excludes, so
+one rule discharges both. That is the reason the pattern rule is a MUST rather
+than the SHOULD the ReDoS framing would have justified — a performance hazard can
+be a SHOULD, but two validators quietly disagreeing about what conforms cannot.
+
+`format`, `contentEncoding` and `contentMediaType` are pinned as annotations by
+the same argument at a smaller scale. Every library defaults differently on
+whether to assert them, so a schema whose verdict depends on which library read it
+has no single answer — and "depends on the library" is not a semantics a contract
+can publish.
+
+One consequence worth stating because it is easy to get backwards. A client that
+finds a schema breaking any of these rules SKIPS its pre-check and sends anyway;
+it does not refuse locally. The Exchange's enforcement is the deciding check, and
+a client that vetoed here would block payloads the Exchange would have accepted —
+turning a safety rule about reading a hostile document into a denial of service
+against its own user. An Exchange applying the same rules to its OWN configured
+schema reads a failure the opposite way: nothing third-party is involved, so it is
+a misconfigured deployment, and the one outcome it must not reach is advertising a
+schema it is not itself enforcing. Same rules, same code, opposite response — which
+is why the SDK face returns a verdict naming WHICH rule broke rather than a bare
+error.
+
 ## Recipient addressing: a body field, not the signed request URL
 
 Every addressed request carries `exchange`, the bare host of its intended

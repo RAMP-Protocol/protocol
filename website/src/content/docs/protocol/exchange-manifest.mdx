@@ -123,7 +123,7 @@ The Exchange's offer-signing keys are **not** carried in `ramp.json`. They live 
 | `gnap_grant_endpoint` | string | No | GNAP grant endpoint when GNAP is supported |
 | `supported_profiles` | string[] | No | Domain extension profiles this Exchange conforms to (e.g., `["ramp-academic-v1", "ramp-news-v1"]`) |
 | `base_currency` | string | No | ISO 4217 currency code for all `unit_cost` values in offers (e.g., `"USD"`) |
-| `account_registration` | object | No | How to open an account here. Its `data_schema` is a JSON Schema (draft 2020-12, max 16KB) for the `registration_data` an agent sends to `Register`. Present means this Exchange enforces it **and accepts registration through the API**; absent means `registration_data` passes through uninspected. Must be self-contained — consumers do not resolve a remote `$ref` out of it |
+| `account_registration` | object | No | How to open an account here. Its `data_schema` is a JSON Schema (draft 2020-12) for the `registration_data` an agent sends to `Register`. Present means this Exchange enforces it **and accepts registration through the API**; absent means `registration_data` passes through uninspected. It must satisfy every rule in [Registration schema rules](#registration-schema-rules) below — self-contained, 16KB, 32 levels deep, restricted `pattern` alphabet |
 | `contact` | string | No | Contact email for integration inquiries |
 | `terms_uri` | string | No | Terms of service URL |
 | `terms_digest` | string | No | Digest of the document at `terms_uri`, in `method:hexdigest` form, pinning **which** terms document you are currently offering. A registration echoes it, the request signature covers that echo, and you record the accepted value with the account — which is what answers "which terms did this operator accept" after a later revision. Only allowed alongside `terms_uri`. Publishing it for the first time refuses every client that does not yet echo it, so treat it as a coordinated change |
@@ -170,6 +170,57 @@ Two details matter in practice:
 
 An Exchange that serves its API from a separate domain should front it under its
 own subdomain rather than advertising the other domain directly.
+
+### Registration schema rules
+
+`account_registration.data_schema` is the one part of this manifest a client both
+**reads out of a third party's document** and then **executes**, before any
+signature has been checked. A JSON Schema is a small program, so an unbounded one
+is a denial-of-service vector and one that resolves references is an SSRF vector
+aimed wherever its author points. A publisher **MUST** satisfy every rule below,
+and a consumer **MUST** refuse a schema that does not.
+
+- **Self-contained.** Every `$ref`, `$dynamicRef` and `$recursiveRef` begins with
+  `#`. A consumer never resolves a reference that leaves the document — doing so
+  turns every reader into a fetch aimed at a URL the schema's author chose.
+- **One dialect.** Every `$schema` in the document names
+  `https://json-schema.org/draft/2020-12/schema` (a trailing `#` is the same
+  value). A document declaring none is read as 2020-12. An older draft is refused
+  rather than validated under semantics its author did not intend.
+- **16KB**, measured as the UTF-8 bytes of the member **as served** in this file.
+- **32 nested JSON containers**, counting the schema object itself as the first.
+  Deep `allOf` and `$ref` chains are the cheapest way to make a compile expensive.
+- **A restricted `pattern` alphabet.** A group opens with `(` or `(?:` and nothing
+  else; the escapes `\1`–`\9`, `\k`, `\p`, `\P`, `\A`, `\z`, `\Z`, `\Q`, `\E`,
+  `\C`, `\G` and `\K` do not appear; and `[[:` does not appear.
+- **Annotations stay annotations.** `format`, `contentEncoding` and
+  `contentMediaType` are never asserted.
+
+The bounds are numbers in the contract rather than each implementation's choice
+because a schema is validated at **both ends of one registration** — the Exchange
+enforcing it and the client pre-checking against it — so a limit one side invents
+refuses payloads the other accepts, which is the disagreement the field exists to
+prevent.
+
+The `pattern` rule is the one worth explaining, and it is a MUST rather than a
+SHOULD because half of what it excludes fails **silently**. Draft 2020-12 patterns
+are ECMA-262, and the regex engines real implementations run do not agree on that
+grammar. The loud half of the gap is Go's RE2 refusing the lookaround, atomic
+groups and backreferences ECMA allows: a schema using them compiles for one
+implementation and fails for the next — visible, and merely annoying. The quiet
+half is the dangerous one. Inline flags, Unicode property classes, text anchors
+and POSIX bracket names are accepted by one engine and either refused or read
+**differently** by another, so two conformant validators both compile the pattern
+and then disagree about which payloads match it, with nothing logged and no error
+to catch. Excluding the catastrophic-backtracking constructs falls out of the same
+rule instead of needing one of its own.
+
+A **client** that finds a schema breaking any of these rejects it and **skips its
+local pre-check** rather than repairing or truncating it, sending the payload and
+letting the Exchange decide — exactly as it would where no schema is published. A
+local check that cannot run must not become a local veto. An **Exchange** that
+cannot compile its own configured schema is looking at a misconfiguration of its
+deployment, and must not advertise a schema it is not itself enforcing.
 
 ## The Unified RAMP Well-Known File
 

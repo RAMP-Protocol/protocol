@@ -140,6 +140,45 @@ held there by a conformance guard. Reach for it wherever you vet a domain that
 arrived in a message; note that the client's own send path still vets with the wider
 `IsBareHost`, so passing that one is not yet evidence the wire will accept a value.
 
+**Registration schema** — an Exchange MAY publish a JSON Schema for the
+`registration_data` it expects. Both ends of a registration validate against it, so
+the rules live here once: 2020-12 only, same-document `$ref` only, 16KB, 32 levels,
+and a `pattern` alphabet all three SDK languages express identically. `raw` is the
+schema's bytes **as served** in `ramp.json` — the size cap is defined over those:
+
+```go
+schema, verdict := helpers.CompileRegistrationSchema(raw)
+if verdict != helpers.SchemaAccepted {
+    // "wrong_dialect" | "remote_ref" | "too_large" | "too_deep" | "unsafe_pattern" | ...
+}
+```
+
+The two callers read a non-accepted verdict differently, and getting it backwards is
+the easy mistake. A **client** pre-checking a payload skips the check and sends
+anyway — the Exchange's enforcement decides, and a local check that cannot run must
+not become a local veto against your own user. An **Exchange** compiling its OWN
+configured schema is looking at a misconfigured deployment, and must not advertise a
+schema it is not enforcing. Validation returns the offending members ready for the
+refusal builder; a nil `*RegistrationSchema` means no schema is published, so nothing
+is enforced:
+
+```go
+fieldErrors := schema.Validate(req.GetRegistrationData().AsMap())
+if len(fieldErrors) > 0 {
+    return helpers.RegistrationFailureDetail(domain, "registration_data does not conform",
+        rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+        fieldErrors...)
+}
+```
+
+Each entry is an RFC 6901 pointer relative to `registration_data` (`""` addresses the
+whole object) plus the violated constraint. The text states the constraint and
+**never the submitted value** — registration data is an operator's business data and a
+refusal travels back over the wire, so the validating library's own messages, which
+quote the failing value, are deliberately not used. The list is deduplicated by
+pointer and keyword and sorted before the 64-item cap, so the same entries survive in
+every language.
+
 **Also:** RFC 7638 `Thumbprint`, ADR-019 `ErrorDetail` constructors +
 `AsConnectError`/`ErrorDetailFrom`/`Reason`, `NewIdempotencyKey`, scope helpers,
 `RedactURL` (a signed URL carries its credential in the query — never log it raw),
