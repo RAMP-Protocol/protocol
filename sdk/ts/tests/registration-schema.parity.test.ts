@@ -43,6 +43,16 @@ type CompileVector = {
 	expected_verdict: string;
 };
 
+/**
+ * wellFormed reports whether a string contains no lone surrogate. `String.isWellFormed`
+ * would say so directly but needs a newer lib target than this package sets, and a
+ * UTF-8 round trip answers the same question: encoding replaces a lone surrogate with
+ * U+FFFD, so a string that survives unchanged had none.
+ */
+function wellFormed(s: string): boolean {
+	return new TextDecoder().decode(new TextEncoder().encode(s)) === s;
+}
+
 function vectorBytes(v: { schema?: string; schema_b64?: string }): Uint8Array {
 	if (v.schema_b64 !== undefined) return new Uint8Array(Buffer.from(v.schema_b64, "base64"));
 	return new TextEncoder().encode(v.schema ?? "");
@@ -111,9 +121,17 @@ describe("registration-schema parity", () => {
 		expect(fieldErrors.map((x) => x.path)).toEqual(v.expected_paths);
 		expect(fieldErrors.length).toBeLessThanOrEqual(maxRegistrationFieldErrors);
 		for (const fe of fieldErrors) {
-			expect(fe.path.length).toBeLessThanOrEqual(maxRegistrationFieldErrorPathLen);
-			expect(fe.error.length).toBeGreaterThanOrEqual(1);
-			expect(fe.error.length).toBeLessThanOrEqual(maxRegistrationFieldErrorTextLen);
+			// CHARACTERS, which is what protovalidate's string.max_len counts. Measuring
+			// `.length` here counts UTF-16 code units and would fail a pointer that is
+			// comfortably inside the bound — the same unit confusion the port itself had.
+			expect([...fe.path].length).toBeLessThanOrEqual(maxRegistrationFieldErrorPathLen);
+			expect([...fe.error].length).toBeGreaterThanOrEqual(1);
+			expect([...fe.error].length).toBeLessThanOrEqual(maxRegistrationFieldErrorTextLen);
+			// A clamp that cut through a surrogate pair would leave a lone surrogate,
+			// which is not a string the wire can carry. Encoding replaces one with
+			// U+FFFD, so a round trip that comes back unchanged had none.
+			expect(wellFormed(fe.path)).toBe(true);
+			expect(wellFormed(fe.error)).toBe(true);
 		}
 	});
 

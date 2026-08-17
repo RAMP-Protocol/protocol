@@ -40,6 +40,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // compileVector is one CompileRegistrationSchema case. The schema is carried as the
@@ -629,7 +630,7 @@ func buildRegSchemaValidateVectors(t *testing.T) []validateVector {
 			Paths: paths, Keywords: keywords,
 		})
 	}
-	out = append(out, buildTruncationVector(t))
+	out = append(out, buildTruncationVector(t), buildAstralPointerVector(t))
 	return out
 }
 
@@ -669,6 +670,40 @@ func buildTruncationVector(t *testing.T) validateVector {
 	}
 	return validateVector{
 		Name: "more_failures_than_the_wire_carries", Schema: schema, Data: data,
+		Paths: paths, Keywords: keywords,
+	}
+}
+
+// buildAstralPointerVector pins the UNIT the pointer bound is counted in.
+//
+// protovalidate's string.max_len counts CHARACTERS, and the three languages reach for
+// three different lengths: bytes in Go, code points in Python, UTF-16 code units in
+// JavaScript. A member name of astral characters separates all three — 200 of them are
+// 200 characters, 800 bytes and 400 code units — so a port measuring the wrong one
+// either clamps a pointer the others leave whole, naming a DIFFERENT member, or cuts
+// through a character and emits a string proto.Marshal rejects. Nothing in the corpus
+// distinguished them until this case existed.
+func buildAstralPointerVector(t *testing.T) validateVector {
+	t.Helper()
+	// Comfortably inside the 255-character bound and comfortably outside it in UTF-16
+	// code units, which is the whole point of the case.
+	name := strings.Repeat("😀", 200)
+	schema := `{"type":"object","properties":{"` + name + `":{"type":"string"}}}`
+	data := map[string]any{name: float64(1)}
+
+	sch, v := CompileRegistrationSchema([]byte(schema))
+	if v != SchemaAccepted {
+		t.Fatalf("astral pointer vector: its schema does not compile (%s)", v)
+	}
+	paths, keywords := oracleViolations(sch, data)
+	want := "/" + name
+	if len(paths) != 1 || paths[0] != want {
+		t.Fatalf("astral pointer vector: oracle returned %q, intended the whole pointer "+
+			"(%d characters, under the %d-character bound)",
+			paths, utf8.RuneCountInString(want), MaxRegistrationFieldErrorPathLen)
+	}
+	return validateVector{
+		Name: "a_member_named_in_astral_characters", Schema: schema, Data: data,
 		Paths: paths, Keywords: keywords,
 	}
 }
