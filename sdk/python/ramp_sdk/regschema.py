@@ -258,6 +258,27 @@ def _has_nested_quantifier(p: str) -> bool:
     return False
 
 
+_JSON_WHITESPACE = frozenset(b" \t\r\n")
+
+
+def _is_json_blank(raw: bytes) -> bool:
+    """Whether ``raw`` carries nothing but JSON whitespace, which is what "this
+    Exchange publishes no data_schema" looks like in bytes.
+
+    The definition is RFC 8259's and nothing wider: space, tab, carriage return and
+    line feed. It is deliberately NOT each language's idea of whitespace, because that
+    is three different sets — Go's ``unicode.IsSpace`` takes U+00A0 and U+3000, this
+    port's ``bytes.strip()`` takes neither, and JavaScript's ``String.trim`` takes both
+    plus a leading byte order mark. This gate decides the ENFORCEMENT SWITCH: reading a
+    document as blank means reading it as "no schema published", which turns validation
+    off. So it has to be the same question in all three, asked over the bytes AS SERVED
+    rather than over a decoded string — decoding is itself where one of those
+    disagreements lives, and a mark or an ill-formed byte must survive to reach the rule
+    that refuses it.
+    """
+    return all(b in _JSON_WHITESPACE for b in raw)
+
+
 def _refuse_json_constant(token: str) -> Any:
     """Reject the JavaScript-only numeric literals. RFC 8259 §6 excludes Infinity and
     NaN from the JSON grammar; this parser admits them unless told otherwise."""
@@ -1024,7 +1045,7 @@ def _decode(raw: bytes) -> tuple[Any, SchemaVerdict]:
         )
         raise TypeError(msg)
     raw = bytes(raw)
-    if not raw.strip():
+    if _is_json_blank(raw):
         # Nothing to compile is its own answer, not a malformed document: an Exchange
         # that publishes no data_schema is the contract's ordinary case.
         return None, "not_published"

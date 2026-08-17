@@ -138,6 +138,30 @@ const portableSyntaxEscapes = new Set("$()*+./?[\\]^{|}".split(""));
 const shorthandClassEscapes = new Set("dDwW".split(""));
 
 /**
+ * isJsonBlank reports whether `bytes` carries nothing but JSON whitespace, which is
+ * what "this Exchange publishes no data_schema" looks like in bytes.
+ *
+ * The definition is RFC 8259's and nothing wider: space, tab, carriage return and line
+ * feed. It is deliberately NOT each language's idea of whitespace, because that is
+ * three different sets — Go's `unicode.IsSpace` takes U+00A0 and U+3000, a Python
+ * `bytes.strip()` takes neither, and this runtime's `String.trim` takes both. This gate
+ * decides the ENFORCEMENT SWITCH: reading a document as blank means reading it as "no
+ * schema published", which turns validation off.
+ *
+ * It asks the question over the BYTES rather than a decoded string, which matters most
+ * here: `TextDecoder` strips a leading byte order mark, so decoding first made "mark
+ * followed by a space" look blank and returned `not_published` — silently bypassing the
+ * rule below that exists to refuse a mark, and turning enforcement off for a document
+ * the other two SDKs call malformed.
+ */
+function isJsonBlank(bytes: Uint8Array): boolean {
+	for (const b of bytes) {
+		if (b !== 0x20 && b !== 0x09 && b !== 0x0d && b !== 0x0a) return false;
+	}
+	return true;
+}
+
+/**
  * hexEscapeLen reports the length of a `\xHH` escape at `i`, or 0 if there is not one
  * there. Exactly two hex digits: `\x41` is read the same by all three engines, while
  * the brace form `\x{41}` is an RE2 spelling the other two refuse and a short `\x4` is
@@ -904,7 +928,7 @@ export function compileRegistrationSchema(raw: Uint8Array | string): {
 	const bytes = typeof raw === "string" ? new TextEncoder().encode(raw) : raw;
 	// Nothing to compile is its own answer, not a malformed document: an Exchange that
 	// publishes no data_schema is the contract's ordinary case.
-	if (bytes.length === 0 || new TextDecoder().decode(bytes).trim() === "") {
+	if (isJsonBlank(bytes)) {
 		return { schema: null, verdict: "not_published" };
 	}
 	// Size first, on the bytes as served and before any parse: an oversized document

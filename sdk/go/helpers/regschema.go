@@ -128,6 +128,27 @@ const RegistrationSchemaDialect = "https://json-schema.org/draft/2020-12/schema"
 // utf8BOM is the UTF-8 encoding of U+FEFF, refused at the head of a schema.
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
+// isJSONBlank reports whether raw carries nothing but JSON whitespace, which is what
+// "this Exchange publishes no data_schema" looks like in bytes.
+//
+// The definition is RFC 8259's and nothing wider: space, tab, carriage return and line
+// feed. It is deliberately NOT each language's idea of whitespace, because that is
+// three different sets — Go's unicode.IsSpace takes U+00A0 and U+3000, a Python
+// bytes.strip() takes neither, and JavaScript's String.trim takes both plus a leading
+// byte order mark. This gate decides the ENFORCEMENT SWITCH: reading a document as
+// blank means reading it as "no schema published", which turns validation off. So it
+// has to be the same question in all three, asked over the bytes AS SERVED rather than
+// over a decoded string — decoding is itself where one of those disagreements lives,
+// and a mark or an ill-formed byte must survive to reach the rule that refuses it.
+func isJSONBlank(raw []byte) bool {
+	for _, b := range raw {
+		if b != 0x20 && b != 0x09 && b != 0x0D && b != 0x0A {
+			return false
+		}
+	}
+	return true
+}
+
 // SchemaVerdict is the outcome of compiling a published data_schema.
 type SchemaVerdict int
 
@@ -262,7 +283,7 @@ type RegistrationSchema struct {
 func CompileRegistrationSchema(raw []byte) (*RegistrationSchema, SchemaVerdict) {
 	// Nothing to compile is its own answer, not a malformed document. An Exchange
 	// that publishes no data_schema is the contract's ordinary case.
-	if len(bytes.TrimSpace(raw)) == 0 {
+	if isJSONBlank(raw) {
 		return nil, SchemaNotPublished
 	}
 	// Size first, on the bytes as served and before any parse: an oversized document
@@ -944,14 +965,14 @@ func isRangeHyphenAt(p string, i int) bool {
 //
 // So the admitted alphabet is the intersection, expressed as six rules:
 //
-//	1. an escape names a portable class, control character, \xHH, or a metacharacter
-//	   standing for itself — see portableEscapes, an ALLOWLIST;
-//	2. a group opens with `(` or `(?:` and nothing else;
-//	3. `[:` does not appear inside a bracket expression, at any position — it is a
-//	   POSIX class name to RE2 and the literal characters to JavaScript;
-//	4. a bracket expression closes, and does not open with `]`;
-//	5. a counted repeat does not exceed maxPortableRepeat;
-//	6. no quantified group has a body that can itself repeat or branch.
+//  1. an escape names a portable class, control character, \xHH, or a metacharacter
+//     standing for itself — see portableEscapes, an ALLOWLIST;
+//  2. a group opens with `(` or `(?:` and nothing else;
+//  3. `[:` does not appear inside a bracket expression, at any position — it is a
+//     POSIX class name to RE2 and the literal characters to JavaScript;
+//  4. a bracket expression closes, and does not open with `]`;
+//  5. a counted repeat does not exceed maxPortableRepeat;
+//  6. no quantified group has a body that can itself repeat or branch.
 //
 // Rule 6 is aimed at catastrophic backtracking SEPARATELY and deliberately, because
 // nothing in rules 1-5 covers it: `(a+)+` needs neither lookaround nor a

@@ -316,6 +316,9 @@ func TestDataSchemaCommentStatesTheRulesTheSDKEnforces(t *testing.T) {
 		{"const and friends hold data, not schema", "const"},
 		// The encoding, which decides WHICH document every rule above is read against.
 		{"UTF-8 with no byte order mark", "byte order mark"},
+		// What counts as "no schema published" — the enforcement switch, so a byte
+		// sequence read as absent is one that turns validation off.
+		{"absent means empty or JSON whitespace", "only JSON whitespace"},
 	}
 	// The alphabet itself, character by character, so an escape dropped from the SDK
 	// is an escape the contract stops naming.

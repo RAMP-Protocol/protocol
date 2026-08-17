@@ -432,6 +432,34 @@ var rawByteCompileCases = []struct {
 		raw:  []byte("\x80" + `{"type":"object"}`),
 		want: SchemaMalformed,
 	},
+
+	// What counts as "no schema published", which is the ENFORCEMENT SWITCH: reading
+	// a document as blank reads it as "publishes none", and validation is then off.
+	// Each language's own idea of whitespace is a different set, so the question is
+	// asked over the bytes with RFC 8259's four and nothing else.
+	//
+	// The byte order mark cases are the ones that motivated this. Decoding before
+	// testing for blankness made "mark, then a space" look empty in the TypeScript
+	// port, because TextDecoder strips the mark — so the document never reached the
+	// rule that refuses a mark, and an Exchange whose configured schema was an empty
+	// file saved with one would have run with enforcement silently off while the other
+	// two called it malformed.
+	{name: "a_byte_order_mark_alone", raw: []byte("\ufeff"), want: SchemaMalformed},
+	{name: "a_byte_order_mark_then_only_spaces", raw: []byte("\ufeff  "), want: SchemaMalformed},
+	// Whitespace the languages disagree about: U+00A0, U+2028 and U+3000 are space to
+	// two of the three and not to the other. None of them is JSON whitespace, so the
+	// document is not blank — it is a document that is not JSON.
+	{name: "a_no_break_space_alone", raw: []byte("\u00a0"), want: SchemaMalformed},
+	{name: "a_line_separator_alone", raw: []byte("\u2028"), want: SchemaMalformed},
+	{name: "an_ideographic_space_alone", raw: []byte("\u3000"), want: SchemaMalformed},
+	// A vertical tab and a form feed are whitespace to all three languages and to
+	// none of JSON. They agreed on the wrong answer before, which no parity test could
+	// have caught — only the grammar decides this one.
+	{name: "a_vertical_tab_alone", raw: []byte("\v"), want: SchemaMalformed},
+	{name: "a_form_feed_alone", raw: []byte("\f"), want: SchemaMalformed},
+	// The four that ARE JSON whitespace still read as "publishes none", which is the
+	// contract's ordinary case and must keep working.
+	{name: "only_json_whitespace", raw: []byte(" \t\r\n"), want: SchemaNotPublished},
 }
 
 // buildRegSchemaValidateVectors enumerates what a refusal has to SAY. The pointer

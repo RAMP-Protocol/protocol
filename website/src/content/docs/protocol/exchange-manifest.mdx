@@ -220,6 +220,12 @@ and a consumer **MUST** refuse a schema that does not.
 - **One encoding.** The bytes are well-formed UTF-8 and do not begin with a byte
   order mark, and a consumer neither strips a mark nor repairs ill-formed bytes.
   `NaN` and `Infinity` are not JSON and are refused with them.
+- **Absent means empty, or only JSON whitespace** — space, tab, carriage return and
+  line feed, and no others. This is the enforcement switch, so bytes read as absent
+  are bytes that turn validation off: a consumer that asks its own language what
+  "blank" means gets three different answers, and a decoder that strips a byte order
+  mark makes a mark followed by a space look like nothing at all. A document that is
+  not empty and not JSON is **malformed**, which is a refusal, never silence.
 - **No nested quantifiers.** A quantified group's body cannot itself repeat or
   branch: `(a+)+`, `(a|a)*` and `([a-z]+)*` are refused, `(?:ab)+` is fine.
 - **Annotations stay annotations.** `format`, `contentEncoding` and

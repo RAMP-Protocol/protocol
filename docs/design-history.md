@@ -322,6 +322,18 @@ literals. RFC 8259 permits either mark policy, which is exactly why the contract
 pick one — the size cap is defined over the bytes as served, and a parser that silently
 drops three of them is measuring something else.
 
+The same decode also decided a question nobody had noticed was a question: what "this
+Exchange publishes no schema" looks like in bytes. That gate runs before every rule and
+turns enforcement OFF, and each language had been asking its own runtime what "blank"
+means — three different sets, and the JavaScript one strips a byte order mark before
+answering, so a mark followed by a space read as "nothing published" and never reached
+the rule that refuses a mark. An empty configuration file saved by an editor that adds
+one would have left that Exchange enforcing nothing, quietly, while the other two called
+the same bytes malformed. Emptiness is now RFC 8259's four whitespace bytes, tested over
+the bytes rather than a decoded string. The general shape is the one this feature keeps
+running into: a rule is only as portable as the layer underneath it, and "ask the
+platform" is not a specification.
+
 ## Recipient addressing: a body field, not the signed request URL
 
 Every addressed request carries `exchange`, the bare host of its intended

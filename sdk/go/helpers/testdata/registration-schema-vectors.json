@@ -337,6 +337,54 @@
       "schema": "",
       "schema_b64": "gHsidHlwZSI6Im9iamVjdCJ9",
       "expected_verdict": "malformed"
+    },
+    {
+      "name": "a_byte_order_mark_alone",
+      "schema": "",
+      "schema_b64": "77u/",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "a_byte_order_mark_then_only_spaces",
+      "schema": "",
+      "schema_b64": "77u/ICA=",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "a_no_break_space_alone",
+      "schema": "",
+      "schema_b64": "wqA=",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "a_line_separator_alone",
+      "schema": "",
+      "schema_b64": "4oCo",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "an_ideographic_space_alone",
+      "schema": "",
+      "schema_b64": "44CA",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "a_vertical_tab_alone",
+      "schema": "",
+      "schema_b64": "Cw==",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "a_form_feed_alone",
+      "schema": "",
+      "schema_b64": "DA==",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "only_json_whitespace",
+      "schema": "",
+      "schema_b64": "IAkNCg==",
+      "expected_verdict": "not_published"
     }
   ],
   "dialect": "https://json-schema.org/draft/2020-12/schema",
