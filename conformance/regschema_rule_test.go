@@ -47,6 +47,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,16 +63,20 @@ const regSchemaVectors = "../sdk/go/helpers/testdata/registration-schema-vectors
 
 // sdkRegSchemaRule is the rule set the SDK ships, as recorded in the vectors.
 type sdkRegSchemaRule struct {
-	Dialect      string `json:"dialect"`
-	MaxBytes     int    `json:"max_schema_bytes"`
-	MaxDepth     int    `json:"max_schema_depth"`
-	MaxErrors    uint64 `json:"max_field_errors"`
-	MaxPathLen   uint64 `json:"max_field_error_path_len"`
-	MaxErrTextLn uint64 `json:"max_field_error_text_len"`
+	Dialect        string `json:"dialect"`
+	MaxBytes       int    `json:"max_schema_bytes"`
+	MaxDepth       int    `json:"max_schema_depth"`
+	MaxEvaluations int    `json:"max_schema_evaluations"`
+	MaxRepeat      int    `json:"max_pattern_repeat"`
+	ForbiddenEsc   string `json:"forbidden_pattern_escapes"`
+	MaxErrors      uint64 `json:"max_field_errors"`
+	MaxPathLen     uint64 `json:"max_field_error_path_len"`
+	MaxErrTextLn   uint64 `json:"max_field_error_text_len"`
 }
 
 var errNoSDKRegSchemaRule = errors.New(
 	regSchemaVectors + " is missing one of dialect / max_schema_bytes / max_schema_depth / " +
+		"max_schema_evaluations / max_pattern_repeat / forbidden_pattern_escapes / " +
 		"max_field_errors / max_field_error_path_len / max_field_error_text_len — this guard reads " +
 		"the SDK's copy of the registration-schema rules from there")
 
@@ -88,6 +93,7 @@ var sdkRegRule = sync.OnceValues(func() (sdkRegSchemaRule, error) {
 		return sdkRegSchemaRule{}, err
 	}
 	if doc.Dialect == "" || doc.MaxBytes == 0 || doc.MaxDepth == 0 ||
+		doc.MaxEvaluations == 0 || doc.MaxRepeat == 0 || doc.ForbiddenEsc == "" ||
 		doc.MaxErrors == 0 || doc.MaxPathLen == 0 || doc.MaxErrTextLn == 0 {
 		return sdkRegSchemaRule{}, errNoSDKRegSchemaRule
 	}
@@ -166,6 +172,57 @@ func TestSDKRegistrationFailureBoundsMatchTheWire(t *testing.T) {
 	}
 }
 
+// escapeListRe pulls the escape sentence out of the comment. The list is spelled out
+// character by character in the contract precisely so this can read it back.
+var escapeListRe = regexp.MustCompile(`the escapes ((?:\\.(?:, )?| and )+) MUST NOT appear`)
+
+// assertEscapeSetsMatch compares the alphabet the contract states with the one the SDK
+// enforces, in both directions.
+func assertEscapeSetsMatch(t *testing.T, comment, sdkEscapes string) {
+	t.Helper()
+	m := escapeListRe.FindStringSubmatch(comment)
+	if m == nil {
+		t.Fatalf("AccountRegistration.data_schema no longer carries a readable "+
+			"\"the escapes ... MUST NOT appear\" list — this half of the guard has lost its anchor.\n"+
+			"  the SDK forbids: %q", sdkEscapes)
+	}
+	contract := map[rune]bool{}
+	for _, tok := range regexp.MustCompile(`\\(.)`).FindAllStringSubmatch(m[1], -1) {
+		contract[rune(tok[1][0])] = true
+	}
+	sdk := map[rune]bool{}
+	for _, r := range sdkEscapes {
+		sdk[r] = true
+	}
+	for r := range contract {
+		if !sdk[r] {
+			t.Errorf("the contract forbids the escape %s and the SDK does not.\n"+
+				"  contract (authoritative): AccountRegistration.data_schema\n"+
+				"  SDK (%s): %q\n"+
+				"A rule the contract publishes and nothing enforces is worse than no rule.",
+				strconv.QuoteRune(r), regSchemaVectors, sdkEscapes)
+		}
+	}
+	for r := range sdk {
+		if !contract[r] {
+			t.Errorf("the SDK forbids the escape %s and the contract does not name it.\n"+
+				"  An implementor reading only the contract would admit a pattern this SDK refuses.",
+				strconv.QuoteRune(r))
+		}
+	}
+}
+
+// byteCapPhrase renders the size cap the way the contract states it, EXACTLY. The
+// KB form is used only when the number really is a whole number of kibibytes; any
+// other value has to appear verbatim, so a cap that moved off the round number
+// cannot hide behind an integer division that still reads "16KB".
+func byteCapPhrase(n int) string {
+	if n%1024 == 0 {
+		return strconv.Itoa(n/1024) + "KB"
+	}
+	return strconv.Itoa(n)
+}
+
 // dataSchemaComment returns the leading // block above the data_schema field, read
 // from the proto SOURCE. The descriptor does not retain source comments, and the
 // comment is where these rules live — data_schema is a Struct, so no field-level
@@ -226,19 +283,48 @@ func TestDataSchemaCommentStatesTheRulesTheSDKEnforces(t *testing.T) {
 			opening, comment)
 	}
 
-	for _, c := range []struct {
+	// Every phrase is DERIVED from the SDK's own numbers, not restated. The earlier
+	// version of this list spelled five of them as literals in this file, and a
+	// mutation run proved what that was worth: dropping an escape from all three SDKs
+	// left every gate green, and moving the byte cap to 17000 also passed, because the
+	// assertion rendered it as MaxBytes/1024 and integer division still said "16KB".
+	checks := []struct {
 		rule   string
 		phrase string
 	}{
-		{"the size cap", strconv.Itoa(want.MaxBytes/1024) + "KB"},
+		{"the size cap", byteCapPhrase(want.MaxBytes)},
 		{"the depth cap", strconv.Itoa(want.MaxDepth) + " nested JSON containers"},
+		{"the evaluation cap", strconv.Itoa(want.MaxEvaluations) + " evaluations"},
+		{"the repeat bound", "MUST NOT exceed " + strconv.Itoa(want.MaxRepeat)},
 		{"the pinned dialect", want.Dialect},
 		{"same-document references only", `it begins with "#"`},
+		{"no reference cycles", "MUST NOT return to a schema already on it"},
 		{"the group forms a pattern may use", `A group MUST open with "(" or "(?:"`},
-		{"the escapes a pattern may not use", `\1-\9, \k, \p, \P, \A, \z, \Z, \Q, \E, \C, \G and \K`},
-		{"the POSIX bracket form a pattern may not use", `"[[:" MUST NOT appear`},
-		{"format and friends are annotations", "MUST NOT be asserted"},
-	} {
+		{"the POSIX bracket form a pattern may not use", `"[:"` + " MUST NOT appear inside a bracket expression"},
+		{"no nested quantifiers", "No nested quantifiers"},
+		{"format and friends are annotations", "MUST NOT assert format"},
+		{"the object-only rule", "MUST be a JSON object"},
+	}
+	// The alphabet itself, character by character, so an escape dropped from the SDK
+	// is an escape the contract stops naming.
+	for _, r := range want.ForbiddenEsc {
+		checks = append(checks, struct {
+			rule   string
+			phrase string
+		}{
+			rule:   "the forbidden escape " + strconv.QuoteRune(r),
+			phrase: `\` + string(r),
+		})
+	}
+	// ... and the same comparison in the OTHER direction, which is the one that
+	// matters. Checking only that the contract names everything the SDK forbids is
+	// self-satisfying: regenerating the corpus after dropping an escape updates the
+	// SDK's side of the comparison too, so the set shrinks on both sides and the guard
+	// stays green while the contract still promises a rule nothing enforces. The
+	// contract is authoritative, so its set is the one that decides.
+	assertEscapeSetsMatch(t, comment, want.ForbiddenEsc)
+
+	for _, c := range checks {
 		if !strings.Contains(comment, c.phrase) {
 			t.Errorf("AccountRegistration.data_schema does not state %s.\n"+
 				"  the SDK enforces it (%s), so an implementor reading only the contract\n"+

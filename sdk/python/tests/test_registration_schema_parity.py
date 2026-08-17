@@ -25,18 +25,22 @@ because it is a property of every possible payload rather than of these.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 from conftest import GO_TESTDATA, load_json
 
 from ramp_sdk.regschema import (
+    MAX_PORTABLE_REPEAT,
     MAX_REGISTRATION_FIELD_ERROR_PATH_LEN,
     MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN,
     MAX_REGISTRATION_FIELD_ERRORS,
     MAX_REGISTRATION_SCHEMA_BYTES,
     MAX_REGISTRATION_SCHEMA_DEPTH,
+    MAX_REGISTRATION_SCHEMA_EVALUATIONS,
     REGISTRATION_SCHEMA_DIALECT,
+    _DIVERGENT_ESCAPES,
     compile_registration_schema,
     is_safe_schema_pattern,
 )
@@ -45,6 +49,7 @@ _DOC = load_json(GO_TESTDATA / "registration-schema-vectors.json")
 _COMPILE = _DOC["compile"]
 _VALIDATE = _DOC["validate"]
 _PATTERN = _DOC["pattern"]
+_MATCH = _DOC["match"]
 
 
 def test_the_rule_constants_match_the_oracle() -> None:
@@ -56,6 +61,11 @@ def test_the_rule_constants_match_the_oracle() -> None:
     assert MAX_REGISTRATION_FIELD_ERRORS == _DOC["max_field_errors"]
     assert MAX_REGISTRATION_FIELD_ERROR_PATH_LEN == _DOC["max_field_error_path_len"]
     assert MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN == _DOC["max_field_error_text_len"]
+    assert MAX_REGISTRATION_SCHEMA_EVALUATIONS == _DOC["max_schema_evaluations"]
+    assert MAX_PORTABLE_REPEAT == _DOC["max_pattern_repeat"]
+    # The alphabet itself, not a description of it. Dropping an escape from all three
+    # SDKs used to leave every gate green; this is what makes that go red.
+    assert "".join(sorted(_DIVERGENT_ESCAPES)) == _DOC["forbidden_pattern_escapes"]
 
 
 @pytest.mark.parametrize("vector", _COMPILE, ids=[v["name"] for v in _COMPILE])
@@ -91,6 +101,28 @@ def test_validate_matches_the_oracle(vector: dict[str, Any]) -> None:
 @pytest.mark.parametrize("vector", _PATTERN, ids=[v["name"] for v in _PATTERN])
 def test_pattern_alphabet_matches_the_oracle(vector: dict[str, Any]) -> None:
     assert is_safe_schema_pattern(vector["pattern"]) is vector["safe"]
+
+
+@pytest.mark.parametrize("vector", _MATCH, ids=[v["name"] for v in _MATCH])
+def test_pattern_matching_matches_the_oracle(vector: dict[str, Any]) -> None:
+    """The dimension whose absence let a whole class of divergence ship.
+
+    The other three record which schemas are ADMITTED; this one records what an
+    admitted schema then MATCHES, which is where the three engines silently disagreed
+    — ``^abc$`` against ``"abc\\n"`` and ``^\\d+$`` against Arabic-Indic digits both
+    conformed here and violated in the other two, with every suite green.
+    """
+    schema = json.dumps(
+        {
+            "type": "object",
+            "properties": {"vat_id": {"type": "string", "pattern": vector["pattern"]}},
+        }
+    )
+    compiled, verdict = compile_registration_schema(schema.encode("utf8"))
+    assert verdict == "accepted", f"the case's own pattern is not admitted: {verdict}"
+    assert compiled is not None
+    conforms = not compiled.validate({"vat_id": vector["value"]})
+    assert conforms is vector["matches"]
 
 
 def test_field_errors_never_echo_the_submitted_value() -> None:

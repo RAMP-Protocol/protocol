@@ -26,6 +26,9 @@ import re
 from typing import Any, Literal
 
 import jsonschema
+import referencing.exceptions
+from jsonschema import validators
+from referencing import Registry
 
 __all__ = [
     "MAX_REGISTRATION_FIELD_ERRORS",
@@ -33,6 +36,7 @@ __all__ = [
     "MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN",
     "MAX_REGISTRATION_SCHEMA_BYTES",
     "MAX_REGISTRATION_SCHEMA_DEPTH",
+    "MAX_REGISTRATION_SCHEMA_EVALUATIONS",
     "REGISTRATION_SCHEMA_DIALECT",
     "RegistrationSchema",
     "SchemaVerdict",
@@ -60,6 +64,24 @@ MAX_REGISTRATION_FIELD_ERRORS = 64
 MAX_REGISTRATION_FIELD_ERROR_PATH_LEN = 255
 MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN = 255
 
+# Bounds the WORK of checking a payload, which the size and depth caps do not:
+# ``anyOf`` branches multiply along a reference chain, so a schema can be small and
+# shallow and still cost an unbounded amount to evaluate. Cost is linear in this
+# count, so the bound is really a time bound expressed as a number a static walk can
+# compute and a shared corpus can pin, which a stopwatch cannot.
+MAX_REGISTRATION_SCHEMA_EVALUATIONS = 10000
+
+# NOTE on wall-clock bounds. The Go oracle carries a compile timeout, which it can
+# enforce because its runtime preempts. This port carries none, deliberately: a
+# CPU-bound spin holds the interpreter, a worker thread cannot be cancelled, and a
+# signal-based alarm works only on the main thread of the main interpreter — which is
+# not where a server validates. A control that cannot preempt the work it names is not
+# a control. What bounds this port is entirely static and identical in all three
+# languages: the size, depth and evaluation caps, and the pattern alphabet, which
+# refuses the nested quantifiers that make backtracking catastrophic in the first
+# place. Go's timeout is a language-local backstop, not part of the accepted/refused
+# contract, and no admitted schema should ever reach it.
+
 # The only $schema value a published data_schema may name. A document naming none is
 # read as this dialect; one naming another is refused rather than validated under
 # semantics its author did not intend.
@@ -83,7 +105,11 @@ SchemaVerdict = Literal[
     "too_large",
     "too_deep",
     "unsafe_pattern",
+    "too_complex",
+    "ref_cycle",
+    "compile_timeout",
     "uncompilable",
+    "not_published",
 ]
 
 
@@ -91,7 +117,7 @@ SchemaVerdict = Literal[
 # otherwise let one SDK accept a schema another refuses, or — worse, because it is
 # silent — let two SDKs accept the same schema and disagree about which payloads
 # match it. See is_safe_schema_pattern for the full argument.
-_DIVERGENT_ESCAPES = frozenset("123456789kpPAzZQECGK")
+_DIVERGENT_ESCAPES = frozenset("123456789kpPsSAzZQECGK")
 
 # Keywords whose value is arbitrary JSON DATA rather than a subschema. Their
 # contents are never read as keywords, so a ``const`` carrying a "$ref" member is a
@@ -111,25 +137,138 @@ _REFERENCE_KEYWORDS = ("$ref", "$dynamicRef", "$recursiveRef")
 _POINTER_ESCAPES = ((("~"), "~0"), ("/", "~1"))
 
 
+# The largest {n,m} bound admitted. RE2 refuses a repeat count over 1000 outright
+# while the other two engines expand it, so a larger bound is a pattern one SDK
+# compiles and another does not.
+MAX_PORTABLE_REPEAT = 1000
+
+
+def _is_portable_quantifier(s: str) -> bool:
+    """Whether the ``{...}`` starting at ``s`` is a counted repeat every engine reads
+    the same way. A ``{`` that opens no valid quantifier is refused rather than
+    treated as a literal, because whether it IS a literal is precisely what the
+    engines disagree about."""
+    end = s.find("}")
+    if end < 0:
+        return False
+    body = s[1:end]
+    if not body:
+        return False
+    for part in body.split(",", 1):
+        if not part:
+            continue  # "{n,}" is well formed
+        if not part.isdigit():
+            return False
+        if int(part) > MAX_PORTABLE_REPEAT:
+            return False
+    return True
+
+
+def _group_body(p: str, open_at: int) -> tuple[str, int] | None:
+    """The text between the parenthesis at ``open_at`` and its match, plus the index
+    just past the closing parenthesis."""
+    depth = 0
+    in_class = False
+    i = open_at
+    n = len(p)
+    while i < n:
+        ch = p[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if ch == "[":
+            in_class = True
+        elif ch == "]":
+            in_class = False
+        elif ch == "(" and not in_class:
+            depth += 1
+        elif ch == ")" and not in_class:
+            depth -= 1
+            if depth == 0:
+                return p[open_at + 1 : i], i + 1
+        i += 1
+    return None
+
+
+def _strip_escapes(s: str) -> str:
+    """Remove escaped characters so an escaped metacharacter (``\\+``) is not read as
+    a quantifier."""
+    out = []
+    i = 0
+    while i < len(s):
+        if s[i] == "\\":
+            i += 2
+            continue
+        out.append(s[i])
+        i += 1
+    return "".join(out)
+
+
+def _has_nested_quantifier(p: str) -> bool:
+    """Whether the pattern quantifies a group whose body can itself repeat or branch —
+    the shape that makes a backtracking engine explore exponentially many ways to
+    match one input.
+
+    This is the half of the catastrophic-backtracking answer that excluding lookaround
+    and backreferences does not cover: nested quantifiers need neither, and every
+    classic form — ``(a+)+``, ``(a|a)*``, ``([a-z]+)*``, ``(?:a*)*`` — sits comfortably
+    inside the rest of the alphabet. It has to be STATIC: a regex spin holds CPython's
+    interpreter, so no timer in this port could stop one.
+
+    Deliberately coarse — a quantified group whose body contains any of ``* + ? { |``.
+    Deciding whether a particular body is genuinely ambiguous is not decidable in
+    general, and the conservative answer costs an author a rewrite while the permissive
+    one costs a service its availability.
+    """
+    in_class = False
+    i = 0
+    n = len(p)
+    while i < n:
+        ch = p[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if ch == "[":
+            in_class = True
+        elif ch == "]":
+            in_class = False
+        elif ch == "(" and not in_class:
+            found = _group_body(p, i)
+            if found is not None:
+                body, after = found
+                # A non-capturing group's "?:" is syntax, not content.
+                body = body.removeprefix("?:")
+                if (
+                    after < n
+                    and p[after] in "*+?{"
+                    and any(c in _strip_escapes(body) for c in "*+?{|")
+                ):
+                    return True
+        i += 1
+    return False
+
+
 def is_safe_schema_pattern(pattern: str) -> bool:
     """Whether a ``pattern`` uses only constructs all three SDK languages express
-    identically.
+    identically, and none that make a backtracking engine explode.
 
     Draft 2020-12 patterns are ECMA-262, and the three SDKs run three different
-    engines over them: Go's RE2, JavaScript's RegExp and Python's ``re``. The three
-    intersect on far less than any one accepts, and BOTH directions of the gap are a
-    bug. Lookaround, atomic groups and backreferences are legal ECMA and refused by
-    RE2, so a schema using them compiles in two SDKs and fails in the third. Inline
-    flags, Unicode property classes, text anchors and POSIX bracket names run the
-    other way — accepted by ``re`` or RE2 and either refused or read DIFFERENTLY by
-    JavaScript. The second kind is the more dangerous, because nothing errors: two
-    SDKs both compile the pattern and then disagree about which payloads match it.
+    engines over them: Go's RE2, JavaScript's RegExp and Python's ``re``. Two distinct
+    failures follow, and this function answers only the first.
 
-    So the admitted alphabet is the intersection: a group opens with ``(`` or
-    ``(?:`` and nothing else, an escape names a character or one of the shared
-    classes, and ``[[:`` never appears. Refusing catastrophic backtracking falls out
-    of the first rule rather than being aimed at separately.
+    Some constructs one engine cannot express at all — RE2 has no lookaround,
+    JavaScript has no inline flags — so no care at the call site reconciles them and
+    they are refused here. Others every engine compiles and then reads DIFFERENTLY:
+    ``\\d`` is Unicode-aware in this port and ASCII in the other two, and ``$`` also
+    matches before a trailing newline here. Those are NOT refused — they appear in
+    almost every real pattern — they are corrected, by compiling with the ASCII flag
+    and rewriting ``$``. See ``_ramp_pattern`` below.
+
+    The last rule is about availability rather than agreement: a quantified group whose
+    body can repeat or branch is refused, because that is what makes backtracking
+    catastrophic and no timer in this port could stop one.
     """
+    in_class = False
     i = 0
     n = len(pattern)
     while i < n:
@@ -142,23 +281,97 @@ def is_safe_schema_pattern(pattern: str) -> bool:
                 return False
             i += 2  # the escaped character is consumed, never re-read as syntax
             continue
-        if ch == "(":
+        if ch == "[":
+            if in_class:
+                # A literal "[" inside a class — EXCEPT when it opens a POSIX name.
+                # "[:alpha:]" is a character class to RE2 and the literal characters
+                # ":alph" to JavaScript: both compile, then match different strings.
+                if pattern.startswith("[:", i):
+                    return False
+                i += 1
+                continue
+            in_class = True
+            rest = pattern[i + 1 :]
+            rest = rest.removeprefix("^")
+            # "]" straight after the opening bracket is a literal in POSIX and an
+            # empty class in ECMA; the engines disagree about whether it compiles.
+            if rest.startswith("]") or not rest:
+                return False
+            if pattern.startswith("[[:", i):
+                return False
+        elif ch == "]":
+            if not in_class:
+                # An unmatched "]" is a literal to RE2 and a syntax error to ajv.
+                return False
+            in_class = False
+        elif ch == "(" and not in_class:
             if i + 1 < n and pattern[i + 1] == "?":
                 # Everything spelled "(?..." is refused except the non-capturing
                 # group, the only one all three engines write the same way. That
-                # covers lookaround, the atomic group "(?>", inline flags "(?i)",
-                # and the named group whose spelling differs by engine.
+                # covers lookaround, the atomic group "(?>", inline flags "(?i)", and
+                # the named group whose spelling differs by engine.
                 if i + 2 >= n or pattern[i + 2] != ":":
                     return False
                 i += 3
                 continue
-        elif ch == "[" and pattern.startswith("[[:", i):
-            # A POSIX class to RE2 and a bracket expression matching the literal
-            # characters ":alph" to JavaScript — the same pattern, two different
-            # languages of matching strings, with no error on either side.
-            return False
+        elif ch == "{" and not in_class:
+            if not _is_portable_quantifier(pattern[i:]):
+                return False
         i += 1
-    return True
+    # An unclosed class is a literal "[" to RE2 and a syntax error to ajv.
+    if in_class:
+        return False
+    return not _has_nested_quantifier(pattern)
+
+
+def _ramp_regex(pattern: str) -> re.Pattern[str]:
+    """Compile a schema ``pattern`` so this port matches the same strings as the Go
+    and JavaScript ones.
+
+    Two corrections, both silent divergences rather than errors — the dangerous kind,
+    because every engine compiles the pattern and only the verdicts differ:
+
+    ``re.ASCII`` — ``\\d``, ``\\w``, ``\\s`` and ``\\b`` are Unicode-aware by default for
+    ``str`` patterns here and ASCII-only in RE2 and ECMA-262. Without the flag
+    ``^\\d+$`` accepts Arabic-Indic digits in this port alone.
+
+    ``$`` becomes ``\\Z`` — Python's ``$`` also matches just BEFORE a trailing newline,
+    where RE2 and ECMA-262 match only at the very end. Without the rewrite
+    ``^[A-Z]{2}[0-9]+$`` accepts ``"DE12345\\n"`` in this port alone. The rewrite is
+    bracket- and escape-aware, so a literal ``$`` in ``[$]`` or ``\\$`` is left alone.
+    """
+    out: list[str] = []
+    in_class = False
+    i = 0
+    n = len(pattern)
+    while i < n:
+        ch = pattern[i]
+        if ch == "\\":
+            out.append(pattern[i : i + 2])
+            i += 2
+            continue
+        if ch == "[":
+            in_class = True
+        elif ch == "]":
+            in_class = False
+        elif ch == "$" and not in_class:
+            out.append("\\Z")
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return re.compile("".join(out), re.ASCII)
+
+
+def _ramp_pattern(validator: Any, patrn: str, instance: Any, _schema: Any) -> Any:
+    """The ``pattern`` keyword, re-implemented over ``_ramp_regex``.
+
+    Overriding the keyword rather than pre-processing the schema keeps the correction
+    in one place and leaves the document the Exchange published byte-identical to the
+    one this port validates against.
+    """
+    if validator.is_type(instance, "string") and _ramp_regex(patrn).search(instance) is None:
+        yield jsonschema.ValidationError(f"pattern: {patrn}")
 
 
 def _is_dialect(value: str) -> bool:
@@ -280,6 +493,167 @@ def _scan(node: Any) -> SchemaVerdict:
     return "accepted"
 
 
+# --- work bound -----------------------------------------------------------------
+
+# Keywords holding a LIST of subschemas, each of which may be evaluated against the
+# same instance. They are what makes cost multiply along a reference chain.
+_BRANCH_KEYWORDS = frozenset({"anyOf", "oneOf", "allOf", "prefixItems"})
+
+# Keywords holding exactly one subschema.
+_SINGLE_SUBSCHEMA_KEYWORDS = frozenset(
+    {
+        "not",
+        "if",
+        "then",
+        "else",
+        "items",
+        "contains",
+        "propertyNames",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "contentSchema",
+    }
+)
+
+# Saturation point. Counting stops here rather than continuing to a number that
+# carries no information past the cap.
+_COST_CEILING = MAX_REGISTRATION_SCHEMA_EVALUATIONS + 1
+
+
+class _CostWalker:
+    """Counts the worst-case number of subschema evaluations, and — because counting
+    means following every reference to its target — also decides whether a reference
+    cycle is present and whether a same-document reference resolves at all."""
+
+    def __init__(self, root: Any) -> None:
+        self.root = root
+        self.anchors: dict[str, Any] = {}
+        _collect_anchors(root, self.anchors)
+        self.memo: dict[str, int] = {}
+        self.on_stack: set[str] = set()
+        self.verdict: SchemaVerdict = "accepted"
+
+    def fail(self, verdict: SchemaVerdict) -> int:
+        if self.verdict == "accepted":
+            self.verdict = verdict
+        return _COST_CEILING
+
+    def cost(self, node: Any) -> int:
+        """The worst-case evaluations ``node`` can require against one instance: a
+        boolean schema is one, an object schema is itself plus everything it can
+        delegate to.
+
+        ``$defs`` and ``definitions`` are deliberately NOT counted — they are
+        reachable only through a reference, and counting them here as well would
+        charge a shared definition once per declaration plus once per use.
+        """
+        if self.verdict != "accepted":
+            return _COST_CEILING
+        if not isinstance(node, dict):
+            return 1
+        total = 1
+        for key in sorted(node):
+            value = node[key]
+            if key in _NON_SCHEMA_KEYWORDS or key in ("$defs", "definitions"):
+                continue
+            if key in _REFERENCE_KEYWORDS:
+                if isinstance(value, str):
+                    total = _add_cost(total, self.ref_cost(value))
+            elif key in _BRANCH_KEYWORDS:
+                if isinstance(value, list):
+                    for item in value:
+                        total = _add_cost(total, self.cost(item))
+                else:
+                    total = _add_cost(total, self.cost(value))
+            elif key in _SINGLE_SUBSCHEMA_KEYWORDS:
+                total = _add_cost(total, self.cost(value))
+            elif key in _SCHEMA_MAP_KEYWORDS:
+                if isinstance(value, dict):
+                    for name in sorted(value):
+                        total = _add_cost(total, self.cost(value[name]))
+                else:
+                    total = _add_cost(total, self.cost(value))
+            if total >= _COST_CEILING:
+                return _COST_CEILING
+        return total
+
+    def ref_cost(self, ref: str) -> int:
+        """Count a reference's target once and remember it. A location already being
+        counted is a cycle: its cost is not finite, and it is what makes two of the
+        three ports abort rather than answer."""
+        if ref in self.memo:
+            return self.memo[ref]
+        if ref in self.on_stack:
+            return self.fail("ref_cycle")
+        target, ok = self.resolve(ref)
+        if not ok:
+            return self.fail("uncompilable")
+        self.on_stack.add(ref)
+        c = self.cost(target)
+        self.on_stack.discard(ref)
+        self.memo[ref] = c
+        return c
+
+    def resolve(self, ref: str) -> tuple[Any, bool]:
+        """Follow a same-document reference. The scan has already refused anything not
+        beginning with "#", so only three forms reach here: the whole document, an RFC
+        6901 pointer into it, and a ``$anchor`` name."""
+        frag = ref.removeprefix("#")
+        if not frag:
+            return self.root, True
+        if not frag.startswith("/"):
+            if frag in self.anchors:
+                return self.anchors[frag], True
+            return None, False
+        node = self.root
+        for raw_token in frag[1:].split("/"):
+            token = raw_token.replace("~1", "/").replace("~0", "~")
+            if isinstance(node, dict):
+                if token not in node:
+                    return None, False
+                node = node[token]
+            elif isinstance(node, list):
+                if not token.isdigit() or int(token) >= len(node):
+                    return None, False
+                node = node[int(token)]
+            else:
+                return None, False
+        return node, True
+
+
+def _add_cost(a: int, b: int) -> int:
+    if a >= _COST_CEILING or b >= _COST_CEILING or a + b >= _COST_CEILING:
+        return _COST_CEILING
+    return a + b
+
+
+def _collect_anchors(node: Any, out: dict[str, Any]) -> None:
+    """Index every ``$anchor`` so a "#name" reference resolves without a second walk
+    per reference."""
+    if isinstance(node, dict):
+        anchor = node.get("$anchor")
+        if isinstance(anchor, str) and anchor not in out:
+            out[anchor] = node
+        for key in sorted(node):
+            _collect_anchors(node[key], out)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_anchors(item, out)
+
+
+def _check_evaluation_cost(doc: Any) -> SchemaVerdict:
+    """Bound how much work validating a payload can cost. The size and depth caps
+    bound the DOCUMENT and say nothing about this."""
+    walker = _CostWalker(doc)
+    cost = walker.cost(doc)
+    if walker.verdict != "accepted":
+        return walker.verdict
+    if cost > MAX_REGISTRATION_SCHEMA_EVALUATIONS:
+        return "too_complex"
+    return "accepted"
+
+
 def _json_pointer(tokens: Any) -> str:
     """Render an instance location as an RFC 6901 pointer. The empty location is the
     empty pointer, which addresses registration_data itself — how a whole-object
@@ -326,8 +700,8 @@ def _describe(error: jsonschema.ValidationError) -> tuple[str, str]:
     if keyword == "required":
         # jsonschema reports one missing property per error; the name comes off the
         # SCHEMA's required list, not off the payload.
-        missing = _missing_property(error)
-        return keyword, f"required: {missing}" if missing else "required"
+        missing = _missing_properties(error)
+        return keyword, ("required: " + ", ".join(missing)) if missing else "required"
     if keyword == "type":
         want = error.validator_value
         wanted = want if isinstance(want, list) else [want]
@@ -384,21 +758,25 @@ _FIXED_TEXT = {
 }
 
 
-_MISSING_PROPERTY = re.compile(r"^'(?P<name>.+)' is a required property$")
+def _missing_properties(error: jsonschema.ValidationError) -> list[str]:
+    """The member names a ``required`` failure names, read from STRUCTURED data.
 
+    This library states them only inside ``error.message``, which is the one place
+    this module refuses to read — not merely for the leakage rule (a required
+    failure's message names a member the SCHEMA demands, so it would be safe) but
+    because the message is not parseable: it renders the name with ``repr``, which
+    switches to double quotes when the name itself contains an apostrophe, so a
+    member called ``o'brien`` silently dropped out of the refusal and the operator was
+    told only that something was required.
 
-def _missing_property(error: jsonschema.ValidationError) -> str:
-    """The single property name a ``required`` failure names.
-
-    jsonschema states it only inside the message, which is the one place this module
-    otherwise refuses to read. It is safe HERE and nowhere else: a required failure's
-    message names a member the SCHEMA demands, so the string comes off the schema
-    rather than off the payload — the value that failed is precisely the value that
-    is absent. The match is anchored so a message shape that changed yields nothing
-    rather than a fragment of some other text.
+    The set difference is exact and needs no parsing. It also renders the whole set at
+    once, matching the Go oracle, which reports every missing member in one entry.
     """
-    match = _MISSING_PROPERTY.match(str(error.message))
-    return match.group("name") if match else ""
+    required = error.validator_value
+    instance = error.instance
+    if not isinstance(required, list) or not isinstance(instance, dict):
+        return []
+    return sorted(str(name) for name in required if name not in instance)
 
 
 class RegistrationSchema:
@@ -466,6 +844,23 @@ class RegistrationSchema:
         return flat[:MAX_REGISTRATION_FIELD_ERRORS]
 
 
+# The 2020-12 validator with RAMP's corrected `pattern` keyword. Built once: extending
+# a validator compiles a new class, and doing that per schema would be wasteful.
+_RampValidator = validators.extend(jsonschema.Draft202012Validator, {"pattern": _ramp_pattern})
+
+
+def _refuse_retrieve(uri: str) -> Any:
+    """The SSRF backstop. Every reference that reaches here has already escaped the
+    scan, so the only correct answer is to refuse — never to dial."""
+    raise referencing.exceptions.Unretrievable(uri)
+
+
+# An empty registry that refuses to fetch. Without it this library's default registry
+# will resolve an http:// reference by making the request, which is precisely the
+# fetch the contract forbids; the scan is the rule, and this is the layer beneath it.
+_REFUSING_REGISTRY: Registry[Any] = Registry(retrieve=_refuse_retrieve)
+
+
 def _decode(raw: bytes) -> tuple[Any, SchemaVerdict]:
     """The pre-parse gauntlet: the two bounds that must hold BEFORE a parser sees the
     document, then the parse, then the top-level shape.
@@ -481,6 +876,10 @@ def _decode(raw: bytes) -> tuple[Any, SchemaVerdict]:
     therefore be reached only for documents harmless enough to parse — precisely the
     ones it is not needed for. Lexical counting needs no recursion.
     """
+    if not raw.strip():
+        # Nothing to compile is its own answer, not a malformed document: an Exchange
+        # that publishes no data_schema is the contract's ordinary case.
+        return None, "not_published"
     if len(raw) > MAX_REGISTRATION_SCHEMA_BYTES:
         return None, "too_large"
     if _raw_nesting_depth(raw) > MAX_REGISTRATION_SCHEMA_DEPTH:
@@ -489,9 +888,11 @@ def _decode(raw: bytes) -> tuple[Any, SchemaVerdict]:
         doc = json.loads(raw)
     except (ValueError, UnicodeDecodeError):
         return None, "malformed"
-    # 2020-12 admits an object or a boolean at the top level, nothing else. bool is a
-    # subclass of int in Python, so it is checked before any numeric interpretation.
-    if not isinstance(doc, (dict, bool)):
+    # A JSON OBJECT and nothing else. 2020-12 admits a bare boolean as a schema, but
+    # data_schema is a google.protobuf.Struct, which carries an object — so a boolean
+    # cannot reach this face over the wire at all, and admitting one would pin
+    # behaviour for a document the contract has no way to transport.
+    if not isinstance(doc, dict):
         return None, "malformed"
     return doc, "accepted"
 
@@ -517,8 +918,14 @@ def compile_registration_schema(raw: bytes) -> tuple[RegistrationSchema | None, 
     verdict = _scan(doc)
     if verdict != "accepted":
         return None, verdict
+    # The work bound, still before the library is involved. This is also where a
+    # reference cycle and a same-document reference that resolves to nothing are
+    # found, because counting the cost means following every reference to its target.
+    verdict = _check_evaluation_cost(doc)
+    if verdict != "accepted":
+        return None, verdict
 
-    validator_cls = jsonschema.Draft202012Validator
+    validator_cls = _RampValidator
     try:
         # check_schema is the metaschema pass; without it an invalid document is only
         # discovered when a payload happens to reach the broken keyword.
@@ -529,4 +936,4 @@ def compile_registration_schema(raw: bytes) -> tuple[RegistrationSchema | None, 
     # contentMediaType stay ANNOTATIONS, never assertions. The three languages'
     # libraries default differently, so leaving this to a default would make the same
     # document conform in one SDK and not in another.
-    return RegistrationSchema(validator_cls(doc)), "accepted"
+    return RegistrationSchema(validator_cls(doc, registry=_REFUSING_REGISTRY)), "accepted"

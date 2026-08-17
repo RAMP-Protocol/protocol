@@ -199,27 +199,29 @@ side compiles and the other refuses, so a payload passes the pre-check and is
 rejected at the Exchange, or worse passes the Exchange having never been checked.
 The limit had to become a number in the contract for the same reason the domain
 pattern did: one value space with two contracts is the state that produces the
-bugs. It is 32 containers and 16KB, and a conformance guard now reads the SDK's
-copies back out of the shared vectors and fails if the field comment stops stating
-them — which is the only mechanism available here, because `data_schema` is a
-`Struct` and no field-level protovalidate rule can reach inside one. The
-neighbouring domain guard exists because two copies of a rule drifted silently;
-this one exists because the rule has no machine-readable copy to compare against
-at all.
+bugs.
 
-Where the depth bound is CHECKED turned out to matter as much as its value. The
-first implementation measured the decoded document, which reads naturally and is
-wrong: every one of the three parsers descends recursively, and two of them abort
-on a deeply nested document before any check could run. Python's `json` raises
-`RecursionError` — not the exception a malformed document raises, so it escaped
-the validator as a crash rather than arriving as a verdict, on precisely the input
-the cap exists to stop. A 12KB schema, well under the size cap, killed the Python
-SDK while Go and TypeScript answered "too deep". The bound now runs lexically over
-the raw bytes, before a parser sees them: counting brackets needs no recursion, so
-the check that exists to stop a hostile document is no longer reachable only for
-documents harmless enough to parse. The generalisation is worth keeping: a
-resource bound that runs after the work it is meant to bound is not a bound, and
-"after the parse" is an easy place to not notice that.
+What the first attempt got wrong is WHICH quantity to bound. It capped the document
+— 16KB and 32 nested containers — and those bound nothing about the work of checking
+a payload against it. `anyOf` branches multiply along a reference chain, so a
+1,675-byte schema five containers deep, a tenth of the size cap and a sixth of the
+depth cap, measured 16.7 million evaluations and took twenty-seven seconds against a
+two-member payload. The bound that matters is a static count of evaluations, and it
+is now 10000 — about fifteen milliseconds, several hundred times what a schema
+describing a business entity needs. Counting it requires following every reference to
+its target, which is how the same walk also decides two questions the three libraries
+had been answering three different ways: whether a reference cycle is present, and
+whether a same-document reference resolves at all. `{"$ref":"#"}` is twelve bytes and
+used to crash two of the three ports out of an API documented as returning a verdict
+rather than throwing.
+
+A related correction, because it generalises: a bound belongs on the phase whose cost
+it models. The agreed design called for a *compile* timeout. Compilation turned out to
+be one to seventy milliseconds in every shape anyone could construct, while validation
+was the expensive phase — so the timeout as specified would have caught nothing. It is
+kept anyway, on the language whose runtime can actually preempt, because a phase left
+unbounded on the grounds that a different phase's bound is tighter today is not
+bounded; but the control that does the work is the static count.
 
 The second is `pattern`, and it is the more interesting failure. Draft 2020-12
 says patterns are ECMA-262. The engines real implementations run are not ECMA-262:
@@ -235,13 +237,39 @@ report success. They then disagree about which registrations are valid, with
 nothing logged and no error to catch — a conformance divergence that no test suite
 finds because neither side ever fails.
 
-So the admitted alphabet is the intersection, stated as three syntactic rules a
-lexical scan can apply identically in three languages. Catastrophic backtracking,
-which the field comment had already named as the hazard, stops being a separate
-concern: the constructs that cause it are the same ones portability excludes, so
-one rule discharges both. That is the reason the pattern rule is a MUST rather
-than the SHOULD the ReDoS framing would have justified — a performance hazard can
-be a SHOULD, but two validators quietly disagreeing about what conforms cannot.
+So the admitted alphabet is the intersection, stated as syntactic rules a lexical
+scan can apply identically in three languages.
+
+The first version of that rule made a mistake worth recording, because it is the
+mistake the whole section is about. It treated one rule as the answer to two
+different problems. Constructs one engine cannot PARSE and constructs every engine
+parses and then READS differently are both divergences, but they need opposite
+remedies: the first can only be refused, while refusing the second would have gutted
+the feature, because the second is `$`, `\d` and `\w`. Those appear in nearly every
+real pattern, and the shipped rule left them in — so `^[A-Z]{2}[0-9]+$`, the example
+the contract itself gives, accepted `"DE12345\n"` under one implementation and refused
+it under two, silently. The rule now refuses only what cannot be reconciled, and the
+implementation whose engine differs corrects it: ASCII character classes, and `$`
+anchored at the end of the text and nowhere else. `\s` is the exception that proves
+the split — there is no single set to correct TO, since RE2, Python and ECMA-262 each
+read it as a different collection of characters, so it joins the refused list and an
+author writes the class out.
+
+The second mistake was the claim that excluding lookaround and backreferences means
+catastrophic backtracking "falls out of the same rule". It does not. `(a+)+` needs
+neither construct, and every classic form was admitted by the shipped alphabet. That
+is now its own rule — a quantified group's body may not itself repeat or branch — and
+it has to be a PUBLISHING rule rather than a runtime timeout, which is the part worth
+remembering: a regex spin holds CPython's interpreter and blocks Node's event loop, so
+a consumer cannot interrupt one it has already started. A timer would have been a
+control that cannot preempt the work it names.
+
+And the deepest lesson is about the corpus rather than the rules. Three dimensions and
+141 cases all passed while the three implementations disagreed about which payloads a
+published schema accepts, because every dimension recorded which schemas were
+ADMITTED and none recorded what an admitted schema then MATCHED. A rule that is only
+asserted is a rule nobody checks; the fourth dimension exists so the alphabet can be
+maintained empirically rather than by argument.
 
 `format`, `contentEncoding` and `contentMediaType` are pinned as annotations by
 the same argument at a smaller scale. Every library defaults differently on
@@ -750,9 +778,11 @@ autolink pass could not see into. All of it is deleted. `protoc-gen-rampvocab` a
 The three SDKs (`sdk/go`, `sdk/ts`, `sdk/python`) are split into a **pure trust
 core** and a separate **I/O tier**, and the two obey opposite dependency rules. The
 core — the RFC 9421 / 7638 crypto, JCS canonicalization, offer/acceptance verify, and
-the transport-neutral `core` composition — imposes **nothing** beyond the platform
-standard library, a vetted crypto primitive, and a vetted JCS/canonicalization
-library. It takes no HTTP client and does not dial the network: `sdk/go/helpers`
+the transport-neutral `core` composition — imposes nothing beyond the platform
+standard library and a small set of VETTED libraries, currently a crypto primitive, a
+JCS/canonicalizer, and a JSON Schema engine (the registration-schema face, which is
+pure computation over bytes and dials nothing). The list is closed by review rather
+than by count: what the tier refuses is a DEPENDENCY THAT DIALS, not a dependency. It takes no HTTP client and does not dial the network: `sdk/go/helpers`
 never constructs an `http.Client`, `sdk/ts/core` imports neither `undici` nor a
 framework, and `ramp_sdk.core` imports no `httpx`. The I/O tier — `sdk/{go,ts,python}/resolvers`
 — is the *only* place a network fetch lives (well-known JWKS, WBA directory,

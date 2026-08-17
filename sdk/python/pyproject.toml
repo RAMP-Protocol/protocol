@@ -60,6 +60,14 @@ select = [
 "ramp_sdk/server_verify.py" = ["PLR0913", "PLR0911"]
 "ramp_sdk/pop.py" = ["PLR0913", "PLR0911"]
 "ramp_sdk/signedurl.py" = ["PLR0911"]
+# The registration-schema face is three lexical scanners and a cost walk, and each is
+# a state machine whose branch and early-return count IS the rule it transcribes: the
+# pattern alphabet refuses a dozen distinct constructs, the cost walk charges each
+# applicator keyword class differently, and the pointer resolver fails closed on every
+# way a reference can miss. All of them are pinned case-by-case by the shared
+# Go-oracle corpus, so condensing them into table lookups or fewer returns would move
+# the rule away from the place a reader checks it against the contract text.
+"ramp_sdk/regschema.py" = ["PLR0911", "PLR0912"]
 "ramp_sdk/acceptance.py" = ["PLR0913"]
 # The L2 core mirrors the same crypto-primitive shape: the offer-verify _check
 # walks each fail-closed rejection reason as its own early return (resolver-miss,

@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
@@ -28,31 +30,47 @@ import (
 //
 //	Remote $ref is not resolved. A schema that could point at a URL would make
 //	every reader an SSRF vector aimed at an address its author chose. Only
-//	same-document references are admitted, and the compiler is built with no
-//	URLLoader, so a reference this package missed fails closed rather than dials.
+//	same-document references are admitted, and the compiler is given an explicitly
+//	REFUSING loader, so a reference this package missed fails closed rather than
+//	being read off disk — which is what the library does when left to its default.
 //
 //	The dialect is pinned. Draft 2020-12 only: a validator that silently accepted
 //	an older draft would apply DIFFERENT semantics to the same document than a peer
 //	that refused it, which is the disagreement this face exists to prevent.
 //
-//	Resources are bounded. A size cap, a nesting-depth cap, and a narrowed `pattern`
-//	alphabet, all measured before the schema is compiled.
+//	Resources are bounded. A size cap, a nesting-depth cap, an evaluation-cost cap
+//	and a narrowed `pattern` alphabet, all measured before the schema is compiled.
 //
-// The pattern rule does double duty and the second job is the load-bearing one.
-// Draft 2020-12 `pattern` is ECMA-262, so lookaround and backreferences are legal
-// there — and Go's RE2 refuses them at compile time while JavaScript and Python
-// accept them. Left alone, the SAME schema compiles in two of this SDK's three
-// languages and fails in the third, which is exactly the cross-implementation
-// disagreement the shared rules are for. Narrowing the alphabet to what all three
-// can express makes the verdict identical everywhere, and removes the largest
-// catastrophic-backtracking class as a side effect.
+// `pattern` needs two different mechanisms, and treating it as one problem is the
+// mistake this face made first. Draft 2020-12 patterns are ECMA-262, and the three
+// SDKs run three different engines over them.
+//
+//	Some constructs one engine cannot express at all — RE2 has no lookaround, and
+//	JavaScript has no inline flags. Those are REFUSED, because no amount of care at
+//	the call site reconciles them.
+//
+//	Others every engine compiles and then reads DIFFERENTLY. `\d` is Unicode-aware
+//	in Python and ASCII in RE2 and ECMA-262; Python's `$` also matches before a
+//	trailing newline. Refusing those would gut the feature — they appear in almost
+//	every real pattern — so instead the ODD ONE OUT is corrected. Go and JavaScript
+//	already agree; the Python port compiles with its ASCII flag and rewrites `$`, so
+//	all three match the same strings.
+//
+// The second kind is the dangerous one, because nothing errors: two conformant
+// validators both compile the pattern and then disagree about which payloads
+// conform. It is also why the shared corpus records what a pattern MATCHES and not
+// only whether the schema was admitted — an alphabet that is merely asserted is one
+// nobody can check.
+//
+// Work is bounded twice, because the two phases have different cost drivers. The
+// size and depth caps bound the DOCUMENT; they say nothing about how much work
+// checking a payload against it takes, and a 1.6KB schema five levels deep can cost
+// tens of seconds. MaxRegistrationSchemaEvaluations bounds that statically, before
+// anything runs. A compile timeout bounds the other phase, whose cost lives in regex
+// compilation and reference resolution rather than in branch count.
 //
 // Everything here is pure: bytes in, verdict out, no IO and no state, which is why
-// it sits in the IO-free tier and can run before any network or database is
-// touched. Bounding compile TIME is deliberately not a timer in Go — the caps above
-// bound the work structurally and RE2 matches in linear time, so a wall clock would
-// add nondeterminism that the shared conformance vectors could not pin. The ports
-// whose engines backtrack carry that bound instead.
+// it sits in the IO-free tier and can run before any network or database is touched.
 
 // MaxRegistrationSchemaBytes is the published schema's size cap, measured as the
 // UTF-8 bytes of the data_schema member AS SERVED in ramp.json — which is why the
@@ -81,6 +99,27 @@ const (
 	MaxRegistrationFieldErrorTextLen = 255
 )
 
+// MaxRegistrationSchemaEvaluations bounds the WORK of checking a payload, which the
+// size and depth caps do not. `anyOf` branches multiply along a reference chain, so a
+// schema can be small and shallow and still cost an unbounded amount to evaluate: a
+// 1,675-byte document five levels deep measures 16.7 million evaluations and takes
+// 27 seconds against a two-member payload. Cost is linear in this count at roughly
+// 1.5µs per evaluation, so the bound is really a time bound — about 15ms — expressed
+// as a number a static walk can compute and a shared corpus can pin, which a
+// stopwatch cannot. A registration schema describing a business entity measures a few
+// dozen, so the headroom is several hundredfold.
+const MaxRegistrationSchemaEvaluations = 10000
+
+// RegistrationSchemaCompileTimeout bounds the OTHER phase. Compiling is cheap in
+// every shape measured (single-digit to tens of milliseconds across the three
+// languages), and the evaluation cap above does not bound it at all: compilation
+// spends its time in regex compilation, reference resolution, and — in the
+// TypeScript port — generating and evaluating JavaScript source. A phase left
+// unbounded because a different phase's bound happens to be tighter today is not
+// bounded. Generous on purpose: it is a backstop against a shape nobody predicted,
+// not a performance budget.
+const RegistrationSchemaCompileTimeout = 2 * time.Second
+
 // RegistrationSchemaDialect is the only $schema value a published data_schema may
 // name. A document that names none is read as this dialect; one that names another
 // is refused rather than validated under semantics its author did not intend.
@@ -99,7 +138,8 @@ const (
 	SchemaAccepted
 
 	// SchemaMalformed means the bytes are not JSON, or the document is not a JSON
-	// Schema at its top level (2020-12 admits an object or a boolean, nothing else).
+	// object at its top level. 2020-12 would admit a bare boolean as a schema, but
+	// data_schema is a google.protobuf.Struct and cannot carry one.
 	SchemaMalformed
 
 	// SchemaWrongDialect means a $schema in the document names a dialect other than
@@ -122,9 +162,34 @@ const (
 	// all three SDK languages can express identically.
 	SchemaUnsafePattern
 
+	// SchemaTooComplex means checking a payload against the schema would cost more
+	// than MaxRegistrationSchemaEvaluations. The document itself may be small: this
+	// bounds the work, which the size and depth caps do not.
+	SchemaTooComplex
+
+	// SchemaRefCycle means a reference chain returns to a schema already on it. The
+	// cycle is legal JSON Schema — it is how a recursive structure is written — but
+	// its evaluation cost has no static bound, and it is what makes two of the three
+	// ports abort rather than answer. Registration data describes a business entity,
+	// which is not a recursive shape, so refusing the construct costs nothing real.
+	// Separate from SchemaTooComplex because the remedy is different: a cycle is a
+	// modelling choice to undo, not a budget to trim.
+	SchemaRefCycle
+
+	// SchemaCompileTimeout means compilation ran past RegistrationSchemaCompileTimeout.
+	SchemaCompileTimeout
+
 	// SchemaUncompilable means the document is well-formed JSON, passes the rules
-	// above, and is still not a valid 2020-12 schema.
+	// above, and is still not a valid 2020-12 schema — including a same-document
+	// reference that resolves to nothing.
 	SchemaUncompilable
+
+	// SchemaNotPublished means there was no schema to compile: the Exchange publishes
+	// none. It is a verdict rather than an error because it is a normal, common state
+	// with its own contract — registration_data passes through uninspected — and
+	// because collapsing it into a refusal would leave a caller unable to tell "there
+	// is nothing to enforce" from "I refused to enforce what I was given".
+	SchemaNotPublished
 )
 
 // String renders the verdict as the stable token the shared conformance vectors
@@ -148,8 +213,16 @@ func (v SchemaVerdict) String() string {
 		return "too_deep"
 	case SchemaUnsafePattern:
 		return "unsafe_pattern"
+	case SchemaTooComplex:
+		return "too_complex"
+	case SchemaRefCycle:
+		return "ref_cycle"
+	case SchemaCompileTimeout:
+		return "compile_timeout"
 	case SchemaUncompilable:
 		return "uncompilable"
+	case SchemaNotPublished:
+		return "not_published"
 	default:
 		return fmt.Sprintf("SchemaVerdict(%d)", int(v))
 	}
@@ -184,6 +257,11 @@ type RegistrationSchema struct {
 //	involved, and serving a manifest advertising a schema it cannot itself enforce
 //	is the one outcome it must not reach.
 func CompileRegistrationSchema(raw []byte) (*RegistrationSchema, SchemaVerdict) {
+	// Nothing to compile is its own answer, not a malformed document. An Exchange
+	// that publishes no data_schema is the contract's ordinary case.
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, SchemaNotPublished
+	}
 	// Size first, on the bytes as served and before any parse: an oversized document
 	// must not be decoded to find out that it was oversized.
 	if len(raw) > MaxRegistrationSchemaBytes {
@@ -203,21 +281,30 @@ func CompileRegistrationSchema(raw []byte) (*RegistrationSchema, SchemaVerdict) 
 	if err != nil {
 		return nil, SchemaMalformed
 	}
-	switch doc.(type) {
-	case map[string]any, bool:
-	default:
+	// A JSON OBJECT and nothing else. 2020-12 admits a bare boolean as a schema, but
+	// data_schema is a google.protobuf.Struct, which carries an object — so a boolean
+	// cannot reach this face over the wire at all, and admitting one would pin
+	// behaviour for a document the contract has no way to transport.
+	if _, isObject := doc.(map[string]any); !isObject {
 		return nil, SchemaMalformed
 	}
 	if v := scanRegistrationSchema(doc); v != SchemaAccepted {
 		return nil, v
 	}
+	// The work bound, still before the compiler is involved. This is also where a
+	// reference cycle and a same-document reference that resolves to nothing are
+	// found, because counting the cost means following every reference to its target.
+	if v := checkEvaluationCost(doc); v != SchemaAccepted {
+		return nil, v
+	}
 
 	c := jsonschema.NewCompiler()
-	// No URL loader is installed, deliberately. Without one the library refuses to
-	// resolve any reference it does not already hold, so a remote reference the scan
-	// above did not recognise fails closed here instead of dialing. The scan is the
-	// rule the ports implement; this is the backstop under it, and a guard in the
-	// tests pins the absence at the source since it has no runtime footprint.
+	// An explicitly REFUSING loader, not the absence of one. The library installs a
+	// FileLoader by default, so leaving this unset does not mean "resolves nothing" —
+	// it means a reference the scan above missed is read off local disk. The scan is
+	// the rule the ports implement; this is the backstop under it, and it has to be
+	// installed to exist.
+	c.UseLoader(refusingSchemaLoader{})
 	c.DefaultDraft(jsonschema.Draft2020)
 	// format / contentEncoding / contentMediaType stay ANNOTATIONS, never assertions.
 	// The three languages' libraries default differently, so leaving this to a
@@ -226,11 +313,50 @@ func CompileRegistrationSchema(raw []byte) (*RegistrationSchema, SchemaVerdict) 
 	if err := c.AddResource(schemaURL, doc); err != nil {
 		return nil, SchemaUncompilable
 	}
-	sch, err := c.Compile(schemaURL)
-	if err != nil {
-		return nil, SchemaUncompilable
+	sch, v := compileWithin(c, schemaURL, RegistrationSchemaCompileTimeout)
+	if v != SchemaAccepted {
+		return nil, v
 	}
 	return &RegistrationSchema{sch: sch}, SchemaAccepted
+}
+
+// refusingSchemaLoader is the SSRF backstop. Every reference that reaches it has
+// already escaped the scan, so the only correct answer is to refuse — never to read
+// a file, and never to dial.
+type refusingSchemaLoader struct{}
+
+func (refusingSchemaLoader) Load(url string) (any, error) {
+	return nil, fmt.Errorf("helpers: refusing to resolve %q: a registration schema must be self-contained", url)
+}
+
+// compileWithin runs the compiler under a wall clock.
+//
+// The goroutine is abandoned rather than cancelled, because the library takes no
+// context. That is tolerable HERE and would not be on the validate path: the input
+// is already bounded to 16KB, the branch count is already bounded, and compilation
+// happens once per schema rather than once per payload — so the abandoned work is
+// bounded and terminates on its own. The caller gets an answer either way.
+func compileWithin(c *jsonschema.Compiler, url string, budget time.Duration) (*jsonschema.Schema, SchemaVerdict) {
+	type result struct {
+		sch *jsonschema.Schema
+		err error
+	}
+	done := make(chan result, 1) // buffered: the abandoned goroutine must not block forever
+	go func() {
+		sch, err := c.Compile(url)
+		done <- result{sch: sch, err: err}
+	}()
+	timer := time.NewTimer(budget)
+	defer timer.Stop()
+	select {
+	case r := <-done:
+		if r.err != nil {
+			return nil, SchemaUncompilable
+		}
+		return r.sch, SchemaAccepted
+	case <-timer.C:
+		return nil, SchemaCompileTimeout
+	}
 }
 
 // Validate checks a registration_data payload against the schema and names what
@@ -252,6 +378,16 @@ func CompileRegistrationSchema(raw []byte) (*RegistrationSchema, SchemaVerdict) 
 //	The order is deterministic. Entries are deduplicated and sorted by path, then by
 //	keyword, before the list is capped. Three validators walk a failing document in
 //	three different orders, so an unsorted list is one no shared corpus could pin.
+//
+// A nil receiver reports no failures, because "no schema" means "nothing to enforce"
+// — the pass-through case an Exchange publishing no data_schema is entitled to, and
+// the case a client is REQUIRED to fall into when it cannot check locally. Note what
+// that implies: a caller that drops the verdict from CompileRegistrationSchema holds
+// nil after every refusal too, and this call then reports success. That is correct for
+// a client, whose refusal is "send anyway and let the Exchange decide", and wrong for
+// an Exchange, which must treat any verdict other than SchemaAccepted or
+// SchemaNotPublished as a misconfiguration of its own deployment. The verdict is the
+// only thing that separates the two, so an Exchange must not discard it.
 func (s *RegistrationSchema) Validate(data map[string]any) []*rampv1.RegistrationFieldError {
 	if s == nil || s.sch == nil {
 		return nil
@@ -418,6 +554,220 @@ func scanRegistrationSchema(node any) SchemaVerdict {
 	return SchemaAccepted
 }
 
+// --- work bound ----------------------------------------------------------------
+
+// branchKeywords hold a LIST of subschemas, each of which may be evaluated against
+// the same instance. They are what makes cost multiply along a reference chain:
+// nesting an `anyOf` pair ten deep is 2^10 evaluations in a document a reader would
+// call small.
+var branchKeywords = map[string]bool{
+	"anyOf": true, "oneOf": true, "allOf": true, "prefixItems": true,
+}
+
+// singleSubschemaKeywords hold exactly one subschema.
+var singleSubschemaKeywords = map[string]bool{
+	"not": true, "if": true, "then": true, "else": true,
+	"items": true, "contains": true, "propertyNames": true,
+	"additionalProperties": true, "unevaluatedProperties": true,
+	"unevaluatedItems": true, "contentSchema": true,
+}
+
+// costCeiling is the saturation point. Counting stops here rather than continuing to
+// a number that would overflow: past the cap the exact value carries no information,
+// and a chain twenty levels longer than the cap would wrap an int to something small
+// and pass.
+const costCeiling = MaxRegistrationSchemaEvaluations + 1
+
+// checkEvaluationCost bounds how much work validating a payload can cost, and — as a
+// consequence of having to follow every reference to count — decides two more
+// questions the compiler would otherwise answer inconsistently across the three
+// languages: whether a reference cycle is present, and whether a same-document
+// reference resolves at all.
+func checkEvaluationCost(doc any) SchemaVerdict {
+	w := &costWalker{
+		root:    doc,
+		anchors: map[string]any{},
+		memo:    map[string]int{},
+		onStack: map[string]bool{},
+		verdict: SchemaAccepted,
+	}
+	collectAnchors(doc, w.anchors)
+	cost := w.cost(doc)
+	if w.verdict != SchemaAccepted {
+		return w.verdict
+	}
+	if cost > MaxRegistrationSchemaEvaluations {
+		return SchemaTooComplex
+	}
+	return SchemaAccepted
+}
+
+type costWalker struct {
+	root    any
+	anchors map[string]any
+	memo    map[string]int  // resolved reference location -> cost, so a target reached twice is counted once
+	onStack map[string]bool // resolved locations currently being counted, which is how a cycle is seen
+	verdict SchemaVerdict
+}
+
+// fail records the first failure and returns a saturated cost so the walk unwinds
+// without doing more work.
+func (w *costWalker) fail(v SchemaVerdict) int {
+	if w.verdict == SchemaAccepted {
+		w.verdict = v
+	}
+	return costCeiling
+}
+
+func addCost(a, b int) int {
+	if a >= costCeiling || b >= costCeiling || a+b >= costCeiling {
+		return costCeiling
+	}
+	return a + b
+}
+
+// cost is the worst-case number of subschema evaluations `node` can require against
+// one instance. A boolean schema is one. An object schema is itself plus everything
+// it can delegate to.
+//
+// $defs and definitions are deliberately NOT counted: they are reachable only
+// through a reference, and counting them here as well as at the reference would
+// charge a shared definition once per declaration plus once per use.
+func (w *costWalker) cost(node any) int {
+	if w.verdict != SchemaAccepted {
+		return costCeiling
+	}
+	obj, ok := node.(map[string]any)
+	if !ok {
+		// A boolean schema, or a value in a position this walk does not model.
+		return 1
+	}
+	total := 1
+	for _, k := range sortedKeys(obj) {
+		v := obj[k]
+		switch {
+		case nonSchemaKeywords[k] || k == "$defs" || k == "definitions":
+			// Data, or a declaration that costs nothing until it is referenced.
+			continue
+		case isReferenceKeyword(k):
+			ref, isString := v.(string)
+			if !isString {
+				continue
+			}
+			total = addCost(total, w.refCost(ref))
+		case branchKeywords[k]:
+			items, isList := v.([]any)
+			if !isList {
+				total = addCost(total, w.cost(v))
+				continue
+			}
+			for _, item := range items {
+				total = addCost(total, w.cost(item))
+			}
+		case singleSubschemaKeywords[k]:
+			total = addCost(total, w.cost(v))
+		case schemaMapKeywords[k]:
+			sub, isMap := v.(map[string]any)
+			if !isMap {
+				total = addCost(total, w.cost(v))
+				continue
+			}
+			for _, name := range sortedKeys(sub) {
+				total = addCost(total, w.cost(sub[name]))
+			}
+		}
+		if total >= costCeiling {
+			return costCeiling
+		}
+	}
+	return total
+}
+
+// refCost counts a reference's target once and remembers it. A location already
+// being counted is a cycle: its cost is not finite, and every port aborts on it
+// rather than answering.
+func (w *costWalker) refCost(ref string) int {
+	if c, seen := w.memo[ref]; seen {
+		return c
+	}
+	if w.onStack[ref] {
+		return w.fail(SchemaRefCycle)
+	}
+	target, ok := w.resolve(ref)
+	if !ok {
+		return w.fail(SchemaUncompilable)
+	}
+	w.onStack[ref] = true
+	c := w.cost(target)
+	delete(w.onStack, ref)
+	w.memo[ref] = c
+	return c
+}
+
+// resolve follows a same-document reference. The scan has already refused anything
+// that does not begin with "#", so only three forms reach here: the whole document,
+// an RFC 6901 pointer into it, and a $anchor name.
+func (w *costWalker) resolve(ref string) (any, bool) {
+	frag := strings.TrimPrefix(ref, "#")
+	if frag == "" {
+		return w.root, true
+	}
+	if !strings.HasPrefix(frag, "/") {
+		target, ok := w.anchors[frag]
+		return target, ok
+	}
+	node := w.root
+	for _, tok := range strings.Split(strings.TrimPrefix(frag, "/"), "/") {
+		tok = strings.NewReplacer("~1", "/", "~0", "~").Replace(tok)
+		switch n := node.(type) {
+		case map[string]any:
+			next, ok := n[tok]
+			if !ok {
+				return nil, false
+			}
+			node = next
+		case []any:
+			i, err := strconv.Atoi(tok)
+			if err != nil || i < 0 || i >= len(n) {
+				return nil, false
+			}
+			node = n[i]
+		default:
+			return nil, false
+		}
+	}
+	return node, true
+}
+
+// collectAnchors indexes every $anchor in the document so a "#name" reference can be
+// resolved without a second walk per reference.
+func collectAnchors(node any, out map[string]any) {
+	switch n := node.(type) {
+	case map[string]any:
+		if a, ok := n["$anchor"].(string); ok {
+			if _, dup := out[a]; !dup {
+				out[a] = n
+			}
+		}
+		for _, k := range sortedKeys(n) {
+			collectAnchors(n[k], out)
+		}
+	case []any:
+		for _, item := range n {
+			collectAnchors(item, out)
+		}
+	}
+}
+
+func isReferenceKeyword(k string) bool {
+	for _, kw := range referenceKeywords {
+		if k == kw {
+			return true
+		}
+	}
+	return false
+}
+
 // referenceKeywords name the members whose value is a reference. $recursiveRef is
 // the 2019-09 spelling; it is listed so a document mixing drafts cannot smuggle a
 // remote target through a keyword this draft ignores.
@@ -474,6 +824,11 @@ func isRegistrationSchemaDialect(s string) bool {
 //	        classic catastrophic-backtracking construct in the engines that do.
 //	p, P    Unicode property classes: RE2 has them, ECMA-262 needs the `u` flag
 //	        that a JSON Schema `pattern` is not compiled with.
+//	s, S    the whitespace class: three engines, three different sets. RE2 is
+//	        [\t\n\f\r ], Python adds the vertical tab, and ECMA-262 adds both that
+//	        and every Unicode space separator — so `^a\sb$` accepts a non-breaking
+//	        space in one SDK and refuses it in the other two. An explicit class
+//	        says exactly what is meant and means it everywhere.
 //	A, z, Z text anchors: RE2 spells them, ECMA-262 has only ^ and $.
 //	Q, E    literal spans: RE2 only.
 //	C, G, K single-engine escapes with no counterpart anywhere else.
@@ -481,6 +836,7 @@ var divergentEscapes = map[byte]bool{
 	'1': true, '2': true, '3': true, '4': true, '5': true,
 	'6': true, '7': true, '8': true, '9': true,
 	'k': true, 'p': true, 'P': true,
+	's': true, 'S': true,
 	'A': true, 'z': true, 'Z': true,
 	'Q': true, 'E': true,
 	'C': true, 'G': true, 'K': true,
@@ -512,6 +868,7 @@ var divergentEscapes = map[byte]bool{
 // Over-refusing costs an author a rewrite; under-refusing costs the SDKs the
 // agreement they exist to provide.
 func IsSafeSchemaPattern(p string) bool {
+	inClass := false // inside a [...] bracket expression
 	for i := 0; i < len(p); i++ {
 		switch p[i] {
 		case '\\':
@@ -523,7 +880,42 @@ func IsSafeSchemaPattern(p string) bool {
 				return false
 			}
 			i++ // the escaped character is consumed, never re-read as syntax
+		case '[':
+			if inClass {
+				// A literal '[' inside a class — EXCEPT when it opens a POSIX name.
+				// "[:alpha:]" is a character class to RE2 and the literal characters
+				// ":alph" to JavaScript: both compile, and they then match different
+				// strings. Checking only at the start of the class (the earlier rule)
+				// missed every position but the first, which is where a pattern like
+				// "^[a[:alpha:]]+$" slipped through and produced three different
+				// answers from the three SDKs.
+				if strings.HasPrefix(p[i:], "[:") {
+					return false
+				}
+				continue
+			}
+			inClass = true
+			// A ']' immediately after the opening bracket (or after a leading '^') is
+			// a literal in POSIX and an empty class in ECMA — engines disagree about
+			// whether that even compiles, so the whole shape is refused.
+			rest := p[i+1:]
+			rest = strings.TrimPrefix(rest, "^")
+			if strings.HasPrefix(rest, "]") || rest == "" {
+				return false
+			}
+			if strings.HasPrefix(p[i:], "[[:") {
+				return false
+			}
+		case ']':
+			if !inClass {
+				// An unmatched ']' is a literal to RE2 and a syntax error to ajv.
+				return false
+			}
+			inClass = false
 		case '(':
+			if inClass {
+				continue // a literal paren
+			}
 			if i+1 >= len(p) || p[i+1] != '?' {
 				continue // a plain capturing group
 			}
@@ -536,13 +928,153 @@ func IsSafeSchemaPattern(p string) bool {
 				return false
 			}
 			i += 2
-		case '[':
-			// "[[:alpha:]]" is a POSIX class to RE2 and a bracket expression matching
-			// the literal characters ":alph" to JavaScript — the same pattern, two
-			// different languages of matching strings, with no error on either side.
-			if strings.HasPrefix(p[i:], "[[:") {
+		case '{':
+			if inClass {
+				continue
+			}
+			// A quantifier whose bound is absent or enormous parts the engines: ajv
+			// reads a bare "{" as a literal where RE2 errors, and RE2 caps a repeat
+			// count that the other two expand.
+			if !isPortableQuantifier(p[i:]) {
 				return false
 			}
+		}
+	}
+	// An unclosed class is a literal '[' to RE2 and a syntax error to ajv.
+	if inClass {
+		return false
+	}
+	return !hasNestedQuantifier(p)
+}
+
+// hasNestedQuantifier reports whether the pattern quantifies a group whose body can
+// itself repeat or branch — the shape that makes a backtracking engine explore
+// exponentially many ways to match one input.
+//
+// This is the OTHER half of the catastrophic-backtracking answer, and the half that
+// was missing. Excluding lookaround and backreferences removes one family; nested
+// quantifiers need neither, and every classic form — (a+)+, (a|a)*, ([a-z]+)*,
+// (?:a*)* — sits comfortably inside the rest of the alphabet. Go is safe regardless
+// because RE2 does not backtrack, but Python and JavaScript are not, and a timer
+// cannot rescue them: a regex spin holds CPython's interpreter and blocks Node's
+// event loop, so the bound has to be static or it does not exist.
+//
+// The test is deliberately coarse — a quantified group whose body contains any of
+// `* + ? { |`. Deciding whether a particular body is genuinely ambiguous is not
+// decidable in general, and the conservative answer costs an author a rewrite while
+// the permissive one costs a service its availability. Simple repetition still
+// works: `(?:ab)+` is admitted, `(?:a|ab)+` is not.
+func hasNestedQuantifier(p string) bool {
+	inClass := false
+	for i := 0; i < len(p); i++ {
+		switch p[i] {
+		case '\\':
+			i++
+		case '[':
+			if !inClass {
+				inClass = true
+			}
+		case ']':
+			inClass = false
+		case '(':
+			if inClass {
+				continue
+			}
+			body, after, ok := groupBody(p, i)
+			if !ok {
+				continue
+			}
+			// A non-capturing group's "?:" is syntax, not content — reading it as
+			// content would flag every "(?:...)+" as nested.
+			body = strings.TrimPrefix(body, "?:")
+			if isQuantifier(p, after) && strings.ContainsAny(stripEscapes(body), "*+?{|") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// groupBody returns the text between the parenthesis at open and its match, plus the
+// index just past the closing parenthesis.
+func groupBody(p string, open int) (body string, after int, ok bool) {
+	depth, inClass := 0, false
+	for i := open; i < len(p); i++ {
+		switch p[i] {
+		case '\\':
+			i++
+		case '[':
+			inClass = true
+		case ']':
+			inClass = false
+		case '(':
+			if !inClass {
+				depth++
+			}
+		case ')':
+			if inClass {
+				continue
+			}
+			depth--
+			if depth == 0 {
+				return p[open+1 : i], i + 1, true
+			}
+		}
+	}
+	return "", 0, false
+}
+
+// isQuantifier reports whether a repetition operator starts at i.
+func isQuantifier(p string, i int) bool {
+	if i >= len(p) {
+		return false
+	}
+	switch p[i] {
+	case '*', '+', '?', '{':
+		return true
+	}
+	return false
+}
+
+// stripEscapes removes escaped characters so an escaped metacharacter (`\+`) is not
+// read as a quantifier.
+func stripEscapes(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' {
+			i++
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// maxPortableRepeat is the largest {n,m} bound admitted. RE2 refuses a repeat count
+// over 1000 outright while the other two engines expand it, so a larger bound is a
+// pattern one SDK compiles and another does not.
+const maxPortableRepeat = 1000
+
+// isPortableQuantifier reports whether the "{...}" starting at s is a counted repeat
+// every engine reads the same way. A "{" that opens no valid quantifier is refused
+// rather than treated as a literal, because whether it IS a literal is precisely
+// what the engines disagree about.
+func isPortableQuantifier(s string) bool {
+	end := strings.IndexByte(s, '}')
+	if end < 0 {
+		return false
+	}
+	body := s[1:end]
+	if body == "" {
+		return false
+	}
+	for _, part := range strings.SplitN(body, ",", 2) {
+		if part == "" {
+			continue // "{n,}" is well formed
+		}
+		n, err := strconv.Atoi(part)
+		if err != nil || n < 0 || n > maxPortableRepeat {
+			return false
 		}
 	}
 	return true
@@ -630,31 +1162,52 @@ func jsonPointerOf(loc []string) string {
 	return b.String()
 }
 
-// clampPointer keeps a pointer inside the wire's length bound WITHOUT truncating
-// it. A pointer cut mid-token addresses a different member — or none — so an
-// over-long one degrades to the longest ANCESTOR that fits: less precise, still
-// true. The empty pointer is the floor, and it is always within the bound.
+// Both bounds below are counted in CHARACTERS — Unicode code points — because that
+// is what protovalidate's string.max_len counts. Counting bytes instead (Go's
+// natural len) makes this SDK clamp earlier than the wire requires and, worse,
+// earlier than the other two SDKs do, so the three name DIFFERENT members for the
+// same failure. Counting UTF-16 units, JavaScript's natural length, parts from both.
+
+// clampPointer keeps a pointer inside the wire's length bound WITHOUT truncating it.
+// A pointer cut mid-token addresses a different member — or none — so an over-long
+// one degrades to the longest ANCESTOR that fits: less precise, still true. The empty
+// pointer is the floor, and it is always within the bound.
 func clampPointer(p string) string {
-	if len(p) <= MaxRegistrationFieldErrorPathLen {
+	if utf8.RuneCountInString(p) <= MaxRegistrationFieldErrorPathLen {
 		return p
 	}
-	for i := len(p) - 1; i > 0; i-- {
-		if p[i] == '/' && i <= MaxRegistrationFieldErrorPathLen {
-			return p[:i]
+	best := ""
+	for i, r := range p {
+		if r != '/' || i == 0 {
+			continue
 		}
+		if utf8.RuneCountInString(p[:i]) > MaxRegistrationFieldErrorPathLen {
+			break
+		}
+		best = p[:i]
 	}
-	return ""
+	return best
 }
 
-// clampText keeps the constraint text inside the wire's bound. The field also has a
-// minimum of one character, so an empty description becomes a generic one rather
-// than a message the contract would reject.
+// clampText keeps the constraint text inside the wire's bound, cutting only on a
+// character boundary: a byte-wise cut through a multi-byte character produces invalid
+// UTF-8, and proto.Marshal then refuses the refusal — a failure that appears only on
+// the unhappy path, which is the worst place for one. The field also has a minimum of
+// one character, so an empty description becomes a generic one rather than a message
+// the contract would reject.
 func clampText(s string) string {
 	if s == "" {
 		return "does not conform to the published schema"
 	}
-	if len(s) > MaxRegistrationFieldErrorTextLen {
-		return s[:MaxRegistrationFieldErrorTextLen]
+	if utf8.RuneCountInString(s) <= MaxRegistrationFieldErrorTextLen {
+		return s
+	}
+	n := 0
+	for i := range s {
+		if n == MaxRegistrationFieldErrorTextLen {
+			return s[:i]
+		}
+		n++
 	}
 	return s
 }

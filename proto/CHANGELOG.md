@@ -2,6 +2,78 @@
 
 ## Unreleased
 
+**The registration schema's rules become checkable, and two of them were wrong
+(comment-only, no wire change).** The previous revision stated a rule set for
+`AccountRegistration.data_schema` and shipped an SDK to enforce it. Reviewing what
+shipped found the central promise — that two conformant validators agree about which
+payloads a published schema accepts — was false, and that the resource caps bounded the
+wrong thing. Both are corrected here, and the shared corpus gains the dimension that
+would have caught them.
+
+**`pattern` needed two mechanisms, not one.** Draft 2020-12 patterns are ECMA-262 and
+the engines implementations run disagree about them in two different ways. Some
+constructs one engine cannot express at all, and those are refused — that much the
+previous revision had. The rest every engine compiles and then reads DIFFERENTLY, and
+refusing those would have gutted the feature, because they are `$`, `\d` and `\w`,
+which appear in almost every real pattern. `^[A-Z]{2}[0-9]+$` — the example this
+contract itself gives — accepted `"DE12345\n"` under one implementation and refused it
+under two, with nothing logged. So the alphabet now refuses only what cannot be
+reconciled, and an implementation whose engine differs is expected to correct it: match
+ASCII character classes, and anchor `$` at the end of the text and nowhere else. `\s`
+moves to the refused list, because there is no single set to correct TO — RE2 reads it
+as `[\t\n\f\r ]`, Python adds the vertical tab, and ECMA-262 adds that plus every
+Unicode space separator. An explicit character class says what was meant.
+
+Three more shapes join the refused list, each of which two engines read differently
+without erroring: a POSIX name anywhere inside a bracket expression (not merely at its
+start, which is all the previous rule checked, so `^[a[:alpha:]]+$` slipped through and
+produced three different answers); a counted repeat over 1000, which RE2 refuses and the
+others expand; and a bracket expression that opens with `]` or never closes.
+
+**Nested quantifiers are refused outright.** `(a+)+`, `(a|a)*` and `([a-z]+)*` are the
+catastrophic-backtracking forms, they need neither lookaround nor backreferences, and
+the previous revision's claim that excluding those two "falls out of the same rule" was
+simply wrong — every one of them was admitted. It has to be a PUBLISHING rule rather
+than a runtime bound, because a regex spin holds its interpreter: a consumer cannot
+reliably interrupt one it has already started.
+
+**The caps bounded the document, not the work.** 16KB and 32 containers say nothing
+about how expensive checking a payload is. Branches multiply along a reference chain, so
+a 1,675-byte schema five containers deep — a tenth of the size cap, a sixth of the depth
+cap — cost 16.7 million evaluations and twenty-seven seconds against a two-member
+payload. A new bound of **10000 evaluations**, counted statically before anything runs,
+is the missing one; it is about fifteen milliseconds of work, several hundred times what
+a schema describing a business entity needs.
+
+**Reference cycles are refused.** A `$ref` chain that returns to a schema already on it
+is legal JSON Schema and has no static cost bound; it is also what made validators
+recurse until they aborted, out of an API documented as returning a verdict rather than
+throwing. `{"$ref":"#"}` is twelve bytes. The same walk that counts evaluations follows
+every reference to its target, so it decides this and the resolvability of a
+same-document reference at the same time — three questions the libraries had been
+answering three different ways.
+
+**Smaller corrections.** The value MUST be a JSON object: 2020-12 admits a bare boolean
+as a schema, but a `Struct` cannot carry one, so the previous rules pinned behaviour for
+a document the wire cannot transport. A consumer that refuses a schema MUST skip its
+local pre-check rather than decline to send — stated before as a SHOULD in one sentence
+and a MUST in another, in the same comment. And the escape list is spelled out character
+by character rather than ranged, so a conformance guard can compare the contract's set
+with the SDK's in both directions; the previous guard compared five of eight rules
+against string literals in its own test file, and dropping an escape from every SDK left
+every gate green.
+
+*Tooling:* the shared corpus gains a fourth dimension recording what an admitted pattern
+MATCHES, not merely which schemas are admitted. Its absence is why none of the above was
+visible: 141 cases across three dimensions all passed while the three implementations
+disagreed about payloads. Also corrected in the SDK: the refusal list is clamped by
+CHARACTERS rather than bytes or UTF-16 units, which is what `string.max_len` counts and
+what stopped one implementation naming a different member than the others; a refusal
+carrying a non-ASCII constraint no longer cuts mid-character into a message
+`proto.Marshal` rejects; and the JSON Schema library is given an explicitly REFUSING
+loader, since leaving it unset does not mean "resolves nothing" — one library's default
+reads a reference off local disk and another's fetches it over HTTP.
+
 **The published registration schema states its safety rules as numbers (comment-only,
 no wire change).** `AccountRegistration.data_schema` already required a self-contained
 schema, forbade resolving a remote `$ref`, and capped the document at 16KB. What it did

@@ -6790,33 +6790,66 @@ type AccountRegistration struct {
 	//	ramp.json.
 	//
 	//	Bounded depth: 32 nested JSON containers, counting the schema itself as the
-	//	first. Deep allOf and $ref chains are the cheapest way to make compiling a
-	//	schema expensive.
+	//	first.
+	//
+	//	Bounded WORK: 10000 evaluations, counted statically as the worst case for one
+	//	payload — each anyOf/oneOf/allOf branch and prefixItems entry costs its own
+	//	subschema, and a $ref costs its target. The size and depth caps do not bound
+	//	this and are not a substitute for it: branches multiply along a reference
+	//	chain, so a 1.6KB schema five containers deep can cost tens of millions of
+	//	evaluations and tens of seconds against a two-member payload. A definition
+	//	nobody references costs nothing, so a document may carry a library of them.
+	//
+	//	No reference cycles. A $ref chain MUST NOT return to a schema already on it.
+	//	The construct is legal JSON Schema and is how a recursive structure is
+	//	written, but its evaluation cost has no static bound and it is what makes a
+	//	validator recurse until it aborts. Registration data describes a business
+	//	entity, which is not a recursive shape.
 	//
 	//	A portable `pattern` alphabet. A group MUST open with "(" or "(?:" and
-	//	nothing else; the escapes \1-\9, \k, \p, \P, \A, \z, \Z, \Q, \E, \C, \G and
-	//	\K MUST NOT appear; and "[[:" MUST NOT appear. Draft 2020-12 patterns are
-	//	ECMA-262, but the engines implementations run do not agree on it. Some of
-	//	the disagreement is loud — RE2 refuses the lookaround, atomic groups and
-	//	backreferences ECMA allows, so a schema using them compiles for one
-	//	implementation and fails for another. The rest is silent, and is why this is
-	//	a MUST: inline flags, Unicode property classes, text anchors and POSIX
-	//	bracket names are accepted by one engine and either refused or read
-	//	DIFFERENTLY by the next, so two conformant validators both compile the
-	//	pattern and then disagree about which payloads match it. Excluding the
-	//	backtracking constructs — the ones that make a `pattern` a denial-of-service
-	//	vector in the engines that backtrack — falls out of the same rule.
+	//	nothing else; the escapes \1, \2, \3, \4, \5, \6, \7, \8, \9, \A, \C, \E,
+	//	\G, \K, \P, \Q, \S, \Z, \k, \p, \s and \z MUST NOT appear (spelled out
+	//	rather than ranged, so a conformance guard can check the set character by
+	//	character); a counted repeat MUST NOT exceed 1000; "[:"
+	//	MUST NOT appear inside a bracket expression; and a bracket expression MUST
+	//	close and MUST NOT open with "]". Draft 2020-12 patterns are ECMA-262, but
+	//	the engines implementations run do not agree on it. Some of the disagreement
+	//	is loud — RE2 refuses the lookaround, atomic groups and backreferences ECMA
+	//	allows, so a schema using them compiles for one implementation and fails for
+	//	another. The rest is SILENT, and is why this is a MUST rather than a SHOULD:
+	//	inline flags, Unicode property classes, text anchors and POSIX bracket names
+	//	are accepted by one engine and either refused or read DIFFERENTLY by the
+	//	next, so two conformant validators both compile the pattern and then disagree
+	//	about which payloads match it, with nothing logged. `\s` is the plainest
+	//	example — RE2 reads it as [\t\n\f\r ], Python adds the vertical tab, and
+	//	ECMA-262 adds that plus every Unicode space separator. An explicit character
+	//	class says what was meant and means it everywhere.
 	//
-	//	Annotations stay annotations. format, contentEncoding and contentMediaType
-	//	MUST NOT be asserted. Libraries default differently on each, and a schema
-	//	whose verdict depends on which library read it has no single answer.
+	//	No nested quantifiers. A quantified group MUST NOT have a body that can
+	//	itself repeat or branch: `(a+)+`, `(a|a)*` and `([a-z]+)*` are refused, while
+	//	`(?:ab)+` is admitted. This is the denial-of-service half of the pattern
+	//	rule, and it is deliberately SEPARATE from the alphabet above, because
+	//	excluding lookaround and backreferences does not cover it — catastrophic
+	//	backtracking needs neither. It has to be a publishing rule rather than a
+	//	runtime bound: a regex spin holds its interpreter, so a consumer cannot
+	//	reliably interrupt one it has already started.
 	//
-	// A consumer SHOULD reject a schema that breaks any of these and SKIP its local
-	// pre-check rather than repair or truncate it, which leaves the Exchange's own
-	// enforcement the deciding check exactly as when no schema is published. That is
-	// a rule for the CLIENT side: an Exchange that cannot compile its own configured
-	// schema is looking at a misconfiguration of its deployment, and MUST NOT
-	// advertise a schema it is not itself enforcing.
+	//	Annotations stay annotations. A consumer MUST NOT assert format,
+	//	contentEncoding or contentMediaType. Libraries default differently on each,
+	//	and a schema whose verdict depends on which library read it has no single
+	//	answer.
+	//
+	// The value MUST be a JSON object. Draft 2020-12 also admits a bare boolean as a
+	// schema, but this field is a Struct and cannot carry one.
+	//
+	// A consumer that finds a schema breaking any of these MUST refuse it, and MUST
+	// then SKIP its local pre-check rather than repair or truncate the schema —
+	// leaving the Exchange's own enforcement the deciding check, exactly as when no
+	// schema is published. Refusing locally and declining to send would turn a rule
+	// about reading a third party's document into a denial of service against the
+	// consumer's own user. That is the CLIENT side. An Exchange that cannot compile
+	// its OWN configured schema is looking at a misconfiguration of its deployment,
+	// and MUST NOT advertise a schema it is not itself enforcing.
 	DataSchema    *structpb.Struct `protobuf:"bytes,1,opt,name=data_schema,json=dataSchema,proto3" json:"data_schema,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -73,6 +73,7 @@ _CORPUS_SPECS: list[tuple[pathlib.Path, Callable[[Any], Any], str]] = [
         "regschema-validate",
     ),
     (GO_TESTDATA / "registration-schema-vectors.json", lambda d: d["pattern"], "regschema-pattern"),
+    (GO_TESTDATA / "registration-schema-vectors.json", lambda d: d["match"], "regschema-match"),
     (CONFORMANCE_CORPUS / "crossfield.json", _whole, "crossfield"),
 ]
 

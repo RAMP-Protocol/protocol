@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 92 symbols at cross-language parity · 14 documented divergences · 143 Go-idiomatic exclusions · 25 conformance corpora, each tri-replayed.
+**At a glance:** 93 symbols at cross-language parity · 14 documented divergences · 144 Go-idiomatic exclusions · 25 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -55,6 +55,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `MaxRegistrationFieldErrors` | `MAX_REGISTRATION_FIELD_ERRORS` | `maxRegistrationFieldErrors` |
 | `MaxRegistrationSchemaBytes` | `MAX_REGISTRATION_SCHEMA_BYTES` | `maxRegistrationSchemaBytes` |
 | `MaxRegistrationSchemaDepth` | `MAX_REGISTRATION_SCHEMA_DEPTH` | `maxRegistrationSchemaDepth` |
+| `MaxRegistrationSchemaEvaluations` | `MAX_REGISTRATION_SCHEMA_EVALUATIONS` | `maxRegistrationSchemaEvaluations` |
 | `NewIdempotencyKey` | `generate_idempotency_key` | `generateIdempotencyKey` |
 | `NormalizeScopes` | `normalize_scopes` | `normalizeScopes` |
 | `OfferSignatureAlgorithm` | `OFFER_SIGNATURE_ALGORITHM` | `OFFER_SIGNATURE_ALGORITHM` |
@@ -284,6 +285,7 @@ Go constructs (functional-option builders, `errors.Is` sentinels, value types, c
 | `helpers.NewMultisigContext` | Go context.Context accessor; py/ts thread multisig state explicitly. |
 | `helpers.PoPOptions` | Go options struct for the delivery-proof signer; Python takes the same values as keyword arguments and TS as an options object. |
 | `helpers.RedactURL` | Go query-stripping helper for a signed URL headed to a log; py/ts redact inline at the log site. |
+| `helpers.RegistrationSchemaCompileTimeout` | Go-only wall-clock backstop on compilation, not part of the accepted/refused contract and deliberately absent from the ports: Go's runtime preempts, while a CPU-bound spin holds CPython's interpreter and blocks Node's event loop, so a timer there cannot interrupt the work it names. What bounds all three identically is static — the size, depth and evaluation caps and the pattern alphabet — and no admitted schema should ever reach this timeout. |
 | `helpers.RetrievalAuthFailureReasonFromToken` | Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly. |
 | `helpers.SharedValidator` | Go protovalidate validator singleton; TS/Python ship no protovalidate face. |
 | `helpers.SignOfferAcceptanceWith` | Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer. |

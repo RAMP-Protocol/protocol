@@ -142,9 +142,10 @@ arrived in a message; note that the client's own send path still vets with the w
 
 **Registration schema** — an Exchange MAY publish a JSON Schema for the
 `registration_data` it expects. Both ends of a registration validate against it, so
-the rules live here once: 2020-12 only, same-document `$ref` only, 16KB, 32 levels,
-and a `pattern` alphabet all three SDK languages express identically. `raw` is the
-schema's bytes **as served** in `ramp.json` — the size cap is defined over those:
+the rules live here once: 2020-12 only, same-document `$ref` only and no reference
+cycles, 16KB, 32 containers, 10,000 evaluations of work, and a `pattern` alphabet all
+three SDK languages express identically. `raw` is the schema's bytes **as served** in
+`ramp.json` — the size cap is defined over those:
 
 ```go
 schema, verdict := helpers.CompileRegistrationSchema(raw)
@@ -157,10 +158,14 @@ The two callers read a non-accepted verdict differently, and getting it backward
 the easy mistake. A **client** pre-checking a payload skips the check and sends
 anyway — the Exchange's enforcement decides, and a local check that cannot run must
 not become a local veto against your own user. An **Exchange** compiling its OWN
-configured schema is looking at a misconfigured deployment, and must not advertise a
-schema it is not enforcing. Validation returns the offending members ready for the
-refusal builder; a nil `*RegistrationSchema` means no schema is published, so nothing
-is enforced:
+configured schema treats anything but `SchemaAccepted` or `SchemaNotPublished` as a
+misconfigured deployment, and must not advertise a schema it is not enforcing.
+
+**Do not discard the verdict.** A nil `*RegistrationSchema` reports no failures,
+because "no schema" means "nothing to enforce" — which is right for
+`SchemaNotPublished` and right for a client that could not check locally. It is also
+what you hold after every refusal, so an Exchange that drops the verdict enforces
+nothing and cannot tell. The verdict is the only thing that separates the two cases:
 
 ```go
 fieldErrors := schema.Validate(req.GetRegistrationData().AsMap())

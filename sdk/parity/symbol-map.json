@@ -114,6 +114,7 @@
     "helpers.NewMultisigContext": "Go context.Context accessor; py/ts thread multisig state explicitly.",
     "helpers.PoPOptions": "Go options struct for the delivery-proof signer; Python takes the same values as keyword arguments and TS as an options object.",
     "helpers.RedactURL": "Go query-stripping helper for a signed URL headed to a log; py/ts redact inline at the log site.",
+    "helpers.RegistrationSchemaCompileTimeout": "Go-only wall-clock backstop on compilation, not part of the accepted/refused contract and deliberately absent from the ports: Go's runtime preempts, while a CPU-bound spin holds CPython's interpreter and blocks Node's event loop, so a timer there cannot interrupt the work it names. What bounds all three identically is static — the size, depth and evaluation caps and the pattern alphabet — and no admitted schema should ever reach this timeout.",
     "helpers.RetrievalAuthFailureReasonFromToken": "Go lookup from the delivery edge's refusal token to the typed enum; py/ts branch on the token string directly.",
     "helpers.SharedValidator": "Go protovalidate validator singleton; TS/Python ship no protovalidate face.",
     "helpers.SignOfferAcceptanceWith": "Go Signer-custody variant of SignOfferAcceptance so the SDK never holds the key; py/ts pass key material directly to their single acceptance signer.",
@@ -394,6 +395,11 @@
       "allowlist_reason": null,
       "python": "MAX_REGISTRATION_SCHEMA_DEPTH",
       "ts": "maxRegistrationSchemaDepth"
+    },
+    "helpers.MaxRegistrationSchemaEvaluations": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_SCHEMA_EVALUATIONS",
+      "ts": "maxRegistrationSchemaEvaluations"
     },
     "helpers.NewIdempotencyKey": {
       "allowlist_reason": null,

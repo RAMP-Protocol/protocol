@@ -21,6 +21,8 @@
 
 import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020";
 
+import type { RegistrationFieldError as RegistrationFieldErrorShape } from "./errordetail";
+
 /**
  * maxRegistrationSchemaBytes is the published schema's size cap, measured as the
  * UTF-8 bytes of the data_schema member AS SERVED in ramp.json — which is why the
@@ -58,6 +60,25 @@ export const maxRegistrationFieldErrorTextLen = 255;
 export const registrationSchemaDialect = "https://json-schema.org/draft/2020-12/schema";
 
 /**
+ * maxRegistrationSchemaEvaluations bounds the WORK of checking a payload, which the
+ * size and depth caps do not: `anyOf` branches multiply along a reference chain, so a
+ * schema can be small and shallow and still cost an unbounded amount to evaluate.
+ * Cost is linear in this count, so the bound is really a time bound expressed as a
+ * number a static walk can compute and a shared corpus can pin, which a stopwatch
+ * cannot.
+ */
+export const maxRegistrationSchemaEvaluations = 10000;
+
+// NOTE on wall-clock bounds. The Go oracle carries a compile timeout, which it can
+// enforce because its runtime preempts. This port carries none, deliberately: a
+// CPU-bound spin blocks the event loop, so a timer never runs until the work it was
+// meant to interrupt has finished. A control that cannot preempt the work it names is
+// not a control. What bounds this port is entirely static and identical in all three
+// languages: the size, depth and evaluation caps, and the pattern alphabet, which
+// refuses the nested quantifiers that make backtracking catastrophic in the first
+// place.
+
+/**
  * SchemaVerdict is the outcome of compiling a published data_schema. The tokens
  * are the Go `SchemaVerdict.String()` vocabulary verbatim, which is what the
  * shared vectors record — a union of string literals rather than a numeric enum,
@@ -75,21 +96,20 @@ export type SchemaVerdict =
 	| "too_large"
 	| "too_deep"
 	| "unsafe_pattern"
-	| "uncompilable";
+	| "too_complex"
+	| "ref_cycle"
+	| "compile_timeout"
+	| "uncompilable"
+	| "not_published";
 
-/** One member failure, in the wire's RegistrationFieldError shape. */
-export interface RegistrationFieldError {
-	/**
-	 * RFC 6901 JSON Pointer relative to registration_data; "" addresses
-	 * registration_data itself, for whole-object failures.
-	 */
-	path: string;
-	/** The violated CONSTRAINT — never the submitted value. */
-	error: string;
-}
+// The wire shape is declared once, next to the refusal builder that consumes it, and
+// re-exported here so a caller importing only this module still names one type.
+// Re-declaring it would be a third copy of an L0 shape that gen/ts already generates,
+// against ADR-020's "L0 is consumed, never rebuilt".
+export type { RegistrationFieldError } from "./errordetail";
 
 /** One failure before it is narrowed to the wire's two-field shape. */
-export interface SchemaViolation extends RegistrationFieldError {
+export interface SchemaViolation extends RegistrationFieldErrorShape {
 	/**
 	 * The failed keyword. The shared corpus pins THIS rather than the prose:
 	 * `error` wording is validator-defined by contract, while the keyword is the
@@ -102,7 +122,7 @@ export interface SchemaViolation extends RegistrationFieldError {
 // otherwise let one SDK accept a schema another refuses, or — worse, because it is
 // silent — let two SDKs accept the same schema and disagree about which payloads
 // match it. See isSafeSchemaPattern for the full argument.
-const divergentEscapes = new Set("123456789kpPAzZQECGK".split(""));
+const divergentEscapes = new Set("123456789kpPsSAzZQECGK".split(""));
 
 // Keywords whose value is arbitrary JSON DATA rather than a subschema. Their
 // contents are never read as keywords, so a `const` carrying a "$ref" member is
@@ -123,26 +143,128 @@ const schemaMapKeywords = new Set([
 const referenceKeywords = ["$ref", "$dynamicRef", "$recursiveRef"] as const;
 
 /**
- * isSafeSchemaPattern reports whether a `pattern` uses only constructs all three
- * SDK languages express identically.
+ * The largest {n,m} bound admitted. RE2 refuses a repeat count over 1000 outright
+ * while the other two engines expand it, so a larger bound is a pattern one SDK
+ * compiles and another does not.
+ */
+const maxPortableRepeat = 1000;
+
+/**
+ * Whether the `{...}` starting at s is a counted repeat every engine reads the same
+ * way. A `{` that opens no valid quantifier is refused rather than treated as a
+ * literal, because whether it IS a literal is precisely what the engines disagree
+ * about.
+ */
+function isPortableQuantifier(s: string): boolean {
+	const end = s.indexOf("}");
+	if (end < 0) return false;
+	const body = s.slice(1, end);
+	if (body === "") return false;
+	for (const part of body.split(",", 2)) {
+		if (part === "") continue; // "{n,}" is well formed
+		if (!/^[0-9]+$/.test(part)) return false;
+		if (Number(part) > maxPortableRepeat) return false;
+	}
+	return true;
+}
+
+/** The text between the parenthesis at `open` and its match, plus the index past it. */
+function groupBody(p: string, open: number): { body: string; after: number } | null {
+	let depth = 0;
+	let inClass = false;
+	for (let i = open; i < p.length; i++) {
+		const ch = p[i];
+		if (ch === "\\") {
+			i++;
+			continue;
+		}
+		if (ch === "[") inClass = true;
+		else if (ch === "]") inClass = false;
+		else if (ch === "(" && !inClass) depth++;
+		else if (ch === ")" && !inClass) {
+			depth--;
+			if (depth === 0) return { body: p.slice(open + 1, i), after: i + 1 };
+		}
+	}
+	return null;
+}
+
+/** Remove escaped characters so an escaped metacharacter is not read as a quantifier. */
+function stripEscapes(s: string): string {
+	let out = "";
+	for (let i = 0; i < s.length; i++) {
+		if (s[i] === "\\") {
+			i++;
+			continue;
+		}
+		out += s[i];
+	}
+	return out;
+}
+
+/**
+ * Whether the pattern quantifies a group whose body can itself repeat or branch — the
+ * shape that makes a backtracking engine explore exponentially many ways to match one
+ * input.
  *
- * Draft 2020-12 patterns are ECMA-262, and the three SDKs run three different
- * engines over them: Go's RE2, JavaScript's RegExp and Python's `re`. The three
- * intersect on far less than any one of them accepts, and BOTH directions of the
- * gap are a bug. Lookaround, atomic groups and backreferences are legal ECMA and
- * refused by RE2, so a schema using them compiles in two SDKs and fails in the
- * third. Inline flags, Unicode property classes, text anchors and POSIX bracket
- * names run the other way — taken by RE2 or Python and either refused or read
- * DIFFERENTLY here. The second kind is the more dangerous, because nothing
- * errors: two SDKs both compile the pattern and then disagree about which
- * payloads match it.
+ * This is the half of the catastrophic-backtracking answer that excluding lookaround
+ * and backreferences does not cover: nested quantifiers need neither, and every
+ * classic form — `(a+)+`, `(a|a)*`, `([a-z]+)*`, `(?:a*)*` — sits comfortably inside
+ * the rest of the alphabet. It has to be STATIC: a regex spin blocks this runtime's
+ * event loop, so no timer here could stop one.
  *
- * So the admitted alphabet is the intersection: a group opens with `(` or `(?:`
- * and nothing else, an escape names a character or one of the shared classes, and
- * `[[:` never appears. Refusing catastrophic backtracking falls out of the first
- * rule rather than being aimed at separately.
+ * Deliberately coarse — a quantified group whose body contains any of `* + ? { |`.
+ * Deciding whether a particular body is genuinely ambiguous is not decidable in
+ * general, and the conservative answer costs an author a rewrite while the permissive
+ * one costs a service its availability.
+ */
+function hasNestedQuantifier(p: string): boolean {
+	let inClass = false;
+	for (let i = 0; i < p.length; i++) {
+		const ch = p[i];
+		if (ch === "\\") {
+			i++;
+			continue;
+		}
+		if (ch === "[") inClass = true;
+		else if (ch === "]") inClass = false;
+		else if (ch === "(" && !inClass) {
+			const found = groupBody(p, i);
+			if (found === null) continue;
+			// A non-capturing group's "?:" is syntax, not content.
+			const body = found.body.startsWith("?:") ? found.body.slice(2) : found.body;
+			const next = p[found.after];
+			if (
+				(next === "*" || next === "+" || next === "?" || next === "{") &&
+				/[*+?{|]/.test(stripEscapes(body))
+			) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/**
+ * isSafeSchemaPattern reports whether a `pattern` uses only constructs all three SDK
+ * languages express identically, and none that make a backtracking engine explode.
+ *
+ * Draft 2020-12 patterns are ECMA-262, and the three SDKs run three different engines
+ * over them. Two distinct failures follow, and this function answers only the first.
+ *
+ * Some constructs one engine cannot express at all — RE2 has no lookaround, this
+ * runtime has no inline flags — so no care at the call site reconciles them and they
+ * are refused here. Others every engine compiles and then reads DIFFERENTLY: `\d` is
+ * Unicode-aware in Python and ASCII here and in RE2, and Python's `$` also matches
+ * before a trailing newline. Those are not refused — they appear in almost every real
+ * pattern — they are corrected in the port that diverges, which is Python.
+ *
+ * The last rule is about availability rather than agreement: a quantified group whose
+ * body can repeat or branch is refused, because that is what makes backtracking
+ * catastrophic and no timer here could stop one.
  */
 export function isSafeSchemaPattern(pattern: string): boolean {
+	let inClass = false;
 	for (let i = 0; i < pattern.length; i++) {
 		const ch = pattern[i];
 		if (ch === "\\") {
@@ -154,28 +276,57 @@ export function isSafeSchemaPattern(pattern: string): boolean {
 			i++; // the escaped character is consumed, never re-read as syntax
 			continue;
 		}
-		if (ch === "(" && pattern[i + 1] === "?") {
-			// Everything spelled "(?..." is refused except the non-capturing group,
-			// the only one all three engines write the same way. That covers
-			// lookaround, the atomic group "(?>", inline flags "(?i)", and the named
-			// group whose spelling differs by engine.
-			if (pattern[i + 2] !== ":") return false;
-			i += 2;
-			continue;
-		}
-		if (ch === "[" && pattern.startsWith("[[:", i)) {
-			// A POSIX class to RE2 and a bracket expression matching the literal
-			// characters ":alph" here — the same pattern, two different languages of
-			// matching strings, with no error on either side.
-			return false;
+		if (ch === "[") {
+			if (inClass) {
+				// A literal "[" inside a class — EXCEPT when it opens a POSIX name.
+				// "[:alpha:]" is a character class to RE2 and the literal characters
+				// ":alph" here: both compile, then match different strings.
+				if (pattern.startsWith("[:", i)) return false;
+				continue;
+			}
+			inClass = true;
+			let rest = pattern.slice(i + 1);
+			if (rest.startsWith("^")) rest = rest.slice(1);
+			// "]" straight after the opening bracket is a literal in POSIX and an
+			// empty class in ECMA; the engines disagree about whether it compiles.
+			if (rest.startsWith("]") || rest === "") return false;
+			if (pattern.startsWith("[[:", i)) return false;
+		} else if (ch === "]") {
+			// An unmatched "]" is a literal to RE2 and a syntax error here.
+			if (!inClass) return false;
+			inClass = false;
+		} else if (ch === "(" && !inClass) {
+			if (pattern[i + 1] === "?") {
+				// Everything spelled "(?..." is refused except the non-capturing
+				// group, the only one all three engines write the same way.
+				if (pattern[i + 2] !== ":") return false;
+				i += 2;
+			}
+		} else if (ch === "{" && !inClass) {
+			if (!isPortableQuantifier(pattern.slice(i))) return false;
 		}
 	}
-	return true;
+	// An unclosed class is a literal "[" to RE2 and a syntax error here.
+	if (inClass) return false;
+	return !hasNestedQuantifier(pattern);
 }
 
 /** The 2020-12 identifier in the two spellings that name the same dialect. */
 function isDialect(value: string): boolean {
 	return value === registrationSchemaDialect || value === `${registrationSchemaDialect}#`;
+}
+
+/**
+ * Object keys in CODE POINT order.
+ *
+ * JavaScript's default sort compares UTF-16 code units, which orders an astral
+ * character BEFORE U+FFFF where Go and Python order it after. Because the scan
+ * answers with the FIRST fault it finds, that difference changed the compile verdict:
+ * a document with two faults under two keys answered `remote_ref` here and
+ * `wrong_dialect` in the other two.
+ */
+function sortedKeys(o: Record<string, unknown>): string[] {
+	return Object.keys(o).sort(cmp);
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -199,7 +350,7 @@ function checkKeywords(obj: Record<string, unknown>): SchemaVerdict {
 	// than by the generic pattern branch above.
 	const patternProperties = obj["patternProperties"];
 	if (isPlainObject(patternProperties)) {
-		for (const key of Object.keys(patternProperties).sort()) {
+		for (const key of sortedKeys(patternProperties)) {
 			if (!isSafeSchemaPattern(key)) return "unsafe_pattern";
 		}
 	}
@@ -253,7 +404,7 @@ function scanSchemaMap(child: unknown): SchemaVerdict {
 		// invalid schema is the compiler's to reject.
 		return scan(child);
 	}
-	for (const name of Object.keys(child).sort()) {
+	for (const name of sortedKeys(child)) {
 		const verdict = scan(child[name]);
 		if (verdict !== "accepted") return verdict;
 	}
@@ -280,7 +431,7 @@ function scan(node: unknown): SchemaVerdict {
 	if (own !== "accepted") return own;
 	// Sorted so a document with two faults answers the same way on every run and in
 	// every language.
-	for (const key of Object.keys(node).sort()) {
+	for (const key of sortedKeys(node)) {
 		// A non-schema keyword's value is DATA. Its contents are not read as keywords
 		// at all, so a `const` carrying a "$ref" member is a value a payload may equal
 		// rather than a reference to resolve.
@@ -290,6 +441,157 @@ function scan(node: unknown): SchemaVerdict {
 		if (verdict !== "accepted") return verdict;
 	}
 	return "accepted";
+}
+
+// --- work bound -----------------------------------------------------------------
+
+// Keywords holding a LIST of subschemas, each of which may be evaluated against the
+// same instance. They are what makes cost multiply along a reference chain.
+const branchKeywords = new Set(["anyOf", "oneOf", "allOf", "prefixItems"]);
+
+// Keywords holding exactly one subschema.
+const singleSubschemaKeywords = new Set([
+	"not", "if", "then", "else", "items", "contains", "propertyNames",
+	"additionalProperties", "unevaluatedProperties", "unevaluatedItems", "contentSchema",
+]);
+
+// Saturation point: past the cap the exact value carries no information.
+const costCeiling = maxRegistrationSchemaEvaluations + 1;
+
+function addCost(a: number, b: number): number {
+	if (a >= costCeiling || b >= costCeiling || a + b >= costCeiling) return costCeiling;
+	return a + b;
+}
+
+/** Index every `$anchor` so a "#name" reference resolves without a second walk. */
+function collectAnchors(node: unknown, out: Map<string, unknown>): void {
+	if (Array.isArray(node)) {
+		for (const item of node) collectAnchors(item, out);
+		return;
+	}
+	if (!isPlainObject(node)) return;
+	const anchor = node["$anchor"];
+	if (typeof anchor === "string" && !out.has(anchor)) out.set(anchor, node);
+	for (const key of sortedKeys(node)) collectAnchors(node[key], out);
+}
+
+/**
+ * Counts the worst-case number of subschema evaluations, and — because counting means
+ * following every reference to its target — also decides whether a reference cycle is
+ * present and whether a same-document reference resolves at all.
+ */
+class CostWalker {
+	readonly #root: unknown;
+	readonly #anchors = new Map<string, unknown>();
+	readonly #memo = new Map<string, number>();
+	readonly #onStack = new Set<string>();
+	verdict: SchemaVerdict = "accepted";
+
+	constructor(root: unknown) {
+		this.#root = root;
+		collectAnchors(root, this.#anchors);
+	}
+
+	fail(v: SchemaVerdict): number {
+		if (this.verdict === "accepted") this.verdict = v;
+		return costCeiling;
+	}
+
+	/**
+	 * The worst-case evaluations `node` can require against one instance: a boolean
+	 * schema is one, an object schema is itself plus everything it can delegate to.
+	 *
+	 * `$defs` and `definitions` are deliberately NOT counted — they are reachable only
+	 * through a reference, and counting them here as well would charge a shared
+	 * definition once per declaration plus once per use.
+	 */
+	cost(node: unknown): number {
+		if (this.verdict !== "accepted") return costCeiling;
+		if (!isPlainObject(node)) return 1;
+		let total = 1;
+		for (const key of sortedKeys(node)) {
+			const value = node[key];
+			if (nonSchemaKeywords.has(key) || key === "$defs" || key === "definitions") continue;
+			if ((referenceKeywords as readonly string[]).includes(key)) {
+				if (typeof value === "string") total = addCost(total, this.refCost(value));
+			} else if (branchKeywords.has(key)) {
+				if (Array.isArray(value)) {
+					for (const item of value) total = addCost(total, this.cost(item));
+				} else {
+					total = addCost(total, this.cost(value));
+				}
+			} else if (singleSubschemaKeywords.has(key)) {
+				total = addCost(total, this.cost(value));
+			} else if (schemaMapKeywords.has(key)) {
+				if (isPlainObject(value)) {
+					for (const name of sortedKeys(value)) total = addCost(total, this.cost(value[name]));
+				} else {
+					total = addCost(total, this.cost(value));
+				}
+			}
+			if (total >= costCeiling) return costCeiling;
+		}
+		return total;
+	}
+
+	/**
+	 * Count a reference's target once and remember it. A location already being
+	 * counted is a cycle: its cost is not finite, and it is what makes this port abort
+	 * rather than answer.
+	 */
+	refCost(ref: string): number {
+		const memo = this.#memo.get(ref);
+		if (memo !== undefined) return memo;
+		if (this.#onStack.has(ref)) return this.fail("ref_cycle");
+		const target = this.resolve(ref);
+		if (!target.ok) return this.fail("uncompilable");
+		this.#onStack.add(ref);
+		const c = this.cost(target.node);
+		this.#onStack.delete(ref);
+		this.#memo.set(ref, c);
+		return c;
+	}
+
+	/**
+	 * Follow a same-document reference. The scan has already refused anything not
+	 * beginning with "#", so only three forms reach here: the whole document, an RFC
+	 * 6901 pointer into it, and a `$anchor` name.
+	 */
+	resolve(ref: string): { node: unknown; ok: boolean } {
+		const frag = ref.startsWith("#") ? ref.slice(1) : ref;
+		if (frag === "") return { node: this.#root, ok: true };
+		if (!frag.startsWith("/")) {
+			const target = this.#anchors.get(frag);
+			return { node: target, ok: this.#anchors.has(frag) };
+		}
+		let node: unknown = this.#root;
+		for (const raw of frag.slice(1).split("/")) {
+			const token = raw.replaceAll("~1", "/").replaceAll("~0", "~");
+			if (isPlainObject(node)) {
+				if (!(token in node)) return { node: undefined, ok: false };
+				node = node[token];
+			} else if (Array.isArray(node)) {
+				if (!/^[0-9]+$/.test(token) || Number(token) >= node.length) {
+					return { node: undefined, ok: false };
+				}
+				node = node[Number(token)];
+			} else {
+				return { node: undefined, ok: false };
+			}
+		}
+		return { node, ok: true };
+	}
+}
+
+/**
+ * Bound how much work validating a payload can cost. The size and depth caps bound
+ * the DOCUMENT and say nothing about this.
+ */
+function checkEvaluationCost(doc: unknown): SchemaVerdict {
+	const walker = new CostWalker(doc);
+	const cost = walker.cost(doc);
+	if (walker.verdict !== "accepted") return walker.verdict;
+	return cost > maxRegistrationSchemaEvaluations ? "too_complex" : "accepted";
 }
 
 /**
@@ -414,8 +716,8 @@ export class RegistrationSchema {
 	 * failing document in three different orders, so an unsorted list is one no
 	 * shared corpus could pin.
 	 */
-	validate(data: unknown): RegistrationFieldError[] {
-		return this.violations(data).map(({ path, error }) => ({ path, error }));
+	validate(data: unknown): RegistrationFieldErrorShape[] {
+		return this.violations(data).map(({ path, error }) => ({ path, error: clampText(error) }));
 	}
 
 	/**
@@ -428,14 +730,24 @@ export class RegistrationSchema {
 		if (this.#validate(instance)) return [];
 		const errors = this.#validate.errors ?? [];
 
-		// Drop any error that has descendants: a composite keyword (oneOf, anyOf,
-		// if) reports itself AND the branch failures underneath it, while Go's
-		// oracle reports only the leaves. Ajv's schemaPath makes the relationship
-		// explicit, so the filter is exact rather than a keyword denylist — and a
-		// composite that failed with NO branch errors (oneOf matching two branches)
-		// is a leaf and survives, which is what Go does too.
+		// Drop any error that has descendants AT THE SAME INSTANCE: a composite
+		// keyword (oneOf, anyOf, if) reports itself AND the branch failures underneath
+		// it, while Go's oracle reports only the leaves.
+		//
+		// Both halves of the key are load-bearing. Keying on schemaPath alone — the
+		// first version of this — dropped a composite failure at one member because an
+		// UNRELATED error at a DIFFERENT member happened to sit under the same shared
+		// subschema, so a genuinely failing member vanished from the refusal and the
+		// operator was never told to fix it. A composite that failed with no branch
+		// errors (oneOf matching two branches) is still a leaf and survives.
 		const leaves = errors.filter(
-			(e) => !errors.some((o) => o !== e && o.schemaPath.startsWith(`${e.schemaPath}/`)),
+			(e) =>
+				!errors.some(
+					(o) =>
+						o !== e &&
+						o.instancePath === e.instancePath &&
+						o.schemaPath.startsWith(`${e.schemaPath}/`),
+				),
 		);
 
 		const flat: SchemaViolation[] = [];
@@ -448,22 +760,37 @@ export class RegistrationSchema {
 			if (at !== undefined) {
 				// Where a key repeats, the lexicographically smallest text wins, so the
 				// prose does not depend on which duplicate was walked first.
-				if (text < flat[at]!.error) flat[at]!.error = clampText(text);
+				if (cmp(text, flat[at]!.error) < 0) flat[at]!.error = text;
 				continue;
 			}
 			seen.set(key, flat.length);
-			flat.push({ path, keyword, error: clampText(text) });
+			flat.push({ path, keyword, error: text });
 		}
 		flat.sort((a, b) => (a.path === b.path ? cmp(a.keyword, b.keyword) : cmp(a.path, b.path)));
 		return flat.slice(0, maxRegistrationFieldErrors);
 	}
 }
 
-// Byte-order comparison, matching Go's string ordering and Python's — JavaScript's
-// default Array#sort compares UTF-16 code units too, but only via string coercion
-// on the whole element, so the comparator is written out.
+/**
+ * CODE POINT comparison, matching Go's byte order over UTF-8 and Python's ordering
+ * over str.
+ *
+ * `a < b` compares UTF-16 code units, which is NOT the same order: a surrogate pair
+ * (U+10000 and above) begins with 0xD800-0xDBFF and therefore sorts before U+E000-
+ * U+FFFF, where the other two languages sort it after. That difference is not
+ * cosmetic here — the scan answers with the first fault it finds, so key order
+ * decides the verdict.
+ */
 function cmp(a: string, b: string): number {
-	return a < b ? -1 : a > b ? 1 : 0;
+	const ac = [...a];
+	const bc = [...b];
+	const n = Math.min(ac.length, bc.length);
+	for (let i = 0; i < n; i++) {
+		const x = ac[i]!.codePointAt(0)!;
+		const y = bc[i]!.codePointAt(0)!;
+		if (x !== y) return x < y ? -1 : 1;
+	}
+	return ac.length - bc.length;
 }
 
 /**
@@ -487,6 +814,11 @@ export function compileRegistrationSchema(raw: Uint8Array | string): {
 	verdict: SchemaVerdict;
 } {
 	const bytes = typeof raw === "string" ? new TextEncoder().encode(raw) : raw;
+	// Nothing to compile is its own answer, not a malformed document: an Exchange that
+	// publishes no data_schema is the contract's ordinary case.
+	if (bytes.length === 0 || new TextDecoder().decode(bytes).trim() === "") {
+		return { schema: null, verdict: "not_published" };
+	}
 	// Size first, on the bytes as served and before any parse: an oversized document
 	// must not be decoded to find out that it was oversized.
 	if (bytes.length > maxRegistrationSchemaBytes) return { schema: null, verdict: "too_large" };
@@ -507,12 +839,20 @@ export function compileRegistrationSchema(raw: Uint8Array | string): {
 	} catch {
 		return { schema: null, verdict: "malformed" };
 	}
-	// 2020-12 admits an object or a boolean at the top level, nothing else.
-	if (!isPlainObject(doc) && typeof doc !== "boolean") {
+	// A JSON OBJECT and nothing else. 2020-12 admits a bare boolean as a schema, but
+	// data_schema is a google.protobuf.Struct, which carries an object — so a boolean
+	// cannot reach this face over the wire at all, and admitting one would pin
+	// behaviour for a document the contract has no way to transport.
+	if (!isPlainObject(doc)) {
 		return { schema: null, verdict: "malformed" };
 	}
 	const verdict = scan(doc);
 	if (verdict !== "accepted") return { schema: null, verdict };
+	// The work bound, still before the library is involved. This is also where a
+	// reference cycle and a same-document reference that resolves to nothing are
+	// found, because counting the cost means following every reference to its target.
+	const costVerdict = checkEvaluationCost(doc);
+	if (costVerdict !== "accepted") return { schema: null, verdict: costVerdict };
 
 	// strict:false because a published schema may legitimately carry keywords this
 	// version of Ajv does not know, and the robustness principle applies to those

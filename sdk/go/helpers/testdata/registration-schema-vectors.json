@@ -6,16 +6,6 @@
       "expected_verdict": "accepted"
     },
     {
-      "name": "boolean_true_schema",
-      "schema": "true",
-      "expected_verdict": "accepted"
-    },
-    {
-      "name": "boolean_false_schema",
-      "schema": "false",
-      "expected_verdict": "accepted"
-    },
-    {
       "name": "declares_the_dialect",
       "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\"}",
       "expected_verdict": "accepted"
@@ -131,6 +121,21 @@
       "expected_verdict": "remote_ref"
     },
     {
+      "name": "a_property_named_enum_carrying_a_remote_ref",
+      "schema": "{\"type\":\"object\",\"properties\":{\"enum\":{\"$ref\":\"https://evil.example/s.json\"}}}",
+      "expected_verdict": "remote_ref"
+    },
+    {
+      "name": "a_property_named_const_carrying_a_remote_ref",
+      "schema": "{\"type\":\"object\",\"properties\":{\"const\":{\"$ref\":\"https://evil.example/s.json\"}}}",
+      "expected_verdict": "remote_ref"
+    },
+    {
+      "name": "a_definition_named_default_carrying_a_remote_ref",
+      "schema": "{\"$defs\":{\"default\":{\"$ref\":\"https://evil.example/s.json\"}},\"type\":\"object\",\"properties\":{\"v\":{\"$ref\":\"#/$defs/default\"}}}",
+      "expected_verdict": "remote_ref"
+    },
+    {
       "name": "exactly_at_the_size_cap",
       "schema": "{\"type\":\"object\",\"description\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}",
       "expected_verdict": "accepted"
@@ -166,6 +171,51 @@
       "expected_verdict": "too_deep"
     },
     {
+      "name": "branch_product_just_over_the_cap",
+      "schema": "{\"$defs\":{\"d0\":{\"anyOf\":[{\"$ref\":\"#/$defs/d1\"},{\"$ref\":\"#/$defs/d1\"}]},\"d1\":{\"anyOf\":[{\"$ref\":\"#/$defs/d2\"},{\"$ref\":\"#/$defs/d2\"}]},\"d2\":{\"anyOf\":[{\"$ref\":\"#/$defs/d3\"},{\"$ref\":\"#/$defs/d3\"}]},\"d3\":{\"anyOf\":[{\"$ref\":\"#/$defs/d4\"},{\"$ref\":\"#/$defs/d4\"}]},\"d4\":{\"anyOf\":[{\"$ref\":\"#/$defs/d5\"},{\"$ref\":\"#/$defs/d5\"}]},\"d5\":{\"anyOf\":[{\"$ref\":\"#/$defs/d6\"},{\"$ref\":\"#/$defs/d6\"}]},\"d6\":{\"anyOf\":[{\"$ref\":\"#/$defs/d7\"},{\"$ref\":\"#/$defs/d7\"}]},\"d7\":{\"anyOf\":[{\"$ref\":\"#/$defs/d8\"},{\"$ref\":\"#/$defs/d8\"}]},\"d8\":{\"anyOf\":[{\"$ref\":\"#/$defs/d9\"},{\"$ref\":\"#/$defs/d9\"}]},\"d9\":{\"anyOf\":[{\"$ref\":\"#/$defs/d10\"},{\"$ref\":\"#/$defs/d10\"}]},\"d10\":{\"anyOf\":[{\"$ref\":\"#/$defs/d11\"},{\"$ref\":\"#/$defs/d11\"}]},\"d11\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"string\"}]}},\"$ref\":\"#/$defs/d0\"}",
+      "expected_verdict": "too_complex"
+    },
+    {
+      "name": "branch_product_far_over_the_cap",
+      "schema": "{\"$defs\":{\"d0\":{\"anyOf\":[{\"$ref\":\"#/$defs/d1\"},{\"$ref\":\"#/$defs/d1\"}]},\"d1\":{\"anyOf\":[{\"$ref\":\"#/$defs/d2\"},{\"$ref\":\"#/$defs/d2\"}]},\"d2\":{\"anyOf\":[{\"$ref\":\"#/$defs/d3\"},{\"$ref\":\"#/$defs/d3\"}]},\"d3\":{\"anyOf\":[{\"$ref\":\"#/$defs/d4\"},{\"$ref\":\"#/$defs/d4\"}]},\"d4\":{\"anyOf\":[{\"$ref\":\"#/$defs/d5\"},{\"$ref\":\"#/$defs/d5\"}]},\"d5\":{\"anyOf\":[{\"$ref\":\"#/$defs/d6\"},{\"$ref\":\"#/$defs/d6\"}]},\"d6\":{\"anyOf\":[{\"$ref\":\"#/$defs/d7\"},{\"$ref\":\"#/$defs/d7\"}]},\"d7\":{\"anyOf\":[{\"$ref\":\"#/$defs/d8\"},{\"$ref\":\"#/$defs/d8\"}]},\"d8\":{\"anyOf\":[{\"$ref\":\"#/$defs/d9\"},{\"$ref\":\"#/$defs/d9\"}]},\"d9\":{\"anyOf\":[{\"$ref\":\"#/$defs/d10\"},{\"$ref\":\"#/$defs/d10\"}]},\"d10\":{\"anyOf\":[{\"$ref\":\"#/$defs/d11\"},{\"$ref\":\"#/$defs/d11\"}]},\"d11\":{\"anyOf\":[{\"$ref\":\"#/$defs/d12\"},{\"$ref\":\"#/$defs/d12\"}]},\"d12\":{\"anyOf\":[{\"$ref\":\"#/$defs/d13\"},{\"$ref\":\"#/$defs/d13\"}]},\"d13\":{\"anyOf\":[{\"$ref\":\"#/$defs/d14\"},{\"$ref\":\"#/$defs/d14\"}]},\"d14\":{\"anyOf\":[{\"$ref\":\"#/$defs/d15\"},{\"$ref\":\"#/$defs/d15\"}]},\"d15\":{\"anyOf\":[{\"$ref\":\"#/$defs/d16\"},{\"$ref\":\"#/$defs/d16\"}]},\"d16\":{\"anyOf\":[{\"$ref\":\"#/$defs/d17\"},{\"$ref\":\"#/$defs/d17\"}]},\"d17\":{\"anyOf\":[{\"$ref\":\"#/$defs/d18\"},{\"$ref\":\"#/$defs/d18\"}]},\"d18\":{\"anyOf\":[{\"$ref\":\"#/$defs/d19\"},{\"$ref\":\"#/$defs/d19\"}]},\"d19\":{\"anyOf\":[{\"$ref\":\"#/$defs/d20\"},{\"$ref\":\"#/$defs/d20\"}]},\"d20\":{\"anyOf\":[{\"$ref\":\"#/$defs/d21\"},{\"$ref\":\"#/$defs/d21\"}]},\"d21\":{\"anyOf\":[{\"$ref\":\"#/$defs/d22\"},{\"$ref\":\"#/$defs/d22\"}]},\"d22\":{\"anyOf\":[{\"$ref\":\"#/$defs/d23\"},{\"$ref\":\"#/$defs/d23\"}]},\"d23\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"string\"}]}},\"$ref\":\"#/$defs/d0\"}",
+      "expected_verdict": "too_complex"
+    },
+    {
+      "name": "branch_product_under_the_cap",
+      "schema": "{\"$defs\":{\"d0\":{\"anyOf\":[{\"$ref\":\"#/$defs/d1\"},{\"$ref\":\"#/$defs/d1\"}]},\"d1\":{\"anyOf\":[{\"$ref\":\"#/$defs/d2\"},{\"$ref\":\"#/$defs/d2\"}]},\"d2\":{\"anyOf\":[{\"$ref\":\"#/$defs/d3\"},{\"$ref\":\"#/$defs/d3\"}]},\"d3\":{\"anyOf\":[{\"$ref\":\"#/$defs/d4\"},{\"$ref\":\"#/$defs/d4\"}]},\"d4\":{\"anyOf\":[{\"$ref\":\"#/$defs/d5\"},{\"$ref\":\"#/$defs/d5\"}]},\"d5\":{\"anyOf\":[{\"$ref\":\"#/$defs/d6\"},{\"$ref\":\"#/$defs/d6\"}]},\"d6\":{\"anyOf\":[{\"$ref\":\"#/$defs/d7\"},{\"$ref\":\"#/$defs/d7\"}]},\"d7\":{\"anyOf\":[{\"$ref\":\"#/$defs/d8\"},{\"$ref\":\"#/$defs/d8\"}]},\"d8\":{\"anyOf\":[{\"$ref\":\"#/$defs/d9\"},{\"$ref\":\"#/$defs/d9\"}]},\"d9\":{\"anyOf\":[{\"$ref\":\"#/$defs/d10\"},{\"$ref\":\"#/$defs/d10\"}]},\"d10\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"string\"}]}},\"$ref\":\"#/$defs/d0\"}",
+      "expected_verdict": "accepted"
+    },
+    {
+      "name": "self_reference_at_the_root",
+      "schema": "{\"$ref\":\"#\"}",
+      "expected_verdict": "ref_cycle"
+    },
+    {
+      "name": "reference_cycle_through_defs",
+      "schema": "{\"$defs\":{\"a\":{\"$ref\":\"#/$defs/b\"},\"b\":{\"$ref\":\"#/$defs/a\"}},\"$ref\":\"#/$defs/a\"}",
+      "expected_verdict": "ref_cycle"
+    },
+    {
+      "name": "self_reference_through_defs",
+      "schema": "{\"$defs\":{\"a\":{\"$ref\":\"#/$defs/a\"}},\"$ref\":\"#/$defs/a\"}",
+      "expected_verdict": "ref_cycle"
+    },
+    {
+      "name": "local_ref_to_a_missing_pointer",
+      "schema": "{\"type\":\"object\",\"properties\":{\"vat_id\":{\"$ref\":\"#/$defs/nope\"}}}",
+      "expected_verdict": "uncompilable"
+    },
+    {
+      "name": "local_ref_to_a_missing_anchor",
+      "schema": "{\"type\":\"object\",\"properties\":{\"vat_id\":{\"$ref\":\"#nope\"}}}",
+      "expected_verdict": "uncompilable"
+    },
+    {
+      "name": "unreferenced_defs_are_free",
+      "schema": "{\"$defs\":{\"big\":{\"$defs\":{\"d0\":{\"anyOf\":[{\"$ref\":\"#/$defs/d1\"},{\"$ref\":\"#/$defs/d1\"}]},\"d1\":{\"anyOf\":[{\"$ref\":\"#/$defs/d2\"},{\"$ref\":\"#/$defs/d2\"}]},\"d2\":{\"anyOf\":[{\"$ref\":\"#/$defs/d3\"},{\"$ref\":\"#/$defs/d3\"}]},\"d3\":{\"anyOf\":[{\"$ref\":\"#/$defs/d4\"},{\"$ref\":\"#/$defs/d4\"}]},\"d4\":{\"anyOf\":[{\"$ref\":\"#/$defs/d5\"},{\"$ref\":\"#/$defs/d5\"}]},\"d5\":{\"anyOf\":[{\"$ref\":\"#/$defs/d6\"},{\"$ref\":\"#/$defs/d6\"}]},\"d6\":{\"anyOf\":[{\"$ref\":\"#/$defs/d7\"},{\"$ref\":\"#/$defs/d7\"}]},\"d7\":{\"anyOf\":[{\"$ref\":\"#/$defs/d8\"},{\"$ref\":\"#/$defs/d8\"}]},\"d8\":{\"anyOf\":[{\"$ref\":\"#/$defs/d9\"},{\"$ref\":\"#/$defs/d9\"}]},\"d9\":{\"anyOf\":[{\"$ref\":\"#/$defs/d10\"},{\"$ref\":\"#/$defs/d10\"}]},\"d10\":{\"anyOf\":[{\"$ref\":\"#/$defs/d11\"},{\"$ref\":\"#/$defs/d11\"}]},\"d11\":{\"anyOf\":[{\"$ref\":\"#/$defs/d12\"},{\"$ref\":\"#/$defs/d12\"}]},\"d12\":{\"anyOf\":[{\"$ref\":\"#/$defs/d13\"},{\"$ref\":\"#/$defs/d13\"}]},\"d13\":{\"anyOf\":[{\"$ref\":\"#/$defs/d14\"},{\"$ref\":\"#/$defs/d14\"}]},\"d14\":{\"anyOf\":[{\"$ref\":\"#/$defs/d15\"},{\"$ref\":\"#/$defs/d15\"}]},\"d15\":{\"anyOf\":[{\"$ref\":\"#/$defs/d16\"},{\"$ref\":\"#/$defs/d16\"}]},\"d16\":{\"anyOf\":[{\"$ref\":\"#/$defs/d17\"},{\"$ref\":\"#/$defs/d17\"}]},\"d17\":{\"anyOf\":[{\"$ref\":\"#/$defs/d18\"},{\"$ref\":\"#/$defs/d18\"}]},\"d18\":{\"anyOf\":[{\"$ref\":\"#/$defs/d19\"},{\"$ref\":\"#/$defs/d19\"}]},\"d19\":{\"anyOf\":[{\"$ref\":\"#/$defs/d20\"},{\"$ref\":\"#/$defs/d20\"}]},\"d20\":{\"anyOf\":[{\"$ref\":\"#/$defs/d21\"},{\"$ref\":\"#/$defs/d21\"}]},\"d21\":{\"anyOf\":[{\"$ref\":\"#/$defs/d22\"},{\"$ref\":\"#/$defs/d22\"}]},\"d22\":{\"anyOf\":[{\"$ref\":\"#/$defs/d23\"},{\"$ref\":\"#/$defs/d23\"}]},\"d23\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"string\"}]}},\"$ref\":\"#/$defs/d0\"}},\"type\":\"object\"}",
+      "expected_verdict": "accepted"
+    },
+    {
       "name": "pattern_with_lookahead",
       "schema": "{\"type\":\"object\",\"properties\":{\"vat_id\":{\"type\":\"string\",\"pattern\":\"^(?=.*[0-9]).+$\"}}}",
       "expected_verdict": "unsafe_pattern"
@@ -186,6 +236,21 @@
       "expected_verdict": "unsafe_pattern"
     },
     {
+      "name": "pattern_with_a_posix_class_mid_bracket",
+      "schema": "{\"type\":\"object\",\"properties\":{\"vat_id\":{\"type\":\"string\",\"pattern\":\"^[a[:alpha:]]+$\"}}}",
+      "expected_verdict": "unsafe_pattern"
+    },
+    {
+      "name": "pattern_with_nested_quantifiers",
+      "schema": "{\"type\":\"object\",\"properties\":{\"vat_id\":{\"type\":\"string\",\"pattern\":\"^(a+)+$\"}}}",
+      "expected_verdict": "unsafe_pattern"
+    },
+    {
+      "name": "pattern_with_quantified_alternation",
+      "schema": "{\"type\":\"object\",\"properties\":{\"vat_id\":{\"type\":\"string\",\"pattern\":\"^(a|a)*$\"}}}",
+      "expected_verdict": "unsafe_pattern"
+    },
+    {
       "name": "not_json",
       "schema": "{\"type\":",
       "expected_verdict": "malformed"
@@ -193,6 +258,21 @@
     {
       "name": "empty_input",
       "schema": "",
+      "expected_verdict": "not_published"
+    },
+    {
+      "name": "whitespace_only",
+      "schema": "  \n\t ",
+      "expected_verdict": "not_published"
+    },
+    {
+      "name": "boolean_true_schema",
+      "schema": "true",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "boolean_false_schema",
+      "schema": "false",
       "expected_verdict": "malformed"
     },
     {
@@ -222,11 +302,166 @@
     }
   ],
   "dialect": "https://json-schema.org/draft/2020-12/schema",
+  "forbidden_pattern_escapes": "123456789ACEGKPQSZkpsz",
+  "match": [
+    {
+      "name": "anchored_literal_exact",
+      "pattern": "^abc$",
+      "value": "abc",
+      "matches": true
+    },
+    {
+      "name": "anchored_literal_trailing_newline",
+      "pattern": "^abc$",
+      "value": "abc\n",
+      "matches": false
+    },
+    {
+      "name": "vat_pattern_exact",
+      "pattern": "^[A-Z]{2}[0-9]+$",
+      "value": "DE12345",
+      "matches": true
+    },
+    {
+      "name": "vat_pattern_trailing_newline",
+      "pattern": "^[A-Z]{2}[0-9]+$",
+      "value": "DE12345\n",
+      "matches": false
+    },
+    {
+      "name": "vat_pattern_embedded_newline",
+      "pattern": "^[A-Z]{2}[0-9]+$",
+      "value": "DE123\n45",
+      "matches": false
+    },
+    {
+      "name": "vat_pattern_wrong_shape",
+      "pattern": "^[A-Z]{2}[0-9]+$",
+      "value": "not-a-vat",
+      "matches": false
+    },
+    {
+      "name": "digits_ascii",
+      "pattern": "^\\d+$",
+      "value": "12345",
+      "matches": true
+    },
+    {
+      "name": "word_boundary_ascii",
+      "pattern": "^\\w+\\b$",
+      "value": "acme",
+      "matches": true
+    },
+    {
+      "name": "digits_arabic_indic",
+      "pattern": "^\\d+$",
+      "value": "١٢٣",
+      "matches": false
+    },
+    {
+      "name": "digits_fullwidth",
+      "pattern": "^\\d+$",
+      "value": "１２３",
+      "matches": false
+    },
+    {
+      "name": "word_ascii",
+      "pattern": "^\\w+$",
+      "value": "abc_123",
+      "matches": true
+    },
+    {
+      "name": "word_latin_supplement",
+      "pattern": "^\\w+$",
+      "value": "Ä",
+      "matches": false
+    },
+    {
+      "name": "explicit_space_matches",
+      "pattern": "^a[ \\t]b$",
+      "value": "a b",
+      "matches": true
+    },
+    {
+      "name": "explicit_space_refuses_nbsp",
+      "pattern": "^a[ \\t]b$",
+      "value": "a b",
+      "matches": false
+    },
+    {
+      "name": "class_range",
+      "pattern": "^[a-z0-9-]+$",
+      "value": "acme-gmbh",
+      "matches": true
+    },
+    {
+      "name": "class_range_refuses_uppercase",
+      "pattern": "^[a-z0-9-]+$",
+      "value": "Acme",
+      "matches": false
+    },
+    {
+      "name": "alternation_first",
+      "pattern": "^(cat|dog)$",
+      "value": "cat",
+      "matches": true
+    },
+    {
+      "name": "alternation_second",
+      "pattern": "^(cat|dog)$",
+      "value": "dog",
+      "matches": true
+    },
+    {
+      "name": "alternation_neither",
+      "pattern": "^(cat|dog)$",
+      "value": "fox",
+      "matches": false
+    },
+    {
+      "name": "non_capturing_repeat",
+      "pattern": "^(?:ab)+$",
+      "value": "ababab",
+      "matches": true
+    },
+    {
+      "name": "non_capturing_repeat_partial",
+      "pattern": "^(?:ab)+$",
+      "value": "aba",
+      "matches": false
+    },
+    {
+      "name": "counted_repeat_exact",
+      "pattern": "^\\d{5}$",
+      "value": "12345",
+      "matches": true
+    },
+    {
+      "name": "counted_repeat_too_few",
+      "pattern": "^\\d{5}$",
+      "value": "1234",
+      "matches": false
+    },
+    {
+      "name": "unanchored_substring",
+      "pattern": "[0-9]+",
+      "value": "abc123def",
+      "matches": true
+    },
+    {
+      "name": "empty_value_against_plus",
+      "pattern": "^[a-z]+$",
+      "value": "",
+      "matches": false
+    }
+  ],
   "max_field_error_path_len": 255,
   "max_field_error_text_len": 255,
   "max_field_errors": 64,
+  "max_pattern_repeat": 1000,
   "max_schema_bytes": 16384,
   "max_schema_depth": 32,
+  "max_schema_evaluations": 10000,
   "pattern": [
     {
       "name": "empty",
@@ -259,13 +494,28 @@
       "safe": true
     },
     {
-      "name": "nested_non_capturing_groups",
+      "name": "quantified_group_with_optional_body",
       "pattern": "^(?:a(?:bc)?)+$",
-      "safe": true
+      "safe": false
     },
     {
       "name": "shared_escape_classes",
-      "pattern": "^\\d+\\s\\w+$",
+      "pattern": "^\\d+\\w+$",
+      "safe": true
+    },
+    {
+      "name": "whitespace_class",
+      "pattern": "^a\\sb$",
+      "safe": false
+    },
+    {
+      "name": "negated_whitespace_class",
+      "pattern": "^a\\Sb$",
+      "safe": false
+    },
+    {
+      "name": "explicit_space_class",
+      "pattern": "^a[ \\t]b$",
       "safe": true
     },
     {
@@ -284,9 +534,9 @@
       "safe": true
     },
     {
-      "name": "class_containing_a_bracket",
+      "name": "class_opening_with_a_bracket",
       "pattern": "^[][]$",
-      "safe": true
+      "safe": false
     },
     {
       "name": "lookahead",
@@ -371,6 +621,76 @@
     {
       "name": "posix_class",
       "pattern": "^[[:alpha:]]+$",
+      "safe": false
+    },
+    {
+      "name": "quantified_group_with_inner_plus",
+      "pattern": "(a+)+$",
+      "safe": false
+    },
+    {
+      "name": "quantified_group_with_inner_star",
+      "pattern": "^(?:a*)*b$",
+      "safe": false
+    },
+    {
+      "name": "quantified_group_with_inner_optional",
+      "pattern": "(a?)+$",
+      "safe": false
+    },
+    {
+      "name": "quantified_group_with_alternation",
+      "pattern": "(a|a)*$",
+      "safe": false
+    },
+    {
+      "name": "quantified_group_with_class_repeat",
+      "pattern": "([a-zA-Z]+)*$",
+      "safe": false
+    },
+    {
+      "name": "unquantified_group_with_alternation",
+      "pattern": "^(cat|dog)$",
+      "safe": true
+    },
+    {
+      "name": "quantified_group_with_a_fixed_body",
+      "pattern": "^(?:ab)+$",
+      "safe": true
+    },
+    {
+      "name": "repeat_at_the_portable_bound",
+      "pattern": "^a{1000}$",
+      "safe": true
+    },
+    {
+      "name": "repeat_over_the_portable_bound",
+      "pattern": "^a{1001}$",
+      "safe": false
+    },
+    {
+      "name": "open_ended_repeat",
+      "pattern": "^a{2,}$",
+      "safe": true
+    },
+    {
+      "name": "bare_brace",
+      "pattern": "a{",
+      "safe": false
+    },
+    {
+      "name": "posix_class_mid_bracket",
+      "pattern": "^[a[:alpha:]]+$",
+      "safe": false
+    },
+    {
+      "name": "unmatched_closing_bracket",
+      "pattern": "]",
+      "safe": false
+    },
+    {
+      "name": "unclosed_class",
+      "pattern": "^[abc",
       "safe": false
     },
     {
@@ -780,5 +1100,20 @@
         "type"
       ]
     }
+  ],
+  "verdicts": [
+    "no_verdict",
+    "accepted",
+    "malformed",
+    "wrong_dialect",
+    "remote_ref",
+    "too_large",
+    "too_deep",
+    "unsafe_pattern",
+    "too_complex",
+    "ref_cycle",
+    "compile_timeout",
+    "uncompilable",
+    "not_published"
   ]
 }

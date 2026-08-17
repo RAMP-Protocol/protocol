@@ -29,6 +29,7 @@ import {
 	maxRegistrationFieldErrors,
 	maxRegistrationSchemaBytes,
 	maxRegistrationSchemaDepth,
+	maxRegistrationSchemaEvaluations,
 	registrationSchemaDialect,
 } from "../src/regschema";
 
@@ -41,6 +42,7 @@ type ValidateVector = {
 	expected_keywords: string[];
 };
 type PatternVector = { name: string; pattern: string; safe: boolean };
+type MatchVector = { name: string; pattern: string; value: string; matches: boolean };
 type VectorsFile = {
 	dialect: string;
 	max_schema_bytes: number;
@@ -48,9 +50,13 @@ type VectorsFile = {
 	max_field_errors: number;
 	max_field_error_path_len: number;
 	max_field_error_text_len: number;
+	max_schema_evaluations: number;
+	max_pattern_repeat: number;
+	forbidden_pattern_escapes: string;
 	compile: CompileVector[];
 	validate: ValidateVector[];
 	pattern: PatternVector[];
+	match: MatchVector[];
 };
 
 const vectors = vectorsFile as VectorsFile;
@@ -65,6 +71,7 @@ describe("registration-schema parity", () => {
 		expect(maxRegistrationFieldErrors).toBe(vectors.max_field_errors);
 		expect(maxRegistrationFieldErrorPathLen).toBe(vectors.max_field_error_path_len);
 		expect(maxRegistrationFieldErrorTextLen).toBe(vectors.max_field_error_text_len);
+		expect(maxRegistrationSchemaEvaluations).toBe(vectors.max_schema_evaluations);
 	});
 
 	it.each(vectors.compile.map((v) => [v.name, v] as const))("compile %s", (_name, v) => {
@@ -99,6 +106,20 @@ describe("registration-schema parity", () => {
 
 	it.each(vectors.pattern.map((v) => [v.name, v] as const))("pattern %s", (_name, v) => {
 		expect(isSafeSchemaPattern(v.pattern)).toBe(v.safe);
+	});
+
+	// The dimension whose absence let a whole class of divergence ship. The other
+	// three record which schemas are ADMITTED; this one records what an admitted
+	// schema then MATCHES, which is where the three engines silently disagreed.
+	it.each(vectors.match.map((v) => [v.name, v] as const))("match %s", (_name, v) => {
+		const schema = JSON.stringify({
+			type: "object",
+			properties: { vat_id: { type: "string", pattern: v.pattern } },
+		});
+		const { schema: compiled, verdict } = compileRegistrationSchema(schema);
+		expect(verdict).toBe("accepted");
+		if (compiled === null) throw new Error("the case's own pattern is not admitted");
+		expect(compiled.validate({ vat_id: v.value }).length === 0).toBe(v.matches);
 	});
 
 	it("never echoes the submitted value in a field error", () => {

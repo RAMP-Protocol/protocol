@@ -8,9 +8,16 @@ package helpers_test
 // and that the pure tier never grew a way to dial. Each is asserted here.
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"unicode/utf8"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+	"google.golang.org/protobuf/proto"
 
 	rampv1 "github.com/RAMP-Protocol/protocol/gen/go/ramp/v1"
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
@@ -166,26 +173,102 @@ func TestAnOverlongPointerDegradesToAnAncestor(t *testing.T) {
 	}
 }
 
-// TestTheCompilerIsBuiltWithoutALoader is a source-level guard, in the shape of the
-// package's other structural guards, for the two properties this face cannot
-// demonstrate by behaviour alone.
+// TestClampedTextStaysValidUTF8 pins the boundary the clamp cuts on.
 //
-// The first is the SSRF one. The scan refuses a reference that leaves the document,
-// and the compiler is built with no URLLoader so a reference the scan did not
-// recognise fails closed instead of dialing. Installing a loader would remove that
-// backstop silently — every existing test would still pass — and the io-leaf guard
-// would not see it, because the dial would happen inside the library rather than in
-// a helpers file naming http.Client.
+// The text is built from schema-side strings — a `pattern`, a list of required member
+// names — which may be non-ASCII and long. Cutting at a BYTE offset lands mid-character,
+// and proto.Marshal then refuses the refusal with "string field contains invalid UTF-8":
+// the Exchange cannot serialize its own answer, and only on the unhappy path.
+func TestClampedTextStaysValidUTF8(t *testing.T) {
+	// Three alignments, so at least one cut falls inside a multi-byte character.
+	for pad := 0; pad < 3; pad++ {
+		pattern := "^(?:" + strings.Repeat("a", pad) + strings.Repeat("€", 300) + ")$"
+		schema := `{"type":"object","properties":{"v":{"type":"string","pattern":` +
+			strconv.Quote(pattern) + `}}}`
+		s := mustCompile(t, schema)
+		got := s.Validate(map[string]any{"v": "x"})
+		if len(got) != 1 {
+			t.Fatalf("pad=%d: got %d failures, want 1", pad, len(got))
+		}
+		text := got[0].GetError()
+		if !utf8.ValidString(text) {
+			t.Errorf("pad=%d: clamped text is not valid UTF-8", pad)
+		}
+		if n := utf8.RuneCountInString(text); n > helpers.MaxRegistrationFieldErrorTextLen {
+			t.Errorf("pad=%d: clamped text is %d characters, over the wire bound of %d",
+				pad, n, helpers.MaxRegistrationFieldErrorTextLen)
+		}
+		detail := helpers.RegistrationFailureDetail(
+			"ramp.v1.ExchangeService", "registration_data does not conform",
+			rampv1.RegistrationFailureReason_REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA,
+			got...)
+		if _, err := proto.Marshal(detail); err != nil {
+			t.Errorf("pad=%d: the refusal does not serialize: %v", pad, err)
+		}
+	}
+}
+
+// TestPointersAreClampedByCharacters pins WHICH unit the bound counts.
 //
-// The second is the leakage one from the test above, asserted at the source so the
-// intent survives a refactor: the library's own renderings quote the submitted
+// protovalidate's string.max_len counts characters, not bytes. Counting bytes here
+// clamps earlier than the wire requires and — the part that matters — earlier than the
+// other two SDKs, so the three name DIFFERENT members for the same failure.
+func TestPointersAreClampedByCharacters(t *testing.T) {
+	// Two levels of 60 multi-byte characters: 122 characters, 362 bytes. Inside the
+	// character bound, far outside a byte one.
+	const seg = "€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
+	schema := `{"type":"object","properties":{"` + seg + `":{"type":"object","properties":{"` +
+		seg + `":{"type":"string","minLength":99}}}}}`
+	s := mustCompile(t, schema)
+	got := s.Validate(map[string]any{seg: map[string]any{seg: "x"}})
+	if len(got) != 1 {
+		t.Fatalf("got %d failures, want 1", len(got))
+	}
+	want := "/" + seg + "/" + seg
+	if got[0].GetPath() != want {
+		t.Errorf("pointer was degraded when it did not need to be:\n got %q\nwant %q",
+			got[0].GetPath(), want)
+	}
+}
+
+// TestTheCompilerRefusesToResolveAnythingOffThisProcess is the SSRF backstop, tested
+// as behaviour rather than asserted in a comment.
+//
+// The scan refuses a reference that leaves the document, and this is the layer beneath
+// it: a reference the scan did not recognise must fail closed. The earlier version of
+// this file asserted the OPPOSITE — that no loader was installed — on the belief that
+// "no loader" meant "resolves nothing". It does not. The library installs a FileLoader
+// by default, so leaving it unset means a missed reference is read off local disk, and
+// a probe confirmed exactly that. The backstop has to be installed to exist.
+func TestTheCompilerRefusesToResolveAnythingOffThisProcess(t *testing.T) {
+	dir := t.TempDir()
+	leak := filepath.Join(dir, "leak.json")
+	if err := os.WriteFile(leak, []byte(`{"type":"string","maxLength":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Reach past the scan by handing the compiler the reference directly, exactly as
+	// CompileRegistrationSchema builds it.
+	doc, err := jsonschema.UnmarshalJSON(strings.NewReader(`{"$ref":"file://` + leak + `"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := jsonschema.NewCompiler()
+	c.UseLoader(helpers.RefusingSchemaLoaderForTest())
+	c.DefaultDraft(jsonschema.Draft2020)
+	if err := c.AddResource("ramp:registration-data-schema", doc); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Compile("ramp:registration-data-schema"); err == nil {
+		t.Fatal("the compiler resolved a file:// reference — the SSRF backstop is not installed")
+	}
+}
+
+// TestTheFaceNeverRendersTheLibrarysMessages is the leakage guard at the source, so
+// the intent survives a refactor: the library's own renderings quote the submitted
 // value, so this file must never call them.
-func TestTheCompilerIsBuiltWithoutALoader(t *testing.T) {
+func TestTheFaceNeverRendersTheLibrarysMessages(t *testing.T) {
 	src := readHelperSource(t, "regschema.go")
 	for _, forbidden := range []string{
-		"UseLoader",             // would let the compiler resolve a reference by fetching it
-		"jsonschema.FileLoader", // the same, from disk
-		"SchemeURLLoader",
 		"LocalizedString", // the library's rendering — quotes the offending value
 		"LocalizedError",
 		"LocalizedGoString",
@@ -193,14 +276,18 @@ func TestTheCompilerIsBuiltWithoutALoader(t *testing.T) {
 		"DetailedOutput",
 	} {
 		if strings.Contains(src, forbidden) {
-			t.Errorf("regschema.go names %q — the compiler must resolve nothing off this "+
-				"process and must never render the library's own messages, which quote the "+
-				"submitted value", forbidden)
+			t.Errorf("regschema.go names %q — the library's own messages quote the submitted "+
+				"value, and a refusal must carry the constraint and nothing else", forbidden)
 		}
 	}
 	// Guard the guard: if the file stopped using the library entirely the checks
 	// above would pass vacuously.
 	if !strings.Contains(src, "jsonschema.NewCompiler()") {
 		t.Fatal("regschema.go no longer builds a compiler — this guard would assert nothing")
+	}
+	// And the backstop must be installed, not merely absent-by-default.
+	if !strings.Contains(src, "c.UseLoader(refusingSchemaLoader{})") {
+		t.Error("regschema.go no longer installs the refusing loader — the library's " +
+			"default reads references off local disk")
 	}
 }

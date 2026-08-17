@@ -35,6 +35,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -107,6 +108,109 @@ func nestedSchema(depth int) string {
 	return b.String()
 }
 
+// branchBlowupSchema builds a schema whose DOCUMENT is small and shallow and whose
+// evaluation cost is 2^n. It is the shape the size and depth caps do not see: at
+// n=24 it is 1,675 bytes, five containers deep, and took 27 seconds to check a
+// two-member payload before the work bound existed.
+func branchBlowupSchema(n int) string {
+	var b strings.Builder
+	b.WriteString(`{"$defs":{`)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		next := `{"type":"string"}`
+		if i+1 < n {
+			next = `{"$ref":"#/$defs/d` + strconv.Itoa(i+1) + `"}`
+		}
+		b.WriteString(`"d` + strconv.Itoa(i) + `":{"anyOf":[` + next + `,` + next + `]}`)
+	}
+	b.WriteString(`},"$ref":"#/$defs/d0"}`)
+	return b.String()
+}
+
+// matchVector is one MATCHING case: does this pattern accept this string?
+//
+// This dimension exists because its absence is what let a whole class of divergence
+// ship. The other three record which schemas are ADMITTED; none of them records what
+// an admitted schema then MATCHES, and that is precisely where the three engines
+// disagreed — silently, with every suite green. `^abc$` against "abc\n" and `^\d+$`
+// against Arabic-Indic digits both conformed in one port and violated in the other
+// two, including the VAT pattern this corpus itself publishes as realistic.
+type matchVector struct {
+	Name    string `json:"name"`
+	Pattern string `json:"pattern"`
+	Value   string `json:"value"`
+	Matches bool   `json:"matches"`
+}
+
+// buildRegSchemaMatchVectors pins the SEMANTICS of the admitted alphabet: for a fixed
+// pattern and a fixed string, does the pattern accept it?
+//
+// Every case here is a pattern the alphabet admits — the point is not which schemas
+// are refused but that two conformant validators agree about what an accepted one
+// means. The verdict is derived by validating through the real face rather than by
+// calling a regex directly, so the corpus records what a PAYLOAD experiences.
+func buildRegSchemaMatchVectors(t *testing.T) []matchVector {
+	t.Helper()
+	cases := []struct {
+		name    string
+		pattern string
+		value   string
+		want    bool
+	}{
+		// The trailing-newline family. Python's "$" also matches just before a final
+		// newline where RE2 and ECMA-262 match only at the very end, so every one of
+		// these conformed in one port and violated in the other two.
+		{"anchored_literal_exact", "^abc$", "abc", true},
+		{"anchored_literal_trailing_newline", "^abc$", "abc\n", false},
+		{"vat_pattern_exact", "^[A-Z]{2}[0-9]+$", "DE12345", true},
+		{"vat_pattern_trailing_newline", "^[A-Z]{2}[0-9]+$", "DE12345\n", false},
+		{"vat_pattern_embedded_newline", "^[A-Z]{2}[0-9]+$", "DE123\n45", false},
+		{"vat_pattern_wrong_shape", "^[A-Z]{2}[0-9]+$", "not-a-vat", false},
+
+		// The character-class family. \d, \w and \s are Unicode-aware in Python and
+		// ASCII in the other two, so a non-ASCII digit or letter conformed in one port
+		// alone.
+		{"digits_ascii", `^\d+$`, "12345", true},
+		{"word_boundary_ascii", `^\w+\b$`, "acme", true},
+		{"digits_arabic_indic", `^\d+$`, "١٢٣", false},
+		{"digits_fullwidth", `^\d+$`, "１２３", false},
+		{"word_ascii", `^\w+$`, "abc_123", true},
+		{"word_latin_supplement", `^\w+$`, "Ä", false},
+		{"explicit_space_matches", `^a[ \t]b$`, "a b", true},
+		{"explicit_space_refuses_nbsp", `^a[ \t]b$`, "a\u00a0b", false},
+
+		// Ordinary matching, so the dimension is not only about the edge cases.
+		{"class_range", "^[a-z0-9-]+$", "acme-gmbh", true},
+		{"class_range_refuses_uppercase", "^[a-z0-9-]+$", "Acme", false},
+		{"alternation_first", "^(cat|dog)$", "cat", true},
+		{"alternation_second", "^(cat|dog)$", "dog", true},
+		{"alternation_neither", "^(cat|dog)$", "fox", false},
+		{"non_capturing_repeat", "^(?:ab)+$", "ababab", true},
+		{"non_capturing_repeat_partial", "^(?:ab)+$", "aba", false},
+		{"counted_repeat_exact", `^\d{5}$`, "12345", true},
+		{"counted_repeat_too_few", `^\d{5}$`, "1234", false},
+		{"unanchored_substring", "[0-9]+", "abc123def", true},
+		{"empty_value_against_plus", "^[a-z]+$", "", false},
+	}
+	out := make([]matchVector, 0, len(cases))
+	for _, c := range cases {
+		schema := objectSchema(`{"type":"string","pattern":` + strconv.Quote(c.pattern) + `}`)
+		sch, v := CompileRegistrationSchema([]byte(schema))
+		if v != SchemaAccepted {
+			t.Fatalf("match vector %s: its pattern is not admitted by the alphabet (%s)", c.name, v)
+		}
+		got := len(sch.Validate(map[string]any{"vat_id": c.value})) == 0
+		if got != c.want {
+			t.Fatalf("match vector %s: oracle matches=%v, intended=%v for pattern %q value %q",
+				c.name, got, c.want, c.pattern, c.value)
+		}
+		out = append(out, matchVector{Name: c.name, Pattern: c.pattern, Value: c.value, Matches: got})
+	}
+	return out
+}
+
 // buildRegSchemaCompileVectors enumerates what a published schema may and may not
 // be. Every compile rule gets at least one acceptance and one refusal, and the
 // caps get both sides of their boundary, so a port that implemented "> " as ">="
@@ -120,8 +224,6 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 	}{
 		// Accepted — the shapes an Exchange really publishes.
 		{"minimal_object", `{"type":"object"}`, SchemaAccepted},
-		{"boolean_true_schema", `true`, SchemaAccepted},
-		{"boolean_false_schema", `false`, SchemaAccepted},
 		{"declares_the_dialect", `{"$schema":"` + RegistrationSchemaDialect + `","type":"object"}`, SchemaAccepted},
 		{"dialect_with_empty_fragment", `{"$schema":"` + RegistrationSchemaDialect + `#","type":"object"}`, SchemaAccepted},
 		{"omits_the_dialect", `{"type":"object","required":["vat_id"]}`, SchemaAccepted},
@@ -163,6 +265,16 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 		{"remote_dynamic_ref", objectSchema(`{"$dynamicRef":"https://evil.example/s.json#x"}`), SchemaRemoteRef},
 		{"remote_recursive_ref", objectSchema(`{"$recursiveRef":"https://evil.example/s.json"}`), SchemaRemoteRef},
 		{"remote_ref_inside_defs", `{"$defs":{"vat":{"$ref":"https://evil.example/s.json"}},"type":"object"}`, SchemaRemoteRef},
+		// A property NAMED like a data keyword, carrying a remote reference in its
+		// subschema. These pin the interaction between the two keyword sets: the child
+		// of `properties` is a map of NAMES, so a member called "enum" or "const" is a
+		// property whose subschema must still be scanned — not data to skip. Dropping
+		// `properties` from the schema-map set makes the generic walk treat that map as
+		// a schema, whose "enum" member it then skips as data, and the reference inside
+		// is never seen. Nothing else in this corpus reaches that combination.
+		{"a_property_named_enum_carrying_a_remote_ref", `{"type":"object","properties":{"enum":{"$ref":"https://evil.example/s.json"}}}`, SchemaRemoteRef},
+		{"a_property_named_const_carrying_a_remote_ref", `{"type":"object","properties":{"const":{"$ref":"https://evil.example/s.json"}}}`, SchemaRemoteRef},
+		{"a_definition_named_default_carrying_a_remote_ref", `{"$defs":{"default":{"$ref":"https://evil.example/s.json"}},"type":"object","properties":{"v":{"$ref":"#/$defs/default"}}}`, SchemaRemoteRef},
 
 		// Refused — resource caps, stated as boundaries.
 		{"exactly_at_the_size_cap", schemaOfBytes(t, MaxRegistrationSchemaBytes), SchemaAccepted},
@@ -186,15 +298,53 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 		// inside it must not mean skipping the depth count.
 		{"deep_data_inside_a_const", `{"type":"object","properties":{"vat_id":{"const":` + strings.Repeat("[", 40) + `1` + strings.Repeat("]", 40) + `}}}`, SchemaTooDeep},
 
+		// Refused — the work of CHECKING a payload, which the caps above do not bound.
+		// Each is small and shallow: the cost is in how the branches multiply.
+		{"branch_product_just_over_the_cap", branchBlowupSchema(12), SchemaTooComplex},
+		{"branch_product_far_over_the_cap", branchBlowupSchema(24), SchemaTooComplex},
+		{"branch_product_under_the_cap", branchBlowupSchema(11), SchemaAccepted},
+		// Reference topology. A cycle is legal JSON Schema and has no finite
+		// evaluation cost; it is also what made two of the three ports abort instead
+		// of answering, so it is refused rather than handed to a compiler.
+		{"self_reference_at_the_root", `{"$ref":"#"}`, SchemaRefCycle},
+		{"reference_cycle_through_defs", `{"$defs":{"a":{"$ref":"#/$defs/b"},"b":{"$ref":"#/$defs/a"}},"$ref":"#/$defs/a"}`, SchemaRefCycle},
+		{"self_reference_through_defs", `{"$defs":{"a":{"$ref":"#/$defs/a"}},"$ref":"#/$defs/a"}`, SchemaRefCycle},
+		// A same-document reference that resolves to nothing. Left to the libraries
+		// this was accepted by one and refused by two, and the one that accepted it
+		// then threw on every payload.
+		{"local_ref_to_a_missing_pointer", objectSchema(`{"$ref":"#/$defs/nope"}`), SchemaUncompilable},
+		{"local_ref_to_a_missing_anchor", objectSchema(`{"$ref":"#nope"}`), SchemaUncompilable},
+		// A definition that is declared and never referenced costs nothing, so a
+		// document may carry a large library of them.
+		{"unreferenced_defs_are_free", `{"$defs":{"big":` + branchBlowupSchema(24) + `},"type":"object"}`, SchemaAccepted},
+
 		// Refused — a pattern outside the shared alphabet.
 		{"pattern_with_lookahead", objectSchema(`{"type":"string","pattern":"^(?=.*[0-9]).+$"}`), SchemaUnsafePattern},
 		{"pattern_with_backreference", objectSchema(`{"type":"string","pattern":"^(a)\\1$"}`), SchemaUnsafePattern},
 		{"pattern_properties_key_with_lookahead", `{"type":"object","patternProperties":{"^(?!x).*$":{"type":"string"}}}`, SchemaUnsafePattern},
 		{"property_names_pattern_with_lookbehind", `{"type":"object","propertyNames":{"pattern":"(?<=a)b"}}`, SchemaUnsafePattern},
+		// A POSIX class anywhere but the first position. Checking only the start of
+		// the bracket expression let this through, and the three engines then read it
+		// three different ways with no error on any of them.
+		{"pattern_with_a_posix_class_mid_bracket", objectSchema(`{"type":"string","pattern":"^[a[:alpha:]]+$"}`), SchemaUnsafePattern},
+		// Nested quantifiers: catastrophic backtracking needs neither lookaround nor
+		// backreferences, so excluding those does not cover it.
+		{"pattern_with_nested_quantifiers", objectSchema(`{"type":"string","pattern":"^(a+)+$"}`), SchemaUnsafePattern},
+		{"pattern_with_quantified_alternation", objectSchema(`{"type":"string","pattern":"^(a|a)*$"}`), SchemaUnsafePattern},
 
 		// Refused — not a schema at all.
 		{"not_json", `{"type":`, SchemaMalformed},
-		{"empty_input", ``, SchemaMalformed},
+		// No schema at all is the contract's ordinary case — an Exchange that
+		// publishes none accepts registration_data uninspected — so it is its own
+		// verdict rather than a refusal a caller has to special-case.
+		{"empty_input", ``, SchemaNotPublished},
+		{"whitespace_only", "  \n\t ", SchemaNotPublished},
+		// A boolean IS a schema in 2020-12, but data_schema is a google.protobuf.Struct,
+		// which carries a JSON OBJECT and nothing else — so a bare true/false cannot
+		// reach this face over the wire at all, and admitting it would pin behaviour
+		// for a document the contract cannot transport.
+		{"boolean_true_schema", `true`, SchemaMalformed},
+		{"boolean_false_schema", `false`, SchemaMalformed},
 		{"json_array_at_the_top_level", `[{"type":"object"}]`, SchemaMalformed},
 		{"json_string_at_the_top_level", `"a schema"`, SchemaMalformed},
 		{"trailing_content_after_the_document", `{"type":"object"} {}`, SchemaMalformed},
@@ -481,8 +631,18 @@ func buildRegSchemaPatternVectors(t *testing.T) []patternVector {
 		{"alternation", "^(cat|dog)$", true},
 		{"capturing_group", "^(ab)+$", true},
 		{"non_capturing_group", "^(?:ab)+$", true},
-		{"nested_non_capturing_groups", "^(?:a(?:bc)?)+$", true},
-		{"shared_escape_classes", `^\d+\s\w+$`, true},
+		// Refused by the nested-quantifier rule, not by the alphabet: the body of the
+		// quantified group can itself vary in length, which is the shape a backtracking
+		// engine explores exponentially. A safe rewrite exists ("^(?:abc|a)+$" is not
+		// one — it branches; "^a(?:bc)?$" without the outer repeat is).
+		{"quantified_group_with_optional_body", "^(?:a(?:bc)?)+$", false},
+		{"shared_escape_classes", `^\d+\w+$`, true},
+		// \s is NOT shared: three engines, three whitespace sets, and the difference is
+		// silent — every one of them compiles the pattern.
+		{"whitespace_class", `^a\sb$`, false},
+		{"negated_whitespace_class", `^a\Sb$`, false},
+		// An explicit class says what was meant, and means it everywhere.
+		{"explicit_space_class", `^a[ \t]b$`, true},
 		{"escaped_metacharacters", `^\.\+\*\?\[\]\{\}$`, true},
 		// An escaped paren followed by "?=" is a LITERAL "(?=", not a lookahead. The
 		// scan has to consume the escape or it refuses a pattern every engine accepts.
@@ -491,7 +651,10 @@ func buildRegSchemaPatternVectors(t *testing.T) []patternVector {
 		// character as syntax. Without this case an implementation that skipped one
 		// character per backslash unconditionally would agree everywhere else.
 		{"escaped_backslash_then_a_group", `^\\(?:ab)$`, true},
-		{"class_containing_a_bracket", `^[][]$`, true},
+		// "[]" straight after the opening bracket is a literal in POSIX and an empty
+		// class in ECMA, and the engines disagree about whether the whole thing even
+		// compiles — so the shape is refused rather than left to them.
+		{"class_opening_with_a_bracket", `^[][]$`, false},
 
 		// Refused — legal ECMA-262, no RE2 equivalent.
 		{"lookahead", "^(?=.*x).+$", false},
@@ -514,6 +677,31 @@ func buildRegSchemaPatternVectors(t *testing.T) []patternVector {
 		{"absolute_end_anchor", `abc\Z`, false},
 		{"literal_span", `\Qa.b\E`, false},
 		{"posix_class", "^[[:alpha:]]+$", false},
+
+		// Refused — nested quantifiers. Catastrophic backtracking needs neither
+		// lookaround nor backreferences, so the escape list above does not cover it,
+		// and no timer in the backtracking ports could: a regex spin holds CPython's
+		// interpreter and blocks Node's event loop.
+		{"quantified_group_with_inner_plus", `(a+)+$`, false},
+		{"quantified_group_with_inner_star", `^(?:a*)*b$`, false},
+		{"quantified_group_with_inner_optional", `(a?)+$`, false},
+		{"quantified_group_with_alternation", `(a|a)*$`, false},
+		{"quantified_group_with_class_repeat", `([a-zA-Z]+)*$`, false},
+		// The same group WITHOUT the outer quantifier is ordinary and admitted.
+		{"unquantified_group_with_alternation", `^(cat|dog)$`, true},
+		{"quantified_group_with_a_fixed_body", `^(?:ab)+$`, true},
+
+		// Refused — a repeat bound the engines do not share. RE2 refuses a count over
+		// 1000 outright where the other two expand it.
+		{"repeat_at_the_portable_bound", `^a{1000}$`, true},
+		{"repeat_over_the_portable_bound", `^a{1001}$`, false},
+		{"open_ended_repeat", `^a{2,}$`, true},
+		{"bare_brace", `a{`, false},
+
+		// Refused — bracket expressions the engines read differently.
+		{"posix_class_mid_bracket", "^[a[:alpha:]]+$", false},
+		{"unmatched_closing_bracket", `]`, false},
+		{"unclosed_class", `^[abc`, false},
 
 		// Refused — not a pattern any engine compiles.
 		{"trailing_backslash", `abc\`, false},
@@ -538,6 +726,34 @@ func buildRegSchemaPatternVectors(t *testing.T) []patternVector {
 	return out
 }
 
+// forbiddenPatternEscapes renders the divergent-escape set as sorted characters, so
+// the corpus carries the rule itself rather than a description of it.
+func forbiddenPatternEscapes() string {
+	out := make([]byte, 0, len(divergentEscapes))
+	for c := range divergentEscapes {
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return string(out)
+}
+
+// schemaVerdictVocabulary is every token the face can answer with. A port that grew a
+// verdict the oracle does not have, or lost one it does, is caught by comparing this
+// list rather than by whichever cases happen to exercise each token.
+func schemaVerdictVocabulary() []string {
+	all := []SchemaVerdict{
+		SchemaNoVerdict, SchemaAccepted, SchemaMalformed, SchemaWrongDialect,
+		SchemaRemoteRef, SchemaTooLarge, SchemaTooDeep, SchemaUnsafePattern,
+		SchemaTooComplex, SchemaRefCycle, SchemaCompileTimeout, SchemaUncompilable,
+		SchemaNotPublished,
+	}
+	out := make([]string, 0, len(all))
+	for _, v := range all {
+		out = append(out, v.String())
+	}
+	return out
+}
+
 // TestGenerateRegSchemaVectors emits the registration-schema golden corpus.
 // Verification no-op by default, (re)writes under RAMP_UPDATE_VECTORS=1.
 func TestGenerateRegSchemaVectors(t *testing.T) {
@@ -545,12 +761,21 @@ func TestGenerateRegSchemaVectors(t *testing.T) {
 		"dialect":                  RegistrationSchemaDialect,
 		"max_schema_bytes":         MaxRegistrationSchemaBytes,
 		"max_schema_depth":         MaxRegistrationSchemaDepth,
+		"max_schema_evaluations":   MaxRegistrationSchemaEvaluations,
 		"max_field_errors":         MaxRegistrationFieldErrors,
 		"max_field_error_path_len": MaxRegistrationFieldErrorPathLen,
 		"max_field_error_text_len": MaxRegistrationFieldErrorTextLen,
-		"compile":                  buildRegSchemaCompileVectors(t),
-		"validate":                 buildRegSchemaValidateVectors(t),
-		"pattern":                  buildRegSchemaPatternVectors(t),
+		// The alphabet as DATA, not as a sentence a guard restates. The conformance
+		// tier compares these against the contract's own wording, and a rule stated
+		// only in prose on both sides is one nothing compares: dropping an escape from
+		// all three SDKs used to leave every gate green.
+		"forbidden_pattern_escapes": forbiddenPatternEscapes(),
+		"max_pattern_repeat":        maxPortableRepeat,
+		"verdicts":                  schemaVerdictVocabulary(),
+		"compile":                   buildRegSchemaCompileVectors(t),
+		"validate":                  buildRegSchemaValidateVectors(t),
+		"pattern":                   buildRegSchemaPatternVectors(t),
+		"match":                     buildRegSchemaMatchVectors(t),
 	}
 	path := filepath.Join("testdata", "registration-schema-vectors.json")
 	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {
