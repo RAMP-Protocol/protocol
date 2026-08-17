@@ -90,20 +90,19 @@ func schemaOfBytes(t *testing.T, n int) string {
 	return prefix + strings.Repeat("x", pad) + suffix
 }
 
-// nestedSchema builds a schema whose document nests to exactly depth levels, using
-// allOf — one array plus one object per level, which is the cheapest legal way to
-// make a schema deep and therefore the shape the cap exists to stop.
+// nestedSchema builds a valid schema whose document nests to EXACTLY depth JSON
+// containers. `not` is used because it takes a subschema directly, so each level is
+// one container and the boundary can be hit on the nose — `allOf` would add an
+// array per level and could only produce odd depths, leaving the "exactly at the
+// cap" case a level short of the cap it claims to test.
 func nestedSchema(depth int) string {
-	// Level 1 is the root object. Each further pair of levels is an allOf array and
-	// the object inside it, so the leaf sits at `depth`.
 	var b strings.Builder
-	levels := (depth - 1) / 2
-	for i := 0; i < levels; i++ {
-		b.WriteString(`{"allOf":[`)
+	for i := 0; i < depth-1; i++ {
+		b.WriteString(`{"not":`)
 	}
-	b.WriteString(`{"type":"object"}`)
-	for i := 0; i < levels; i++ {
-		b.WriteString(`]}`)
+	b.WriteString(`{}`)
+	for i := 0; i < depth-1; i++ {
+		b.WriteString(`}`)
 	}
 	return b.String()
 }
@@ -169,7 +168,19 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 		{"exactly_at_the_size_cap", schemaOfBytes(t, MaxRegistrationSchemaBytes), SchemaAccepted},
 		{"one_byte_over_the_size_cap", schemaOfBytes(t, MaxRegistrationSchemaBytes+1), SchemaTooLarge},
 		{"exactly_at_the_depth_cap", nestedSchema(MaxRegistrationSchemaDepth), SchemaAccepted},
-		{"one_level_over_the_depth_cap", nestedSchema(MaxRegistrationSchemaDepth + 2), SchemaTooDeep},
+		{"one_level_over_the_depth_cap", nestedSchema(MaxRegistrationSchemaDepth + 1), SchemaTooDeep},
+		// Deep enough to break a recursive-descent PARSER, not merely the cap. This
+		// is the case that pins WHERE the depth check runs: a port that decoded first
+		// and measured the decoded document afterwards agrees with the oracle on
+		// every other case in this corpus and dies on this one — Python's json raises
+		// RecursionError here, which is not the exception a malformed document
+		// raises, so it escapes as a crash rather than arriving as a verdict.
+		{"deep_enough_to_break_a_parser", nestedSchema(1000), SchemaTooDeep},
+		// A brace inside a STRING is text, not a container. Without this a port whose
+		// lexical depth counter ignored string literals would refuse a schema every
+		// other implementation accepts — and the pattern below is exactly the kind of
+		// value a real registration schema carries.
+		{"braces_inside_a_string_are_not_containers", objectSchema(`{"type":"string","pattern":"^[{[]+$","description":"` + strings.Repeat("{", 40) + `"}`), SchemaAccepted},
 		// Deep DATA is bounded too: a const carrying a deeply nested value is as
 		// expensive to parse as a deeply nested schema, and skipping the keyword scan
 		// inside it must not mean skipping the depth count.

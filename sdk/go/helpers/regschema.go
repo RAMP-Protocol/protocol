@@ -189,6 +189,16 @@ func CompileRegistrationSchema(raw []byte) (*RegistrationSchema, SchemaVerdict) 
 	if len(raw) > MaxRegistrationSchemaBytes {
 		return nil, SchemaTooLarge
 	}
+	// Depth SECOND, and still on the raw bytes — before the document is handed to a
+	// JSON parser rather than after. Every parser here descends recursively, and two
+	// of the three abort on a deeply nested document in a way this face cannot map
+	// onto a verdict: Python raises RecursionError, which is not the exception a
+	// malformed document raises. Checking after the parse therefore means the check
+	// that exists to stop a hostile document is reached only for documents that were
+	// harmless enough to parse. Lexical counting needs no recursion at all.
+	if rawNestingDepth(raw) > MaxRegistrationSchemaDepth {
+		return nil, SchemaTooDeep
+	}
 	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return nil, SchemaMalformed
@@ -198,7 +208,7 @@ func CompileRegistrationSchema(raw []byte) (*RegistrationSchema, SchemaVerdict) 
 	default:
 		return nil, SchemaMalformed
 	}
-	if v := scanRegistrationSchema(doc, 1); v != SchemaAccepted {
+	if v := scanRegistrationSchema(doc); v != SchemaAccepted {
 		return nil, v
 	}
 
@@ -297,9 +307,10 @@ func (s *RegistrationSchema) violations(inst any) []schemaViolation {
 // --- schema scan --------------------------------------------------------------
 
 // nonSchemaKeywords hold arbitrary JSON DATA, not subschemas. Their contents are
-// still walked for depth — deep data is deep to parse — but never inspected for
-// keywords, so a `const` that happens to carry a "$ref" member is data rather than
-// a reference.
+// never inspected for keywords, so a `const` that happens to carry a "$ref" member
+// is a value a payload may equal rather than a reference to resolve. Their nesting
+// is still bounded — the lexical depth scan runs over the raw bytes and does not
+// care which keyword a container sits under.
 var nonSchemaKeywords = map[string]bool{
 	"const": true, "default": true, "enum": true, "examples": true,
 }
@@ -313,17 +324,56 @@ var schemaMapKeywords = map[string]bool{
 	"definitions": true, "dependentSchemas": true,
 }
 
-// scanRegistrationSchema walks the decoded document once, enforcing the depth,
-// dialect, reference and pattern rules. depth is the level of the container being
-// entered, so the root object is 1.
+// rawNestingDepth returns the deepest JSON container nesting in raw, counted
+// lexically — no parse, no recursion, one pass over the bytes.
+//
+// It is string-aware, so a brace inside a string literal is text rather than a
+// container, and escape-aware so a literal quote does not end the string early. It
+// does NOT check that the brackets balance: an unbalanced document is the parser's
+// to reject, and this only has to produce an upper bound on how deep a parser would
+// have to descend.
+//
+// Byte-wise rather than rune-wise on purpose. Every delimiter it looks for is
+// ASCII, and no continuation byte of a multi-byte UTF-8 sequence can collide with
+// one, so decoding first would cost a pass and change nothing.
+func rawNestingDepth(raw []byte) int {
+	depth, deepest := 0, 0
+	inString, escaped := false, false
+	for _, b := range raw {
+		if inString {
+			switch {
+			case escaped:
+				escaped = false
+			case b == '\\':
+				escaped = true
+			case b == '"':
+				inString = false
+			}
+			continue
+		}
+		switch b {
+		case '"':
+			inString = true
+		case '{', '[':
+			depth++
+			if depth > deepest {
+				deepest = depth
+			}
+		case '}', ']':
+			depth--
+		}
+	}
+	return deepest
+}
+
+// scanRegistrationSchema walks the decoded document once, enforcing the dialect,
+// reference and pattern rules. Depth is NOT its business — rawNestingDepth owns
+// that bound and has already run, which is what lets this walk recurse freely.
 //
 // The first failure decides, and the order of the checks within a level is fixed
 // (dialect, then references, then patterns) so a document breaking two rules always
 // gets the same answer.
-func scanRegistrationSchema(node any, depth int) SchemaVerdict {
-	if depth > MaxRegistrationSchemaDepth {
-		return SchemaTooDeep
-	}
+func scanRegistrationSchema(node any) SchemaVerdict {
 	switch n := node.(type) {
 	case map[string]any:
 		if v := checkSchemaKeywords(n); v != SchemaAccepted {
@@ -332,62 +382,35 @@ func scanRegistrationSchema(node any, depth int) SchemaVerdict {
 		// Sorted so a document with two faults answers the same way on every run;
 		// Go's map order is randomised and the verdict must not be.
 		for _, k := range sortedKeys(n) {
+			// A non-schema keyword's value is DATA. Its contents are not read as
+			// keywords at all, so a `const` carrying a "$ref" member is a value a
+			// payload may equal rather than a reference to resolve.
+			if nonSchemaKeywords[k] {
+				continue
+			}
 			child := n[k]
-			switch {
-			case nonSchemaKeywords[k]:
-				if v := scanDepthOnly(child, depth+1); v != SchemaAccepted {
-					return v
-				}
-			case schemaMapKeywords[k]:
-				sub, ok := child.(map[string]any)
-				if !ok {
-					// Not the shape the keyword takes; walk it generically rather than
-					// guess. An invalid schema is the compiler's to reject.
-					if v := scanRegistrationSchema(child, depth+1); v != SchemaAccepted {
-						return v
+			if schemaMapKeywords[k] {
+				if sub, ok := child.(map[string]any); ok {
+					// The child's KEYS are property or definition names, never
+					// keywords, so only its values are read as schemas.
+					for _, name := range sortedKeys(sub) {
+						if v := scanRegistrationSchema(sub[name]); v != SchemaAccepted {
+							return v
+						}
 					}
 					continue
 				}
-				if depth+1 > MaxRegistrationSchemaDepth {
-					return SchemaTooDeep
-				}
-				for _, name := range sortedKeys(sub) {
-					if v := scanRegistrationSchema(sub[name], depth+2); v != SchemaAccepted {
-						return v
-					}
-				}
-			default:
-				if v := scanRegistrationSchema(child, depth+1); v != SchemaAccepted {
-					return v
-				}
+				// Not the shape the keyword takes; fall through and walk it
+				// generically rather than guess. An invalid schema is the compiler's
+				// to reject.
 			}
-		}
-	case []any:
-		for _, item := range n {
-			if v := scanRegistrationSchema(item, depth+1); v != SchemaAccepted {
-				return v
-			}
-		}
-	}
-	return SchemaAccepted
-}
-
-// scanDepthOnly walks a value that is DATA rather than schema: it still counts
-// toward the depth bound, and nothing in it is read as a keyword.
-func scanDepthOnly(node any, depth int) SchemaVerdict {
-	if depth > MaxRegistrationSchemaDepth {
-		return SchemaTooDeep
-	}
-	switch n := node.(type) {
-	case map[string]any:
-		for _, k := range sortedKeys(n) {
-			if v := scanDepthOnly(n[k], depth+1); v != SchemaAccepted {
+			if v := scanRegistrationSchema(child); v != SchemaAccepted {
 				return v
 			}
 		}
 	case []any:
 		for _, item := range n {
-			if v := scanDepthOnly(item, depth+1); v != SchemaAccepted {
+			if v := scanRegistrationSchema(item); v != SchemaAccepted {
 				return v
 			}
 		}

@@ -105,8 +105,8 @@ export interface SchemaViolation extends RegistrationFieldError {
 const divergentEscapes = new Set("123456789kpPAzZQECGK".split(""));
 
 // Keywords whose value is arbitrary JSON DATA rather than a subschema. Their
-// contents still count toward the depth bound — deep data is deep to parse — but
-// are never read as keywords, so a `const` carrying a "$ref" member is data.
+// contents are never read as keywords, so a `const` carrying a "$ref" member is
+// data. Their nesting is still bounded, by the lexical depth scan over the raw bytes.
 const nonSchemaKeywords = new Set(["const", "default", "enum", "examples"]);
 
 // Keywords that map NAMES to subschemas. Their child keys are property or
@@ -207,54 +207,69 @@ function checkKeywords(obj: Record<string, unknown>): SchemaVerdict {
 }
 
 /**
- * Walk a value that is DATA rather than schema: it still counts toward the depth
- * bound, and nothing in it is read as a keyword.
+ * rawNestingDepth returns the deepest JSON container nesting in `raw`, counted
+ * lexically — no parse, no recursion, one pass over the bytes.
+ *
+ * It is string-aware, so a brace inside a string literal is text rather than a
+ * container, and escape-aware so a literal quote does not end the string early. It
+ * does NOT check that the brackets balance: an unbalanced document is the parser's
+ * to reject, and this only has to produce an upper bound on how deep a parser would
+ * have to descend.
+ *
+ * Byte-wise rather than character-wise on purpose. Every delimiter it looks for is
+ * ASCII, and no continuation byte of a multi-byte UTF-8 sequence can collide with
+ * one, so decoding first would cost a pass and change nothing.
  */
-function scanDepthOnly(node: unknown, depth: number): SchemaVerdict {
-	if (depth > maxRegistrationSchemaDepth) return "too_deep";
-	if (Array.isArray(node)) {
-		for (const item of node) {
-			const verdict = scanDepthOnly(item, depth + 1);
-			if (verdict !== "accepted") return verdict;
+function rawNestingDepth(raw: Uint8Array): number {
+	let depth = 0;
+	let deepest = 0;
+	let inString = false;
+	let escaped = false;
+	for (const byte of raw) {
+		if (inString) {
+			if (escaped) escaped = false;
+			else if (byte === 0x5c) escaped = true; // backslash
+			else if (byte === 0x22) inString = false; // quote
+			continue;
 		}
-	} else if (isPlainObject(node)) {
-		for (const key of Object.keys(node).sort()) {
-			const verdict = scanDepthOnly(node[key], depth + 1);
-			if (verdict !== "accepted") return verdict;
-		}
+		if (byte === 0x22) inString = true;
+		else if (byte === 0x7b || byte === 0x5b) {
+			// { [
+			depth++;
+			if (depth > deepest) deepest = depth;
+		} else if (byte === 0x7d || byte === 0x5d) depth--; // } ]
 	}
-	return "accepted";
+	return deepest;
 }
 
 /**
- * Walk a keyword whose child object maps NAMES to subschemas. `depth` is the level
- * of the object DECLARING the keyword, so the map sits at depth + 1 and each
- * subschema at depth + 2.
+ * Walk a keyword whose child object maps NAMES to subschemas. The child's keys are
+ * property or definition names, never keywords, so only its values are read as
+ * schemas.
  */
-function scanSchemaMap(child: unknown, depth: number): SchemaVerdict {
+function scanSchemaMap(child: unknown): SchemaVerdict {
 	if (!isPlainObject(child)) {
 		// Not the shape the keyword takes; walk it generically rather than guess. An
 		// invalid schema is the compiler's to reject.
-		return scan(child, depth + 1);
+		return scan(child);
 	}
-	if (depth + 1 > maxRegistrationSchemaDepth) return "too_deep";
 	for (const name of Object.keys(child).sort()) {
-		const verdict = scan(child[name], depth + 2);
+		const verdict = scan(child[name]);
 		if (verdict !== "accepted") return verdict;
 	}
 	return "accepted";
 }
 
 /**
- * Walk the decoded document once, enforcing depth, dialect, reference and pattern
- * rules. `depth` is the level of the container being entered, so the root object
- * is 1. The first failure decides.
+ * Walk the decoded document once, enforcing the dialect, reference and pattern
+ * rules. Depth is NOT its business — rawNestingDepth owns that bound and has
+ * already run, which is what lets this walk recurse freely. The first failure
+ * decides.
  */
-function scan(node: unknown, depth: number): SchemaVerdict {
-	if (depth > maxRegistrationSchemaDepth) return "too_deep";
+function scan(node: unknown): SchemaVerdict {
 	if (Array.isArray(node)) {
 		for (const item of node) {
-			const verdict = scan(item, depth + 1);
+			const verdict = scan(item);
 			if (verdict !== "accepted") return verdict;
 		}
 		return "accepted";
@@ -266,15 +281,12 @@ function scan(node: unknown, depth: number): SchemaVerdict {
 	// Sorted so a document with two faults answers the same way on every run and in
 	// every language.
 	for (const key of Object.keys(node).sort()) {
+		// A non-schema keyword's value is DATA. Its contents are not read as keywords
+		// at all, so a `const` carrying a "$ref" member is a value a payload may equal
+		// rather than a reference to resolve.
+		if (nonSchemaKeywords.has(key)) continue;
 		const child = node[key];
-		let verdict: SchemaVerdict;
-		if (nonSchemaKeywords.has(key)) {
-			verdict = scanDepthOnly(child, depth + 1);
-		} else if (schemaMapKeywords.has(key)) {
-			verdict = scanSchemaMap(child, depth);
-		} else {
-			verdict = scan(child, depth + 1);
-		}
+		const verdict = schemaMapKeywords.has(key) ? scanSchemaMap(child) : scan(child);
 		if (verdict !== "accepted") return verdict;
 	}
 	return "accepted";
@@ -478,6 +490,16 @@ export function compileRegistrationSchema(raw: Uint8Array | string): {
 	// Size first, on the bytes as served and before any parse: an oversized document
 	// must not be decoded to find out that it was oversized.
 	if (bytes.length > maxRegistrationSchemaBytes) return { schema: null, verdict: "too_large" };
+	// Depth SECOND, and still on the raw bytes — before the document is handed to a
+	// JSON parser rather than after. Every parser across the three SDKs descends
+	// recursively, and two of them abort on a deeply nested document in a way this
+	// face cannot map onto a verdict (Python raises RecursionError, which is not the
+	// exception a malformed document raises), so a check placed after the parse is
+	// reached only for documents harmless enough to parse. Lexical counting needs no
+	// recursion at all.
+	if (rawNestingDepth(bytes) > maxRegistrationSchemaDepth) {
+		return { schema: null, verdict: "too_deep" };
+	}
 
 	let doc: unknown;
 	try {
@@ -489,7 +511,7 @@ export function compileRegistrationSchema(raw: Uint8Array | string): {
 	if (!isPlainObject(doc) && typeof doc !== "boolean") {
 		return { schema: null, verdict: "malformed" };
 	}
-	const verdict = scan(doc, 1);
+	const verdict = scan(doc);
 	if (verdict !== "accepted") return { schema: null, verdict };
 
 	// strict:false because a published schema may legitimately carry keywords this

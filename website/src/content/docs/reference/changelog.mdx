@@ -49,6 +49,10 @@ whose length depends on the library is one no shared corpus could pin. A conform
 guard reads the SDK's numbers back out of the shared corpus and fails if the field
 comment stops stating them, which is the only drift gate available for a bound that lives
 in a comment: `data_schema` is a `Struct`, and no field-level rule can reach inside one.
+The depth bound is measured lexically over the raw bytes, BEFORE the document is parsed:
+every JSON parser involved descends recursively, and one of them aborts on a deep
+document by raising an error that is not a verdict at all, so a check placed after the
+parse is reached only for documents harmless enough to parse.
 
 **Every addressed request names its recipient: `exchange` becomes required (breaking,
 pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`

@@ -94,8 +94,9 @@ SchemaVerdict = Literal[
 _DIVERGENT_ESCAPES = frozenset("123456789kpPAzZQECGK")
 
 # Keywords whose value is arbitrary JSON DATA rather than a subschema. Their
-# contents still count toward the depth bound — deep data is deep to parse — but are
-# never read as keywords, so a ``const`` carrying a "$ref" member is data.
+# contents are never read as keywords, so a ``const`` carrying a "$ref" member is a
+# value a payload may equal rather than a reference to resolve. Their nesting is
+# still bounded, by the lexical depth scan over the raw bytes.
 _NON_SCHEMA_KEYWORDS = frozenset({"const", "default", "enum", "examples"})
 
 # Keywords that map NAMES to subschemas. Their child keys are property or definition
@@ -190,51 +191,71 @@ def _check_keywords(obj: dict[str, Any]) -> SchemaVerdict:
     return "accepted"
 
 
-def _scan_depth_only(node: Any, depth: int) -> SchemaVerdict:
-    """Walk a value that is DATA rather than schema: it still counts toward the
-    depth bound, and nothing in it is read as a keyword."""
-    if depth > MAX_REGISTRATION_SCHEMA_DEPTH:
-        return "too_deep"
-    if isinstance(node, dict):
-        for key in sorted(node):
-            verdict = _scan_depth_only(node[key], depth + 1)
-            if verdict != "accepted":
-                return verdict
-    elif isinstance(node, list):
-        for item in node:
-            verdict = _scan_depth_only(item, depth + 1)
-            if verdict != "accepted":
-                return verdict
-    return "accepted"
+# JSON structural bytes, named so the lexical scan below reads as JSON rather than
+# as arithmetic.
+_QUOTE = 0x22
+_BACKSLASH = 0x5C
+_OPENERS = frozenset({0x7B, 0x5B})  # { [
+_CLOSERS = frozenset({0x7D, 0x5D})  # } ]
 
 
-def _scan_schema_map(child: Any, depth: int) -> SchemaVerdict:
-    """Walk a keyword whose child object maps NAMES to subschemas. The child's keys
-    are property or definition names, never keywords, so the map itself is descended
-    as a plain container and only its values are read as schemas.
+def _raw_nesting_depth(raw: bytes) -> int:
+    """The deepest JSON container nesting in ``raw``, counted lexically — no parse,
+    no recursion, one pass over the bytes.
 
-    ``depth`` is the level of the object DECLARING the keyword, so the map sits at
-    ``depth + 1`` and each subschema at ``depth + 2``.
+    It is string-aware, so a brace inside a string literal is text rather than a
+    container, and escape-aware so a literal quote does not end the string early. It
+    does NOT check that the brackets balance: an unbalanced document is the parser's
+    to reject, and this only has to produce an upper bound on how deep a parser would
+    have to descend.
+
+    Byte-wise rather than character-wise on purpose. Every delimiter it looks for is
+    ASCII, and no continuation byte of a multi-byte UTF-8 sequence can collide with
+    one, so decoding first would cost a pass and change nothing.
     """
+    depth = 0
+    deepest = 0
+    in_string = False
+    escaped = False
+    for byte in raw:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif byte == _BACKSLASH:
+                escaped = True
+            elif byte == _QUOTE:
+                in_string = False
+            continue
+        if byte == _QUOTE:
+            in_string = True
+        elif byte in _OPENERS:
+            depth += 1
+            deepest = max(deepest, depth)
+        elif byte in _CLOSERS:
+            depth -= 1
+    return deepest
+
+
+def _scan_schema_map(child: Any) -> SchemaVerdict:
+    """Walk a keyword whose child object maps NAMES to subschemas. The child's keys
+    are property or definition names, never keywords, so only its values are read as
+    schemas."""
     if not isinstance(child, dict):
         # Not the shape the keyword takes; walk it generically rather than guess. An
         # invalid schema is the compiler's to reject.
-        return _scan(child, depth + 1)
-    if depth + 1 > MAX_REGISTRATION_SCHEMA_DEPTH:
-        return "too_deep"
+        return _scan(child)
     for name in sorted(child):
-        verdict = _scan(child[name], depth + 2)
+        verdict = _scan(child[name])
         if verdict != "accepted":
             return verdict
     return "accepted"
 
 
-def _scan(node: Any, depth: int) -> SchemaVerdict:
-    """Walk the decoded document once, enforcing depth, dialect, reference and
-    pattern rules. ``depth`` is the level of the container being entered, so the
-    root object is 1. The first failure decides."""
-    if depth > MAX_REGISTRATION_SCHEMA_DEPTH:
-        return "too_deep"
+def _scan(node: Any) -> SchemaVerdict:
+    """Walk the decoded document once, enforcing the dialect, reference and pattern
+    rules. Depth is NOT its business — ``_raw_nesting_depth`` owns that bound and has
+    already run, which is what lets this walk recurse freely. The first failure
+    decides."""
     if isinstance(node, dict):
         verdict = _check_keywords(node)
         if verdict != "accepted":
@@ -242,18 +263,18 @@ def _scan(node: Any, depth: int) -> SchemaVerdict:
         # Sorted so a document with two faults answers the same way on every run and
         # in every language.
         for key in sorted(node):
-            child = node[key]
+            # A non-schema keyword's value is DATA. Its contents are not read as
+            # keywords at all, so a ``const`` carrying a "$ref" member is a value a
+            # payload may equal rather than a reference to resolve.
             if key in _NON_SCHEMA_KEYWORDS:
-                verdict = _scan_depth_only(child, depth + 1)
-            elif key in _SCHEMA_MAP_KEYWORDS:
-                verdict = _scan_schema_map(child, depth)
-            else:
-                verdict = _scan(child, depth + 1)
+                continue
+            child = node[key]
+            verdict = _scan_schema_map(child) if key in _SCHEMA_MAP_KEYWORDS else _scan(child)
             if verdict != "accepted":
                 return verdict
     elif isinstance(node, list):
         for item in node:
-            verdict = _scan(item, depth + 1)
+            verdict = _scan(item)
             if verdict != "accepted":
                 return verdict
     return "accepted"
@@ -445,6 +466,36 @@ class RegistrationSchema:
         return flat[:MAX_REGISTRATION_FIELD_ERRORS]
 
 
+def _decode(raw: bytes) -> tuple[Any, SchemaVerdict]:
+    """The pre-parse gauntlet: the two bounds that must hold BEFORE a parser sees the
+    document, then the parse, then the top-level shape.
+
+    Size first, on the bytes as served: an oversized document must not be decoded to
+    find out that it was oversized.
+
+    Depth second, and still on the raw bytes — before the document is handed to a
+    JSON parser rather than after. Every parser across the three SDKs descends
+    recursively, and this one aborts on a deeply nested document in a way that is not
+    a verdict at all: ``json.loads`` raises ``RecursionError``, which is not the
+    exception a malformed document raises. A depth check placed after the parse would
+    therefore be reached only for documents harmless enough to parse — precisely the
+    ones it is not needed for. Lexical counting needs no recursion.
+    """
+    if len(raw) > MAX_REGISTRATION_SCHEMA_BYTES:
+        return None, "too_large"
+    if _raw_nesting_depth(raw) > MAX_REGISTRATION_SCHEMA_DEPTH:
+        return None, "too_deep"
+    try:
+        doc = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return None, "malformed"
+    # 2020-12 admits an object or a boolean at the top level, nothing else. bool is a
+    # subclass of int in Python, so it is checked before any numeric interpretation.
+    if not isinstance(doc, (dict, bool)):
+        return None, "malformed"
+    return doc, "accepted"
+
+
 def compile_registration_schema(raw: bytes) -> tuple[RegistrationSchema | None, SchemaVerdict]:
     """Check a published data_schema against every rule and compile it.
 
@@ -460,19 +511,10 @@ def compile_registration_schema(raw: bytes) -> tuple[RegistrationSchema | None, 
     An EXCHANGE compiling its OWN configured schema treats the same verdict as an
     operator misconfiguration, and must not advertise a schema it cannot enforce.
     """
-    # Size first, on the bytes as served and before any parse: an oversized document
-    # must not be decoded to find out that it was oversized.
-    if len(raw) > MAX_REGISTRATION_SCHEMA_BYTES:
-        return None, "too_large"
-    try:
-        doc = json.loads(raw)
-    except (ValueError, UnicodeDecodeError):
-        return None, "malformed"
-    # 2020-12 admits an object or a boolean at the top level, nothing else. bool is a
-    # subclass of int in Python, so it is checked before any numeric interpretation.
-    if not isinstance(doc, (dict, bool)):
-        return None, "malformed"
-    verdict = _scan(doc, 1)
+    doc, verdict = _decode(raw)
+    if verdict != "accepted":
+        return None, verdict
+    verdict = _scan(doc)
     if verdict != "accepted":
         return None, verdict
 

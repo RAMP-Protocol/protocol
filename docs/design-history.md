@@ -207,6 +207,20 @@ neighbouring domain guard exists because two copies of a rule drifted silently;
 this one exists because the rule has no machine-readable copy to compare against
 at all.
 
+Where the depth bound is CHECKED turned out to matter as much as its value. The
+first implementation measured the decoded document, which reads naturally and is
+wrong: every one of the three parsers descends recursively, and two of them abort
+on a deeply nested document before any check could run. Python's `json` raises
+`RecursionError` — not the exception a malformed document raises, so it escaped
+the validator as a crash rather than arriving as a verdict, on precisely the input
+the cap exists to stop. A 12KB schema, well under the size cap, killed the Python
+SDK while Go and TypeScript answered "too deep". The bound now runs lexically over
+the raw bytes, before a parser sees them: counting brackets needs no recursion, so
+the check that exists to stop a hostile document is no longer reachable only for
+documents harmless enough to parse. The generalisation is worth keeping: a
+resource bound that runs after the work it is meant to bound is not a bound, and
+"after the parse" is an easy place to not notice that.
+
 The second is `pattern`, and it is the more interesting failure. Draft 2020-12
 says patterns are ECMA-262. The engines real implementations run are not ECMA-262:
 Go's RE2, JavaScript's RegExp and Python's `re` intersect on considerably less than
