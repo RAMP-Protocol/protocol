@@ -876,6 +876,22 @@ def _decode(raw: bytes) -> tuple[Any, SchemaVerdict]:
     therefore be reached only for documents harmless enough to parse — precisely the
     ones it is not needed for. Lexical counting needs no recursion.
     """
+    # BYTES, checked at runtime rather than trusted from the annotation. Both bounds
+    # below are defined over UTF-8 bytes, and Python will happily run them against a
+    # ``str``: ``len`` then counts characters against a byte cap, and the depth scan
+    # compares integer byte values against one-character strings, so every comparison
+    # is False and it returns 0 — the gate does not weaken, it disappears. A caller
+    # holding a decoded manifest reaches for ``json.dumps``, which returns ``str``, so
+    # this is the natural mistake rather than an exotic one. Refusing it loudly is the
+    # only safe answer; silently validating a schema neither cap was applied to is not.
+    if not isinstance(raw, (bytes, bytearray, memoryview)):
+        msg = (
+            "compile_registration_schema takes the schema's UTF-8 BYTES as served, "
+            f"not {type(raw).__name__} — the size and depth caps are defined over bytes "
+            "and cannot be applied to a decoded string. Encode it first."
+        )
+        raise TypeError(msg)
+    raw = bytes(raw)
     if not raw.strip():
         # Nothing to compile is its own answer, not a malformed document: an Exchange
         # that publishes no data_schema is the contract's ordinary case.

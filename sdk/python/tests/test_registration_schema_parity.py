@@ -169,6 +169,47 @@ def test_field_errors_never_echo_the_submitted_value() -> None:
         assert sentinel not in fe["path"], "pointer carries the submitted value"
 
 
+def test_a_str_schema_is_refused_rather_than_silently_uncapped() -> None:
+    """Both caps are defined over UTF-8 BYTES, and Python will run them against a
+    ``str`` without complaining: ``len`` counts characters against a byte cap, and the
+    depth scan compares integer byte values against one-character strings, so every
+    comparison is False and it returns 0 — the gate does not weaken, it disappears.
+
+    A caller holding a decoded manifest reaches for ``json.dumps``, which returns
+    ``str``, so this is the natural mistake rather than an exotic one.
+    """
+    deep = '{"not":' * 100 + "{}" + "}" * 100
+    assert compile_registration_schema(deep.encode("utf8"))[1] == "too_deep"
+    with pytest.raises(TypeError, match="BYTES"):
+        compile_registration_schema(deep)  # type: ignore[arg-type]
+
+    # And the size cap, where a multi-byte document is far longer in bytes than in
+    # characters — 6,037 characters, 18,037 bytes, against a 16,384-byte cap.
+    oversize = json.dumps({"type": "object", "description": "€" * 6000}, ensure_ascii=False)
+    assert compile_registration_schema(oversize.encode("utf8"))[1] == "too_large"
+    with pytest.raises(TypeError, match="BYTES"):
+        compile_registration_schema(oversize)  # type: ignore[arg-type]
+
+
+def test_the_refusing_registry_blocks_a_reference_the_scan_did_not_catch() -> None:
+    """The SSRF backstop, exercised past the scan.
+
+    This library's DEFAULT registry resolves an http:// reference by making the
+    request — verified against a local listener before this was installed. The scan is
+    the rule; a reference that escapes it must still not dial.
+    """
+    from ramp_sdk.regschema import _REFUSING_REGISTRY
+
+    import jsonschema
+    import referencing.exceptions
+
+    validator = jsonschema.Draft202012Validator(
+        {"$ref": "http://127.0.0.1:1/pwned"}, registry=_REFUSING_REGISTRY
+    )
+    with pytest.raises(referencing.exceptions.Unresolvable):
+        list(validator.iter_errors("x"))
+
+
 def test_no_compiled_schema_passes_the_payload_through() -> None:
     """An Exchange that publishes no data_schema accepts registration_data
     uninspected. Nothing to compile means nothing to enforce, which is the contract's
