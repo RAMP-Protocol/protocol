@@ -20,18 +20,40 @@ previous revision had. The rest every engine compiles and then reads DIFFERENTLY
 refusing those would have gutted the feature, because they are `$`, `\d` and `\w`,
 which appear in almost every real pattern. `^[A-Z]{2}[0-9]+$` — the example this
 contract itself gives — accepted `"DE12345\n"` under one implementation and refused it
-under two, with nothing logged. So the alphabet now refuses only what cannot be
-reconciled, and an implementation whose engine differs is expected to correct it: match
-ASCII character classes, and anchor `$` at the end of the text and nowhere else. `\s`
-moves to the refused list, because there is no single set to correct TO — RE2 reads it
-as `[\t\n\f\r ]`, Python adds the vertical tab, and ECMA-262 adds that plus every
-Unicode space separator. An explicit character class says what was meant.
+under two, with nothing logged. So an implementation whose engine differs is expected to
+correct it: match ASCII character classes, and anchor `$` at the end of the text and
+nowhere else. `\s` and `\B` are refused instead, because for those there is no single
+meaning to correct TO — RE2 reads `\s` as `[\t\n\f\r ]`, Python adds the vertical tab,
+and ECMA-262 adds that plus every Unicode space separator, while `\B` finds no word
+boundary in the empty string for two engines and finds one for the third. An explicit
+character class says what was meant.
 
-Three more shapes join the refused list, each of which two engines read differently
+**The alphabet is now stated as what a pattern MAY contain.** The previous revision
+enumerated the divergent escapes, and that list was wrong in both directions and could
+not be finished: the set of escapes three engines disagree about grows with every
+dialect and library version, so it needed a new entry each time somebody found one, and
+`\B`, `\cA`, `\a`, `\012`, `\x{41}`, `\uHHHH` and the identity escapes were all admitted
+until somebody did. The portable set is small and closed — the shorthand classes, the
+control characters, `\xHH`, and the metacharacters that stand for themselves — and it
+was derived by running every ASCII escape through all three engines in three positions
+rather than by reasoning about them. An author who wants anything else writes the
+characters out.
+
+Four more shapes join the refused list, each of which two engines read differently
 without erroring: a POSIX name anywhere inside a bracket expression (not merely at its
 start, which is all the previous rule checked, so `^[a[:alpha:]]+$` slipped through and
 produced three different answers); a counted repeat over 1000, which RE2 refuses and the
-others expand; and a bracket expression that opens with `]` or never closes.
+others expand; a bracket expression that opens with `]` or never closes; and a range
+whose endpoint is a shorthand class (`[\w-x]`), which RE2 reads as a range while the
+other two refuse it outright.
+
+**Where a pattern may appear is now stated.** `pattern` carries its regex as a value and
+`patternProperties` carries its regexes as KEYS. Both are patterns, both are held to the
+alphabet, and they are the only two keywords in the dialect that carry one. Saying so
+matters because it is exactly what an implementation gets wrong: correcting the `pattern`
+keyword alone leaves `patternProperties` uncorrected, and a property name that is a
+non-ASCII digit then matches `^\d+$` for one implementation and not the other two — the
+same silent split, on the keyword the rules already single out for pattern SAFETY.
 
 **Nested quantifiers are refused outright.** `(a+)+`, `(a|a)*` and `([a-z]+)*` are the
 catastrophic-backtracking forms, they need neither lookaround nor backreferences, and
@@ -46,7 +68,9 @@ a 1,675-byte schema five containers deep — a tenth of the size cap, a sixth of
 cap — cost 16.7 million evaluations and twenty-seven seconds against a two-member
 payload. A new bound of **10000 evaluations**, counted statically before anything runs,
 is the missing one; it is about fifteen milliseconds of work, several hundred times what
-a schema describing a business entity needs.
+a schema describing a business entity needs. It bounds the SCHEMA: it is the cost of
+applying the schema at one location in a payload, so a subschema under `items` is counted
+once here and evaluated once per element at runtime.
 
 **Reference cycles are refused.** A `$ref` chain that returns to a schema already on it
 is legal JSON Schema and has no static cost bound; it is also what made validators
@@ -55,6 +79,24 @@ throwing. `{"$ref":"#"}` is twelve bytes. The same walk that counts evaluations 
 every reference to its target, so it decides this and the resolvability of a
 same-document reference at the same time — three questions the libraries had been
 answering three different ways.
+
+**The encoding is pinned, because it decides which document the rules are read
+against.** The bytes MUST be well-formed UTF-8 and MUST NOT begin with a byte order
+mark. RFC 8259 forbids adding a mark and permits a parser to ignore one, so both
+policies conform and the contract makes the choice once: a parser that strips a mark
+validates a different document than the one served, and counts three bytes against the
+size cap that the schema does not contain. Ill-formed bytes MUST NOT be repaired either
+— one implementation's parser silently substituted U+FFFD and enforced a `pattern` with
+a different character inside it, while the other two refused the same bytes. The
+JavaScript-only literals `NaN` and `Infinity` are not JSON (RFC 8259 §6) and are refused
+with them; one implementation's parser accepts all three as an extension.
+
+**Data is not schema, stated explicitly.** `const`, `enum`, `default` and `examples`
+hold arbitrary JSON values whose contents are never read as keywords, so the `$ref` and
+`$schema` rules stop at them — a `const` carrying a "$ref" member states a value a
+payload may equal, not a reference to resolve. The rules said "every `$ref`" and
+"`$schema`, wherever it appears", which an implementor following the text literally would
+apply inside those four keywords and refuse schemas every SDK accepts.
 
 **Smaller corrections.** The value MUST be a JSON object: 2020-12 admits a bare boolean
 as a schema, but a `Struct` cannot carry one, so the previous rules pinned behaviour for
@@ -69,7 +111,9 @@ every gate green.
 *Tooling:* the shared corpus gains a fourth dimension recording what an admitted pattern
 MATCHES, not merely which schemas are admitted. Its absence is why none of the above was
 visible: 141 cases across three dimensions all passed while the three implementations
-disagreed about payloads. Also corrected in the SDK: the refusal list is clamped by
+disagreed about payloads. The corpus can now also state a case as raw bytes, because the
+encoding rules above are defined over the bytes as served and ill-formed UTF-8 cannot be
+written into a JSON string at all. Also corrected in the SDK: the refusal list is clamped by
 CHARACTERS rather than bytes or UTF-16 units, which is what `string.max_len` counts and
 what stopped one implementation naming a different member than the others; a refusal
 carrying a non-ASCII constraint no longer cuts mid-character into a message

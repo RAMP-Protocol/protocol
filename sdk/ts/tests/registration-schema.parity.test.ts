@@ -33,7 +33,20 @@ import {
 	registrationSchemaDialect,
 } from "../src/regschema";
 
-type CompileVector = { name: string; schema: string; expected_verdict: string };
+type CompileVector = {
+	name: string;
+	schema?: string;
+	// Carried as base64 when the input is not expressible as a JSON string — invalid
+	// UTF-8. The rules are defined over the bytes AS SERVED, so a corpus that could
+	// only state well-formed UTF-8 could not state the rule deciding what that means.
+	schema_b64?: string;
+	expected_verdict: string;
+};
+
+function vectorBytes(v: { schema?: string; schema_b64?: string }): Uint8Array {
+	if (v.schema_b64 !== undefined) return new Uint8Array(Buffer.from(v.schema_b64, "base64"));
+	return new TextEncoder().encode(v.schema ?? "");
+}
 type ValidateVector = {
 	name: string;
 	schema: string;
@@ -52,7 +65,7 @@ type VectorsFile = {
 	max_field_error_text_len: number;
 	max_schema_evaluations: number;
 	max_pattern_repeat: number;
-	forbidden_pattern_escapes: string;
+	portable_pattern_escapes: string;
 	compile: CompileVector[];
 	validate: ValidateVector[];
 	pattern: PatternVector[];
@@ -75,7 +88,7 @@ describe("registration-schema parity", () => {
 	});
 
 	it.each(vectors.compile.map((v) => [v.name, v] as const))("compile %s", (_name, v) => {
-		const { schema, verdict } = compileRegistrationSchema(v.schema);
+		const { schema, verdict } = compileRegistrationSchema(vectorBytes(v));
 		expect(verdict).toBe(v.expected_verdict);
 		// The schema is usable exactly when it was accepted — a port that returned a
 		// compiled schema alongside a refusal would let a caller ignoring the verdict
@@ -84,7 +97,7 @@ describe("registration-schema parity", () => {
 	});
 
 	it.each(vectors.validate.map((v) => [v.name, v] as const))("validate %s", (_name, v) => {
-		const { schema, verdict } = compileRegistrationSchema(v.schema);
+		const { schema, verdict } = compileRegistrationSchema(vectorBytes(v));
 		expect(verdict).toBe("accepted");
 		if (schema === null) throw new Error("the case's own schema did not compile");
 

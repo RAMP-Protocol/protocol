@@ -21,13 +21,12 @@ oracle by the shared vectors at
 
 from __future__ import annotations
 
+import codecs
 import json
-import re
 from typing import Any, Literal
 
 import jsonschema
 import referencing.exceptions
-from jsonschema import validators
 from referencing import Registry
 
 __all__ = [
@@ -113,11 +112,22 @@ SchemaVerdict = Literal[
 ]
 
 
-# Escape letters whose meaning is not shared by all three SDK engines. Each would
-# otherwise let one SDK accept a schema another refuses, or — worse, because it is
-# silent — let two SDKs accept the same schema and disagree about which payloads
-# match it. See is_safe_schema_pattern for the full argument.
-_DIVERGENT_ESCAPES = frozenset("123456789kpPsSAzZQECGK")
+# Escape letters every engine spells the same way AND reads the same way. This is an
+# ALLOWLIST, and that is the point: the set of escapes the three engines disagree
+# about is open-ended, so enumerating it means adding an entry every time somebody
+# finds another one. See is_safe_schema_pattern for the full argument.
+_PORTABLE_ESCAPES = frozenset("dDwWnrtfv")
+
+# The regex metacharacters an author escapes to mean the character itself. Every
+# engine accepts these — they are the characters that NEED escaping, so no dialect can
+# refuse them. Escaping anything else is an "identity escape", which ECMA-262 refuses
+# under the ``u`` flag that the TypeScript port's validator compiles with.
+_PORTABLE_SYNTAX_ESCAPES = frozenset("$()*+./?[\\]^{|}")
+
+# The escapes standing for a SET of characters rather than one. A set cannot be the
+# endpoint of a range, and the engines disagree about whether saying so ("[\\w-x]") is
+# an error or a reinterpretation.
+_SHORTHAND_CLASS_ESCAPES = frozenset("dDwW")
 
 # Keywords whose value is arbitrary JSON DATA rather than a subschema. Their
 # contents are never read as keywords, so a ``const`` carrying a "$ref" member is a
@@ -248,6 +258,33 @@ def _has_nested_quantifier(p: str) -> bool:
     return False
 
 
+def _refuse_json_constant(token: str) -> Any:
+    """Reject the JavaScript-only numeric literals. RFC 8259 §6 excludes Infinity and
+    NaN from the JSON grammar; this parser admits them unless told otherwise."""
+    msg = f"{token} is not a JSON value"
+    raise ValueError(msg)
+
+
+def _hex_escape_len(pattern: str, i: int) -> int:
+    """The length of a ``\\xHH`` escape at ``i``, or 0 if there is not one there.
+
+    Exactly two hex digits: ``\\x41`` is read the same by all three engines, while the
+    brace form ``\\x{41}`` is an RE2 spelling the other two refuse and a short
+    ``\\x4`` is refused by all three.
+    """
+    if pattern[i : i + 2] != "\\x" or len(pattern) < i + 4:
+        return 0
+    if not all(c in "0123456789abcdefABCDEF" for c in pattern[i + 2 : i + 4]):
+        return 0
+    return 4
+
+
+def _is_range_hyphen(pattern: str, i: int) -> bool:
+    """Whether the character at ``i`` is a "-" acting as a range operator inside a
+    bracket expression, rather than the literal hyphen a class may end with."""
+    return i < len(pattern) and pattern[i] == "-" and i + 1 < len(pattern) and pattern[i + 1] != "]"
+
+
 def is_safe_schema_pattern(pattern: str) -> bool:
     """Whether a ``pattern`` uses only constructs all three SDK languages express
     identically, and none that make a backtracking engine explode.
@@ -264,6 +301,12 @@ def is_safe_schema_pattern(pattern: str) -> bool:
     almost every real pattern — they are corrected, by compiling with the ASCII flag
     and rewriting ``$``. See ``_ramp_pattern`` below.
 
+    The escape rule is an ALLOWLIST rather than a list of the divergent escapes,
+    because the divergent set is open-ended: two successive reviews found new
+    counterexamples by trying, which is the signature of a rule stated from the wrong
+    side. The portable set is small, closed and checkable, and the corpus carries it
+    as data so the contract and all three SDKs are compared against one another.
+
     The last rule is about availability rather than agreement: a quantified group whose
     body can repeat or branch is refused, because that is what makes backtracking
     catastrophic and no timer in this port could stop one.
@@ -277,10 +320,29 @@ def is_safe_schema_pattern(pattern: str) -> bool:
             if i + 1 >= n:
                 # A trailing backslash is not a pattern any engine compiles.
                 return False
-            if pattern[i + 1] in _DIVERGENT_ESCAPES:
+            if _hex_escape_len(pattern, i):
+                i += 4  # the whole \xHH is consumed, never re-read as syntax
+                continue
+            nxt = pattern[i + 1]
+            if nxt not in _PORTABLE_ESCAPES and nxt not in _PORTABLE_SYNTAX_ESCAPES:
+                return False
+            # A range whose endpoint is a shorthand CLASS rather than a character —
+            # "[\w-x]". RE2 reads it as a range and compiles; this port and ECMA-262
+            # under the ``u`` flag both refuse it. Only the adjacency is refused.
+            if in_class and nxt in _SHORTHAND_CLASS_ESCAPES and _is_range_hyphen(pattern, i + 2):
                 return False
             i += 2  # the escaped character is consumed, never re-read as syntax
             continue
+        # The mirror of the case above: "[a-\w]".
+        if (
+            ch == "-"
+            and in_class
+            and _is_range_hyphen(pattern, i)
+            and pattern[i + 1] == "\\"
+            and i + 2 < n
+            and pattern[i + 2] in _SHORTHAND_CLASS_ESCAPES
+        ):
+            return False
         if ch == "[":
             if in_class:
                 # A literal "[" inside a class — EXCEPT when it opens a POSIX name.
@@ -324,21 +386,14 @@ def is_safe_schema_pattern(pattern: str) -> bool:
     return not _has_nested_quantifier(pattern)
 
 
-def _ramp_regex(pattern: str) -> re.Pattern[str]:
-    """Compile a schema ``pattern`` so this port matches the same strings as the Go
-    and JavaScript ones.
+def _rewrite_dollar(pattern: str) -> str:
+    """Rewrite every ``$`` that acts as an anchor into ``\\Z``.
 
-    Two corrections, both silent divergences rather than errors — the dangerous kind,
-    because every engine compiles the pattern and only the verdicts differ:
-
-    ``re.ASCII`` — ``\\d``, ``\\w``, ``\\s`` and ``\\b`` are Unicode-aware by default for
-    ``str`` patterns here and ASCII-only in RE2 and ECMA-262. Without the flag
-    ``^\\d+$`` accepts Arabic-Indic digits in this port alone.
-
-    ``$`` becomes ``\\Z`` — Python's ``$`` also matches just BEFORE a trailing newline,
-    where RE2 and ECMA-262 match only at the very end. Without the rewrite
-    ``^[A-Z]{2}[0-9]+$`` accepts ``"DE12345\\n"`` in this port alone. The rewrite is
-    bracket- and escape-aware, so a literal ``$`` in ``[$]`` or ``\\$`` is left alone.
+    Python's ``$`` also matches just BEFORE a trailing newline, where RE2 and ECMA-262
+    match only at the very end, so without this ``^[A-Z]{2}[0-9]+$`` accepted
+    ``"DE12345\\n"`` in this port alone — silently, because every engine compiled the
+    pattern and only the verdicts differed. The scan is bracket- and escape-aware, so
+    a literal dollar sign in ``[$]`` or ``\\$`` is left alone.
     """
     out: list[str] = []
     in_class = False
@@ -360,18 +415,87 @@ def _ramp_regex(pattern: str) -> re.Pattern[str]:
             continue
         out.append(ch)
         i += 1
-    return re.compile("".join(out), re.ASCII)
+    return "".join(out)
 
 
-def _ramp_pattern(validator: Any, patrn: str, instance: Any, _schema: Any) -> Any:
-    """The ``pattern`` keyword, re-implemented over ``_ramp_regex``.
+_ASCII_SCOPE_OPEN = "(?a:"
 
-    Overriding the keyword rather than pre-processing the schema keeps the correction
-    in one place and leaves the document the Exchange published byte-identical to the
-    one this port validates against.
+
+def _corrected_pattern_source(pattern: str) -> str:
+    """Rewrite one author-written regex into a source that means the SAME thing here
+    as it does in RE2 and in ECMA-262.
+
+    Two corrections, both expressed in the SOURCE rather than in compile flags, and
+    that is the whole point. This library compiles regexes in four places — the
+    ``pattern`` keyword, the ``patternProperties`` keys, the matched-key scan behind
+    ``additionalProperties``, and the evaluated-key scan behind
+    ``unevaluatedProperties`` — and overriding keywords reached only the first two.
+    A registration whose property name was a non-ASCII digit was refused by
+    ``additionalProperties`` in the other two SDKs and accepted here, which is exactly
+    the split this face exists to prevent. Correcting the source fixes every call site
+    at once, including ones a future release of the library might add.
+
+    ``(?a:...)`` is a SCOPED flag rather than the global ``(?a)``. It has to be:
+    ``find_additional_properties`` joins every patternProperties key with "|", and a
+    global flag anywhere but position 0 is a compile error.
+
+    ``$`` becomes ``\\Z`` because Python's ``$`` also matches just before a final
+    newline, so "DE12345\\n" satisfied a "^[A-Z]{2}[0-9]+$" that the other two
+    refused. The rewrite is bracket-aware: a ``$`` inside a character class is a
+    literal dollar sign.
     """
-    if validator.is_type(instance, "string") and _ramp_regex(patrn).search(instance) is None:
-        yield jsonschema.ValidationError(f"pattern: {patrn}")
+    return _ASCII_SCOPE_OPEN + _rewrite_dollar(pattern) + ")"
+
+
+def _authored_pattern_source(pattern: str) -> str:
+    """Recover the author's own text from a corrected source, for a refusal an
+    operator reads.
+
+    Both rewrites are exactly reversible, and the alphabet is what guarantees it:
+    ``\\Z`` is not an admitted escape, so every ``\\Z`` present was inserted here.
+    """
+    if not pattern.startswith(_ASCII_SCOPE_OPEN) or not pattern.endswith(")"):
+        return pattern
+    inner = pattern[len(_ASCII_SCOPE_OPEN) : -1]
+    out: list[str] = []
+    i = 0
+    while i < len(inner):
+        if inner[i] == "\\" and i + 1 < len(inner):
+            out.append("$" if inner[i + 1] == "Z" else inner[i : i + 2])
+            i += 2
+            continue
+        out.append(inner[i])
+        i += 1
+    return "".join(out)
+
+
+def _correct_regexes(node: Any) -> Any:
+    """Return a copy of the document with every regex-valued position corrected.
+
+    The walk mirrors ``_scan`` exactly, and for the same reasons: a ``const`` holds
+    DATA whose contents are never read as keywords, and ``properties``/``$defs`` map
+    NAMES to subschemas, so a property literally called "pattern" is a property name
+    and not a regex.
+    """
+    if isinstance(node, list):
+        return [_correct_regexes(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    out: dict[str, Any] = {}
+    for key, child in node.items():
+        if key in _NON_SCHEMA_KEYWORDS:
+            out[key] = child
+        elif key == "pattern" and isinstance(child, str):
+            out[key] = _corrected_pattern_source(child)
+        elif key == "patternProperties" and isinstance(child, dict):
+            # The regexes are the KEYS here, which is why overriding the `pattern`
+            # keyword never reached them.
+            out[key] = {_corrected_pattern_source(k): _correct_regexes(v) for k, v in child.items()}
+        elif key in _SCHEMA_MAP_KEYWORDS and isinstance(child, dict):
+            out[key] = {name: _correct_regexes(sub) for name, sub in child.items()}
+        else:
+            out[key] = _correct_regexes(child)
+    return out
 
 
 def _is_dialect(value: str) -> bool:
@@ -706,6 +830,10 @@ def _describe(error: jsonschema.ValidationError) -> tuple[str, str]:
         want = error.validator_value
         wanted = want if isinstance(want, list) else [want]
         return keyword, "must be of type " + " or ".join(str(w) for w in wanted)
+    if keyword == "pattern":
+        # The AUTHOR's pattern, not this port's corrected copy: an operator reading a
+        # refusal should see the regex their Exchange published.
+        return keyword, f"pattern: {_authored_pattern_source(str(error.validator_value))}"
     if keyword in _BOUND_KEYWORDS:
         # The bound comes off the schema, so naming it leaks nothing and is the one
         # piece of detail that makes a refusal actionable.
@@ -844,9 +972,13 @@ class RegistrationSchema:
         return flat[:MAX_REGISTRATION_FIELD_ERRORS]
 
 
-# The 2020-12 validator with RAMP's corrected `pattern` keyword. Built once: extending
-# a validator compiles a new class, and doing that per schema would be wasteful.
-_RampValidator = validators.extend(jsonschema.Draft202012Validator, {"pattern": _ramp_pattern})
+# The stock 2020-12 validator. It needs no keyword overrides because the correction
+# lives in the schema SOURCE — see _correct_regexes. An earlier version extended the
+# `pattern` keyword instead, which reached `pattern` and `propertyNames` and missed
+# `patternProperties` keys and the two matched-key scans behind `additionalProperties`
+# and `unevaluatedProperties`. Correcting the source reaches every place this library
+# compiles a regex, including any a future release adds.
+_RampValidator = jsonschema.Draft202012Validator
 
 
 def _refuse_retrieve(uri: str) -> Any:
@@ -898,10 +1030,24 @@ def _decode(raw: bytes) -> tuple[Any, SchemaVerdict]:
         return None, "not_published"
     if len(raw) > MAX_REGISTRATION_SCHEMA_BYTES:
         return None, "too_large"
+    # The ENCODING, still on the raw bytes, because every rule below is stated over a
+    # document and this decides WHICH document that is. RFC 8259 forbids adding a byte
+    # order mark and lets a parser ignore one, so both policies conform and the choice
+    # had to be made once for all three SDKs: ``json.loads`` strips it from bytes and
+    # JavaScript's TextDecoder strips it by default, while Go's parser does not, so the
+    # same document compiled in two SDKs and was malformed in the third. It is refused
+    # — a stripped mark would make the size cap above count three bytes the schema does
+    # not contain, and a mark is only valid at the start of a JSON text, never inside
+    # the ramp.json member this schema lives in.
+    if raw.startswith(codecs.BOM_UTF8):
+        return None, "malformed"
     if _raw_nesting_depth(raw) > MAX_REGISTRATION_SCHEMA_DEPTH:
         return None, "too_deep"
     try:
-        doc = json.loads(raw)
+        # parse_constant refuses NaN, Infinity and -Infinity. RFC 8259 excludes them
+        # from the grammar, but this parser accepts all three as an extension, so
+        # without it a document Go and TypeScript both call malformed compiled here.
+        doc = json.loads(raw, parse_constant=_refuse_json_constant)
     except (ValueError, UnicodeDecodeError):
         return None, "malformed"
     # A JSON OBJECT and nothing else. 2020-12 admits a bare boolean as a schema, but
@@ -944,12 +1090,19 @@ def compile_registration_schema(raw: bytes) -> tuple[RegistrationSchema | None, 
     validator_cls = _RampValidator
     try:
         # check_schema is the metaschema pass; without it an invalid document is only
-        # discovered when a payload happens to reach the broken keyword.
+        # discovered when a payload happens to reach the broken keyword. It runs on the
+        # document AS PUBLISHED — the corrected copy below is this port's private
+        # business and must not be what the author's schema is judged against.
         validator_cls.check_schema(doc)
     except jsonschema.exceptions.SchemaError:
         return None, "uncompilable"
+    # Every regex in the document, rewritten to mean here what it means in the other
+    # two SDKs. This happens AFTER the metaschema pass and after every rule above, so
+    # what is scanned, bounded and validated as a schema is always the published
+    # document; only the copy handed to the matcher carries the correction.
+    corrected = _correct_regexes(doc)
     # No format_checker is passed, deliberately: format, contentEncoding and
     # contentMediaType stay ANNOTATIONS, never assertions. The three languages'
     # libraries default differently, so leaving this to a default would make the same
     # document conform in one SDK and not in another.
-    return RegistrationSchema(validator_cls(doc, registry=_REFUSING_REGISTRY)), "accepted"
+    return RegistrationSchema(validator_cls(corrected, registry=_REFUSING_REGISTRY)), "accepted"

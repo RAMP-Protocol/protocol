@@ -194,18 +194,32 @@ and a consumer **MUST** refuse a schema that does not.
   field is a `Struct` and cannot carry one.
 - **16KB**, measured as the UTF-8 bytes of the member **as served** in this file.
 - **32 nested JSON containers**, counting the schema object itself as the first.
-- **10,000 evaluations**, counted statically as the worst case for one payload. This
+- **10,000 evaluations**, counted statically over the schema — the cost of applying
+  it at **one location** in a payload, so a subschema under `items` is counted once
+  here and evaluated once per element at runtime. This
   is the bound that matters and the one people expect the other two to provide: each
   `anyOf`/`oneOf`/`allOf` branch costs its own subschema and a `$ref` costs its
   target, so branches multiply along a reference chain. A 1,675-byte schema five
   containers deep — a tenth of the size cap — measured 16.7 million evaluations and
   twenty-seven seconds against a two-member payload. A definition nobody references
   costs nothing, so a document may carry a library of them.
-- **A restricted `pattern` alphabet.** A group opens with `(` or `(?:` and nothing
-  else; the escapes `\1`–`\9`, `\A`, `\C`, `\E`, `\G`, `\K`, `\P`, `\Q`, `\S`, `\Z`,
-  `\k`, `\p`, `\s` and `\z` do not appear; a counted repeat does not exceed 1000;
-  `[:` does not appear inside a bracket expression; and a bracket expression closes
-  and does not open with `]`.
+- **A restricted `pattern` alphabet**, stated as what a pattern **may** contain. A
+  group opens with `(` or `(?:` and nothing else; the only escapes are `\$`, `\(`,
+  `\)`, `\*`, `\+`, `\.`, `\/`, `\?`, `\D`, `\W`, `\[`, `\\`, `\]`, `\^`, `\d`,
+  `\f`, `\n`, `\r`, `\t`, `\v`, `\w`, `\{`, `\|`, `\}` and `\xHH` with exactly two
+  hex digits; a counted repeat does not exceed 1000; `[:` does not appear inside a
+  bracket expression; a bracket expression closes and does not open with `]`; and a
+  range endpoint is not a shorthand class (`[\w-x]`).
+- **Patterns live in two places.** `pattern` states its regex as a value and
+  `patternProperties` states its regexes as **keys**. Both are patterns and both are
+  held to the alphabet; they are the only two keywords in the dialect that carry one.
+- **Data is not schema.** `const`, `enum`, `default` and `examples` hold arbitrary
+  JSON values, so the reference, dialect and pattern rules stop at them — a `const`
+  carrying a `$ref` member is a value a payload may equal. Their nesting still counts
+  against the depth cap.
+- **One encoding.** The bytes are well-formed UTF-8 and do not begin with a byte
+  order mark, and a consumer neither strips a mark nor repairs ill-formed bytes.
+  `NaN` and `Infinity` are not JSON and are refused with them.
 - **No nested quantifiers.** A quantified group's body cannot itself repeat or
   branch: `(a+)+`, `(a|a)*` and `([a-z]+)*` are refused, `(?:ab)+` is fine.
 - **Annotations stay annotations.** `format`, `contentEncoding` and
@@ -233,7 +247,21 @@ are valid, with nothing logged.
 Where a construct **can** be reconciled it is not refused — `$`, `\d` and `\w` appear
 in almost every real pattern, and an implementation whose engine reads them
 differently is expected to correct it (match ASCII classes; anchor `$` at the end of
-the text and nowhere else). Only what cannot be reconciled is excluded.
+the text and nowhere else). Only what cannot be reconciled is excluded — `\s`, and
+`\B`, which finds no word boundary in the empty string for RE2 and JavaScript and
+finds one in Python.
+
+That correction has to reach **every** place the implementation compiles a regex, not
+just the `pattern` keyword: `patternProperties` states its regexes as keys, and the
+matched-key scans behind `additionalProperties` and `unevaluatedProperties` compile
+them again. Correcting one and not the others is how a property name that is a
+non-ASCII digit came to match `^\d+$` for one implementation and not the other two.
+
+The alphabet is stated as an **allowlist** for a structural reason: the set of escapes
+three engines disagree about is open-ended, so a list of forbidden ones needs a new
+entry every time somebody finds another, and until then the gap is open. The portable
+set is small and closed, and an author who wants something outside it writes the
+characters out.
 
 The second rule is about **availability**, and it is separate because excluding
 lookaround and backreferences does not cover it. `(a+)+` against a 30-character input

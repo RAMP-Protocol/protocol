@@ -118,11 +118,45 @@ export interface SchemaViolation extends RegistrationFieldErrorShape {
 	keyword: string;
 }
 
-// Escape letters whose meaning is not shared by all three SDK engines. Each would
-// otherwise let one SDK accept a schema another refuses, or — worse, because it is
-// silent — let two SDKs accept the same schema and disagree about which payloads
-// match it. See isSafeSchemaPattern for the full argument.
-const divergentEscapes = new Set("123456789kpPsSAzZQECGK".split(""));
+// Escape letters every engine spells the same way AND reads the same way. This is an
+// ALLOWLIST, and that is the point: the set of escapes the three engines disagree
+// about is open-ended, so enumerating it means adding an entry every time somebody
+// finds another one. See isSafeSchemaPattern for the full argument.
+const portableEscapes = new Set("dDwWnrtfv".split(""));
+
+// The regex metacharacters an author escapes to mean the character itself. Every
+// engine accepts these — they are the characters that NEED escaping, so no dialect can
+// refuse them. Escaping anything else is an "identity escape", and this port is the
+// one that refuses those: ajv compiles every pattern with the `u` flag
+// (`unicodeRegExp` defaults to true), under which ECMA-262 rejects `\-`, `\a` and the
+// rest outright while RE2 and Python accept them.
+const portableSyntaxEscapes = new Set("$()*+./?[\\]^{|}".split(""));
+
+// The escapes standing for a SET of characters rather than one. A set cannot be the
+// endpoint of a range, and the engines disagree about whether saying so ("[\w-x]") is
+// an error or a reinterpretation.
+const shorthandClassEscapes = new Set("dDwW".split(""));
+
+/**
+ * hexEscapeLen reports the length of a `\xHH` escape at `i`, or 0 if there is not one
+ * there. Exactly two hex digits: `\x41` is read the same by all three engines, while
+ * the brace form `\x{41}` is an RE2 spelling the other two refuse and a short `\x4` is
+ * refused by all three.
+ */
+function hexEscapeLen(pattern: string, i: number): number {
+	if (pattern[i] !== "\\" || pattern[i + 1] !== "x" || i + 3 >= pattern.length) return 0;
+	if (!/^[0-9a-fA-F]{2}$/.test(pattern.slice(i + 2, i + 4))) return 0;
+	return 4;
+}
+
+/**
+ * isRangeHyphenAt reports whether the character at `i` is a "-" acting as a range
+ * operator inside a bracket expression, rather than the literal hyphen a class may
+ * end with ("[a-z-]").
+ */
+function isRangeHyphenAt(pattern: string, i: number): boolean {
+	return pattern[i] === "-" && i + 1 < pattern.length && pattern[i + 1] !== "]";
+}
 
 // Keywords whose value is arbitrary JSON DATA rather than a subschema. Their
 // contents are never read as keywords, so a `const` carrying a "$ref" member is
@@ -259,6 +293,11 @@ function hasNestedQuantifier(p: string): boolean {
  * before a trailing newline. Those are not refused — they appear in almost every real
  * pattern — they are corrected in the port that diverges, which is Python.
  *
+ * The escape rule is an ALLOWLIST rather than a list of the divergent escapes, because
+ * the divergent set is open-ended: two successive reviews found new counterexamples by
+ * trying, which is the signature of a rule stated from the wrong side. The portable set
+ * is small, closed and checkable, and the corpus carries it as data.
+ *
  * The last rule is about availability rather than agreement: a quantified group whose
  * body can repeat or branch is refused, because that is what makes backtracking
  * catastrophic and no timer here could stop one.
@@ -272,9 +311,30 @@ export function isSafeSchemaPattern(pattern: string): boolean {
 				// A trailing backslash is not a pattern any engine compiles.
 				return false;
 			}
-			if (divergentEscapes.has(pattern[i + 1]!)) return false;
+			if (hexEscapeLen(pattern, i) > 0) {
+				i += 3; // the whole \xHH is consumed, never re-read as syntax
+				continue;
+			}
+			const next = pattern[i + 1]!;
+			if (!portableEscapes.has(next) && !portableSyntaxEscapes.has(next)) return false;
+			// A range whose endpoint is a shorthand CLASS rather than a character —
+			// "[\w-x]". RE2 reads it as a range and compiles; Python and this runtime
+			// under the `u` flag both refuse it. Only the adjacency is refused.
+			if (inClass && shorthandClassEscapes.has(next) && isRangeHyphenAt(pattern, i + 2)) {
+				return false;
+			}
 			i++; // the escaped character is consumed, never re-read as syntax
 			continue;
+		}
+		// The mirror of the case above: "[a-\w]".
+		if (
+			ch === "-" &&
+			inClass &&
+			isRangeHyphenAt(pattern, i) &&
+			pattern[i + 1] === "\\" &&
+			shorthandClassEscapes.has(pattern[i + 2] ?? "")
+		) {
+			return false;
 		}
 		if (ch === "[") {
 			if (inClass) {
@@ -600,9 +660,15 @@ function checkEvaluationCost(doc: unknown): SchemaVerdict {
  * over-long one degrades to the longest ANCESTOR that fits.
  */
 function clampPointer(pointer: string): string {
-	if (pointer.length <= maxRegistrationFieldErrorPathLen) return pointer;
-	for (let i = pointer.length - 1; i > 0; i--) {
-		if (pointer[i] === "/" && i <= maxRegistrationFieldErrorPathLen) return pointer.slice(0, i);
+	// CODE POINTS, not UTF-16 code units. protovalidate's string.max_len counts
+	// characters, and Go and Python both count them — so measuring `.length` here made
+	// this port clamp a pointer the other two left whole, and a pointer of 201 astral
+	// characters degraded all the way to the empty string, naming the root object where
+	// the others named the failing member.
+	const chars = [...pointer];
+	if (chars.length <= maxRegistrationFieldErrorPathLen) return pointer;
+	for (let i = chars.length - 1; i > 0; i--) {
+		if (chars[i] === "/" && i <= maxRegistrationFieldErrorPathLen) return chars.slice(0, i).join("");
 	}
 	return "";
 }
@@ -614,7 +680,12 @@ function clampPointer(pointer: string): string {
  */
 function clampText(text: string): string {
 	if (!text) return "does not conform to the published schema";
-	return text.slice(0, maxRegistrationFieldErrorTextLen);
+	// CODE POINTS, for the same reason as clampPointer — and here a UTF-16 slice could
+	// also cut through a surrogate pair, emitting a lone surrogate where Go emits valid
+	// UTF-8. The wire counts characters; so does this.
+	const chars = [...text];
+	if (chars.length <= maxRegistrationFieldErrorTextLen) return text;
+	return chars.slice(0, maxRegistrationFieldErrorTextLen).join("");
 }
 
 // Keywords whose constraint is a single schema-side bound worth stating verbatim.
@@ -740,15 +811,13 @@ export class RegistrationSchema {
 		// subschema, so a genuinely failing member vanished from the refusal and the
 		// operator was never told to fix it. A composite that failed with no branch
 		// errors (oneOf matching two branches) is still a leaf and survives.
-		const leaves = errors.filter(
-			(e) =>
-				!errors.some(
-					(o) =>
-						o !== e &&
-						o.instancePath === e.instancePath &&
-						o.schemaPath.startsWith(`${e.schemaPath}/`),
-				),
-		);
+		// A composite is a leaf only when nothing beneath it failed. Nesting is read off
+		// the schema path, and a $ref BREAKS that nesting: the branch's own failure is
+		// reported under "#/$defs/..." rather than under the anyOf, so an anyOf whose
+		// branches are ALL $refs looked childless and survived beside the real error.
+		// "one of several defined formats" is an ordinary registration shape, so the
+		// hop is recognised rather than assumed away.
+		const leaves = errors.filter((e) => !errors.some((o) => o !== e && isBeneath(o, e)));
 
 		const flat: SchemaViolation[] = [];
 		const seen = new Map<string, number>();
@@ -769,6 +838,25 @@ export class RegistrationSchema {
 		flat.sort((a, b) => (a.path === b.path ? cmp(a.keyword, b.keyword) : cmp(a.path, b.path)));
 		return flat.slice(0, maxRegistrationFieldErrors);
 	}
+}
+
+// The keywords that fail as a WHOLE because every branch under them failed. Their own
+// error adds nothing an operator can act on once the branch failures are reported, so
+// it survives only when nothing beneath it did.
+const branchComposites = new Set(["anyOf", "oneOf"]);
+
+/**
+ * isBeneath reports whether error `o` sits under error `e`, so that `e` is a composite
+ * whose real cause is already reported and not a leaf.
+ *
+ * The schema-path test is the ordinary one. The composite test exists because a `$ref`
+ * relocates the branch's failure out from under the composite — it is reported at the
+ * definition it points to — leaving a nesting test nothing to match on.
+ */
+function isBeneath(o: ErrorObject, e: ErrorObject): boolean {
+	if (o.instancePath !== e.instancePath) return false;
+	if (o.schemaPath.startsWith(`${e.schemaPath}/`)) return true;
+	return branchComposites.has(e.keyword) && !branchComposites.has(o.keyword);
 }
 
 /**
@@ -822,6 +910,17 @@ export function compileRegistrationSchema(raw: Uint8Array | string): {
 	// Size first, on the bytes as served and before any parse: an oversized document
 	// must not be decoded to find out that it was oversized.
 	if (bytes.length > maxRegistrationSchemaBytes) return { schema: null, verdict: "too_large" };
+	// A byte order mark is refused. RFC 8259 forbids adding one and lets a parser ignore
+	// one, so both policies conform and the choice had to be made once for all three
+	// SDKs: TextDecoder strips it by default and Python's json.loads strips it from
+	// bytes, while Go's parser does not — so the same document compiled in two SDKs and
+	// was malformed in the third. Refusing is the side that keeps the size cap above
+	// honest, since a stripped mark would make it count three bytes the schema does not
+	// contain, and a mark is only valid at the start of a JSON text, never inside the
+	// ramp.json member this schema lives in.
+	if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+		return { schema: null, verdict: "malformed" };
+	}
 	// Depth SECOND, and still on the raw bytes — before the document is handed to a
 	// JSON parser rather than after. Every parser across the three SDKs descends
 	// recursively, and two of them abort on a deeply nested document in a way this

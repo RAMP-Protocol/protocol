@@ -289,6 +289,39 @@ schema it is not itself enforcing. Same rules, same code, opposite response — 
 is why the SDK face returns a verdict naming WHICH rule broke rather than a bare
 error.
 
+A second review then found the same lesson twice more, in places the fourth dimension
+did not reach.
+
+The alphabet had been written as a list of the escapes the engines disagree about, and
+that list can never be finished. Two rounds of review found new members by trying them
+— `\B`, `\cA`, `\a`, `\012`, `\x{41}`, `\uHHHH`, the identity escapes — and `\B` was the
+dangerous kind, since all three engines compile it and then disagree about the empty
+string. Enumerating the bad set is the wrong side of the rule when the bad set is
+open-ended, which is a judgement this repo had already made twice elsewhere: the SSRF
+guard allowlists URL schemes because "a scheme denylist is unwinnable", and the bare-host
+check compares against a parsed host rather than "a blocklist of the separators anyone
+thought to name". The pattern alphabet is now an allowlist for the same reason, and it
+was derived by running every ASCII escape through all three engines in three positions
+rather than by reasoning about which ones ought to be portable. JSON Schema's own
+interoperability section recommends a subset in the same spirit, and a narrower one.
+
+The correction for a divergence has to reach every place a regex is compiled, not the
+one that is obvious. Overriding the `pattern` KEYWORD left `patternProperties` — whose
+regexes are KEYS — and the matched-key scans behind `additionalProperties` and
+`unevaluatedProperties` all using the library's defaults, so a property name that was a
+non-ASCII digit matched `^\d+$` in one implementation and not the other two. The fix
+moves the correction into the schema SOURCE, once, where every call site reads it,
+including any a future release of the library adds.
+
+And the rules sit on top of a byte decode that nobody had specified. Three
+implementations gave three different answers to a byte order mark, to invalid UTF-8 and
+to `NaN`, not because they disagreed about JSON Schema but because their JSON decoders
+differ: two strip a leading mark and one does not, one repairs ill-formed bytes to
+U+FFFD and enforces a document nobody published, and one accepts JavaScript's numeric
+literals. RFC 8259 permits either mark policy, which is exactly why the contract has to
+pick one — the size cap is defined over the bytes as served, and a parser that silently
+drops three of them is measuring something else.
+
 ## Recipient addressing: a body field, not the signed request URL
 
 Every addressed request carries `exchange`, the bare host of its intended
@@ -773,7 +806,7 @@ autolink pass could not see into. All of it is deleted. `protoc-gen-rampvocab` a
 `gen/go/vocab` stay — they are a real Go-SDK surface the conformance suite uses
 (`pricingunits.IsRegistered`).
 
-## SDK layering: a dependency-free trust core, a vetted-client I/O tier
+## SDK layering: a dial-free trust core, a vetted-client I/O tier
 
 The three SDKs (`sdk/go`, `sdk/ts`, `sdk/python`) are split into a **pure trust
 core** and a separate **I/O tier**, and the two obey opposite dependency rules. The
@@ -782,7 +815,8 @@ the transport-neutral `core` composition — imposes nothing beyond the platform
 standard library and a small set of VETTED libraries, currently a crypto primitive, a
 JCS/canonicalizer, and a JSON Schema engine (the registration-schema face, which is
 pure computation over bytes and dials nothing). The list is closed by review rather
-than by count: what the tier refuses is a DEPENDENCY THAT DIALS, not a dependency. It takes no HTTP client and does not dial the network: `sdk/go/helpers`
+than by count: what the tier refuses is a DEPENDENCY THAT DIALS, not a dependency. It
+takes no HTTP client and does not dial the network: `sdk/go/helpers`
 never constructs an `http.Client`, `sdk/ts/core` imports neither `undici` nor a
 framework, and `ramp_sdk.core` imports no `httpx`. The I/O tier — `sdk/{go,ts,python}/resolvers`
 — is the *only* place a network fetch lives (well-known JWKS, WBA directory,

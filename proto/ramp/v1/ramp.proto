@@ -2751,19 +2751,42 @@ message AccountRegistration {
   //   older draft is refused rather than validated under semantics its author did
   //   not intend.
   //
+  //   Data is not schema. `const`, `enum`, `default` and `examples` hold arbitrary
+  //   JSON VALUES, and their contents are never read as keywords: a `const` whose
+  //   value happens to carry a "$ref" or "$schema" member states a value a payload
+  //   may equal, not a reference to resolve or a dialect to honour. Both rules
+  //   above therefore stop at those four keywords, and so does the pattern
+  //   alphabet. Their nesting still counts against the depth cap. Likewise the
+  //   child keys of `properties`, `patternProperties`, `$defs`, `definitions` and
+  //   `dependentSchemas` are NAMES rather than keywords, so a property called
+  //   "$ref" is a property.
+  //
   //   Bounded size: 16KB, measured as the UTF-8 bytes of this member AS SERVED in
   //   ramp.json.
+  //
+  //   One encoding. The bytes MUST be well-formed UTF-8 (RFC 8259 requires it for
+  //   interchange) and MUST NOT begin with a byte order mark. RFC 8259 forbids
+  //   ADDING a mark and lets a parser ignore one, so both policies conform and the
+  //   choice is made here rather than left to each implementation: parsers differ,
+  //   and one that strips a mark validates a different document — and counts three
+  //   bytes against the size cap that the schema does not contain. A consumer MUST
+  //   NOT repair ill-formed bytes either; substituting U+FFFD silently enforces a
+  //   schema nobody published. A mark is in any case only valid at the start of a
+  //   JSON text, and this is a member inside one.
   //
   //   Bounded depth: 32 nested JSON containers, counting the schema itself as the
   //   first.
   //
-  //   Bounded WORK: 10000 evaluations, counted statically as the worst case for one
-  //   payload — each anyOf/oneOf/allOf branch and prefixItems entry costs its own
-  //   subschema, and a $ref costs its target. The size and depth caps do not bound
-  //   this and are not a substitute for it: branches multiply along a reference
-  //   chain, so a 1.6KB schema five containers deep can cost tens of millions of
-  //   evaluations and tens of seconds against a two-member payload. A definition
-  //   nobody references costs nothing, so a document may carry a library of them.
+  //   Bounded WORK: 10000 evaluations, counted statically over the SCHEMA — each
+  //   anyOf/oneOf/allOf branch and prefixItems entry costs its own subschema, and a
+  //   $ref costs its target. It is the cost of applying the schema at ONE location
+  //   in a payload, not of a whole payload: a subschema under `items` is counted
+  //   once here and evaluated once per element at runtime. The size and depth caps
+  //   do not bound it and are not a substitute for it: branches multiply along a
+  //   reference chain, so a 1.6KB schema five containers deep can cost tens of
+  //   millions of evaluations and tens of seconds against a two-member payload. A
+  //   definition nobody references costs nothing, so a document may carry a library
+  //   of them.
   //
   //   No reference cycles. A $ref chain MUST NOT return to a schema already on it.
   //   The construct is legal JSON Schema and is how a recursive structure is
@@ -2771,24 +2794,42 @@ message AccountRegistration {
   //   validator recurse until it aborts. Registration data describes a business
   //   entity, which is not a recursive shape.
   //
-  //   A portable `pattern` alphabet. A group MUST open with "(" or "(?:" and
-  //   nothing else; the escapes \1, \2, \3, \4, \5, \6, \7, \8, \9, \A, \C, \E,
-  //   \G, \K, \P, \Q, \S, \Z, \k, \p, \s and \z MUST NOT appear (spelled out
-  //   rather than ranged, so a conformance guard can check the set character by
-  //   character); a counted repeat MUST NOT exceed 1000; "[:"
-  //   MUST NOT appear inside a bracket expression; and a bracket expression MUST
-  //   close and MUST NOT open with "]". Draft 2020-12 patterns are ECMA-262, but
-  //   the engines implementations run do not agree on it. Some of the disagreement
-  //   is loud — RE2 refuses the lookaround, atomic groups and backreferences ECMA
-  //   allows, so a schema using them compiles for one implementation and fails for
-  //   another. The rest is SILENT, and is why this is a MUST rather than a SHOULD:
-  //   inline flags, Unicode property classes, text anchors and POSIX bracket names
-  //   are accepted by one engine and either refused or read DIFFERENTLY by the
-  //   next, so two conformant validators both compile the pattern and then disagree
-  //   about which payloads match it, with nothing logged. `\s` is the plainest
-  //   example — RE2 reads it as [\t\n\f\r ], Python adds the vertical tab, and
-  //   ECMA-262 adds that plus every Unicode space separator. An explicit character
-  //   class says what was meant and means it everywhere.
+  //   A portable `pattern` alphabet, stated as what a pattern MAY contain rather
+  //   than as what it may not. A group MUST open with "(" or "(?:" and nothing
+  //   else; only the escapes \$, \(, \), \*, \+, \., \/, \?, \D, \W, \[, \\, \],
+  //   \^, \d, \f, \n, \r, \t, \v, \w, \{, \| and \} MAY appear, together with \xHH
+  //   carrying exactly two hexadecimal digits (spelled out rather than ranged, so a
+  //   conformance guard can check the set character by character); a counted repeat
+  //   MUST NOT exceed 1000; "[:" MUST NOT appear inside a bracket expression; a
+  //   bracket expression MUST close and MUST NOT open with "]"; and a range
+  //   endpoint MUST NOT be one of the shorthand classes ("[\w-x]").
+  //
+  //   The direction of that rule is the rule. Draft 2020-12 patterns are ECMA-262,
+  //   but the engines implementations run do not agree on it, and the set they
+  //   disagree about has no end: it grows with every dialect and every library
+  //   version, so a list of forbidden escapes needs a new entry each time somebody
+  //   finds one, and until then the gap is open. The portable set is small and
+  //   closed, and an author who wants a construct outside it writes the characters
+  //   out instead.
+  //
+  //   Some of the disagreement is loud — RE2 refuses the lookaround, atomic groups
+  //   and backreferences ECMA allows, so a schema using them compiles for one
+  //   implementation and fails for another. The rest is SILENT, and is why this is
+  //   a MUST rather than a SHOULD: inline flags, Unicode property classes, text
+  //   anchors and POSIX bracket names are accepted by one engine and either refused
+  //   or read DIFFERENTLY by the next, so two conformant validators both compile
+  //   the pattern and then disagree about which payloads match it, with nothing
+  //   logged. `\s` and `\B` are the plainest examples — RE2 reads `\s` as
+  //   [\t\n\f\r ], Python adds the vertical tab, and ECMA-262 adds that plus every
+  //   Unicode space separator; `\B` finds no word boundary in the empty string for
+  //   RE2 and ECMA-262 and finds one for Python. An explicit character class says
+  //   what was meant and means it everywhere.
+  //
+  //   Where a pattern may appear. `pattern` states its regex as a value and
+  //   `patternProperties` states its regexes as KEYS; both are patterns and both
+  //   are held to the alphabet above. They are the only two keywords in the dialect
+  //   that carry one — `propertyNames` reaches the rule through the subschema it
+  //   applies.
   //
   //   No nested quantifiers. A quantified group MUST NOT have a body that can
   //   itself repeat or branch: `(a+)+`, `(a|a)*` and `([a-z]+)*` are refused, while

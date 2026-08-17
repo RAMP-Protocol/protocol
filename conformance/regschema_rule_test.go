@@ -68,7 +68,7 @@ type sdkRegSchemaRule struct {
 	MaxDepth       int    `json:"max_schema_depth"`
 	MaxEvaluations int    `json:"max_schema_evaluations"`
 	MaxRepeat      int    `json:"max_pattern_repeat"`
-	ForbiddenEsc   string `json:"forbidden_pattern_escapes"`
+	PortableEsc    string `json:"portable_pattern_escapes"`
 	MaxErrors      uint64 `json:"max_field_errors"`
 	MaxPathLen     uint64 `json:"max_field_error_path_len"`
 	MaxErrTextLn   uint64 `json:"max_field_error_text_len"`
@@ -76,7 +76,7 @@ type sdkRegSchemaRule struct {
 
 var errNoSDKRegSchemaRule = errors.New(
 	regSchemaVectors + " is missing one of dialect / max_schema_bytes / max_schema_depth / " +
-		"max_schema_evaluations / max_pattern_repeat / forbidden_pattern_escapes / " +
+		"max_schema_evaluations / max_pattern_repeat / portable_pattern_escapes / " +
 		"max_field_errors / max_field_error_path_len / max_field_error_text_len — this guard reads " +
 		"the SDK's copy of the registration-schema rules from there")
 
@@ -93,7 +93,7 @@ var sdkRegRule = sync.OnceValues(func() (sdkRegSchemaRule, error) {
 		return sdkRegSchemaRule{}, err
 	}
 	if doc.Dialect == "" || doc.MaxBytes == 0 || doc.MaxDepth == 0 ||
-		doc.MaxEvaluations == 0 || doc.MaxRepeat == 0 || doc.ForbiddenEsc == "" ||
+		doc.MaxEvaluations == 0 || doc.MaxRepeat == 0 || doc.PortableEsc == "" ||
 		doc.MaxErrors == 0 || doc.MaxPathLen == 0 || doc.MaxErrTextLn == 0 {
 		return sdkRegSchemaRule{}, errNoSDKRegSchemaRule
 	}
@@ -174,17 +174,22 @@ func TestSDKRegistrationFailureBoundsMatchTheWire(t *testing.T) {
 
 // escapeListRe pulls the escape sentence out of the comment. The list is spelled out
 // character by character in the contract precisely so this can read it back.
-var escapeListRe = regexp.MustCompile(`the escapes ((?:\\.(?:, )?| and )+) MUST NOT appear`)
+var escapeListRe = regexp.MustCompile(`only the escapes ((?:\\.(?:, )?| and )+) MAY appear`)
 
 // assertEscapeSetsMatch compares the alphabet the contract states with the one the SDK
 // enforces, in both directions.
+//
+// Both directions matter, and the one-directional version was self-satisfying: it read
+// the SDK's set out of the corpus, and the corpus regenerates from the SDK, so dropping
+// an escape from all three SDKs dropped it from the corpus too and the guard was
+// comparing the mutation against itself. Only the contract is an independent witness.
 func assertEscapeSetsMatch(t *testing.T, comment, sdkEscapes string) {
 	t.Helper()
 	m := escapeListRe.FindStringSubmatch(comment)
 	if m == nil {
 		t.Fatalf("AccountRegistration.data_schema no longer carries a readable "+
-			"\"the escapes ... MUST NOT appear\" list — this half of the guard has lost its anchor.\n"+
-			"  the SDK forbids: %q", sdkEscapes)
+			"\"only the escapes ... MAY appear\" list — this half of the guard has lost its anchor.\n"+
+			"  the SDK admits: %q", sdkEscapes)
 	}
 	contract := map[rune]bool{}
 	for _, tok := range regexp.MustCompile(`\\(.)`).FindAllStringSubmatch(m[1], -1) {
@@ -196,17 +201,17 @@ func assertEscapeSetsMatch(t *testing.T, comment, sdkEscapes string) {
 	}
 	for r := range contract {
 		if !sdk[r] {
-			t.Errorf("the contract forbids the escape %s and the SDK does not.\n"+
+			t.Errorf("the contract admits the escape %s and the SDK does not.\n"+
 				"  contract (authoritative): AccountRegistration.data_schema\n"+
 				"  SDK (%s): %q\n"+
-				"A rule the contract publishes and nothing enforces is worse than no rule.",
+				"An author following the contract would write a pattern this SDK refuses.",
 				strconv.QuoteRune(r), regSchemaVectors, sdkEscapes)
 		}
 	}
 	for r := range sdk {
 		if !contract[r] {
-			t.Errorf("the SDK forbids the escape %s and the contract does not name it.\n"+
-				"  An implementor reading only the contract would admit a pattern this SDK refuses.",
+			t.Errorf("the SDK admits the escape %s and the contract does not name it.\n"+
+				"  An implementor reading only the contract would refuse a pattern this SDK admits.",
 				strconv.QuoteRune(r))
 		}
 	}
@@ -304,15 +309,22 @@ func TestDataSchemaCommentStatesTheRulesTheSDKEnforces(t *testing.T) {
 		{"no nested quantifiers", "No nested quantifiers"},
 		{"format and friends are annotations", "MUST NOT assert format"},
 		{"the object-only rule", "MUST be a JSON object"},
+		// The two rules the SDK applies that the contract used to leave unsaid. An
+		// implementor reading only the contract accepted schemas the SDK refuses, and
+		// refused schemas the SDK accepts.
+		{"patternProperties keys are patterns", "patternProperties"},
+		{"const and friends hold data, not schema", "const"},
+		// The encoding, which decides WHICH document every rule above is read against.
+		{"UTF-8 with no byte order mark", "byte order mark"},
 	}
 	// The alphabet itself, character by character, so an escape dropped from the SDK
 	// is an escape the contract stops naming.
-	for _, r := range want.ForbiddenEsc {
+	for _, r := range want.PortableEsc {
 		checks = append(checks, struct {
 			rule   string
 			phrase string
 		}{
-			rule:   "the forbidden escape " + strconv.QuoteRune(r),
+			rule:   "the admitted escape " + strconv.QuoteRune(r),
 			phrase: `\` + string(r),
 		})
 	}
@@ -322,7 +334,7 @@ func TestDataSchemaCommentStatesTheRulesTheSDKEnforces(t *testing.T) {
 	// SDK's side of the comparison too, so the set shrinks on both sides and the guard
 	// stays green while the contract still promises a rule nothing enforces. The
 	// contract is authoritative, so its set is the one that decides.
-	assertEscapeSetsMatch(t, comment, want.ForbiddenEsc)
+	assertEscapeSetsMatch(t, comment, want.PortableEsc)
 
 	for _, c := range checks {
 		if !strings.Contains(comment, c.phrase) {

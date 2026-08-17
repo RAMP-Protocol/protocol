@@ -299,10 +299,47 @@
       "name": "required_is_not_a_list",
       "schema": "{\"type\":\"object\",\"required\":\"vat_id\"}",
       "expected_verdict": "uncompilable"
+    },
+    {
+      "name": "nan_literal",
+      "schema": "{\"type\":\"object\",\"properties\":{\"k\":{\"const\":NaN}}}",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "infinity_literal",
+      "schema": "{\"type\":\"object\",\"properties\":{\"k\":{\"const\":Infinity}}}",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "negative_infinity_literal",
+      "schema": "{\"type\":\"object\",\"properties\":{\"k\":{\"const\":-Infinity}}}",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "byte_order_mark_before_the_document",
+      "schema": "﻿{\"type\":\"object\"}",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "invalid_utf8_inside_a_string",
+      "schema": "",
+      "schema_b64": "eyJ0eXBlIjoib2JqZWN0IiwidGl0bGUiOiL//iJ9",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "invalid_utf8_inside_a_pattern",
+      "schema": "",
+      "schema_b64": "eyJ0eXBlIjoib2JqZWN0IiwicHJvcGVydGllcyI6eyJrIjp7InR5cGUiOiJzdHJpbmciLCJwYXR0ZXJuIjoiXmH/JCJ9fX0=",
+      "expected_verdict": "malformed"
+    },
+    {
+      "name": "a_lone_continuation_byte_at_the_head",
+      "schema": "",
+      "schema_b64": "gHsidHlwZSI6Im9iamVjdCJ9",
+      "expected_verdict": "malformed"
     }
   ],
   "dialect": "https://json-schema.org/draft/2020-12/schema",
-  "forbidden_pattern_escapes": "123456789ACEGKPQSZkpsz",
   "match": [
     {
       "name": "anchored_literal_exact",
@@ -347,12 +384,6 @@
       "matches": true
     },
     {
-      "name": "word_boundary_ascii",
-      "pattern": "^\\w+\\b$",
-      "value": "acme",
-      "matches": true
-    },
-    {
       "name": "digits_arabic_indic",
       "pattern": "^\\d+$",
       "value": "١٢٣",
@@ -386,6 +417,18 @@
       "name": "explicit_space_refuses_nbsp",
       "pattern": "^a[ \\t]b$",
       "value": "a b",
+      "matches": false
+    },
+    {
+      "name": "hex_escape_matches",
+      "pattern": "^\\x41$",
+      "value": "A",
+      "matches": true
+    },
+    {
+      "name": "hex_escape_refuses_another_letter",
+      "pattern": "^\\x41$",
+      "value": "B",
       "matches": false
     },
     {
@@ -624,6 +667,86 @@
       "safe": false
     },
     {
+      "name": "word_boundary",
+      "pattern": "\\bword\\b",
+      "safe": false
+    },
+    {
+      "name": "non_word_boundary",
+      "pattern": "a\\Bb",
+      "safe": false
+    },
+    {
+      "name": "backspace_in_class",
+      "pattern": "[\\b]",
+      "safe": false
+    },
+    {
+      "name": "control_escape",
+      "pattern": "\\cA",
+      "safe": false
+    },
+    {
+      "name": "js_unicode_escape",
+      "pattern": "\\u0041",
+      "safe": false
+    },
+    {
+      "name": "alert_escape",
+      "pattern": "\\a",
+      "safe": false
+    },
+    {
+      "name": "identity_escape_hyphen",
+      "pattern": "a\\-z",
+      "safe": false
+    },
+    {
+      "name": "identity_escape_underscore",
+      "pattern": "\\_",
+      "safe": false
+    },
+    {
+      "name": "class_range_from_a_class",
+      "pattern": "[\\w-x]",
+      "safe": false
+    },
+    {
+      "name": "hex_escape",
+      "pattern": "^\\x41$",
+      "safe": true
+    },
+    {
+      "name": "hex_escape_lowercase_in_class",
+      "pattern": "^[\\x0a]$",
+      "safe": true
+    },
+    {
+      "name": "brace_hex_escape",
+      "pattern": "\\x{41}",
+      "safe": false
+    },
+    {
+      "name": "short_hex_escape",
+      "pattern": "\\x4",
+      "safe": false
+    },
+    {
+      "name": "non_hex_escape",
+      "pattern": "\\xZZ",
+      "safe": false
+    },
+    {
+      "name": "null_escape",
+      "pattern": "\\0",
+      "safe": false
+    },
+    {
+      "name": "octal_escape",
+      "pattern": "\\012",
+      "safe": false
+    },
+    {
       "name": "quantified_group_with_inner_plus",
       "pattern": "(a+)+$",
       "safe": false
@@ -704,6 +827,7 @@
       "safe": false
     }
   ],
+  "portable_pattern_escapes": "$()*+./?DW[\\]^dfnrtvw{|}",
   "validate": [
     {
       "name": "a_conforming_payload",
@@ -815,6 +939,58 @@
       ],
       "expected_keywords": [
         "minProperties"
+      ]
+    },
+    {
+      "name": "a_pattern_properties_key_against_a_non_ascii_digit",
+      "schema": "{\"type\":\"object\",\"patternProperties\":{\"^\\\\d+$\":{\"type\":\"string\"}},\"additionalProperties\":false}",
+      "data": {
+        "١٢٣": "x"
+      },
+      "expected_paths": [
+        ""
+      ],
+      "expected_keywords": [
+        "additionalProperties"
+      ]
+    },
+    {
+      "name": "a_pattern_properties_key_against_a_trailing_newline",
+      "schema": "{\"type\":\"object\",\"patternProperties\":{\"^a$\":{\"type\":\"string\"}},\"additionalProperties\":false}",
+      "data": {
+        "a\n": "x"
+      },
+      "expected_paths": [
+        ""
+      ],
+      "expected_keywords": [
+        "additionalProperties"
+      ]
+    },
+    {
+      "name": "a_pattern_properties_key_that_matches",
+      "schema": "{\"type\":\"object\",\"patternProperties\":{\"^\\\\d+$\":{\"type\":\"string\"}},\"additionalProperties\":false}",
+      "data": {
+        "123": 7
+      },
+      "expected_paths": [
+        "/123"
+      ],
+      "expected_keywords": [
+        "type"
+      ]
+    },
+    {
+      "name": "a_composite_whose_branches_are_all_refs",
+      "schema": "{\"type\":\"object\",\"$defs\":{\"i\":{\"type\":\"integer\"},\"b\":{\"type\":\"boolean\"}},\"properties\":{\"k\":{\"anyOf\":[{\"$ref\":\"#/$defs/i\"},{\"$ref\":\"#/$defs/b\"}]}}}",
+      "data": {
+        "k": "x"
+      },
+      "expected_paths": [
+        "/k"
+      ],
+      "expected_keywords": [
+        "type"
       ]
     },
     {

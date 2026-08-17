@@ -32,6 +32,7 @@ package helpers
 // INFRASTRUCTURE, not the code under test.
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -46,9 +47,13 @@ import (
 // defined over the bytes as served, so a corpus that re-encoded the schema could not
 // state the boundary case at all; and a port reads the same bytes this face read.
 type compileVector struct {
-	Name    string `json:"name"`
-	Schema  string `json:"schema"`
-	Verdict string `json:"expected_verdict"`
+	Name   string `json:"name"`
+	Schema string `json:"schema"`
+	// SchemaB64 carries the input as base64 when it is not expressible as a JSON
+	// string — invalid UTF-8. Exactly one of Schema and SchemaB64 is set; a replay
+	// prefers SchemaB64 when present and UTF-8-encodes Schema otherwise.
+	SchemaB64 string `json:"schema_b64,omitempty"`
+	Verdict   string `json:"expected_verdict"`
 }
 
 // validateVector is one Validate case. Paths and Keywords run in parallel: entry i
@@ -173,13 +178,16 @@ func buildRegSchemaMatchVectors(t *testing.T) []matchVector {
 		// ASCII in the other two, so a non-ASCII digit or letter conformed in one port
 		// alone.
 		{"digits_ascii", `^\d+$`, "12345", true},
-		{"word_boundary_ascii", `^\w+\b$`, "acme", true},
 		{"digits_arabic_indic", `^\d+$`, "١٢٣", false},
 		{"digits_fullwidth", `^\d+$`, "１２３", false},
 		{"word_ascii", `^\w+$`, "abc_123", true},
 		{"word_latin_supplement", `^\w+$`, "Ä", false},
 		{"explicit_space_matches", `^a[ \t]b$`, "a b", true},
 		{"explicit_space_refuses_nbsp", `^a[ \t]b$`, "a\u00a0b", false},
+		// \xHH is the one escape admitted by shape rather than by letter, so its
+		// meaning is pinned here as well as its acceptance.
+		{"hex_escape_matches", `^\x41$`, "A", true},
+		{"hex_escape_refuses_another_letter", `^\x41$`, "B", false},
 
 		// Ordinary matching, so the dimension is not only about the edge cases.
 		{"class_range", "^[a-z0-9-]+$", "acme-gmbh", true},
@@ -351,9 +359,27 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 		// Well-formed JSON, past every rule above, and still not a 2020-12 schema.
 		{"type_names_a_type_that_does_not_exist", `{"type":"objekt"}`, SchemaUncompilable},
 		{"required_is_not_a_list", `{"type":"object","required":"vat_id"}`, SchemaUncompilable},
+
+		// Refused — the ENCODING, which decides WHICH document the rules above are
+		// read against. Each of these got three different answers from the three SDKs
+		// before it was pinned here, and none of it was the JSON grammar's doing: it
+		// was the byte decode in front of it.
+		//
+		// NaN and Infinity are not JSON (RFC 8259 §6 excludes them from the grammar),
+		// but Python's json.loads accepts all three as an extension.
+		{"nan_literal", `{"type":"object","properties":{"k":{"const":NaN}}}`, SchemaMalformed},
+		{"infinity_literal", `{"type":"object","properties":{"k":{"const":Infinity}}}`, SchemaMalformed},
+		{"negative_infinity_literal", `{"type":"object","properties":{"k":{"const":-Infinity}}}`, SchemaMalformed},
+		// A byte order mark. RFC 8259 forbids adding one and permits a parser to
+		// ignore one, so both policies conform and the choice had to be made once for
+		// all three — Python and JavaScript strip it during the byte decode, Go does
+		// not. It is refused: a stripped mark would make the size cap count three
+		// bytes the schema does not contain, and a mark is only valid at the start of
+		// a JSON text, never inside ramp.json where this member lives.
+		{"byte_order_mark_before_the_document", "\ufeff" + `{"type":"object"}`, SchemaMalformed},
 	}
 
-	out := make([]compileVector, 0, len(cases))
+	out := make([]compileVector, 0, len(cases)+len(rawByteCompileCases))
 	for _, c := range cases {
 		_, got := CompileRegistrationSchema([]byte(c.schema))
 		if got != c.want {
@@ -361,7 +387,50 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 		}
 		out = append(out, compileVector{Name: c.name, Schema: c.schema, Verdict: got.String()})
 	}
+	// The byte-valued cases, carried as base64 because they are not expressible as a
+	// JSON string at all. The size cap and the encoding rule are both defined over
+	// the bytes AS SERVED, so a corpus that could only state well-formed UTF-8 could
+	// not state the rule that decides what well-formed means.
+	for _, c := range rawByteCompileCases {
+		_, got := CompileRegistrationSchema(c.raw)
+		if got != c.want {
+			t.Fatalf("compile vector %s: oracle verdict=%s, intended=%s", c.name, got, c.want)
+		}
+		out = append(out, compileVector{
+			Name:      c.name,
+			SchemaB64: base64.StdEncoding.EncodeToString(c.raw),
+			Verdict:   got.String(),
+		})
+	}
 	return out
+}
+
+// rawByteCompileCases are compile cases whose input is a byte sequence rather than
+// text. Invalid UTF-8 is the reason this exists: Go's encoding/json silently repairs
+// an ill-formed byte to U+FFFD, so without an explicit validity check the document
+// enforced is not the document served — a `pattern` or `const` carrying one bad byte
+// would be enforced with a different character inside it, silently, while the two
+// ports refuse the same bytes outright.
+var rawByteCompileCases = []struct {
+	name string
+	raw  []byte
+	want SchemaVerdict
+}{
+	{
+		name: "invalid_utf8_inside_a_string",
+		raw:  []byte(`{"type":"object","title":"` + "\xff\xfe" + `"}`),
+		want: SchemaMalformed,
+	},
+	{
+		name: "invalid_utf8_inside_a_pattern",
+		raw:  []byte(`{"type":"object","properties":{"k":{"type":"string","pattern":"^a` + "\xff" + `$"}}}`),
+		want: SchemaMalformed,
+	},
+	{
+		name: "a_lone_continuation_byte_at_the_head",
+		raw:  []byte("\x80" + `{"type":"object"}`),
+		want: SchemaMalformed,
+	},
 }
 
 // buildRegSchemaValidateVectors enumerates what a refusal has to SAY. The pointer
@@ -443,6 +512,50 @@ func buildRegSchemaValidateVectors(t *testing.T) []validateVector {
 			data:         map[string]any{"legal_name": "Acme GmbH"},
 			wantPaths:    []string{""},
 			wantKeywords: []string{"minProperties"},
+		},
+		{
+			// patternProperties states its regexes as KEYS, so a port that corrects
+			// matching by overriding the `pattern` KEYWORD does not reach them. The
+			// match dimension cannot catch this — it drives patterns directly — so the
+			// route is pinned here instead. A non-ASCII digit must fail the key test in
+			// every port, leaving the member unmatched and additionalProperties to
+			// refuse it.
+			name:         "a_pattern_properties_key_against_a_non_ascii_digit",
+			schema:       `{"type":"object","patternProperties":{"^\\d+$":{"type":"string"}},"additionalProperties":false}`,
+			data:         map[string]any{"١٢٣": "x"},
+			wantPaths:    []string{""},
+			wantKeywords: []string{"additionalProperties"},
+		},
+		{
+			// The same route, against the trailing-newline divergence rather than the
+			// character-class one.
+			name:         "a_pattern_properties_key_against_a_trailing_newline",
+			schema:       `{"type":"object","patternProperties":{"^a$":{"type":"string"}},"additionalProperties":false}`,
+			data:         map[string]any{"a\n": "x"},
+			wantPaths:    []string{""},
+			wantKeywords: []string{"additionalProperties"},
+		},
+		{
+			// A key the pattern DOES match, so the vector above is pinning a refusal
+			// rather than a schema nothing can satisfy.
+			name:         "a_pattern_properties_key_that_matches",
+			schema:       `{"type":"object","patternProperties":{"^\\d+$":{"type":"string"}},"additionalProperties":false}`,
+			data:         map[string]any{"123": 7},
+			wantPaths:    []string{"/123"},
+			wantKeywords: []string{"type"},
+		},
+		{
+			// Every branch of the composite is a $ref. A leaf filter keyed on schema
+			// path nesting does not recognise the hop — the leaf reports under $defs,
+			// not under the anyOf — and the composite's own failure survives as an
+			// extra, less specific error beside the real one. Naming one of several
+			// defined formats is an ordinary registration shape, so this is reachable.
+			name: "a_composite_whose_branches_are_all_refs",
+			schema: `{"type":"object","$defs":{"i":{"type":"integer"},"b":{"type":"boolean"}},` +
+				`"properties":{"k":{"anyOf":[{"$ref":"#/$defs/i"},{"$ref":"#/$defs/b"}]}}}`,
+			data:         map[string]any{"k": "x"},
+			wantPaths:    []string{"/k"},
+			wantKeywords: []string{"type"},
 		},
 		{
 			// Both branches fail the same keyword at the same pointer, so the answer
@@ -678,6 +791,45 @@ func buildRegSchemaPatternVectors(t *testing.T) []patternVector {
 		{"literal_span", `\Qa.b\E`, false},
 		{"posix_class", "^[[:alpha:]]+$", false},
 
+		// Refused by the ALLOWLIST rather than by a named exclusion. Each of these was
+		// admitted while the rule enumerated the divergent escapes instead of the
+		// portable ones, and each was found by trying rather than by reasoning — which
+		// is the argument for stating the rule from this side.
+		//
+		// \B is the one that matters most: all three engines compile it and then
+		// disagree about the empty string, where RE2 and ECMA-262 find no word boundary
+		// and Python does. Nothing errors, so only a match test could ever have caught
+		// it. \b agrees on its own and is refused with it, because it is near-useless
+		// in an anchored field matcher and [\b] is a different construct that RE2
+		// rejects outright.
+		{"word_boundary", `\bword\b`, false},
+		{"non_word_boundary", `a\Bb`, false},
+		{"backspace_in_class", `[\b]`, false},
+		// A control escape, a JavaScript-only unicode escape, and an alert: each
+		// compiles somewhere and fails somewhere else.
+		{"control_escape", `\cA`, false},
+		{"js_unicode_escape", "\\u0041", false},
+		{"alert_escape", `\a`, false},
+		// An identity escape — a backslash before a character that is not a regex
+		// metacharacter. RE2 and Python allow it; ECMA-262 under the `u` flag refuses
+		// it, and the TypeScript validator compiles every pattern with that flag. The
+		// character itself is always admitted, so the rewrite is to delete a backslash.
+		{"identity_escape_hyphen", `a\-z`, false},
+		{"identity_escape_underscore", `\_`, false},
+		{"class_range_from_a_class", `[\w-x]`, false},
+		// \xHH is admitted by SHAPE — exactly two hex digits. The brace form is an RE2
+		// spelling the other two refuse, and a short one is refused by all three.
+		{"hex_escape", `^\x41$`, true},
+		{"hex_escape_lowercase_in_class", `^[\x0a]$`, true},
+		{"brace_hex_escape", `\x{41}`, false},
+		{"short_hex_escape", `\x4`, false},
+		{"non_hex_escape", `\xZZ`, false},
+		// \0 agrees on its own and is still refused: admitting it would consume the
+		// "\0" of "\012" and leave "12" as literals, silently admitting an octal escape
+		// the engines do NOT agree on.
+		{"null_escape", `\0`, false},
+		{"octal_escape", `\012`, false},
+
 		// Refused — nested quantifiers. Catastrophic backtracking needs neither
 		// lookaround nor backreferences, so the escape list above does not cover it,
 		// and no timer in the backtracking ports could: a regex spin holds CPython's
@@ -726,11 +878,20 @@ func buildRegSchemaPatternVectors(t *testing.T) []patternVector {
 	return out
 }
 
-// forbiddenPatternEscapes renders the divergent-escape set as sorted characters, so
-// the corpus carries the rule itself rather than a description of it.
-func forbiddenPatternEscapes() string {
-	out := make([]byte, 0, len(divergentEscapes))
-	for c := range divergentEscapes {
+// portablePatternEscapes renders the admitted escape set as sorted characters, so the
+// corpus carries the rule itself rather than a description of it. Both halves are
+// emitted together — the classes and control characters, and the metacharacters that
+// stand for themselves — because the contract states one alphabet, not two.
+//
+// `x` is deliberately absent: \xHH is admitted by shape, not by letter, so a single
+// character could not represent it and a port that dropped the two-hex-digit rule
+// would still match this string.
+func portablePatternEscapes() string {
+	out := make([]byte, 0, len(portableEscapes)+len(portableSyntaxEscapes))
+	for c := range portableEscapes {
+		out = append(out, c)
+	}
+	for c := range portableSyntaxEscapes {
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
@@ -769,13 +930,13 @@ func TestGenerateRegSchemaVectors(t *testing.T) {
 		// tier compares these against the contract's own wording, and a rule stated
 		// only in prose on both sides is one nothing compares: dropping an escape from
 		// all three SDKs used to leave every gate green.
-		"forbidden_pattern_escapes": forbiddenPatternEscapes(),
-		"max_pattern_repeat":        maxPortableRepeat,
-		"verdicts":                  schemaVerdictVocabulary(),
-		"compile":                   buildRegSchemaCompileVectors(t),
-		"validate":                  buildRegSchemaValidateVectors(t),
-		"pattern":                   buildRegSchemaPatternVectors(t),
-		"match":                     buildRegSchemaMatchVectors(t),
+		"portable_pattern_escapes": portablePatternEscapes(),
+		"max_pattern_repeat":       maxPortableRepeat,
+		"verdicts":                 schemaVerdictVocabulary(),
+		"compile":                  buildRegSchemaCompileVectors(t),
+		"validate":                 buildRegSchemaValidateVectors(t),
+		"pattern":                  buildRegSchemaPatternVectors(t),
+		"match":                    buildRegSchemaMatchVectors(t),
 	}
 	path := filepath.Join("testdata", "registration-schema-vectors.json")
 	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {

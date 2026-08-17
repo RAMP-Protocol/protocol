@@ -125,6 +125,9 @@ const RegistrationSchemaCompileTimeout = 2 * time.Second
 // is refused rather than validated under semantics its author did not intend.
 const RegistrationSchemaDialect = "https://json-schema.org/draft/2020-12/schema"
 
+// utf8BOM is the UTF-8 encoding of U+FEFF, refused at the head of a schema.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 // SchemaVerdict is the outcome of compiling a published data_schema.
 type SchemaVerdict int
 
@@ -266,6 +269,30 @@ func CompileRegistrationSchema(raw []byte) (*RegistrationSchema, SchemaVerdict) 
 	// must not be decoded to find out that it was oversized.
 	if len(raw) > MaxRegistrationSchemaBytes {
 		return nil, SchemaTooLarge
+	}
+	// The ENCODING, still on the raw bytes, because every rule below is stated over a
+	// document and these two decide which document that is.
+	//
+	// Invalid UTF-8 is refused rather than repaired. encoding/json silently replaces
+	// an ill-formed byte with U+FFFD, so without this check the schema compiled here
+	// is not the schema that was served — a `const` or a `pattern` carrying one bad
+	// byte would be enforced with a different character in it, and the two ports
+	// refuse the same document outright. RFC 8259 requires UTF-8 for interchange.
+	//
+	// A byte order mark is refused too. RFC 8259 forbids adding one and lets a parser
+	// ignore one, so both policies conform and the choice has to be made once for all
+	// three: Python's json.loads strips it from bytes and JavaScript's TextDecoder
+	// strips it by default, while Go's parser does not, and three implementations
+	// disagreeing about the same document is the failure this face exists to prevent.
+	// Refusing is the side that keeps MaxRegistrationSchemaBytes honest — a stripped
+	// mark would make the cap count three bytes that the schema does not contain. It
+	// also cannot legitimately occur on the wire: a mark is only valid at the start of
+	// a JSON text, and data_schema is a member INSIDE ramp.json.
+	if !utf8.Valid(raw) {
+		return nil, SchemaMalformed
+	}
+	if bytes.HasPrefix(raw, utf8BOM) {
+		return nil, SchemaMalformed
 	}
 	// Depth SECOND, and still on the raw bytes — before the document is handed to a
 	// JSON parser rather than after. Every parser here descends recursively, and two
@@ -815,31 +842,90 @@ func isRegistrationSchemaDialect(s string) bool {
 	return s == RegistrationSchemaDialect || s == RegistrationSchemaDialect+"#"
 }
 
-// divergentEscapes are the escape letters whose meaning is not shared by all three
-// engines. Each would otherwise let one SDK accept a schema another refuses, or —
-// worse, because it is silent — let two SDKs accept the same schema and disagree
-// about which payloads match it.
+// portableEscapes are the escape letters every engine spells the same way AND reads
+// the same way. It is an ALLOWLIST, and that is the whole point: the set of escapes
+// the three engines disagree about is open-ended, so enumerating it means adding an
+// entry every time somebody finds another one. Two successive reviews found new
+// counterexamples by trying, which is the signature of a rule stated from the wrong
+// side. The portable set, by contrast, is small, closed and checkable.
 //
-//	1-9, k  backreferences (\1, \k<name>): RE2 has neither, and both are the
-//	        classic catastrophic-backtracking construct in the engines that do.
-//	p, P    Unicode property classes: RE2 has them, ECMA-262 needs the `u` flag
-//	        that a JSON Schema `pattern` is not compiled with.
-//	s, S    the whitespace class: three engines, three different sets. RE2 is
-//	        [\t\n\f\r ], Python adds the vertical tab, and ECMA-262 adds both that
-//	        and every Unicode space separator — so `^a\sb$` accepts a non-breaking
-//	        space in one SDK and refuses it in the other two. An explicit class
-//	        says exactly what is meant and means it everywhere.
-//	A, z, Z text anchors: RE2 spells them, ECMA-262 has only ^ and $.
-//	Q, E    literal spans: RE2 only.
-//	C, G, K single-engine escapes with no counterpart anywhere else.
-var divergentEscapes = map[byte]bool{
-	'1': true, '2': true, '3': true, '4': true, '5': true,
-	'6': true, '7': true, '8': true, '9': true,
-	'k': true, 'p': true, 'P': true,
-	's': true, 'S': true,
-	'A': true, 'z': true, 'Z': true,
-	'Q': true, 'E': true,
-	'C': true, 'G': true, 'K': true,
+//	d, D, w, W  the digit and word classes, once Python is pinned to ASCII. These
+//	            are the two the whole feature would be useless without.
+//	n, r, t, f, v  the control characters, identical everywhere.
+//
+// `x` is admitted separately, and only as \xHH with exactly two hex digits — see
+// hexEscapeLen. Nothing else is: \0 is excluded even though it agrees on its own,
+// because admitting it would consume the "\0" of "\012" and leave "12" as literals,
+// silently admitting an octal escape the engines do NOT agree on.
+//
+// What the exclusions cost, and why each is right:
+//
+//	s, S     the whitespace class: three engines, three different sets. RE2 is
+//	         [\t\n\f\r ], Python adds the vertical tab, and ECMA-262 adds both that
+//	         and every Unicode space separator — so `^a\sb$` accepts a non-breaking
+//	         space in one SDK and refuses it in the other two.
+//	b, B     \B disagrees on the empty string: a word boundary is absent there for
+//	         RE2 and ECMA-262 and present for Python, so \B matches in two engines
+//	         and not the third with nothing logged. \b agrees on its own, but it is
+//	         near-useless in a fully anchored field matcher and it cannot be
+//	         admitted without also reasoning about [\b], which RE2 rejects outright.
+//	1-9, k   backreferences: RE2 has neither, and both are the classic
+//	         catastrophic-backtracking construct in the engines that do.
+//	p, P     Unicode property classes: RE2 has them and ECMA-262 has them only
+//	         under the `u` flag, which is not a portable assumption to build a
+//	         published rule on.
+//	A, z, Z  text anchors: RE2 spells them, ECMA-262 has only ^ and $.
+//	-, _, :, ;, and the rest of the punctuation: escaping a character that is not
+//	         a regex metacharacter is an "identity escape". RE2 and Python allow
+//	         it; ECMA-262 under the `u` flag REFUSES it, and the TypeScript port's
+//	         validator compiles every pattern with that flag. Write the character
+//	         itself instead.
+//
+// The set was derived by measurement, not by reasoning: every ASCII escape was run
+// through all three engines in bare, in-class and anchored position, and only those
+// that compiled AND matched identically in all three, in every position, are here.
+var portableEscapes = map[byte]bool{
+	'd': true, 'D': true, 'w': true, 'W': true,
+	'n': true, 'r': true, 't': true, 'f': true, 'v': true,
+}
+
+// portableSyntaxEscapes are the regex metacharacters an author escapes to mean the
+// character itself. Unlike the identity escapes above, every engine accepts these —
+// they are the characters that NEED escaping, so no dialect can refuse them.
+var portableSyntaxEscapes = map[byte]bool{
+	'$': true, '(': true, ')': true, '*': true, '+': true, '.': true,
+	'/': true, '?': true, '[': true, '\\': true, ']': true, '^': true,
+	'{': true, '|': true, '}': true,
+}
+
+// hexEscapeLen reports the length of a \xHH escape at the start of s, or 0 if s does
+// not begin with one. Exactly two hex digits: \x41 is read the same by all three
+// engines, while the brace form \x{41} is an RE2 spelling that the other two refuse,
+// and a short \x4 is refused by all three.
+func hexEscapeLen(s string) int {
+	if len(s) < 4 || s[0] != '\\' || s[1] != 'x' {
+		return 0
+	}
+	if !isHexDigit(s[2]) || !isHexDigit(s[3]) {
+		return 0
+	}
+	return 4
+}
+
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
+// shorthandClassEscapes are the escapes that stand for a SET of characters rather
+// than for one. A set cannot be the endpoint of a range, and the engines disagree
+// about whether saying so is an error or a reinterpretation.
+var shorthandClassEscapes = map[byte]bool{'d': true, 'D': true, 'w': true, 'W': true}
+
+// isRangeHyphenAt reports whether the byte at i is a "-" acting as a range operator
+// inside a bracket expression, rather than the literal hyphen a class is allowed to
+// end with ("[a-z-]") or begin with ("[-a-z]").
+func isRangeHyphenAt(p string, i int) bool {
+	return i < len(p) && p[i] == '-' && i+1 < len(p) && p[i+1] != ']'
 }
 
 // IsSafeSchemaPattern reports whether a `pattern` uses only constructs all three
@@ -856,17 +942,26 @@ var divergentEscapes = map[byte]bool{
 // the more dangerous, because nothing errors: two SDKs both compile the pattern and
 // then disagree about which payloads match it.
 //
-// So the admitted alphabet is the intersection, expressed as three rules: a group
-// opens with `(` or `(?:` and nothing else; an escape names a character or one of
-// the shared classes; and `[[:` — a POSIX class to RE2 and a literal bracket to
-// JavaScript — never appears. Refusing catastrophic backtracking falls out of the
-// first rule rather than being aimed at separately.
+// So the admitted alphabet is the intersection, expressed as six rules:
 //
-// The scan is syntactic and deliberately a little conservative: it tracks escaping,
-// so a literal `\(` is not read as a group, but it does not model character-class
-// interiors, where these constructs cannot carry their special meaning anyway.
-// Over-refusing costs an author a rewrite; under-refusing costs the SDKs the
-// agreement they exist to provide.
+//	1. an escape names a portable class, control character, \xHH, or a metacharacter
+//	   standing for itself — see portableEscapes, an ALLOWLIST;
+//	2. a group opens with `(` or `(?:` and nothing else;
+//	3. `[:` does not appear inside a bracket expression, at any position — it is a
+//	   POSIX class name to RE2 and the literal characters to JavaScript;
+//	4. a bracket expression closes, and does not open with `]`;
+//	5. a counted repeat does not exceed maxPortableRepeat;
+//	6. no quantified group has a body that can itself repeat or branch.
+//
+// Rule 6 is aimed at catastrophic backtracking SEPARATELY and deliberately, because
+// nothing in rules 1-5 covers it: `(a+)+` needs neither lookaround nor a
+// backreference and sits comfortably inside the alphabet. See hasNestedQuantifier.
+//
+// The scan is syntactic and deliberately a little conservative. It tracks escaping,
+// so a literal `\(` is not read as a group, and it tracks bracket-expression
+// interiors, because the constructs above mean different things inside a class than
+// outside one. Over-refusing costs an author a rewrite; under-refusing costs the SDKs
+// the agreement they exist to provide.
 func IsSafeSchemaPattern(p string) bool {
 	inClass := false // inside a [...] bracket expression
 	for i := 0; i < len(p); i++ {
@@ -876,10 +971,27 @@ func IsSafeSchemaPattern(p string) bool {
 				// A trailing backslash is not a pattern any engine compiles.
 				return false
 			}
-			if divergentEscapes[p[i+1]] {
+			if n := hexEscapeLen(p[i:]); n > 0 {
+				i += n - 1 // the whole \xHH is consumed, never re-read as syntax
+				continue
+			}
+			if !portableEscapes[p[i+1]] && !portableSyntaxEscapes[p[i+1]] {
+				return false
+			}
+			// A range whose endpoint is a shorthand CLASS rather than a character —
+			// "[\w-x]". RE2 reads it as a range and compiles; Python and ECMA-262 under
+			// the `u` flag both refuse it outright. The escape itself is portable, so
+			// only the adjacency is refused, and only when the "-" is a range operator
+			// rather than the literal hyphen a class may end with.
+			if inClass && shorthandClassEscapes[p[i+1]] && isRangeHyphenAt(p, i+2) {
 				return false
 			}
 			i++ // the escaped character is consumed, never re-read as syntax
+		case '-':
+			// The mirror of the case above: "[a-\w]".
+			if inClass && isRangeHyphenAt(p, i) && i+2 < len(p) && p[i+1] == '\\' && shorthandClassEscapes[p[i+2]] {
+				return false
+			}
 		case '[':
 			if inClass {
 				// A literal '[' inside a class — EXCEPT when it opens a POSIX name.

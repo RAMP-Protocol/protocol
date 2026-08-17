@@ -25,6 +25,7 @@ because it is a property of every possible payload rather than of these.
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any
 
@@ -40,7 +41,8 @@ from ramp_sdk.regschema import (
     MAX_REGISTRATION_SCHEMA_DEPTH,
     MAX_REGISTRATION_SCHEMA_EVALUATIONS,
     REGISTRATION_SCHEMA_DIALECT,
-    _DIVERGENT_ESCAPES,
+    _PORTABLE_ESCAPES,
+    _PORTABLE_SYNTAX_ESCAPES,
     compile_registration_schema,
     is_safe_schema_pattern,
 )
@@ -65,12 +67,22 @@ def test_the_rule_constants_match_the_oracle() -> None:
     assert MAX_PORTABLE_REPEAT == _DOC["max_pattern_repeat"]
     # The alphabet itself, not a description of it. Dropping an escape from all three
     # SDKs used to leave every gate green; this is what makes that go red.
-    assert "".join(sorted(_DIVERGENT_ESCAPES)) == _DOC["forbidden_pattern_escapes"]
+    admitted = _PORTABLE_ESCAPES | _PORTABLE_SYNTAX_ESCAPES
+    assert "".join(sorted(admitted)) == _DOC["portable_pattern_escapes"]
+
+
+def _vector_bytes(vector: dict[str, Any]) -> bytes:
+    """The input a vector states. Most carry it as text; the encoding cases carry it as
+    base64, because invalid UTF-8 cannot be written into a JSON string at all and the
+    rules are defined over the bytes AS SERVED."""
+    if "schema_b64" in vector:
+        return base64.b64decode(vector["schema_b64"])
+    return str(vector["schema"]).encode("utf8")
 
 
 @pytest.mark.parametrize("vector", _COMPILE, ids=[v["name"] for v in _COMPILE])
 def test_compile_matches_the_oracle(vector: dict[str, Any]) -> None:
-    schema, verdict = compile_registration_schema(vector["schema"].encode("utf8"))
+    schema, verdict = compile_registration_schema(_vector_bytes(vector))
     assert verdict == vector["expected_verdict"]
     # The schema is usable exactly when it was accepted — a port that returned a
     # compiled schema alongside a refusal would let a caller ignoring the verdict
@@ -80,7 +92,7 @@ def test_compile_matches_the_oracle(vector: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("vector", _VALIDATE, ids=[v["name"] for v in _VALIDATE])
 def test_validate_matches_the_oracle(vector: dict[str, Any]) -> None:
-    schema, verdict = compile_registration_schema(vector["schema"].encode("utf8"))
+    schema, verdict = compile_registration_schema(_vector_bytes(vector))
     assert verdict == "accepted", f"the case's own schema does not compile: {verdict}"
     assert schema is not None
 
