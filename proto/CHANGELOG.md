@@ -88,6 +88,24 @@ a different character inside it, while the other two refused the same bytes. The
 JavaScript-only literals `NaN` and `Infinity` are not JSON (RFC 8259 §6) and are refused
 with them; one implementation's parser accepts all three as an extension.
 
+**The payload is bounded too, and the bound names its unit.** A published schema is
+applied to `RegisterRequest.registration_data`, and the cost of that is roughly the
+schema's own cost multiplied by the elements in the payload — a subschema under `items`
+is counted once by the evaluation cap and evaluated once per element. The multiplier was
+unbounded. It now is: at most **64 members at the top level**, and at most **16384
+bytes**, measured as the payload's **RFC 8785 (JCS) canonical JSON encoding**.
+
+The unit is the load-bearing half. Every other cap in this contract is over bytes a
+party actually served; `registration_data` is never served as bytes — it is a `Struct`,
+decoded before any consumer sees it — so "16KB" means nothing until an encoding is
+chosen, and two implementations choosing privately is the same both-ends disagreement
+the schema rules exist to prevent. JCS also pins number formatting, which is not a
+detail: a payload carrying `1e300` is seven bytes under one renderer and three hundred
+under another. Both bounds are checked before the schema runs, and a payload breaking
+either is a malformed request rather than
+`REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA`, which names non-conformance to
+a published schema and applies only where one is published.
+
 **"No schema published" is defined at the byte level, because it is the enforcement
 switch.** Absent means no bytes, or only JSON whitespace — RFC 8259's space, tab,
 carriage return and line feed, and no others. Each implementation had been asking its

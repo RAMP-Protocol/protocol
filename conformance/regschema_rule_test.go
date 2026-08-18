@@ -72,12 +72,15 @@ type sdkRegSchemaRule struct {
 	MaxErrors      uint64 `json:"max_field_errors"`
 	MaxPathLen     uint64 `json:"max_field_error_path_len"`
 	MaxErrTextLn   uint64 `json:"max_field_error_text_len"`
+	MaxDataBytes   int    `json:"max_registration_data_bytes"`
+	MaxDataMembers int    `json:"max_registration_data_members"`
 }
 
 var errNoSDKRegSchemaRule = errors.New(
 	regSchemaVectors + " is missing one of dialect / max_schema_bytes / max_schema_depth / " +
 		"max_schema_evaluations / max_pattern_repeat / portable_pattern_escapes / " +
-		"max_field_errors / max_field_error_path_len / max_field_error_text_len — this guard reads " +
+		"max_field_errors / max_field_error_path_len / max_field_error_text_len / " +
+		"max_registration_data_bytes / max_registration_data_members — this guard reads " +
 		"the SDK's copy of the registration-schema rules from there")
 
 // sdkRegRule reads the SDK's copy of the rules from the committed vectors. Errors
@@ -232,7 +235,7 @@ func byteCapPhrase(n int) string {
 // from the proto SOURCE. The descriptor does not retain source comments, and the
 // comment is where these rules live — data_schema is a Struct, so no field-level
 // protovalidate rule can reach inside it.
-func dataSchemaComment(t *testing.T) string {
+func fieldComment(t *testing.T, decl string) string {
 	t.Helper()
 	for _, cf := range Contract {
 		path := filepath.Join("..", "proto", cf.File.Path())
@@ -242,7 +245,7 @@ func dataSchemaComment(t *testing.T) string {
 		}
 		lines := strings.Split(string(b), "\n")
 		for i, ln := range lines {
-			if !strings.HasPrefix(strings.TrimSpace(ln), "google.protobuf.Struct data_schema = 1") {
+			if !strings.HasPrefix(strings.TrimSpace(ln), decl) {
 				continue
 			}
 			var block []string
@@ -254,7 +257,7 @@ func dataSchemaComment(t *testing.T) string {
 				block = append([]string{strings.TrimSpace(strings.TrimPrefix(trimmed, "//"))}, block...)
 			}
 			if len(block) == 0 {
-				t.Fatalf("%s: data_schema carries no leading comment — the rules it is supposed to state are gone", path)
+				t.Fatalf("%s: %s carries no leading comment — the rules it is supposed to state are gone", path, decl)
 			}
 			// Joined with a space so a rule split across two comment lines is still
 			// one string to search; the source wraps at 80 columns and every phrase
@@ -262,8 +265,21 @@ func dataSchemaComment(t *testing.T) string {
 			return strings.Join(block, " ")
 		}
 	}
-	t.Fatal("no contract file declares data_schema — this guard would assert nothing")
+	t.Fatalf("no contract file declares %q — this guard would assert nothing", decl)
 	return ""
+}
+
+// dataSchemaComment and registrationDataComment name the two fields whose rules live
+// only in prose. Same extraction, different declaration — factored rather than copied
+// so a change to how a comment is read cannot apply to one field and not the other.
+func dataSchemaComment(t *testing.T) string {
+	t.Helper()
+	return fieldComment(t, "google.protobuf.Struct data_schema = 1")
+}
+
+func registrationDataComment(t *testing.T) string {
+	t.Helper()
+	return fieldComment(t, "google.protobuf.Struct registration_data = 2")
 }
 
 // TestDataSchemaCommentStatesTheRulesTheSDKEnforces is the source half.
@@ -379,6 +395,46 @@ func TestRegistrationSchemaVectorsAreNotVacuous(t *testing.T) {
 		if c.n == 0 {
 			t.Errorf("%s carries no %s cases — that dimension asserts nothing in any language",
 				regSchemaVectors, c.dimension)
+		}
+	}
+}
+
+// TestRegistrationDataCommentStatesItsBounds is the sibling of the data_schema guard,
+// for the field the schema is APPLIED to.
+//
+// It matters for the same reason and one more: the byte cap here is over a canonical
+// ENCODING rather than over bytes anyone served, because registration_data arrives as a
+// decoded Struct. A number without its unit is the ambiguity that produces two
+// implementations measuring different things, so the unit is a phrase this checks too.
+func TestRegistrationDataCommentStatesItsBounds(t *testing.T) {
+	want := mustSDKRegRule(t)
+	comment := registrationDataComment(t)
+
+	const opening = "Business-registration data about the operator"
+	if !strings.HasPrefix(comment, opening) {
+		t.Fatalf("the extracted comment does not begin with registration_data's own first line "+
+			"(%q) — this guard is reading the wrong block and would assert nothing.\n  read: %.120s…",
+			opening, comment)
+	}
+
+	checks := []struct {
+		rule   string
+		phrase string
+	}{
+		{"the payload byte cap", strconv.Itoa(want.MaxDataBytes) + " bytes"},
+		{"the payload member cap", "At most " + strconv.Itoa(want.MaxDataMembers) + " members"},
+		// The unit, without which the number above states nothing checkable.
+		{"the encoding the byte cap is measured over", "RFC 8785"},
+		{"the top-level qualifier on the member cap", "top level"},
+		// The ordering, which is what makes the bound a bound rather than a report.
+		{"checked before the schema runs", "BEFORE the schema runs"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(comment, c.phrase) {
+			t.Errorf("RegisterRequest.registration_data no longer states %s.\n"+
+				"  the SDK enforces it (%s), so an implementor reading only the contract "+
+				"would send a payload the SDK refuses.\n  expected the comment to contain %s",
+				c.rule, regSchemaVectors, strconv.Quote(c.phrase))
 		}
 	}
 }

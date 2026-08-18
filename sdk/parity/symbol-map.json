@@ -296,6 +296,11 @@
       "python": "check_audience",
       "ts": "checkAudience"
     },
+    "helpers.CheckRegistrationData": {
+      "allowlist_reason": null,
+      "python": "check_registration_data",
+      "ts": "checkRegistrationData"
+    },
     "helpers.CompileRegistrationSchema": {
       "allowlist_reason": null,
       "python": "compile_registration_schema",
@@ -371,6 +376,16 @@
       "python": "MAX_BARE_DOMAIN_LEN",
       "ts": "maxBareDomainLen"
     },
+    "helpers.MaxRegistrationDataBytes": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_DATA_BYTES",
+      "ts": "maxRegistrationDataBytes"
+    },
+    "helpers.MaxRegistrationDataMembers": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_DATA_MEMBERS",
+      "ts": "maxRegistrationDataMembers"
+    },
     "helpers.MaxRegistrationFieldErrorPathLen": {
       "allowlist_reason": null,
       "python": "MAX_REGISTRATION_FIELD_ERROR_PATH_LEN",
@@ -435,6 +450,11 @@
       "allowlist_reason": null,
       "python": "reason",
       "ts": "reason"
+    },
+    "helpers.RegistrationDataVerdict": {
+      "allowlist_reason": null,
+      "python": "RegistrationDataVerdict",
+      "ts": "RegistrationDataVerdict"
     },
     "helpers.RegistrationFailureDetail": {
       "allowlist_reason": null,

@@ -20,6 +20,7 @@
 // sdk/go/helpers/testdata/registration-schema-vectors.json.
 
 import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020";
+import canonicalize from "canonicalize";
 
 import type { RegistrationFieldError as RegistrationFieldErrorShape } from "./errordetail";
 
@@ -994,4 +995,83 @@ export function compileRegistrationSchema(raw: Uint8Array | string): {
 	} catch {
 		return { schema: null, verdict: "uncompilable" };
 	}
+}
+
+/**
+ * maxRegistrationDataBytes bounds a submitted registration_data payload, measured as
+ * its RFC 8785 canonical JSON encoding.
+ *
+ * The UNIT has to be named, and that is the whole point of this constant. Every other
+ * cap in this module is over bytes a party actually served; registration_data is not
+ * served as bytes at all — it arrives as a decoded google.protobuf.Struct — so "16KB"
+ * means nothing until an encoding is chosen, and two implementations choosing privately
+ * is the disagreement this module exists to remove. JCS is the choice because all three
+ * SDKs already compute it for the signing primitive, and because it pins number
+ * formatting: a payload carrying 1e300 is seven bytes to one renderer and three hundred
+ * to another.
+ *
+ * It bounds WORK, not storage. The schema's own caps bound the schema; nothing bounded
+ * the payload the schema is applied to, and validation cost is roughly the schema's cost
+ * multiplied by the elements in the payload — a subschema under `items` is counted once
+ * by maxRegistrationSchemaEvaluations and evaluated once per element.
+ */
+export const maxRegistrationDataBytes = 16384;
+
+/**
+ * maxRegistrationDataMembers bounds the number of members at the TOP LEVEL of a
+ * payload. Top level rather than recursive, deliberately: nested bulk is already bounded
+ * by the byte cap, and a recursive count would refuse a small document that merely
+ * nests, which a business entity legitimately does (an address is an object).
+ */
+export const maxRegistrationDataMembers = 64;
+
+/**
+ * RegistrationDataVerdict is the outcome of checking a submitted registration_data
+ * payload. The tokens are the Go oracle's vocabulary verbatim.
+ *
+ * "no_verdict" is Go's zero value and is never returned here; it is in the vocabulary
+ * because the corpus carries the whole vocabulary.
+ */
+export type RegistrationDataVerdict =
+	| "no_verdict"
+	| "accepted"
+	| "too_large"
+	| "too_many_members"
+	| "uncanonicalizable";
+
+/**
+ * checkRegistrationData bounds a submitted registration_data payload.
+ *
+ * `data` is the decoded object. A null/undefined or empty payload is accepted: sending
+ * no business data is a matter for the published schema's `required` list, not for a
+ * size bound.
+ *
+ * This runs BEFORE RegistrationSchema.validate, for the same reason the schema's own
+ * size cap runs before the schema is parsed: the bound exists to stop work, so it has to
+ * precede the work. An Exchange refuses an over-bound payload outright — a malformed
+ * request rather than a schema failure, so NOT
+ * REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, which names non-conformance to
+ * a published schema and applies only when one is published.
+ */
+export function checkRegistrationData(
+	data: Record<string, unknown> | null | undefined,
+): RegistrationDataVerdict {
+	const obj = data ?? {};
+	// Members first: it is a length check, and it bounds the document the canonical
+	// encoding below then has to walk.
+	if (Object.keys(obj).length > maxRegistrationDataMembers) return "too_many_members";
+	let jcs: string | undefined;
+	try {
+		jcs = canonicalize(obj);
+	} catch {
+		// The reachable case is a non-finite number, which JSON cannot represent and
+		// this canonicalizer throws on. It is a verdict rather than an exception because
+		// this face, like the rest of the registration surface, does not throw.
+		return "uncanonicalizable";
+	}
+	if (jcs === undefined) return "uncanonicalizable";
+	// BYTES, not UTF-16 code units: the cap is over the canonical encoding, and a
+	// non-ASCII member name costs more than one unit per character.
+	if (new TextEncoder().encode(jcs).length > maxRegistrationDataBytes) return "too_large";
+	return "accepted";
 }

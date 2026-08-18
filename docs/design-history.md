@@ -334,6 +334,20 @@ the bytes rather than a decoded string. The general shape is the one this featur
 running into: a rule is only as portable as the layer underneath it, and "ask the
 platform" is not a specification.
 
+The last gap was the other side of the same coin. Every cap protected the schema, and
+nothing protected the payload the schema is applied to — validation cost is the schema's
+cost multiplied by the elements in the payload, so the multiplier was the unbounded
+half. Bounding it turned out to be less about the number than about the unit. Every
+other cap in the contract is over bytes somebody served; `registration_data` arrives as
+a decoded `Struct` and is never served as bytes at all, so "16KB" is not a rule until an
+encoding is named. The reference Exchange had already picked one privately — a sum of
+key and rendered-value lengths, with numbers rendered in shortest-decimal form, under
+which `1e300` weighs three hundred bytes and seven as JSON — which is precisely the kind
+of quiet, defensible, incompatible choice this whole feature exists to remove. The
+contract names RFC 8785 instead, because all three SDKs already compute it for signing
+and because it fixes number formatting by specification rather than by whichever
+renderer a language reaches for.
+
 ## Recipient addressing: a body field, not the signed request URL
 
 Every addressed request carries `exchange`, the bare host of its intended

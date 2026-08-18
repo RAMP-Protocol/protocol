@@ -22,8 +22,11 @@ import { describe, expect, it } from "vitest";
 
 import vectorsFile from "../../go/helpers/testdata/registration-schema-vectors.json";
 import {
+	checkRegistrationData,
 	compileRegistrationSchema,
 	isSafeSchemaPattern,
+	maxRegistrationDataBytes,
+	maxRegistrationDataMembers,
 	maxRegistrationFieldErrorPathLen,
 	maxRegistrationFieldErrorTextLen,
 	maxRegistrationFieldErrors,
@@ -65,6 +68,11 @@ type ValidateVector = {
 	expected_keywords: string[];
 };
 type PatternVector = { name: string; pattern: string; safe: boolean };
+type RegDataVector = {
+	name: string;
+	data: Record<string, unknown>;
+	expected_verdict: string;
+};
 type MatchVector = { name: string; pattern: string; value: string; matches: boolean };
 type VectorsFile = {
 	dialect: string;
@@ -76,6 +84,9 @@ type VectorsFile = {
 	max_schema_evaluations: number;
 	max_pattern_repeat: number;
 	portable_pattern_escapes: string;
+	max_registration_data_bytes: number;
+	max_registration_data_members: number;
+	registration_data: RegDataVector[];
 	compile: CompileVector[];
 	validate: ValidateVector[];
 	pattern: PatternVector[];
@@ -95,6 +106,8 @@ describe("registration-schema parity", () => {
 		expect(maxRegistrationFieldErrorPathLen).toBe(vectors.max_field_error_path_len);
 		expect(maxRegistrationFieldErrorTextLen).toBe(vectors.max_field_error_text_len);
 		expect(maxRegistrationSchemaEvaluations).toBe(vectors.max_schema_evaluations);
+		expect(maxRegistrationDataBytes).toBe(vectors.max_registration_data_bytes);
+		expect(maxRegistrationDataMembers).toBe(vectors.max_registration_data_members);
 	});
 
 	it.each(vectors.compile.map((v) => [v.name, v] as const))("compile %s", (_name, v) => {
@@ -190,4 +203,27 @@ describe("registration-schema parity", () => {
 			expect(fe.path).not.toContain(sentinel);
 		}
 	});
+
+	// The bounds on a SUBMITTED payload, which are the other half of the resource story:
+	// the schema's caps bound the schema, and validation cost is the schema's cost
+	// multiplied by the elements in the payload. The boundary cases pin the UNIT —
+	// registration_data is not served as bytes, it arrives decoded, so the rule names an
+	// encoding and a port measuring its own rendering would part on exactly these.
+	it.each(vectors.registration_data.map((v) => [v.name, v] as const))(
+		"registration_data %s",
+		(_name, v) => {
+			expect(checkRegistrationData(v.data)).toBe(v.expected_verdict);
+		},
+	);
+
+	it("answers a non-finite number with a verdict rather than throwing", () => {
+		// The one outcome the shared corpus cannot carry: JSON has no way to write NaN
+		// or Infinity, which is exactly why a payload holding one has no canonical form
+		// — and a decoded object can still hold one, because the value came from a
+		// language rather than from a JSON document.
+		for (const n of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NaN]) {
+			expect(checkRegistrationData({ n })).toBe("uncanonicalizable");
+		}
+	});
+
 });

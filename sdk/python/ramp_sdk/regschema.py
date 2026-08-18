@@ -27,9 +27,12 @@ from typing import Any, Literal
 
 import jsonschema
 import referencing.exceptions
+import rfc8785
 from referencing import Registry
 
 __all__ = [
+    "MAX_REGISTRATION_DATA_BYTES",
+    "MAX_REGISTRATION_DATA_MEMBERS",
     "MAX_REGISTRATION_FIELD_ERRORS",
     "MAX_REGISTRATION_FIELD_ERROR_PATH_LEN",
     "MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN",
@@ -37,8 +40,10 @@ __all__ = [
     "MAX_REGISTRATION_SCHEMA_DEPTH",
     "MAX_REGISTRATION_SCHEMA_EVALUATIONS",
     "REGISTRATION_SCHEMA_DIALECT",
+    "RegistrationDataVerdict",
     "RegistrationSchema",
     "SchemaVerdict",
+    "check_registration_data",
     "compile_registration_schema",
     "is_safe_schema_pattern",
 ]
@@ -1127,3 +1132,76 @@ def compile_registration_schema(raw: bytes) -> tuple[RegistrationSchema | None, 
     # libraries default differently, so leaving this to a default would make the same
     # document conform in one SDK and not in another.
     return RegistrationSchema(validator_cls(corrected, registry=_REFUSING_REGISTRY)), "accepted"
+
+
+# The submitted payload's size cap, measured as its RFC 8785 canonical JSON encoding.
+#
+# The UNIT has to be named, and that is the whole point. Every other cap in this module
+# is over bytes a party actually served; registration_data is not served as bytes at all
+# — it arrives as a decoded google.protobuf.Struct — so "16KB" means nothing until an
+# encoding is chosen, and two implementations choosing privately is the disagreement
+# this module exists to remove. JCS is the choice because all three SDKs already compute
+# it for the signing primitive, and because it pins number formatting: a payload
+# carrying 1e300 is seven bytes to one renderer and three hundred to another.
+#
+# It bounds WORK, not storage. The schema's caps bound the schema; nothing bounded the
+# payload the schema is applied to, and validation cost is roughly the schema's cost
+# multiplied by the elements in the payload — a subschema under ``items`` is counted
+# once by MAX_REGISTRATION_SCHEMA_EVALUATIONS and evaluated once per element.
+MAX_REGISTRATION_DATA_BYTES = 16384
+
+# The number of members allowed at the TOP LEVEL of a payload. Top level rather than
+# recursive, deliberately: nested bulk is already bounded by the byte cap, and a
+# recursive count would refuse a small document that merely nests, which a business
+# entity legitimately does (an address is an object).
+MAX_REGISTRATION_DATA_MEMBERS = 64
+
+# The outcome of checking a submitted registration_data payload. Tokens are the Go
+# oracle's vocabulary verbatim, which is what the shared vectors record.
+#
+# "no_verdict" is Go's zero value and is never returned here; it is in the vocabulary
+# because the corpus carries the whole vocabulary.
+RegistrationDataVerdict = Literal[
+    "no_verdict",
+    "accepted",
+    "too_large",
+    "too_many_members",
+    "uncanonicalizable",
+]
+
+
+def _registration_data_bytes(data: dict[str, Any] | None) -> int:
+    """The length of the payload's RFC 8785 canonical JSON encoding. A ``None`` payload
+    encodes as the empty object rather than as ``null``, so an absent payload and an
+    empty one measure the same."""
+    return len(rfc8785.dumps(data if data is not None else {}))
+
+
+def check_registration_data(data: dict[str, Any] | None) -> RegistrationDataVerdict:
+    """Bound a submitted registration_data payload.
+
+    ``data`` is the decoded object. A ``None`` or empty payload is accepted: sending no
+    business data is a matter for the published schema's ``required`` list, not for a
+    size bound.
+
+    This runs BEFORE :meth:`RegistrationSchema.validate`, for the same reason the
+    schema's own size cap runs before the schema is parsed: the bound exists to stop
+    work, so it has to precede the work. An Exchange refuses an over-bound payload
+    outright — a malformed request rather than a schema failure, so NOT
+    REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, which names non-conformance
+    to a published schema and applies only when one is published.
+    """
+    # Members first: it is a length check, and it bounds the document the canonical
+    # encoding below then has to walk.
+    if data is not None and len(data) > MAX_REGISTRATION_DATA_MEMBERS:
+        return "too_many_members"
+    try:
+        size = _registration_data_bytes(data)
+    except (ValueError, TypeError):
+        # The reachable case is a non-finite number, which JSON cannot represent. It is
+        # a verdict rather than an exception because this face, like the rest of the
+        # registration surface, does not throw.
+        return "uncanonicalizable"
+    if size > MAX_REGISTRATION_DATA_BYTES:
+        return "too_large"
+    return "accepted"

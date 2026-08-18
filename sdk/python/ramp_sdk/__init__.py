@@ -73,6 +73,8 @@ from .keyresolver import KeyResolver, StaticKeyResolver
 from .money import canonicalize_money, format_money, parse_money
 from .pop import AGENT_KEY_HEADER, sign_agent_binding, verify_agent_binding
 from .regschema import (
+    MAX_REGISTRATION_DATA_BYTES,
+    MAX_REGISTRATION_DATA_MEMBERS,
     MAX_REGISTRATION_FIELD_ERROR_PATH_LEN,
     MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN,
     MAX_REGISTRATION_FIELD_ERRORS,
@@ -80,8 +82,10 @@ from .regschema import (
     MAX_REGISTRATION_SCHEMA_DEPTH,
     MAX_REGISTRATION_SCHEMA_EVALUATIONS,
     REGISTRATION_SCHEMA_DIALECT,
+    RegistrationDataVerdict,
     RegistrationSchema,
     SchemaVerdict,
+    check_registration_data,
     compile_registration_schema,
     is_safe_schema_pattern,
 )
@@ -119,6 +123,8 @@ __all__ = [
     "BARE_DOMAIN_PATTERN",
     "ERROR_DETAIL_TYPE",
     "MAX_BARE_DOMAIN_LEN",
+    "MAX_REGISTRATION_DATA_BYTES",
+    "MAX_REGISTRATION_DATA_MEMBERS",
     "MAX_REGISTRATION_FIELD_ERRORS",
     "MAX_REGISTRATION_FIELD_ERROR_PATH_LEN",
     "MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN",
@@ -142,6 +148,7 @@ __all__ = [
     "MultisigVerdict",
     "NoEndpointError",
     "ProtocolVersion",
+    "RegistrationDataVerdict",
     "RegistrationSchema",
     "RejectReason",
     "RejectedOffer",
@@ -170,6 +177,7 @@ __all__ = [
     "canonicalize_money",
     "catalog_rejection_detail",
     "check_audience",
+    "check_registration_data",
     "clock_window",
     "compile_registration_schema",
     "content_digest",

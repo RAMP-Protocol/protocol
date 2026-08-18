@@ -39,10 +39,13 @@ from ramp_sdk.regschema import (
     MAX_REGISTRATION_FIELD_ERRORS,
     MAX_REGISTRATION_SCHEMA_BYTES,
     MAX_REGISTRATION_SCHEMA_DEPTH,
+    MAX_REGISTRATION_DATA_BYTES,
+    MAX_REGISTRATION_DATA_MEMBERS,
     MAX_REGISTRATION_SCHEMA_EVALUATIONS,
     REGISTRATION_SCHEMA_DIALECT,
     _PORTABLE_ESCAPES,
     _PORTABLE_SYNTAX_ESCAPES,
+    check_registration_data,
     compile_registration_schema,
     is_safe_schema_pattern,
 )
@@ -52,6 +55,7 @@ _COMPILE = _DOC["compile"]
 _VALIDATE = _DOC["validate"]
 _PATTERN = _DOC["pattern"]
 _MATCH = _DOC["match"]
+_REGDATA = _DOC["registration_data"]
 
 
 def test_the_rule_constants_match_the_oracle() -> None:
@@ -65,6 +69,8 @@ def test_the_rule_constants_match_the_oracle() -> None:
     assert MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN == _DOC["max_field_error_text_len"]
     assert MAX_REGISTRATION_SCHEMA_EVALUATIONS == _DOC["max_schema_evaluations"]
     assert MAX_PORTABLE_REPEAT == _DOC["max_pattern_repeat"]
+    assert MAX_REGISTRATION_DATA_BYTES == _DOC["max_registration_data_bytes"]
+    assert MAX_REGISTRATION_DATA_MEMBERS == _DOC["max_registration_data_members"]
     # The alphabet itself, not a description of it. Dropping an escape from all three
     # SDKs used to leave every gate green; this is what makes that go red.
     admitted = _PORTABLE_ESCAPES | _PORTABLE_SYNTAX_ESCAPES
@@ -229,3 +235,25 @@ def test_no_compiled_schema_passes_the_payload_through() -> None:
     schema, verdict = compile_registration_schema(b"{not json")
     assert verdict == "malformed"
     assert schema is None
+
+
+@pytest.mark.parametrize("vector", _REGDATA, ids=[v["name"] for v in _REGDATA])
+def test_registration_data_bounds_match_the_oracle(vector: dict[str, Any]) -> None:
+    """The bounds on a SUBMITTED payload, which are the other half of the resource
+    story: the schema's caps bound the schema, and validation cost is the schema's cost
+    multiplied by the elements in the payload.
+
+    The boundary cases are what pin the UNIT. registration_data is not served as bytes —
+    it arrives decoded — so the rule names an encoding, and a port measuring its own
+    language's rendering instead would agree on the easy cases and part on these.
+    """
+    assert check_registration_data(vector["data"]) == vector["expected_verdict"]
+
+
+def test_a_non_finite_number_is_a_verdict_not_an_exception() -> None:
+    """The one outcome the shared corpus cannot carry: JSON has no way to write NaN or
+    Infinity, which is exactly why a payload holding one has no canonical form — and a
+    decoded map can still hold one, because the value came from a language rather than
+    from a JSON document."""
+    for value in (float("inf"), float("-inf"), float("nan")):
+        assert check_registration_data({"n": value}) == "uncanonicalizable"

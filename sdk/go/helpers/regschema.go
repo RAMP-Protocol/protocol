@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gowebpki/jcs"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 
@@ -1419,4 +1421,125 @@ func describeViolation(k jsonschema.ErrorKind) (keyword, text string) {
 		return last, "does not satisfy " + last
 	}
 	return "schema", "does not conform to the published schema"
+}
+
+// MaxRegistrationDataBytes bounds a submitted registration_data payload, measured as
+// its RFC 8785 canonical JSON encoding.
+//
+// The UNIT has to be named, and that is the whole point of this constant. Every other
+// cap in this file is over bytes a party actually served; registration_data is not
+// served as bytes at all — it arrives as a decoded google.protobuf.Struct — so "16KB"
+// means nothing until an encoding is chosen, and two implementations choosing
+// privately is the disagreement this package exists to remove. JCS is the choice
+// because all three SDKs already compute it for the signing primitive, with a vetted
+// canonicalizer each, and because it pins number formatting: a payload carrying 1e300
+// is seven bytes to one renderer and three hundred to another.
+//
+// It bounds WORK, not storage. The schema's own caps bound the schema; nothing bounded
+// the payload the schema is applied to, and validation cost is roughly the schema's
+// cost multiplied by the elements in the payload — a subschema under `items` is
+// counted once by MaxRegistrationSchemaEvaluations and evaluated once per element.
+// The multiplier was the unbounded half.
+const MaxRegistrationDataBytes = 16384
+
+// MaxRegistrationDataMembers bounds the number of members at the TOP LEVEL of a
+// registration_data payload. Top level rather than recursive, deliberately: nested
+// bulk is already bounded by the byte cap above, and a recursive count would refuse a
+// small document that merely nests, which a business entity legitimately does
+// (an address is an object).
+const MaxRegistrationDataMembers = 64
+
+// RegistrationDataVerdict is the outcome of checking a submitted registration_data
+// payload against the bounds above.
+type RegistrationDataVerdict int
+
+const (
+	// RegistrationDataNoVerdict is the zero value: nothing was decided. It is first so
+	// a caller who ignores the result reads "no answer" rather than an acceptance, and
+	// it is never returned.
+	RegistrationDataNoVerdict RegistrationDataVerdict = iota
+
+	// RegistrationDataAccepted means the payload is within every bound. It says
+	// nothing about whether the payload conforms to a published schema — that is
+	// RegistrationSchema.Validate, and it runs after this.
+	RegistrationDataAccepted
+
+	// RegistrationDataTooLarge means the canonical encoding exceeds
+	// MaxRegistrationDataBytes.
+	RegistrationDataTooLarge
+
+	// RegistrationDataTooManyMembers means the top level carries more than
+	// MaxRegistrationDataMembers members.
+	RegistrationDataTooManyMembers
+
+	// RegistrationDataUncanonicalizable means the payload has no canonical JSON form —
+	// a non-finite number is the reachable case, since JSON has no NaN or Infinity and
+	// a decoded map can still hold one. It is a verdict rather than an error because
+	// this face, like the rest of the registration surface, does not throw.
+	RegistrationDataUncanonicalizable
+)
+
+// String renders the verdict as the token the shared corpus records.
+func (v RegistrationDataVerdict) String() string {
+	switch v {
+	case RegistrationDataNoVerdict:
+		return "no_verdict"
+	case RegistrationDataAccepted:
+		return "accepted"
+	case RegistrationDataTooLarge:
+		return "too_large"
+	case RegistrationDataTooManyMembers:
+		return "too_many_members"
+	case RegistrationDataUncanonicalizable:
+		return "uncanonicalizable"
+	default:
+		return "no_verdict"
+	}
+}
+
+// CheckRegistrationData bounds a submitted registration_data payload.
+//
+// data is the decoded object — RegisterRequest.GetRegistrationData().AsMap() at a call
+// site. A nil or empty payload is accepted: sending no business data is a matter for
+// the published schema's `required` list, not for a size bound.
+//
+// This runs BEFORE RegistrationSchema.Validate, for the same reason the schema's size
+// cap runs before the schema is parsed: the bound exists to stop work, so it has to
+// precede the work. An Exchange refuses an over-bound payload outright — this is a
+// malformed request rather than a schema failure, so it is NOT
+// REGISTRATION_FAILURE_REASON_INVALID_REGISTRATION_DATA, which names non-conformance
+// to a published schema and applies only when one is published.
+func CheckRegistrationData(data map[string]any) RegistrationDataVerdict {
+	// Members first: it is a length check, and it bounds the document the canonical
+	// encoding below then has to walk.
+	if len(data) > MaxRegistrationDataMembers {
+		return RegistrationDataTooManyMembers
+	}
+	n, err := registrationDataBytes(data)
+	if err != nil {
+		return RegistrationDataUncanonicalizable
+	}
+	if n > MaxRegistrationDataBytes {
+		return RegistrationDataTooLarge
+	}
+	return RegistrationDataAccepted
+}
+
+// registrationDataBytes returns the length of the payload's RFC 8785 canonical JSON
+// encoding. A nil map encodes as the empty object rather than as `null`, so an absent
+// payload and an empty one measure the same.
+func registrationDataBytes(data map[string]any) (int, error) {
+	if data == nil {
+		data = map[string]any{}
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		// The reachable case is a non-finite float, which JSON cannot represent.
+		return 0, fmt.Errorf("helpers: registration_data has no JSON form: %w", err)
+	}
+	canon, err := jcs.Transform(raw)
+	if err != nil {
+		return 0, fmt.Errorf("helpers: registration_data JCS transform: %w", err)
+	}
+	return len(canon), nil
 }

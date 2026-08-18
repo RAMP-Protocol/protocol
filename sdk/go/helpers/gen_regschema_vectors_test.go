@@ -77,6 +77,16 @@ type patternVector struct {
 	Safe    bool   `json:"safe"`
 }
 
+// regDataVector is one CheckRegistrationData case: a submitted payload and the bound
+// it does or does not break. The payload is carried as decoded JSON rather than as
+// text, because the rule is defined over the payload's CANONICAL encoding and a port
+// that replayed raw text would be testing its own JSON parser instead.
+type regDataVector struct {
+	Name    string         `json:"name"`
+	Data    map[string]any `json:"data"`
+	Verdict string         `json:"expected_verdict"`
+}
+
 // objectSchema wraps a property schema in the object shape a registration schema
 // actually has, so the cases read like documents an Exchange would publish.
 func objectSchema(inner string) string {
@@ -148,6 +158,121 @@ type matchVector struct {
 	Pattern string `json:"pattern"`
 	Value   string `json:"value"`
 	Matches bool   `json:"matches"`
+}
+
+// buildRegDataVectors pins the bounds on a SUBMITTED payload, which are the other half
+// of the resource story: the schema's own caps bound the schema, and validation cost is
+// the schema's cost multiplied by the elements in the payload.
+//
+// The measurement is the point of most of these cases. registration_data is not served
+// as bytes — it arrives decoded — so the rule names an encoding, and a port that
+// measured its own language's rendering instead would agree on the easy cases and part
+// on the interesting ones.
+func buildRegDataVectors(t *testing.T) []regDataVector {
+	t.Helper()
+
+	// A payload whose canonical form lands exactly on the cap, and its neighbour one
+	// byte over. Built by padding one string value, the same way schemaOfBytes states
+	// the schema cap's boundary rather than "something big".
+	// The envelope is DERIVED rather than counted by hand: the canonical form of
+	// {"pad":""} is measured through the real face, so a boundary case cannot drift
+	// into the wrong side of the cap because somebody miscounted the punctuation.
+	envelope, err := registrationDataBytes(map[string]any{"pad": ""})
+	if err != nil {
+		t.Fatalf("measuring the padding envelope: %v", err)
+	}
+	atCap := func(total int) map[string]any {
+		return map[string]any{"pad": strings.Repeat("x", total-envelope)}
+	}
+
+	wide := func(n int) map[string]any {
+		out := make(map[string]any, n)
+		for i := 0; i < n; i++ {
+			out["k"+pad2(i)] = "v"
+		}
+		return out
+	}
+
+	cases := []struct {
+		name string
+		data map[string]any
+		want RegistrationDataVerdict
+	}{
+		{"an_empty_payload", map[string]any{}, RegistrationDataAccepted},
+		{"a_nil_payload", nil, RegistrationDataAccepted},
+		{
+			"a_realistic_registration",
+			map[string]any{
+				"legal_name":           "Acme GmbH",
+				"vat_id":               "DE12345",
+				"jurisdiction_country": "DE",
+				"address": map[string]any{
+					"street": "Hauptstrasse 1", "postal_code": "10115", "city": "Berlin",
+				},
+			},
+			RegistrationDataAccepted,
+		},
+		// The member cap, on the nose and one over.
+		{"members_at_the_cap", wide(MaxRegistrationDataMembers), RegistrationDataAccepted},
+		{"members_over_the_cap", wide(MaxRegistrationDataMembers + 1), RegistrationDataTooManyMembers},
+		// The byte cap, on the nose and one over.
+		{"bytes_at_the_cap", atCap(MaxRegistrationDataBytes), RegistrationDataAccepted},
+		{"bytes_over_the_cap", atCap(MaxRegistrationDataBytes + 1), RegistrationDataTooLarge},
+		// ONE top-level member, far over the byte cap. The member count alone would
+		// admit this, and so would a flattened count — the bulk is nested.
+		{
+			"one_member_holding_bulk",
+			map[string]any{"contacts": func() []any {
+				out := make([]any, 4000)
+				for i := range out {
+					out[i] = map[string]any{"email": "a@b.example"}
+				}
+				return out
+			}()},
+			RegistrationDataTooLarge,
+		},
+		// The case that pins the UNIT. Go renders this float as 1e+300 through
+		// encoding/json and as three hundred digits through the shortest-decimal
+		// formatting the reference Exchange's own gate uses, so a port measuring its
+		// language's rendering rather than the canonical one answers differently.
+		{"a_large_float", map[string]any{"n": 1e300}, RegistrationDataAccepted},
+	}
+
+	// RegistrationDataUncanonicalizable has no vector, and cannot have one: the input
+	// that produces it is a non-finite number, which JSON has no way to write down —
+	// which is the very reason the verdict exists. Each language asserts it directly
+	// instead, the same way the never-echo-a-value rule is a behavioural test rather
+	// than a vector.
+	out := make([]regDataVector, 0, len(cases))
+	for _, c := range cases {
+		got := CheckRegistrationData(c.data)
+		if got != c.want {
+			t.Fatalf("registration_data vector %s: oracle verdict=%s, intended=%s", c.name, got, c.want)
+		}
+		data := c.data
+		if data == nil {
+			// JSON has no way to say "the caller passed nil"; the rule treats an absent
+			// payload and an empty one alike, which is what this records.
+			data = map[string]any{}
+		}
+		out = append(out, regDataVector{Name: c.name, Data: data, Verdict: got.String()})
+	}
+	return out
+}
+
+// regDataVerdictVocabulary is every token the payload check can answer with, recorded
+// for the same reason as the schema vocabulary: a port that grew or lost one is caught
+// by comparing the list rather than by whichever cases happen to exercise each token.
+func regDataVerdictVocabulary() []string {
+	all := []RegistrationDataVerdict{
+		RegistrationDataNoVerdict, RegistrationDataAccepted, RegistrationDataTooLarge,
+		RegistrationDataTooManyMembers, RegistrationDataUncanonicalizable,
+	}
+	out := make([]string, 0, len(all))
+	for _, v := range all {
+		out = append(out, v.String())
+	}
+	return out
 }
 
 // buildRegSchemaMatchVectors pins the SEMANTICS of the admitted alphabet: for a fixed
@@ -993,13 +1118,17 @@ func TestGenerateRegSchemaVectors(t *testing.T) {
 		// tier compares these against the contract's own wording, and a rule stated
 		// only in prose on both sides is one nothing compares: dropping an escape from
 		// all three SDKs used to leave every gate green.
-		"portable_pattern_escapes": portablePatternEscapes(),
-		"max_pattern_repeat":       maxPortableRepeat,
-		"verdicts":                 schemaVerdictVocabulary(),
-		"compile":                  buildRegSchemaCompileVectors(t),
-		"validate":                 buildRegSchemaValidateVectors(t),
-		"pattern":                  buildRegSchemaPatternVectors(t),
-		"match":                    buildRegSchemaMatchVectors(t),
+		"max_registration_data_bytes":   MaxRegistrationDataBytes,
+		"max_registration_data_members": MaxRegistrationDataMembers,
+		"registration_data_verdicts":    regDataVerdictVocabulary(),
+		"portable_pattern_escapes":      portablePatternEscapes(),
+		"max_pattern_repeat":            maxPortableRepeat,
+		"verdicts":                      schemaVerdictVocabulary(),
+		"compile":                       buildRegSchemaCompileVectors(t),
+		"validate":                      buildRegSchemaValidateVectors(t),
+		"pattern":                       buildRegSchemaPatternVectors(t),
+		"match":                         buildRegSchemaMatchVectors(t),
+		"registration_data":             buildRegDataVectors(t),
 	}
 	path := filepath.Join("testdata", "registration-schema-vectors.json")
 	if os.Getenv("RAMP_UPDATE_VECTORS") == "1" {

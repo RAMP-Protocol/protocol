@@ -8,6 +8,7 @@ package helpers_test
 // and that the pure tier never grew a way to dial. Each is asserted here.
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -289,5 +290,40 @@ func TestTheFaceNeverRendersTheLibrarysMessages(t *testing.T) {
 	if !strings.Contains(src, "c.UseLoader(refusingSchemaLoader{})") {
 		t.Error("regschema.go no longer installs the refusing loader — the library's " +
 			"default reads references off local disk")
+	}
+}
+
+// TestANonFiniteNumberIsAVerdictNotAPanic covers the one outcome the shared corpus
+// cannot: JSON has no way to write NaN or Infinity, which is exactly why a payload
+// carrying one has no canonical form — and a decoded map can still hold one, because
+// the value came from a language, not from a JSON document.
+func TestANonFiniteNumberIsAVerdictNotAPanic(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		n    float64
+	}{
+		{"positive infinity", math.Inf(1)},
+		{"negative infinity", math.Inf(-1)},
+		{"not a number", math.NaN()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := helpers.CheckRegistrationData(map[string]any{"n": tc.n})
+			if got != helpers.RegistrationDataUncanonicalizable {
+				t.Fatalf("verdict = %s, want uncanonicalizable", got)
+			}
+		})
+	}
+}
+
+// TestTheZeroVerdictIsNotAnAcceptance guards the ordering of the verdict constants.
+// A caller who ignores the result holds the zero value, and it must not read as "this
+// payload is fine" — the same property the schema verdict carries.
+func TestTheZeroVerdictIsNotAnAcceptance(t *testing.T) {
+	var zero helpers.RegistrationDataVerdict
+	if zero == helpers.RegistrationDataAccepted {
+		t.Fatal("the zero RegistrationDataVerdict is an acceptance")
+	}
+	if zero.String() != "no_verdict" {
+		t.Fatalf("zero verdict renders %q, want %q", zero.String(), "no_verdict")
 	}
 }
