@@ -363,6 +363,20 @@ every library any implementation chooses. Chain length is now a number beside th
 and work caps, and it is a THIRD axis rather than a refinement of either — a flat chain is
 shallow and cheap, which is exactly why the other two never saw it.
 
+The payload had the same gap on a different axis, and it surfaced in the most useful way
+possible: a test passed locally and failed in CI. Not flakiness — the two ran different
+releases of the same language, and the verdict for a deeply nested payload was a function
+of which one. Canonicalising walks the payload recursively; 3.11 spends C stack on
+Python-to-Python calls and 3.12 does not, so the same nominal recursion limit admitted
+roughly twice the nesting, while the other two SDKs accepted every depth tried. It had
+been recorded as "this port is deliberately stricter", which was the wrong reading of the
+evidence — it was not stricter, it was undetermined.
+
+Two lessons worth keeping. A bound that comes from a runtime's remaining stack is not a
+bound, because nothing states it and every environment answers differently; and the check
+that enforces a depth bound must not itself recurse, or it fails on exactly the inputs it
+exists to reject.
+
 The last gap was the other side of the same coin. Every cap protected the schema, and
 nothing protected the payload the schema is applied to — validation cost is the schema's
 cost multiplied by the elements in the payload, so the multiplier was the unbounded

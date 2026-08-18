@@ -75,6 +75,7 @@ type sdkRegSchemaRule struct {
 	MaxErrTextLn   uint64 `json:"max_field_error_text_len"`
 	MaxDataBytes   int    `json:"max_registration_data_bytes"`
 	MaxDataMembers int    `json:"max_registration_data_members"`
+	MaxDataDepth   int    `json:"max_registration_data_depth"`
 }
 
 var errNoSDKRegSchemaRule = errors.New(
@@ -82,7 +83,8 @@ var errNoSDKRegSchemaRule = errors.New(
 		"max_schema_evaluations / max_schema_ref_hops / max_pattern_repeat / " +
 		"portable_pattern_escapes / " +
 		"max_field_errors / max_field_error_path_len / max_field_error_text_len / " +
-		"max_registration_data_bytes / max_registration_data_members — this guard reads " +
+		"max_registration_data_bytes / max_registration_data_members / " +
+		"max_registration_data_depth — this guard reads " +
 		"the SDK's copy of the registration-schema rules from there")
 
 // sdkRegRule reads the SDK's copy of the rules from the committed vectors. Errors
@@ -446,6 +448,7 @@ func TestRegistrationDataCommentStatesItsBounds(t *testing.T) {
 	}{
 		{"the payload byte cap", strconv.Itoa(want.MaxDataBytes) + " bytes"},
 		{"the payload member cap", "At most " + strconv.Itoa(want.MaxDataMembers) + " members"},
+		{"the payload depth cap", "At most " + strconv.Itoa(want.MaxDataDepth) + " nested JSON containers"},
 		// The unit, without which the number above states nothing checkable.
 		{"the encoding the byte cap is measured over", "RFC 8785"},
 		{"the top-level qualifier on the member cap", "top level"},

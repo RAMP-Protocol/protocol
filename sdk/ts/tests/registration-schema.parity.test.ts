@@ -27,6 +27,7 @@ import {
 	isSafeSchemaPattern,
 	maxPortableRepeat,
 	maxRegistrationDataBytes,
+	maxRegistrationDataDepth,
 	maxRegistrationDataMembers,
 	maxRegistrationFieldErrorPathLen,
 	maxRegistrationFieldErrorTextLen,
@@ -93,6 +94,7 @@ type VectorsFile = {
 	registration_data_verdicts: string[];
 	max_registration_data_bytes: number;
 	max_registration_data_members: number;
+	max_registration_data_depth: number;
 	registration_data: RegDataVector[];
 	compile: CompileVector[];
 	validate: ValidateVector[];
@@ -116,6 +118,7 @@ describe("registration-schema parity", () => {
 		expect(maxRegistrationSchemaRefHops).toBe(vectors.max_schema_ref_hops);
 		expect(maxRegistrationDataBytes).toBe(vectors.max_registration_data_bytes);
 		expect(maxRegistrationDataMembers).toBe(vectors.max_registration_data_members);
+		expect(maxRegistrationDataDepth).toBe(vectors.max_registration_data_depth);
 		// The two values that decide which patterns this port ADMITS, and the two this
 		// suite did not check until a multi-comma repeat proved the alphabet had already
 		// drifted from the other two SDKs.

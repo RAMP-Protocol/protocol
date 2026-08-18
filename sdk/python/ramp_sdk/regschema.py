@@ -32,6 +32,7 @@ from referencing import Registry
 
 __all__ = [
     "MAX_REGISTRATION_DATA_BYTES",
+    "MAX_REGISTRATION_DATA_DEPTH",
     "MAX_REGISTRATION_DATA_MEMBERS",
     "MAX_REGISTRATION_FIELD_ERRORS",
     "MAX_REGISTRATION_FIELD_ERROR_PATH_LEN",
@@ -1272,6 +1273,19 @@ MAX_REGISTRATION_DATA_BYTES = 16384
 # entity legitimately does (an address is an object).
 MAX_REGISTRATION_DATA_MEMBERS = 64
 
+# Bounds how deeply a submitted registration_data payload may nest, counting JSON
+# containers so a bare ``{}`` is depth 1. Same number and same counting rule as
+# MAX_REGISTRATION_SCHEMA_DEPTH, because it is the same question asked of the other
+# document.
+#
+# It exists because without it the ANSWER depended on the reader's runtime rather than on
+# the payload. Canonicalising walks the payload recursively, and where that walk runs out
+# of stack differs by interpreter version: this port refused a payload past about five
+# hundred containers on 3.11 and accepted nine hundred on 3.12, while the other two SDKs
+# accepted every depth tried. A static bound checked first turns that into one verdict
+# every implementation reaches.
+MAX_REGISTRATION_DATA_DEPTH = 32
+
 # The outcome of checking a submitted registration_data payload. Tokens are the Go
 # oracle's vocabulary verbatim, which is what the shared vectors record.
 #
@@ -1282,6 +1296,7 @@ RegistrationDataVerdict = Literal[
     "accepted",
     "too_large",
     "too_many_members",
+    "too_deep",
     "uncanonicalizable",
 ]
 
@@ -1312,6 +1327,28 @@ def _as_wire_numbers(value: Any) -> Any:
     return value
 
 
+def _registration_data_depth(data: dict[str, Any] | None) -> int:
+    """How many JSON containers the payload nests, counting the payload object itself as
+    the first. The walk is ITERATIVE: it runs before the depth bound is known to hold, so
+    it is the one walk that must survive any input."""
+    if data is None:
+        return 1
+    deepest = 0
+    stack: list[tuple[Any, int]] = [(data, 1)]
+    while stack:
+        node, depth = stack.pop()
+        deepest = max(deepest, depth)
+        # No need to walk past the bound: the answer is already decided, and a payload
+        # deep enough to matter is also deep enough to be expensive to finish walking.
+        if depth > MAX_REGISTRATION_DATA_DEPTH:
+            return depth
+        if isinstance(node, dict):
+            stack.extend((child, depth + 1) for child in node.values())
+        elif isinstance(node, list):
+            stack.extend((child, depth + 1) for child in node)
+    return deepest
+
+
 def _registration_data_bytes(data: dict[str, Any] | None) -> int:
     """The length of the payload's RFC 8785 canonical JSON encoding. A ``None`` payload
     encodes as the empty object rather than as ``null``, so an absent payload and an
@@ -1337,6 +1374,11 @@ def check_registration_data(data: dict[str, Any] | None) -> RegistrationDataVerd
     # encoding below then has to walk.
     if data is not None and len(data) > MAX_REGISTRATION_DATA_MEMBERS:
         return "too_many_members"
+    # Depth SECOND, and before anything walks the payload recursively. The check is
+    # iterative for that reason: a recursive one would hit the very limit it exists to
+    # keep the caller away from, raising while discovering that the payload is too deep.
+    if _registration_data_depth(data) > MAX_REGISTRATION_DATA_DEPTH:
+        return "too_deep"
     try:
         size = _registration_data_bytes(data)
     except (ValueError, TypeError, OverflowError, RecursionError):
@@ -1349,11 +1391,13 @@ def check_registration_data(data: dict[str, Any] | None) -> RegistrationDataVerd
         #   renders integers as the number the wire will carry. The other two SDKs
         #   answer for the equivalent payload rather than raising, and so does this one;
         #
-        #   a payload nested deeper than this interpreter's recursion limit, which the
-        #   canonicalizer hits while walking it. Go accepts a payload that deep, so this
-        #   port is stricter here — a difference recorded rather than papered over,
-        #   since closing it needs a nesting bound in the contract and that is a
-        #   publishing rule, not a port fix.
+        #   RecursionError, which the depth bound above should now make unreachable: it
+        #   stays as a backstop, the same standing as the Go oracle's compile timeout,
+        #   which no admitted schema should reach either. It used to be a live path, and
+        #   the verdict it produced depended on the INTERPRETER — 3.11 refused a payload
+        #   past about five hundred containers and 3.12 accepted nine hundred — which is
+        #   why the bound above is a number in the contract rather than whatever this
+        #   runtime happens to survive.
         return "uncanonicalizable"
     if size > MAX_REGISTRATION_DATA_BYTES:
         return "too_large"

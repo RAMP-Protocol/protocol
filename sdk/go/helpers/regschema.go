@@ -1518,6 +1518,22 @@ const MaxRegistrationDataBytes = 16384
 // (an address is an object).
 const MaxRegistrationDataMembers = 64
 
+// MaxRegistrationDataDepth bounds how deeply a submitted registration_data payload may
+// nest, counting JSON containers so a bare `{}` is depth 1. Same number and same
+// counting rule as MaxRegistrationSchemaDepth, because it is the same question asked of
+// the other document.
+//
+// It exists because without it the ANSWER depended on the reader's runtime rather than
+// on the payload. Canonicalising walks the payload recursively, and where that walk runs
+// out of stack differs by language and even by interpreter version — one port refused a
+// payload past about five hundred containers on one Python and accepted nine hundred on
+// the next, while the other two SDKs accepted every depth tried. A static bound checked
+// first turns that into one verdict every implementation reaches.
+//
+// A business entity nests an address inside an object and stops; the deepest payload in
+// the conformance corpus is three.
+const MaxRegistrationDataDepth = 32
+
 // RegistrationDataVerdict is the outcome of checking a submitted registration_data
 // payload against the bounds above.
 type RegistrationDataVerdict int
@@ -1541,6 +1557,12 @@ const (
 	// MaxRegistrationDataMembers members.
 	RegistrationDataTooManyMembers
 
+	// RegistrationDataTooDeep means the payload nests more than
+	// MaxRegistrationDataDepth containers. The token matches SchemaVerdict's own
+	// "too_deep" deliberately: same word, same counting rule, asked of the other
+	// document.
+	RegistrationDataTooDeep
+
 	// RegistrationDataUncanonicalizable means the payload has no canonical JSON form —
 	// a non-finite number is the reachable case, since JSON has no NaN or Infinity and
 	// a decoded map can still hold one. It is a verdict rather than an error because
@@ -1559,6 +1581,8 @@ func (v RegistrationDataVerdict) String() string {
 		return "too_large"
 	case RegistrationDataTooManyMembers:
 		return "too_many_members"
+	case RegistrationDataTooDeep:
+		return "too_deep"
 	case RegistrationDataUncanonicalizable:
 		return "uncanonicalizable"
 	default:
@@ -1584,6 +1608,12 @@ func CheckRegistrationData(data map[string]any) RegistrationDataVerdict {
 	if len(data) > MaxRegistrationDataMembers {
 		return RegistrationDataTooManyMembers
 	}
+	// Depth SECOND, and before anything walks the payload recursively. The check is
+	// iterative for that reason: a recursive one would hit the very limit it exists to
+	// keep the caller away from, raising while discovering that the payload is too deep.
+	if registrationDataDepth(data) > MaxRegistrationDataDepth {
+		return RegistrationDataTooDeep
+	}
 	n, err := registrationDataBytes(data)
 	if err != nil {
 		return RegistrationDataUncanonicalizable
@@ -1592,6 +1622,44 @@ func CheckRegistrationData(data map[string]any) RegistrationDataVerdict {
 		return RegistrationDataTooLarge
 	}
 	return RegistrationDataAccepted
+}
+
+// registrationDataDepth returns how many JSON containers the payload nests, counting
+// the payload object itself as the first. The walk is ITERATIVE: it runs before the
+// depth bound is known to hold, so it is the one walk that must survive any input.
+func registrationDataDepth(data map[string]any) int {
+	if data == nil {
+		return 1
+	}
+	type frame struct {
+		node  any
+		depth int
+	}
+	deepest := 0
+	stack := []frame{{node: data, depth: 1}}
+	for len(stack) > 0 {
+		f := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if f.depth > deepest {
+			deepest = f.depth
+		}
+		// No need to walk past the bound: the answer is already decided, and a payload
+		// deep enough to matter is also deep enough to be expensive to finish walking.
+		if f.depth > MaxRegistrationDataDepth {
+			return f.depth
+		}
+		switch v := f.node.(type) {
+		case map[string]any:
+			for _, child := range v {
+				stack = append(stack, frame{node: child, depth: f.depth + 1})
+			}
+		case []any:
+			for _, child := range v {
+				stack = append(stack, frame{node: child, depth: f.depth + 1})
+			}
+		}
+	}
+	return deepest
 }
 
 // registrationDataBytes returns the length of the payload's RFC 8785 canonical JSON

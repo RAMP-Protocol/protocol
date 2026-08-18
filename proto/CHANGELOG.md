@@ -88,6 +88,18 @@ a different character inside it, while the other two refused the same bytes. The
 JavaScript-only literals `NaN` and `Infinity` are not JSON (RFC 8259 §6) and are refused
 with them; one implementation's parser accepts all three as an extension.
 
+**The payload's nesting is bounded too, at 32 containers — because without it the answer
+depended on who was reading.** A deeply nested payload is small and has few top-level
+members, so neither the byte cap nor the member cap saw it, and canonicalising one walks
+it recursively. Where that walk runs out of stack is a property of the runtime, not of
+the payload: one implementation refused past roughly five hundred containers on one
+release of its language and accepted nine hundred on the next, while two others accepted
+every depth tried. Two deployments of the same SDK on different runtimes therefore
+disagreed about the same registration. The bound is the same number and the same counting
+rule as the schema's own depth cap, it is checked before anything walks the payload, and
+the walk that checks it is iterative — a recursive check would hit the very limit it
+exists to keep a caller away from.
+
 **A reference chain is bounded on its own axis: 100 hops.** A chain of definitions each
 referring to the next is three JSON containers deep however long it is, so the depth cap
 never saw it, and it costs one evaluation per link, so the work cap did not either. Both

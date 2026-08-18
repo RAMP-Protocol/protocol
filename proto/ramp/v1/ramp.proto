@@ -3569,6 +3569,18 @@ message RegisterRequest {
   //   would refuse a small document that merely nests, which a business entity
   //   legitimately does — an address is an object.
   //
+  //   At most 32 nested JSON containers, counting this member itself as the first —
+  //   the same number and the same counting rule as the schema's own depth cap,
+  //   because it is the same question asked of the other document. It is bounded
+  //   for a reason the other two caps do not cover: a deeply nested payload is
+  //   small and has few top-level members, and canonicalising it walks it
+  //   RECURSIVELY, so without a stated bound the verdict was a property of the
+  //   reader's runtime rather than of the payload — one implementation refused
+  //   past roughly five hundred containers on one release of its language and
+  //   accepted nine hundred on the next, while two others accepted every depth
+  //   tried. Checked before the payload is canonicalised, so the bound precedes
+  //   the walk it exists to bound.
+  //
   //   At most 16384 bytes, measured as this member's RFC 8785 (JCS) CANONICAL JSON
   //   encoding. The unit is named on purpose and is the load-bearing half of the
   //   rule: every other cap in this contract is over bytes a party actually served,

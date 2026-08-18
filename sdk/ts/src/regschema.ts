@@ -1194,6 +1194,21 @@ export const maxRegistrationDataBytes = 16384;
 export const maxRegistrationDataMembers = 64;
 
 /**
+ * maxRegistrationDataDepth bounds how deeply a submitted registration_data payload may
+ * nest, counting JSON containers so a bare `{}` is depth 1. Same number and same counting
+ * rule as maxRegistrationSchemaDepth, because it is the same question asked of the other
+ * document.
+ *
+ * It exists because without it the ANSWER depended on the reader's runtime rather than on
+ * the payload. Canonicalising walks the payload recursively, and where that walk runs out
+ * of stack differs by language and even by interpreter version — one port refused a
+ * payload past about five hundred containers on one Python and accepted nine hundred on
+ * the next, while this one and Go accepted every depth tried. A static bound checked
+ * first turns that into one verdict every implementation reaches.
+ */
+export const maxRegistrationDataDepth = 32;
+
+/**
  * RegistrationDataVerdict is the outcome of checking a submitted registration_data
  * payload. The tokens are the Go oracle's vocabulary verbatim.
  *
@@ -1205,10 +1220,34 @@ export const registrationDataVerdicts = [
 	"accepted",
 	"too_large",
 	"too_many_members",
+	"too_deep",
 	"uncanonicalizable",
 ] as const;
 
 export type RegistrationDataVerdict = (typeof registrationDataVerdicts)[number];
+
+/**
+ * registrationDataDepth returns how many JSON containers the payload nests, counting the
+ * payload object itself as the first. The walk is ITERATIVE: it runs before the depth
+ * bound is known to hold, so it is the one walk that must survive any input.
+ */
+function registrationDataDepth(data: Record<string, unknown>): number {
+	let deepest = 0;
+	const stack: Array<{ node: unknown; depth: number }> = [{ node: data, depth: 1 }];
+	while (stack.length > 0) {
+		const { node, depth } = stack.pop()!;
+		if (depth > deepest) deepest = depth;
+		// No need to walk past the bound: the answer is already decided, and a payload
+		// deep enough to matter is also deep enough to be expensive to finish walking.
+		if (depth > maxRegistrationDataDepth) return depth;
+		if (Array.isArray(node)) {
+			for (const child of node) stack.push({ node: child, depth: depth + 1 });
+		} else if (node !== null && typeof node === "object") {
+			for (const child of Object.values(node)) stack.push({ node: child, depth: depth + 1 });
+		}
+	}
+	return deepest;
+}
 
 /**
  * checkRegistrationData bounds a submitted registration_data payload.
@@ -1231,6 +1270,10 @@ export function checkRegistrationData(
 	// Members first: it is a length check, and it bounds the document the canonical
 	// encoding below then has to walk.
 	if (Object.keys(obj).length > maxRegistrationDataMembers) return "too_many_members";
+	// Depth SECOND, and before anything walks the payload recursively. The check is
+	// iterative for that reason: a recursive one would hit the very limit it exists to
+	// keep the caller away from, throwing while discovering that the payload is too deep.
+	if (registrationDataDepth(obj) > maxRegistrationDataDepth) return "too_deep";
 	let jcs: string | undefined;
 	try {
 		jcs = canonicalize(obj);

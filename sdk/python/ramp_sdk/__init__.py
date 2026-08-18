@@ -74,6 +74,7 @@ from .money import canonicalize_money, format_money, parse_money
 from .pop import AGENT_KEY_HEADER, sign_agent_binding, verify_agent_binding
 from .regschema import (
     MAX_REGISTRATION_DATA_BYTES,
+    MAX_REGISTRATION_DATA_DEPTH,
     MAX_REGISTRATION_DATA_MEMBERS,
     MAX_REGISTRATION_FIELD_ERROR_PATH_LEN,
     MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN,
@@ -125,6 +126,7 @@ __all__ = [
     "ERROR_DETAIL_TYPE",
     "MAX_BARE_DOMAIN_LEN",
     "MAX_REGISTRATION_DATA_BYTES",
+    "MAX_REGISTRATION_DATA_DEPTH",
     "MAX_REGISTRATION_DATA_MEMBERS",
     "MAX_REGISTRATION_FIELD_ERRORS",
     "MAX_REGISTRATION_FIELD_ERROR_PATH_LEN",

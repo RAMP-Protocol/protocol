@@ -584,6 +584,7 @@
   "max_field_errors": 64,
   "max_pattern_repeat": 1000,
   "max_registration_data_bytes": 16384,
+  "max_registration_data_depth": 32,
   "max_registration_data_members": 64,
   "max_schema_bytes": 16384,
   "max_schema_depth": 32,
@@ -13146,6 +13147,7 @@
     "accepted",
     "too_large",
     "too_many_members",
+    "too_deep",
     "uncanonicalizable"
   ],
   "validate": [

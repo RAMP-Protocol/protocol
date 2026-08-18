@@ -381,6 +381,11 @@
       "python": "MAX_REGISTRATION_DATA_BYTES",
       "ts": "maxRegistrationDataBytes"
     },
+    "helpers.MaxRegistrationDataDepth": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_DATA_DEPTH",
+      "ts": "maxRegistrationDataDepth"
+    },
     "helpers.MaxRegistrationDataMembers": {
       "allowlist_reason": null,
       "python": "MAX_REGISTRATION_DATA_MEMBERS",

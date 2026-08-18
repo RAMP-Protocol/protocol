@@ -40,6 +40,7 @@ from ramp_sdk.regschema import (
     MAX_REGISTRATION_SCHEMA_BYTES,
     MAX_REGISTRATION_SCHEMA_DEPTH,
     MAX_REGISTRATION_DATA_BYTES,
+    MAX_REGISTRATION_DATA_DEPTH,
     MAX_REGISTRATION_DATA_MEMBERS,
     MAX_REGISTRATION_SCHEMA_EVALUATIONS,
     MAX_REGISTRATION_SCHEMA_REF_HOPS,
@@ -75,6 +76,7 @@ def test_the_rule_constants_match_the_oracle() -> None:
     assert MAX_PORTABLE_REPEAT == _DOC["max_pattern_repeat"]
     assert MAX_REGISTRATION_DATA_BYTES == _DOC["max_registration_data_bytes"]
     assert MAX_REGISTRATION_DATA_MEMBERS == _DOC["max_registration_data_members"]
+    assert MAX_REGISTRATION_DATA_DEPTH == _DOC["max_registration_data_depth"]
     # The alphabet itself, not a description of it. Dropping an escape from all three
     # SDKs used to leave every gate green; this is what makes that go red.
     admitted = _PORTABLE_ESCAPES | _PORTABLE_SYNTAX_ESCAPES
@@ -290,29 +292,47 @@ def test_an_integer_measures_as_the_double_the_wire_will_carry() -> None:
 
 
 def test_the_payload_face_answers_rather_than_raising() -> None:
-    """Three inputs this port could hit an exception on, where the other two SDKs answer.
+    """Inputs this port could hit an exception on, where the other two SDKs answer.
 
-    The face is documented as returning a verdict for every way a payload can fail, and
-    a caller that let an exception escape would crash the request — or, wrapping it
-    broadly, read the crash as "no schema" and turn enforcement off.
+    The face is documented as returning a verdict for every way a payload can fail, and a
+    caller that let an exception escape would crash the request — or, wrapping it broadly,
+    read the crash as "no schema" and turn enforcement off.
 
-    The 600-deep case is the one where this port is deliberately STRICTER than Go, which
-    accepts a payload that deep: the canonicalizer walks it recursively and this
-    interpreter runs out of stack first. Closing that difference needs a nesting bound in
-    the contract, which is a publishing rule rather than a port fix, so it is recorded
-    here rather than hidden. What matters for this test is that it answers.
+    The deeply nested case is here because it used to be the worst of the three, and not
+    in the way it was first described. Canonicalising walks the payload recursively, so
+    the verdict depended on the INTERPRETER rather than on the payload: 3.11 refused past
+    about five hundred containers and 3.12 accepted nine hundred, while Go and TypeScript
+    accepted every depth tried. It is now bounded before anything walks it, so every
+    runtime answers "too_deep" at the same place.
     """
     deep: dict[str, Any] = {}
     cur = deep
     for _ in range(600):
         cur["a"] = {}
         cur = cur["a"]
-    for name, payload in (
-        ("a non-finite number", {"n": float("inf")}),
-        ("an integer too large for a double", {"n": 10**400}),
-        ("a payload nested past the recursion limit", deep),
-    ):
-        assert check_registration_data(payload) == "uncanonicalizable", name
+    assert check_registration_data({"n": float("inf")}) == "uncanonicalizable"
+    assert check_registration_data({"n": 10**400}) == "uncanonicalizable"
+    assert check_registration_data(deep) == "too_deep"
+
+
+def test_the_depth_verdict_does_not_depend_on_the_runtime() -> None:
+    """The property the bound exists for, asserted on both sides of it.
+
+    Nothing here is allowed to vary with the interpreter's remaining stack: the payload
+    at the cap is accepted and the one past it is refused, on any runtime, because the
+    walk that decides it is iterative and runs before anything recurses.
+    """
+
+    def nest(n: int) -> dict[str, Any]:
+        inner: dict[str, Any] = {}
+        for _ in range(n - 1):
+            inner = {"a": inner}
+        return inner
+
+    assert check_registration_data(nest(MAX_REGISTRATION_DATA_DEPTH)) == "accepted"
+    assert check_registration_data(nest(MAX_REGISTRATION_DATA_DEPTH + 1)) == "too_deep"
+    # Far past every runtime limit measured, and still a verdict rather than a crash.
+    assert check_registration_data(nest(5000)) == "too_deep"
 
 
 def test_a_long_flat_reference_chain_is_refused_without_exhausting_the_stack() -> None:

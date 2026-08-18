@@ -245,6 +245,12 @@ func buildRegDataVectors(t *testing.T) []regDataVector {
 		{"a_float_the_canonical_form_keeps_under", map[string]any{"n": 1e16}, RegistrationDataAccepted},
 	}
 
+	// The depth boundary is stated as a pair rather than as "something deep", the way
+	// the byte and member caps are. It bounds an axis nothing else did: a deeply nested
+	// payload is small and has few top-level members, so neither of the other two caps
+	// sees it, and canonicalising it recurses — which made the verdict a property of the
+	// reader's runtime until this bound existed.
+	//
 	// RegistrationDataUncanonicalizable has no vector, and cannot have one: the input
 	// that produces it is a non-finite number, which JSON has no way to write down —
 	// which is the very reason the verdict exists. Each language asserts it directly
@@ -289,13 +295,24 @@ func overCapWithFloat(t *testing.T) map[string]any {
 	return data
 }
 
+// nestedPayload builds a payload nesting exactly depth JSON containers, counting the
+// payload object itself as the first.
+func nestedPayload(depth int) map[string]any {
+	inner := map[string]any{}
+	for i := 1; i < depth; i++ {
+		inner = map[string]any{"a": inner}
+	}
+	return inner
+}
+
 // regDataVerdictVocabulary is every token the payload check can answer with, recorded
 // for the same reason as the schema vocabulary: a port that grew or lost one is caught
 // by comparing the list rather than by whichever cases happen to exercise each token.
 func regDataVerdictVocabulary() []string {
 	all := []RegistrationDataVerdict{
 		RegistrationDataNoVerdict, RegistrationDataAccepted, RegistrationDataTooLarge,
-		RegistrationDataTooManyMembers, RegistrationDataUncanonicalizable,
+		RegistrationDataTooManyMembers, RegistrationDataTooDeep,
+		RegistrationDataUncanonicalizable,
 	}
 	out := make([]string, 0, len(all))
 	for _, v := range all {
@@ -1204,6 +1221,7 @@ func TestGenerateRegSchemaVectors(t *testing.T) {
 		// all three SDKs used to leave every gate green.
 		"max_registration_data_bytes":   MaxRegistrationDataBytes,
 		"max_registration_data_members": MaxRegistrationDataMembers,
+		"max_registration_data_depth":   MaxRegistrationDataDepth,
 		"registration_data_verdicts":    regDataVerdictVocabulary(),
 		"portable_pattern_escapes":      portablePatternEscapes(),
 		"max_pattern_repeat":            maxPortableRepeat,
