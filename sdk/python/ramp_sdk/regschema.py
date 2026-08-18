@@ -158,25 +158,38 @@ _POINTER_ESCAPES = ((("~"), "~0"), ("/", "~1"))
 MAX_PORTABLE_REPEAT = 1000
 
 
-def _is_portable_quantifier(s: str) -> bool:
-    """Whether the ``{...}`` starting at ``s`` is a counted repeat every engine reads
-    the same way. A ``{`` that opens no valid quantifier is refused rather than
-    treated as a literal, because whether it IS a literal is precisely what the
-    engines disagree about."""
+def _quantifier_len(s: str) -> int:
+    """The length of the counted repeat starting at ``s``, including its closing brace,
+    or 0 if ``s`` opens none that every engine reads the same way. A ``{`` that opens no
+    valid quantifier is refused rather than treated as a literal, because whether it IS
+    a literal is precisely what the engines disagree about.
+
+    It returns a LENGTH rather than a bool so the caller can consume the whole
+    ``{n,m}``. That is what lets an unmatched ``}`` be refused: once every well-formed
+    quantifier is stepped over, a ``}`` the scan still reaches closes nothing.
+
+    The first bound must be present. ``a{,5}`` is the shape that forced this: RE2 reads
+    it as the five literal characters and this engine reads it as a repeat of zero to
+    five, so both compile the pattern and then disagree about which payloads match it,
+    with nothing logged. The empty part is still allowed AFTER the comma, because
+    ``{n,}`` is the ordinary open-ended repeat and every engine agrees on it.
+    """
     end = s.find("}")
     if end < 0:
-        return False
+        return 0
     body = s[1:end]
     if not body:
-        return False
-    for part in body.split(",", 1):
+        return 0
+    for i, part in enumerate(body.split(",", 1)):
         if not part:
+            if i == 0:
+                return 0  # "{,5}" — two engines, two readings
             continue  # "{n,}" is well formed
         if not part.isdigit():
-            return False
+            return 0
         if int(part) > MAX_PORTABLE_REPEAT:
-            return False
-    return True
+            return 0
+    return end + 1
 
 
 def _group_body(p: str, open_at: int) -> tuple[str, int] | None:
@@ -403,8 +416,18 @@ def is_safe_schema_pattern(pattern: str) -> bool:
                 i += 3
                 continue
         elif ch == "{" and not in_class:
-            if not _is_portable_quantifier(pattern[i:]):
+            consumed = _quantifier_len(pattern[i:])
+            if consumed == 0:
                 return False
+            i += consumed
+            continue
+        elif ch == "}" and not in_class:
+            # Every well-formed quantifier was stepped over above, so a "}" reached here
+            # closes nothing. RE2 and this engine read it as a literal and ECMA-262 under
+            # the `u` flag refuses it outright — the same split the unmatched "]" rule
+            # exists for, so it gets the same answer. A literal brace is written "\}",
+            # which the alphabet admits.
+            return False
         i += 1
     # An unclosed class is a literal "[" to RE2 and a syntax error to ajv.
     if in_class:
@@ -689,7 +712,7 @@ class _CostWalker:
             self.verdict = verdict
         return _COST_CEILING
 
-    def cost(self, node: Any) -> int:
+    def cost(self, node: Any, missing: set[str] | None = None) -> int:
         """The worst-case evaluations ``node`` can require against one instance: a
         boolean schema is one, an object schema is itself plus everything it can
         delegate to.
@@ -702,6 +725,8 @@ class _CostWalker:
             return _COST_CEILING
         if not isinstance(node, dict):
             return 1
+        if missing is None:
+            missing = set()
         total = 1
         for key in sorted(node):
             value = node[key]
@@ -709,41 +734,98 @@ class _CostWalker:
                 continue
             if key in _REFERENCE_KEYWORDS:
                 if isinstance(value, str):
-                    total = _add_cost(total, self.ref_cost(value))
+                    total = _add_cost(total, self._ref_contribution(value, missing))
             elif key in _BRANCH_KEYWORDS:
                 if isinstance(value, list):
                     for item in value:
-                        total = _add_cost(total, self.cost(item))
+                        total = _add_cost(total, self.cost(item, missing))
                 else:
-                    total = _add_cost(total, self.cost(value))
+                    total = _add_cost(total, self.cost(value, missing))
             elif key in _SINGLE_SUBSCHEMA_KEYWORDS:
-                total = _add_cost(total, self.cost(value))
+                total = _add_cost(total, self.cost(value, missing))
             elif key in _SCHEMA_MAP_KEYWORDS:
                 if isinstance(value, dict):
                     for name in sorted(value):
-                        total = _add_cost(total, self.cost(value[name]))
+                        total = _add_cost(total, self.cost(value[name], missing))
                 else:
-                    total = _add_cost(total, self.cost(value))
+                    total = _add_cost(total, self.cost(value, missing))
             if total >= _COST_CEILING:
                 return _COST_CEILING
         return total
 
-    def ref_cost(self, ref: str) -> int:
-        """Count a reference's target once and remember it. A location already being
-        counted is a cycle: its cost is not finite, and it is what makes two of the
-        three ports abort rather than answer."""
+    def root_cost(self) -> int:
+        """The whole document's cost, driving any reference the root walk defers.
+
+        The structural walk records a reference it has not yet counted rather than
+        recursing into it, so the entry point has to keep running it until nothing is
+        outstanding — the same loop ``ref_cost`` runs, one level up.
+        """
+        while True:
+            missing: set[str] = set()
+            total = self.cost(self.root, missing)
+            if self.verdict != "accepted":
+                return _COST_CEILING
+            if not missing:
+                return total
+            for dep in sorted(missing):
+                self.ref_cost(dep)
+                if self.verdict != "accepted":
+                    return _COST_CEILING
+
+    def _ref_contribution(self, ref: str, missing: set[str]) -> int:
+        """What a reference adds to the enclosing schema's cost, if that is already
+        known. A target not yet counted is recorded as a dependency and contributes
+        nothing for now; the driver in ``ref_cost`` counts it and re-runs this walk."""
         if ref in self.memo:
             return self.memo[ref]
         if ref in self.on_stack:
             return self.fail("ref_cycle")
-        target, ok = self.resolve(ref)
-        if not ok:
-            return self.fail("uncompilable")
+        missing.add(ref)
+        return 0
+
+    def ref_cost(self, ref: str) -> int:
+        """Count a reference's target once and remember it.
+
+        The walk over the reference GRAPH is iterative, with an explicit stack, while
+        the walk over a single schema's structure stays recursive. That split is the
+        point: structural depth is already bounded at
+        MAX_REGISTRATION_SCHEMA_DEPTH by the lexical scan that runs before this, but the
+        length of a ``$ref`` chain is bounded only by the document's size — and a flat
+        chain of definitions is three containers deep, so the depth cap never sees it. A
+        recursive walk therefore ran out of interpreter stack on a document well under
+        the size cap and raised out of a face documented as never raising, where the
+        other two SDKs answered.
+
+        A location already being counted is a cycle: its cost is not finite, and it is
+        what made this port abort rather than answer.
+        """
+        if ref in self.memo:
+            return self.memo[ref]
+        stack: list[str] = [ref]
         self.on_stack.add(ref)
-        c = self.cost(target)
-        self.on_stack.discard(ref)
-        self.memo[ref] = c
-        return c
+        while stack:
+            cur = stack[-1]
+            target, ok = self.resolve(cur)
+            if not ok:
+                return self.fail("uncompilable")
+            missing: set[str] = set()
+            total = self.cost(target, missing)
+            if self.verdict != "accepted":
+                return _COST_CEILING
+            if missing:
+                # Count the dependencies first, then re-run this node's walk with them
+                # memoised. Each node is walked at most once more than it has batches
+                # of new dependencies, so a flat chain costs one extra pass per link.
+                for dep in sorted(missing):
+                    if dep in self.on_stack:
+                        return self.fail("ref_cycle")
+                    stack.append(dep)
+                    self.on_stack.add(dep)
+                continue
+            self.memo[cur] = total
+            self.on_stack.discard(cur)
+            stack.pop()
+        return self.memo[ref]
 
     def resolve(self, ref: str) -> tuple[Any, bool]:
         """Follow a same-document reference. The scan has already refused anything not
@@ -796,7 +878,7 @@ def _check_evaluation_cost(doc: Any) -> SchemaVerdict:
     """Bound how much work validating a payload can cost. The size and depth caps
     bound the DOCUMENT and say nothing about this."""
     walker = _CostWalker(doc)
-    cost = walker.cost(doc)
+    cost = walker.root_cost()
     if walker.verdict != "accepted":
         return walker.verdict
     if cost > MAX_REGISTRATION_SCHEMA_EVALUATIONS:
@@ -1223,10 +1305,21 @@ def check_registration_data(data: dict[str, Any] | None) -> RegistrationDataVerd
         return "too_many_members"
     try:
         size = _registration_data_bytes(data)
-    except (ValueError, TypeError):
-        # The reachable case is a non-finite number, which JSON cannot represent. It is
-        # a verdict rather than an exception because this face, like the rest of the
-        # registration surface, does not throw.
+    except (ValueError, TypeError, OverflowError, RecursionError):
+        # A verdict rather than an exception because this face, like the rest of the
+        # registration surface, does not throw. Three ways a payload reaches here:
+        #
+        #   a non-finite number, which JSON cannot represent at all;
+        #
+        #   an integer too large for a double — OverflowError out of the coercion that
+        #   renders integers as the number the wire will carry. The other two SDKs
+        #   answer for the equivalent payload rather than raising, and so does this one;
+        #
+        #   a payload nested deeper than this interpreter's recursion limit, which the
+        #   canonicalizer hits while walking it. Go accepts a payload that deep, so this
+        #   port is stricter here — a difference recorded rather than papered over,
+        #   since closing it needs a nesting bound in the contract and that is a
+        #   publishing rule, not a port fix.
         return "uncanonicalizable"
     if size > MAX_REGISTRATION_DATA_BYTES:
         return "too_large"

@@ -342,6 +342,12 @@ func buildRegSchemaMatchVectors(t *testing.T) []matchVector {
 		// \xHH is the one escape admitted by shape rather than by letter, so its
 		// meaning is pinned here as well as its acceptance.
 		{"hex_escape_matches", `^\x41$`, "A", true},
+		// The dot's line-terminator set. RE2 and Python exclude only "\n"; ECMA-262
+		// excludes all four terminators, so "^.$" against a carriage return conformed in
+		// two SDKs and violated in the third until the odd one out was corrected.
+		{"dot_matches_a_carriage_return", `^.$`, "\r", true},
+		{"dot_refuses_a_newline", `^.$`, "\n", false},
+		{"dot_matches_an_ordinary_character", `^.$`, "a", true},
 		{"hex_escape_refuses_another_letter", `^\x41$`, "B", false},
 
 		// Ordinary matching, so the dimension is not only about the edge cases.
@@ -515,6 +521,15 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 		{"type_names_a_type_that_does_not_exist", `{"type":"objekt"}`, SchemaUncompilable},
 		{"required_is_not_a_list", `{"type":"object","required":"vat_id"}`, SchemaUncompilable},
 
+		// A long FLAT reference chain: every definition is a sibling, so the document is
+		// three containers deep and the lexical depth cap never sees it, while the walk
+		// that follows references sees one link per definition. It is ordinary JSON and
+		// well under the size cap, and it is what a recursive reference walk runs out of
+		// stack on — one port raised out of a face documented as never raising while the
+		// other two answered. The verdict is the ordinary one; the case exists so that
+		// stays true.
+		{"a_long_flat_reference_chain", flatRefChain(500), SchemaAccepted},
+
 		// Refused — the ENCODING, which decides WHICH document the rules above are
 		// read against. Each of these got three different answers from the three SDKs
 		// before it was pinned here, and none of it was the JSON grammar's doing: it
@@ -614,6 +629,23 @@ var rawByteCompileCases = []struct {
 	// The four that ARE JSON whitespace still read as "publishes none", which is the
 	// contract's ordinary case and must keep working.
 	{name: "only_json_whitespace", raw: []byte(" \t\r\n"), want: SchemaNotPublished},
+}
+
+// flatRefChain builds a document whose definitions form a chain of n links, each one
+// referring to the next. Every definition is a sibling of the others, so the document
+// nests only three containers deep however long the chain is — which is exactly why the
+// depth cap cannot stand in for a bound on reference following.
+func flatRefChain(n int) string {
+	var b strings.Builder
+	b.WriteString(`{"$defs":{`)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(`"` + strconv.Itoa(i) + `":{"$ref":"#/$defs/` + strconv.Itoa(i+1) + `"}`)
+	}
+	b.WriteString(`,"` + strconv.Itoa(n) + `":{"type":"string"}},"$ref":"#/$defs/0"}`)
+	return b.String()
 }
 
 // buildRegSchemaValidateVectors enumerates what a refusal has to SAY. The pointer
@@ -1063,6 +1095,22 @@ func buildRegSchemaPatternVectors(t *testing.T) []patternVector {
 		// Refused — a repeat bound the engines do not share. RE2 refuses a count over
 		// 1000 outright where the other two expand it.
 		{"repeat_at_the_portable_bound", `^a{1000}$`, true},
+		// A counted repeat with no first bound. RE2 reads "a{,5}" as the five literal
+		// characters and Python reads it as a repeat of zero to five, so both engines
+		// compile the pattern and then disagree about which payloads match it — the
+		// silent class, and the reason the first bound is now required. "{n,}" is a
+		// different shape and stays admitted.
+		{"repeat_missing_the_first_bound", `^a{,5}$`, false},
+		{"open_ended_repeat_keeps_its_empty_second_part", `^a{2,}$`, true},
+		// A body with more than two parts. Every engine refuses it, but this port's
+		// scanner admitted it: JavaScript's String.split takes an element LIMIT that
+		// discards the remainder, where Go's SplitN and Python's maxsplit keep it, so
+		// "1,2,3" arrived as two clean numbers here and as "1" and "2,3" there.
+		{"repeat_with_three_parts", `^a{1,2,3}$`, false},
+		// A closing brace that closes nothing. RE2 and Python read it as a literal and
+		// ECMA-262 under the `u` flag refuses it, exactly like the unmatched "]" above.
+		{"unmatched_closing_brace", `^price}$`, false},
+		{"escaped_closing_brace_is_a_literal", `^price\}$`, true},
 		{"repeat_over_the_portable_bound", `^a{1001}$`, false},
 		{"open_ended_repeat", `^a{2,}$`, true},
 		{"bare_brace", `a{`, false},

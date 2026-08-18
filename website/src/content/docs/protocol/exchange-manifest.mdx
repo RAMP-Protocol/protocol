@@ -207,9 +207,11 @@ and a consumer **MUST** refuse a schema that does not.
   group opens with `(` or `(?:` and nothing else; the only escapes are `\$`, `\(`,
   `\)`, `\*`, `\+`, `\.`, `\/`, `\?`, `\D`, `\W`, `\[`, `\\`, `\]`, `\^`, `\d`,
   `\f`, `\n`, `\r`, `\t`, `\v`, `\w`, `\{`, `\|`, `\}` and `\xHH` with exactly two
-  hex digits; a counted repeat does not exceed 1000; `[:` does not appear inside a
-  bracket expression; a bracket expression closes and does not open with `]`; and a
-  range endpoint is not a shorthand class (`[\w-x]`).
+  hex digits; a counted repeat does not exceed 1000 and states its first
+  bound (`a{2,}` yes, `a{,5}` no); a `}` outside a bracket expression closes a counted
+  repeat, so a literal brace is written `\}`; `[:` does not appear inside a bracket
+  expression; a bracket expression closes and does not open with `]`; and a range
+  endpoint is not a shorthand class (`[\w-x]`).
 - **Patterns live in two places.** `pattern` states its regex as a value and
   `patternProperties` states its regexes as **keys**. Both are patterns and both are
   held to the alphabet; they are the only two keywords in the dialect that carry one.

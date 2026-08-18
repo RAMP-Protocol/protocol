@@ -25,6 +25,7 @@ import {
 	checkRegistrationData,
 	compileRegistrationSchema,
 	isSafeSchemaPattern,
+	maxPortableRepeat,
 	maxRegistrationDataBytes,
 	maxRegistrationDataMembers,
 	maxRegistrationFieldErrorPathLen,
@@ -34,6 +35,8 @@ import {
 	maxRegistrationSchemaDepth,
 	maxRegistrationSchemaEvaluations,
 	registrationSchemaDialect,
+	registrationDataVerdicts,
+	schemaVerdicts,
 } from "../src/regschema";
 
 type CompileVector = {
@@ -84,6 +87,8 @@ type VectorsFile = {
 	max_schema_evaluations: number;
 	max_pattern_repeat: number;
 	portable_pattern_escapes: string;
+	verdicts: string[];
+	registration_data_verdicts: string[];
 	max_registration_data_bytes: number;
 	max_registration_data_members: number;
 	registration_data: RegDataVector[];
@@ -108,6 +113,48 @@ describe("registration-schema parity", () => {
 		expect(maxRegistrationSchemaEvaluations).toBe(vectors.max_schema_evaluations);
 		expect(maxRegistrationDataBytes).toBe(vectors.max_registration_data_bytes);
 		expect(maxRegistrationDataMembers).toBe(vectors.max_registration_data_members);
+		// The two values that decide which patterns this port ADMITS, and the two this
+		// suite did not check until a multi-comma repeat proved the alphabet had already
+		// drifted from the other two SDKs.
+		expect(maxPortableRepeat).toBe(vectors.max_pattern_repeat);
+	});
+
+	it("admits exactly the oracle's escape alphabet", () => {
+		// Asserted through the RULE rather than against an exported set: every escape the
+		// corpus lists must be admitted, and a letter outside the list must not be. That
+		// needs no new public symbol and checks the behaviour the contract states rather
+		// than a constant that happens to sit beside it.
+		for (const c of vectors.portable_pattern_escapes) {
+			expect(isSafeSchemaPattern(`\\${c}`)).toBe(true);
+		}
+		// A sample from outside the list, each one measured as divergent across the three
+		// engines: the whitespace classes, the empty-string word boundary, a text anchor
+		// and a named backreference.
+		for (const c of ["s", "S", "B", "A", "k"]) {
+			expect(vectors.portable_pattern_escapes).not.toContain(c);
+			expect(isSafeSchemaPattern(`\\${c}`)).toBe(false);
+		}
+	});
+
+	it("ships the oracle's verdict vocabularies", () => {
+		// The corpus emits both lists so a port that grew a verdict the oracle does not
+		// have, or lost one it does, is caught by comparing the list rather than by
+		// whichever cases happen to exercise each token. Nothing read them until now, so
+		// the hand-written union could drift with every gate green. Deriving the union
+		// from this array is what keeps the type and the runtime list one object.
+		expect([...schemaVerdicts]).toEqual(vectors.verdicts);
+		expect([...registrationDataVerdicts]).toEqual(vectors.registration_data_verdicts);
+	});
+
+	it("ships a non-empty case set in every dimension", () => {
+		// Vacuity. If the generator stopped emitting a dimension this suite would run
+		// zero cases for it and pass, which is exactly what the `match` dimension — the
+		// only one recording what an admitted schema then MATCHES — cannot afford.
+		expect(vectors.compile.length).toBeGreaterThan(0);
+		expect(vectors.validate.length).toBeGreaterThan(0);
+		expect(vectors.pattern.length).toBeGreaterThan(0);
+		expect(vectors.match.length).toBeGreaterThan(0);
+		expect(vectors.registration_data.length).toBeGreaterThan(0);
 	});
 
 	it.each(vectors.compile.map((v) => [v.name, v] as const))("compile %s", (_name, v) => {

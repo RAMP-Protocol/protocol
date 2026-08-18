@@ -1070,9 +1070,21 @@ func IsSafeSchemaPattern(p string) bool {
 			// A quantifier whose bound is absent or enormous parts the engines: ajv
 			// reads a bare "{" as a literal where RE2 errors, and RE2 caps a repeat
 			// count that the other two expand.
-			if !isPortableQuantifier(p[i:]) {
+			n := quantifierLen(p[i:])
+			if n == 0 {
 				return false
 			}
+			i += n - 1 // consume through the closing brace
+		case '}':
+			if inClass {
+				continue // a literal brace inside a class
+			}
+			// Every well-formed quantifier was stepped over above, so a "}" reached
+			// here closes nothing. RE2 and Python read it as a literal and ECMA-262
+			// under the `u` flag refuses it outright — the same split the unmatched
+			// "]" rule above exists for, so it gets the same answer. A literal brace
+			// is written "\}", which the alphabet admits.
+			return false
 		}
 	}
 	// An unclosed class is a literal '[' to RE2 and a syntax error to ajv.
@@ -1190,29 +1202,42 @@ func stripEscapes(s string) string {
 // pattern one SDK compiles and another does not.
 const maxPortableRepeat = 1000
 
-// isPortableQuantifier reports whether the "{...}" starting at s is a counted repeat
-// every engine reads the same way. A "{" that opens no valid quantifier is refused
-// rather than treated as a literal, because whether it IS a literal is precisely
-// what the engines disagree about.
-func isPortableQuantifier(s string) bool {
+// quantifierLen reports the length of the counted repeat starting at s, including its
+// closing brace, or 0 if s does not open one every engine reads the same way. A "{"
+// that opens no valid quantifier is refused rather than treated as a literal, because
+// whether it IS a literal is precisely what the engines disagree about.
+//
+// It returns a LENGTH rather than a bool so the caller can consume the whole "{n,m}".
+// That is what lets an unmatched "}" be refused: once every well-formed quantifier is
+// stepped over, a "}" the scan still reaches closes nothing.
+//
+// The first bound must be present. "a{,5}" is the shape that forced this: RE2 reads it
+// as the five literal characters and Python reads it as a repeat of zero to five, so
+// both engines compile the pattern and then disagree about which payloads match it,
+// with nothing logged. The empty part is still allowed AFTER the comma, because "{n,}"
+// is the ordinary open-ended repeat and every engine agrees on it.
+func quantifierLen(s string) int {
 	end := strings.IndexByte(s, '}')
 	if end < 0 {
-		return false
+		return 0
 	}
 	body := s[1:end]
 	if body == "" {
-		return false
+		return 0
 	}
-	for _, part := range strings.SplitN(body, ",", 2) {
+	for i, part := range strings.SplitN(body, ",", 2) {
 		if part == "" {
+			if i == 0 {
+				return 0 // "{,5}" — two engines, two readings
+			}
 			continue // "{n,}" is well formed
 		}
 		n, err := strconv.Atoi(part)
 		if err != nil || n < 0 || n > maxPortableRepeat {
-			return false
+			return 0
 		}
 	}
-	return true
+	return end + 1
 }
 
 func sortedKeys(m map[string]any) []string {

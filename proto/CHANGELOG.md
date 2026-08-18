@@ -88,6 +88,28 @@ a different character inside it, while the other two refused the same bytes. The
 JavaScript-only literals `NaN` and `Infinity` are not JSON (RFC 8259 §6) and are refused
 with them; one implementation's parser accepts all three as an extension.
 
+**Two more brace rules, found the way the bracket rules were.** A counted repeat MUST
+state its first bound, and a `}` outside a bracket expression MUST close one. `a{,5}` is
+five literal characters to RE2 and a repeat of zero to five to Python, so both engines
+compile it and then disagree about which payloads match, with nothing logged — the silent
+kind. An unmatched `}` is a literal to RE2 and Python and a syntax error to ECMA-262 under
+the `u` flag, which is the loud kind and exactly what the unmatched `]` rule already
+refuses. A literal brace is written `\}`, which the alphabet admits. `{n,}` is unaffected.
+
+*Tooling:* three corrections in the SDKs behind those rules, none of them contract
+changes. The dot's line-terminator set is now corrected in the TypeScript port rather
+than left to diverge — RE2 and Python exclude only `\n` where ECMA-262 excludes all four
+terminators, so `^.$` against a carriage return conformed in two SDKs and violated in the
+third; that port gains the same kind of source-level correction the Python `$` rewrite
+already uses, which reaches every place its validator compiles a regex. A multi-part
+repeat like `a{1,2,3}` was admitted by the TypeScript scanner alone, because
+`String.split`'s second argument caps the result and discards the remainder where Go's
+`SplitN` and Python's `maxsplit` keep it. And the Python compile face no longer runs out
+of interpreter stack on a long flat `$ref` chain: a chain is three containers deep however
+long it is, so the depth cap never saw it, and the walk that follows references is now
+iterative. The payload face answers with a verdict for an oversized integer and a deeply
+nested payload instead of raising, out of an API documented as never raising.
+
 **The payload is bounded too, and the bound names its unit.** A published schema is
 applied to `RegisterRequest.registration_data`, and the cost of that is roughly the
 schema's own cost multiplied by the elements in the payload — a subschema under `items`

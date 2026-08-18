@@ -88,20 +88,23 @@ export const maxRegistrationSchemaEvaluations = 10000;
  * "no_verdict" is Go's zero value and is never returned here; it is in the
  * vocabulary because the corpus carries the whole vocabulary.
  */
-export type SchemaVerdict =
-	| "no_verdict"
-	| "accepted"
-	| "malformed"
-	| "wrong_dialect"
-	| "remote_ref"
-	| "too_large"
-	| "too_deep"
-	| "unsafe_pattern"
-	| "too_complex"
-	| "ref_cycle"
-	| "compile_timeout"
-	| "uncompilable"
-	| "not_published";
+export const schemaVerdicts = [
+	"no_verdict",
+	"accepted",
+	"malformed",
+	"wrong_dialect",
+	"remote_ref",
+	"too_large",
+	"too_deep",
+	"unsafe_pattern",
+	"too_complex",
+	"ref_cycle",
+	"compile_timeout",
+	"uncompilable",
+	"not_published",
+] as const;
+
+export type SchemaVerdict = (typeof schemaVerdicts)[number];
 
 // The wire shape is declared once, next to the refusal builder that consumes it, and
 // re-exported here so a caller importing only this module still names one type.
@@ -137,6 +140,97 @@ const portableSyntaxEscapes = new Set("$()*+./?[\\]^{|}".split(""));
 // endpoint of a range, and the engines disagree about whether saying so ("[\w-x]") is
 // an error or a reinterpretation.
 const shorthandClassEscapes = new Set("dDwW".split(""));
+
+/**
+ * correctedPatternSource rewrites one author-written regex into a source that means the
+ * SAME thing here as it does in RE2 and in Python's `re`.
+ *
+ * One correction, and it is this port's turn to make one: `.` excludes only `\n` in RE2
+ * and in Python, and excludes all four line terminators in ECMA-262, so `^.$` against a
+ * carriage return conformed in the other two SDKs and violated here. Refusing `.` would
+ * gut a construct that appears in most real patterns, so the odd one out is corrected
+ * instead — exactly what the Python port already does for `$`, which matches before a
+ * trailing newline there and nowhere else.
+ *
+ * The scan is bracket- and escape-aware: a `.` inside a character class is already a
+ * literal dot, and an escaped `\.` is a literal everywhere.
+ */
+function correctedPatternSource(pattern: string): string {
+	const out: string[] = [];
+	let inClass = false;
+	for (let i = 0; i < pattern.length; i++) {
+		const ch = pattern[i]!;
+		if (ch === "\\") {
+			out.push(pattern.slice(i, i + 2));
+			i++;
+			continue;
+		}
+		if (ch === "[") inClass = true;
+		else if (ch === "]") inClass = false;
+		else if (ch === "." && !inClass) {
+			out.push("[^\n]");
+			continue;
+		}
+		out.push(ch);
+	}
+	return out.join("");
+}
+
+/**
+ * authoredPatternSource recovers the author's own text from a corrected source, for a
+ * refusal an operator reads.
+ *
+ * The rewrite is reversed rather than tracked alongside, which is exact in the direction
+ * that matters: an author who wrote `.` sees `.` back. It is not a round trip in the
+ * other direction — an author who wrote `[^\n]` also sees `.` — but the two are the same
+ * set of characters once corrected, and `.` is overwhelmingly the form people write. The
+ * refusal prose is validator-defined by contract and deliberately not pinned by the
+ * shared corpus, so an equivalent spelling is within what that contract allows.
+ */
+function authoredPatternSource(pattern: string): string {
+	return pattern.split("[^\n]").join(".");
+}
+
+/**
+ * correctRegexes returns a copy of the document with every regex-valued position
+ * corrected.
+ *
+ * The walk mirrors the safety scan exactly, and for the same reasons: a `const` holds
+ * DATA whose contents are never read as keywords, and `properties`/`$defs` map NAMES to
+ * subschemas, so a property literally called "pattern" is a property name and not a
+ * regex. Correcting the SOURCE rather than the matcher reaches every place ajv compiles
+ * a regex — the `pattern` keyword, the `patternProperties` keys, and the matched-key
+ * scans behind `additionalProperties` and `unevaluatedProperties` — including any a
+ * later release adds.
+ */
+function correctRegexes(node: unknown): unknown {
+	if (Array.isArray(node)) return node.map(correctRegexes);
+	if (node === null || typeof node !== "object") return node;
+	const out: Record<string, unknown> = {};
+	for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
+		if (nonSchemaKeywords.has(key)) {
+			out[key] = child;
+		} else if (key === "pattern" && typeof child === "string") {
+			out[key] = correctedPatternSource(child);
+		} else if (key === "patternProperties" && child !== null && typeof child === "object") {
+			// The regexes are the KEYS here, which is why correcting the matcher for the
+			// `pattern` keyword alone would never reach them.
+			out[key] = Object.fromEntries(
+				Object.entries(child as Record<string, unknown>).map(([k, v]) => [
+					correctedPatternSource(k),
+					correctRegexes(v),
+				]),
+			);
+		} else if (schemaMapKeywords.has(key) && child !== null && typeof child === "object") {
+			out[key] = Object.fromEntries(
+				Object.entries(child as Record<string, unknown>).map(([n, sub]) => [n, correctRegexes(sub)]),
+			);
+		} else {
+			out[key] = correctRegexes(child);
+		}
+	}
+	return out;
+}
 
 /**
  * isJsonBlank reports whether `bytes` carries nothing but JSON whitespace, which is
@@ -206,25 +300,52 @@ const referenceKeywords = ["$ref", "$dynamicRef", "$recursiveRef"] as const;
  * while the other two engines expand it, so a larger bound is a pattern one SDK
  * compiles and another does not.
  */
-const maxPortableRepeat = 1000;
+/**
+ * The largest {n,m} bound admitted. RE2 refuses a repeat count over 1000 outright while
+ * the other two engines expand it, so a larger bound is a pattern one SDK compiles and
+ * another does not. Exported so the parity suite can hold it against the corpus header:
+ * it and the escape alphabet are the two values that decide which patterns this port
+ * admits, and they were the two the suite did not check.
+ */
+export const maxPortableRepeat = 1000;
 
 /**
- * Whether the `{...}` starting at s is a counted repeat every engine reads the same
- * way. A `{` that opens no valid quantifier is refused rather than treated as a
- * literal, because whether it IS a literal is precisely what the engines disagree
- * about.
+ * The length of the counted repeat starting at `s`, including its closing brace, or 0
+ * if `s` opens none that every engine reads the same way. A `{` that opens no valid
+ * quantifier is refused rather than treated as a literal, because whether it IS a
+ * literal is precisely what the engines disagree about.
+ *
+ * It returns a LENGTH rather than a boolean so the caller can consume the whole
+ * `{n,m}`. That is what lets an unmatched `}` be refused: once every well-formed
+ * quantifier is stepped over, a `}` the scan still reaches closes nothing.
+ *
+ * The first bound must be present. `a{,5}` is the shape that forced this: RE2 reads it
+ * as the five literal characters and Python reads it as a repeat of zero to five, so
+ * both compile the pattern and then disagree about which payloads match it, with
+ * nothing logged. The empty part is still allowed AFTER the comma, because `{n,}` is
+ * the ordinary open-ended repeat and every engine agrees on it.
+ *
+ * The body is split on EVERY comma, not with a limit. `String.split`'s second argument
+ * caps the result array and DISCARDS the remainder, where Go's SplitN and Python's
+ * maxsplit keep it in the last element — so `"1,2,3".split(",", 2)` was `["1","2"]`
+ * here and `["1", "2,3"]` there, and this port alone admitted `a{1,2,3}`.
  */
-function isPortableQuantifier(s: string): boolean {
+function quantifierLen(s: string): number {
 	const end = s.indexOf("}");
-	if (end < 0) return false;
+	if (end < 0) return 0;
 	const body = s.slice(1, end);
-	if (body === "") return false;
-	for (const part of body.split(",", 2)) {
-		if (part === "") continue; // "{n,}" is well formed
-		if (!/^[0-9]+$/.test(part)) return false;
-		if (Number(part) > maxPortableRepeat) return false;
+	if (body === "") return 0;
+	const parts = body.split(",");
+	if (parts.length > 2) return 0;
+	for (const [i, part] of parts.entries()) {
+		if (part === "") {
+			if (i === 0) return 0; // "{,5}" — two engines, two readings
+			continue; // "{n,}" is well formed
+		}
+		if (!/^[0-9]+$/.test(part)) return 0;
+		if (Number(part) > maxPortableRepeat) return 0;
 	}
-	return true;
+	return end + 1;
 }
 
 /** The text between the parenthesis at `open` and its match, plus the index past it. */
@@ -388,7 +509,16 @@ export function isSafeSchemaPattern(pattern: string): boolean {
 				i += 2;
 			}
 		} else if (ch === "{" && !inClass) {
-			if (!isPortableQuantifier(pattern.slice(i))) return false;
+			const consumed = quantifierLen(pattern.slice(i));
+			if (consumed === 0) return false;
+			i += consumed - 1; // consume through the closing brace
+		} else if (ch === "}" && !inClass) {
+			// Every well-formed quantifier was stepped over above, so a "}" reached here
+			// closes nothing. RE2 and Python read it as a literal and ECMA-262 under the
+			// `u` flag refuses it outright — the same split the unmatched "]" rule exists
+			// for, so it gets the same answer. A literal brace is written "\}", which the
+			// alphabet admits.
+			return false;
 		}
 	}
 	// An unclosed class is a literal "[" to RE2 and a syntax error here.
@@ -774,6 +904,11 @@ function describe(error: ErrorObject): { keyword: string; text: string } {
 		const wanted = Array.isArray(want) ? want : [want];
 		return { keyword, text: `must be of type ${wanted.join(" or ")}` };
 	}
+	if (keyword === "pattern") {
+		// The AUTHOR's pattern, not this port's corrected copy: an operator reading a
+		// refusal should see the regex their Exchange published.
+		return { keyword, text: `pattern: ${authoredPatternSource(String(params["pattern"]))}` };
+	}
 	if (boundKeywords.has(keyword)) {
 		// The bound comes off the schema, so naming it leaks nothing and is the one
 		// piece of detail that makes a refusal actionable.
@@ -991,7 +1126,15 @@ export function compileRegistrationSchema(raw: Uint8Array | string): {
 	// instead of being fetched.
 	const ajv = new Ajv2020({ strict: false, allErrors: true, validateFormats: false });
 	try {
-		return { schema: new RegistrationSchema(ajv.compile(doc as object)), verdict: "accepted" };
+		// Every regex in the document, rewritten to mean here what it means in the other
+		// two SDKs. This happens after every rule above, so what is scanned and bounded
+		// as a schema is always the published document; only the copy handed to the
+		// matcher carries the correction.
+		const corrected = correctRegexes(doc);
+		return {
+			schema: new RegistrationSchema(ajv.compile(corrected as object)),
+			verdict: "accepted",
+		};
 	} catch {
 		return { schema: null, verdict: "uncompilable" };
 	}
@@ -1032,12 +1175,15 @@ export const maxRegistrationDataMembers = 64;
  * "no_verdict" is Go's zero value and is never returned here; it is in the vocabulary
  * because the corpus carries the whole vocabulary.
  */
-export type RegistrationDataVerdict =
-	| "no_verdict"
-	| "accepted"
-	| "too_large"
-	| "too_many_members"
-	| "uncanonicalizable";
+export const registrationDataVerdicts = [
+	"no_verdict",
+	"accepted",
+	"too_large",
+	"too_many_members",
+	"uncanonicalizable",
+] as const;
+
+export type RegistrationDataVerdict = (typeof registrationDataVerdicts)[number];
 
 /**
  * checkRegistrationData bounds a submitted registration_data payload.

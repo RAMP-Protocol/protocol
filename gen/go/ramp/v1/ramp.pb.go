@@ -6845,9 +6845,19 @@ type AccountRegistration struct {
 	//	\^, \d, \f, \n, \r, \t, \v, \w, \{, \| and \} MAY appear, together with \xHH
 	//	carrying exactly two hexadecimal digits (spelled out rather than ranged, so a
 	//	conformance guard can check the set character by character); a counted repeat
-	//	MUST NOT exceed 1000; "[:" MUST NOT appear inside a bracket expression; a
-	//	bracket expression MUST close and MUST NOT open with "]"; and a range
-	//	endpoint MUST NOT be one of the shorthand classes ("[\w-x]").
+	//	MUST NOT exceed 1000 and MUST state its first bound, so "a{2,}" is admitted
+	//	and "a{,5}" is not; a "}" outside a bracket expression MUST close a counted
+	//	repeat, so a literal brace is written "\}"; "[:" MUST NOT appear inside a
+	//	bracket expression; a bracket expression MUST close and MUST NOT open with
+	//	"]"; and a range endpoint MUST NOT be one of the shorthand classes ("[\w-x]").
+	//
+	//	The two brace rules are there for the same reason as the bracket ones, and
+	//	were found the same way. "a{,5}" is five literal characters to RE2 and a
+	//	repeat of zero to five to Python, so both engines compile it and then
+	//	disagree about which payloads match — the silent kind. An unmatched "}" is a
+	//	literal to RE2 and to Python and a syntax error to ECMA-262 under the `u`
+	//	flag, which is the loud kind, and exactly what the unmatched "]" rule above
+	//	already refuses.
 	//
 	//	The direction of that rule is the rule. Draft 2020-12 patterns are ECMA-262,
 	//	but the engines implementations run do not agree on it, and the set they

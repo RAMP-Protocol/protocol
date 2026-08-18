@@ -323,15 +323,27 @@ func TestDataSchemaCommentStatesTheRulesTheSDKEnforces(t *testing.T) {
 		{"the group forms a pattern may use", `A group MUST open with "(" or "(?:"`},
 		{"the POSIX bracket form a pattern may not use", `"[:"` + " MUST NOT appear inside a bracket expression"},
 		{"no nested quantifiers", "No nested quantifiers"},
+		// The two brace rules, each anchored on its own clause.
+		{"a counted repeat states its first bound", `MUST state its first bound`},
+		{"an unmatched closing brace is refused", `MUST close a counted repeat`},
 		{"format and friends are annotations", "MUST NOT assert format"},
 		{"the object-only rule", "MUST be a JSON object"},
 		// The two rules the SDK applies that the contract used to leave unsaid. An
 		// implementor reading only the contract accepted schemas the SDK refuses, and
 		// refused schemas the SDK accepts.
-		{"patternProperties keys are patterns", "patternProperties"},
-		{"const and friends hold data, not schema", "const"},
+		//
+		// Each phrase below is a clause only its own rule's sentence can produce. The
+		// first version of these three searched for a bare word — "const",
+		// "patternProperties", "byte order mark" — and every one of them already
+		// occurred in a different paragraph, so the checks passed on text that did not
+		// state the rule at all: deleting the whole "Data is not schema" paragraph, 683
+		// characters, left this test green. A guard that cannot tell the rule from a
+		// word that appears near it is not holding anything.
+		{"patternProperties keys are patterns", "states its regexes as KEYS"},
+		{"const and friends hold data, not schema", "their contents are never read as keywords"},
 		// The encoding, which decides WHICH document every rule above is read against.
-		{"UTF-8 with no byte order mark", "byte order mark"},
+		{"no byte order mark", "MUST NOT begin with a byte order mark"},
+		{"well-formed UTF-8", "MUST be well-formed UTF-8"},
 		// What counts as "no schema published" — the enforcement switch, so a byte
 		// sequence read as absent is one that turns validation off.
 		{"absent means empty or JSON whitespace", "only JSON whitespace"},
@@ -380,6 +392,8 @@ func TestRegistrationSchemaVectorsAreNotVacuous(t *testing.T) {
 		Compile  []json.RawMessage `json:"compile"`
 		Validate []json.RawMessage `json:"validate"`
 		Pattern  []json.RawMessage `json:"pattern"`
+		Match    []json.RawMessage `json:"match"`
+		RegData  []json.RawMessage `json:"registration_data"`
 	}
 	if err := json.Unmarshal(b, &doc); err != nil {
 		t.Fatalf("decode %s: %v", regSchemaVectors, err)
@@ -391,6 +405,12 @@ func TestRegistrationSchemaVectorsAreNotVacuous(t *testing.T) {
 		{"compile", len(doc.Compile)},
 		{"validate", len(doc.Validate)},
 		{"pattern", len(doc.Pattern)},
+		// `match` and `registration_data` were omitted here while the emitter grew them.
+		// `match` is the dimension that records what an admitted schema then MATCHES —
+		// the one whose absence let a whole class of divergence ship — so a guard that
+		// could not notice it disappearing was the wrong guard to be missing.
+		{"match", len(doc.Match)},
+		{"registration_data", len(doc.RegData)},
 	} {
 		if c.n == 0 {
 			t.Errorf("%s carries no %s cases — that dimension asserts nothing in any language",

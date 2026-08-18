@@ -334,6 +334,26 @@ the bytes rather than a decoded string. The general shape is the one this featur
 running into: a rule is only as portable as the layer underneath it, and "ask the
 platform" is not a specification.
 
+The brace rules arrived last and are the clearest statement of the pattern. `a{,5}` and a
+lone `}` had been admitted the whole time, and each was found the same way the bracket
+rules were — by asking a second engine what it thought the pattern meant, rather than by
+reading the rule. What makes them worth recording is that the two failure modes sit side
+by side in one construct: the missing first bound is SILENT, with RE2 reading five literal
+characters and Python reading a repeat, while the unmatched brace is LOUD, refused by
+ECMA-262 under the `u` flag and accepted by the other two. A rule set that only closed the
+loud half would have looked complete and left the dangerous half open.
+
+Three enforcement lessons came with them, none of which changed a rule. Correcting a
+divergence has to happen where every consumer of the value reads it: the TypeScript port's
+dot correction is written into the schema source for the same reason Python's `$` rewrite
+is, because a matcher-level fix reaches one call site and a source-level fix reaches all of
+them. A port can diverge through a standard-library detail rather than a design decision —
+`String.split`'s second argument caps the result and discards the remainder where Go and
+Python keep it, which is why one scanner alone admitted `a{1,2,3}`. And a bound stated over
+one axis does not constrain another: the schema depth cap counts containers, so a flat
+reference chain of five hundred links is three containers deep and passed it, then
+exhausted the interpreter stack of the one port whose walk was recursive.
+
 The last gap was the other side of the same coin. Every cap protected the schema, and
 nothing protected the payload the schema is applied to — validation cost is the schema's
 cost multiplied by the elements in the payload, so the multiplier was the unbounded

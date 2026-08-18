@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from conftest import GO_TESTDATA, load_json
@@ -43,6 +43,8 @@ from ramp_sdk.regschema import (
     MAX_REGISTRATION_DATA_MEMBERS,
     MAX_REGISTRATION_SCHEMA_EVALUATIONS,
     REGISTRATION_SCHEMA_DIALECT,
+    RegistrationDataVerdict,
+    SchemaVerdict,
     _PORTABLE_ESCAPES,
     _PORTABLE_SYNTAX_ESCAPES,
     check_registration_data,
@@ -275,3 +277,55 @@ def test_an_integer_measures_as_the_double_the_wire_will_carry() -> None:
     assert check_registration_data({"a": {"b": [10**16]}}) == "accepted"
     # A bool subclasses int here and must not be rendered as a number.
     assert check_registration_data({"flag": True}) == "accepted"
+
+
+def test_the_payload_face_answers_rather_than_raising() -> None:
+    """Three inputs this port could hit an exception on, where the other two SDKs answer.
+
+    The face is documented as returning a verdict for every way a payload can fail, and
+    a caller that let an exception escape would crash the request — or, wrapping it
+    broadly, read the crash as "no schema" and turn enforcement off.
+
+    The 600-deep case is the one where this port is deliberately STRICTER than Go, which
+    accepts a payload that deep: the canonicalizer walks it recursively and this
+    interpreter runs out of stack first. Closing that difference needs a nesting bound in
+    the contract, which is a publishing rule rather than a port fix, so it is recorded
+    here rather than hidden. What matters for this test is that it answers.
+    """
+    deep: dict[str, Any] = {}
+    cur = deep
+    for _ in range(600):
+        cur["a"] = {}
+        cur = cur["a"]
+    for name, payload in (
+        ("a non-finite number", {"n": float("inf")}),
+        ("an integer too large for a double", {"n": 10**400}),
+        ("a payload nested past the recursion limit", deep),
+    ):
+        assert check_registration_data(payload) == "uncanonicalizable", name
+
+
+def test_a_long_flat_reference_chain_does_not_exhaust_the_stack() -> None:
+    """The compile face walks references iteratively.
+
+    A flat chain is three containers deep however long it is, so the lexical depth cap
+    never sees it, while the walk that follows references sees one link per definition. A
+    recursive walk raised RecursionError on a document well under the size cap. The
+    shared corpus carries this case too; this asserts the property directly, at a length
+    the corpus does not have to encode.
+    """
+    links = 560
+    defs = {str(i): {"$ref": f"#/$defs/{i + 1}"} for i in range(links)}
+    defs[str(links)] = {"type": "string"}
+    raw = json.dumps({"$defs": defs, "$ref": "#/$defs/0"}, separators=(",", ":")).encode()
+    assert len(raw) <= MAX_REGISTRATION_SCHEMA_BYTES
+    assert compile_registration_schema(raw)[1] == "accepted"
+
+
+def test_the_verdict_vocabularies_match_the_oracle() -> None:
+    """The corpus emits both lists so a port that grew a verdict the oracle does not
+    have, or lost one it does, is caught by comparing the list rather than by whichever
+    cases happen to exercise each token. Nothing read them until now, so this port's
+    hand-written Literal could drift from the oracle with every gate green."""
+    assert list(get_args(SchemaVerdict)) == _DOC["verdicts"]
+    assert list(get_args(RegistrationDataVerdict)) == _DOC["registration_data_verdicts"]
