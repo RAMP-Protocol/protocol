@@ -723,8 +723,19 @@ class _CostWalker:
         self.anchors: dict[str, Any] = {}
         _collect_anchors(root, self.anchors)
         self.memo: dict[str, int] = {}
-        # The hop count at which each pending reference was first reached, so the
-        # iterative driver can resume its walk at the right depth.
+        # The longest chain of further $ref hops starting at each counted location,
+        # written at exactly the moment ``memo`` is — the two are always written
+        # together, so a value read out of ``below`` is as final as the cost beside it.
+        # It is a property of the LOCATION rather than of the walk that reached it,
+        # which is what makes the chain count independent of the order a document
+        # happens to list its references in.
+        self.below: dict[str, int] = {}
+        # The longest hop count at which each pending reference has been reached, so the
+        # iterative driver resumes its walk at the depth of the longest route it knows.
+        # This feeds the GUARD, not the bound: the bound is stated over ``below``, which
+        # is exact whatever depth a resumed walk starts from, so the only thing a
+        # shorter route here costs is a later refusal. Longest, because a guard that
+        # stops early should use the route that reaches the limit first.
         self.hops: dict[str, int] = {}
         self.on_stack: set[str] = set()
         self.verdict: SchemaVerdict = "accepted"
@@ -734,46 +745,63 @@ class _CostWalker:
             self.verdict = verdict
         return _COST_CEILING
 
-    def cost(self, node: Any, missing: set[str] | None = None, hops: int = 0) -> int:
-        """The worst-case evaluations ``node`` can require against one instance: a
-        boolean schema is one, an object schema is itself plus everything it can
-        delegate to.
+    def cost(
+        self, node: Any, missing: set[str] | None = None, hops: int = 0
+    ) -> tuple[int, int]:
+        """The worst-case evaluations ``node`` can require against one instance, and the
+        longest chain of ``$ref`` hops starting anywhere inside it.
+
+        A boolean schema is one evaluation; an object schema is itself plus everything
+        it can delegate to. The second number rides along because the reference bound is
+        over the longest PATH, so something has to compute it, and this walk already
+        follows every reference to its target — counting the two together is what keeps
+        them consistent.
 
         ``$defs`` and ``definitions`` are deliberately NOT counted — they are
         reachable only through a reference, and counting them here as well would
         charge a shared definition once per declaration plus once per use.
         """
         if self.verdict != "accepted":
-            return _COST_CEILING
+            return _COST_CEILING, 0
         if not isinstance(node, dict):
-            return 1
+            return 1, 0
         if missing is None:
             missing = set()
         total = 1
+        below = 0
         for key in sorted(node):
             value = node[key]
             if key in _NON_SCHEMA_KEYWORDS or key in ("$defs", "definitions"):
                 continue
             if key in _REFERENCE_KEYWORDS:
                 if isinstance(value, str):
-                    total = _add_cost(total, self._ref_contribution(value, missing, hops + 1))
+                    cost, ref_below = self._ref_contribution(value, missing, hops + 1)
+                    total = _add_cost(total, cost)
+                    # The reference is itself a hop, so the chain through it is one
+                    # longer than whatever chain remains below its target.
+                    below = max(below, 1 + ref_below)
             elif key in _BRANCH_KEYWORDS:
                 if isinstance(value, list):
                     for item in value:
-                        total = _add_cost(total, self.cost(item, missing, hops))
+                        cost, sub_below = self.cost(item, missing, hops)
+                        total, below = _add_cost(total, cost), max(below, sub_below)
                 else:
-                    total = _add_cost(total, self.cost(value, missing, hops))
+                    cost, sub_below = self.cost(value, missing, hops)
+                    total, below = _add_cost(total, cost), max(below, sub_below)
             elif key in _SINGLE_SUBSCHEMA_KEYWORDS:
-                total = _add_cost(total, self.cost(value, missing, hops))
+                cost, sub_below = self.cost(value, missing, hops)
+                total, below = _add_cost(total, cost), max(below, sub_below)
             elif key in _SCHEMA_MAP_KEYWORDS:
                 if isinstance(value, dict):
                     for name in sorted(value):
-                        total = _add_cost(total, self.cost(value[name], missing, hops))
+                        cost, sub_below = self.cost(value[name], missing, hops)
+                        total, below = _add_cost(total, cost), max(below, sub_below)
                 else:
-                    total = _add_cost(total, self.cost(value, missing, hops))
+                    cost, sub_below = self.cost(value, missing, hops)
+                    total, below = _add_cost(total, cost), max(below, sub_below)
             if total >= _COST_CEILING:
-                return _COST_CEILING
-        return total
+                return _COST_CEILING, below
+        return total, below
 
     def root_cost(self) -> int:
         """The whole document's cost, driving any reference the root walk defers.
@@ -784,7 +812,7 @@ class _CostWalker:
         """
         while True:
             missing: set[str] = set()
-            total = self.cost(self.root, missing, 0)
+            total, _ = self.cost(self.root, missing, 0)
             if self.verdict != "accepted":
                 return _COST_CEILING
             if not missing:
@@ -794,10 +822,13 @@ class _CostWalker:
                 if self.verdict != "accepted":
                     return _COST_CEILING
 
-    def _ref_contribution(self, ref: str, missing: set[str], hops: int) -> int:
-        """What a reference adds to the enclosing schema's cost, if that is already
-        known. A target not yet counted is recorded as a dependency and contributes
-        nothing for now; the driver in ``ref_cost`` counts it and re-runs this walk.
+    def _ref_contribution(
+        self, ref: str, missing: set[str], hops: int
+    ) -> tuple[int, int]:
+        """What a reference adds to the enclosing schema's cost, and how long a chain
+        runs below its target, if those are already known. A target not yet counted is
+        recorded as a dependency and contributes nothing for now; the driver in
+        ``ref_cost`` counts it and re-runs this walk, and by then both are memoised.
 
         ``hops`` is the number of references already followed to reach this one. It is
         tracked explicitly rather than read off ``len(self.on_stack)``, which is a search
@@ -805,18 +836,35 @@ class _CostWalker:
         siblings on that set, so its size is not the chain length. The bound is a number
         in the contract, so all three SDKs have to compute the same quantity by
         construction and not by coincidence.
+
+        The chain through this reference is ``hops + below``: what it took to arrive,
+        plus what remains beneath the target. Both halves are needed. A count that
+        watches only the first half measures the walk instead of the document — it
+        passes a chain split into short segments that are each entered from the root,
+        and it answers the same graph differently depending on the order that document
+        happens to list its references in.
         """
         if ref in self.memo:
-            return self.memo[ref]
+            # ONE check, here at the reference site. This port defers a target it has
+            # not counted, so by the pass on which a site's contribution is final the
+            # target is always memoised — which makes this the single place every
+            # reference is measured, exactly as the recursive ports measure it at their
+            # single site. Stating the condition a second time where a target is counted
+            # would state it twice, and a condition stated twice is a condition neither
+            # statement is responsible for.
+            if hops + self.below[ref] > MAX_REGISTRATION_SCHEMA_REF_HOPS:
+                return self.fail("ref_chain_too_long"), self.below[ref]
+            return self.memo[ref], self.below[ref]
         if ref in self.on_stack:
-            return self.fail("ref_cycle")
+            return self.fail("ref_cycle"), 0
         # After the cycle check, so a chain that closes on itself still reports the more
-        # specific diagnosis.
+        # specific diagnosis. A guard rather than the bound: it keeps a chain as long as
+        # the size cap admits from being followed to its end before anything refuses it.
         if hops > MAX_REGISTRATION_SCHEMA_REF_HOPS:
-            return self.fail("ref_chain_too_long")
+            return self.fail("ref_chain_too_long"), 0
         missing.add(ref)
-        self.hops[ref] = min(self.hops.get(ref, hops), hops)
-        return 0
+        self.hops[ref] = max(self.hops.get(ref, hops), hops)
+        return 0, 0
 
     def ref_cost(self, ref: str) -> int:
         """Count a reference's target once and remember it.
@@ -844,7 +892,7 @@ class _CostWalker:
             if not ok:
                 return self.fail("uncompilable")
             missing: set[str] = set()
-            total = self.cost(target, missing, self.hops.get(cur, 0))
+            total, below = self.cost(target, missing, self.hops.get(cur, 0))
             if self.verdict != "accepted":
                 return _COST_CEILING
             if missing:
@@ -857,7 +905,13 @@ class _CostWalker:
                     stack.append(dep)
                     self.on_stack.add(dep)
                 continue
+            # Written together, so a `below` read anywhere is as final as the cost
+            # beside it. A walk cut short by the cost ceiling records a partial `below`,
+            # which cannot produce a wrong accept: a saturated cost is
+            # MAX_REGISTRATION_SCHEMA_EVALUATIONS + 1 and refuses the document as too
+            # complex whatever its chain length.
             self.memo[cur] = total
+            self.below[cur] = below
             self.on_stack.discard(cur)
             stack.pop()
         return self.memo[ref]
@@ -1329,8 +1383,13 @@ def _as_wire_numbers(value: Any) -> Any:
 
 def _registration_data_depth(data: dict[str, Any] | None) -> int:
     """How many JSON containers the payload nests, counting the payload object itself as
-    the first. The walk is ITERATIVE: it runs before the depth bound is known to hold, so
-    it is the one walk that must survive any input."""
+    the first. A scalar is a value, not a container, so ``{"a": "x"}`` nests one — the
+    same rule the schema side applies, where the count is of a document's opening braces
+    and brackets and nothing else.
+
+    Only containers are pushed, so every entry on the stack is one and the count needs no
+    test at the far end. The walk is ITERATIVE: it runs before the depth bound is known
+    to hold, so it is the one walk that must survive any input."""
     if data is None:
         return 1
     deepest = 0
@@ -1343,9 +1402,14 @@ def _registration_data_depth(data: dict[str, Any] | None) -> int:
         if depth > MAX_REGISTRATION_DATA_DEPTH:
             return depth
         if isinstance(node, dict):
-            stack.extend((child, depth + 1) for child in node.values())
+            children: Any = node.values()
         elif isinstance(node, list):
-            stack.extend((child, depth + 1) for child in node)
+            children = node
+        else:
+            continue
+        stack.extend(
+            (child, depth + 1) for child in children if isinstance(child, (dict, list))
+        )
     return deepest
 
 

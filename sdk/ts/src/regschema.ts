@@ -713,10 +713,26 @@ function collectAnchors(node: unknown, out: Map<string, unknown>): void {
  * following every reference to its target — also decides whether a reference cycle is
  * present and whether a same-document reference resolves at all.
  */
+/**
+ * What a resolved reference location is worth, remembered once.
+ *
+ * Both fields are properties of the LOCATION rather than of the walk that reached it.
+ * That is what makes them safe to memoise, and it is what the chain bound needs: cost is
+ * the same by whichever route a target is reached, and chain length is not, so a memo
+ * holding cost alone answers a later, longer route with a number that says nothing about
+ * how much chain remains beneath it.
+ */
+interface RefFacts {
+	/** Worst-case subschema evaluations at the target. */
+	readonly cost: number;
+	/** Longest chain of further $ref hops starting at the target. */
+	readonly below: number;
+}
+
 class CostWalker {
 	readonly #root: unknown;
 	readonly #anchors = new Map<string, unknown>();
-	readonly #memo = new Map<string, number>();
+	readonly #memo = new Map<string, RefFacts>();
 	readonly #onStack = new Set<string>();
 	verdict: SchemaVerdict = "accepted";
 
@@ -731,65 +747,135 @@ class CostWalker {
 	}
 
 	/**
-	 * The worst-case evaluations `node` can require against one instance: a boolean
-	 * schema is one, an object schema is itself plus everything it can delegate to.
+	 * The worst-case evaluations `node` can require against one instance, and the longest
+	 * chain of `$ref` hops starting anywhere inside it.
+	 *
+	 * A boolean schema is one evaluation; an object schema is itself plus everything it
+	 * can delegate to. The second number rides along because the reference bound is over
+	 * the longest PATH, so something has to compute it, and this walk already follows
+	 * every reference to its target — counting the two together is what keeps them
+	 * consistent.
 	 *
 	 * `$defs` and `definitions` are deliberately NOT counted — they are reachable only
 	 * through a reference, and counting them here as well would charge a shared
 	 * definition once per declaration plus once per use.
 	 */
-	cost(node: unknown, hops: number): number {
-		if (this.verdict !== "accepted") return costCeiling;
-		if (!isPlainObject(node)) return 1;
+	cost(node: unknown, hops: number): RefFacts {
+		if (this.verdict !== "accepted") return { cost: costCeiling, below: 0 };
+		if (!isPlainObject(node)) return { cost: 1, below: 0 };
 		let total = 1;
+		let below = 0;
 		for (const key of sortedKeys(node)) {
 			const value = node[key];
 			if (nonSchemaKeywords.has(key) || key === "$defs" || key === "definitions") continue;
 			if ((referenceKeywords as readonly string[]).includes(key)) {
-				if (typeof value === "string") total = addCost(total, this.refCost(value, hops + 1));
+				if (typeof value === "string") {
+					const r = this.refCost(value, hops + 1);
+					total = addCost(total, r.cost);
+					// The reference is itself a hop, so the chain through it is one longer
+					// than whatever chain remains below its target.
+					below = Math.max(below, 1 + r.below);
+				}
 			} else if (branchKeywords.has(key)) {
 				if (Array.isArray(value)) {
-					for (const item of value) total = addCost(total, this.cost(item, hops));
+					for (const item of value) {
+						const r = this.cost(item, hops);
+						total = addCost(total, r.cost);
+						below = Math.max(below, r.below);
+					}
 				} else {
-					total = addCost(total, this.cost(value, hops));
+					const r = this.cost(value, hops);
+					total = addCost(total, r.cost);
+					below = Math.max(below, r.below);
 				}
 			} else if (singleSubschemaKeywords.has(key)) {
-				total = addCost(total, this.cost(value, hops));
+				const r = this.cost(value, hops);
+				total = addCost(total, r.cost);
+				below = Math.max(below, r.below);
 			} else if (schemaMapKeywords.has(key)) {
 				if (isPlainObject(value)) {
-					for (const name of sortedKeys(value)) total = addCost(total, this.cost(value[name], hops));
+					for (const name of sortedKeys(value)) {
+						const r = this.cost(value[name], hops);
+						total = addCost(total, r.cost);
+						below = Math.max(below, r.below);
+					}
 				} else {
-					total = addCost(total, this.cost(value, hops));
+					const r = this.cost(value, hops);
+					total = addCost(total, r.cost);
+					below = Math.max(below, r.below);
 				}
 			}
-			if (total >= costCeiling) return costCeiling;
+			if (total >= costCeiling) return { cost: costCeiling, below };
 		}
-		return total;
+		return { cost: total, below };
 	}
 
 	/**
-	 * Count a reference's target once and remember it. A location already being
-	 * counted is a cycle: its cost is not finite, and it is what makes this port abort
-	 * rather than answer.
+	 * Count a reference's target once and remember it, and enforce the chain bound at
+	 * this reference. A location already being counted is a cycle: its cost is not
+	 * finite, and it is what makes this port abort rather than answer.
+	 *
+	 * The chain through this reference is `hops + below`: what it took to arrive, plus
+	 * what remains beneath the target. Both halves are needed. A count that watches only
+	 * the first half measures the walk instead of the document — it passes a chain split
+	 * into short segments that are each entered from the root, and it answers the same
+	 * graph differently depending on the order that document happens to list its
+	 * references in.
 	 */
-	refCost(ref: string, hops: number): number {
+	refCost(ref: string, hops: number): RefFacts {
+		const { facts, judge } = this.#refFacts(ref, hops);
+		if (!judge) return facts;
+		// ONE check, at the reference site, so it is applied identically whether the
+		// target was just walked or was already known. Splitting it — once where a target
+		// is counted and again where the memo answers — states the same condition twice,
+		// and a condition stated twice is a condition neither statement is responsible
+		// for.
+		if (hops + facts.below > maxRegistrationSchemaRefHops) {
+			return { cost: this.fail("ref_chain_too_long"), below: facts.below };
+		}
+		return facts;
+	}
+
+	/**
+	 * A reference target's facts, from the memo when the target has been counted before
+	 * and by walking it otherwise.
+	 *
+	 * `judge` is false when the walk has already reached a verdict of its own — a cycle,
+	 * an unresolvable reference, a chain past the recursion guard — and the caller should
+	 * propagate that rather than measure a chain that no longer means anything.
+	 */
+	#refFacts(ref: string, hops: number): { facts: RefFacts; judge: boolean } {
 		const memo = this.#memo.get(ref);
-		if (memo !== undefined) return memo;
-		if (this.#onStack.has(ref)) return this.fail("ref_cycle");
+		if (memo !== undefined) return { facts: memo, judge: true };
+		if (this.#onStack.has(ref)) {
+			return { facts: { cost: this.fail("ref_cycle"), below: 0 }, judge: false };
+		}
 		// After the cycle check, so a chain that closes on itself still reports the more
 		// specific diagnosis. `hops` is tracked explicitly rather than read off the size
 		// of #onStack: the two agree here, where the walk recurses and the set mirrors the
 		// path, and they do NOT agree in a port whose walk is iterative and whose
 		// equivalent set is a search frontier. The bound is a number in the contract, so
 		// the three SDKs compute the same quantity by construction, not by coincidence.
-		if (hops > maxRegistrationSchemaRefHops) return this.fail("ref_chain_too_long");
+		//
+		// This is NOT the bound — the bound is the hops+below check above, which is
+		// exact. It is a recursion guard: cost and refCost call each other, so without it
+		// a chain as long as the size cap admits would be walked as deep as it is long
+		// before anything refused it.
+		if (hops > maxRegistrationSchemaRefHops) {
+			return { facts: { cost: this.fail("ref_chain_too_long"), below: 0 }, judge: false };
+		}
 		const target = this.resolve(ref);
-		if (!target.ok) return this.fail("uncompilable");
+		if (!target.ok) {
+			return { facts: { cost: this.fail("uncompilable"), below: 0 }, judge: false };
+		}
 		this.#onStack.add(ref);
-		const c = this.cost(target.node, hops);
+		const facts = this.cost(target.node, hops);
 		this.#onStack.delete(ref);
-		this.#memo.set(ref, c);
-		return c;
+		// A walk cut short by the cost ceiling memoises a partial `below`, which cannot
+		// produce a wrong accept: a saturated cost is maxRegistrationSchemaEvaluations+1,
+		// so the document is refused as too complex whatever its chain length.
+		this.#memo.set(ref, facts);
+		return { facts, judge: true };
 	}
 
 	/**
@@ -829,7 +915,7 @@ class CostWalker {
  */
 function checkEvaluationCost(doc: unknown): SchemaVerdict {
 	const walker = new CostWalker(doc);
-	const cost = walker.cost(doc, 0);
+	const { cost } = walker.cost(doc, 0);
 	if (walker.verdict !== "accepted") return walker.verdict;
 	return cost > maxRegistrationSchemaEvaluations ? "too_complex" : "accepted";
 }
@@ -1228,10 +1314,17 @@ export type RegistrationDataVerdict = (typeof registrationDataVerdicts)[number];
 
 /**
  * registrationDataDepth returns how many JSON containers the payload nests, counting the
- * payload object itself as the first. The walk is ITERATIVE: it runs before the depth
- * bound is known to hold, so it is the one walk that must survive any input.
+ * payload object itself as the first. A scalar is a value, not a container, so
+ * `{"a":"x"}` nests one — the same rule the schema side applies, where the count is of a
+ * document's opening braces and brackets and nothing else.
+ *
+ * Only containers are pushed, so every frame on the stack is one and the count needs no
+ * test at the far end. The walk is ITERATIVE: it runs before the depth bound is known to
+ * hold, so it is the one walk that must survive any input.
  */
 function registrationDataDepth(data: Record<string, unknown>): number {
+	const isContainer = (v: unknown): boolean =>
+		Array.isArray(v) || (v !== null && typeof v === "object");
 	let deepest = 0;
 	const stack: Array<{ node: unknown; depth: number }> = [{ node: data, depth: 1 }];
 	while (stack.length > 0) {
@@ -1240,10 +1333,11 @@ function registrationDataDepth(data: Record<string, unknown>): number {
 		// No need to walk past the bound: the answer is already decided, and a payload
 		// deep enough to matter is also deep enough to be expensive to finish walking.
 		if (depth > maxRegistrationDataDepth) return depth;
-		if (Array.isArray(node)) {
-			for (const child of node) stack.push({ node: child, depth: depth + 1 });
-		} else if (node !== null && typeof node === "object") {
-			for (const child of Object.values(node)) stack.push({ node: child, depth: depth + 1 });
+		let children: readonly unknown[] = [];
+		if (Array.isArray(node)) children = node;
+		else if (node !== null && typeof node === "object") children = Object.values(node);
+		for (const child of children) {
+			if (isContainer(child)) stack.push({ node: child, depth: depth + 1 });
 		}
 	}
 	return deepest;

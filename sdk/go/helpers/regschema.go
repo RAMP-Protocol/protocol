@@ -122,9 +122,10 @@ const MaxRegistrationSchemaEvaluations = 10000
 // evaluation cap does not see it either — a flat chain costs one evaluation per link,
 // so five hundred links is five hundred against a bound of ten thousand.
 //
-// What it bounds is the RECURSION every validator does while resolving that chain. This
-// package's own cost walk follows references iteratively and does not care, but the
-// libraries the three SDKs hand an accepted schema to do not, and one of them exhausted
+// What it bounds is the RECURSION every validator does while resolving that chain — this
+// package's own cost walk included, which is why that walk refuses a chain already past
+// the bound rather than following it to the end. The libraries the three SDKs hand an
+// accepted schema to have no such guard, and one of them exhausted
 // its interpreter stack at 495 links — throwing out of a face documented as returning a
 // verdict, on a document every SDK had just called valid. A bound in the contract is
 // what stops that, because it stops the document being published rather than asking
@@ -668,12 +669,12 @@ func checkEvaluationCost(doc any) SchemaVerdict {
 	w := &costWalker{
 		root:    doc,
 		anchors: map[string]any{},
-		memo:    map[string]int{},
+		memo:    map[string]refFacts{},
 		onStack: map[string]bool{},
 		verdict: SchemaAccepted,
 	}
 	collectAnchors(doc, w.anchors)
-	cost := w.cost(doc, 0)
+	cost, _ := w.cost(doc, 0)
 	if w.verdict != SchemaAccepted {
 		return w.verdict
 	}
@@ -686,9 +687,21 @@ func checkEvaluationCost(doc any) SchemaVerdict {
 type costWalker struct {
 	root    any
 	anchors map[string]any
-	memo    map[string]int  // resolved reference location -> cost, so a target reached twice is counted once
-	onStack map[string]bool // resolved locations currently being counted, which is how a cycle is seen
+	memo    map[string]refFacts // resolved reference location -> what is true of it, so a target reached twice is counted once
+	onStack map[string]bool     // resolved locations currently being counted, which is how a cycle is seen
 	verdict SchemaVerdict
+}
+
+// refFacts is what a resolved reference location is worth, remembered once.
+//
+// Both fields are properties of the LOCATION rather than of the walk that reached it.
+// That is what makes them safe to memoise, and it is what the chain bound needs: cost
+// is the same by whichever route a target is reached, and chain length is not, so a
+// memo holding cost alone answers a later, longer route with a number that says
+// nothing about how much chain remains beneath it.
+type refFacts struct {
+	cost  int // worst-case subschema evaluations at the target
+	below int // longest chain of further $ref hops starting at the target
 }
 
 // fail records the first failure and returns a saturated cost so the walk unwinds
@@ -711,19 +724,24 @@ func addCost(a, b int) int {
 // one instance. A boolean schema is one. An object schema is itself plus everything
 // it can delegate to.
 //
+// It returns a second number in the same pass: the longest chain of $ref hops that
+// starts anywhere inside `node`. The reference bound is over the longest PATH, so
+// something has to compute it, and this walk already follows every reference to its
+// target — counting the two together is what keeps them consistent.
+//
 // $defs and definitions are deliberately NOT counted: they are reachable only
 // through a reference, and counting them here as well as at the reference would
 // charge a shared definition once per declaration plus once per use.
-func (w *costWalker) cost(node any, hops int) int {
+func (w *costWalker) cost(node any, hops int) (int, int) {
 	if w.verdict != SchemaAccepted {
-		return costCeiling
+		return costCeiling, 0
 	}
 	obj, ok := node.(map[string]any)
 	if !ok {
 		// A boolean schema, or a value in a position this walk does not model.
-		return 1
+		return 1, 0
 	}
-	total := 1
+	total, below := 1, 0
 	for _, k := range sortedKeys(obj) {
 		v := obj[k]
 		switch {
@@ -735,39 +753,47 @@ func (w *costWalker) cost(node any, hops int) int {
 			if !isString {
 				continue
 			}
-			total = addCost(total, w.refCost(ref, hops+1))
+			c, b := w.refCost(ref, hops+1)
+			total = addCost(total, c)
+			// The reference is itself a hop, so the chain through it is one longer
+			// than whatever chain remains below its target.
+			below = max(below, 1+b)
 		case branchKeywords[k]:
 			items, isList := v.([]any)
 			if !isList {
-				total = addCost(total, w.cost(v, hops))
+				c, b := w.cost(v, hops)
+				total, below = addCost(total, c), max(below, b)
 				continue
 			}
 			for _, item := range items {
-				total = addCost(total, w.cost(item, hops))
+				c, b := w.cost(item, hops)
+				total, below = addCost(total, c), max(below, b)
 			}
 		case singleSubschemaKeywords[k]:
-			total = addCost(total, w.cost(v, hops))
+			c, b := w.cost(v, hops)
+			total, below = addCost(total, c), max(below, b)
 		case schemaMapKeywords[k]:
 			sub, isMap := v.(map[string]any)
 			if !isMap {
-				total = addCost(total, w.cost(v, hops))
+				c, b := w.cost(v, hops)
+				total, below = addCost(total, c), max(below, b)
 				continue
 			}
 			for _, name := range sortedKeys(sub) {
-				total = addCost(total, w.cost(sub[name], hops))
+				c, b := w.cost(sub[name], hops)
+				total, below = addCost(total, c), max(below, b)
 			}
 		}
 		if total >= costCeiling {
-			return costCeiling
+			return costCeiling, below
 		}
 	}
-	return total
+	return total, below
 }
 
-// refCost counts a reference's target once and remembers it. A location already
-// being counted is a cycle: its cost is not finite, and every port aborts on it
-// rather than answering.
-// refCost counts a reference's target once and remembers it.
+// refCost counts a reference's target once and remembers it, and enforces the chain
+// bound at this reference. A location already being counted is a cycle: its cost is
+// not finite, and every port aborts on it rather than answering.
 //
 // hops is the number of references already followed to reach this one, tracked
 // explicitly rather than read off the size of onStack. The two agree here, where the
@@ -775,27 +801,60 @@ func (w *costWalker) cost(node any, hops int) int {
 // is iterative and whose equivalent set is a search frontier rather than a path. The
 // bound is a number in the contract, so the three SDKs have to compute the same quantity
 // by construction and not by coincidence.
-func (w *costWalker) refCost(ref string, hops int) int {
-	if c, seen := w.memo[ref]; seen {
-		return c
+//
+// The chain through this reference is hops + below: what it took to arrive, plus what
+// remains beneath the target. Both halves are needed. A count that watches only the
+// first half measures the walk instead of the document — it passes a chain split into
+// short segments that are each entered from the root, and it answers the same graph
+// differently depending on the order the document happens to list its references in.
+func (w *costWalker) refCost(ref string, hops int) (int, int) {
+	cost, below, judge := w.refFacts(ref, hops)
+	if !judge {
+		return cost, below
+	}
+	// ONE check, at the reference site, so it is applied identically whether the target
+	// was just walked or was already known. Splitting it — once where a target is
+	// counted and again where the memo answers — states the same condition twice, and a
+	// condition stated twice is a condition neither statement is responsible for.
+	if hops+below > MaxRegistrationSchemaRefHops {
+		return w.fail(SchemaRefChainTooLong), below
+	}
+	return cost, below
+}
+
+// refFacts produces a reference target's facts, from the memo when the target has been
+// counted before and by walking it otherwise.
+//
+// judge is false when the walk has already reached a verdict of its own — a cycle, an
+// unresolvable reference, a chain past the recursion guard — and the caller should
+// propagate that rather than measure a chain that no longer means anything.
+func (w *costWalker) refFacts(ref string, hops int) (cost, below int, judge bool) {
+	if f, seen := w.memo[ref]; seen {
+		return f.cost, f.below, true
 	}
 	if w.onStack[ref] {
-		return w.fail(SchemaRefCycle)
+		return w.fail(SchemaRefCycle), 0, false
 	}
 	// After the cycle check, so a chain that closes on itself still reports the more
-	// specific diagnosis.
+	// specific diagnosis. This is NOT the bound — the bound is the hops+below check,
+	// which is exact. It is a recursion guard: cost and refCost call each other, so
+	// without it a chain as long as the size cap admits would be walked as deep as it
+	// is long before anything refused it.
 	if hops > MaxRegistrationSchemaRefHops {
-		return w.fail(SchemaRefChainTooLong)
+		return w.fail(SchemaRefChainTooLong), 0, false
 	}
 	target, ok := w.resolve(ref)
 	if !ok {
-		return w.fail(SchemaUncompilable)
+		return w.fail(SchemaUncompilable), 0, false
 	}
 	w.onStack[ref] = true
-	c := w.cost(target, hops)
+	c, b := w.cost(target, hops)
 	delete(w.onStack, ref)
-	w.memo[ref] = c
-	return c
+	// A walk cut short by the cost ceiling memoises a partial `below`, which cannot
+	// produce a wrong accept: a saturated cost is MaxRegistrationSchemaEvaluations+1,
+	// so the document is refused as too complex whatever its chain length.
+	w.memo[ref] = refFacts{cost: c, below: b}
+	return c, b, true
 }
 
 // resolve follows a same-document reference. The scan has already refused anything
@@ -1625,8 +1684,13 @@ func CheckRegistrationData(data map[string]any) RegistrationDataVerdict {
 }
 
 // registrationDataDepth returns how many JSON containers the payload nests, counting
-// the payload object itself as the first. The walk is ITERATIVE: it runs before the
-// depth bound is known to hold, so it is the one walk that must survive any input.
+// the payload object itself as the first. A scalar is a value, not a container, so
+// {"a":"x"} nests one — the same rule rawNestingDepth applies to the schema, which
+// counts a document's opening braces and brackets and nothing else.
+//
+// Only containers are pushed, so every frame on the stack is one and the count needs
+// no test at the far end. The walk is ITERATIVE: it runs before the depth bound is
+// known to hold, so it is the one walk that must survive any input.
 func registrationDataDepth(data map[string]any) int {
 	if data == nil {
 		return 1
@@ -1637,6 +1701,12 @@ func registrationDataDepth(data map[string]any) int {
 	}
 	deepest := 0
 	stack := []frame{{node: data, depth: 1}}
+	push := func(child any, depth int) {
+		switch child.(type) {
+		case map[string]any, []any:
+			stack = append(stack, frame{node: child, depth: depth})
+		}
+	}
 	for len(stack) > 0 {
 		f := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -1651,11 +1721,11 @@ func registrationDataDepth(data map[string]any) int {
 		switch v := f.node.(type) {
 		case map[string]any:
 			for _, child := range v {
-				stack = append(stack, frame{node: child, depth: f.depth + 1})
+				push(child, f.depth+1)
 			}
 		case []any:
 			for _, child := range v {
-				stack = append(stack, frame{node: child, depth: f.depth + 1})
+				push(child, f.depth+1)
 			}
 		}
 	}

@@ -208,6 +208,27 @@ func buildRegDataVectors(t *testing.T) []regDataVector {
 		// accepted nine hundred on the next.
 		{"nesting_at_the_depth_cap", nestedPayload(MaxRegistrationDataDepth), RegistrationDataAccepted},
 		{"nesting_one_over_the_depth_cap", nestedPayload(MaxRegistrationDataDepth + 1), RegistrationDataTooDeep},
+		// The same boundary on the shape a payload actually takes. The pair above bottoms
+		// out in an empty object, which is the one shape where a count of containers and a
+		// count of every value agree — so it cannot tell the two rules apart, and a leaf
+		// that is a value is what every real payload has.
+		{
+			"nesting_at_the_depth_cap_with_a_scalar_leaf",
+			nestedPayloadScalarLeaf(MaxRegistrationDataDepth),
+			RegistrationDataAccepted,
+		},
+		{
+			"nesting_one_over_the_depth_cap_with_a_scalar_leaf",
+			nestedPayloadScalarLeaf(MaxRegistrationDataDepth + 1),
+			RegistrationDataTooDeep,
+		},
+		// An array is a container and the scalars inside it are not, so this sits exactly
+		// at the cap rather than one over.
+		{
+			"nesting_at_the_depth_cap_ending_in_an_array_of_scalars",
+			nestedPayloadAround(MaxRegistrationDataDepth-1, []any{float64(1), float64(2), float64(3)}),
+			RegistrationDataAccepted,
+		},
 		{
 			"a_realistic_registration",
 			map[string]any{
@@ -311,6 +332,23 @@ func nestedPayload(depth int) map[string]any {
 		inner = map[string]any{"a": inner}
 	}
 	return inner
+}
+
+// nestedPayloadAround wraps leaf in `maps` objects. The payload nests that many
+// containers plus however many leaf is worth: a scalar is a value and adds none, an
+// array adds one.
+func nestedPayloadAround(maps int, leaf any) map[string]any {
+	var cur any = leaf
+	for i := 0; i < maps; i++ {
+		cur = map[string]any{"a": cur}
+	}
+	return cur.(map[string]any)
+}
+
+// nestedPayloadScalarLeaf nests containers objects deep and bottoms out in a string,
+// which is the shape of every payload that carries data rather than structure.
+func nestedPayloadScalarLeaf(containers int) map[string]any {
+	return nestedPayloadAround(containers, "x")
 }
 
 // regDataVerdictVocabulary is every token the payload check can answer with, recorded
@@ -560,6 +598,44 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 		{"a_reference_chain_one_hop_over", flatRefChain(MaxRegistrationSchemaRefHops), SchemaRefChainTooLong},
 		{"a_long_flat_reference_chain", flatRefChain(500), SchemaRefChainTooLong},
 
+		// The same chain, entered in pieces. A count that watches only how far the walk
+		// has come measures the walk rather than the document: a target counted once at a
+		// low hop count answers every later arrival with what it already knows, so a
+		// chain reached through seeds spaced under the cap passes every segment and the
+		// whole is never measured. The chain here is 150 links against a cap of 100.
+		{"a_seeded_reference_chain_over_the_hop_cap", seededRefChain(150, 80), SchemaRefChainTooLong},
+
+		// One graph, two orders. Same definitions, same links, same longest path of 145 —
+		// only the order the root lists its two branches in differs. Both must refuse, and
+		// they must refuse alike: a bound over a graph that answers by visit order is not
+		// a property of the document, and the two ends of one registration do not agree on
+		// how a schema's members happen to be ordered.
+		{
+			"a_shared_reference_tail_with_the_long_branch_first",
+			sharedTailRefChain(95, 50, false, "h", "t"),
+			SchemaRefChainTooLong,
+		},
+		{
+			"a_shared_reference_tail_with_the_short_branch_first",
+			sharedTailRefChain(95, 50, true, "h", "t"),
+			SchemaRefChainTooLong,
+		},
+		// The same graph again, with the tail named so it SORTS before the head. A walk
+		// that drains its pending references in name order counts the tail first, so the
+		// head's arrival at it finds a target already counted and is measured only if
+		// arriving at a known target is measured at all. The two above cannot show that:
+		// their head sorts first either way.
+		{
+			"a_shared_reference_tail_that_sorts_before_its_head",
+			sharedTailRefChain(95, 50, false, "z", "a"),
+			SchemaRefChainTooLong,
+		},
+		// And the boundary on that shape, so an exact count is not mistaken for a blanket
+		// refusal of shared tails: two branches into one tail are ordinary reuse, and a
+		// document whose longest path fits is still a document that fits.
+		{"a_shared_reference_tail_at_the_hop_cap", sharedTailRefChain(60, 40, false, "h", "t"), SchemaAccepted},
+		{"a_shared_reference_tail_one_hop_over", sharedTailRefChain(60, 41, false, "h", "t"), SchemaRefChainTooLong},
+
 		// Refused — the ENCODING, which decides WHICH document the rules above are
 		// read against. Each of these got three different answers from the three SDKs
 		// before it was pinned here, and none of it was the JSON grammar's doing: it
@@ -675,6 +751,76 @@ func flatRefChain(n int) string {
 		b.WriteString(`"` + strconv.Itoa(i) + `":{"$ref":"#/$defs/` + strconv.Itoa(i+1) + `"}`)
 	}
 	b.WriteString(`,"` + strconv.Itoa(n) + `":{"type":"string"}},"$ref":"#/$defs/0"}`)
+	return b.String()
+}
+
+// seededRefChain is a chain of `links` definitions the root enters at several points at
+// once, seeds spaced `every` links apart and the deepest listed first. Every segment
+// between two seeds is shorter than the cap while the chain as a whole is `links` hops,
+// so it is refused only by a count that measures the document rather than the walk.
+func seededRefChain(links, every int) string {
+	var b strings.Builder
+	b.WriteString(`{"allOf":[`)
+	for i, seed := ((links-1)/every)*every, 0; i >= 0; i, seed = i-every, seed+1 {
+		if seed > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(`{"$ref":"#/$defs/` + strconv.Itoa(i) + `"}`)
+	}
+	b.WriteString(`],"$defs":{`)
+	for i := 0; i < links; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(`"` + strconv.Itoa(i) + `":`)
+		if i == links-1 {
+			b.WriteString(`{"type":"string"}`)
+			continue
+		}
+		b.WriteString(`{"$ref":"#/$defs/` + strconv.Itoa(i+1) + `"}`)
+	}
+	b.WriteString(`}}`)
+	return b.String()
+}
+
+// sharedTailRefChain is a head chain of `head` definitions running into a tail chain of
+// `tail`, with the root referencing both the head and the tail directly. The longest
+// path is head+tail hops and the short branch straight to the tail is `tail`.
+//
+// Two things vary that must not change the answer, because neither is a property of the
+// graph. shortBranchFirst swaps the order the root LISTS the two branches, which is what
+// a walk following the document sees. headName and tailName set how the definitions
+// SORT, which is what a walk draining a set of pending references sees — name the tail
+// before the head and such a walk counts the tail first, so every later arrival finds it
+// already known and measures nothing.
+func sharedTailRefChain(head, tail int, shortBranchFirst bool, headName, tailName string) string {
+	longBranch := `{"$ref":"#/$defs/` + headName + `0"}`
+	shortBranch := `{"$ref":"#/$defs/` + tailName + `0"}`
+	branches := longBranch + "," + shortBranch
+	if shortBranchFirst {
+		branches = shortBranch + "," + longBranch
+	}
+	var b strings.Builder
+	b.WriteString(`{"allOf":[` + branches + `],"$defs":{`)
+	for i := 0; i < head; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		next := headName + strconv.Itoa(i+1)
+		if i == head-1 {
+			next = tailName + "0"
+		}
+		b.WriteString(`"` + headName + strconv.Itoa(i) + `":{"$ref":"#/$defs/` + next + `"}`)
+	}
+	for i := 0; i < tail; i++ {
+		b.WriteString(`,"` + tailName + strconv.Itoa(i) + `":`)
+		if i == tail-1 {
+			b.WriteString(`{"type":"string"}`)
+			continue
+		}
+		b.WriteString(`{"$ref":"#/$defs/` + tailName + strconv.Itoa(i+1) + `"}`)
+	}
+	b.WriteString(`}}`)
 	return b.String()
 }
 
