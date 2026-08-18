@@ -200,6 +200,14 @@ func buildRegDataVectors(t *testing.T) []regDataVector {
 	}{
 		{"an_empty_payload", map[string]any{}, RegistrationDataAccepted},
 		{"a_nil_payload", nil, RegistrationDataAccepted},
+		// The depth boundary, stated as a pair the way the byte and member caps are.
+		// It bounds an axis neither of those sees: a deeply nested payload is small and
+		// has few top-level members. Canonicalising walks it recursively, so before this
+		// bound existed the verdict came from the reader's runtime — one implementation
+		// refused past about five hundred containers on one release of its language and
+		// accepted nine hundred on the next.
+		{"nesting_at_the_depth_cap", nestedPayload(MaxRegistrationDataDepth), RegistrationDataAccepted},
+		{"nesting_one_over_the_depth_cap", nestedPayload(MaxRegistrationDataDepth + 1), RegistrationDataTooDeep},
 		{
 			"a_realistic_registration",
 			map[string]any{
