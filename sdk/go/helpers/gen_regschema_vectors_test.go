@@ -231,11 +231,18 @@ func buildRegDataVectors(t *testing.T) []regDataVector {
 			}()},
 			RegistrationDataTooLarge,
 		},
-		// The case that pins the UNIT. Go renders this float as 1e+300 through
-		// encoding/json and as three hundred digits through the shortest-decimal
-		// formatting the reference Exchange's own gate uses, so a port measuring its
-		// language's rendering rather than the canonical one answers differently.
-		{"a_large_float", map[string]any{"n": 1e300}, RegistrationDataAccepted},
+		// The cases that pin the UNIT, and they have to be boundary cases to do it.
+		//
+		// 1e16 is where a language's ordinary JSON rendering and the canonical one
+		// part: JCS spells it 10000000000000000, seventeen characters, because it
+		// follows ECMAScript number-to-string, while an ordinary compact dump emits
+		// 1e+16, five. A payload sitting one byte over the cap under the canonical
+		// spelling therefore sits eleven bytes UNDER it when measured any other way —
+		// so a port that reached for its own serializer answers "accepted" here and
+		// the vector catches it. Without the boundary the difference is invisible,
+		// because both spellings are far below the cap.
+		{"a_float_that_only_the_canonical_form_pushes_over", overCapWithFloat(t), RegistrationDataTooLarge},
+		{"a_float_the_canonical_form_keeps_under", map[string]any{"n": 1e16}, RegistrationDataAccepted},
 	}
 
 	// RegistrationDataUncanonicalizable has no vector, and cannot have one: the input
@@ -258,6 +265,28 @@ func buildRegDataVectors(t *testing.T) []regDataVector {
 		out = append(out, regDataVector{Name: c.name, Data: data, Verdict: got.String()})
 	}
 	return out
+}
+
+// overCapWithFloat builds a payload that exceeds the byte cap by exactly one byte
+// under the CANONICAL encoding, carrying a float whose canonical spelling is longer
+// than an ordinary JSON dump would produce. Measured through the real face rather than
+// counted by hand, so the case cannot drift onto the wrong side of the cap.
+func overCapWithFloat(t *testing.T) map[string]any {
+	t.Helper()
+	base, err := registrationDataBytes(map[string]any{"n": 1e16, "pad": ""})
+	if err != nil {
+		t.Fatalf("measuring the float payload envelope: %v", err)
+	}
+	data := map[string]any{"n": 1e16, "pad": strings.Repeat("x", MaxRegistrationDataBytes+1-base)}
+	got, err := registrationDataBytes(data)
+	if err != nil {
+		t.Fatalf("measuring the float payload: %v", err)
+	}
+	if got != MaxRegistrationDataBytes+1 {
+		t.Fatalf("float payload measures %d bytes, intended exactly %d",
+			got, MaxRegistrationDataBytes+1)
+	}
+	return data
 }
 
 // regDataVerdictVocabulary is every token the payload check can answer with, recorded

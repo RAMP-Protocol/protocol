@@ -257,3 +257,21 @@ def test_a_non_finite_number_is_a_verdict_not_an_exception() -> None:
     from a JSON document."""
     for value in (float("inf"), float("-inf"), float("nan")):
         assert check_registration_data({"n": value}) == "uncanonicalizable"
+
+
+def test_an_integer_measures_as_the_double_the_wire_will_carry() -> None:
+    """The one divergence this port could have had all to itself.
+
+    ``registration_data`` is a Struct, whose only numeric type is a double, so the other
+    two SDKs never see an integer at all — their decoded numbers are already doubles.
+    This language keeps them, and the canonicalizer refuses any outside the 2**53 safe
+    domain, so an unconverted payload would answer ``uncanonicalizable`` here and
+    ``accepted`` there. The corpus cannot state this case, because JSON has one numeric
+    type and the distinction does not survive the file.
+    """
+    assert check_registration_data({"n": 10**16}) == "accepted"
+    assert check_registration_data({"n": 2**53 + 1}) == "accepted"
+    # Nested, and through a list, since the coercion has to be total to be worth having.
+    assert check_registration_data({"a": {"b": [10**16]}}) == "accepted"
+    # A bool subclasses int here and must not be rendered as a number.
+    assert check_registration_data({"flag": True}) == "accepted"

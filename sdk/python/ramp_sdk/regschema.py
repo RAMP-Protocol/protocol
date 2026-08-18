@@ -1170,11 +1170,37 @@ RegistrationDataVerdict = Literal[
 ]
 
 
+def _as_wire_numbers(value: Any) -> Any:
+    """Render integers as the doubles the wire will carry.
+
+    ``registration_data`` is a ``google.protobuf.Struct``, whose only numeric type is a
+    double, so an ``int`` in a payload is a value this language kept and the wire cannot.
+    The other two SDKs never face the question — their decoded numbers are already
+    doubles — so without this the same payload measures here and refuses there: the
+    canonicalizer rejects any integer outside the 2**53 safe domain, which is exactly
+    the range a double cannot represent either.
+
+    Coercing rather than refusing keeps the verdict identical in all three, and it
+    models the field honestly: whatever a caller holds, a Struct will carry the double.
+    ``bool`` is checked first because it subclasses ``int`` here and must stay a
+    boolean.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return float(value)
+    if isinstance(value, dict):
+        return {k: _as_wire_numbers(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_as_wire_numbers(v) for v in value]
+    return value
+
+
 def _registration_data_bytes(data: dict[str, Any] | None) -> int:
     """The length of the payload's RFC 8785 canonical JSON encoding. A ``None`` payload
     encodes as the empty object rather than as ``null``, so an absent payload and an
     empty one measure the same."""
-    return len(rfc8785.dumps(data if data is not None else {}))
+    return len(rfc8785.dumps(_as_wire_numbers(data if data is not None else {})))
 
 
 def check_registration_data(data: dict[str, Any] | None) -> RegistrationDataVerdict:
