@@ -67,6 +67,7 @@ type sdkRegSchemaRule struct {
 	MaxBytes       int    `json:"max_schema_bytes"`
 	MaxDepth       int    `json:"max_schema_depth"`
 	MaxEvaluations int    `json:"max_schema_evaluations"`
+	MaxRefHops     int    `json:"max_schema_ref_hops"`
 	MaxRepeat      int    `json:"max_pattern_repeat"`
 	PortableEsc    string `json:"portable_pattern_escapes"`
 	MaxErrors      uint64 `json:"max_field_errors"`
@@ -78,7 +79,8 @@ type sdkRegSchemaRule struct {
 
 var errNoSDKRegSchemaRule = errors.New(
 	regSchemaVectors + " is missing one of dialect / max_schema_bytes / max_schema_depth / " +
-		"max_schema_evaluations / max_pattern_repeat / portable_pattern_escapes / " +
+		"max_schema_evaluations / max_schema_ref_hops / max_pattern_repeat / " +
+		"portable_pattern_escapes / " +
 		"max_field_errors / max_field_error_path_len / max_field_error_text_len / " +
 		"max_registration_data_bytes / max_registration_data_members — this guard reads " +
 		"the SDK's copy of the registration-schema rules from there")
@@ -316,6 +318,7 @@ func TestDataSchemaCommentStatesTheRulesTheSDKEnforces(t *testing.T) {
 		{"the size cap", byteCapPhrase(want.MaxBytes)},
 		{"the depth cap", strconv.Itoa(want.MaxDepth) + " nested JSON containers"},
 		{"the evaluation cap", strconv.Itoa(want.MaxEvaluations) + " evaluations"},
+		{"the reference-chain cap", strconv.Itoa(want.MaxRefHops) + " hops"},
 		{"the repeat bound", "MUST NOT exceed " + strconv.Itoa(want.MaxRepeat)},
 		{"the pinned dialect", want.Dialect},
 		{"same-document references only", `it begins with "#"`},

@@ -34,6 +34,7 @@ import {
 	maxRegistrationSchemaBytes,
 	maxRegistrationSchemaDepth,
 	maxRegistrationSchemaEvaluations,
+	maxRegistrationSchemaRefHops,
 	registrationSchemaDialect,
 	registrationDataVerdicts,
 	schemaVerdicts,
@@ -85,6 +86,7 @@ type VectorsFile = {
 	max_field_error_path_len: number;
 	max_field_error_text_len: number;
 	max_schema_evaluations: number;
+	max_schema_ref_hops: number;
 	max_pattern_repeat: number;
 	portable_pattern_escapes: string;
 	verdicts: string[];
@@ -111,6 +113,7 @@ describe("registration-schema parity", () => {
 		expect(maxRegistrationFieldErrorPathLen).toBe(vectors.max_field_error_path_len);
 		expect(maxRegistrationFieldErrorTextLen).toBe(vectors.max_field_error_text_len);
 		expect(maxRegistrationSchemaEvaluations).toBe(vectors.max_schema_evaluations);
+		expect(maxRegistrationSchemaRefHops).toBe(vectors.max_schema_ref_hops);
 		expect(maxRegistrationDataBytes).toBe(vectors.max_registration_data_bytes);
 		expect(maxRegistrationDataMembers).toBe(vectors.max_registration_data_members);
 		// The two values that decide which patterns this port ADMITS, and the two this

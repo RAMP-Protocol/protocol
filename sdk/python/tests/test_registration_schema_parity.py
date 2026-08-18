@@ -42,6 +42,7 @@ from ramp_sdk.regschema import (
     MAX_REGISTRATION_DATA_BYTES,
     MAX_REGISTRATION_DATA_MEMBERS,
     MAX_REGISTRATION_SCHEMA_EVALUATIONS,
+    MAX_REGISTRATION_SCHEMA_REF_HOPS,
     REGISTRATION_SCHEMA_DIALECT,
     RegistrationDataVerdict,
     SchemaVerdict,
@@ -70,6 +71,7 @@ def test_the_rule_constants_match_the_oracle() -> None:
     assert MAX_REGISTRATION_FIELD_ERROR_PATH_LEN == _DOC["max_field_error_path_len"]
     assert MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN == _DOC["max_field_error_text_len"]
     assert MAX_REGISTRATION_SCHEMA_EVALUATIONS == _DOC["max_schema_evaluations"]
+    assert MAX_REGISTRATION_SCHEMA_REF_HOPS == _DOC["max_schema_ref_hops"]
     assert MAX_PORTABLE_REPEAT == _DOC["max_pattern_repeat"]
     assert MAX_REGISTRATION_DATA_BYTES == _DOC["max_registration_data_bytes"]
     assert MAX_REGISTRATION_DATA_MEMBERS == _DOC["max_registration_data_members"]
@@ -96,6 +98,14 @@ def test_compile_matches_the_oracle(vector: dict[str, Any]) -> None:
     # compiled schema alongside a refusal would let a caller ignoring the verdict
     # enforce a schema the rules rejected.
     assert (schema is not None) is (verdict == "accepted")
+    # An ACCEPTED schema must also be usable. The dimension asserted only that the
+    # compiled object exists, so a schema this port could compile and then not validate
+    # against was pinned as good: a long reference chain compiled, and the library's own
+    # recursive resolution then raised on the first payload. Validating a trivial payload
+    # is the cheapest thing that would have caught it.
+    if verdict == "accepted":
+        assert schema is not None
+        schema.validate({"probe": 1})
 
 
 @pytest.mark.parametrize("vector", _VALIDATE, ids=[v["name"] for v in _VALIDATE])
@@ -305,21 +315,36 @@ def test_the_payload_face_answers_rather_than_raising() -> None:
         assert check_registration_data(payload) == "uncanonicalizable", name
 
 
-def test_a_long_flat_reference_chain_does_not_exhaust_the_stack() -> None:
-    """The compile face walks references iteratively.
+def test_a_long_flat_reference_chain_is_refused_without_exhausting_the_stack() -> None:
+    """A chain is bounded on its own axis, and discovering that must not itself crash.
 
-    A flat chain is three containers deep however long it is, so the lexical depth cap
-    never sees it, while the walk that follows references sees one link per definition. A
-    recursive walk raised RecursionError on a document well under the size cap. The
-    shared corpus carries this case too; this asserts the property directly, at a length
-    the corpus does not have to encode.
+    Three containers deep however long it is, so the depth cap never sees it, and one
+    evaluation per link, so the cost cap does not either. What it does reach is the
+    RECURSION a validator performs while resolving it — this port's library raised at 495
+    links on a document every SDK had just accepted.
+
+    The refusal still has to walk the chain to discover its length, which is what keeps
+    this covering the iterative rewrite of the cost walk: a recursive walk would run out
+    of stack before it could return the verdict.
     """
     links = 560
-    defs = {str(i): {"$ref": f"#/$defs/{i + 1}"} for i in range(links)}
+    defs: dict[str, Any] = {str(i): {"$ref": f"#/$defs/{i + 1}"} for i in range(links)}
     defs[str(links)] = {"type": "string"}
     raw = json.dumps({"$defs": defs, "$ref": "#/$defs/0"}, separators=(",", ":")).encode()
     assert len(raw) <= MAX_REGISTRATION_SCHEMA_BYTES
-    assert compile_registration_schema(raw)[1] == "accepted"
+    assert compile_registration_schema(raw)[1] == "ref_chain_too_long"
+
+
+def test_a_chain_within_the_hop_cap_compiles_and_validates() -> None:
+    """The other side of the bound: a chain at the cap is usable, not merely accepted."""
+    links = MAX_REGISTRATION_SCHEMA_REF_HOPS - 1
+    defs: dict[str, Any] = {str(i): {"$ref": f"#/$defs/{i + 1}"} for i in range(links)}
+    defs[str(links)] = {"type": "object"}
+    raw = json.dumps({"$defs": defs, "$ref": "#/$defs/0"}, separators=(",", ":")).encode()
+    schema, verdict = compile_registration_schema(raw)
+    assert verdict == "accepted"
+    assert schema is not None
+    schema.validate({"probe": 1})
 
 
 def test_the_verdict_vocabularies_match_the_oracle() -> None:

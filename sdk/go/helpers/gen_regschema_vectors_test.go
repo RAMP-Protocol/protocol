@@ -521,14 +521,19 @@ func buildRegSchemaCompileVectors(t *testing.T) []compileVector {
 		{"type_names_a_type_that_does_not_exist", `{"type":"objekt"}`, SchemaUncompilable},
 		{"required_is_not_a_list", `{"type":"object","required":"vat_id"}`, SchemaUncompilable},
 
-		// A long FLAT reference chain: every definition is a sibling, so the document is
-		// three containers deep and the lexical depth cap never sees it, while the walk
-		// that follows references sees one link per definition. It is ordinary JSON and
-		// well under the size cap, and it is what a recursive reference walk runs out of
-		// stack on — one port raised out of a face documented as never raising while the
-		// other two answered. The verdict is the ordinary one; the case exists so that
-		// stays true.
-		{"a_long_flat_reference_chain", flatRefChain(500), SchemaAccepted},
+		// A FLAT reference chain: every definition is a sibling, so the document is three
+		// containers deep and the lexical depth cap never sees it, while the walk that
+		// follows references sees one link per definition. Ordinary JSON, well under the
+		// size cap, and costing one evaluation per link — so neither of the other two
+		// caps sees it either. It is bounded on its own axis because the libraries the
+		// three SDKs hand an accepted schema to resolve such a chain RECURSIVELY, and one
+		// of them exhausted its interpreter stack at 495 links, raising out of a face
+		// documented as returning a verdict on a document every SDK had just accepted.
+		//
+		// flatRefChain(n) is n+1 hops: the document's own $ref, then one per definition.
+		{"a_reference_chain_at_the_hop_cap", flatRefChain(MaxRegistrationSchemaRefHops - 1), SchemaAccepted},
+		{"a_reference_chain_one_hop_over", flatRefChain(MaxRegistrationSchemaRefHops), SchemaRefChainTooLong},
+		{"a_long_flat_reference_chain", flatRefChain(500), SchemaRefChainTooLong},
 
 		// Refused — the ENCODING, which decides WHICH document the rules above are
 		// read against. Each of these got three different answers from the three SDKs
@@ -1170,7 +1175,8 @@ func schemaVerdictVocabulary() []string {
 	all := []SchemaVerdict{
 		SchemaNoVerdict, SchemaAccepted, SchemaMalformed, SchemaWrongDialect,
 		SchemaRemoteRef, SchemaTooLarge, SchemaTooDeep, SchemaUnsafePattern,
-		SchemaTooComplex, SchemaRefCycle, SchemaCompileTimeout, SchemaUncompilable,
+		SchemaTooComplex, SchemaRefCycle, SchemaRefChainTooLong, SchemaCompileTimeout,
+		SchemaUncompilable,
 		SchemaNotPublished,
 	}
 	out := make([]string, 0, len(all))
@@ -1188,6 +1194,7 @@ func TestGenerateRegSchemaVectors(t *testing.T) {
 		"max_schema_bytes":         MaxRegistrationSchemaBytes,
 		"max_schema_depth":         MaxRegistrationSchemaDepth,
 		"max_schema_evaluations":   MaxRegistrationSchemaEvaluations,
+		"max_schema_ref_hops":      MaxRegistrationSchemaRefHops,
 		"max_field_errors":         MaxRegistrationFieldErrors,
 		"max_field_error_path_len": MaxRegistrationFieldErrorPathLen,
 		"max_field_error_text_len": MaxRegistrationFieldErrorTextLen,

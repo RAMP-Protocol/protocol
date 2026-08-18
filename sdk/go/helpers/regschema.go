@@ -112,6 +112,29 @@ const (
 // dozen, so the headroom is several hundredfold.
 const MaxRegistrationSchemaEvaluations = 10000
 
+// MaxRegistrationSchemaRefHops bounds how long a $ref chain may be, measured as the
+// longest path of reference hops rather than as the number of references a document
+// contains.
+//
+// It is a SEPARATE axis from MaxRegistrationSchemaDepth, and the shape that forced it
+// shows why: a chain of five hundred definitions, each referring to the next, is three
+// JSON containers deep however long it is, so the depth cap never sees it. The
+// evaluation cap does not see it either — a flat chain costs one evaluation per link,
+// so five hundred links is five hundred against a bound of ten thousand.
+//
+// What it bounds is the RECURSION every validator does while resolving that chain. This
+// package's own cost walk follows references iteratively and does not care, but the
+// libraries the three SDKs hand an accepted schema to do not, and one of them exhausted
+// its interpreter stack at 495 links — throwing out of a face documented as returning a
+// verdict, on a document every SDK had just called valid. A bound in the contract is
+// what stops that, because it stops the document being published rather than asking
+// three libraries to survive it.
+//
+// 100 is far above use and far below harm: a realistic registration schema chains one
+// or two references, the deepest chain in an accepted conformance vector is eleven, and
+// the crash needs about five hundred.
+const MaxRegistrationSchemaRefHops = 100
+
 // RegistrationSchemaCompileTimeout bounds the OTHER phase. Compiling is cheap in
 // every shape measured (single-digit to tens of milliseconds across the three
 // languages), and the evaluation cap above does not bound it at all: compilation
@@ -202,6 +225,12 @@ const (
 	// modelling choice to undo, not a budget to trim.
 	SchemaRefCycle
 
+	// SchemaRefChainTooLong means a reference chain is longer than
+	// MaxRegistrationSchemaRefHops. It is its own verdict rather than SchemaTooComplex
+	// or SchemaTooDeep because it is its own rule: a flat chain is cheap to evaluate and
+	// shallow to nest, and neither of those caps can see it.
+	SchemaRefChainTooLong
+
 	// SchemaCompileTimeout means compilation ran past RegistrationSchemaCompileTimeout.
 	SchemaCompileTimeout
 
@@ -243,6 +272,8 @@ func (v SchemaVerdict) String() string {
 		return "too_complex"
 	case SchemaRefCycle:
 		return "ref_cycle"
+	case SchemaRefChainTooLong:
+		return "ref_chain_too_long"
 	case SchemaCompileTimeout:
 		return "compile_timeout"
 	case SchemaUncompilable:
@@ -642,7 +673,7 @@ func checkEvaluationCost(doc any) SchemaVerdict {
 		verdict: SchemaAccepted,
 	}
 	collectAnchors(doc, w.anchors)
-	cost := w.cost(doc)
+	cost := w.cost(doc, 0)
 	if w.verdict != SchemaAccepted {
 		return w.verdict
 	}
@@ -683,7 +714,7 @@ func addCost(a, b int) int {
 // $defs and definitions are deliberately NOT counted: they are reachable only
 // through a reference, and counting them here as well as at the reference would
 // charge a shared definition once per declaration plus once per use.
-func (w *costWalker) cost(node any) int {
+func (w *costWalker) cost(node any, hops int) int {
 	if w.verdict != SchemaAccepted {
 		return costCeiling
 	}
@@ -704,26 +735,26 @@ func (w *costWalker) cost(node any) int {
 			if !isString {
 				continue
 			}
-			total = addCost(total, w.refCost(ref))
+			total = addCost(total, w.refCost(ref, hops+1))
 		case branchKeywords[k]:
 			items, isList := v.([]any)
 			if !isList {
-				total = addCost(total, w.cost(v))
+				total = addCost(total, w.cost(v, hops))
 				continue
 			}
 			for _, item := range items {
-				total = addCost(total, w.cost(item))
+				total = addCost(total, w.cost(item, hops))
 			}
 		case singleSubschemaKeywords[k]:
-			total = addCost(total, w.cost(v))
+			total = addCost(total, w.cost(v, hops))
 		case schemaMapKeywords[k]:
 			sub, isMap := v.(map[string]any)
 			if !isMap {
-				total = addCost(total, w.cost(v))
+				total = addCost(total, w.cost(v, hops))
 				continue
 			}
 			for _, name := range sortedKeys(sub) {
-				total = addCost(total, w.cost(sub[name]))
+				total = addCost(total, w.cost(sub[name], hops))
 			}
 		}
 		if total >= costCeiling {
@@ -736,19 +767,32 @@ func (w *costWalker) cost(node any) int {
 // refCost counts a reference's target once and remembers it. A location already
 // being counted is a cycle: its cost is not finite, and every port aborts on it
 // rather than answering.
-func (w *costWalker) refCost(ref string) int {
+// refCost counts a reference's target once and remembers it.
+//
+// hops is the number of references already followed to reach this one, tracked
+// explicitly rather than read off the size of onStack. The two agree here, where the
+// walk recurses and onStack mirrors the path, and they do NOT agree in a port whose walk
+// is iterative and whose equivalent set is a search frontier rather than a path. The
+// bound is a number in the contract, so the three SDKs have to compute the same quantity
+// by construction and not by coincidence.
+func (w *costWalker) refCost(ref string, hops int) int {
 	if c, seen := w.memo[ref]; seen {
 		return c
 	}
 	if w.onStack[ref] {
 		return w.fail(SchemaRefCycle)
 	}
+	// After the cycle check, so a chain that closes on itself still reports the more
+	// specific diagnosis.
+	if hops > MaxRegistrationSchemaRefHops {
+		return w.fail(SchemaRefChainTooLong)
+	}
 	target, ok := w.resolve(ref)
 	if !ok {
 		return w.fail(SchemaUncompilable)
 	}
 	w.onStack[ref] = true
-	c := w.cost(target)
+	c := w.cost(target, hops)
 	delete(w.onStack, ref)
 	w.memo[ref] = c
 	return c

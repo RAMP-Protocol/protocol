@@ -416,6 +416,11 @@
       "python": "MAX_REGISTRATION_SCHEMA_EVALUATIONS",
       "ts": "maxRegistrationSchemaEvaluations"
     },
+    "helpers.MaxRegistrationSchemaRefHops": {
+      "allowlist_reason": null,
+      "python": "MAX_REGISTRATION_SCHEMA_REF_HOPS",
+      "ts": "maxRegistrationSchemaRefHops"
+    },
     "helpers.NewIdempotencyKey": {
       "allowlist_reason": null,
       "python": "generate_idempotency_key",

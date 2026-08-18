@@ -2798,6 +2798,16 @@ message AccountRegistration {
   //   definition nobody references costs nothing, so a document may carry a library
   //   of them.
   //
+  //   Bounded reference chains: 100 hops, counted as the longest path of $ref hops
+  //   rather than as the number of references the document contains. This is a
+  //   THIRD axis, and a flat chain of definitions shows why it has to be: each one
+  //   referring to the next is three JSON containers deep however long it is, so
+  //   the depth cap never sees it, and it costs one evaluation per link, so the
+  //   work cap does not either. What it does reach is the recursion a validator
+  //   performs while resolving the chain — a chain of a few hundred exhausted one
+  //   implementation's stack outright, on a document every other rule had passed.
+  //   A schema describing a business entity chains one or two references.
+  //
   //   No reference cycles. A $ref chain MUST NOT return to a schema already on it.
   //   The construct is legal JSON Schema and is how a recursive structure is
   //   written, but its evaluation cost has no static bound and it is what makes a

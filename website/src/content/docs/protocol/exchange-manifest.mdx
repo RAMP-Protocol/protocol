@@ -183,6 +183,10 @@ and a consumer **MUST** refuse a schema that does not.
 - **Self-contained.** Every `$ref`, `$dynamicRef` and `$recursiveRef` begins with
   `#`. A consumer never resolves a reference that leaves the document — doing so
   turns every reader into a fetch aimed at a URL the schema's author chose.
+- **100 reference hops**, counted as the longest path of `$ref` hops. A third axis,
+  because a flat chain of definitions is three containers deep however long it is and
+  costs one evaluation per link — so neither the depth cap nor the work cap sees it,
+  while the recursion a validator performs to resolve it grows with every link.
 - **No reference cycles.** A `$ref` chain never returns to a schema already on it.
   The construct is legal JSON Schema and is how a recursive structure is written,
   but its cost has no static bound and it is what makes a validator recurse until

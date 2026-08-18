@@ -70,6 +70,23 @@ export const registrationSchemaDialect = "https://json-schema.org/draft/2020-12/
  */
 export const maxRegistrationSchemaEvaluations = 10000;
 
+/**
+ * maxRegistrationSchemaRefHops bounds how long a `$ref` chain may be, measured as the
+ * longest path of reference hops rather than as the number of references a document
+ * contains.
+ *
+ * A SEPARATE axis from maxRegistrationSchemaDepth, and the shape that forced it shows
+ * why: a chain of five hundred definitions, each referring to the next, is three JSON
+ * containers deep however long it is, so the depth cap never sees it. The evaluation cap
+ * does not see it either — a flat chain costs one evaluation per link.
+ *
+ * What it bounds is the RECURSION a validator does while resolving that chain. The cost
+ * walk here does not care, but the libraries the three SDKs hand an accepted schema to
+ * do, and one of them exhausted its interpreter stack at 495 links — raising out of a
+ * face documented as returning a verdict, on a document every SDK had just called valid.
+ */
+export const maxRegistrationSchemaRefHops = 100;
+
 // NOTE on wall-clock bounds. The Go oracle carries a compile timeout, which it can
 // enforce because its runtime preempts. This port carries none, deliberately: a
 // CPU-bound spin blocks the event loop, so a timer never runs until the work it was
@@ -99,6 +116,7 @@ export const schemaVerdicts = [
 	"unsafe_pattern",
 	"too_complex",
 	"ref_cycle",
+	"ref_chain_too_long",
 	"compile_timeout",
 	"uncompilable",
 	"not_published",
@@ -720,7 +738,7 @@ class CostWalker {
 	 * through a reference, and counting them here as well would charge a shared
 	 * definition once per declaration plus once per use.
 	 */
-	cost(node: unknown): number {
+	cost(node: unknown, hops: number): number {
 		if (this.verdict !== "accepted") return costCeiling;
 		if (!isPlainObject(node)) return 1;
 		let total = 1;
@@ -728,20 +746,20 @@ class CostWalker {
 			const value = node[key];
 			if (nonSchemaKeywords.has(key) || key === "$defs" || key === "definitions") continue;
 			if ((referenceKeywords as readonly string[]).includes(key)) {
-				if (typeof value === "string") total = addCost(total, this.refCost(value));
+				if (typeof value === "string") total = addCost(total, this.refCost(value, hops + 1));
 			} else if (branchKeywords.has(key)) {
 				if (Array.isArray(value)) {
-					for (const item of value) total = addCost(total, this.cost(item));
+					for (const item of value) total = addCost(total, this.cost(item, hops));
 				} else {
-					total = addCost(total, this.cost(value));
+					total = addCost(total, this.cost(value, hops));
 				}
 			} else if (singleSubschemaKeywords.has(key)) {
-				total = addCost(total, this.cost(value));
+				total = addCost(total, this.cost(value, hops));
 			} else if (schemaMapKeywords.has(key)) {
 				if (isPlainObject(value)) {
-					for (const name of sortedKeys(value)) total = addCost(total, this.cost(value[name]));
+					for (const name of sortedKeys(value)) total = addCost(total, this.cost(value[name], hops));
 				} else {
-					total = addCost(total, this.cost(value));
+					total = addCost(total, this.cost(value, hops));
 				}
 			}
 			if (total >= costCeiling) return costCeiling;
@@ -754,14 +772,21 @@ class CostWalker {
 	 * counted is a cycle: its cost is not finite, and it is what makes this port abort
 	 * rather than answer.
 	 */
-	refCost(ref: string): number {
+	refCost(ref: string, hops: number): number {
 		const memo = this.#memo.get(ref);
 		if (memo !== undefined) return memo;
 		if (this.#onStack.has(ref)) return this.fail("ref_cycle");
+		// After the cycle check, so a chain that closes on itself still reports the more
+		// specific diagnosis. `hops` is tracked explicitly rather than read off the size
+		// of #onStack: the two agree here, where the walk recurses and the set mirrors the
+		// path, and they do NOT agree in a port whose walk is iterative and whose
+		// equivalent set is a search frontier. The bound is a number in the contract, so
+		// the three SDKs compute the same quantity by construction, not by coincidence.
+		if (hops > maxRegistrationSchemaRefHops) return this.fail("ref_chain_too_long");
 		const target = this.resolve(ref);
 		if (!target.ok) return this.fail("uncompilable");
 		this.#onStack.add(ref);
-		const c = this.cost(target.node);
+		const c = this.cost(target.node, hops);
 		this.#onStack.delete(ref);
 		this.#memo.set(ref, c);
 		return c;
@@ -804,7 +829,7 @@ class CostWalker {
  */
 function checkEvaluationCost(doc: unknown): SchemaVerdict {
 	const walker = new CostWalker(doc);
-	const cost = walker.cost(doc);
+	const cost = walker.cost(doc, 0);
 	if (walker.verdict !== "accepted") return walker.verdict;
 	return cost > maxRegistrationSchemaEvaluations ? "too_complex" : "accepted";
 }

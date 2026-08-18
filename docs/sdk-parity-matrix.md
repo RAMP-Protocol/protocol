@@ -12,7 +12,7 @@
 
 Go is the oracle (`sdk/go/{helpers,resolvers,core,connect,connectserver}`); Python and TS mirror it. This document is **generated** from the same two artifacts CI already enforces against the code, so it cannot drift from the real surface — a mismatch fails the API-surface gate or the corpus-completeness gate before it can reach this file.
 
-**At a glance:** 97 symbols at cross-language parity · 14 documented divergences · 144 Go-idiomatic exclusions · 25 conformance corpora, each tri-replayed.
+**At a glance:** 98 symbols at cross-language parity · 14 documented divergences · 144 Go-idiomatic exclusions · 25 conformance corpora, each tri-replayed.
 
 Layering (L1 pure trust core vs L2 I/O resolvers), the SSRF transport-wiring invariant, and naming conventions are recorded in [`design-history.md`](./design-history.md).
 
@@ -59,6 +59,7 @@ Legend: a name = the public face in that language · `—` = intentionally none 
 | `MaxRegistrationSchemaBytes` | `MAX_REGISTRATION_SCHEMA_BYTES` | `maxRegistrationSchemaBytes` |
 | `MaxRegistrationSchemaDepth` | `MAX_REGISTRATION_SCHEMA_DEPTH` | `maxRegistrationSchemaDepth` |
 | `MaxRegistrationSchemaEvaluations` | `MAX_REGISTRATION_SCHEMA_EVALUATIONS` | `maxRegistrationSchemaEvaluations` |
+| `MaxRegistrationSchemaRefHops` | `MAX_REGISTRATION_SCHEMA_REF_HOPS` | `maxRegistrationSchemaRefHops` |
 | `NewIdempotencyKey` | `generate_idempotency_key` | `generateIdempotencyKey` |
 | `NormalizeScopes` | `normalize_scopes` | `normalizeScopes` |
 | `OfferSignatureAlgorithm` | `OFFER_SIGNATURE_ALGORITHM` | `OFFER_SIGNATURE_ALGORITHM` |

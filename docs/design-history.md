@@ -354,6 +354,15 @@ one axis does not constrain another: the schema depth cap counts containers, so 
 reference chain of five hundred links is three containers deep and passed it, then
 exhausted the interpreter stack of the one port whose walk was recursive.
 
+That fix was one stage short. Making the cost walk iterative stopped the SDK's own walk
+from recursing, and the library it then hands an accepted schema to still resolved the
+chain recursively — so the same document compiled and crashed on the first payload. The
+lesson is about where a bound belongs: an implementation can only make its own walk
+iterative, and a rule the contract does not state has to be survived independently by
+every library any implementation chooses. Chain length is now a number beside the depth
+and work caps, and it is a THIRD axis rather than a refinement of either — a flat chain is
+shallow and cheap, which is exactly why the other two never saw it.
+
 The last gap was the other side of the same coin. Every cap protected the schema, and
 nothing protected the payload the schema is applied to — validation cost is the schema's
 cost multiplied by the elements in the payload, so the multiplier was the unbounded

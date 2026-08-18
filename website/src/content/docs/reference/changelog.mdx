@@ -91,6 +91,18 @@ a different character inside it, while the other two refused the same bytes. The
 JavaScript-only literals `NaN` and `Infinity` are not JSON (RFC 8259 §6) and are refused
 with them; one implementation's parser accepts all three as an extension.
 
+**A reference chain is bounded on its own axis: 100 hops.** A chain of definitions each
+referring to the next is three JSON containers deep however long it is, so the depth cap
+never saw it, and it costs one evaluation per link, so the work cap did not either. Both
+caps passed a five-hundred-link chain and every SDK called it valid — and then the
+recursion each validator performs while resolving that chain exhausted one
+implementation's stack outright, raising out of a face documented as returning a verdict.
+A third bound is what stops the document being published, rather than asking three
+libraries to survive it. A schema describing a business entity chains one or two
+references; the deepest chain in a conformance vector that is accepted is eleven. The
+refusal is its own verdict, `ref_chain_too_long`, because it is its own rule — a cycle
+still reports `ref_cycle`, which is the more specific answer.
+
 **Two more brace rules, found the way the bracket rules were.** A counted repeat MUST
 state its first bound, and a `}` outside a bracket expression MUST close one. `a{,5}` is
 five literal characters to RE2 and a repeat of zero to five to Python, so both engines

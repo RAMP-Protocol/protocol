@@ -39,6 +39,7 @@ __all__ = [
     "MAX_REGISTRATION_SCHEMA_BYTES",
     "MAX_REGISTRATION_SCHEMA_DEPTH",
     "MAX_REGISTRATION_SCHEMA_EVALUATIONS",
+    "MAX_REGISTRATION_SCHEMA_REF_HOPS",
     "REGISTRATION_SCHEMA_DIALECT",
     "RegistrationDataVerdict",
     "RegistrationSchema",
@@ -74,6 +75,22 @@ MAX_REGISTRATION_FIELD_ERROR_TEXT_LEN = 255
 # count, so the bound is really a time bound expressed as a number a static walk can
 # compute and a shared corpus can pin, which a stopwatch cannot.
 MAX_REGISTRATION_SCHEMA_EVALUATIONS = 10000
+
+# Bounds how long a $ref chain may be, measured as the longest path of reference hops
+# rather than as the number of references a document contains.
+#
+# A SEPARATE axis from MAX_REGISTRATION_SCHEMA_DEPTH, and the shape that forced it shows
+# why: a chain of five hundred definitions, each referring to the next, is three JSON
+# containers deep however long it is, so the depth cap never sees it. The evaluation cap
+# does not see it either — a flat chain costs one evaluation per link.
+#
+# What it bounds is the RECURSION a validator does while resolving that chain. This
+# module's own cost walk follows references iteratively and does not care, but the
+# library it hands an accepted schema to does not, and it exhausted the interpreter stack
+# at 495 links — raising out of a face documented as returning a verdict, on a document
+# every SDK had just called valid. The bound stops the document being published rather
+# than asking three libraries to survive it.
+MAX_REGISTRATION_SCHEMA_REF_HOPS = 100
 
 # NOTE on wall-clock bounds. The Go oracle carries a compile timeout, which it can
 # enforce because its runtime preempts. This port carries none, deliberately: a
@@ -111,6 +128,7 @@ SchemaVerdict = Literal[
     "unsafe_pattern",
     "too_complex",
     "ref_cycle",
+    "ref_chain_too_long",
     "compile_timeout",
     "uncompilable",
     "not_published",
@@ -704,6 +722,9 @@ class _CostWalker:
         self.anchors: dict[str, Any] = {}
         _collect_anchors(root, self.anchors)
         self.memo: dict[str, int] = {}
+        # The hop count at which each pending reference was first reached, so the
+        # iterative driver can resume its walk at the right depth.
+        self.hops: dict[str, int] = {}
         self.on_stack: set[str] = set()
         self.verdict: SchemaVerdict = "accepted"
 
@@ -712,7 +733,7 @@ class _CostWalker:
             self.verdict = verdict
         return _COST_CEILING
 
-    def cost(self, node: Any, missing: set[str] | None = None) -> int:
+    def cost(self, node: Any, missing: set[str] | None = None, hops: int = 0) -> int:
         """The worst-case evaluations ``node`` can require against one instance: a
         boolean schema is one, an object schema is itself plus everything it can
         delegate to.
@@ -734,21 +755,21 @@ class _CostWalker:
                 continue
             if key in _REFERENCE_KEYWORDS:
                 if isinstance(value, str):
-                    total = _add_cost(total, self._ref_contribution(value, missing))
+                    total = _add_cost(total, self._ref_contribution(value, missing, hops + 1))
             elif key in _BRANCH_KEYWORDS:
                 if isinstance(value, list):
                     for item in value:
-                        total = _add_cost(total, self.cost(item, missing))
+                        total = _add_cost(total, self.cost(item, missing, hops))
                 else:
-                    total = _add_cost(total, self.cost(value, missing))
+                    total = _add_cost(total, self.cost(value, missing, hops))
             elif key in _SINGLE_SUBSCHEMA_KEYWORDS:
-                total = _add_cost(total, self.cost(value, missing))
+                total = _add_cost(total, self.cost(value, missing, hops))
             elif key in _SCHEMA_MAP_KEYWORDS:
                 if isinstance(value, dict):
                     for name in sorted(value):
-                        total = _add_cost(total, self.cost(value[name], missing))
+                        total = _add_cost(total, self.cost(value[name], missing, hops))
                 else:
-                    total = _add_cost(total, self.cost(value, missing))
+                    total = _add_cost(total, self.cost(value, missing, hops))
             if total >= _COST_CEILING:
                 return _COST_CEILING
         return total
@@ -762,7 +783,7 @@ class _CostWalker:
         """
         while True:
             missing: set[str] = set()
-            total = self.cost(self.root, missing)
+            total = self.cost(self.root, missing, 0)
             if self.verdict != "accepted":
                 return _COST_CEILING
             if not missing:
@@ -772,15 +793,28 @@ class _CostWalker:
                 if self.verdict != "accepted":
                     return _COST_CEILING
 
-    def _ref_contribution(self, ref: str, missing: set[str]) -> int:
+    def _ref_contribution(self, ref: str, missing: set[str], hops: int) -> int:
         """What a reference adds to the enclosing schema's cost, if that is already
         known. A target not yet counted is recorded as a dependency and contributes
-        nothing for now; the driver in ``ref_cost`` counts it and re-runs this walk."""
+        nothing for now; the driver in ``ref_cost`` counts it and re-runs this walk.
+
+        ``hops`` is the number of references already followed to reach this one. It is
+        tracked explicitly rather than read off ``len(self.on_stack)``, which is a search
+        FRONTIER in this port rather than a path: a schema whose references branch puts
+        siblings on that set, so its size is not the chain length. The bound is a number
+        in the contract, so all three SDKs have to compute the same quantity by
+        construction and not by coincidence.
+        """
         if ref in self.memo:
             return self.memo[ref]
         if ref in self.on_stack:
             return self.fail("ref_cycle")
+        # After the cycle check, so a chain that closes on itself still reports the more
+        # specific diagnosis.
+        if hops > MAX_REGISTRATION_SCHEMA_REF_HOPS:
+            return self.fail("ref_chain_too_long")
         missing.add(ref)
+        self.hops[ref] = min(self.hops.get(ref, hops), hops)
         return 0
 
     def ref_cost(self, ref: str) -> int:
@@ -809,7 +843,7 @@ class _CostWalker:
             if not ok:
                 return self.fail("uncompilable")
             missing: set[str] = set()
-            total = self.cost(target, missing)
+            total = self.cost(target, missing, self.hops.get(cur, 0))
             if self.verdict != "accepted":
                 return _COST_CEILING
             if missing:
