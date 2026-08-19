@@ -975,3 +975,64 @@ The claim is scoped to that seam deliberately. A caller that injects a whole
 ownership of that fetch and the guard is that caller's to install — which is a
 different bargain from an option that quietly weakens a fetch the SDK still
 performs.
+
+## Identity documents are located, not inlined, and their origin rule is stricter than `endpoint`'s
+
+`WellKnownManifest.identity_documents` names where a participant serves two
+documents: its Web Bot Auth directory and its Signature Agent Card. Both members
+are URI references, both are optional, and any role may publish the block.
+
+This is not a return to the `keys_uri` / `jwks_uri` pointer pattern that "Inline
+keys instead of key-URI pointers" rejected. That section is about the
+now-superseded `WellKnownManifest.public_keys` shape, and the objection to a
+pointer was that verification would have to follow it — a second fetch on every
+verification path, and a second thing that can 404 or go stale. Nothing here
+changes what verification does. A verifier still resolves the WBA directory from
+the covered `Signature-Agent` header and the WBA-canonical path, exactly as
+before, and it does not read `ramp.json` at all. The block is discovery metadata
+for a consumer that already has the manifest in hand: it relocates a document's
+PATH rather than introducing a lookup step. Keys themselves are still never
+republished here.
+
+The absence semantics are deliberately asymmetric, which is what keeps the
+addition free of behaviour change. A missing `wba_directory` means the canonical
+path on the serving host — today's behaviour, so a participant that publishes
+nothing is unaffected. A missing `signature_agent_card` means NOT ADVERTISED,
+because RAMP defines no canonical path for that document; inventing a fallback
+would send consumers fetching a URL nobody agreed to serve.
+
+The resolved URL must be on the EXACT SAME ORIGIN as the manifest — `https`, equal
+hostname, equal effective port — and a subdomain is refused. That is stricter than
+the rule "Host anchoring compares host and port, but not scheme" describes for
+`endpoint`, and the difference is not an inconsistency. The two fields fail
+differently. If the host named by `endpoint` is taken over, an attacker receives
+signed calls that were addressed to the Exchange: bad, but they still cannot
+produce a valid signature as anybody else. If the host named by `wba_directory` is
+taken over, the attacker BECOMES the identity — they publish their own keys and
+their signatures verify as the participant. Subdomain takeover through a dangling
+DNS record is an ordinary failure, and it would be enough on its own, without the
+participant ever losing control of the host that serves `ramp.json`.
+
+The allowance also buys nothing here. `endpoint` needs a subdomain because an
+Exchange's API is a live service that commonly runs on separate infrastructure.
+Identity documents are static JSON served next to a `/.well-known/ramp.json` the
+participant is already serving on that exact host.
+
+Two smaller decisions follow from the same reasoning. The origin compared is the
+one the manifest was FETCHED FROM, not the self-asserted `domain` member — the
+argument already written out for `endpoint`, since a manifest that anchored to its
+own field could set that field to whatever it wanted. And the manifest URL itself
+is vetted before anything resolves against it: it must be `https`, name a plain
+host and carry no userinfo. Checking only the resolved side is not enough, because
+a base of `http://a.example/ramp.json` resolving to `https://a.example/doc` passes
+every later check — the hostnames match and both sides fold to no port — so
+accepting it would mean trusting a manifest that arrived unauthenticated.
+
+The SDK face is `ResolveIdentityDocument`, one shared golden corpus, three
+languages. It reuses `IsBareDomain` for the host shape rather than growing a new
+predicate, which also fixes the ordering the audience check already learned:
+U+212A KELVIN SIGN case-folds to a plain ASCII `k`, so a host compared after
+folding can match a name it is only imitating. The shape check runs first. The
+returned URL is canonical — host lowercased, a default port folded away — so all
+three SDKs answer with the same string rather than echoing however the manifest
+spelled the authority.

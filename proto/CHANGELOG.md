@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+**`WellKnownManifest.identity_documents`: where a participant's identity documents are
+served (field 32, additive).** A new optional `IdentityDocuments` block with two optional
+members, `wba_directory` and `signature_agent_card`, each `min_len: 1`. Any role may
+publish it. Both members are RFC 3986 URI references, relative or absolute, resolved
+against the URL the manifest was FETCHED FROM — never the self-asserted `domain` member,
+which a hostile manifest could set to validate itself. After resolution the URL MUST be on
+the EXACT SAME ORIGIN as the manifest (`https`, equal hostname, equal effective port, where
+an omitted port and `:443` are the same port) and MUST NOT carry userinfo. The manifest URL
+itself is vetted first, on the same three conditions.
+
+This is stricter than the `endpoint` rule, which allows a subdomain, and deliberately so:
+whoever takes over the host named by `endpoint` misdirects signed calls they still cannot
+sign for, while whoever takes over the host named by `wba_directory` publishes their own
+keys and BECOMES the participant. A dangling DNS record on one unused subdomain is enough
+for that.
+
+Discovery metadata only. Signature verification is unchanged — a verifier still resolves
+the WBA directory from the covered `Signature-Agent` header — and keys are still never
+republished in `ramp.json`. Absence is asymmetric: a missing `wba_directory` means fall
+back to the canonical path `/.well-known/http-message-signatures-directory` on the serving
+host, which is today's behaviour, while a missing `signature_agent_card` means NOT
+ADVERTISED, since RAMP defines no canonical path for that document. An empty block is the
+same as no block.
+
+The SDK face is `ResolveIdentityDocument` / `resolve_identity_document` /
+`resolveIdentityDocument`, one shared golden corpus replayed in all three languages. It
+returns a canonical URL (host lowercased, default port folded away) so the three answer
+identically, and it reuses the existing bare-domain shape check, which runs BEFORE case
+folding so a U+212A KELVIN SIGN host cannot fold into the ASCII name it imitates.
+
+Two proto comments that still described the pre-WBA-split world — an agent's keys being
+inline in `ramp.json`, and `Requester.domain` being "used for public key lookup" — are
+corrected in the same change.
+
 **Every addressed request names its recipient: `exchange` becomes required (breaking,
 pre-1.0).** `ResourceQuery` (field 10), `DisputeRequest` (field 10), `RegisterRequest`
 (field 3), `GetAccountStatusRequest` (field 2), `DomainVerificationRequest` (field 4),
