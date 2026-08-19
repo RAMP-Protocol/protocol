@@ -28,6 +28,23 @@ const hostAscii = new Set(
 	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:[]<>\"",
 );
 
+// Userinfo admits a DIFFERENT closed set from the host: no `"`, `<`, `>` or `]`.
+// Reusing the host set here would close the backslash hole and still under-refuse
+// four characters the oracle rejects — and the gap is not cosmetic. WHATWG treats
+// `\` as a fourth authority delimiter in special schemes, so a backslash smuggled
+// into userinfo ends the authority early and the fetch reaches an entirely
+// different host from the one the anchor check just approved.
+const userinfoAscii = new Set(
+	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:",
+);
+
+// A scheme, and only at the front. The oracle reads `://` as a separator solely
+// when a valid scheme precedes it at position 0; anywhere else the text is a path.
+// Locating the separator by search instead let a path segment supply the host —
+// `evil.example/x://a.example` answered `a.example`.
+const schemeAtFront = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//;
+const escapePair = /%(?![0-9A-Fa-f]{2})/;
+
 // A control character is refused outright rather than removed. This is the reason
 // the platform parser cannot be used here: `new URL` strips tabs, newlines and
 // leading control characters per WHATWG, so it answers "host" where the oracle
@@ -68,16 +85,14 @@ export function parseRef(ref: string): ParsedRef {
 	if (controlChar.test(ref)) {
 		throw invalidHost(ref, "control character");
 	}
-	// A percent-escape is refused rather than decoded. The oracle admits only the
-	// escapes that decode to a byte at or above 0x80 (and %25 itself), which no
-	// domain name carries; refusing all of them costs nothing a caller can use and
-	// removes an unescaping step the three languages would each get subtly wrong.
-	// Every value the two answers differ on is one both refuse at every call site.
-	if (ref.includes("%")) {
-		throw invalidHost(ref, "percent-escape in a host reference");
-	}
-
+	// `://` is a separator only behind a valid scheme at the front. A reference that
+	// carries the sequence anywhere else is not schemeless — it is malformed, which
+	// is what the oracle answers, so treating it as schemeless and prepending https
+	// would trade one wrong answer for another.
 	const hadScheme = ref.includes("://");
+	if (hadScheme && !schemeAtFront.test(ref)) {
+		throw invalidHost(ref, 'no valid scheme before "://"');
+	}
 	const work = hadScheme ? ref : `https://${ref}`;
 	const sep = work.indexOf("://");
 	const scheme = hadScheme ? work.slice(0, sep).toLowerCase() : "https";
@@ -87,17 +102,50 @@ export function parseRef(ref: string): ParsedRef {
 	const rest = work.slice(sep + 3);
 	const end = rest.search(/[/?#]/);
 	const authority = end < 0 ? rest : rest.slice(0, end);
+	const beyond = end < 0 ? "" : rest.slice(end);
+
+	// Escapes are read PER COMPONENT, because the oracle reads them per component.
+	// A malformed escape in a path is refused there and admitted in a query, which
+	// is not unescaped at parse time. Checking the whole reference instead refused
+	// `?q=a%20b` — an ordinary, fully conformant endpoint.
+	const queryAt = beyond.search(/[?#]/);
+	const path = queryAt < 0 ? beyond : beyond.slice(0, queryAt);
+	if (escapePair.test(path)) {
+		throw invalidHost(ref, "malformed percent-escape in path");
+	}
 
 	// Userinfo is split at the LAST "@", so an "@" inside a credential does not
 	// become part of the host.
 	const at = authority.lastIndexOf("@");
 	const hasUserinfo = at >= 0;
+	const userinfo = hasUserinfo ? authority.slice(0, at) : "";
 	const host = hasUserinfo ? authority.slice(at + 1) : authority;
 	if (host === "") {
 		throw invalidHost(ref, "no host");
 	}
+	for (const ch of userinfo) {
+		const cp = ch.codePointAt(0) ?? 0;
+		// "%" and "@" are excluded from the set check on purpose: escapes are read
+		// below, and an "@" before the last one is part of the credential, not a
+		// second separator.
+		if (cp < 0x80 && ch !== "%" && ch !== "@" && !userinfoAscii.has(ch)) {
+			throw invalidHost(ref, `invalid character ${JSON.stringify(ch)} in userinfo`);
+		}
+	}
+	if (escapePair.test(userinfo)) {
+		throw invalidHost(ref, "malformed percent-escape in userinfo");
+	}
 	for (const ch of host) {
 		const cp = ch.codePointAt(0) ?? 0;
+		// A percent-escape is refused in the HOST, and only there. The oracle admits
+		// just the escapes decoding to a byte at or above 0x80, plus %25 — none of
+		// which a domain name carries — so refusing the lot costs nothing a caller
+		// can use and removes an unescaping step the three languages would each get
+		// subtly wrong. Every value the two answers differ on refuses downstream
+		// anyway: a host holding a raw high byte anchors to no bare domain.
+		if (ch === "%") {
+			throw invalidHost(ref, "percent-escape in the host component");
+		}
 		if (cp < 0x80 && !hostAscii.has(ch)) {
 			throw invalidHost(ref, `invalid character ${JSON.stringify(ch)} in host`);
 		}

@@ -13,6 +13,7 @@ it; these names are internal to the SDK.
 
 from __future__ import annotations
 
+import re
 from typing import NamedTuple
 
 
@@ -47,6 +48,23 @@ _HOST_ASCII = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:[]<>\""
 )
 
+# Userinfo admits a DIFFERENT closed set from the host: no ``"``, ``<``, ``>`` or
+# ``]``. Reusing the host set here would close the backslash hole and still
+# under-refuse four characters the oracle rejects — and the gap is not cosmetic.
+# WHATWG treats ``\`` as a fourth authority delimiter in special schemes, so a
+# backslash smuggled into userinfo ends the authority early and a fetch reaches an
+# entirely different host from the one the anchor check just approved.
+_USERINFO_ASCII = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:"
+)
+
+# A scheme, and only at the front. The oracle reads ``://`` as a separator solely
+# when a valid scheme precedes it at position 0; anywhere else the text is a path.
+# Locating the separator by search instead let a path segment supply the host —
+# ``evil.example/x://a.example`` answered ``a.example``.
+_SCHEME_AT_FRONT = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_BAD_ESCAPE = re.compile("%(?![0-9A-Fa-f]{2})")
+
 # The port a scheme reaches when none is written.
 _DEFAULT_PORTS = {"http": "80", "https": "443"}
 
@@ -60,6 +78,41 @@ def _invalid_host(ref: str, why: str) -> ValueError:
     as :func:`check_audience` does, because a sentinel is not how a caller in this
     language distinguishes causes."""
     return ValueError(f"hosts: reference is not a usable host: {why}: {ref!r}")
+
+
+def _split_components(rest: str) -> tuple[str, str]:
+    """Split what follows ``://`` into its authority and its path.
+
+    The authority ends at the first delimiter that starts a path, query or fragment
+    — the three things a reference can carry beyond it — and the path ends where a
+    query or fragment begins. They are separated because escapes are read PER
+    COMPONENT, exactly as the oracle reads them: a malformed escape is refused in a
+    path and admitted in a query, which is not unescaped at parse time. Checking the
+    whole reference instead refused ``?q=a%20b``, an ordinary conformant endpoint.
+    """
+    authority, beyond = rest, ""
+    for i, c in enumerate(rest):
+        if c in "/?#":
+            authority, beyond = rest[:i], rest[i:]
+            break
+    path = beyond
+    for i, c in enumerate(beyond):
+        if c in "?#":
+            path = beyond[:i]
+            break
+    return authority, path
+
+
+def _vet_userinfo(ref: str, userinfo: str) -> None:
+    """Refuse a credential the oracle would refuse, over its OWN character set."""
+    for c in userinfo:
+        # "%" and "@" are excluded from the set check on purpose: escapes are read
+        # below, and an "@" before the last one is part of the credential, not a
+        # second separator.
+        if ord(c) < _ASCII_MAX and c not in "%@" and c not in _USERINFO_ASCII:
+            raise _invalid_host(ref, f"invalid character {c!r} in userinfo")
+    if _BAD_ESCAPE.search(userinfo):
+        raise _invalid_host(ref, "malformed percent-escape in userinfo")
 
 
 def _parse_ref(ref: str) -> ParsedRef:
@@ -87,35 +140,41 @@ def _parse_ref(ref: str) -> ParsedRef:
         raise _invalid_host(ref, "control character")
     if ref.strip() == "":
         raise _invalid_host(ref, "empty reference")
-    # A percent-escape is refused rather than decoded. The oracle admits only the
-    # escapes that decode to a byte at or above 0x80 (and %25 itself), which no
-    # domain name carries; refusing all of them costs nothing a caller can use and
-    # removes an unescaping step the three languages would each get subtly wrong.
-    # Every value the two answers differ on is one both refuse at every call site.
-    if "%" in ref:
-        raise _invalid_host(ref, "percent-escape in a host reference")
-
+    # ``://`` is a separator only behind a valid scheme at the front. A reference
+    # that carries the sequence anywhere else is not schemeless — it is malformed,
+    # which is what the oracle answers, so treating it as schemeless and prepending
+    # https would trade one wrong answer for another.
     had_scheme = "://" in ref
+    if had_scheme and not _SCHEME_AT_FRONT.match(ref):
+        raise _invalid_host(ref, 'no valid scheme before "://"')
     work = ref if had_scheme else f"https://{ref}"
     sep = work.index("://")
     scheme = work[:sep].lower() if had_scheme else "https"
 
     # The authority ends at the first delimiter that starts a path, query or
     # fragment — the three things a reference can carry beyond it.
-    rest = work[sep + 3 :]
-    authority = rest
-    for i, c in enumerate(rest):
-        if c in "/?#":
-            authority = rest[:i]
-            break
+    authority, path = _split_components(work[sep + 3 :])
+    if _BAD_ESCAPE.search(path):
+        raise _invalid_host(ref, "malformed percent-escape in path")
 
     # Userinfo is split at the LAST "@", so an "@" inside a credential does not
     # become part of the host.
     has_userinfo = "@" in authority
-    host = authority.rpartition("@")[2] if has_userinfo else authority
+    userinfo, _, host = authority.rpartition("@")
+    if not has_userinfo:
+        userinfo, host = "", authority
     if host == "":
         raise _invalid_host(ref, "no host")
+    _vet_userinfo(ref, userinfo)
     for c in host:
+        # A percent-escape is refused in the HOST, and only there. The oracle admits
+        # just the escapes decoding to a byte at or above 0x80, plus %25 — none of
+        # which a domain name carries — so refusing the lot costs nothing a caller
+        # can use and removes an unescaping step the three languages would each get
+        # subtly wrong. Every value the two answers differ on refuses downstream
+        # anyway: a host holding a raw high byte anchors to no bare domain.
+        if c == "%":
+            raise _invalid_host(ref, "percent-escape in the host component")
         if ord(c) < _ASCII_MAX and c not in _HOST_ASCII:
             raise _invalid_host(ref, f"invalid character {c!r} in host")
 
