@@ -23,6 +23,32 @@ import { describe, it, expect } from "vitest";
 import { resolveIdentityDocument } from "../src/hosts.ts";
 import sweepFile from "../../go/helpers/testdata/identity-document-sweep-vectors.json";
 
+// The same two rules the intent suite pins, applied to every one of the 1209
+// refused sweep cases. A bare catch would map ANY throw to "refused", and the
+// hostile inputs in this corpus are exactly where a raw TypeError out of the URL
+// constructor would surface — so the one place the check matters most was the
+// one place it was not made.
+const BACKSTOP_MESSAGE = "identity document: reference cannot be resolved against the manifest URL";
+
+// Runs one case and returns the resolved URL, or the refusal REASON rather than
+// a bare null. A refusal outside the documented family, or one that came from
+// the constructor backstop instead of a rule, is reported as its own string and
+// therefore shows up as a mismatch rather than passing as a refusal.
+function answer(manifestUrl: string, ref: string): string | null {
+	try {
+		return resolveIdentityDocument(manifestUrl, ref);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		if (!message.startsWith("identity document: ")) {
+			return `FOREIGN THROW: ${message}`;
+		}
+		if (message === BACKSTOP_MESSAGE) {
+			return "BACKSTOP REFUSAL, not a rule";
+		}
+		return null;
+	}
+}
+
 type SweepVector = {
 	name: string;
 	manifest_url: string;
@@ -44,12 +70,7 @@ describe("sdk/ts resolveIdentityDocument matches the sdk/go oracle across the sw
 	it("every sweep case answers as the oracle does", () => {
 		const mismatches: string[] = [];
 		for (const v of vectors) {
-			let got: string | null;
-			try {
-				got = resolveIdentityDocument(v.manifest_url, v.ref);
-			} catch {
-				got = null;
-			}
+			const got = answer(v.manifest_url, v.ref);
 			const want = v.accepted ? v.resolved : null;
 			if (got !== want) {
 				mismatches.push(

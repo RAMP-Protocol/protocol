@@ -27,6 +27,25 @@ from ramp_sdk.hosts import resolve_identity_document
 
 _VECTORS = load_json(GO_TESTDATA / "identity-document-sweep-vectors.json")["identity_document_sweep"]
 
+# Every refusal this resolver documents carries this prefix.
+_REFUSAL_PREFIX = "identity document: "
+
+
+def _answer(manifest_url: str, ref: str) -> str | None:
+    """Resolve one case, or report WHY it was refused rather than only THAT it was.
+
+    ``ValueError`` alone is too weak a pin: ``urlsplit`` raises it too, so a stray
+    one from inside the resolver would be counted as a correct refusal. A refusal
+    outside the documented family is returned as its own string, which makes it a
+    mismatch instead.
+    """
+    try:
+        return resolve_identity_document(manifest_url, ref)
+    except ValueError as exc:
+        if not str(exc).startswith(_REFUSAL_PREFIX):
+            return f"FOREIGN RAISE: {exc}"
+        return None
+
 
 def test_the_sweep_corpus_is_populated() -> None:
     # A corpus that lost its cases would pass the loop below in silence.
@@ -38,10 +57,7 @@ def test_the_sweep_corpus_is_populated() -> None:
 def test_every_sweep_case_answers_as_the_oracle_does() -> None:
     mismatches: list[str] = []
     for v in _VECTORS:
-        try:
-            got = resolve_identity_document(v["manifest_url"], v["ref"])
-        except ValueError:
-            got = None
+        got = _answer(v["manifest_url"], v["ref"])
         want = v["resolved"] if v["accepted"] else None
         if got != want:
             mismatches.append(
