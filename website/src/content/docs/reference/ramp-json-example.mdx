@@ -38,6 +38,36 @@ The `ramp.json` file is served at `/.well-known/ramp.json` and carries a `WellKn
 }
 ```
 
+## An Agent Manifest
+
+An agent's manifest is much smaller. It is a role marker, plus the optional
+`identity_documents` block naming where the agent serves the documents that
+describe its identity:
+
+```json
+{
+  "ver": "1.0",
+  "role": "ROLE_AGENT",
+  "domain": "research-bot.example",
+  "identity_documents": {
+    "wba_directory": "/.well-known/http-message-signatures-directory",
+    "signature_agent_card": "/.well-known/signature-agent-card.json"
+  }
+}
+```
+
+Both members are URI references — relative, as above, or absolute. A consumer
+resolves each against the URL it fetched `ramp.json` from, and the result must be
+on the **exact same origin** as that URL: `https`, the same hostname, the same
+effective port, and no userinfo. A subdomain is refused, which is stricter than
+the rule for `endpoint`; [Identity documents](/protocol/exchange-manifest/#identity-documents)
+explains why.
+
+Omitting `wba_directory` keeps today's behaviour — a consumer falls back to the
+canonical path below on the host that served the manifest. Omitting
+`signature_agent_card` means the card is **not advertised**; RAMP defines no
+canonical path for it, so nothing may guess one.
+
 ## The WBA Directory
 
 Signing keys are **not** carried in `ramp.json`. Each participant publishes its keys in a separate, pure WBA directory — a JWK Set served at `/.well-known/http-message-signatures-directory` with `Content-Type: application/jwk-set+json`. Keys are identified by their RFC 7638 thumbprint (the RFC 9421 `keyid`), not by a `kid` label, and the optional emergency revocation list now lives here as `revocation_url`:

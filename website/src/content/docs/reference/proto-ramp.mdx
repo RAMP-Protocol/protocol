@@ -284,7 +284,7 @@ The account's current state. `billing_ref` is empty when the calling agent has n
 
 ### WellKnownManifest
 
-Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Signing keys are **not** carried here — each participant publishes them in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`, modeled by [`WBAFile`](#wbafile)). Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
+Served at `/.well-known/ramp.json` by **every** RAMP participant (agent, exchange, broker, publisher). Single canonical document, role-tagged via `role`. Signing keys are **not** carried here — each participant publishes them in its WBA directory (the JWK Set at `/.well-known/http-message-signatures-directory`, modeled by [`WBAFile`](#wbafile)); the optional [`IdentityDocuments`](#identitydocuments) block only says WHERE that directory and the participant's Signature Agent Card are served. Per-role fields are populated only when that role applies; consumers MUST ignore non-applicable fields based on `role`.
 
 ::proto-message{name=WellKnownManifest}
 
@@ -296,7 +296,13 @@ How to open an account at an Exchange, published as the optional `account_regist
 
 ### IdentityDocuments
 
-Where a participant serves its identity documents, published as the optional `identity_documents` block on the manifest. Discovery metadata only — it does not change how a request signature is verified.
+Where a participant serves its identity documents — its WBA directory and its Signature Agent Card — published as the optional `identity_documents` block on the manifest. Any role may publish it.
+
+**Discovery metadata only.** Publishing this block does not change how a request signature is verified: a verifier still resolves the WBA directory from the covered `Signature-Agent` header. The block relocates a document, it does not add a lookup step.
+
+Both members are RFC 3986 URI references, relative or absolute, resolved against the URL the manifest was **fetched from** — never against the self-asserted `domain` member, which a hostile manifest could set to whatever it wanted to validate. After resolution the URL MUST be on the **exact same origin** as the manifest (`https`, equal hostname, equal effective port, where an omitted port and `:443` are the same port) and MUST NOT carry userinfo. That is stricter than the rule for `WellKnownManifest.endpoint`, which allows a subdomain: whoever takes over an `endpoint` host misdirects calls they still cannot sign for, while whoever takes over an identity-document host publishes their own keys and becomes the participant. See [Identity documents](/protocol/exchange-manifest/#identity-documents) for the full argument.
+
+Absence is **not symmetric**. A missing `wba_directory` means fall back to the canonical path `/.well-known/http-message-signatures-directory` on the serving host — today's behaviour. A missing `signature_agent_card` means **not advertised**: RAMP defines no canonical path for that document, so a consumer must not guess one. An empty block is the same as no block.
 
 ::proto-message{name=IdentityDocuments}
 
