@@ -17,19 +17,24 @@ itself is vetted first, on the same three conditions.
 
 Both the reference AND the manifest URL must also be written in the RFC 3986 character set
 — the unreserved characters, the gen-delims, the sub-delims and `%` — with every
-percent-escape valid, no percent-encoded dot segment (`%2e`, `%2E`), any written-out port a
-number in 1-65535, a non-empty authority whenever one is named, and no colon in the first
-segment of a schemeless reference. The manifest URL additionally MUST NOT carry a fragment,
-which a URL a document was fetched from cannot meaningfully have. A control character, a
-space, a backslash and every non-ASCII byte fall outside the character set, so one rule
-covers them all. These are refusals rather than repairs: the rule has to produce the same
-verdict and the same resolved string in every implementation, and the URL parsers
-implementations reach for disagree about almost everything outside that set — one
-percent-encodes a literal `|` where another keeps it, one silently strips a tab and so
-reads an absolute reference to another host as a relative path, skipping every origin
-check, and one decodes `%2e` before removing dot segments and therefore fetches a different
-document. Every value the field is meant to carry — a plain absolute path, a relative path,
-a full https URL — is unaffected.
+percent-escape valid, no percent-encoded dot anywhere in the string (`%2e`, `%2E`,
+mid-segment included, so `card%2ejson` is refused too), any written-out port a number in
+1-65535, at most one colon in an authority, a non-empty authority whenever one is named,
+and no colon in the first segment of a schemeless reference. A reference MAY carry a
+fragment and it is kept, but never a second one: RFC 3986 gives a reference a single
+fragment running to the end of the string, so a hash inside a fragment is written `%23`.
+The manifest URL MUST NOT carry a fragment at all, which a URL a document was fetched from
+cannot meaningfully have. The resolved query and fragment are the substrings the author
+wrote, not a re-serialization of them. A control character, a space, a backslash and every
+non-ASCII byte fall outside the character set, so one rule covers them all. These are
+refusals rather than repairs: the rule has to produce the same verdict and the same
+resolved string in every implementation, and the URL parsers implementations reach for
+disagree about almost everything outside that set — one percent-encodes a literal `|` where
+another keeps it, one silently strips a tab and so reads an absolute reference to another
+host as a relative path, skipping every origin check, one decodes `%2e` before removing dot
+segments and therefore fetches a different document, and one percent-encodes an apostrophe
+in a query where the others keep it. Every value the field is meant to carry — a plain
+absolute path, a relative path, a full https URL — is unaffected.
 
 This is stricter than the `endpoint` rule, which allows a subdomain, and deliberately so:
 whoever takes over the host named by `endpoint` misdirects signed calls they still cannot

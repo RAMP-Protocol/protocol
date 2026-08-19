@@ -6836,17 +6836,26 @@ func (x *AccountRegistration) GetDataSchema() *structpb.Struct {
 // identity-document host publishes their own keys and BECOMES this participant.
 // Both the reference AND the URL it resolves against MUST be written in the
 // RFC 3986 character set — the unreserved characters, the gen-delims, the
-// sub-delims and `%` — with every percent-escape valid, no percent-encoded dot
-// segment (`%2e`, `%2E`), and no fragment on the manifest URL; any port written
-// out MUST be a number in 1-65535, and a reference that names an authority MUST
-// name a non-empty one. Those are refusals, not repairs: this rule has to give
-// the same verdict and the same resolved string in every implementation, and
-// the URL parsers implementations reach for disagree about almost everything
-// outside that character set — one percent-encodes a literal `|` where another
-// keeps it, one silently strips a tab and reads an absolute reference as a
-// relative path, one decodes `%2e` and then removes the segment, which names a
-// different document. An empty block means the same as no block. Key material
-// and Signature Agent Card contents are never copied in here, and the emergency
+// sub-delims and `%` — with every percent-escape valid and no percent-encoded
+// dot anywhere in the string (`%2e`, `%2E`), mid-segment included and not only
+// at a segment boundary. A reference with no scheme MUST NOT carry a colon in
+// its FIRST path segment, the RFC 3986 path-noscheme rule, since that is
+// ambiguous with a scheme. An authority holds at most one colon: everything
+// after it is the port, and any port written out MUST be a number in 1-65535.
+// A reference that names an authority MUST name a non-empty one. The manifest
+// URL MUST NOT carry a fragment, having been fetched; a reference MAY carry
+// one and it is kept, but never a second, because RFC 3986 gives a reference a
+// single fragment that runs to the end of the string. The resolved query and
+// fragment are the substrings the author wrote, not a re-serialization of them.
+// Those are refusals, not repairs: this rule has to give the same verdict and
+// the same resolved string in every implementation, and the URL parsers
+// implementations reach for disagree about almost everything outside that
+// character set — one percent-encodes a literal `|` where another keeps it, one
+// silently strips a tab and reads an absolute reference as a relative path, one
+// decodes `%2e` and then removes the segment, which names a different document,
+// and one percent-encodes an apostrophe in a query where the others keep it.
+// An empty block means the same as no block. Key material and Signature Agent
+// Card contents are never copied in here, and the emergency
 // revocation list stays where it is, linked from the WBA directory
 // (WBAFile.revocation_url).
 type IdentityDocuments struct {

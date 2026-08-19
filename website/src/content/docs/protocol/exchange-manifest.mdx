@@ -244,16 +244,35 @@ set: the unreserved characters, the gen-delims, the sub-delims, and `%`. On top 
 that:
 
 - every `%` **MUST** introduce two hex digits, so `%zz` is refused;
-- `%2e` and `%2E` are refused, because a percent-encoded dot is a dot segment
-  written so that dot-segment removal cannot see it;
+- `%2e` and `%2E` are refused **anywhere in the string**, not only where they
+  would form a whole segment, because a percent-encoded dot is a dot segment
+  written so that dot-segment removal cannot see it. So `card%2ejson` is refused
+  along with `%2e%2e/card.json`. Refusing it everywhere costs nothing for the
+  values this field carries, and a rule that applied only at segment boundaries
+  would be harder to write identically in three languages — which is the whole
+  point;
 - a port written out **MUST** be a number in `1`-`65535`;
+- an authority holds **at most one colon**. Everything after the first colon is
+  the port, so `exchange.example:8443:9` is refused by the port rule above rather
+  than read as a host named `exchange.example:8443`;
 - a reference that names an authority **MUST** name a non-empty one, so `//` and
   `///dir` are refused;
 - the first segment of a reference with no scheme **MUST NOT** contain a colon,
   which is the RFC 3986 `path-noscheme` rule;
+- a reference **MAY** carry a fragment and it is kept, but **never a second one**.
+  RFC 3986 gives a reference a single fragment running to the end of the string,
+  so `#a#b` is not a reference at all — a hash inside a fragment is written `%23`;
 - the manifest URL is held to **all of the above as well**, and additionally
   **MUST NOT** carry a fragment. A fragment is never sent to a server, so the URL
-  a manifest was fetched from cannot meaningfully have one.
+  a manifest was fetched from cannot meaningfully have one. That the reference
+  may carry one is the deliberate asymmetry: the base is a URL a document **was
+  fetched from**, while the reference is a value an author **wrote**, where a
+  fragment can name an entry inside the document it points at.
+
+The resolved query and fragment are the **substrings the author wrote**, not a
+re-serialization of them. The path is resolved per RFC 3986 §5.2, but the query
+and the fragment are copied across, because the three URL libraries re-encode
+them differently inside the character set above.
 
 A control character, a space, a backslash and any non-ASCII byte all fall outside
 the character set, so one rule covers them.
@@ -265,8 +284,9 @@ character set above. One percent-encodes a literal `|` where another keeps it. O
 silently strips a tab, which turns an absolute reference to another host into what
 looks like a relative path — and with it every origin check the reference was
 supposed to face. One decodes `%2e` before removing dot segments, and so fetches a
-**different document** than the others do. A refusal is the one answer every
-implementation can give identically; a divergent acceptance is not.
+**different document** than the others do. One percent-encodes an apostrophe in a
+query where the others keep it. A refusal is the one answer every implementation
+can give identically; a divergent acceptance is not.
 
 So the practical guidance is short: write a plain path. Every value RAMP
 intends — `/.well-known/http-message-signatures-directory`, `card.json`,
