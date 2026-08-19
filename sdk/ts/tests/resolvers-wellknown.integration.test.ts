@@ -322,3 +322,27 @@ describe("createWellKnownEndpointResolver", () => {
 		}
 	});
 });
+
+// The bare-host check is documented as running BEFORE the allow overlay and before
+// the network. Three comments say so and nothing tested it: a resolver that ran the
+// overlay first, or built the URL and dialled, would satisfy every other case here.
+it("refuses a host that is not bare before the overlay and before the network", async () => {
+	const asked: string[] = [];
+	let fetches = 0;
+	const r = createWellKnownEndpointResolver({
+		scheme: "http",
+		allow: (id) => {
+			asked.push(id);
+			return true;
+		},
+		fetch: async () => {
+			fetches += 1;
+			return { status: 200, text: async () => JSON.stringify({ endpoint: "http://a.example/v1" }) };
+		},
+	});
+	await expect(r.resolveEndpoint("a.example/.well-known/evil.json")).rejects.toThrow(
+		/not a usable host/,
+	);
+	expect(asked).toEqual([]);
+	expect(fetches).toBe(0);
+});

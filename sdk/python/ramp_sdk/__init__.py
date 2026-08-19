@@ -97,6 +97,7 @@ from .regschema import (
 from .resolvers import (
     WBA_DIRECTORY_PATH,
     DirectoryUnavailableError,
+    EndpointRefusedError,
     KeyExpiredError,
     KeyRevokedError,
     NoEndpointError,
@@ -148,6 +149,7 @@ __all__ = [
     "ContentTypeJSON",
     "ContentTypeProto",
     "DirectoryUnavailableError",
+    "EndpointRefusedError",
     "KeyExpiredError",
     "KeyResolver",
     "KeyRevokedError",

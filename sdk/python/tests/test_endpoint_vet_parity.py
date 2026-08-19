@@ -24,7 +24,12 @@ import httpx
 import pytest
 
 from conftest import GO_RESOLVERS_TESTDATA, load_json
-from ramp_sdk.resolvers import ResolverError, WellKnownEndpointResolver
+from ramp_sdk.resolvers import (
+    DirectoryUnavailableError,
+    NoEndpointError,
+    ResolverError,
+    WellKnownEndpointResolver,
+)
 
 _DOC = load_json(GO_RESOLVERS_TESTDATA / "endpoint-vet-vectors.json")
 _REFUSED = [v for v in _DOC["endpoint_vet"] if v["refused"]]
@@ -51,14 +56,15 @@ def test_an_accepted_endpoint_is_handed_back(vector: dict) -> None:
     assert r.resolve_endpoint(vector["host"]) == vector["endpoint"]
 
 
-# The class is not pinned here on purpose. The corpus records the RULE's verdict,
-# and two different faults reach it: an unusable serving host is the caller's own
-# value (a ValueError, raised before any fetch), while an unusable advertised
-# endpoint is a verdict on the Exchange's answer (EndpointRefusedError). Which is
-# which is pinned in the integration suite; what this file holds is that all three
-# languages refuse the same set.
+# The exact class is not pinned, because two different faults legitimately reach a
+# refusal: an unusable serving host is the caller's own value (a ValueError, raised
+# before any fetch), while an unusable advertised endpoint is a verdict on the
+# Exchange's answer (EndpointRefusedError). What IS pinned is the pair that must never
+# appear — a case refused by "no endpoint advertised" or by a transport failure never
+# reached the rule at all, and asserting a bare raise let exactly that pass.
 @pytest.mark.parametrize("vector", _REFUSED, ids=[v["name"] for v in _REFUSED])
-def test_a_refused_endpoint_is_never_handed_back(vector: dict) -> None:
+def test_a_refused_endpoint_is_refused_by_the_rule(vector: dict) -> None:
     r = WellKnownEndpointResolver(http=_serving_manifest(vector["endpoint"]))
-    with pytest.raises((ValueError, ResolverError)):
+    with pytest.raises((ValueError, ResolverError)) as caught:
         r.resolve_endpoint(vector["host"])
+    assert not isinstance(caught.value, NoEndpointError | DirectoryUnavailableError)

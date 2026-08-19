@@ -17,7 +17,11 @@
 // a manifest carrying the vector's endpoint, so each case exercises the bare-host
 // check, the decode and the vet, and nothing else.
 import { describe, expect, it } from "vitest";
-import { createWellKnownEndpointResolver } from "../resolvers/index.ts";
+import {
+	createWellKnownEndpointResolver,
+	DirectoryUnavailable,
+	NoEndpoint,
+} from "../resolvers/index.ts";
 import type { FetchLike } from "../resolvers/http.ts";
 import vectorsFile from "../../go/resolvers/testdata/endpoint-vet-vectors.json";
 
@@ -50,16 +54,23 @@ describe("sdk/ts endpoint rule matches the sdk/go oracle vectors", () => {
 		});
 	}
 
-	// The class is not pinned here on purpose. The corpus records the RULE's
-	// verdict, and two different faults reach it: an unusable serving host is the
-	// caller's own value (an invalid-host throw, before any fetch), while an
-	// unusable advertised endpoint is a verdict on the Exchange's answer
-	// (EndpointRefused). Which is which is pinned in the integration suite; what
-	// this file holds is that all three languages refuse the same set.
+	// The exact class is not pinned, because two different faults legitimately reach
+	// a refusal: an unusable serving host is the caller's own value (an invalid-host
+	// throw, before any fetch), while an unusable advertised endpoint is a verdict on
+	// the Exchange's answer (EndpointRefused). What IS pinned is the pair that must
+	// never appear — a case refused by "no endpoint advertised" or by a transport
+	// failure never reached the rule at all, and asserting a bare throw let exactly
+	// that pass.
 	for (const v of refused) {
-		it(`endpointVet ${v.name} is refused`, async () => {
+		it(`endpointVet ${v.name} is refused by the rule`, async () => {
 			const r = createWellKnownEndpointResolver({ fetch: servingManifest(v.endpoint) });
-			await expect(r.resolveEndpoint(v.host)).rejects.toThrow();
+			const err = await r.resolveEndpoint(v.host).then(
+				() => undefined,
+				(e: unknown) => e,
+			);
+			expect(err).toBeDefined();
+			expect(err).not.toBeInstanceOf(NoEndpoint);
+			expect(err).not.toBeInstanceOf(DirectoryUnavailable);
 		});
 	}
 });

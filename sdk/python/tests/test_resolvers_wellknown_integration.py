@@ -22,6 +22,7 @@ from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+import httpx
 import pytest
 from resolvers_harness import (
     ANCHOR,
@@ -395,3 +396,29 @@ def test_a_host_that_is_not_bare_never_reaches_the_network() -> None:
         assert origin.manifest_hits() == 0
     finally:
         origin.close()
+
+
+# The bare-host check is documented as running BEFORE the allow overlay and before
+# the network. Three comments say so and nothing tested it: a resolver that ran the
+# overlay first, or built the URL and dialled, would satisfy every other case here.
+def test_a_host_that_is_not_bare_is_refused_before_the_overlay_and_the_network() -> None:
+    asked: list[str] = []
+    fetched: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        fetched.append(str(request.url))
+        return httpx.Response(200, json={"endpoint": "http://a.example/v1"})
+
+    def allow(host: str) -> bool:
+        asked.append(host)
+        return True
+
+    r = WellKnownEndpointResolver(
+        scheme="http",
+        allow=allow,
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ValueError, match="not a usable host"):
+        r.resolve_endpoint("a.example/.well-known/evil.json")
+    assert asked == []
+    assert fetched == []

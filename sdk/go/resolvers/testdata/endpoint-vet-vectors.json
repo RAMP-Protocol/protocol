@@ -97,12 +97,6 @@
       "refused": true
     },
     {
-      "name": "empty_endpoint",
-      "host": "exchange.example",
-      "endpoint": "",
-      "refused": true
-    },
-    {
       "name": "no_authority",
       "host": "exchange.example",
       "endpoint": "/v1",
@@ -118,6 +112,54 @@
       "name": "unusable_serving_host",
       "host": "",
       "endpoint": "https://exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "escape_in_query",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1?q=a%20b",
+      "refused": false
+    },
+    {
+      "name": "escape_in_path",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/p%41th",
+      "refused": false
+    },
+    {
+      "name": "malformed_escape_in_query",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1?q=%zz",
+      "refused": false
+    },
+    {
+      "name": "at_sign_in_the_path",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1@x",
+      "refused": false
+    },
+    {
+      "name": "malformed_escape_in_path",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/p%zzth",
+      "refused": true
+    },
+    {
+      "name": "backslash_in_userinfo",
+      "host": "exchange.example",
+      "endpoint": "http://evil.example\\@exchange.example/v1",
+      "refused": true
+    },
+    {
+      "name": "separator_in_a_path_segment",
+      "host": "exchange.example",
+      "endpoint": "evil.example/x://exchange.example",
+      "refused": true
+    },
+    {
+      "name": "scheme_starting_with_a_digit",
+      "host": "exchange.example",
+      "endpoint": "1https://exchange.example/",
       "refused": true
     }
   ]

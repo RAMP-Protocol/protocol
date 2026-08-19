@@ -35,7 +35,9 @@ import {
 	KeyRevoked,
 	createWBAKeyResolver,
 	RevocationUnevaluated,
+	WBA_DIRECTORY_PATH,
 } from "../resolvers/index.ts";
+import type { FetchLike } from "../resolvers/http.ts";
 
 // activeJwk / expiredJwk / longJwk build a directory JWK member whose validity
 // window straddles (or excludes) the shared anchor.
@@ -358,5 +360,56 @@ describe("createWBAKeyResolver.run poller", () => {
 			ac.abort();
 			await origin.close();
 		}
+	});
+});
+
+// The WBA anchor wrapper, at the two things that are local to it and that no
+// resolver-level case reaches. Both are what its docstring claims and neither was
+// covered: the wrapper is module-private, so it is driven here through the poll it
+// guards, with a stub transport recording which URLs were actually requested.
+describe("the WBA revocation anchor wrapper", () => {
+	async function polled(directory: string, revocationURL: string): Promise<string[]> {
+		const seen: string[] = [];
+		const fetch: FetchLike = async (url) => {
+			seen.push(url);
+			if (url.includes(WBA_DIRECTORY_PATH)) {
+				return {
+					status: 200,
+					text: async () => JSON.stringify({ keys: [], revocation_url: revocationURL }),
+				};
+			}
+			return {
+				status: 200,
+				text: async () => JSON.stringify({ as_of: "2026-01-01T00:00:00Z", revoked: [] }),
+			};
+		};
+		const r = createWBAKeyResolver({ scheme: "http", fetch });
+		await r.resolve("unknown-thumbprint", directory).catch(() => undefined);
+		// De-duplicated: the unknown-thumbprint force-refresh re-reads the directory,
+		// so a polled URL legitimately appears more than once. What is under test is
+		// WHICH URLs were reached, not how many times.
+		return [...new Set(seen.filter((u) => !u.includes(WBA_DIRECTORY_PATH)))];
+	}
+
+	// The shared predicate reads a schemeless value as https, which is right for an
+	// exchange domain and wrong for a URL a directory published. The wrapper requires
+	// an absolute reference so the scheme cannot be invented on the directory's behalf.
+	it("does not poll a revocation_url that names no scheme", async () => {
+		expect(await polled("a.example", "a.example/rev.json")).toEqual([]);
+	});
+
+	// The regression the wrapper was introduced for: an explicit non-default port on
+	// both sides must still anchor. A predicate that folded the port away on one side
+	// only stopped a directory anchoring its own revocation URL, and a skipped poll
+	// leaves a revoked key resolving.
+	it("polls a revocation_url that spells the directory's own port out", async () => {
+		expect(await polled("a.example:8443", "http://a.example:8443/rev.json")).toEqual([
+			"http://a.example:8443/rev.json",
+		]);
+	});
+
+	// And the guard still holds where it matters.
+	it("does not poll a revocation_url on another port of the same name", async () => {
+		expect(await polled("a.example:8443", "http://a.example:9443/rev.json")).toEqual([]);
 	});
 });

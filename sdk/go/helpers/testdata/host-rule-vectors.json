@@ -237,6 +237,62 @@
       "candidate": "https://exchange.example",
       "anchored": false,
       "error": true
+    },
+    {
+      "name": "candidate_backslash_in_userinfo",
+      "anchor": "exchange.example",
+      "candidate": "http://evil.example\\@exchange.example/rev",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_separator_in_a_path_segment",
+      "anchor": "exchange.example",
+      "candidate": "evil.example/x://exchange.example",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_scheme_starting_with_a_digit",
+      "anchor": "exchange.example",
+      "candidate": "1https://exchange.example/",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_doubled_colon_after_the_scheme",
+      "anchor": "exchange.example",
+      "candidate": "http:://exchange.example/",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_escape_in_query",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/v1?q=a%20b",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "candidate_escape_in_path",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/p%41th",
+      "anchored": true,
+      "error": false
+    },
+    {
+      "name": "candidate_malformed_escape_in_path",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/p%zzth",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_at_sign_in_the_path",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/v1@x",
+      "anchored": true,
+      "error": false
     }
   ],
   "host_of": [
@@ -509,6 +565,120 @@
       "ref": "user@pass@exchange.example",
       "host": "exchange.example",
       "error": false
+    },
+    {
+      "name": "scheme_with_plus",
+      "ref": "ht+tp://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "scheme_with_hyphen",
+      "ref": "ht-tp://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "scheme_with_dot",
+      "ref": "ht.tp://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "scheme_uppercase",
+      "ref": "HTTPS://exchange.example/v1",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "separator_in_a_path_segment",
+      "ref": "evil.example/x://exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "scheme_starting_with_a_digit",
+      "ref": "1https://exchange.example/",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "doubled_colon_after_the_scheme",
+      "ref": "http:://exchange.example/",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "separator_with_no_scheme",
+      "ref": "://exchange.example/",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "backslash_in_userinfo",
+      "ref": "http://evil.example\\@exchange.example/rev",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "quote_in_userinfo",
+      "ref": "https://u\"x@exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "angle_bracket_in_userinfo",
+      "ref": "https://u\u003cx@exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "close_bracket_in_userinfo",
+      "ref": "https://u]x@exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "escape_in_query",
+      "ref": "https://exchange.example/v1?q=a%20b",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "escape_in_path",
+      "ref": "https://exchange.example/p%41th",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "malformed_escape_in_path",
+      "ref": "https://exchange.example/p%zzth",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_query",
+      "ref": "https://exchange.example/?q=%zz",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "escape_in_userinfo",
+      "ref": "https://u%41x@exchange.example",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "malformed_escape_in_userinfo",
+      "ref": "https://u%zzx@exchange.example",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "at_sign_in_the_path",
+      "ref": "https://exchange.example/v1@x",
+      "host": "exchange.example",
+      "error": false
     }
   ],
   "is_bare_host": [
@@ -683,6 +853,30 @@
     {
       "name": "ipv6_unclosed",
       "ref": "[::1",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "separator_in_a_path_segment",
+      "ref": "evil.example/x://exchange.example",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "scheme_starting_with_a_digit",
+      "ref": "1https://exchange.example/",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "backslash_in_userinfo",
+      "ref": "http://evil.example\\@exchange.example/rev",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_path",
+      "ref": "https://exchange.example/p%zzth",
       "bare": false,
       "error": true
     }

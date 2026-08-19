@@ -160,6 +160,42 @@ func buildHostOfVectors(t *testing.T) []hostOfVector {
 		// Userinfo is split at the LAST "@", so an "@" inside the credential does
 		// not become part of the host.
 		{"userinfo_containing_an_at", "user@pass@exchange.example", "exchange.example", false},
+
+		// Scheme shapes. "://" is a separator only behind a valid scheme at the front;
+		// everywhere else it is ordinary path text, and a reference carrying it is
+		// malformed rather than schemeless. Each of these answered with the wrong
+		// half of the string in a port that searched for the separator instead.
+		{"scheme_with_plus", "ht+tp://exchange.example/v1", "exchange.example", false},
+		{"scheme_with_hyphen", "ht-tp://exchange.example/v1", "exchange.example", false},
+		{"scheme_with_dot", "ht.tp://exchange.example/v1", "exchange.example", false},
+		{"scheme_uppercase", "HTTPS://exchange.example/v1", "exchange.example", false},
+		{"separator_in_a_path_segment", "evil.example/x://exchange.example", "", true},
+		{"scheme_starting_with_a_digit", "1https://exchange.example/", "", true},
+		{"doubled_colon_after_the_scheme", "http:://exchange.example/", "", true},
+		{"separator_with_no_scheme", "://exchange.example/", "", true},
+
+		// Userinfo admits a NARROWER set than the host. Each of these is a character
+		// the host accepts and the credential does not, so a port that validated only
+		// the part after the "@" let them through. The backslash is the one that
+		// mattered: WHATWG ends an authority at it, so the fetch reached a different
+		// host from the one anchoring approved.
+		{"backslash_in_userinfo", "http://evil.example\\@exchange.example/rev", "", true},
+		{"quote_in_userinfo", "https://u" + `"` + "x@exchange.example", "", true},
+		{"angle_bracket_in_userinfo", "https://u<x@exchange.example", "", true},
+		{"close_bracket_in_userinfo", "https://u]x@exchange.example", "", true},
+
+		// Escapes are read per component. A path or query escape says nothing about
+		// the host, and refusing the whole reference over one refused an ordinary
+		// conformant endpoint.
+		{"escape_in_query", "https://exchange.example/v1?q=a%20b", "exchange.example", false},
+		{"escape_in_path", "https://exchange.example/p%41th", "exchange.example", false},
+		{"malformed_escape_in_path", "https://exchange.example/p%zzth", "", true},
+		{"malformed_escape_in_query", "https://exchange.example/?q=%zz", "exchange.example", false},
+		{"escape_in_userinfo", "https://u%41x@exchange.example", "exchange.example", false},
+		{"malformed_escape_in_userinfo", "https://u%zzx@exchange.example", "", true},
+
+		// An "@" beyond the authority is not a credential.
+		{"at_sign_in_the_path", "https://exchange.example/v1@x", "exchange.example", false},
 	}
 	out := make([]hostOfVector, 0, len(cases))
 	for _, c := range cases {
@@ -230,6 +266,10 @@ func buildIsBareHostVectors(t *testing.T) []isBareHostVector {
 		{"backslash_in_the_host", "a\\b.example", false, true},
 		{"percent_escape", "%41.example", false, true},
 		{"ipv6_unclosed", "[::1", false, true},
+		{"separator_in_a_path_segment", "evil.example/x://exchange.example", false, true},
+		{"scheme_starting_with_a_digit", "1https://exchange.example/", false, true},
+		{"backslash_in_userinfo", "http://evil.example\\@exchange.example/rev", false, true},
+		{"malformed_escape_in_path", "https://exchange.example/p%zzth", false, true},
 	}
 	out := make([]isBareHostVector, 0, len(cases))
 	for _, c := range cases {
@@ -335,6 +375,19 @@ func buildHostAnchoredVectors(t *testing.T) []hostAnchoredVector {
 		{"candidate_has_no_authority", "exchange.example", "/v1", false, true},
 		{"candidate_control_character", "exchange.example", "https://exchange.example\n/v1", false, true},
 		{"anchor_control_character", "exchange.example\n", "https://exchange.example", false, true},
+
+		// The candidate half of the three fixes, at the surface a caller reaches for.
+		// Each answered TRUE in a port before it read the reference the way the
+		// oracle does — the first while the fetch would have gone somewhere else
+		// entirely.
+		{"candidate_backslash_in_userinfo", "exchange.example", "http://evil.example\\@exchange.example/rev", false, true},
+		{"candidate_separator_in_a_path_segment", "exchange.example", "evil.example/x://exchange.example", false, true},
+		{"candidate_scheme_starting_with_a_digit", "exchange.example", "1https://exchange.example/", false, true},
+		{"candidate_doubled_colon_after_the_scheme", "exchange.example", "http:://exchange.example/", false, true},
+		{"candidate_escape_in_query", "exchange.example", "https://exchange.example/v1?q=a%20b", true, false},
+		{"candidate_escape_in_path", "exchange.example", "https://exchange.example/p%41th", true, false},
+		{"candidate_malformed_escape_in_path", "exchange.example", "https://exchange.example/p%zzth", false, true},
+		{"candidate_at_sign_in_the_path", "exchange.example", "https://exchange.example/v1@x", true, false},
 	}
 	out := make([]hostAnchoredVector, 0, len(cases))
 	for _, c := range cases {
