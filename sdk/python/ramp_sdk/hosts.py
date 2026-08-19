@@ -196,13 +196,19 @@ def _normalize_domain(v: str) -> str:
 # arrive already disguised as one. ``is_bare_domain`` runs on the untouched value
 # for exactly the reason it runs before ``_normalize_domain`` in check_audience.
 
-# A scheme, if the reference carries one at all (RFC 3986 §3.1).
-_URI_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
+# The scheme grammar of RFC 3986 §3.1, written once. Both patterns below need
+# it, and the refusal that separates "https:/dir" from a relative path only means
+# what it says while they agree: widen one copy and not the other, and one check
+# reads a reference as having a scheme while the other reads it as having none.
+_URI_SCHEME = r"[A-Za-z][A-Za-z0-9+.\-]*"
+
+# A scheme, if the reference carries one at all.
+_URI_SCHEME_RE = re.compile(rf"^{_URI_SCHEME}:")
 
 # The authority of a reference that HAS one: an absolute URI with "//" or a
 # network-path reference beginning with "//". A reference matching neither is
 # relative and inherits the base's authority untouched.
-_URI_AUTHORITY_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.\-]*:)?//([^/?#]*)")
+_URI_AUTHORITY_RE = re.compile(rf"^(?:{_URI_SCHEME}:)?//([^/?#]*)")
 
 
 # A colon reached before the first "/", "?" or "#". Read only when the reference

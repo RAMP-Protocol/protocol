@@ -194,13 +194,19 @@ function normalizeDomain(v: string): string {
 // runs on the untouched value, and the port is compared as written, exactly as
 // the Go oracle does.
 
-// A scheme, if the reference carries one at all (RFC 3986 §3.1).
-const uriSchemeRe = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+// The scheme grammar of RFC 3986 §3.1, written once. Both patterns below need
+// it, and the refusal that separates "https:/dir" from a relative path only means
+// what it says while they agree: widen one copy and not the other, and one check
+// reads a reference as having a scheme while the other reads it as having none.
+const uriSchemeGrammar = String.raw`[A-Za-z][A-Za-z0-9+.-]*`;
+
+// A scheme, if the reference carries one at all.
+const uriSchemeRe = new RegExp(`^${uriSchemeGrammar}:`);
 
 // The authority of a reference that HAS one: an absolute URI with "//" or a
 // network-path reference beginning with "//". A reference matching neither is
 // relative and inherits the base's authority untouched.
-const uriAuthorityRe = /^(?:[A-Za-z][A-Za-z0-9+.-]*:)?\/\/([^/?#]*)/;
+const uriAuthorityRe = new RegExp(`^(?:${uriSchemeGrammar}:)?//([^/?#]*)`);
 
 function uriScheme(ref: string): string {
 	const m = uriSchemeRe.exec(ref);
