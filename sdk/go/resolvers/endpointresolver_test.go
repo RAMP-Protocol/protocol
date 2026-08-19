@@ -227,6 +227,53 @@ func TestWellKnownEndpointResolver_refusesAnEndpointOnAnotherHost(t *testing.T) 
 	}
 }
 
+// Credentials are refused even when the endpoint names no scheme, and the value
+// that names none is otherwise fine.
+//
+// Both endpoints below are on the serving host and port, so the only thing that
+// can decide either case is the userinfo. That isolation is the point: the pair
+// separates "refused for carrying a credential" from "refused for not looking
+// like a URL", and only the first is the rule.
+//
+// It is a regression test. The refusal used to be decided over a plain parse of
+// the raw value, where "u:p@host" reads as scheme "u" with no userinfo at all,
+// while the anchor check read the same string as https and matched the host — so
+// the one shape this refusal exists to stop was the one shape that passed it.
+func TestWellKnownEndpointResolver_refusesASchemelessEndpointCarryingCredentials(t *testing.T) {
+	// Late-bound: the endpoint is the server's own address, which is not known
+	// until it is listening.
+	var endpoint string
+	srv := httptest.NewServer(manifestHandler(&endpoint, nil))
+	defer srv.Close()
+	host := hostOf(t, srv)
+
+	newResolver := func() *resolvers.WellKnownEndpointResolver {
+		return resolvers.NewWellKnownEndpointResolver(resolvers.WellKnownOptions{
+			TTL: time.Hour, Scheme: "http", HTTP: http.DefaultClient,
+		})
+	}
+
+	endpoint = "user:pass@" + host + "/ramp.v1.ExchangeService"
+	got, err := newResolver().ResolveEndpoint(context.Background(), host)
+	if err == nil {
+		t.Fatalf("resolve returned %q; an endpoint carrying credentials must be refused", got)
+	}
+	if !errors.Is(err, resolvers.ErrEndpointRefused) {
+		t.Errorf("error = %v, want it to carry ErrEndpointRefused", err)
+	}
+
+	// The control. Same shape, same host, no credential — accepted, so the refusal
+	// above cannot be read as "a schemeless endpoint is refused".
+	endpoint = host + "/ramp.v1.ExchangeService"
+	got, err = newResolver().ResolveEndpoint(context.Background(), host)
+	if err != nil {
+		t.Fatalf("resolve of the credential-free endpoint failed: %v", err)
+	}
+	if got != endpoint {
+		t.Errorf("resolve = %q, want %q", got, endpoint)
+	}
+}
+
 // The PORT is part of the anchor. An endpoint on another port of the serving host
 // is a different service — one the party that published the manifest need not
 // control — so it is refused like any other mismatch.

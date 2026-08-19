@@ -8,14 +8,16 @@
 // but there must only ever be ONE predicate. Written twice it drifts, and this
 // repo has watched a duplicated host predicate drift inside a single commit.
 //
-// Internal because Python and TypeScript will grow their own implementations
-// rather than binding to a Go export, and the shared public surface belongs with
-// that work.
+// Internal because Python and TypeScript grow their own implementations rather
+// than binding to a Go export; the predicates the rule is built from are the
+// shared public surface, and all three languages are held to one answer by the
+// endpoint-vet conformance vectors rather than by this package being importable.
 package endpointrule
 
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/RAMP-Protocol/protocol/sdk/go/helpers"
 )
@@ -37,10 +39,27 @@ import (
 // header the SDK never chose — on a leg that already carries the agent's own
 // signature.
 //
+// Both conditions are decided over the SAME reading of the reference. That is not
+// tidiness: a value naming no scheme is a URL to one parser and a path to another,
+// and the two answers put the credential on opposite sides of the check. Reading
+// it once, the way the anchor check reads it, is what keeps this one rule.
+//
 // The caller supplies the vocabulary: the errors here describe what was wrong, and
 // each call site wraps them in whatever sentinel its own tier classifies on.
 func Vet(host, endpoint string) error {
-	parsed, err := url.Parse(endpoint)
+	// Read as https when it names no scheme, because that is what the anchor check
+	// below resolves it to, and a refusal decided over a different authority than
+	// the one that gets anchored is a second rule wearing the first one's name.
+	// "u:p@exchange.example" is where the two parted: a plain url.Parse takes "u"
+	// for a scheme, reports no userinfo and no host, so the refusal never fired —
+	// while the anchor check recovered exchange.example and matched it. The
+	// credential-bearing endpoint this refusal exists to stop was the one value
+	// that reached both sides with different answers.
+	ref := endpoint
+	if !strings.Contains(ref, "://") {
+		ref = "https://" + ref
+	}
+	parsed, err := url.Parse(ref)
 	if err != nil {
 		return fmt.Errorf("host=%q endpoint=%q is not a URL: %w", host, endpoint, err)
 	}
