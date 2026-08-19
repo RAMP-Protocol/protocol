@@ -161,6 +161,24 @@
       "host": "exchange.example",
       "endpoint": "1https://exchange.example/",
       "refused": true
+    },
+    {
+      "name": "malformed_escape_in_fragment",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1#%zz",
+      "refused": true
+    },
+    {
+      "name": "query_inside_a_fragment_is_still_a_fragment",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1#a?b=%zz",
+      "refused": true
+    },
+    {
+      "name": "escape_in_fragment",
+      "host": "exchange.example",
+      "endpoint": "https://exchange.example/v1#%25",
+      "refused": false
     }
   ]
 }

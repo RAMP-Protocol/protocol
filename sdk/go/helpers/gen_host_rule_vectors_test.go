@@ -196,6 +196,17 @@ func buildHostOfVectors(t *testing.T) []hostOfVector {
 
 		// An "@" beyond the authority is not a credential.
 		{"at_sign_in_the_path", "https://exchange.example/v1@x", "exchange.example", false},
+
+		// A fragment is unescaped too, so a malformed escape is refused there as it is
+		// in a path — and everything after the FIRST "#" is fragment, so a "?" inside
+		// one does not start a query it could hide in.
+		{"malformed_escape_in_fragment", "https://exchange.example/#%zz", "", true},
+		{"malformed_escape_in_fragment_after_a_path", "https://exchange.example/x#f%zz", "", true},
+		{"malformed_escape_in_fragment_after_a_query", "https://exchange.example/?a=1#%GG", "", true},
+		{"malformed_escape_in_fragment_on_the_authority", "exchange.example#%zz", "", true},
+		{"query_inside_a_fragment_is_still_a_fragment", "https://exchange.example/#a?b=%zz", "", true},
+		{"escape_in_fragment", "https://exchange.example/#%25", "exchange.example", false},
+		{"empty_fragment", "https://exchange.example/#", "exchange.example", false},
 	}
 	out := make([]hostOfVector, 0, len(cases))
 	for _, c := range cases {
@@ -270,6 +281,8 @@ func buildIsBareHostVectors(t *testing.T) []isBareHostVector {
 		{"scheme_starting_with_a_digit", "1https://exchange.example/", false, true},
 		{"backslash_in_userinfo", "http://evil.example\\@exchange.example/rev", false, true},
 		{"malformed_escape_in_path", "https://exchange.example/p%zzth", false, true},
+		{"malformed_escape_in_fragment", "https://exchange.example/#%zz", false, true},
+		{"query_inside_a_fragment_is_still_a_fragment", "https://exchange.example/#a?b=%zz", false, true},
 	}
 	out := make([]isBareHostVector, 0, len(cases))
 	for _, c := range cases {
@@ -388,6 +401,9 @@ func buildHostAnchoredVectors(t *testing.T) []hostAnchoredVector {
 		{"candidate_escape_in_path", "exchange.example", "https://exchange.example/p%41th", true, false},
 		{"candidate_malformed_escape_in_path", "exchange.example", "https://exchange.example/p%zzth", false, true},
 		{"candidate_at_sign_in_the_path", "exchange.example", "https://exchange.example/v1@x", true, false},
+		{"candidate_malformed_escape_in_fragment", "exchange.example", "https://exchange.example/#%zz", false, true},
+		{"candidate_query_inside_a_fragment", "exchange.example", "https://exchange.example/#a?b=%zz", false, true},
+		{"candidate_escape_in_fragment", "exchange.example", "https://exchange.example/#%25", true, false},
 	}
 	out := make([]hostAnchoredVector, 0, len(cases))
 	for _, c := range cases {

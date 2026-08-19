@@ -108,6 +108,9 @@ func buildEndpointVetVectors(t *testing.T) []endpointVetVector {
 		{"backslash_in_userinfo", host, "http://evil.example\\@exchange.example/v1", true},
 		{"separator_in_a_path_segment", host, "evil.example/x://exchange.example", true},
 		{"scheme_starting_with_a_digit", host, "1https://exchange.example/", true},
+		{"malformed_escape_in_fragment", host, "https://exchange.example/v1#%zz", true},
+		{"query_inside_a_fragment_is_still_a_fragment", host, "https://exchange.example/v1#a?b=%zz", true},
+		{"escape_in_fragment", host, "https://exchange.example/v1#%25", false},
 	}
 	out := make([]endpointVetVector, 0, len(cases))
 	for _, c := range cases {

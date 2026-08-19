@@ -80,27 +80,29 @@ def _invalid_host(ref: str, why: str) -> ValueError:
     return ValueError(f"hosts: reference is not a usable host: {why}: {ref!r}")
 
 
-def _split_components(rest: str) -> tuple[str, str]:
-    """Split what follows ``://`` into its authority and its path.
+def _split_components(rest: str) -> tuple[str, str, str]:
+    """Split what follows ``://`` into its authority, its path and its fragment.
 
     The authority ends at the first delimiter that starts a path, query or fragment
-    — the three things a reference can carry beyond it — and the path ends where a
-    query or fragment begins. They are separated because escapes are read PER
-    COMPONENT, exactly as the oracle reads them: a malformed escape is refused in a
-    path and admitted in a query, which is not unescaped at parse time. Checking the
-    whole reference instead refused ``?q=a%20b``, an ordinary conformant endpoint.
+    — the three things a reference can carry beyond it. They are separated because
+    escapes are read PER COMPONENT, exactly as the oracle reads them: a malformed
+    escape is refused in a path and in a fragment, and admitted in a query, which is
+    not unescaped at parse time. Checking the whole reference instead refused
+    ``?q=a%20b``, an ordinary conformant endpoint.
+
+    The fragment is cut FIRST, and that ordering is the rule rather than a detail:
+    everything after the first ``#`` is fragment, so a ``?`` inside one does not
+    start a query. Reading the query first leaves ``/#a?b=%zz`` looking like a query
+    and admits a malformed escape the oracle refuses.
     """
     authority, beyond = rest, ""
     for i, c in enumerate(rest):
         if c in "/?#":
             authority, beyond = rest[:i], rest[i:]
             break
-    path = beyond
-    for i, c in enumerate(beyond):
-        if c in "?#":
-            path = beyond[:i]
-            break
-    return authority, path
+    before_fragment, _, fragment = beyond.partition("#")
+    path = before_fragment.partition("?")[0]
+    return authority, path, fragment
 
 
 def _vet_userinfo(ref: str, userinfo: str) -> None:
@@ -153,9 +155,11 @@ def _parse_ref(ref: str) -> ParsedRef:
 
     # The authority ends at the first delimiter that starts a path, query or
     # fragment — the three things a reference can carry beyond it.
-    authority, path = _split_components(work[sep + 3 :])
+    authority, path, fragment = _split_components(work[sep + 3 :])
     if _BAD_ESCAPE.search(path):
         raise _invalid_host(ref, "malformed percent-escape in path")
+    if _BAD_ESCAPE.search(fragment):
+        raise _invalid_host(ref, "malformed percent-escape in fragment")
 
     # Userinfo is split at the LAST "@", so an "@" inside a credential does not
     # become part of the host.

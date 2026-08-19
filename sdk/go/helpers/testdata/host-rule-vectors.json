@@ -293,6 +293,27 @@
       "candidate": "https://exchange.example/v1@x",
       "anchored": true,
       "error": false
+    },
+    {
+      "name": "candidate_malformed_escape_in_fragment",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/#%zz",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_query_inside_a_fragment",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/#a?b=%zz",
+      "anchored": false,
+      "error": true
+    },
+    {
+      "name": "candidate_escape_in_fragment",
+      "anchor": "exchange.example",
+      "candidate": "https://exchange.example/#%25",
+      "anchored": true,
+      "error": false
     }
   ],
   "host_of": [
@@ -679,6 +700,48 @@
       "ref": "https://exchange.example/v1@x",
       "host": "exchange.example",
       "error": false
+    },
+    {
+      "name": "malformed_escape_in_fragment",
+      "ref": "https://exchange.example/#%zz",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_fragment_after_a_path",
+      "ref": "https://exchange.example/x#f%zz",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_fragment_after_a_query",
+      "ref": "https://exchange.example/?a=1#%GG",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_fragment_on_the_authority",
+      "ref": "exchange.example#%zz",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "query_inside_a_fragment_is_still_a_fragment",
+      "ref": "https://exchange.example/#a?b=%zz",
+      "host": "",
+      "error": true
+    },
+    {
+      "name": "escape_in_fragment",
+      "ref": "https://exchange.example/#%25",
+      "host": "exchange.example",
+      "error": false
+    },
+    {
+      "name": "empty_fragment",
+      "ref": "https://exchange.example/#",
+      "host": "exchange.example",
+      "error": false
     }
   ],
   "is_bare_host": [
@@ -877,6 +940,18 @@
     {
       "name": "malformed_escape_in_path",
       "ref": "https://exchange.example/p%zzth",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "malformed_escape_in_fragment",
+      "ref": "https://exchange.example/#%zz",
+      "bare": false,
+      "error": true
+    },
+    {
+      "name": "query_inside_a_fragment_is_still_a_fragment",
+      "ref": "https://exchange.example/#a?b=%zz",
       "bare": false,
       "error": true
     }

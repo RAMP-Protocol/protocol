@@ -105,13 +105,24 @@ export function parseRef(ref: string): ParsedRef {
 	const beyond = end < 0 ? "" : rest.slice(end);
 
 	// Escapes are read PER COMPONENT, because the oracle reads them per component.
-	// A malformed escape in a path is refused there and admitted in a query, which
-	// is not unescaped at parse time. Checking the whole reference instead refused
-	// `?q=a%20b` — an ordinary, fully conformant endpoint.
-	const queryAt = beyond.search(/[?#]/);
-	const path = queryAt < 0 ? beyond : beyond.slice(0, queryAt);
+	// A malformed escape is refused in a path and in a fragment, and admitted in a
+	// query, which is not unescaped at parse time. Checking the whole reference
+	// instead refused `?q=a%20b` — an ordinary, fully conformant endpoint.
+	//
+	// The fragment is cut FIRST, and that ordering is the rule rather than a detail:
+	// everything after the first "#" is fragment, so a "?" inside one does not start
+	// a query. Reading the query first leaves `/#a?b=%zz` looking like a query and
+	// admits a malformed escape the oracle refuses.
+	const hash = beyond.indexOf("#");
+	const fragment = hash < 0 ? "" : beyond.slice(hash + 1);
+	const beforeFragment = hash < 0 ? beyond : beyond.slice(0, hash);
+	const query = beforeFragment.indexOf("?");
+	const path = query < 0 ? beforeFragment : beforeFragment.slice(0, query);
 	if (escapePair.test(path)) {
 		throw invalidHost(ref, "malformed percent-escape in path");
+	}
+	if (escapePair.test(fragment)) {
+		throw invalidHost(ref, "malformed percent-escape in fragment");
 	}
 
 	// Userinfo is split at the LAST "@", so an "@" inside a credential does not
