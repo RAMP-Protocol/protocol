@@ -187,10 +187,13 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	// was wrong. net/url drops the empty segment when a "..' pops past the root,
 	// where RFC 3986 5.2.4 keeps it: "..//x" against a base of /ramp.json is
 	// //x, because step 2C removes nothing from an empty output buffer and step
-	// 2E then moves the empty segment. Both ports hand-write 5.2.4 and both
-	// answered //x while this oracle answered /x. So 5.2.2, 5.2.3 and 5.2.4 are
-	// written out here too, and ResolveReference is left to do only what it is
-	// still trusted for: the scheme and the authority.
+	// 2E then moves the empty segment. Both ports answered //x while this oracle
+	// answered /x — Python because it hand-writes 5.2.4, TypeScript because the
+	// platform parser it used then happened to be right on this case. It was not
+	// right on the next one, so that port now hand-writes 5.2.4 as well and all
+	// three compute every component of the answer from the raw string.
+	// ResolveReference is left to do only what it is still trusted for: the
+	// scheme and the authority.
 	path := resolvedPath(manifestURL, ref, refURL.Host != "")
 	if path == "" {
 		// RFC 3986 6.2.3: under a hierarchical scheme an empty path is

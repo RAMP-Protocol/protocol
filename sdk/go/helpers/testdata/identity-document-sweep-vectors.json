@@ -26662,6 +26662,2526 @@
       "ref": "x/x/",
       "accepted": true,
       "resolved": "https://a.example//x/x/"
+    },
+    {
+      "name": "sweep_3809",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x"
+    },
+    {
+      "name": "sweep_3810",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3811",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3812",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_3813",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/"
+    },
+    {
+      "name": "sweep_3814",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_3815",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_3816",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_3817",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3818",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_3819",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x"
+    },
+    {
+      "name": "sweep_3820",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3821",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3822",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_3823",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/"
+    },
+    {
+      "name": "sweep_3824",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_3825",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_3826",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_3827",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3828",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "x/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_3829",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x"
+    },
+    {
+      "name": "sweep_3830",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_3831",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_3832",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/y"
+    },
+    {
+      "name": "sweep_3833",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/"
+    },
+    {
+      "name": "sweep_3834",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/y"
+    },
+    {
+      "name": "sweep_3835",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b//y"
+    },
+    {
+      "name": "sweep_3836",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/y"
+    },
+    {
+      "name": "sweep_3837",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3838",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/b/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/b/"
+    },
+    {
+      "name": "sweep_3839",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x"
+    },
+    {
+      "name": "sweep_3840",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3841",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3842",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/y"
+    },
+    {
+      "name": "sweep_3843",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/"
+    },
+    {
+      "name": "sweep_3844",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/y"
+    },
+    {
+      "name": "sweep_3845",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a//y"
+    },
+    {
+      "name": "sweep_3846",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/y"
+    },
+    {
+      "name": "sweep_3847",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3848",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_3849",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known"
+    },
+    {
+      "name": "sweep_3850",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3851",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3852",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/y"
+    },
+    {
+      "name": "sweep_3853",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/"
+    },
+    {
+      "name": "sweep_3854",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/y"
+    },
+    {
+      "name": "sweep_3855",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a//y"
+    },
+    {
+      "name": "sweep_3856",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/y"
+    },
+    {
+      "name": "sweep_3857",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3858",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/a/.well-known/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_3859",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x"
+    },
+    {
+      "name": "sweep_3860",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3861",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3862",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_3863",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/"
+    },
+    {
+      "name": "sweep_3864",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/y"
+    },
+    {
+      "name": "sweep_3865",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_3866",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/y"
+    },
+    {
+      "name": "sweep_3867",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3868",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/..x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_3869",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x.",
+      "accepted": true,
+      "resolved": "https://a.example/x/x."
+    },
+    {
+      "name": "sweep_3870",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x./..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3871",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x./../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3872",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x./../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_3873",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x./.",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./"
+    },
+    {
+      "name": "sweep_3874",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x././y",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./y"
+    },
+    {
+      "name": "sweep_3875",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x./..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_3876",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./y"
+    },
+    {
+      "name": "sweep_3877",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x./../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3878",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/x/x./../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_3879",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x",
+      "accepted": true,
+      "resolved": "https://a.example/.x"
+    },
+    {
+      "name": "sweep_3880",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3881",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3882",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/y"
+    },
+    {
+      "name": "sweep_3883",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_3884",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_3885",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example//y"
+    },
+    {
+      "name": "sweep_3886",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_3887",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3888",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/b/"
+    },
+    {
+      "name": "sweep_3889",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y"
+    },
+    {
+      "name": "sweep_3890",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_3891",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/../",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_3892",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/../y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_3893",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/.",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/"
+    },
+    {
+      "name": "sweep_3894",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/./y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/y"
+    },
+    {
+      "name": "sweep_3895",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/.x//y"
+    },
+    {
+      "name": "sweep_3896",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/y"
+    },
+    {
+      "name": "sweep_3897",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3898",
+      "manifest_url": "https://a.example/ramp.json",
+      "ref": "/.x/.y/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/.x/b/"
+    },
+    {
+      "name": "sweep_3899",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x"
+    },
+    {
+      "name": "sweep_3900",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3901",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3902",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_3903",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/"
+    },
+    {
+      "name": "sweep_3904",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_3905",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_3906",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_3907",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3908",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_3909",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/x/.x"
+    },
+    {
+      "name": "sweep_3910",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/x/"
+    },
+    {
+      "name": "sweep_3911",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/x/"
+    },
+    {
+      "name": "sweep_3912",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/x/y"
+    },
+    {
+      "name": "sweep_3913",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/x/.x/"
+    },
+    {
+      "name": "sweep_3914",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/x/.x/y"
+    },
+    {
+      "name": "sweep_3915",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a/x//y"
+    },
+    {
+      "name": "sweep_3916",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/x/.x/y"
+    },
+    {
+      "name": "sweep_3917",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3918",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "x/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/x/b/"
+    },
+    {
+      "name": "sweep_3919",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x"
+    },
+    {
+      "name": "sweep_3920",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_3921",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_3922",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/y"
+    },
+    {
+      "name": "sweep_3923",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/"
+    },
+    {
+      "name": "sweep_3924",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/y"
+    },
+    {
+      "name": "sweep_3925",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b//y"
+    },
+    {
+      "name": "sweep_3926",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/y"
+    },
+    {
+      "name": "sweep_3927",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3928",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/b/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/b/"
+    },
+    {
+      "name": "sweep_3929",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x"
+    },
+    {
+      "name": "sweep_3930",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3931",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3932",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/y"
+    },
+    {
+      "name": "sweep_3933",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/"
+    },
+    {
+      "name": "sweep_3934",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/y"
+    },
+    {
+      "name": "sweep_3935",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a//y"
+    },
+    {
+      "name": "sweep_3936",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/y"
+    },
+    {
+      "name": "sweep_3937",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3938",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_3939",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known"
+    },
+    {
+      "name": "sweep_3940",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3941",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_3942",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/y"
+    },
+    {
+      "name": "sweep_3943",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/"
+    },
+    {
+      "name": "sweep_3944",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/y"
+    },
+    {
+      "name": "sweep_3945",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a//y"
+    },
+    {
+      "name": "sweep_3946",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/y"
+    },
+    {
+      "name": "sweep_3947",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3948",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/a/.well-known/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_3949",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x"
+    },
+    {
+      "name": "sweep_3950",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3951",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3952",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_3953",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/"
+    },
+    {
+      "name": "sweep_3954",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/y"
+    },
+    {
+      "name": "sweep_3955",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_3956",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/y"
+    },
+    {
+      "name": "sweep_3957",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3958",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/..x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_3959",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x.",
+      "accepted": true,
+      "resolved": "https://a.example/x/x."
+    },
+    {
+      "name": "sweep_3960",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x./..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3961",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x./../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3962",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x./../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_3963",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x./.",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./"
+    },
+    {
+      "name": "sweep_3964",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x././y",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./y"
+    },
+    {
+      "name": "sweep_3965",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x./..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_3966",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./y"
+    },
+    {
+      "name": "sweep_3967",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x./../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3968",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/x/x./../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_3969",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x",
+      "accepted": true,
+      "resolved": "https://a.example/.x"
+    },
+    {
+      "name": "sweep_3970",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3971",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3972",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/y"
+    },
+    {
+      "name": "sweep_3973",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_3974",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_3975",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example//y"
+    },
+    {
+      "name": "sweep_3976",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_3977",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3978",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/b/"
+    },
+    {
+      "name": "sweep_3979",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y"
+    },
+    {
+      "name": "sweep_3980",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_3981",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/../",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_3982",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/../y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_3983",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/.",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/"
+    },
+    {
+      "name": "sweep_3984",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/./y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/y"
+    },
+    {
+      "name": "sweep_3985",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/.x//y"
+    },
+    {
+      "name": "sweep_3986",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/y"
+    },
+    {
+      "name": "sweep_3987",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3988",
+      "manifest_url": "https://a.example/a/ramp.json",
+      "ref": "/.x/.y/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/.x/b/"
+    },
+    {
+      "name": "sweep_3989",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x"
+    },
+    {
+      "name": "sweep_3990",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3991",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_3992",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_3993",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/"
+    },
+    {
+      "name": "sweep_3994",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_3995",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_3996",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_3997",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_3998",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_3999",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x/.x"
+    },
+    {
+      "name": "sweep_4000",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x/"
+    },
+    {
+      "name": "sweep_4001",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x/"
+    },
+    {
+      "name": "sweep_4002",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x/y"
+    },
+    {
+      "name": "sweep_4003",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x/.x/"
+    },
+    {
+      "name": "sweep_4004",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x/.x/y"
+    },
+    {
+      "name": "sweep_4005",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x//y"
+    },
+    {
+      "name": "sweep_4006",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x/.x/y"
+    },
+    {
+      "name": "sweep_4007",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4008",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "x/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/x/b/"
+    },
+    {
+      "name": "sweep_4009",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x"
+    },
+    {
+      "name": "sweep_4010",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4011",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4012",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/y"
+    },
+    {
+      "name": "sweep_4013",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/"
+    },
+    {
+      "name": "sweep_4014",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/y"
+    },
+    {
+      "name": "sweep_4015",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b//y"
+    },
+    {
+      "name": "sweep_4016",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/y"
+    },
+    {
+      "name": "sweep_4017",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4018",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/b/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/b/"
+    },
+    {
+      "name": "sweep_4019",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x"
+    },
+    {
+      "name": "sweep_4020",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4021",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4022",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/y"
+    },
+    {
+      "name": "sweep_4023",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/"
+    },
+    {
+      "name": "sweep_4024",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/y"
+    },
+    {
+      "name": "sweep_4025",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a//y"
+    },
+    {
+      "name": "sweep_4026",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/y"
+    },
+    {
+      "name": "sweep_4027",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4028",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4029",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known"
+    },
+    {
+      "name": "sweep_4030",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4031",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4032",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/y"
+    },
+    {
+      "name": "sweep_4033",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/"
+    },
+    {
+      "name": "sweep_4034",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/y"
+    },
+    {
+      "name": "sweep_4035",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a//y"
+    },
+    {
+      "name": "sweep_4036",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/y"
+    },
+    {
+      "name": "sweep_4037",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4038",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/a/.well-known/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4039",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x"
+    },
+    {
+      "name": "sweep_4040",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4041",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4042",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_4043",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/"
+    },
+    {
+      "name": "sweep_4044",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/y"
+    },
+    {
+      "name": "sweep_4045",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_4046",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/y"
+    },
+    {
+      "name": "sweep_4047",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4048",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/..x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_4049",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x.",
+      "accepted": true,
+      "resolved": "https://a.example/x/x."
+    },
+    {
+      "name": "sweep_4050",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x./..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4051",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x./../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4052",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x./../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_4053",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x./.",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./"
+    },
+    {
+      "name": "sweep_4054",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x././y",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./y"
+    },
+    {
+      "name": "sweep_4055",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x./..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_4056",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./y"
+    },
+    {
+      "name": "sweep_4057",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x./../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4058",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/x/x./../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_4059",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x",
+      "accepted": true,
+      "resolved": "https://a.example/.x"
+    },
+    {
+      "name": "sweep_4060",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4061",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4062",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/y"
+    },
+    {
+      "name": "sweep_4063",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_4064",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_4065",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example//y"
+    },
+    {
+      "name": "sweep_4066",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_4067",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4068",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/b/"
+    },
+    {
+      "name": "sweep_4069",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y"
+    },
+    {
+      "name": "sweep_4070",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_4071",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/../",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_4072",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/../y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_4073",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/.",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/"
+    },
+    {
+      "name": "sweep_4074",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/./y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/y"
+    },
+    {
+      "name": "sweep_4075",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/.x//y"
+    },
+    {
+      "name": "sweep_4076",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/y"
+    },
+    {
+      "name": "sweep_4077",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4078",
+      "manifest_url": "https://a.example/a/b/ramp.json",
+      "ref": "/.x/.y/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/.x/b/"
+    },
+    {
+      "name": "sweep_4079",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x"
+    },
+    {
+      "name": "sweep_4080",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4081",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4082",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_4083",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/"
+    },
+    {
+      "name": "sweep_4084",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_4085",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_4086",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/.x/y"
+    },
+    {
+      "name": "sweep_4087",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4088",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_4089",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x",
+      "accepted": true,
+      "resolved": "https://a.example//x/.x"
+    },
+    {
+      "name": "sweep_4090",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example//x/"
+    },
+    {
+      "name": "sweep_4091",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example//x/"
+    },
+    {
+      "name": "sweep_4092",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example//x/y"
+    },
+    {
+      "name": "sweep_4093",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example//x/.x/"
+    },
+    {
+      "name": "sweep_4094",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example//x/.x/y"
+    },
+    {
+      "name": "sweep_4095",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example//x//y"
+    },
+    {
+      "name": "sweep_4096",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example//x/.x/y"
+    },
+    {
+      "name": "sweep_4097",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example//"
+    },
+    {
+      "name": "sweep_4098",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "x/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example//x/b/"
+    },
+    {
+      "name": "sweep_4099",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x"
+    },
+    {
+      "name": "sweep_4100",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4101",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4102",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/y"
+    },
+    {
+      "name": "sweep_4103",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/"
+    },
+    {
+      "name": "sweep_4104",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/y"
+    },
+    {
+      "name": "sweep_4105",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b//y"
+    },
+    {
+      "name": "sweep_4106",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/.x/y"
+    },
+    {
+      "name": "sweep_4107",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4108",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/b/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/b/"
+    },
+    {
+      "name": "sweep_4109",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x"
+    },
+    {
+      "name": "sweep_4110",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4111",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4112",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/y"
+    },
+    {
+      "name": "sweep_4113",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/"
+    },
+    {
+      "name": "sweep_4114",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/y"
+    },
+    {
+      "name": "sweep_4115",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a//y"
+    },
+    {
+      "name": "sweep_4116",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.x/y"
+    },
+    {
+      "name": "sweep_4117",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4118",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4119",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known"
+    },
+    {
+      "name": "sweep_4120",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4121",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/../",
+      "accepted": true,
+      "resolved": "https://a.example/a/"
+    },
+    {
+      "name": "sweep_4122",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/../y",
+      "accepted": true,
+      "resolved": "https://a.example/a/y"
+    },
+    {
+      "name": "sweep_4123",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/.",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/"
+    },
+    {
+      "name": "sweep_4124",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/./y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/y"
+    },
+    {
+      "name": "sweep_4125",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/a//y"
+    },
+    {
+      "name": "sweep_4126",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/y",
+      "accepted": true,
+      "resolved": "https://a.example/a/.well-known/y"
+    },
+    {
+      "name": "sweep_4127",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4128",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/a/.well-known/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/a/b/"
+    },
+    {
+      "name": "sweep_4129",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x"
+    },
+    {
+      "name": "sweep_4130",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4131",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4132",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_4133",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/.",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/"
+    },
+    {
+      "name": "sweep_4134",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/y"
+    },
+    {
+      "name": "sweep_4135",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_4136",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/y",
+      "accepted": true,
+      "resolved": "https://a.example/x/..x/y"
+    },
+    {
+      "name": "sweep_4137",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4138",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/..x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_4139",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x.",
+      "accepted": true,
+      "resolved": "https://a.example/x/x."
+    },
+    {
+      "name": "sweep_4140",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x./..",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4141",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x./../",
+      "accepted": true,
+      "resolved": "https://a.example/x/"
+    },
+    {
+      "name": "sweep_4142",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x./../y",
+      "accepted": true,
+      "resolved": "https://a.example/x/y"
+    },
+    {
+      "name": "sweep_4143",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x./.",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./"
+    },
+    {
+      "name": "sweep_4144",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x././y",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./y"
+    },
+    {
+      "name": "sweep_4145",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x./..//y",
+      "accepted": true,
+      "resolved": "https://a.example/x//y"
+    },
+    {
+      "name": "sweep_4146",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x./y",
+      "accepted": true,
+      "resolved": "https://a.example/x/x./y"
+    },
+    {
+      "name": "sweep_4147",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x./../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4148",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/x/x./../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/x/b/"
+    },
+    {
+      "name": "sweep_4149",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x",
+      "accepted": true,
+      "resolved": "https://a.example/.x"
+    },
+    {
+      "name": "sweep_4150",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4151",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/../",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4152",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/../y",
+      "accepted": true,
+      "resolved": "https://a.example/y"
+    },
+    {
+      "name": "sweep_4153",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_4154",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/./y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_4155",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/..//y",
+      "accepted": true,
+      "resolved": "https://a.example//y"
+    },
+    {
+      "name": "sweep_4156",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_4157",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4158",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/b/"
+    },
+    {
+      "name": "sweep_4159",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y"
+    },
+    {
+      "name": "sweep_4160",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_4161",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/../",
+      "accepted": true,
+      "resolved": "https://a.example/.x/"
+    },
+    {
+      "name": "sweep_4162",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/../y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/y"
+    },
+    {
+      "name": "sweep_4163",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/.",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/"
+    },
+    {
+      "name": "sweep_4164",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/./y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/y"
+    },
+    {
+      "name": "sweep_4165",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/..//y",
+      "accepted": true,
+      "resolved": "https://a.example/.x//y"
+    },
+    {
+      "name": "sweep_4166",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/y",
+      "accepted": true,
+      "resolved": "https://a.example/.x/.y/y"
+    },
+    {
+      "name": "sweep_4167",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/../..",
+      "accepted": true,
+      "resolved": "https://a.example/"
+    },
+    {
+      "name": "sweep_4168",
+      "manifest_url": "https://a.example//ramp.json",
+      "ref": "/.x/.y/../b/.y/..",
+      "accepted": true,
+      "resolved": "https://a.example/.x/b/"
     }
   ]
 }

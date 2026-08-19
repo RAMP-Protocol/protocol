@@ -1087,6 +1087,25 @@ splits `;params` off the last path segment and then drops an empty one, silently
 turning `/x;` into `/x`. RFC 3986 §5.2.2, §5.2.3 and §5.2.4 are written out in
 that port instead.
 
+Two rounds later the other two followed, and the reason is worth recording
+because each looked like the safe one at the time. Go's `net/url` drops the empty
+segment when a `..` pops past the root, where §5.2.4 keeps it: `..//x` against a
+base of `/ramp.json` is `//x`, because step 2C removes nothing from an empty
+output buffer and step 2E then moves the empty segment. Node's URL parser stops
+removing dot segments for the rest of a path once it meets a segment that BEGINS
+with a dot without being a dot segment, so `x/.x/..` came back as `/x/.x/..`
+where the answer is `/x/`. The second one is a Node deviation rather than a
+reading of the spec: the WHATWG path state classifies a segment as single-dot or
+double-dot from an explicit list, `.x` is on neither, so it is appended and the
+following `..` shortens the path.
+
+So all three now compute every component of the answer — path, query, fragment
+and authority — from the strings the author wrote. No URL library decides any
+part of the output. That is the rule, and it is worth stating as a rule rather
+than as three fixes: a library parser is written to be useful to a browser, not
+to agree with two other languages, and each of these three was found only after
+a corpus said the three agreed.
+
 The durable lesson is not about URLs. A parity corpus proves parity only over the
 inputs it contains, and a corpus assembled from realistic values will contain
 only realistic values — which is precisely the region where independent

@@ -285,6 +285,107 @@ function portIsWritable(port: string): boolean {
 	return n >= 1 && n <= 65535;
 }
 
+// rawPathOf returns the path component of a URI reference or URL, exactly as
+// written: the string with its fragment, query, scheme and authority removed.
+function rawPathOf(s: string): string {
+	const hash = s.indexOf("#");
+	if (hash >= 0) {
+		s = s.slice(0, hash);
+	}
+	const q = s.indexOf("?");
+	if (q >= 0) {
+		s = s.slice(0, q);
+	}
+	// A scheme is a colon reached before any "/", so "/a:b" keeps its colon.
+	const c = s.search(/[:/]/);
+	if (c >= 0 && s[c] === ":") {
+		s = s.slice(c + 1);
+	}
+	if (s.startsWith("//")) {
+		const slash = s.indexOf("/", 2);
+		return slash < 0 ? "" : s.slice(slash);
+	}
+	return s;
+}
+
+// mergePath is RFC 3986 §5.2.3. The base always names an authority by the time
+// this runs, so an empty base path merges as if it were "/".
+function mergePath(basePath: string, refPath: string): string {
+	if (basePath === "") {
+		return `/${refPath}`;
+	}
+	return basePath.slice(0, basePath.lastIndexOf("/") + 1) + refPath;
+}
+
+// removeDotSegments is RFC 3986 §5.2.4, transcribed step by step.
+//
+// Written out rather than delegated because `new URL` gets it wrong. A segment
+// that BEGINS with a dot without being a dot segment — ".x", ".well-known" —
+// makes Node's parser stop removing dot segments for the rest of the path:
+// "x/.x/.." resolved against a base of /ramp.json returns "/x/.x/.." where the
+// RFC, the WHATWG spec and the other two SDKs all answer "/x/". The WHATWG path
+// state classifies a segment as single-dot or double-dot from an explicit list,
+// ".x" is on neither, so it is appended and the following ".." shortens the
+// path — the deviation is Node's, not the spec's.
+//
+// Not a refusal: "../card.json" is a form the field is specified to support and
+// there is a vector pinning it.
+function removeDotSegments(path: string): string {
+	const out: string[] = [];
+	while (path !== "") {
+		if (path.startsWith("../")) {
+			path = path.slice(3);
+		} else if (path.startsWith("./")) {
+			path = path.slice(2);
+		} else if (path.startsWith("/./")) {
+			path = `/${path.slice(3)}`;
+		} else if (path === "/.") {
+			path = "/";
+		} else if (path.startsWith("/../")) {
+			path = `/${path.slice(4)}`;
+			out.pop();
+		} else if (path === "/..") {
+			path = "/";
+			out.pop();
+		} else if (path === "." || path === "..") {
+			path = "";
+		} else {
+			// Move one segment, its leading "/" included, to the output. Popping
+			// one element above therefore drops a segment AND its slash, which is
+			// what §5.2.4 asks for.
+			let i = path.indexOf("/");
+			if (path.startsWith("/")) {
+				i = path.indexOf("/", 1);
+			}
+			if (i < 0) {
+				out.push(path);
+				path = "";
+			} else {
+				out.push(path.slice(0, i));
+				path = path.slice(i);
+			}
+		}
+	}
+	return out.join("");
+}
+
+// resolvedPath is RFC 3986 §5.2.2's path arm: pick the path, merge it if it is
+// relative, then remove dot segments ONCE on whichever branch produced it.
+function resolvedPath(manifestUrl: string, ref: string, refHasAuthority: boolean): string {
+	const refPath = rawPathOf(ref);
+	const basePath = rawPathOf(manifestUrl);
+	if (refHasAuthority || refPath.startsWith("/")) {
+		return removeDotSegments(refPath);
+	}
+	if (refPath === "") {
+		// The base path is INHERITED, and it goes through §5.2.4 like any other:
+		// a base of /a/../ramp.json with a query-only reference must not keep the
+		// dot segments.
+		return removeDotSegments(basePath);
+	}
+	return removeDotSegments(mergePath(basePath, refPath));
+}
+
 // rawQueryOf returns the query a reference or URL DEFINES, exactly as written,
 // and whether it defines one at all. RFC 3986 §3.4: the query runs from the
 // first "?" outside the fragment to the fragment or the end of the string. Read
@@ -424,34 +525,26 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 		}
 	}
 
-	// Only the PATH is taken from the join. The authority is rebuilt from the
-	// values already checked above, and the query and the fragment are taken as
-	// SUBSTRINGS of the strings the author wrote — which is what makes the output
-	// canonical rather than an echo of however the manifest spelled it, and what
-	// keeps WHATWG's own normalizations out of the answer. `joined.search` used
-	// to supply the query, and it percent-encodes an apostrophe that the other
-	// two SDKs keep. A wide differential sweep found the three agree on the path,
-	// and only there.
+	// EVERY component of the answer is now computed from the strings the author
+	// wrote. The authority is rebuilt from the values already checked above; the
+	// path, the query and the fragment are read as substrings and resolved by the
+	// RFC. `new URL` is gone: it was the last library parser deciding any part of
+	// this output, and it was wrong about a path segment that begins with a dot
+	// without being a dot segment — see removeDotSegments. It also
+	// percent-encoded an apostrophe when it still supplied the query.
 	//
 	// THE REBUILD IS LOAD-BEARING, not a formatting step. The origin checks above
 	// read the authority off the RAW string with a regex; if that regex is ever
-	// made to disagree with `new URL` about where the authority ends, the join
-	// can land on another host while every check above passes. Rebuilding from
-	// baseHost means the answer is on the checked origin even then. That is not
-	// theoretical — before the tame predicate above, a leading tab made this
-	// regex read an absolute reference to evil.example as a relative path, and
-	// this line was the only thing that kept the result on a.example.
-	let joined: URL;
-	try {
-		joined = new URL(ref, manifestUrl);
-	} catch {
-		// `new URL` throws a bare TypeError, which is outside the error family
-		// this function documents. Everything measured that reached it is
-		// refused above, so this is the backstop rather than the rule — but a
-		// caller catching by message prefix must never see an unhandled throw.
-		throw new Error("identity document: reference cannot be resolved against the manifest URL");
-	}
+	// made to disagree with the path resolution about where the authority ends,
+	// the answer could land on another host while every check above passes.
+	// Rebuilding from baseHost means it stays on the checked origin even then.
+	// That is not theoretical — before the tame predicate above, a leading tab
+	// made this regex read an absolute reference to evil.example as a relative
+	// path, and this line was the only thing that kept the result on a.example.
 	const authority = basePort === "" ? baseHost.toLowerCase() : `${baseHost.toLowerCase()}:${basePort}`;
+	// RFC 3986 §6.2.3: under a hierarchical scheme an empty path is equivalent to
+	// "/", and "/" is the normalized form.
+	const path = resolvedPath(manifestUrl, ref, refAuthorityMatch !== null) || "/";
 
 	// RFC 3986 5.2.2 inherits the base's query in ONE case: the reference has an
 	// empty path, no authority and no scheme, and defines no query of its own —
@@ -471,5 +564,5 @@ export function resolveIdentityDocument(manifestUrl: string, ref: string): strin
 	// on every branch, and the base has none in any case.
 	const fragment = rawFragmentOf(ref);
 	const fragmentPart = fragment === "" ? "" : `#${fragment}`;
-	return `https://${authority}${joined.pathname}${queryPart}${fragmentPart}`;
+	return `https://${authority}${path}${queryPart}${fragmentPart}`;
 }

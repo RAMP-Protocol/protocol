@@ -113,6 +113,27 @@ var sweepDotBases = []string{
 	"https://a.example//ramp.json",
 }
 
+// A PLAIN segment followed by a segment that BEGINS with a dot without being a
+// dot segment. That is the shape Node's URL parser breaks on: it stops removing
+// dot segments for the rest of the path, so "x/.x/.." came back as "x/.x/.."
+// where the RFC answers "/x/". A dotted atom on its own is not enough — with the
+// dotted segment first, or with only dotted segments before it, the parser
+// behaves, so a corpus built from bare dotted atoms would have passed on the
+// broken code. Kept as its own small product rather than folded into the atom
+// cross product above, which would have multiplied the whole corpus to pin one
+// class.
+var sweepDottedPrefixes = []string{
+	"/x/.x", "x/.x", "/a/b/.x", "/a/.x", "/a/.well-known", "/x/..x", "/x/x.",
+	"/.x", "/.x/.y",
+}
+
+// The tails that ask for dot-segment removal AFTER the dotted segment, which is
+// the removal Node skips.
+var sweepDottedSuffixes = []string{
+	"", "/..", "/../", "/../y", "/.", "/./y", "/..//y", "/y", "/../..",
+	"/../b/.y/..",
+}
+
 func buildIdentityDocumentSweepVectors(t *testing.T) []identityDocumentVector {
 	t.Helper()
 	var out []identityDocumentVector
@@ -152,6 +173,13 @@ func buildIdentityDocumentSweepVectors(t *testing.T) []identityDocumentVector {
 					continue // the empty reference, already covered and refused
 				}
 				record(manifest, a+b)
+			}
+		}
+	}
+	for _, manifest := range sweepDotBases {
+		for _, prefix := range sweepDottedPrefixes {
+			for _, suffix := range sweepDottedSuffixes {
+				record(manifest, prefix+suffix)
 			}
 		}
 	}

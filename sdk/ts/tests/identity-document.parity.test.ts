@@ -31,14 +31,6 @@ const doc = vectorsFile as IdentityDocumentVectorsFile;
 const accepted = doc.identity_document.filter((v) => v.accepted);
 const refused = doc.identity_document.filter((v) => !v.accepted);
 
-// The one refusal this port can produce WITHOUT any rule having fired: the
-// try/catch around the URL constructor. It rewrites a TypeError into the
-// documented error family, which is right for a caller and wrong for this
-// suite — a vector refused only because the parser threw looks exactly like one
-// refused by a rule, and the corpus records verdicts, not messages, so nothing
-// else can tell them apart. A rule ported as a comment would still show green.
-const BACKSTOP_MESSAGE = "identity document: reference cannot be resolved against the manifest URL";
-
 // Runs a refusal and hands back its message, so an assertion can be made about
 // the message instead of only about the fact that something was thrown. Fails
 // when the call RESOLVES, which is the half a bare toThrow() was there for.
@@ -69,13 +61,11 @@ describe("sdk/ts resolveIdentityDocument matches the sdk/go oracle vectors", () 
 	for (const v of refused) {
 		it(`refuses ${v.name}`, () => {
 			const message = refusalMessage(v.manifest_url, v.ref);
-			// The documented error family, not the wording. This is what keeps a
-			// stray TypeError from a rule path counting as a refusal if the
-			// backstop is ever narrowed or removed.
+			// The documented error family, not the wording. Every refusal this
+			// port can produce is now a rule: the URL constructor and the
+			// backstop that rewrote its TypeError are both gone, so this is the
+			// whole check rather than half of it.
 			expect(message).toMatch(/^identity document: /);
-			// And the refusal came from a RULE. True for every vector today; it
-			// starts failing the moment one is refused by the parser instead.
-			expect(message).not.toBe(BACKSTOP_MESSAGE);
 		});
 	}
 
