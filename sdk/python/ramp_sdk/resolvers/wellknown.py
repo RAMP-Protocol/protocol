@@ -21,8 +21,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from ramp_sdk._hostref import _parse_ref, anchored_parsed
 from ramp_sdk.b64 import b64url_decode_strict
-from ramp_sdk.hosts import host_anchored, is_bare_host
+from ramp_sdk.hosts import is_bare_host
 from ramp_sdk.resolvers._http import default_client, fetch_strict
 from ramp_sdk.resolvers.errors import (
     DirectoryUnavailableError,
@@ -59,28 +60,23 @@ def _endpoint_refusal(host: str, endpoint: str) -> str | None:
     it has a second call site — a typed client that re-checks an injected resolver's
     answer. This SDK has only the one, so the rule lives with it.)
 
-    Both halves read the reference the SAME way. A value naming no scheme is a URL
-    to one parser and a path to another, and the two answers put a credential on
+    Both halves are decided over ONE reading of the reference, by the shared parse
+    in :mod:`ramp_sdk._hostref`. That is not tidiness: a value naming no scheme is a
+    URL to one parser and a path to another, and the two answers put a credential on
     opposite sides of the check — ``u:p@exchange.example`` is where they part.
     """
-    # Normalized exactly as the anchor predicate normalizes it: a reference naming
-    # no scheme is read as https, since a bare domain is otherwise
-    # indistinguishable from a path.
-    work = endpoint if "://" in endpoint else f"https://{endpoint}"
-    rest = work[work.index("://") + 3 :]
-    authority = rest
-    for i, c in enumerate(rest):
-        if c in "/?#":
-            authority = rest[:i]
-            break
-    if "@" in authority:
+    try:
+        advertised = _parse_ref(endpoint)
+    except ValueError as exc:
+        return f"host={host!r} endpoint={endpoint!r}: {exc}"
+    if advertised.has_userinfo:
         # Deliberately does not echo the endpoint: it carries the credential.
         return f"host={host!r} advertises an endpoint carrying userinfo"
     try:
-        anchored = host_anchored(host, endpoint)
+        served = _parse_ref(host)
     except ValueError as exc:
-        return f"host={host!r} endpoint={endpoint!r}: {exc}"
-    if not anchored:
+        return f"host={host!r}: {exc}"
+    if not anchored_parsed(served, advertised):
         return f"host={host!r} advertises endpoint {endpoint!r} on a different host"
     return None
 

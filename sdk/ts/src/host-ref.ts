@@ -1,0 +1,185 @@
+// The one reading of a host reference, shared by the routing predicates in
+// hosts.ts and by the endpoint rule in the resolvers tier.
+//
+// It is a module of its own, and deliberately absent from both package export maps
+// (the same shape src/opaque-url.ts already has), for the reason the Go oracle's
+// internal endpointrule package gives: the rule is checked in two places for two
+// different reasons, and written twice it drifts. Stated once here, a refusal
+// decided over one reading and enforced over another cannot happen — which is
+// exactly the defect that shipped when the two halves used different parsers.
+//
+// Nothing here is public API. hosts.ts re-exports the predicates built on it;
+// this module's names are internal to the SDK.
+
+/** A reference that cannot be read as a host at all. The Go oracle exposes an
+ * errors.Is sentinel here; this port throws, as the audience check above does,
+ * because a sentinel is not how a caller in this language distinguishes causes. */
+export function invalidHost(ref: string, why: string): Error {
+	return new Error(`hosts: reference is not a usable host: ${why}: ${JSON.stringify(ref)}`);
+}
+
+// An authority admits a CLOSED set of ASCII characters; everything outside it is
+// refused. Stating the set rather than a list of separators is what makes the
+// refusal structural: a separator nobody thought of is already outside it. Code
+// points at or above 0x80 are admitted — the oracle's parser keeps them, so a name
+// in a non-ASCII script is a usable host even though the wire's domain rule
+// refuses it.
+const hostAscii = new Set(
+	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:[]<>\"",
+);
+
+// A control character is refused outright rather than removed. This is the reason
+// the platform parser cannot be used here: `new URL` strips tabs, newlines and
+// leading control characters per WHATWG, so it answers "host" where the oracle
+// answers "not a host". The port is read textually below for the same kind of
+// reason — `new URL` folds a scheme's default port away at PARSE time, which is
+// earlier than this rule decides which scheme is even in play.
+const controlChar = /[\u0000-\u001F\u007F]/;
+const digitsOnly = /^[0-9]*$/;
+
+export interface ParsedRef {
+	/** The authority with userinfo removed and the port kept, exactly as written. */
+	host: string;
+	/** The authority's host alone: no port, IPv6 brackets stripped, case preserved. */
+	hostname: string;
+	/** The port as written, or "" when none was. Never a default filled in. */
+	port: string;
+	/** Whether the caller actually WROTE a scheme. Anchoring needs this: a scheme
+	 * decides which port counts as the default, so a value that named none must not
+	 * be treated as having named https. */
+	hadScheme: boolean;
+	/** The scheme written, or "https" for a reference that named none. */
+	scheme: string;
+	/** Whether the authority carried userinfo. The endpoint rule refuses a
+	 * credential and needs the answer from THIS reading of the reference: decided
+	 * over a second, differently-shaped parse it disagrees with the anchor check on
+	 * exactly the shape it exists to stop. */
+	hasUserinfo: boolean;
+}
+
+/** Read a bare domain, a host:port pair, or a full URL into its authority. A ref
+ * with no scheme is read as though it carried https, since a bare domain is
+ * otherwise indistinguishable from a path. One parse behind both host predicates,
+ * so neither can disagree with the other about what a reference even is. */
+export function parseRef(ref: string): ParsedRef {
+	if (ref.trim() === "") {
+		throw invalidHost(ref, "empty reference");
+	}
+	if (controlChar.test(ref)) {
+		throw invalidHost(ref, "control character");
+	}
+	// A percent-escape is refused rather than decoded. The oracle admits only the
+	// escapes that decode to a byte at or above 0x80 (and %25 itself), which no
+	// domain name carries; refusing all of them costs nothing a caller can use and
+	// removes an unescaping step the three languages would each get subtly wrong.
+	// Every value the two answers differ on is one both refuse at every call site.
+	if (ref.includes("%")) {
+		throw invalidHost(ref, "percent-escape in a host reference");
+	}
+
+	const hadScheme = ref.includes("://");
+	const work = hadScheme ? ref : `https://${ref}`;
+	const sep = work.indexOf("://");
+	const scheme = hadScheme ? work.slice(0, sep).toLowerCase() : "https";
+
+	// The authority ends at the first delimiter that starts a path, query or
+	// fragment — the three things a reference can carry beyond it.
+	const rest = work.slice(sep + 3);
+	const end = rest.search(/[/?#]/);
+	const authority = end < 0 ? rest : rest.slice(0, end);
+
+	// Userinfo is split at the LAST "@", so an "@" inside a credential does not
+	// become part of the host.
+	const at = authority.lastIndexOf("@");
+	const hasUserinfo = at >= 0;
+	const host = hasUserinfo ? authority.slice(at + 1) : authority;
+	if (host === "") {
+		throw invalidHost(ref, "no host");
+	}
+	for (const ch of host) {
+		const cp = ch.codePointAt(0) ?? 0;
+		if (cp < 0x80 && !hostAscii.has(ch)) {
+			throw invalidHost(ref, `invalid character ${JSON.stringify(ch)} in host`);
+		}
+	}
+
+	let hostname: string;
+	let port: string;
+	if (host.startsWith("[")) {
+		const close = host.indexOf("]");
+		if (close < 0) {
+			throw invalidHost(ref, "missing ']' in host");
+		}
+		hostname = host.slice(1, close);
+		const after = host.slice(close + 1);
+		if (after === "") {
+			port = "";
+		} else if (after.startsWith(":")) {
+			port = after.slice(1);
+		} else {
+			throw invalidHost(ref, "trailing characters after ']' in host");
+		}
+	} else {
+		if (host.includes("[")) {
+			throw invalidHost(ref, "missing ']' in host");
+		}
+		// From the FIRST colon onward, so a value that merely ENDS in digits does
+		// not pass as a port: "a.example::443" and "a.example:44:3" are refused.
+		const colon = host.indexOf(":");
+		hostname = colon < 0 ? host : host.slice(0, colon);
+		port = colon < 0 ? "" : host.slice(colon + 1);
+	}
+	if (!digitsOnly.test(port)) {
+		throw invalidHost(ref, `invalid port ${JSON.stringify(port)} after host`);
+	}
+	return { host, hostname, port, hadScheme, scheme, hasUserinfo };
+}
+
+// The port a scheme reaches when none is written.
+const defaultPorts: Record<string, string> = { http: "80", https: "443" };
+
+/** canonicalPort renders "the same port" as one string, so a port written out in
+ * full and the same port left implicit compare equal. An unknown scheme has no
+ * default to fold, so its port is kept verbatim. */
+function canonicalPort(scheme: string, port: string): string {
+	if (port === "") {
+		return "";
+	}
+	const def = defaultPorts[scheme.toLowerCase()];
+	return def !== undefined && port === def ? "" : port;
+}
+
+/** sameOrSubdomain reports whether candidate equals anchor or is a subdomain of
+ * it. Comparison is case-insensitive and tolerant of ONE trailing root dot — not
+ * of every trailing dot, which would make a doubled root dot compare equal to a
+ * name that never carried one. A subdomain match requires a full dot-delimited
+ * label boundary, so "evil-a.com" is NOT treated as a subdomain of "a.com" — the
+ * check a bare suffix match gets wrong, and the one an attacker registers a domain
+ * to exploit. */
+function sameOrSubdomain(anchor: string, candidate: string): boolean {
+	const a = anchor.toLowerCase().replace(/\.$/, "");
+	const c = candidate.toLowerCase().replace(/\.$/, "");
+	if (a === "") {
+		return false;
+	}
+	return c === a || c.endsWith(`.${a}`);
+}
+
+/** anchoredParsed is the anchor comparison over two references that have ALREADY
+ * been read. It exists so a caller holding a parse can reach the verdict without
+ * triggering a second one — the endpoint rule needs the userinfo answer and the
+ * anchor answer from one reading of the same string.
+ *
+ * A side that named no scheme borrows the other's, which decides only WHICH port
+ * counts as the default. Hostname and port are compared as two values rather than
+ * one joined string: joined, the label boundary would have to find ".a.com" at the
+ * end of "sub.a.com:8443" and would refuse a subdomain for having a port — the
+ * right answer reached through the wrong comparison is still the wrong comparison. */
+export function anchoredParsed(a: ParsedRef, c: ParsedRef): boolean {
+	const anchorScheme = a.hadScheme ? a.scheme : c.scheme;
+	const candidateScheme = c.hadScheme ? c.scheme : a.scheme;
+	return (
+		sameOrSubdomain(a.hostname, c.hostname) &&
+		canonicalPort(anchorScheme, a.port) === canonicalPort(candidateScheme, c.port)
+	);
+}

@@ -29,6 +29,8 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from ramp_sdk._hostref import _parse_ref, anchored_parsed
+
 # BARE_DOMAIN_PATTERN is the wire shape of a domain-valued field: a bare domain
 # with an optional ":port", never a URL. It carries the same bytes as the Go
 # ``helpers.BareDomainPattern`` and as the protovalidate pattern on the contract's
@@ -166,117 +168,6 @@ def _normalize_domain(v: str) -> str:
 # Routing predicates
 # ---------------------------------------------------------------------------
 
-# An authority admits a CLOSED set of ASCII characters; everything outside it is
-# refused. Stating the set rather than a list of separators is what makes the
-# refusal structural: a separator nobody thought of is already outside it. Code
-# points at or above 0x80 are admitted — the oracle's parser keeps them, so a name
-# in a non-ASCII script is a usable host even though the wire's domain rule
-# refuses it.
-_HOST_ASCII = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:[]<>\""
-)
-
-# The port a scheme reaches when none is written.
-_DEFAULT_PORTS = {"http": "80", "https": "443"}
-
-_ASCII_MAX = 0x80
-_DEL = 0x7F
-_CONTROL_MAX = 0x20
-
-
-def _invalid_host(ref: str, why: str) -> ValueError:
-    """The Go oracle exposes an ``errors.Is`` sentinel for this; the port raises,
-    as :func:`check_audience` does, because a sentinel is not how a caller in this
-    language distinguishes causes."""
-    return ValueError(f"hosts: reference is not a usable host: {why}: {ref!r}")
-
-
-def _parse_ref(ref: str) -> tuple[str, str, str, bool, str]:
-    """Read a bare domain, a host:port pair, or a full URL into its authority.
-
-    Returns ``(host, hostname, port, had_scheme, scheme)``: the authority with
-    userinfo removed and the port kept as written; the host alone with IPv6
-    brackets stripped and case preserved; the port as written, never a default
-    filled in; whether the caller actually WROTE a scheme; and the scheme, or
-    ``https`` for a reference that named none.
-
-    A ref with no scheme is read as though it carried https, since a bare domain
-    is otherwise indistinguishable from a path. One parse behind both host
-    predicates, so neither can disagree with the other about what a reference
-    even is.
-
-    Deliberately NOT ``urllib.parse``. Two reasons, and both are cross-language:
-    the pure tier takes no dependency that dials, and — more to the point —
-    ``urlsplit`` strips tabs and newlines the oracle refuses outright, lowercases
-    its ``hostname`` accessor, and keeps userinfo inside ``netloc``. Each of those
-    is a value where a port built on it answers differently from Go, and the
-    shared vectors carry all three.
-    """
-    if any(ord(c) < _CONTROL_MAX or ord(c) == _DEL for c in ref):
-        raise _invalid_host(ref, "control character")
-    if ref.strip() == "":
-        raise _invalid_host(ref, "empty reference")
-    # A percent-escape is refused rather than decoded. The oracle admits only the
-    # escapes that decode to a byte at or above 0x80 (and %25 itself), which no
-    # domain name carries; refusing all of them costs nothing a caller can use and
-    # removes an unescaping step the three languages would each get subtly wrong.
-    # Every value the two answers differ on is one both refuse at every call site.
-    if "%" in ref:
-        raise _invalid_host(ref, "percent-escape in a host reference")
-
-    had_scheme = "://" in ref
-    work = ref if had_scheme else f"https://{ref}"
-    sep = work.index("://")
-    scheme = work[:sep].lower() if had_scheme else "https"
-
-    # The authority ends at the first delimiter that starts a path, query or
-    # fragment — the three things a reference can carry beyond it.
-    rest = work[sep + 3 :]
-    authority = rest
-    for i, c in enumerate(rest):
-        if c in "/?#":
-            authority = rest[:i]
-            break
-
-    # Userinfo is split at the LAST "@", so an "@" inside a credential does not
-    # become part of the host.
-    host = authority.rpartition("@")[2] if "@" in authority else authority
-    if host == "":
-        raise _invalid_host(ref, "no host")
-    for c in host:
-        if ord(c) < _ASCII_MAX and c not in _HOST_ASCII:
-            raise _invalid_host(ref, f"invalid character {c!r} in host")
-
-    hostname, port = _split_host(ref, host)
-    return host, hostname, port, had_scheme, scheme
-
-
-def _split_host(ref: str, host: str) -> tuple[str, str]:
-    """Split an authority into its host and its port, as written.
-
-    Brackets are IPv6 syntax and are read as such only at the FRONT: a bracket
-    anywhere else is a host that never closed one. Elsewhere the port is read from
-    the FIRST colon onward, so a value that merely ENDS in digits does not pass as
-    a port — ``a.example::443`` and ``a.example:44:3`` are refused rather than
-    quietly read as port 443 and port 3.
-    """
-    if host.startswith("["):
-        close = host.find("]")
-        if close < 0:
-            raise _invalid_host(ref, "missing ']' in host")
-        hostname = host[1:close]
-        after = host[close + 1 :]
-        if after != "" and not after.startswith(":"):
-            raise _invalid_host(ref, "trailing characters after ']' in host")
-        port = after[1:] if after != "" else ""
-    else:
-        if "[" in host:
-            raise _invalid_host(ref, "missing ']' in host")
-        hostname, _, port = host.partition(":")
-    if not all(c in "0123456789" for c in port):
-        raise _invalid_host(ref, f"invalid port {port!r} after host")
-    return hostname, port
-
 
 def host_of(ref: str) -> str:
     """Extract the host (including any port) from a bare domain, a host:port pair,
@@ -322,35 +213,6 @@ def is_bare_host(ref: str) -> bool:
     return host == ref
 
 
-def _canonical_port(scheme: str, port: str) -> str:
-    """Render "the same port" as one string, so a port written out in full and the
-    same port left implicit compare equal. An unknown scheme has no default to
-    fold, so its port is kept verbatim."""
-    if port == "":
-        return ""
-    default = _DEFAULT_PORTS.get(scheme.lower())
-    return "" if default is not None and port == default else port
-
-
-def _same_or_subdomain(anchor: str, candidate: str) -> bool:
-    """Report whether ``candidate`` equals ``anchor`` or is a subdomain of it.
-
-    Comparison is case-insensitive and tolerant of ONE trailing root dot — not of
-    every trailing dot, which is what ``rstrip(".")`` would do and would make a
-    doubled root dot compare equal to a name that never carried one. A subdomain
-    match requires a full dot-delimited label boundary, so ``evil-a.com`` is NOT
-    treated as a subdomain of ``a.com`` — the check a bare suffix match gets
-    wrong, and the one an attacker registers a domain to exploit.
-    """
-    a = anchor.lower()
-    c = candidate.lower()
-    a = a.removesuffix(".")
-    c = c.removesuffix(".")
-    if a == "":
-        return False
-    return c == a or c.endswith(f".{a}")
-
-
 def host_anchored(anchor: str, candidate: str) -> bool:
     """Report whether ``candidate`` is anchored to ``anchor`` — the same host and
     port, or a subdomain of that host on that port.
@@ -383,14 +245,4 @@ def host_anchored(anchor: str, candidate: str) -> bool:
     authority reaching two answers, which silently un-anchored every plaintext
     directory that spelled ``:80`` in full.
     """
-    _, a_hostname, a_port, a_had_scheme, a_scheme = _parse_ref(anchor)
-    _, c_hostname, c_port, c_had_scheme, c_scheme = _parse_ref(candidate)
-    anchor_scheme = a_scheme if a_had_scheme else c_scheme
-    candidate_scheme = c_scheme if c_had_scheme else a_scheme
-    # Compared as two values rather than one joined string. Joined, the label
-    # boundary would have to find ".a.com" at the end of "sub.a.com:8443" and
-    # would refuse a subdomain for having a port — the right answer reached
-    # through the wrong comparison is still the wrong comparison.
-    return _same_or_subdomain(a_hostname, c_hostname) and _canonical_port(
-        anchor_scheme, a_port
-    ) == _canonical_port(candidate_scheme, c_port)
+    return anchored_parsed(_parse_ref(anchor), _parse_ref(candidate))

@@ -23,6 +23,8 @@
 // Pure string work, no IO. Byte-parity-guarded against the Go oracle by the
 // shared vectors at sdk/go/helpers/testdata/audience-vectors.json.
 
+import { anchoredParsed, parseRef } from "./host-ref.ts";
+
 /**
  * bareDomainPattern is the wire shape of a domain-valued field: a bare domain
  * with an optional ":port", never a URL. It carries the same bytes as the Go
@@ -165,124 +167,6 @@ function normalizeDomain(v: string): string {
 // Routing predicates
 // ---------------------------------------------------------------------------
 
-/** A reference that cannot be read as a host at all. The Go oracle exposes an
- * errors.Is sentinel here; this port throws, as the audience check above does,
- * because a sentinel is not how a caller in this language distinguishes causes. */
-function invalidHost(ref: string, why: string): Error {
-	return new Error(`hosts: reference is not a usable host: ${why}: ${JSON.stringify(ref)}`);
-}
-
-// An authority admits a CLOSED set of ASCII characters; everything outside it is
-// refused. Stating the set rather than a list of separators is what makes the
-// refusal structural: a separator nobody thought of is already outside it. Code
-// points at or above 0x80 are admitted — the oracle's parser keeps them, so a name
-// in a non-ASCII script is a usable host even though the wire's domain rule
-// refuses it.
-const hostAscii = new Set(
-	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~!$&'()*+,;=:[]<>\"",
-);
-
-// A control character is refused outright rather than removed. This is the reason
-// the platform parser cannot be used here: `new URL` strips tabs, newlines and
-// leading control characters per WHATWG, so it answers "host" where the oracle
-// answers "not a host". The port is read textually below for the same kind of
-// reason — `new URL` folds a scheme's default port away at PARSE time, which is
-// earlier than this rule decides which scheme is even in play.
-const controlChar = /[\u0000-\u001F\u007F]/;
-const digitsOnly = /^[0-9]*$/;
-
-interface ParsedRef {
-	/** The authority with userinfo removed and the port kept, exactly as written. */
-	host: string;
-	/** The authority's host alone: no port, IPv6 brackets stripped, case preserved. */
-	hostname: string;
-	/** The port as written, or "" when none was. Never a default filled in. */
-	port: string;
-	/** Whether the caller actually WROTE a scheme. Anchoring needs this: a scheme
-	 * decides which port counts as the default, so a value that named none must not
-	 * be treated as having named https. */
-	hadScheme: boolean;
-	/** The scheme written, or "https" for a reference that named none. */
-	scheme: string;
-}
-
-/** Read a bare domain, a host:port pair, or a full URL into its authority. A ref
- * with no scheme is read as though it carried https, since a bare domain is
- * otherwise indistinguishable from a path. One parse behind both host predicates,
- * so neither can disagree with the other about what a reference even is. */
-function parseRef(ref: string): ParsedRef {
-	if (ref.trim() === "") {
-		throw invalidHost(ref, "empty reference");
-	}
-	if (controlChar.test(ref)) {
-		throw invalidHost(ref, "control character");
-	}
-	// A percent-escape is refused rather than decoded. The oracle admits only the
-	// escapes that decode to a byte at or above 0x80 (and %25 itself), which no
-	// domain name carries; refusing all of them costs nothing a caller can use and
-	// removes an unescaping step the three languages would each get subtly wrong.
-	// Every value the two answers differ on is one both refuse at every call site.
-	if (ref.includes("%")) {
-		throw invalidHost(ref, "percent-escape in a host reference");
-	}
-
-	const hadScheme = ref.includes("://");
-	const work = hadScheme ? ref : `https://${ref}`;
-	const sep = work.indexOf("://");
-	const scheme = hadScheme ? work.slice(0, sep).toLowerCase() : "https";
-
-	// The authority ends at the first delimiter that starts a path, query or
-	// fragment — the three things a reference can carry beyond it.
-	const rest = work.slice(sep + 3);
-	const end = rest.search(/[/?#]/);
-	const authority = end < 0 ? rest : rest.slice(0, end);
-
-	// Userinfo is split at the LAST "@", so an "@" inside a credential does not
-	// become part of the host.
-	const at = authority.lastIndexOf("@");
-	const host = at < 0 ? authority : authority.slice(at + 1);
-	if (host === "") {
-		throw invalidHost(ref, "no host");
-	}
-	for (const ch of host) {
-		const cp = ch.codePointAt(0) ?? 0;
-		if (cp < 0x80 && !hostAscii.has(ch)) {
-			throw invalidHost(ref, `invalid character ${JSON.stringify(ch)} in host`);
-		}
-	}
-
-	let hostname: string;
-	let port: string;
-	if (host.startsWith("[")) {
-		const close = host.indexOf("]");
-		if (close < 0) {
-			throw invalidHost(ref, "missing ']' in host");
-		}
-		hostname = host.slice(1, close);
-		const after = host.slice(close + 1);
-		if (after === "") {
-			port = "";
-		} else if (after.startsWith(":")) {
-			port = after.slice(1);
-		} else {
-			throw invalidHost(ref, "trailing characters after ']' in host");
-		}
-	} else {
-		if (host.includes("[")) {
-			throw invalidHost(ref, "missing ']' in host");
-		}
-		// From the FIRST colon onward, so a value that merely ENDS in digits does
-		// not pass as a port: "a.example::443" and "a.example:44:3" are refused.
-		const colon = host.indexOf(":");
-		hostname = colon < 0 ? host : host.slice(0, colon);
-		port = colon < 0 ? "" : host.slice(colon + 1);
-	}
-	if (!digitsOnly.test(port)) {
-		throw invalidHost(ref, `invalid port ${JSON.stringify(port)} after host`);
-	}
-	return { host, hostname, port, hadScheme, scheme };
-}
-
 /**
  * hostOf extracts the host (including any port) from a bare domain, a host:port
  * pair, or a full URL. A ref with no scheme is read as though it carried https,
@@ -326,36 +210,6 @@ export function isBareHost(ref: string): boolean {
 	return host === ref;
 }
 
-// The port a scheme reaches when none is written.
-const defaultPorts: Record<string, string> = { http: "80", https: "443" };
-
-/** canonicalPort renders "the same port" as one string, so a port written out in
- * full and the same port left implicit compare equal. An unknown scheme has no
- * default to fold, so its port is kept verbatim. */
-function canonicalPort(scheme: string, port: string): string {
-	if (port === "") {
-		return "";
-	}
-	const def = defaultPorts[scheme.toLowerCase()];
-	return def !== undefined && port === def ? "" : port;
-}
-
-/** sameOrSubdomain reports whether candidate equals anchor or is a subdomain of
- * it. Comparison is case-insensitive and tolerant of ONE trailing root dot — not
- * of every trailing dot, which would make a doubled root dot compare equal to a
- * name that never carried one. A subdomain match requires a full dot-delimited
- * label boundary, so "evil-a.com" is NOT treated as a subdomain of "a.com" — the
- * check a bare suffix match gets wrong, and the one an attacker registers a domain
- * to exploit. */
-function sameOrSubdomain(anchor: string, candidate: string): boolean {
-	const a = anchor.toLowerCase().replace(/\.$/, "");
-	const c = candidate.toLowerCase().replace(/\.$/, "");
-	if (a === "") {
-		return false;
-	}
-	return c === a || c.endsWith(`.${a}`);
-}
-
 /**
  * hostAnchored reports whether candidate is anchored to anchor — the same host and
  * port, or a subdomain of that host on that port. Either side may be a bare
@@ -387,16 +241,5 @@ function sameOrSubdomain(anchor: string, candidate: string): boolean {
  * in full.
  */
 export function hostAnchored(anchor: string, candidate: string): boolean {
-	const a = parseRef(anchor);
-	const c = parseRef(candidate);
-	const anchorScheme = a.hadScheme ? a.scheme : c.scheme;
-	const candidateScheme = c.hadScheme ? c.scheme : a.scheme;
-	// Compared as two values rather than one joined string. Joined, the label
-	// boundary would have to find ".a.com" at the end of "sub.a.com:8443" and would
-	// refuse a subdomain for having a port — the right answer reached through the
-	// wrong comparison is still the wrong comparison.
-	return (
-		sameOrSubdomain(a.hostname, c.hostname) &&
-		canonicalPort(anchorScheme, a.port) === canonicalPort(candidateScheme, c.port)
-	);
+	return anchoredParsed(parseRef(anchor), parseRef(candidate));
 }

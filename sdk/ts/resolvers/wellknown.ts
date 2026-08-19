@@ -4,7 +4,8 @@
 // its fail-closed taxonomy: a fetch/decode failure throws DirectoryUnavailable;
 // an unknown kid is `undefined`; a manifest with no endpoint throws NoEndpoint.
 
-import { hostAnchored, isBareHost } from "../src/hosts.ts";
+import { anchoredParsed, parseRef } from "../src/host-ref.ts";
+import { isBareHost } from "../src/hosts.ts";
 import { DirectoryUnavailable, EndpointRefused, NoEndpoint } from "./errors.ts";
 import { type FetchLike, defaultFetch, fetchStrict } from "./http.ts";
 import { ed25519KeysFromJwks } from "./jwks.ts";
@@ -32,27 +33,29 @@ const DEFAULT_TTL_MS = 300_000; // 5 minutes
  * it has a second call site — a typed client that re-checks an injected resolver's
  * answer. This SDK has only the one, so the rule lives with it.)
  *
- * Both halves read the reference the SAME way. A value naming no scheme is a URL
- * to one parser and a path to another, and the two answers put a credential on
+ * Both halves are decided over ONE reading of the reference, by the shared parse
+ * in src/host-ref.ts. That is not tidiness: a value naming no scheme is a URL to
+ * one parser and a path to another, and the two answers put a credential on
  * opposite sides of the check — "u:p@exchange.example" is where they part. */
 function endpointRefusal(host: string, endpoint: string): string | undefined {
-  // Normalized exactly as the anchor predicate normalizes it: a reference naming
-  // no scheme is read as https, since a bare domain is otherwise
-  // indistinguishable from a path.
-  const work = endpoint.includes("://") ? endpoint : `https://${endpoint}`;
-  const rest = work.slice(work.indexOf("://") + 3);
-  const end = rest.search(/[/?#]/);
-  const authority = end < 0 ? rest : rest.slice(0, end);
-  if (authority.includes("@")) {
+  let advertised: ReturnType<typeof parseRef>;
+  try {
+    advertised = parseRef(endpoint);
+  } catch (err) {
+    return `host=${JSON.stringify(host)} endpoint=${JSON.stringify(endpoint)}: ${String(err)}`;
+  }
+  if (advertised.hasUserinfo) {
     // Deliberately does not echo the endpoint: it carries the credential.
     return `host=${JSON.stringify(host)} advertises an endpoint carrying userinfo`;
   }
+  let served: ReturnType<typeof parseRef>;
   try {
-    if (!hostAnchored(host, endpoint)) {
-      return `host=${JSON.stringify(host)} advertises endpoint ${JSON.stringify(endpoint)} on a different host`;
-    }
+    served = parseRef(host);
   } catch (err) {
-    return `host=${JSON.stringify(host)} endpoint=${JSON.stringify(endpoint)}: ${String(err)}`;
+    return `host=${JSON.stringify(host)}: ${String(err)}`;
+  }
+  if (!anchoredParsed(served, advertised)) {
+    return `host=${JSON.stringify(host)} advertises endpoint ${JSON.stringify(endpoint)} on a different host`;
   }
   return undefined;
 }
