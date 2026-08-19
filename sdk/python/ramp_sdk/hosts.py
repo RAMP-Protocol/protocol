@@ -136,6 +136,29 @@ def check_audience(self_domain: str, *claimed: str) -> AudienceVerdict:
     return "accepted"
 
 
+def _split_host_port(v: str) -> tuple[str, str]:
+    """Split ``host[:port]`` on the last colon; no colon means no port.
+
+    Shared by the audience comparison and the identity-document rule, because the
+    443 fold below is half of BOTH origin comparisons and a change to it must not
+    have to be made twice. Anything stranger than host[:port] is refused by
+    ``is_bare_domain``, before this or right after it.
+    """
+    host, sep, port = v.rpartition(":")
+    if not sep:
+        return v, ""
+    return host, port
+
+
+def _fold_default_port(port: str) -> str:
+    """443 spelled out and 443 left implicit are the same port; nothing else folds.
+
+    A schemeless domain is read as https everywhere in this SDK. Port 80 is NOT
+    folded: that would be reading a scheme into a value that names none.
+    """
+    return "" if port == "443" else port
+
+
 def _normalize_domain(v: str) -> str:
     """Render the two spellings of one identity as one string.
 
@@ -144,16 +167,9 @@ def _normalize_domain(v: str) -> str:
     split on that colon rather than parse a URL, and is why it reproduces the Go
     oracle exactly.
     """
-    host, sep, port = v.rpartition(":")
-    if not sep:
-        host, port = v, ""
-    host = host.lower()
-    # A schemeless domain is read as https everywhere in this SDK, so 443 spelled
-    # out and 443 left implicit are the same port. Any other port is kept, 80
-    # included: folding it would be reading a scheme into a value that names none.
-    if port in ("", "443"):
-        return host
-    return f"{host}:{port}"
+    host, port = _split_host_port(v)
+    port = _fold_default_port(port)
+    return f"{host.lower()}:{port}" if port else host.lower()
 
 
 # Identity-document resolution (Python side of sdk/go/helpers/identitydocs.go).
@@ -188,19 +204,6 @@ _COLON_BEFORE_PATH_RE = re.compile(r"[^/?#]*:")
 def _uri_scheme(ref: str) -> str:
     m = _URI_SCHEME_RE.match(ref)
     return m.group(0)[:-1].lower() if m else ""
-
-
-def _split_host_port(authority: str) -> tuple[str, str]:
-    """Split ``host[:port]``. Anything stranger is refused by is_bare_domain after."""
-    host, sep, port = authority.rpartition(":")
-    if not sep:
-        return authority, ""
-    return host, port
-
-
-def _fold_default_port(port: str) -> str:
-    """443 spelled out and 443 left implicit are the same port; nothing else folds."""
-    return "" if port == "443" else port
 
 
 # Every non-alphanumeric byte the coarse RFC 3986 character set admits: the

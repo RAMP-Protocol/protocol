@@ -136,22 +136,36 @@ export function checkAudience(self: string, ...claimed: string[]): AudienceVerdi
 	return "accepted";
 }
 
+// splitHostPort splits `host[:port]` on the last colon; no colon means no port.
+// Shared by the audience comparison and the identity-document rule, because the
+// 443 fold below is half of BOTH origin comparisons and a change to it must not
+// have to be made twice. Anything stranger than host[:port] is refused by
+// isBareDomain, before this or right after it.
+function splitHostPort(v: string): [string, string] {
+	const i = v.lastIndexOf(":");
+	if (i < 0) {
+		return [v, ""];
+	}
+	return [v.slice(0, i), v.slice(i + 1)];
+}
+
+// 443 spelled out and 443 left implicit are the same port; nothing else folds. A
+// schemeless domain is read as https everywhere in this SDK. Port 80 is NOT
+// folded: that would be reading a scheme into a value that names none.
+function foldDefaultPort(port: string): string {
+	return port === "443" ? "" : port;
+}
+
 // normalizeDomain renders the two spellings of one identity as one string. It
 // runs only on values isBareDomain has already accepted, so the input is ASCII
 // and holds at most one colon followed by digits — which is what lets it split
 // on that colon rather than parse a URL, and is why it reproduces the Go oracle
 // exactly.
 function normalizeDomain(v: string): string {
-	const i = v.lastIndexOf(":");
-	const host = (i >= 0 ? v.slice(0, i) : v).toLowerCase();
-	const port = i >= 0 ? v.slice(i + 1) : "";
-	// A schemeless domain is read as https everywhere in this SDK, so 443 spelled
-	// out and 443 left implicit are the same port. Any other port is kept, 80
-	// included: folding it would be reading a scheme into a value that names none.
-	if (port === "" || port === "443") {
-		return host;
-	}
-	return `${host}:${port}`;
+	const [rawHost, rawPort] = splitHostPort(v);
+	const host = rawHost.toLowerCase();
+	const port = foldDefaultPort(rawPort);
+	return port === "" ? host : `${host}:${port}`;
 }
 
 // Identity-document resolution (TypeScript side of sdk/go/helpers/identitydocs.go).
@@ -182,21 +196,6 @@ const uriAuthorityRe = /^(?:[A-Za-z][A-Za-z0-9+.-]*:)?\/\/([^/?#]*)/;
 function uriScheme(ref: string): string {
 	const m = uriSchemeRe.exec(ref);
 	return m ? m[0].slice(0, -1).toLowerCase() : "";
-}
-
-// splitHostPort splits `host[:port]`. Anything stranger is refused by
-// isBareDomain right after.
-function splitHostPort(authority: string): [string, string] {
-	const i = authority.lastIndexOf(":");
-	if (i < 0) {
-		return [authority, ""];
-	}
-	return [authority.slice(0, i), authority.slice(i + 1)];
-}
-
-// 443 spelled out and 443 left implicit are the same port; nothing else folds.
-function foldDefaultPort(port: string): string {
-	return port === "443" ? "" : port;
 }
 
 // Every byte the coarse RFC 3986 character set admits: the unreserved set, the
