@@ -51,11 +51,20 @@ def test_a_refusal_does_not_echo_the_credential() -> None:
 
     A refusal that names the very userinfo it is refusing puts the credential
     wherever the caller logs its errors.
+
+    The cases reach DIFFERENT refusals on purpose. The last three carry the
+    credential somewhere no parser reads as userinfo - a reference that does not
+    parse at all, and two opaque references with no authority component - so the
+    userinfo checks never fire and the string travels on to a much later refusal.
+    This is the same set the Go oracle covers.
     """
     secret = "s3cr3t"  # noqa: S105 - test fixture, not a real credential
     for manifest_url, ref in (
         ("https://a.example/.well-known/ramp.json", f"https://u:{secret}@a.example/x"),
         (f"https://u:{secret}@a.example/ramp.json", "/x"),
+        ("https://a.example/.well-known/ramp.json", f"https://u:{secret}@a.example/%zz"),
+        ("https://a.example/.well-known/ramp.json", f"https:u:{secret}@a.example/x"),
+        ("https://a.example/.well-known/ramp.json", f"u:{secret}@a.example/x"),
     ):
         with pytest.raises(ValueError) as excinfo:
             resolve_identity_document(manifest_url, ref)

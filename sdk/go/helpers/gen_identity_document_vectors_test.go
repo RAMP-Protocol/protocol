@@ -246,6 +246,11 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 // vectors carry a verdict, not an error string, so nothing in the shared corpus
 // can catch a refusal that names the very userinfo it is refusing. A log line or
 // an error surfaced to an operator is exactly where a leaked credential ends up.
+//
+// The cases are chosen to reach DIFFERENT refusals, because the risk is not one
+// bad message but one path nobody converted. The last two carry the credential
+// somewhere Go never parses as userinfo, so the userinfo checks do not fire and
+// the string travels on to a much later refusal.
 func TestIdentityDocumentRefusalDoesNotEchoTheCredential(t *testing.T) {
 	const secret = "s3cr3t"
 	for _, c := range []struct{ name, manifest, ref string }{
@@ -256,13 +261,21 @@ func TestIdentityDocumentRefusalDoesNotEchoTheCredential(t *testing.T) {
 		// that branch is the one that used to print the reference twice, once
 		// from %q and once from the wrapped *url.Error.
 		{"in a reference that does not parse", "https://a.example/.well-known/ramp.json", "https://u:" + secret + "@a.example/%zz"},
+		// No "//" after the scheme, so this is an OPAQUE reference: everything
+		// after "https:" is opaque data, there is no authority, and therefore
+		// no userinfo component to check. It is refused for naming no host.
+		{"in an opaque reference", "https://a.example/.well-known/ramp.json", "https:u:" + secret + "@a.example/x"},
+		// Same shape one step further out: "u" reads as the scheme, so this is
+		// an opaque reference under a scheme that is not https, and it is
+		// refused for that instead.
+		{"in a schemeless-looking reference", "https://a.example/.well-known/ramp.json", "u:" + secret + "@a.example/x"},
 	} {
 		_, err := ResolveIdentityDocument(c.manifest, c.ref)
 		if err == nil {
-			t.Fatalf("userinfo %s: accepted, want refused", c.name)
+			t.Fatalf("credential %s: accepted, want refused", c.name)
 		}
 		if strings.Contains(err.Error(), secret) {
-			t.Fatalf("userinfo %s: error echoes the credential: %v", c.name, err)
+			t.Fatalf("credential %s: error echoes the credential: %v", c.name, err)
 		}
 	}
 }

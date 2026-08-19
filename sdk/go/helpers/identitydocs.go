@@ -45,6 +45,15 @@ import (
 // have it served back over TLS from the legitimate origin. The protocol already
 // requires the manifest be served over TLS, so a base that is not https is out
 // of contract and this says so instead of working around it.
+//
+// NO REFUSAL ECHOES ITS INPUT. Not just the two that name userinfo: a reference
+// may carry a credential in a component this code never parses as userinfo. Go
+// reads "https:u:pw@a.example/x" as an OPAQUE reference and
+// "u:pw@a.example/x" as a schemeless one, and neither has a userinfo
+// component at all, so both slip past the userinfo checks and reach a later
+// refusal. Errors are logged; a message built with %q would put the credential
+// in the log. Every refusal here is therefore a fixed string, which is also
+// what the two ports already return.
 func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	if why := untameReason(manifestURL); why != "" {
 		// The base is checked as strictly as the reference. A tab in the base
@@ -64,21 +73,18 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	}
 	base, err := url.Parse(manifestURL)
 	if err != nil {
-		// Deliberately does not echo the value: an unparseable URL can still
-		// carry a credential.
 		return "", errors.New("identity document: manifest URL is not a URL")
 	}
 	if base.User != nil {
-		// Deliberately does not echo the URL: it carries the credential.
 		return "", errors.New("identity document: manifest URL carries userinfo")
 	}
 	// url.Parse lowercases the scheme, so this compares the scheme itself and
 	// not how it was spelled.
 	if base.Scheme != "https" {
-		return "", fmt.Errorf("identity document: manifest URL %q is not https", manifestURL)
+		return "", errors.New("identity document: manifest URL is not https")
 	}
 	if base.Host == "" {
-		return "", fmt.Errorf("identity document: manifest URL %q names no host", manifestURL)
+		return "", errors.New("identity document: manifest URL names no host")
 	}
 
 	if strings.TrimSpace(ref) == "" {
@@ -114,18 +120,16 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	}
 	refURL, err := url.Parse(ref)
 	if err != nil {
-		// Deliberately does not echo the value, and deliberately does not wrap
-		// the parse error: an unparseable reference can still carry a
-		// credential, and url.Error prints the input it failed on.
+		// Also does not WRAP the parse error: url.Error prints the input it
+		// failed on, so %w would echo the reference by the back door.
 		return "", errors.New("identity document: reference is not a URI reference")
 	}
 	resolved := base.ResolveReference(refURL)
 	if resolved.User != nil {
-		// Deliberately does not echo the reference: it carries the credential.
 		return "", errors.New("identity document: reference carries userinfo")
 	}
 	if resolved.Scheme != "https" {
-		return "", fmt.Errorf("identity document: reference %q does not resolve to an https URL", ref)
+		return "", errors.New("identity document: reference does not resolve to an https URL")
 	}
 
 	baseHost, resolvedHost := base.Hostname(), resolved.Hostname()
@@ -138,23 +142,23 @@ func ResolveIdentityDocument(manifestURL, ref string) (string, error) {
 	// non-ASCII label, an IP literal in brackets, an empty host, a trailing root
 	// dot.
 	if !IsBareDomain(baseHost) {
-		return "", fmt.Errorf("identity document: manifest URL %q does not name a plain host", manifestURL)
+		return "", errors.New("identity document: manifest URL does not name a plain host")
 	}
 	if !IsBareDomain(resolvedHost) {
-		return "", fmt.Errorf("identity document: reference %q does not name a plain host", ref)
+		return "", errors.New("identity document: reference does not name a plain host")
 	}
 	if !strings.EqualFold(baseHost, resolvedHost) {
-		return "", fmt.Errorf("identity document: reference %q is not on the manifest's origin", ref)
+		return "", errors.New("identity document: reference is not on the manifest's origin")
 	}
 	if !portIsWritable(base.Port()) {
-		return "", fmt.Errorf("identity document: manifest URL %q names a port outside 1-65535", manifestURL)
+		return "", errors.New("identity document: manifest URL names a port outside 1-65535")
 	}
 	if !portIsWritable(resolved.Port()) {
-		return "", fmt.Errorf("identity document: reference %q names a port outside 1-65535", ref)
+		return "", errors.New("identity document: reference names a port outside 1-65535")
 	}
 	basePort := canonicalPort(base.Scheme, base.Port())
 	if basePort != canonicalPort(resolved.Scheme, resolved.Port()) {
-		return "", fmt.Errorf("identity document: reference %q is on a different port than the manifest", ref)
+		return "", errors.New("identity document: reference is on a different port than the manifest")
 	}
 
 	// Canonical output: the host lowercased and a default port folded away. The
