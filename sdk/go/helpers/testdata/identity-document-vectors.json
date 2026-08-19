@@ -246,6 +246,27 @@
       "resolved": "https://a.example/b"
     },
     {
+      "name": "dot_segments_on_the_base_query_only_reference",
+      "manifest_url": "https://a.example/a/../ramp.json",
+      "ref": "?q",
+      "accepted": true,
+      "resolved": "https://a.example/ramp.json?q"
+    },
+    {
+      "name": "dot_segments_on_the_base_fragment_only_reference",
+      "manifest_url": "https://a.example/a/../ramp.json",
+      "ref": "#f",
+      "accepted": true,
+      "resolved": "https://a.example/ramp.json#f"
+    },
+    {
+      "name": "single_dot_segment_on_the_base",
+      "manifest_url": "https://a.example/a/./ramp.json",
+      "ref": "?q",
+      "accepted": true,
+      "resolved": "https://a.example/a/ramp.json?q"
+    },
+    {
       "name": "padded_port_on_the_base",
       "manifest_url": "https://a.example:0443/.well-known/ramp.json",
       "ref": "/x",

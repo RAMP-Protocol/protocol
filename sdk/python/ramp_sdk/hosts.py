@@ -313,8 +313,9 @@ def _remove_dot_segments(path: str) -> str:
     Needed because this port resolves the path itself. It also closes the
     divergence that started this: the old ``urljoin`` call returned an ABSOLUTE
     reference untouched, so this port alone failed to normalize
-    "https://a.example/a/../b" — Go and TypeScript both answer /b. It runs on
-    every branch rather than only the absolute one, and is idempotent.
+    "https://a.example/a/../b" — Go and TypeScript both answer /b. Its one call
+    site is after the branches, so it runs on the inherited base path as well,
+    and it is idempotent.
 
     Not a refusal: "../card.json" is a form the field is specified to support
     and there is a vector pinning it.
@@ -447,17 +448,25 @@ def resolve_identity_document(manifest_url: str, ref: str) -> str:
     ref_parts = urlsplit(ref)
     base_parts = urlsplit(manifest_url)
     if ref_auth_m is not None:
-        path, query = _remove_dot_segments(ref_parts.path), ref_parts.query
+        path, query = ref_parts.path, ref_parts.query
     elif ref_parts.path == "":
+        # The base path is INHERITED, not copied: it goes through 5.2.4 below
+        # like every other branch. A base of https://a.example/a/../ramp.json
+        # with a query-only or fragment-only reference otherwise kept the dot
+        # segments, and Go and TypeScript both remove them - same origin,
+        # different document name.
         path = base_parts.path
         # 5.2.2 inherits the base's query only when the reference DEFINED none.
         # urlsplit cannot tell an empty query from an absent one, so read the
         # "?" off the raw reference, ignoring anything in the fragment.
         query = ref_parts.query if "?" in ref.split("#", 1)[0] else base_parts.query
     elif ref_parts.path.startswith("/"):
-        path, query = _remove_dot_segments(ref_parts.path), ref_parts.query
+        path, query = ref_parts.path, ref_parts.query
     else:
-        path, query = _remove_dot_segments(_merge_path(base_parts.path, ref_parts.path)), ref_parts.query
+        path, query = _merge_path(base_parts.path, ref_parts.path), ref_parts.query
+    # 5.2.4 runs ONCE, on whichever path the branches above produced. Calling it
+    # inside each branch is how the inherited one came to be missed.
+    path = _remove_dot_segments(path)
 
     out = "https://" + base_host.lower()
     if base_port:

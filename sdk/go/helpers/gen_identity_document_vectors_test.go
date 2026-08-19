@@ -142,6 +142,14 @@ func buildIdentityDocumentVectors(t *testing.T) []identityDocumentVector {
 		{"empty_path_is_root", base, "https://a.example", "https://a.example/"},
 		{"dot_segments_absolute_reference", base, "https://a.example/a/../b", "https://a.example/b"},
 		{"dot_segments_relative_reference", base, "/a/../b", "https://a.example/b"},
+		// A dot segment in the MANIFEST URL, on the branch that INHERITS the base
+		// path. Nothing above holds one: every dot-segment case brings its own
+		// through the reference, so the inherited path was never normalized in
+		// the Python port while both other implementations normalized it. Same
+		// origin, different document name.
+		{"dot_segments_on_the_base_query_only_reference", "https://a.example/a/../ramp.json", "?q", "https://a.example/ramp.json?q"},
+		{"dot_segments_on_the_base_fragment_only_reference", "https://a.example/a/../ramp.json", "#f", "https://a.example/ramp.json#f"},
+		{"single_dot_segment_on_the_base", "https://a.example/a/./ramp.json", "?q", "https://a.example/a/ramp.json?q"},
 		// A padded port is a different string from :443 and does not fold, so
 		// it survives into the output. It is accepted on purpose: the port rule
 		// bounds the VALUE, and reading it as text would flip this verdict.
