@@ -2762,6 +2762,17 @@ message AccountRegistration {
 // because the two fields fail differently: whoever takes over an `endpoint` host
 // misdirects calls they still cannot sign for, while whoever takes over an
 // identity-document host publishes their own keys and BECOMES this participant.
+// THE MANIFEST URL IS VETTED FIRST, on its own: it MUST be `https`, MUST name a
+// plain host, and MUST NOT carry userinfo. Those are refusals rather than
+// courtesies, because the checks on the resolved URL cannot stand in for them —
+// a base of `http://a.example/ramp.json` resolving to `https://a.example/doc`
+// passes every one of them, since the hostnames match and both sides fold to no
+// port. Accepting that means trusting a manifest that arrived unauthenticated,
+// which lets whoever rewrote that plaintext document name any path on the host
+// and have it served back over TLS from the legitimate origin. The path is
+// resolved by RFC 3986 5.2.2, 5.2.3 and 5.2.4, dot-segment removal included, and
+// a `..` that pops past the root removes nothing and leaves what follows in
+// place — an empty segment there SURVIVES.
 // Both the reference AND the URL it resolves against MUST be written in the
 // RFC 3986 character set — the unreserved characters, the gen-delims, the
 // sub-delims and `%` — with every percent-escape valid and no percent-encoded

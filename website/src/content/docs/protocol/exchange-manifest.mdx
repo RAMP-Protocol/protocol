@@ -237,6 +237,12 @@ be `https`, name a plain host, and carry no userinfo. A base of
 and both sides fold to no port — and accepting it would mean trusting a manifest
 that arrived unauthenticated.
 
+The path is resolved by RFC 3986 §5.2.2, §5.2.3 and §5.2.4, dot-segment removal
+included. One corner is worth stating because URL libraries disagree about it: a
+`..` that pops past the root removes nothing and leaves what follows in place, so
+an empty segment there **survives**. `..//dir` against a base of `/ramp.json`
+resolves to `//dir`, not `/dir`.
+
 #### What a reference may be written with
 
 A reference is **refused** unless it is written entirely in the RFC 3986 character

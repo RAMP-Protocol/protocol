@@ -13,7 +13,10 @@ against the URL the manifest was FETCHED FROM — never the self-asserted `domai
 which a hostile manifest could set to validate itself. After resolution the URL MUST be on
 the EXACT SAME ORIGIN as the manifest (`https`, equal hostname, equal effective port, where
 an omitted port and `:443` are the same port) and MUST NOT carry userinfo. The manifest URL
-itself is vetted first, on the same three conditions.
+itself is vetted first, on the same three conditions. The path is resolved by RFC 3986
+5.2.2, 5.2.3 and 5.2.4; a `..` that pops past the root removes nothing and leaves what
+follows in place, so an empty segment there survives and `..//dir` against a base of
+`/ramp.json` resolves to `//dir`.
 
 Both the reference AND the manifest URL must also be written in the RFC 3986 character set
 — the unreserved characters, the gen-delims, the sub-delims and `%` — with every
